@@ -9,7 +9,7 @@
 |**Difficulty**          |Advanced                                                      |
 |**Size**                |Large (350 hours / 12 weeks standard)                         |
 |**Primary Technologies**|Go (server), Kotlin/Android (mobile)                          |
-|**Mentor**              |Aaron Brethorst, Executive Director, OTSF & iOS app maintainer|
+|**Mentor**              |Aaron Brethorst, Executive Director, OTSF|
 
 -----
 
