@@ -2,7 +2,7 @@
 
 # Vehicle Tracker: Realtime Vehicle Positioning for Developing Countries
 
-**Google Summer of Code 2025 — Open Transit Software Foundation**
+**Google Summer of Code 2026 — Open Transit Software Foundation**
 
 |                        |                                                              |
 |------------------------|--------------------------------------------------------------|
@@ -67,7 +67,7 @@ vehicle {
     trip_id: "route_5_0830"
     route_id: "5"
     start_time: "08:30:00"
-    start_date: "20250715"
+    start_date: "20260715"
     schedule_relationship: SCHEDULED
   }
   position {
@@ -217,9 +217,9 @@ This project requires a contributor comfortable working across both a Go backend
 
 ## 5. Milestones and Timeline
 
-This timeline follows the GSoC 2025 standard 12-week coding period (June 2 – August 25, 2025) at approximately 29 hours/week. The contributor may request an extended timeline (up to 22 weeks) if needed, with mentor approval.
+This timeline follows the GSoC 2026 standard coding period (May 25 – August 24, 2026) at approximately 27 hours/week. The contributor may request an extended timeline (up to 22 weeks) if needed, with mentor approval.
 
-### Community Bonding Period (May 8 – June 1)
+### Community Bonding Period (May 1 – May 24)
 
 - Set up development environments: Go toolchain, Android Studio, protobuf compiler
 - Read and understand the GTFS-RT specification, particularly the `VehiclePosition` message
@@ -269,7 +269,7 @@ This timeline follows the GSoC 2025 standard 12-week coding period (June 2 – A
 
 -----
 
-> **⏰ Midterm Evaluation (July 14–18)**
+> **⏰ Midterm Evaluation (July 6–10)**
 > 
 > At this point, the contributor should have a functional server that: (1) authenticates drivers, (2) ingests location reports, (3) serves a valid GTFS-RT feed, and (4) has admin management endpoints. The server should be deployable via Docker. The mentor evaluates progress, adjusts scope if needed, and confirms direction for the Android app work.
 
@@ -352,9 +352,9 @@ This timeline follows the GSoC 2025 standard 12-week coding period (June 2 – A
 
 -----
 
-> **📦 Final Submission (August 25)**
-> 
-> **Final Evaluation (August 25 – September 1)**
+> **📦 Final Submission (August 24)**
+>
+> **Final Evaluation (August 24 – August 31)**
 
 -----
 
@@ -429,5 +429,5 @@ This is a significant engineering effort (estimated 60–80 hours) involving car
 - [Android Foreground Services documentation](https://developer.android.com/develop/background-work/services/foreground-services)
 - [Android FusedLocationProviderClient](https://developers.google.com/android/reference/com/google/android/gms/location/FusedLocationProviderClient)
 - [Don’t Kill My App — OEM battery optimization reference](https://dontkillmyapp.com)
-- [GSoC 2025 Timeline](https://developers.google.com/open-source/gsoc/timeline)
+- [GSoC 2026 Timeline](https://developers.google.com/open-source/gsoc/timeline)
 - [GSoC Contributor Time Management Guide](https://google.github.io/gsocguides/student/time-management-for-students)
