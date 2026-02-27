@@ -1,16 +1,23 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
+
+	"github.com/OneBusAway/vehicle-positions/internal/db"
 )
 
 type Server struct {
-	// Add dependencies like DB or in-memory state here
+	db      *sql.DB
+	queries db.Querier
 }
 
-func NewServer() *Server {
-	return &Server{}
+func NewServer(database *sql.DB) *Server {
+	return &Server{
+		db:      database,
+		queries: db.New(database),
+	}
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
@@ -20,7 +27,39 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) handleLocationReport(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement ingestion logic
+	var report struct {
+		VehicleID string  `json:"vehicle_id"`
+		TripID    string  `json:"trip_id"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Bearing   float32 `json:"bearing"`
+		Speed     float32 `json:"speed"`
+		Accuracy  float32 `json:"accuracy"`
+		Timestamp int64   `json:"timestamp"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	params := db.InsertLocationParams{
+		VehicleID: report.VehicleID,
+		TripID:    report.TripID,
+		Latitude:  report.Latitude,
+		Longitude: report.Longitude,
+		Bearing:   float64(report.Bearing),
+		Speed:     float64(report.Speed),
+		Accuracy:  float64(report.Accuracy),
+		Timestamp: report.Timestamp,
+	}
+
+	if err := s.queries.InsertLocation(r.Context(), params); err != nil {
+		http.Error(w, "failed to save location", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 }

@@ -21,3 +21,4 @@ android/app/build/
 android/.idea/
 *.db
 *.db-journal
+*.log
