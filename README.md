@@ -13,6 +13,33 @@
 
 -----
 
+## Implementation Status: [NEW / PLANNING]
+This project is currently in early development as part of the GSoC 2026 preparation. 
+- **Maglev-inspired structure**: Modular Go backend with `internal/api` and `internal/db`.
+- **Database**: SQLite persistence implemented via `sqlc`.
+- **API**: Initial location ingestion (`POST /api/v1/locations`) verified.
+
+## Getting Started
+
+### Prerequisites
+- Go 1.24 or later
+- Docker & Docker Compose (optional, for easy deployment)
+
+### Quick Run (Local)
+If you want to quickly test the current MVP using Go:
+1. **Run Server**: `make run` (Starts the Go server on port 8080. The SQLite database is automatically created and initialized).
+2. **Send Data**:
+   ```bash
+   curl -X POST http://localhost:8080/api/v1/locations -H "Content-Type: application/json" -d '{"vehicle_id": "V1", "latitude": 45.0, "longitude": -73.0, "timestamp": 1234567}'
+   ```
+
+### Quick Run (Docker)
+To run the server without installing Go, you can use Docker Compose:
+1. **Start Server**: `docker compose up -d`
+2. **Test Server**: `curl -X POST http://localhost:8080/api/v1/locations ...`
+
+-----
+
 ## 1. Problem Statement
 
 The OneBusAway server relies on specialized software and hardware — Automatic Vehicle Location (AVL) systems, SIRI feeds, proprietary APIs — to generate the realtime vehicle position data that powers its rider-facing apps. This works well for transit agencies in developed countries that have already invested in this infrastructure, but it creates a significant barrier for transit systems in developing countries that are building out fixed-route transit for the first time.

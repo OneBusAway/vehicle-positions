@@ -24,6 +24,17 @@ func main() {
 	}
 	defer database.Close()
 
+	// Auto-initialize schema if needed
+	schema, err := os.ReadFile("db/schema.sql")
+	if err == nil {
+		log.Printf("Initializing database schema from db/schema.sql...")
+		if _, err := database.Exec(string(schema)); err != nil {
+			log.Printf("Warning: failed to execute schema: %v (it might already exist)", err)
+		}
+	} else {
+		log.Printf("Note: db/schema.sql not found, skipping auto-initialization: %v", err)
+	}
+
 	mux := http.NewServeMux()
 
 	// Initialize API handlers
