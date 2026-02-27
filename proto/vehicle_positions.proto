@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package transit_realtime;
+
+option go_package = "github.com/OneBusAway/vehicle-positions/proto";
+
+message LocationReport {
+  string vehicle_id = 1;
+  string trip_id = 2;
+  double latitude = 3;
+  double longitude = 4;
+  float bearing = 5;
+  float speed = 6;
+  float accuracy = 7;
+  int64 timestamp = 8;
+}
