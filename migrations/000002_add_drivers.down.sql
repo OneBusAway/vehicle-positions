@@ -1,0 +1,2 @@
+ALTER TABLE vehicles DROP COLUMN IF EXISTS driver_id;
+DROP TABLE IF EXISTS drivers;

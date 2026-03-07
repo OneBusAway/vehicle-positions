@@ -26,6 +26,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to initialize store: %v", err)
 	}
+
+	if err := store.Migrate(databaseURL); err != nil {
+		log.Fatalf("could not run migrations: %v", err)
+	}
+
 	defer store.Close()
 
 	tracker := NewTracker(maxAge)

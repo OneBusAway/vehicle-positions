@@ -2,43 +2,26 @@ package main
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-const schema = `
-CREATE TABLE IF NOT EXISTS vehicles (
-    id         TEXT PRIMARY KEY,
-    label      TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS location_points (
-    id          BIGSERIAL PRIMARY KEY,
-    vehicle_id  TEXT NOT NULL REFERENCES vehicles(id),
-    trip_id     TEXT NOT NULL DEFAULT '',
-    latitude    DOUBLE PRECISION NOT NULL,
-    longitude   DOUBLE PRECISION NOT NULL,
-    bearing     DOUBLE PRECISION,
-    speed       DOUBLE PRECISION,
-    accuracy    DOUBLE PRECISION,
-    timestamp   BIGINT NOT NULL,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_location_points_vehicle_id ON location_points(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_location_points_timestamp ON location_points(timestamp);
-`
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 // Store manages persistence of vehicle locations to PostgreSQL.
 type Store struct {
 	pool *pgxpool.Pool
 }
 
-// NewStore connects to PostgreSQL and runs schema migrations.
+// NewStore connects to PostgreSQL.
 func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
@@ -48,11 +31,27 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 		pool.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
-	if _, err := pool.Exec(ctx, schema); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("run migrations: %w", err)
-	}
+
 	return &Store{pool: pool}, nil
+}
+
+// Migrate runs the database schema migrations.
+func (s *Store) Migrate(databaseURL string) error {
+	d, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("invalid migration source: %w", err)
+	}
+
+	m, err := migrate.NewWithSourceInstance("iofs", d, databaseURL)
+	if err != nil {
+		return fmt.Errorf("migration instance error: %w", err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
+
+	return nil
 }
 
 // SaveLocation upserts the vehicle and inserts a location point in a single transaction.
