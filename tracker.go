@@ -26,6 +26,9 @@ type Tracker struct {
 
 // NewTracker creates a Tracker with the given staleness threshold.
 func NewTracker(maxAge time.Duration) *Tracker {
+	if maxAge <= 0 {
+		panic("maxAge must be positive")
+	}
 	return &Tracker{
 		vehicles: make(map[string]*VehicleState),
 		maxAge:   maxAge,

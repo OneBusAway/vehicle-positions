@@ -91,3 +91,13 @@ func TestTracker_Concurrent(t *testing.T) {
 	active := tracker.ActiveVehicles()
 	assert.Len(t, active, 1)
 }
+
+func TestNewTracker_PanicsOnInvalidMaxAge(t *testing.T) {
+	assert.PanicsWithValue(t, "maxAge must be positive", func() {
+		NewTracker(0)
+	}, "NewTracker(0) should panic")
+
+	assert.PanicsWithValue(t, "maxAge must be positive", func() {
+		NewTracker(-1 * time.Second)
+	}, "NewTracker with negative duration should panic")
+}
