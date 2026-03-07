@@ -39,7 +39,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("starting vehicle-positions server on :%s", port)
+		log.Printf("starting vehicle-positions server on http://localhost:%s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
