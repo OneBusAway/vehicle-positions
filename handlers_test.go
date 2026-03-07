@@ -184,6 +184,11 @@ func TestHandlePostLocation_Validation(t *testing.T) {
 			want: "longitude must be between -180 and 180",
 		},
 		{
+			name: "reject null coordinates (0,0)",
+			loc:  LocationReport{VehicleID: "bus-1", Latitude: 0, Longitude: 0, Timestamp: 100},
+			want: "latitude and longitude cannot both be zero (likely GPS error)",
+		},
+		{
 			name: "zero timestamp",
 			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 0},
 			want: "timestamp must be positive",

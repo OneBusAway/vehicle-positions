@@ -28,6 +28,9 @@ func (r *LocationReport) validate() error {
 	if r.VehicleID == "" {
 		return fmt.Errorf("vehicle_id is required")
 	}
+	if r.Latitude == 0 && r.Longitude == 0 {
+		return fmt.Errorf("latitude and longitude cannot both be zero (likely GPS error)")
+	}
 	if r.Latitude < -90 || r.Latitude > 90 {
 		return fmt.Errorf("latitude must be between -90 and 90")
 	}
