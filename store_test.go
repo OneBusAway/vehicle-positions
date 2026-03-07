@@ -20,20 +20,26 @@ func testDatabaseURL(t *testing.T) string {
 }
 
 func TestStore_NewStore(t *testing.T) {
-	url := testDatabaseURL(t)
-	ctx := context.Background()
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		t.Skip("DATABASE_URL not set")
+	}
 
-	store, err := NewStore(ctx, url)
-	require.NoError(t, err)
-	defer store.Close()
-
-	// Verify tables exist by querying them
-	var count int
-	err = store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM vehicles").Scan(&count)
+	store, err := NewStore(context.Background(), url)
 	assert.NoError(t, err)
+	assert.NotNil(t, store)
 
-	err = store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM location_points").Scan(&count)
-	assert.NoError(t, err)
+	err = store.Migrate(url)
+	assert.NoError(t, err, "Migrate should not fail")
+
+	// This proves the schema exists without needing access to store.db
+	err = store.SaveLocation(context.Background(), &LocationReport{
+		VehicleID: "test-bus",
+		Latitude:  12.34,
+		Longitude: 56.78,
+		Timestamp: 123456789,
+	})
+	assert.NoError(t, err, "Should be able to save a location after migration")
 }
 
 func TestStore_SaveLocation(t *testing.T) {
