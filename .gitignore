@@ -1,2 +1,5 @@
 # Compiled binary
 vehicle-positions
+
+# Local settings
+.settings.local.json
