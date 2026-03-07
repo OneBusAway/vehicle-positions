@@ -15,6 +15,10 @@ func main() {
 	databaseURL := envOrDefault("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable")
 	maxAge := envDurationOrDefault("STALENESS_THRESHOLD", 5*time.Minute)
 
+	readTimeout := envDurationOrDefault("READ_TIMEOUT", 15*time.Second)
+	writeTimeout := envDurationOrDefault("WRITE_TIMEOUT", 15*time.Second)
+	idleTimeout := envDurationOrDefault("IDLE_TIMEOUT", 60*time.Second)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -34,8 +38,11 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: mux,
+		Addr:         ":" + port,
+		Handler:      mux,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
 	}
 
 	go func() {
