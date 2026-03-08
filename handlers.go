@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -42,6 +43,17 @@ func (r *LocationReport) validate() error {
 		return fmt.Errorf("timestamp must be positive")
 	}
 	return nil
+}
+
+type LoginRequest struct {
+	Phone string `json:"phone"`
+	PIN   string `json:"pin"`
+}
+
+type AdminCreateDriverRequest struct {
+	Phone string `json:"phone"`
+	PIN   string `json:"pin"`
+	Name  string `json:"name"`
 }
 
 type LocationSaver interface {
@@ -104,6 +116,63 @@ func handleGetFeed(tracker *Tracker) http.HandlerFunc {
 		if _, err := w.Write(data); err != nil {
 			log.Printf("failed to write protobuf response: %v", err)
 		}
+	}
+}
+
+func handleLogin(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req LoginRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+
+		driver, err := store.GetDriverByPhone(r.Context(), req.Phone)
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid phone or PIN"})
+			return
+		}
+
+		if err := bcrypt.CompareHashAndPassword([]byte(driver.PINHash), []byte(req.PIN)); err != nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid phone or PIN"})
+			return
+		}
+
+		token, err := GenerateToken(driver.ID, driver.Phone)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	}
+}
+
+func handleAdminCreateDriver(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req AdminCreateDriverRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.PIN), bcrypt.DefaultCost)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to hash PIN"})
+			return
+		}
+
+		driverID := fmt.Sprintf("dr-%d", time.Now().Unix())
+		_, err = store.pool.Exec(r.Context(),
+			"INSERT INTO drivers (id, phone, pin_hash, name) VALUES ($1, $2, $3, $4)",
+			driverID, req.Phone, string(hash), req.Name,
+		)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create driver: " + err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusCreated, map[string]string{"id": driverID, "status": "created"})
 	}
 }
 

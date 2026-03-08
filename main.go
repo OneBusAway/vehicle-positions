@@ -42,7 +42,9 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/locations", handlePostLocation(store, tracker))
+	mux.HandleFunc("POST /api/v1/auth/login", handleLogin(store))
+	mux.HandleFunc("POST /api/v1/admin/drivers", handleAdminCreateDriver(store))
+	mux.HandleFunc("POST /api/v1/locations", AuthMiddleware(handlePostLocation(store, tracker)))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
