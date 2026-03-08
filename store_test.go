@@ -19,24 +19,50 @@ func testDatabaseURL(t *testing.T) string {
 	return url
 }
 
-func TestStore_NewStore(t *testing.T) {
+func newTestStore(t *testing.T) *Store {
+	t.Helper()
 	url := testDatabaseURL(t)
-	ctx := context.Background()
 
-	store, err := NewStore(ctx, url)
+	// Use require to fail fast if store creation or migration fails
+	store, err := NewStore(context.Background(), url)
 	require.NoError(t, err)
-	defer store.Close()
 
-	// Verify tables exist by querying them
-	var count int
-	err = store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM vehicles").Scan(&count)
-	assert.NoError(t, err)
+	err = store.Migrate(url)
+	require.NoError(t, err)
 
-	err = store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM location_points").Scan(&count)
+	// Ensure the connection is closed when the test finishes
+	t.Cleanup(func() {
+		store.Close()
+	})
+
+	return store
+}
+
+func TestStore_NewStore(t *testing.T) {
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+
+	store, err := NewStore(context.Background(), url)
 	assert.NoError(t, err)
+	assert.NotNil(t, store)
+
+	err = store.Migrate(url)
+	assert.NoError(t, err, "Migrate should not fail")
+
+	// This proves the schema exists without needing access to store.db
+	err = store.SaveLocation(context.Background(), &LocationReport{
+		VehicleID: "test-bus",
+		Latitude:  12.34,
+		Longitude: 56.78,
+		Timestamp: 123456789,
+	})
+	assert.NoError(t, err, "Should be able to save a location after migration")
 }
 
 func TestStore_SaveLocation(t *testing.T) {
+	store := newTestStore(t)
 	url := testDatabaseURL(t)
 	ctx := context.Background()
 
@@ -82,6 +108,7 @@ func TestStore_SaveLocation(t *testing.T) {
 }
 
 func TestStore_SaveLocation_UpsertVehicle(t *testing.T) {
+	store := newTestStore(t)
 	url := testDatabaseURL(t)
 	ctx := context.Background()
 
@@ -112,6 +139,7 @@ func TestStore_SaveLocation_UpsertVehicle(t *testing.T) {
 }
 
 func TestStore_GetRecentLocations(t *testing.T) {
+	store := newTestStore(t)
 	url := testDatabaseURL(t)
 	ctx := context.Background()
 
@@ -144,4 +172,31 @@ func TestStore_GetRecentLocations(t *testing.T) {
 	require.Len(t, locs, 1, "should only return 1 active vehicle")
 	assert.Equal(t, "bus-fresh", locs[0].VehicleID)
 	assert.Equal(t, float64(3), locs[0].Latitude, "should return the most recent point for the vehicle")
+}
+
+func TestStore_SaveLocation_CheckConstraints(t *testing.T) {
+	store := newTestStore(t)
+	tests := []struct {
+		name string
+		loc  LocationReport
+	}{
+		{"empty vehicle ID", LocationReport{VehicleID: "", Latitude: 1, Longitude: 1, Timestamp: 1}},
+		{"latitude too high", LocationReport{VehicleID: "v", Latitude: 91, Longitude: 1, Timestamp: 1}},
+		{"latitude too low", LocationReport{VehicleID: "v", Latitude: -91, Longitude: 1, Timestamp: 1}},
+		{"longitude too high", LocationReport{VehicleID: "v", Latitude: 1, Longitude: 181, Timestamp: 1}},
+		{"longitude too low", LocationReport{VehicleID: "v", Latitude: 1, Longitude: -181, Timestamp: 1}},
+		{"zero timestamp", LocationReport{VehicleID: "v", Latitude: 1, Longitude: 1, Timestamp: 0}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := store.SaveLocation(context.Background(), &tt.loc)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestStore_Migrate_Idempotent(t *testing.T) {
+	store := newTestStore(t)
+	err := store.Migrate(testDatabaseURL(t))
+	assert.NoError(t, err, "second Migrate call should succeed")
 }

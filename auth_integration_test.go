@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,6 +20,9 @@ func TestAuthFlow_Integration(t *testing.T) {
 	if err != nil {
 		t.Skip("Skipping integration test; database not available:", err)
 	}
+	if err := store.Migrate(dbURL); err != nil {
+		t.Errorf("failed to run migrations in test: %v", err)
+	}
 	defer store.Close()
 
 	tracker := NewTracker(5 * time.Minute)
@@ -27,7 +31,7 @@ func TestAuthFlow_Integration(t *testing.T) {
 	mux.HandleFunc("POST /api/v1/admin/drivers", handleAdminCreateDriver(store))
 	mux.HandleFunc("POST /api/v1/locations", AuthMiddleware(handlePostLocation(store, tracker)))
 
-	phone := "+123456789"
+	phone := fmt.Sprintf("+12345%d", time.Now().Unix())
 	pin := "9999"
 	name := "Test Driver"
 
