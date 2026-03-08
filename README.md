@@ -95,8 +95,8 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |`GET /gtfs-rt/vehicle-positions`|GET   |GTFS-RT feed (protobuf or JSON)                     |
 |`GET /api/v1/admin/vehicles`    |GET   |List vehicles                                       |
 |`POST /api/v1/admin/vehicles`   |POST  |Create/update vehicle                               |
-|`GET /api/v1/admin/drivers`     |GET   |List drivers                                        |
-|`POST /api/v1/admin/drivers`    |POST  |Create/update driver                                |
+|`GET /api/v1/admin/users`       |GET   |List users                                          |
+|`POST /api/v1/admin/users`      |POST  |Create/update user                                  |
 |`POST /api/v1/trips/start`      |POST  |Driver starts a trip (assigns vehicle to route/trip)|
 |`POST /api/v1/trips/end`        |POST  |Driver ends a trip                                  |
 |`GET /api/v1/admin/status`      |GET   |System health, active vehicles, feed stats          |
@@ -138,7 +138,7 @@ In v1, the app sends location reports directly to the server as they are capture
 **Core User Flow:**
 
 ```
-[Login screen] → Enter phone number + PIN
+[Login screen] → Enter email address + password
         ↓
 [Select vehicle] → Pick from assigned vehicle list
         ↓
@@ -184,8 +184,8 @@ A lightweight web-based admin panel for transit operators to manage the system. 
 **Admin Capabilities:**
 
 - View active vehicles on a map (Leaflet/OpenStreetMap — no Google Maps API key required)
-- Create/edit/deactivate vehicles and driver accounts
-- Assign drivers to vehicles
+- Create/edit/deactivate vehicles and user accounts
+- Assign users to vehicles
 - View trip history and location trails
 - Monitor feed health (last update time, number of active vehicles, error rates)
 - Download location data as CSV for analysis
@@ -236,10 +236,11 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
 - Initialize Go project with module structure, CI, and linting
 - Define and compile `gtfs-realtime.proto` into Go code
 - Implement the database schema and repository layer:
-  - Vehicles table (id, label, agency_id, active)
-  - Drivers table (id, name, phone, pin_hash, vehicle_id)
-  - Trips table (id, vehicle_id, route_id, trip_id, start_time, end_time, status)
-  - Location points table (id, vehicle_id, trip_id, lat, lon, bearing, speed, accuracy, timestamp, received_at)
+  - Vehicles table (id, label, agency_tag, active, created_at, updated_at)
+  - Users table (id, name, email, password_hash, role, created_at, updated_at)
+  - User vehicles table (user_id, vehicle_id) — join table for many-to-many user/vehicle assignments, composite primary key
+  - Trips table (id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at)
+  - Location points table (id, user_id, vehicle_id, trip_id, lat, lon, bearing, speed, accuracy, source_type, recorded_at, received_at) — `source_type` is an enum/string column (e.g. `driver_app`, `crowdsourced`, `avl_import`) defaulting to `driver_app`; allows filtering and applying different trust/accuracy thresholds per data source in the future
 - Implement `POST /api/v1/locations` — accept a location report, validate, persist, update in-memory state
 - Implement `GET /gtfs-rt/vehicle-positions` — build a `FeedMessage` from in-memory state and serialize to protobuf
 - Add JSON output option for debugging (`?format=json`)
@@ -252,25 +253,26 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
 
 **Deliverable:** The server has secure authentication for drivers and API consumers, plus admin endpoints for managing vehicles and drivers.
 
-- Implement driver authentication:
-  - `POST /api/v1/auth/login` — phone + PIN → JWT token
-  - JWT middleware for all driver-facing endpoints
+- Implement user authentication:
+  - `POST /api/v1/auth/login` — email + password → JWT token
+  - JWT middleware for all authenticated endpoints
   - Token refresh flow
-- Implement API key authentication for feed consumers (separate from driver auth)
+- Implement API key authentication for feed consumers (separate from user auth)
 - Implement admin CRUD endpoints:
   - Vehicles: create, read, update, deactivate
-  - Drivers: create, read, update, deactivate, assign to vehicle
+  - Users: create, read, update, deactivate
+  - User–vehicle assignments: manage many-to-many relationships
   - Trips: start, end, list active, list historical
-- Implement basic authorization (admin vs. driver roles)
+- Implement basic authorization (admin vs. user roles)
 - Implement system status endpoint (`GET /api/v1/admin/status`)
 - Write tests for auth flows and admin operations
 
-**Exit Criteria:** Drivers can log in and submit locations with a valid token. Unauthorized requests are rejected. Admins can manage vehicles and drivers via the API.
+**Exit Criteria:** Users can log in and submit locations with a valid token. Unauthorized requests are rejected. Admins can manage vehicles and users via the API.
 
 -----
 
 > **⏰ Midterm Evaluation (July 6–10)**
-> 
+>
 > At this point, the contributor should have a functional server that: (1) authenticates drivers, (2) ingests location reports, (3) serves a valid GTFS-RT feed, and (4) has admin management endpoints. The server should be deployable via Docker. The mentor evaluates progress, adjusts scope if needed, and confirms direction for the Android app work.
 
 -----
@@ -280,7 +282,7 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
 **Deliverable:** A working Android app that captures GPS locations continuously via a foreground service and sends them directly to the server.
 
 - Set up Android project (Kotlin, Jetpack Compose, Hilt)
-- Implement driver login screen (phone + PIN → JWT from server)
+- Implement login screen (email + password → JWT from server)
 - Implement vehicle selection and trip start/end flow
 - Implement location tracking foreground service:
   - `FusedLocationProviderClient` with configurable interval (default 10s)
@@ -309,7 +311,7 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
   - Dashboard: active vehicles count, feed health, last update times
   - Vehicle map: Leaflet/OSM showing current vehicle positions
   - Vehicle management: CRUD interface
-  - Driver management: CRUD interface, vehicle assignment
+  - User management: CRUD interface, vehicle assignment
   - Trip history: searchable list with location trail visualization
 - Polish the Android app:
   - Handle all permission request flows (location, notification, battery optimization)
