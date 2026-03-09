@@ -3,3 +3,5 @@ vehicle-positions
 
 # Local settings
 settings.local.json
+
+.DS_Store
