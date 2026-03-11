@@ -387,6 +387,8 @@ func TestHandlePostLocation_ContentTypeWithCharsetAccepted(t *testing.T) {
 	w := postLocationWithBody(handler, body, "application/json; charset=utf-8")
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.True(t, mStore.saved, "location should be saved for valid application/json content type")
+}
+
 func TestHandlePostLocation_UnknownFieldRejected(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	handler := handlePostLocation(nil, tracker)
