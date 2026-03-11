@@ -26,7 +26,7 @@ func postLocation(handler http.HandlerFunc, loc LocationReport) *httptest.Respon
 	return w
 }
 
-func postLocationWithContentType(handler http.HandlerFunc, body []byte, contentType string) *httptest.ResponseRecorder {
+func postLocationWithBody(handler http.HandlerFunc, body []byte, contentType string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest("POST", "/api/v1/locations", bytes.NewReader(body))
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -223,6 +223,87 @@ func TestHandlePostLocation_Validation(t *testing.T) {
 	}
 }
 
+func TestHandleAdminStatus_Empty(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	handler := handleAdminStatus(tracker, time.Now())
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var resp adminStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ok", resp.Status)
+	assert.Equal(t, 0, resp.ActiveVehicles)
+	assert.Equal(t, 0, resp.TotalVehiclesTracked)
+	assert.Nil(t, resp.LastUpdate)
+}
+
+func TestHandleAdminStatus_WithVehicles(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100})
+	tracker.Update(&LocationReport{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: 200})
+
+	handler := handleAdminStatus(tracker, time.Now())
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp adminStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ok", resp.Status)
+	assert.Equal(t, 2, resp.ActiveVehicles)
+	assert.Equal(t, 2, resp.TotalVehiclesTracked)
+	require.NotNil(t, resp.LastUpdate)
+	assert.False(t, resp.LastUpdate.IsZero())
+}
+
+func TestHandleAdminStatus_Uptime(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	startTime := time.Now().Add(-10 * time.Second)
+	handler := handleAdminStatus(tracker, startTime)
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	var resp adminStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+
+	assert.GreaterOrEqual(t, resp.UptimeSeconds, int64(10))
+}
+
+func TestHandleAdminStatus_ZeroVehiclesNotNull(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	handler := handleAdminStatus(tracker, time.Now())
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	var raw map[string]any
+	err := json.NewDecoder(w.Body).Decode(&raw)
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(0), raw["active_vehicles"])
+	assert.Equal(t, float64(0), raw["total_vehicles_tracked"])
+}
+
 type mockStore struct {
 	err   error
 	saved bool
@@ -299,4 +380,70 @@ func TestHandlePostLocation_ContentTypeWithCharsetAccepted(t *testing.T) {
 	w := postLocationWithContentType(handler, body, "application/json; charset=utf-8")
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.True(t, mStore.saved, "location should be saved for valid application/json content type")
+func TestHandlePostLocation_UnknownFieldRejected(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	handler := handlePostLocation(nil, tracker)
+
+	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100,"extra":"x"}`)
+	w := postLocationWithBody(handler, body, "application/json")
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "unknown field")
+}
+
+func TestHandlePostLocation_TrailingJSONRejected(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	handler := handlePostLocation(nil, tracker)
+
+	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}{"x":1}`)
+	w := postLocationWithBody(handler, body, "application/json")
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "single JSON object")
+}
+
+func TestHandlePostLocation_TrailingEmptyJSONObjectRejected(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	handler := handlePostLocation(nil, tracker)
+
+	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}{}`)
+	w := postLocationWithBody(handler, body, "application/json")
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "single JSON object")
+}
+
+func TestHandlePostLocation_TrailingGarbageRejected(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	handler := handlePostLocation(nil, tracker)
+
+	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}GARBAGE`)
+	w := postLocationWithBody(handler, body, "application/json")
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "invalid JSON:")
+}
+
+func TestHandlePostLocation_TrailingWhitespaceAccepted(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker)
+
+	body := []byte("{\"vehicle_id\":\"bus-1\",\"latitude\":1,\"longitude\":2,\"timestamp\":100}   \n")
+	w := postLocationWithBody(handler, body, "application/json")
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.True(t, mStore.saved, "location should be saved when only trailing whitespace exists")
 }

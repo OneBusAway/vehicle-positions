@@ -176,23 +176,65 @@ func TestStore_GetRecentLocations(t *testing.T) {
 
 func TestStore_SaveLocation_CheckConstraints(t *testing.T) {
 	store := newTestStore(t)
+	ctx := context.Background()
+
 	tests := []struct {
-		name string
-		loc  LocationReport
+		name      string
+		loc       LocationReport
+		vehicleID string
 	}{
-		{"empty vehicle ID", LocationReport{VehicleID: "", Latitude: 1, Longitude: 1, Timestamp: 1}},
-		{"latitude too high", LocationReport{VehicleID: "v", Latitude: 91, Longitude: 1, Timestamp: 1}},
-		{"latitude too low", LocationReport{VehicleID: "v", Latitude: -91, Longitude: 1, Timestamp: 1}},
-		{"longitude too high", LocationReport{VehicleID: "v", Latitude: 1, Longitude: 181, Timestamp: 1}},
-		{"longitude too low", LocationReport{VehicleID: "v", Latitude: 1, Longitude: -181, Timestamp: 1}},
-		{"zero timestamp", LocationReport{VehicleID: "v", Latitude: 1, Longitude: 1, Timestamp: 0}},
+		{"empty vehicle ID", LocationReport{VehicleID: "", Latitude: 1, Longitude: 1, Timestamp: 1}, ""},
+		{"latitude too high", LocationReport{VehicleID: "v", Latitude: 91, Longitude: 1, Timestamp: 1}, "v"},
+		{"latitude too low", LocationReport{VehicleID: "v", Latitude: -91, Longitude: 1, Timestamp: 1}, "v"},
+		{"longitude too high", LocationReport{VehicleID: "v", Latitude: 1, Longitude: 181, Timestamp: 1}, "v"},
+		{"longitude too low", LocationReport{VehicleID: "v", Latitude: 1, Longitude: -181, Timestamp: 1}, "v"},
+		{"zero timestamp", LocationReport{VehicleID: "v", Latitude: 1, Longitude: 1, Timestamp: 0}, "v"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := store.SaveLocation(context.Background(), &tt.loc)
+			err := store.SaveLocation(ctx, &tt.loc)
 			assert.Error(t, err)
+
+			// Verify rollback: no stale vehicle or location rows were left behind
+			if tt.vehicleID != "" {
+				var count int
+				err = store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM vehicles WHERE id = $1", tt.vehicleID).Scan(&count)
+				require.NoError(t, err)
+				assert.Equal(t, 0, count, "transaction should have rolled back, no vehicle row expected")
+			}
 		})
 	}
+}
+
+func TestStore_SaveLocation_NullableFieldRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	store.pool.Exec(ctx, "DELETE FROM location_points")
+	store.pool.Exec(ctx, "DELETE FROM vehicles")
+
+	loc := &LocationReport{
+		VehicleID: "bus-nullable",
+		TripID:    "route-1",
+		Latitude:  -1.29,
+		Longitude: 36.82,
+		Bearing:   180.5,
+		Speed:     8.5,
+		Accuracy:  12.0,
+		Timestamp: 1752566400,
+	}
+
+	err := store.SaveLocation(ctx, loc)
+	require.NoError(t, err)
+
+	cutoff := time.Now().Add(-5 * time.Minute)
+	locs, err := store.GetRecentLocations(ctx, cutoff)
+	require.NoError(t, err)
+	require.Len(t, locs, 1)
+
+	assert.Equal(t, 180.5, locs[0].Bearing, "bearing should round-trip through save and read")
+	assert.Equal(t, 8.5, locs[0].Speed, "speed should round-trip through save and read")
+	assert.Equal(t, 12.0, locs[0].Accuracy, "accuracy should round-trip through save and read")
 }
 
 func TestStore_Migrate_Idempotent(t *testing.T) {

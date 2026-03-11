@@ -7,9 +7,11 @@ import (
 	"log"
 	"time"
 
+	"github.com/OneBusAway/vehicle-positions/db"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,7 +20,8 @@ var migrationsFS embed.FS
 
 // Store manages persistence of vehicle locations to PostgreSQL.
 type Store struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	queries *db.Queries
 }
 
 // NewStore connects to PostgreSQL.
@@ -32,7 +35,7 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	return &Store{pool: pool}, nil
+	return &Store{pool: pool, queries: db.New(pool)}, nil
 }
 
 // Migrate runs the database schema migrations.
@@ -73,22 +76,26 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx,
-		`INSERT INTO vehicles (id) VALUES ($1)
-		 ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
-		loc.VehicleID,
-	)
-	if err != nil {
+	qtx := s.queries.WithTx(tx)
+
+	if err := qtx.UpsertVehicle(ctx, loc.VehicleID); err != nil {
 		return fmt.Errorf("upsert vehicle: %w", err)
 	}
 
-	_, err = tx.Exec(ctx,
-		`INSERT INTO location_points (vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		loc.VehicleID, loc.TripID, loc.Latitude, loc.Longitude,
-		loc.Bearing, loc.Speed, loc.Accuracy, loc.Timestamp,
-	)
-	if err != nil {
+	if err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
+		VehicleID: loc.VehicleID,
+		TripID:    loc.TripID,
+		Latitude:  loc.Latitude,
+		Longitude: loc.Longitude,
+		// TODO: LocationReport uses bare float64, so we cannot distinguish
+		// "not provided" from zero. Bearing 0.0 (north) is stored as non-NULL
+		// even when the field was never set. A follow-up should change these
+		// fields to *float64 on LocationReport to preserve the distinction.
+		Bearing:   pgtype.Float8{Float64: loc.Bearing, Valid: true},
+		Speed:     pgtype.Float8{Float64: loc.Speed, Valid: true},
+		Accuracy:  pgtype.Float8{Float64: loc.Accuracy, Valid: true},
+		Timestamp: loc.Timestamp,
+	}); err != nil {
 		return fmt.Errorf("insert location: %w", err)
 	}
 
@@ -100,42 +107,30 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 
 // GetRecentLocations retrieves the latest position for each vehicle since the cutoff time.
 func (s *Store) GetRecentLocations(ctx context.Context, cutoff time.Time) ([]*LocationReport, error) {
-	query := `
-		SELECT DISTINCT ON (vehicle_id) vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp
-		FROM location_points
-		WHERE received_at > $1
-		ORDER BY vehicle_id, received_at DESC
-	`
-	rows, err := s.pool.Query(ctx, query, cutoff)
+	rows, err := s.queries.GetRecentLocations(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
 	if err != nil {
 		return nil, fmt.Errorf("query recent locations: %w", err)
 	}
-	defer rows.Close()
 
-	var locations []*LocationReport
-	for rows.Next() {
-		var loc LocationReport
-		var bearing, speed, accuracy *float64
-
-		if err := rows.Scan(&loc.VehicleID, &loc.TripID, &loc.Latitude, &loc.Longitude, &bearing, &speed, &accuracy, &loc.Timestamp); err != nil {
-			return nil, fmt.Errorf("scan location: %w", err)
+	locations := make([]*LocationReport, 0, len(rows))
+	for _, row := range rows {
+		loc := &LocationReport{
+			VehicleID: row.VehicleID,
+			TripID:    row.TripID,
+			Latitude:  row.Latitude,
+			Longitude: row.Longitude,
+			Timestamp: row.Timestamp,
 		}
-
-		if bearing != nil {
-			loc.Bearing = *bearing
+		if row.Bearing.Valid {
+			loc.Bearing = row.Bearing.Float64
 		}
-		if speed != nil {
-			loc.Speed = *speed
+		if row.Speed.Valid {
+			loc.Speed = row.Speed.Float64
 		}
-		if accuracy != nil {
-			loc.Accuracy = *accuracy
+		if row.Accuracy.Valid {
+			loc.Accuracy = row.Accuracy.Float64
 		}
-
-		locations = append(locations, &loc)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration: %w", err)
+		locations = append(locations, loc)
 	}
 
 	return locations, nil
