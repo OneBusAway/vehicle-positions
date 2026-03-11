@@ -26,6 +26,16 @@ func postLocation(handler http.HandlerFunc, loc LocationReport) *httptest.Respon
 	return w
 }
 
+func postLocationWithContentType(handler http.HandlerFunc, body []byte, contentType string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("POST", "/api/v1/locations", bytes.NewReader(body))
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	w := httptest.NewRecorder()
+	handler(w, req)
+	return w
+}
+
 func getFeed(handler http.HandlerFunc, query string) *httptest.ResponseRecorder {
 	url := "/gtfs-rt/vehicle-positions"
 	if query != "" {
@@ -266,4 +276,27 @@ func TestHandlePostLocation_InvalidJSON(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.Contains(t, resp["error"], "invalid JSON")
+}
+
+func TestHandlePostLocation_ContentTypeRequired(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	handler := handlePostLocation(nil, tracker)
+	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}`)
+
+	w := postLocationWithContentType(handler, body, "")
+	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+
+	w = postLocationWithContentType(handler, body, "text/plain")
+	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+}
+
+func TestHandlePostLocation_ContentTypeWithCharsetAccepted(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker)
+	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}`)
+
+	w := postLocationWithContentType(handler, body, "application/json; charset=utf-8")
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.True(t, mStore.saved, "location should be saved for valid application/json content type")
 }

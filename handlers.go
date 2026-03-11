@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"mime"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
@@ -50,6 +52,13 @@ type LocationSaver interface {
 
 func handlePostLocation(store LocationSaver, tracker *Tracker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		contentType := r.Header.Get("Content-Type")
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil || !strings.EqualFold(mediaType, "application/json") {
+			writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "Content-Type must be application/json"})
+			return
+		}
+
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB
 
 		var loc LocationReport
