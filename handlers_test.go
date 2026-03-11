@@ -364,11 +364,18 @@ func TestHandlePostLocation_ContentTypeRequired(t *testing.T) {
 	handler := handlePostLocation(nil, tracker)
 	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}`)
 
-	w := postLocationWithContentType(handler, body, "")
+	w := postLocationWithBody(handler, body, "")
 	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "Content-Type must be application/json")
 
-	w = postLocationWithContentType(handler, body, "text/plain")
+	w = postLocationWithBody(handler, body, "text/plain")
 	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "Content-Type must be application/json")
 }
 
 func TestHandlePostLocation_ContentTypeWithCharsetAccepted(t *testing.T) {
@@ -377,7 +384,7 @@ func TestHandlePostLocation_ContentTypeWithCharsetAccepted(t *testing.T) {
 	handler := handlePostLocation(mStore, tracker)
 	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}`)
 
-	w := postLocationWithContentType(handler, body, "application/json; charset=utf-8")
+	w := postLocationWithBody(handler, body, "application/json; charset=utf-8")
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.True(t, mStore.saved, "location should be saved for valid application/json content type")
 func TestHandlePostLocation_UnknownFieldRejected(t *testing.T) {
