@@ -148,6 +148,50 @@ func TestTracker_StopIsIdempotent(t *testing.T) {
 	assert.NotPanics(t, func() { tracker.Stop() })
 }
 
+func TestTracker_Status_Empty(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	s := tracker.Status()
+
+	assert.Equal(t, 0, s.ActiveVehicles)
+	assert.Equal(t, 0, s.TotalVehiclesTracked)
+	assert.Nil(t, s.LastUpdate)
+}
+
+func TestTracker_Status_WithActiveVehicles(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100})
+	tracker.Update(&LocationReport{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: 200})
+
+	s := tracker.Status()
+
+	assert.Equal(t, 2, s.ActiveVehicles)
+	assert.Equal(t, 2, s.TotalVehiclesTracked)
+	require.NotNil(t, s.LastUpdate)
+	assert.False(t, s.LastUpdate.IsZero())
+}
+
+func TestTracker_Status_WithStaleVehicles(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	tracker.Update(&LocationReport{VehicleID: "old-bus", Latitude: 1, Longitude: 2, Timestamp: 100})
+	tracker.mu.Lock()
+	tracker.vehicles["old-bus"].UpdatedAt = time.Now().Add(-10 * time.Minute)
+	tracker.mu.Unlock()
+
+	tracker.Update(&LocationReport{VehicleID: "new-bus", Latitude: 3, Longitude: 4, Timestamp: 200})
+
+	s := tracker.Status()
+
+	assert.Equal(t, 1, s.ActiveVehicles)
+	assert.Equal(t, 2, s.TotalVehiclesTracked)
+	require.NotNil(t, s.LastUpdate)
+}
+
 func TestTracker_CleanupPreservesFreshVehicles(t *testing.T) {
 	maxAge := 50 * time.Millisecond
 	tracker := NewTracker(maxAge)

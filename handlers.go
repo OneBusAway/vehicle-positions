@@ -147,6 +147,27 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 	return feed
 }
 
+type adminStatusResponse struct {
+	Status               string     `json:"status"`
+	UptimeSeconds        int64      `json:"uptime_seconds"`
+	ActiveVehicles       int        `json:"active_vehicles"`
+	TotalVehiclesTracked int        `json:"total_vehicles_tracked"`
+	LastUpdate           *time.Time `json:"last_update,omitempty"`
+}
+
+func handleAdminStatus(tracker *Tracker, startTime time.Time) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ts := tracker.Status()
+		writeJSON(w, http.StatusOK, adminStatusResponse{
+			Status:               "ok",
+			UptimeSeconds:        int64(time.Since(startTime).Seconds()),
+			ActiveVehicles:       ts.ActiveVehicles,
+			TotalVehiclesTracked: ts.TotalVehiclesTracked,
+			LastUpdate:           ts.LastUpdate,
+		})
+	}
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

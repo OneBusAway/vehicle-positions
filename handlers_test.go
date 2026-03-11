@@ -213,6 +213,87 @@ func TestHandlePostLocation_Validation(t *testing.T) {
 	}
 }
 
+func TestHandleAdminStatus_Empty(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	handler := handleAdminStatus(tracker, time.Now())
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var resp adminStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ok", resp.Status)
+	assert.Equal(t, 0, resp.ActiveVehicles)
+	assert.Equal(t, 0, resp.TotalVehiclesTracked)
+	assert.Nil(t, resp.LastUpdate)
+}
+
+func TestHandleAdminStatus_WithVehicles(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100})
+	tracker.Update(&LocationReport{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: 200})
+
+	handler := handleAdminStatus(tracker, time.Now())
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp adminStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ok", resp.Status)
+	assert.Equal(t, 2, resp.ActiveVehicles)
+	assert.Equal(t, 2, resp.TotalVehiclesTracked)
+	require.NotNil(t, resp.LastUpdate)
+	assert.False(t, resp.LastUpdate.IsZero())
+}
+
+func TestHandleAdminStatus_Uptime(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	startTime := time.Now().Add(-10 * time.Second)
+	handler := handleAdminStatus(tracker, startTime)
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	var resp adminStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+
+	assert.GreaterOrEqual(t, resp.UptimeSeconds, int64(10))
+}
+
+func TestHandleAdminStatus_ZeroVehiclesNotNull(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	handler := handleAdminStatus(tracker, time.Now())
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	var raw map[string]any
+	err := json.NewDecoder(w.Body).Decode(&raw)
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(0), raw["active_vehicles"])
+	assert.Equal(t, float64(0), raw["total_vehicles_tracked"])
+}
+
 type mockStore struct {
 	err   error
 	saved bool

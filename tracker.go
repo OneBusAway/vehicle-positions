@@ -91,6 +91,35 @@ func (t *Tracker) ActiveVehicles() []*VehicleState {
 	return active
 }
 
+// TrackerStatus holds aggregate statistics about tracked vehicles.
+type TrackerStatus struct {
+	ActiveVehicles       int
+	TotalVehiclesTracked int
+	LastUpdate           *time.Time
+}
+
+// Status returns aggregate statistics with a single lock acquisition.
+func (t *Tracker) Status() TrackerStatus {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	cutoff := time.Now().Add(-t.maxAge)
+	var s TrackerStatus
+	s.TotalVehiclesTracked = len(t.vehicles)
+	var latest time.Time
+	for _, v := range t.vehicles {
+		if v.UpdatedAt.After(cutoff) {
+			s.ActiveVehicles++
+		}
+		if v.UpdatedAt.After(latest) {
+			latest = v.UpdatedAt
+		}
+	}
+	if !latest.IsZero() {
+		s.LastUpdate = &latest
+	}
+	return s
+}
+
 // cleanup removes old entries from the tracker to prevent unbounded memory growth.
 func (t *Tracker) cleanup() {
 	t.mu.Lock()
