@@ -1,7 +1,37 @@
-# Compiled binary
+# Binaries
 vehicle-positions
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
 
-# Local settings
-settings.local.json
+# Profiling / Coverage
+*.prof
+# Narrowed to specific patterns to avoid being overly broad
+coverage.out
+*.test.out
+*.cpu
+*.mem
 
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Local configuration
+settings.local.json
