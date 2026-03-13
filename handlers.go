@@ -16,6 +16,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	maxTimestampAge = 24 * time.Hour
+	maxFutureSkew   = 5 * time.Minute
+)
+
 // LocationReport is the JSON payload for incoming location data.
 type LocationReport struct {
 	VehicleID string  `json:"vehicle_id"`
@@ -29,6 +34,10 @@ type LocationReport struct {
 }
 
 func (r *LocationReport) validate() error {
+	return r.validateAt(time.Now())
+}
+
+func (r *LocationReport) validateAt(now time.Time) error {
 	if r.VehicleID == "" {
 		return fmt.Errorf("vehicle_id is required")
 	}
@@ -43,6 +52,13 @@ func (r *LocationReport) validate() error {
 	}
 	if r.Timestamp <= 0 {
 		return fmt.Errorf("timestamp must be positive")
+	}
+	reportedAt := time.Unix(r.Timestamp, 0)
+	if reportedAt.Before(now.Add(-maxTimestampAge)) {
+		return fmt.Errorf("timestamp is too old")
+	}
+	if reportedAt.After(now.Add(maxFutureSkew)) {
+		return fmt.Errorf("timestamp is too far in the future")
 	}
 	return nil
 }

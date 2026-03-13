@@ -322,7 +322,7 @@ func TestHandlePostLocation_HappyPath(t *testing.T) {
 	mStore := &mockStore{}
 	handler := handlePostLocation(mStore, tracker)
 
-	loc := LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100}
+	loc := LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()}
 	w := postLocation(handler, loc)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -335,7 +335,7 @@ func TestHandlePostLocation_StoreFailure(t *testing.T) {
 	mStore := &mockStore{err: fmt.Errorf("database down")}
 	handler := handlePostLocation(mStore, tracker)
 
-	loc := LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100}
+	loc := LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()}
 	w := postLocation(handler, loc)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -382,7 +382,7 @@ func TestHandlePostLocation_ContentTypeWithCharsetAccepted(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	mStore := &mockStore{}
 	handler := handlePostLocation(mStore, tracker)
-	body := []byte(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":100}`)
+	body := []byte(fmt.Sprintf(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":%d}`, time.Now().Unix()))
 
 	w := postLocationWithBody(handler, body, "application/json; charset=utf-8")
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -450,9 +450,59 @@ func TestHandlePostLocation_TrailingWhitespaceAccepted(t *testing.T) {
 	mStore := &mockStore{}
 	handler := handlePostLocation(mStore, tracker)
 
-	body := []byte("{\"vehicle_id\":\"bus-1\",\"latitude\":1,\"longitude\":2,\"timestamp\":100}   \n")
+	body := []byte(fmt.Sprintf("{\"vehicle_id\":\"bus-1\",\"latitude\":1,\"longitude\":2,\"timestamp\":%d}   \n", time.Now().Unix()))
 	w := postLocationWithBody(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.True(t, mStore.saved, "location should be saved when only trailing whitespace exists")
+}
+
+func TestHandlePostLocation_TimestampWindow(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker)
+
+	tests := []struct {
+		name      string
+		timestamp int64
+		wantCode  int
+		wantErr   string
+	}{
+		{
+			name:      "too old",
+			timestamp: time.Now().Add(-maxTimestampAge - time.Minute).Unix(),
+			wantCode:  http.StatusBadRequest,
+			wantErr:   "timestamp is too old",
+		},
+		{
+			name:      "too far in future",
+			timestamp: time.Now().Add(maxFutureSkew + time.Minute).Unix(),
+			wantCode:  http.StatusBadRequest,
+			wantErr:   "timestamp is too far in the future",
+		},
+		{
+			name:      "valid timestamp",
+			timestamp: time.Now().Unix(),
+			wantCode:  http.StatusCreated,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mStore.saved = false
+			loc := LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: tc.timestamp}
+			w := postLocation(handler, loc)
+			assert.Equal(t, tc.wantCode, w.Code)
+
+			if tc.wantCode == http.StatusBadRequest {
+				var resp map[string]string
+				err := json.NewDecoder(w.Body).Decode(&resp)
+				require.NoError(t, err)
+				assert.Contains(t, resp["error"], tc.wantErr)
+				assert.False(t, mStore.saved)
+			} else {
+				assert.True(t, mStore.saved)
+			}
+		})
+	}
 }
