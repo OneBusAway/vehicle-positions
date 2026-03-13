@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -204,6 +205,16 @@ func TestHandlePostLocation_Validation(t *testing.T) {
 			name: "zero timestamp",
 			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 0},
 			want: "timestamp must be positive",
+		},
+		{
+			name: "vehicle_id too long",
+			loc:  LocationReport{VehicleID: strings.Repeat("v", maxVehicleIDLength+1), Latitude: 1, Longitude: 2, Timestamp: 100},
+			want: "vehicle_id exceeds maximum length",
+		},
+		{
+			name: "trip_id too long",
+			loc:  LocationReport{VehicleID: "bus-1", TripID: strings.Repeat("t", maxTripIDLength+1), Latitude: 1, Longitude: 2, Timestamp: 100},
+			want: "trip_id exceeds maximum length",
 		},
 	}
 
