@@ -192,6 +192,37 @@ func TestTracker_Status_WithStaleVehicles(t *testing.T) {
 	require.NotNil(t, s.LastUpdate)
 }
 
+func TestTracker_TotalSeen_SurvivesCleanup(t *testing.T) {
+	tracker := NewTracker(10 * time.Millisecond)
+	defer tracker.Stop()
+
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 1})
+	tracker.Update(&LocationReport{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: 2})
+
+	// Wait for cleanup to remove stale entries
+	assert.Eventually(t, func() bool {
+		tracker.mu.RLock()
+		defer tracker.mu.RUnlock()
+		return len(tracker.vehicles) == 0
+	}, 100*time.Millisecond, 5*time.Millisecond, "cleanup should remove all stale vehicles")
+
+	s := tracker.Status()
+	assert.Equal(t, 0, s.ActiveVehicles)
+	assert.Equal(t, 2, s.TotalVehiclesTracked, "totalSeen must survive cleanup")
+}
+
+func TestTracker_TotalSeen_DuplicateVehicleNotCounted(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 1})
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 3, Longitude: 4, Timestamp: 2})
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 5, Longitude: 6, Timestamp: 3})
+
+	s := tracker.Status()
+	assert.Equal(t, 1, s.TotalVehiclesTracked, "repeated updates for same vehicle should count once")
+}
+
 func TestTracker_CleanupPreservesFreshVehicles(t *testing.T) {
 	maxAge := 50 * time.Millisecond
 	tracker := NewTracker(maxAge)

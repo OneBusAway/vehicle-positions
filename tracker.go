@@ -21,6 +21,7 @@ type VehicleState struct {
 type Tracker struct {
 	mu       sync.RWMutex
 	vehicles map[string]*VehicleState
+	seen     map[string]struct{}
 	maxAge   time.Duration
 	done     chan struct{}
 	stopOnce sync.Once
@@ -34,6 +35,7 @@ func NewTracker(maxAge time.Duration) *Tracker {
 
 	t := &Tracker{
 		vehicles: make(map[string]*VehicleState),
+		seen:     make(map[string]struct{}),
 		maxAge:   maxAge,
 		done:     make(chan struct{}),
 	}
@@ -64,6 +66,7 @@ func (t *Tracker) Stop() {
 func (t *Tracker) Update(loc *LocationReport) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.seen[loc.VehicleID] = struct{}{}
 	t.vehicles[loc.VehicleID] = &VehicleState{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
@@ -104,7 +107,7 @@ func (t *Tracker) Status() TrackerStatus {
 	defer t.mu.RUnlock()
 	cutoff := time.Now().Add(-t.maxAge)
 	var s TrackerStatus
-	s.TotalVehiclesTracked = len(t.vehicles)
+	s.TotalVehiclesTracked = len(t.seen)
 	var latest time.Time
 	for _, v := range t.vehicles {
 		if v.UpdatedAt.After(cutoff) {

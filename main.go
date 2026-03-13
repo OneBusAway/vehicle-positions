@@ -57,6 +57,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/locations", handlePostLocation(store, tracker))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
+	// TODO: protect with requireAuth once auth lands
 	mux.HandleFunc("GET /api/v1/admin/status", handleAdminStatus(tracker, startTime))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
