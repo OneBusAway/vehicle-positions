@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_location_points_vehicle_received_at;
