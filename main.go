@@ -50,7 +50,8 @@ func main() {
 	startTime := time.Now()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/locations", handlePostLocation(store, tracker))
+	limiter := newIPRateLimiter(defaultRateLimitRPS, defaultRateLimitBurst)
+	mux.Handle("POST /api/v1/locations", rateLimitMiddleware(limiter, handlePostLocation(store, tracker)))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
 	mux.HandleFunc("GET /api/v1/admin/status", handleAdminStatus(tracker, startTime))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
