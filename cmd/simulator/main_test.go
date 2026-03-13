@@ -1,8 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"math"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -142,30 +148,33 @@ func TestInterpolate(t *testing.T) {
 	}
 }
 
-func TestBuildReport(t *testing.T) {
-	from := Waypoint{Lat: -1.2864, Lon: 36.8172}
-	to := Waypoint{Lat: -1.2833, Lon: 36.8158}
-
-	pos := interpolate(from, to, 0.5)
-	brng := bearing(from, to)
-	spd := speed(haversineDistance(from, to), 10.0)
-
+func TestLocationReportJSONRoundTrip(t *testing.T) {
 	report := locationReport{
 		VehicleID: "sim-vehicle-001",
-		Latitude:  pos.Lat,
-		Longitude: pos.Lon,
-		Bearing:   brng,
-		Speed:     spd,
+		Latitude:  -1.2864,
+		Longitude: 36.8172,
+		Bearing:   327.5,
+		Speed:     8.0,
 		Timestamp: 1752566400,
 	}
 
-	assert.Equal(t, "sim-vehicle-001", report.VehicleID)
-	assert.InDelta(t, -1.28485, report.Latitude, 0.001)
-	assert.InDelta(t, 36.8165, report.Longitude, 0.001)
-	assert.Greater(t, report.Bearing, 0.0)
-	assert.Less(t, report.Bearing, 360.0)
-	assert.Greater(t, report.Speed, 0.0)
-	assert.Equal(t, int64(1752566400), report.Timestamp)
+	data, err := json.Marshal(report)
+	require.NoError(t, err)
+
+	// Verify JSON field names match server's expected format
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &raw))
+
+	expectedFields := []string{"vehicle_id", "latitude", "longitude", "bearing", "speed", "timestamp"}
+	for _, field := range expectedFields {
+		assert.Contains(t, raw, field, "missing JSON field %q", field)
+	}
+	assert.Len(t, raw, len(expectedFields), "unexpected extra fields in JSON")
+
+	// Verify round-trip preserves values
+	var decoded locationReport
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, report, decoded)
 }
 
 func TestRouteWraparound(t *testing.T) {
@@ -197,4 +206,96 @@ func TestRoutesNotEmpty(t *testing.T) {
 			assert.LessOrEqual(t, wp.Lon, 180.0, "route %d waypoint %d lon", i, j)
 		}
 	}
+}
+
+func TestSendReport_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/api/v1/locations", r.URL.Path)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	s := &stats{}
+	report := &locationReport{
+		VehicleID: "test-vehicle",
+		Latitude:  -1.2864,
+		Longitude: 36.8172,
+		Bearing:   90.0,
+		Speed:     8.0,
+		Timestamp: time.Now().Unix(),
+	}
+
+	sendReport(context.Background(), server.Client(), server.URL, "test-vehicle", report, s)
+
+	assert.Equal(t, int64(1), s.succeeded.Load())
+	assert.Equal(t, int64(0), s.failed.Load())
+	assert.Greater(t, s.totalMS.Load(), int64(-1))
+}
+
+func TestSendReport_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"invalid vehicle_id"}`))
+	}))
+	defer server.Close()
+
+	s := &stats{}
+	report := &locationReport{
+		VehicleID: "test-vehicle",
+		Latitude:  -1.2864,
+		Longitude: 36.8172,
+		Timestamp: time.Now().Unix(),
+	}
+
+	sendReport(context.Background(), server.Client(), server.URL, "test-vehicle", report, s)
+
+	assert.Equal(t, int64(0), s.succeeded.Load())
+	assert.Equal(t, int64(1), s.failed.Load())
+}
+
+func TestSendReport_CancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	s := &stats{}
+	report := &locationReport{
+		VehicleID: "test-vehicle",
+		Latitude:  -1.2864,
+		Longitude: 36.8172,
+		Timestamp: time.Now().Unix(),
+	}
+
+	sendReport(ctx, http.DefaultClient, "http://localhost:99999", "test-vehicle", report, s)
+
+	// Cancelled context should not count as a failure
+	assert.Equal(t, int64(0), s.succeeded.Load())
+	assert.Equal(t, int64(0), s.failed.Load())
+}
+
+func TestSimulateVehicle(t *testing.T) {
+	var received atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received.Add(1)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	route := []Waypoint{
+		{Lat: -1.2864, Lon: 36.8172},
+		{Lat: -1.2833, Lon: 36.8158},
+	}
+
+	s := &stats{}
+	ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
+	defer cancel()
+
+	simulateVehicle(ctx, server.Client(), server.URL, "test-sim", route, 100*time.Millisecond, s)
+
+	assert.Eventually(t, func() bool {
+		return s.succeeded.Load() >= 2
+	}, time.Second, 10*time.Millisecond, "expected at least 2 successful requests")
+	assert.Equal(t, int64(0), s.failed.Load())
+	assert.Greater(t, received.Load(), int64(1))
 }

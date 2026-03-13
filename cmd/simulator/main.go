@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os/signal"
@@ -25,7 +26,6 @@ type locationReport struct {
 }
 
 type stats struct {
-	sent      atomic.Int64
 	succeeded atomic.Int64
 	failed    atomic.Int64
 	totalMS   atomic.Int64
@@ -70,14 +70,13 @@ func main() {
 	}
 	wg.Wait()
 
-	total := s.sent.Load()
 	ok := s.succeeded.Load()
 	fail := s.failed.Load()
 	avgMS := int64(0)
 	if ok > 0 {
 		avgMS = s.totalMS.Load() / ok
 	}
-	log.Printf("simulation complete: %d requests, %d ok, %d failed, avg=%dms", total, ok, fail, avgMS)
+	log.Printf("simulation complete: %d requests, %d ok, %d failed, avg=%dms", ok+fail, ok, fail, avgMS)
 }
 
 func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleID string, route []Waypoint, interval time.Duration, s *stats) {
@@ -92,7 +91,7 @@ func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleI
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			from := route[waypointIdx%len(route)]
+			from := route[waypointIdx]
 			to := route[(waypointIdx+1)%len(route)]
 
 			segmentDist := haversineDistance(from, to)
@@ -104,11 +103,16 @@ func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleI
 			elapsed := now.Sub(segmentStart).Seconds()
 			t := elapsed / segmentDuration
 			if t >= 1.0 {
-				waypointIdx++
+				waypointIdx = (waypointIdx + 1) % len(route)
 				segmentStart = now
 				t = 0
-				from = route[waypointIdx%len(route)]
+				from = route[waypointIdx]
 				to = route[(waypointIdx+1)%len(route)]
+				segmentDist = haversineDistance(from, to)
+				segmentDuration = segmentDist / 8.0
+				if segmentDuration <= 0 {
+					segmentDuration = 1
+				}
 			}
 
 			pos := interpolate(from, to, t)
@@ -133,7 +137,6 @@ func sendReport(ctx context.Context, client *http.Client, baseURL, vehicleID str
 	body, err := json.Marshal(report)
 	if err != nil {
 		log.Printf("%s: marshal error: %v", vehicleID, err)
-		s.sent.Add(1)
 		s.failed.Add(1)
 		return
 	}
@@ -141,7 +144,6 @@ func sendReport(ctx context.Context, client *http.Client, baseURL, vehicleID str
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/locations", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("%s: request error: %v", vehicleID, err)
-		s.sent.Add(1)
 		s.failed.Add(1)
 		return
 	}
@@ -151,20 +153,24 @@ func sendReport(ctx context.Context, client *http.Client, baseURL, vehicleID str
 	resp, err := client.Do(req)
 	latency := time.Since(start)
 
-	s.sent.Add(1)
 	if err != nil {
+		if ctx.Err() != nil {
+			return // clean shutdown, not a real failure
+		}
 		log.Printf("%s: POST failed: %v", vehicleID, err)
 		s.failed.Add(1)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusCreated {
+		io.Copy(io.Discard, resp.Body)
 		s.succeeded.Add(1)
 		s.totalMS.Add(latency.Milliseconds())
 		log.Printf("%s: POST %d (%dms)", vehicleID, resp.StatusCode, latency.Milliseconds())
 	} else {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		s.failed.Add(1)
-		log.Printf("%s: POST %d (%dms)", vehicleID, resp.StatusCode, latency.Milliseconds())
+		log.Printf("%s: POST %d (%dms): %s", vehicleID, resp.StatusCode, latency.Milliseconds(), string(bodyBytes))
 	}
 }
