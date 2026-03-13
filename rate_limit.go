@@ -10,28 +10,36 @@ import (
 const (
 	defaultRateLimitRPS   = 5
 	defaultRateLimitBurst = 10
+	defaultRateLimitTTL   = 10 * time.Minute
 )
 
 type rateLimitEntry struct {
-	windowStart time.Time
-	count       int
+	tokens     float64
+	lastRefill time.Time
+	lastSeen   time.Time
 }
 
 type ipRateLimiter struct {
 	mu      sync.Mutex
 	entries map[string]*rateLimitEntry
-	limit   int
+	rate    float64
+	burst   float64
+	ttl     time.Duration
 }
 
 func newIPRateLimiter(rps, burst int) *ipRateLimiter {
-	limit := rps + burst
-	if limit <= 0 {
-		limit = 1
+	if rps <= 0 {
+		rps = 1
+	}
+	if burst <= 0 {
+		burst = 1
 	}
 
 	return &ipRateLimiter{
 		entries: make(map[string]*rateLimitEntry),
-		limit:   limit,
+		rate:    float64(rps),
+		burst:   float64(burst),
+		ttl:     defaultRateLimitTTL,
 	}
 }
 
@@ -39,23 +47,43 @@ func (l *ipRateLimiter) allow(ip string, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	l.cleanupExpiredLocked(now)
+
 	entry, ok := l.entries[ip]
 	if !ok {
-		l.entries[ip] = &rateLimitEntry{windowStart: now, count: 1}
+		l.entries[ip] = &rateLimitEntry{
+			tokens:     l.burst - 1,
+			lastRefill: now,
+			lastSeen:   now,
+		}
 		return true
 	}
 
-	if now.Sub(entry.windowStart) >= time.Second {
-		entry.windowStart = now
-		entry.count = 1
-		return true
+	elapsed := now.Sub(entry.lastRefill).Seconds()
+	if elapsed > 0 {
+		entry.tokens += elapsed * l.rate
+		if entry.tokens > l.burst {
+			entry.tokens = l.burst
+		}
+		entry.lastRefill = now
 	}
 
-	if entry.count >= l.limit {
+	if entry.tokens < 1 {
+		entry.lastSeen = now
 		return false
 	}
-	entry.count++
+
+	entry.tokens--
+	entry.lastSeen = now
 	return true
+}
+
+func (l *ipRateLimiter) cleanupExpiredLocked(now time.Time) {
+	for ip, entry := range l.entries {
+		if now.Sub(entry.lastSeen) > l.ttl {
+			delete(l.entries, ip)
+		}
+	}
 }
 
 func rateLimitMiddleware(limiter *ipRateLimiter, next http.Handler) http.Handler {
