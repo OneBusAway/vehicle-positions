@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -18,6 +19,8 @@ func main() {
 	readTimeout := envDurationOrDefault("READ_TIMEOUT", 15*time.Second)
 	writeTimeout := envDurationOrDefault("WRITE_TIMEOUT", 15*time.Second)
 	idleTimeout := envDurationOrDefault("IDLE_TIMEOUT", 60*time.Second)
+	rateLimitRPS := envIntOrDefault("RATE_LIMIT_RPS", defaultRateLimitRPS)
+	rateLimitBurst := envIntOrDefault("RATE_LIMIT_BURST", defaultRateLimitBurst)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -50,7 +53,7 @@ func main() {
 	startTime := time.Now()
 
 	mux := http.NewServeMux()
-	limiter := newIPRateLimiter(defaultRateLimitRPS, defaultRateLimitBurst)
+	limiter := newIPRateLimiter(rateLimitRPS, rateLimitBurst)
 	mux.Handle("POST /api/v1/locations", rateLimitMiddleware(limiter, handlePostLocation(store, tracker)))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
 	mux.HandleFunc("GET /api/v1/admin/status", handleAdminStatus(tracker, startTime))
@@ -98,6 +101,18 @@ func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
 			return fallback
 		}
 		return d
+	}
+	return fallback
+}
+
+func envIntOrDefault(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			log.Printf("invalid int for %s: %q, using default %d", key, v, fallback)
+			return fallback
+		}
+		return n
 	}
 	return fallback
 }
