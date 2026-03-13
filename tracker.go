@@ -11,8 +11,8 @@ type VehicleState struct {
 	TripID    string
 	Latitude  float64
 	Longitude float64
-	Bearing   float64
-	Speed     float64
+	Bearing   *float64
+	Speed     *float64
 	Timestamp int64
 	UpdatedAt time.Time // server time when this report was received
 }
@@ -67,13 +67,26 @@ func (t *Tracker) Update(loc *LocationReport) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.seen[loc.VehicleID] = struct{}{}
+
+	var bearing *float64
+	if loc.Bearing != nil {
+		v := *loc.Bearing
+		bearing = &v
+	}
+
+	var speed *float64
+	if loc.Speed != nil {
+		v := *loc.Speed
+		speed = &v
+	}
+
 	t.vehicles[loc.VehicleID] = &VehicleState{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
 		Latitude:  loc.Latitude,
 		Longitude: loc.Longitude,
-		Bearing:   loc.Bearing,
-		Speed:     loc.Speed,
+		Bearing:   bearing,
+		Speed:     speed,
 		Timestamp: loc.Timestamp,
 		UpdatedAt: time.Now(),
 	}

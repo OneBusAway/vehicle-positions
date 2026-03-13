@@ -83,18 +83,29 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 		return fmt.Errorf("upsert vehicle: %w", err)
 	}
 
+	bearing := pgtype.Float8{}
+	if loc.Bearing != nil {
+		bearing = pgtype.Float8{Float64: *loc.Bearing, Valid: true}
+	}
+
+	speed := pgtype.Float8{}
+	if loc.Speed != nil {
+		speed = pgtype.Float8{Float64: *loc.Speed, Valid: true}
+	}
+
+	accuracy := pgtype.Float8{}
+	if loc.Accuracy != nil {
+		accuracy = pgtype.Float8{Float64: *loc.Accuracy, Valid: true}
+	}
+
 	if err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
 		Latitude:  loc.Latitude,
 		Longitude: loc.Longitude,
-		// TODO: LocationReport uses bare float64, so we cannot distinguish
-		// "not provided" from zero. Bearing 0.0 (north) is stored as non-NULL
-		// even when the field was never set. A follow-up should change these
-		// fields to *float64 on LocationReport to preserve the distinction.
-		Bearing:   pgtype.Float8{Float64: loc.Bearing, Valid: true},
-		Speed:     pgtype.Float8{Float64: loc.Speed, Valid: true},
-		Accuracy:  pgtype.Float8{Float64: loc.Accuracy, Valid: true},
+		Bearing:   bearing,
+		Speed:     speed,
+		Accuracy:  accuracy,
 		Timestamp: loc.Timestamp,
 	}); err != nil {
 		return fmt.Errorf("insert location: %w", err)
@@ -123,13 +134,16 @@ func (s *Store) GetRecentLocations(ctx context.Context, cutoff time.Time) ([]*Lo
 			Timestamp: row.Timestamp,
 		}
 		if row.Bearing.Valid {
-			loc.Bearing = row.Bearing.Float64
+			v := row.Bearing.Float64
+			loc.Bearing = &v
 		}
 		if row.Speed.Valid {
-			loc.Speed = row.Speed.Float64
+			v := row.Speed.Float64
+			loc.Speed = &v
 		}
 		if row.Accuracy.Valid {
-			loc.Accuracy = row.Accuracy.Float64
+			v := row.Accuracy.Float64
+			loc.Accuracy = &v
 		}
 		locations = append(locations, loc)
 	}

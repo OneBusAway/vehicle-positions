@@ -17,6 +17,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func float64ptr(v float64) *float64 {
+	return &v
+}
+
 func postLocation(handler http.HandlerFunc, loc LocationReport) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(loc)
 	req := httptest.NewRequest("POST", "/api/v1/locations", bytes.NewReader(body))
@@ -64,8 +68,8 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 			TripID:    "route-5",
 			Latitude:  -1.29,
 			Longitude: 36.82,
-			Bearing:   180,
-			Speed:     8.5,
+			Bearing:   float64ptr(180),
+			Speed:     float64ptr(8.5),
 			Timestamp: 1752566400,
 		},
 		{
@@ -495,4 +499,76 @@ func TestHandlePostLocation_TrailingWhitespaceAccepted(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.True(t, mStore.saved, "location should be saved when only trailing whitespace exists")
+}
+
+func TestBuildFeed_OmitsUnsetBearingAndSpeed(t *testing.T) {
+	vehicles := []*VehicleState{
+		{
+			VehicleID: "bus-1",
+			Latitude:  1,
+			Longitude: 2,
+			Timestamp: 100,
+		},
+	}
+
+	feed := buildFeed(vehicles)
+	require.Len(t, feed.Entity, 1)
+
+	// Verify that the Position message is present and has the expected latitude and longitude
+	pos := feed.Entity[0].Vehicle.Position
+	assert.Equal(t, float32(1), pos.GetLatitude())
+	assert.Equal(t, float32(2), pos.GetLongitude())
+	assert.Nil(t, pos.Bearing)
+	assert.Nil(t, pos.Speed)
+}
+
+func TestHandlePostLocation_ExplicitZeroOptionalFieldsPreserved(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker)
+
+	body := []byte(`{
+		"vehicle_id":"bus-1",
+		"latitude":1,
+		"longitude":2,
+		"bearing":0,
+		"speed":0,
+		"accuracy":0,
+		"timestamp":100
+	}`)
+
+	// Verify that the handler accepts the explicit zero values and they are preserved in the tracker state
+	w := postLocationWithBody(handler, body, "application/json")
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+
+	require.NotNil(t, active[0].Bearing)
+	assert.Equal(t, 0.0, *active[0].Bearing)
+
+	require.NotNil(t, active[0].Speed)
+	assert.Equal(t, 0.0, *active[0].Speed)
+}
+
+func TestHandlePostLocation_MissingOptionalFieldsRemainNil(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker)
+
+	body := []byte(`{
+		"vehicle_id":"bus-1",
+		"latitude":1,
+		"longitude":2,
+		"timestamp":100
+	}`)
+
+	// Verify that the handler accepts the request without optional fields and they remain nil in the tracker state
+	w := postLocationWithBody(handler, body, "application/json")
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+	assert.Nil(t, active[0].Bearing)
+	assert.Nil(t, active[0].Speed)
 }

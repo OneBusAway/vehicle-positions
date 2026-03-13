@@ -19,14 +19,14 @@ import (
 
 // LocationReport is the JSON payload for incoming location data.
 type LocationReport struct {
-	VehicleID string  `json:"vehicle_id"`
-	TripID    string  `json:"trip_id"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Bearing   float64 `json:"bearing"`
-	Speed     float64 `json:"speed"`
-	Accuracy  float64 `json:"accuracy"`
-	Timestamp int64   `json:"timestamp"`
+	VehicleID string   `json:"vehicle_id"`
+	TripID    string   `json:"trip_id"`
+	Latitude  float64  `json:"latitude"`
+	Longitude float64  `json:"longitude"`
+	Bearing   *float64 `json:"bearing,omitempty"`
+	Speed     *float64 `json:"speed,omitempty"`
+	Accuracy  *float64 `json:"accuracy,omitempty"`
+	Timestamp int64    `json:"timestamp"`
 }
 
 const maxVehicleIDLength = 50
@@ -157,21 +157,28 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 	}
 
 	for _, v := range vehicles {
+		position := &gtfs.Position{
+			Latitude:  proto.Float32(float32(v.Latitude)),
+			Longitude: proto.Float32(float32(v.Longitude)),
+		}
+		if v.Bearing != nil {
+			position.Bearing = proto.Float32(float32(*v.Bearing))
+		}
+		if v.Speed != nil {
+			position.Speed = proto.Float32(float32(*v.Speed))
+		}
+
 		entity := &gtfs.FeedEntity{
 			Id: proto.String(v.VehicleID),
 			Vehicle: &gtfs.VehiclePosition{
 				Vehicle: &gtfs.VehicleDescriptor{
 					Id: proto.String(v.VehicleID),
 				},
-				Position: &gtfs.Position{
-					Latitude:  proto.Float32(float32(v.Latitude)),
-					Longitude: proto.Float32(float32(v.Longitude)),
-					Bearing:   proto.Float32(float32(v.Bearing)),
-					Speed:     proto.Float32(float32(v.Speed)),
-				},
+				Position:  position,
 				Timestamp: proto.Uint64(uint64(v.Timestamp)),
 			},
 		}
+
 		if v.TripID != "" {
 			entity.Vehicle.Trip = &gtfs.TripDescriptor{
 				TripId: proto.String(v.TripID),
