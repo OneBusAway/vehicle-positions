@@ -16,6 +16,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	maxVehicleIDLength = 64
+	maxTripIDLength    = 128
+)
+
 // LocationReport is the JSON payload for incoming location data.
 type LocationReport struct {
 	VehicleID string  `json:"vehicle_id"`
@@ -31,6 +36,12 @@ type LocationReport struct {
 func (r *LocationReport) validate() error {
 	if r.VehicleID == "" {
 		return fmt.Errorf("vehicle_id is required")
+	}
+	if len(r.VehicleID) > maxVehicleIDLength {
+		return fmt.Errorf("vehicle_id exceeds maximum length of %d", maxVehicleIDLength)
+	}
+	if len(r.TripID) > maxTripIDLength {
+		return fmt.Errorf("trip_id exceeds maximum length of %d", maxTripIDLength)
 	}
 	if r.Latitude == 0 && r.Longitude == 0 {
 		return fmt.Errorf("latitude and longitude cannot both be zero (likely GPS error)")
