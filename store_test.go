@@ -79,9 +79,9 @@ func TestStore_SaveLocation(t *testing.T) {
 		TripID:    "route-5",
 		Latitude:  -1.29,
 		Longitude: 36.82,
-		Bearing:   180.0,
-		Speed:     8.5,
-		Accuracy:  12.0,
+		Bearing:   float64ptr(180.0),
+		Speed:     float64ptr(8.5),
+		Accuracy:  float64ptr(12.0),
 		Timestamp: 1752566400,
 	}
 
@@ -218,9 +218,9 @@ func TestStore_SaveLocation_NullableFieldRoundTrip(t *testing.T) {
 		TripID:    "route-1",
 		Latitude:  -1.29,
 		Longitude: 36.82,
-		Bearing:   180.5,
-		Speed:     8.5,
-		Accuracy:  12.0,
+		Bearing:   float64ptr(180.5),
+		Speed:     float64ptr(8.5),
+		Accuracy:  float64ptr(12.0),
 		Timestamp: 1752566400,
 	}
 
@@ -232,13 +232,82 @@ func TestStore_SaveLocation_NullableFieldRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
 
-	assert.Equal(t, 180.5, locs[0].Bearing, "bearing should round-trip through save and read")
-	assert.Equal(t, 8.5, locs[0].Speed, "speed should round-trip through save and read")
-	assert.Equal(t, 12.0, locs[0].Accuracy, "accuracy should round-trip through save and read")
+	// updated as pointer fields, so we can distinguish between null and zero values
+	require.NotNil(t, locs[0].Bearing)
+	assert.Equal(t, 180.5, *locs[0].Bearing, "bearing should round-trip through save and read")
+
+	require.NotNil(t, locs[0].Speed)
+	assert.Equal(t, 8.5, *locs[0].Speed, "speed should round-trip through save and read")
+
+	require.NotNil(t, locs[0].Accuracy)
+	assert.Equal(t, 12.0, *locs[0].Accuracy, "accuracy should round-trip through save and read")
 }
 
 func TestStore_Migrate_Idempotent(t *testing.T) {
 	store := newTestStore(t)
 	err := store.Migrate(testDatabaseURL(t))
 	assert.NoError(t, err, "second Migrate call should succeed")
+}
+
+func TestStore_SaveLocation_MissingOptionalFieldsStoredAsNull(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	store.pool.Exec(ctx, "DELETE FROM location_points")
+	store.pool.Exec(ctx, "DELETE FROM vehicles")
+
+	loc := &LocationReport{
+		VehicleID: "bus-null",
+		Latitude:  1,
+		Longitude: 2,
+		Timestamp: 100,
+	}
+
+	err := store.SaveLocation(ctx, loc)
+	require.NoError(t, err)
+
+	// Verify that the nullable fields are actually null in the database, not just zero
+	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-5*time.Minute))
+	require.NoError(t, err)
+	require.Len(t, locs, 1)
+
+	assert.Nil(t, locs[0].Bearing)
+	assert.Nil(t, locs[0].Speed)
+	assert.Nil(t, locs[0].Accuracy)
+}
+
+func TestStore_SaveLocation_ExplicitZeroOptionalFieldsPreserved(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	store.pool.Exec(ctx, "DELETE FROM location_points")
+	store.pool.Exec(ctx, "DELETE FROM vehicles")
+
+	zero := 0.0
+	loc := &LocationReport{
+		VehicleID: "bus-zero",
+		Latitude:  1,
+		Longitude: 2,
+		Bearing:   &zero,
+		Speed:     &zero,
+		Accuracy:  &zero,
+		Timestamp: 100,
+	}
+
+	err := store.SaveLocation(ctx, loc)
+	require.NoError(t, err)
+
+	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-5*time.Minute))
+	require.NoError(t, err)
+	require.Len(t, locs, 1)
+
+	// Verify that the explicit zero values are preserved and not treated as null
+	require.NotNil(t, locs[0].Bearing)
+	assert.Equal(t, 0.0, *locs[0].Bearing)
+
+	require.NotNil(t, locs[0].Speed)
+	assert.Equal(t, 0.0, *locs[0].Speed)
+
+	require.NotNil(t, locs[0].Accuracy)
+	assert.Equal(t, 0.0, *locs[0].Accuracy)
 }
