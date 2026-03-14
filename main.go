@@ -73,6 +73,14 @@ func main() {
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
 	// TODO: protect with requireAuth once auth lands
 	mux.HandleFunc("GET /api/v1/admin/status", handleAdminStatus(tracker, startTime))
+	// TODO: protect with requireAuth once auth lands
+	mux.HandleFunc("GET /api/v1/admin/vehicles", handleListVehicles(store))
+	// TODO: protect with requireAuth once auth lands
+	mux.HandleFunc("GET /api/v1/admin/vehicles/{id}", handleGetVehicle(store))
+	// TODO: protect with requireAuth once auth lands
+	mux.HandleFunc("POST /api/v1/admin/vehicles", handleUpsertVehicle(store))
+	// TODO: protect with requireAuth once auth lands
+	mux.HandleFunc("DELETE /api/v1/admin/vehicles/{id}", handleDeactivateVehicle(store))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})

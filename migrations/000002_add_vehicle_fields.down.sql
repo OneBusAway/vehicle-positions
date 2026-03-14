@@ -1,0 +1,2 @@
+ALTER TABLE vehicles DROP COLUMN IF EXISTS active;
+ALTER TABLE vehicles DROP COLUMN IF EXISTS agency_tag;

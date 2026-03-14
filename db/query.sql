@@ -13,3 +13,24 @@ SELECT DISTINCT ON (vehicle_id)
 FROM location_points
 WHERE received_at > $1
 ORDER BY vehicle_id, received_at DESC;
+
+-- name: ListVehicles :many
+SELECT id, label, agency_tag, active, created_at, updated_at
+FROM vehicles
+ORDER BY created_at DESC;
+
+-- name: GetVehicleByID :one
+SELECT id, label, agency_tag, active, created_at, updated_at
+FROM vehicles
+WHERE id = $1;
+
+-- name: UpsertAdminVehicle :one
+INSERT INTO vehicles (id, label, agency_tag)
+VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, agency_tag = EXCLUDED.agency_tag, updated_at = NOW()
+RETURNING id, label, agency_tag, active, created_at, updated_at;
+
+-- name: DeactivateVehicle :execrows
+UPDATE vehicles
+SET active = false, updated_at = NOW()
+WHERE id = $1;
