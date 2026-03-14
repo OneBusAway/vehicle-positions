@@ -13,6 +13,7 @@ type VehicleState struct {
 	Longitude float64
 	Bearing   *float64
 	Speed     *float64
+	Accuracy  *float64
 	Timestamp int64
 	UpdatedAt time.Time // server time when this report was received
 }
@@ -80,6 +81,12 @@ func (t *Tracker) Update(loc *LocationReport) {
 		speed = &v
 	}
 
+	var accuracy *float64
+	if loc.Accuracy != nil {
+		v := *loc.Accuracy
+		accuracy = &v
+	}
+
 	t.vehicles[loc.VehicleID] = &VehicleState{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
@@ -87,6 +94,7 @@ func (t *Tracker) Update(loc *LocationReport) {
 		Longitude: loc.Longitude,
 		Bearing:   bearing,
 		Speed:     speed,
+		Accuracy:  accuracy,
 		Timestamp: loc.Timestamp,
 		UpdatedAt: time.Now(),
 	}

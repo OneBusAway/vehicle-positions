@@ -21,6 +21,7 @@ func TestTracker_Update(t *testing.T) {
 		Longitude: 36.82,
 		Bearing:   float64ptr(180),
 		Speed:     float64ptr(8.5),
+		Accuracy:  float64ptr(12.0),
 		Timestamp: 1000000,
 	}
 	tracker.Update(loc)
@@ -33,9 +34,10 @@ func TestTracker_Update(t *testing.T) {
 	assert.Equal(t, 36.82, active[0].Longitude)
 	require.NotNil(t, active[0].Bearing)
 	assert.Equal(t, 180.0, *active[0].Bearing)
-
 	require.NotNil(t, active[0].Speed)
 	assert.Equal(t, 8.5, *active[0].Speed)
+	require.NotNil(t, active[0].Accuracy)
+	assert.Equal(t, 12.0, *active[0].Accuracy)
 	assert.Equal(t, int64(1000000), active[0].Timestamp)
 }
 
@@ -262,6 +264,7 @@ func TestTracker_Update_PreservesNilOptionalFields(t *testing.T) {
 	require.Len(t, active, 1)
 	assert.Nil(t, active[0].Bearing)
 	assert.Nil(t, active[0].Speed)
+	assert.Nil(t, active[0].Accuracy)
 }
 
 func TestTracker_Update_PreservesExplicitZeroOptionalFields(t *testing.T) {
@@ -275,6 +278,7 @@ func TestTracker_Update_PreservesExplicitZeroOptionalFields(t *testing.T) {
 		Longitude: 2,
 		Bearing:   &zero,
 		Speed:     &zero,
+		Accuracy:  &zero,
 		Timestamp: 100,
 	}
 
@@ -288,4 +292,7 @@ func TestTracker_Update_PreservesExplicitZeroOptionalFields(t *testing.T) {
 
 	require.NotNil(t, active[0].Speed)
 	assert.Equal(t, 0.0, *active[0].Speed)
+
+	require.NotNil(t, active[0].Accuracy)
+	assert.Equal(t, 0.0, *active[0].Accuracy)
 }

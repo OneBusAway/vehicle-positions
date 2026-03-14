@@ -527,15 +527,15 @@ func TestHandlePostLocation_ExplicitZeroOptionalFieldsPreserved(t *testing.T) {
 	mStore := &mockStore{}
 	handler := handlePostLocation(mStore, tracker)
 
-	body := []byte(`{
+	body := []byte(fmt.Sprintf(`{
 		"vehicle_id":"bus-1",
 		"latitude":1,
 		"longitude":2,
 		"bearing":0,
 		"speed":0,
 		"accuracy":0,
-		"timestamp":100
-	}`)
+		"timestamp":%d
+	}`, time.Now().Unix()))
 
 	// Verify that the handler accepts the explicit zero values and they are preserved in the tracker state
 	w := postLocationWithBody(handler, body, "application/json")
@@ -549,6 +549,9 @@ func TestHandlePostLocation_ExplicitZeroOptionalFieldsPreserved(t *testing.T) {
 
 	require.NotNil(t, active[0].Speed)
 	assert.Equal(t, 0.0, *active[0].Speed)
+
+	require.NotNil(t, active[0].Accuracy)
+	assert.Equal(t, 0.0, *active[0].Accuracy)
 }
 
 func TestHandlePostLocation_MissingOptionalFieldsRemainNil(t *testing.T) {
@@ -556,12 +559,12 @@ func TestHandlePostLocation_MissingOptionalFieldsRemainNil(t *testing.T) {
 	mStore := &mockStore{}
 	handler := handlePostLocation(mStore, tracker)
 
-	body := []byte(`{
+	body := []byte(fmt.Sprintf(`{
 		"vehicle_id":"bus-1",
 		"latitude":1,
 		"longitude":2,
-		"timestamp":100
-	}`)
+		"timestamp":%d
+	}`, time.Now().Unix()))
 
 	// Verify that the handler accepts the request without optional fields and they remain nil in the tracker state
 	w := postLocationWithBody(handler, body, "application/json")
@@ -571,4 +574,5 @@ func TestHandlePostLocation_MissingOptionalFieldsRemainNil(t *testing.T) {
 	require.Len(t, active, 1)
 	assert.Nil(t, active[0].Bearing)
 	assert.Nil(t, active[0].Speed)
+	assert.Nil(t, active[0].Accuracy)
 }
