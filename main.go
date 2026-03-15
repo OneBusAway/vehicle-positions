@@ -80,6 +80,8 @@ func main() {
 	authMiddleware := requireAuth(jwtSecret)
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
+	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
