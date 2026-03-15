@@ -77,9 +77,10 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	authMiddleware := requireAuth(jwtSecret)
+	authMiddleware := requireAuth(jwtSecret, store)
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
