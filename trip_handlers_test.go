@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -295,6 +296,60 @@ func TestHandleStartTrip_EmptySub(t *testing.T) {
 	handler(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleStartTrip_WrongContentType(t *testing.T) {
+	store := &mockTripStarter{}
+	handler := handleStartTrip(store)
+
+	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "text/plain")
+	claims := jwt.MapClaims{"sub": "42"}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+}
+
+func TestHandleEndTrip_WrongContentType(t *testing.T) {
+	store := &mockTripEnder{}
+	handler := handleEndTrip(store)
+
+	body, _ := json.Marshal(EndTripRequest{TripID: 1})
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "text/plain")
+	claims := jwt.MapClaims{"sub": "42"}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+}
+
+func TestHandleStartTrip_VehicleIDFormat(t *testing.T) {
+	store := &mockTripStarter{}
+	handler := handleStartTrip(store)
+
+	tests := []struct {
+		name      string
+		vehicleID string
+		code      int
+	}{
+		{"too long", strings.Repeat("a", 51), http.StatusBadRequest},
+		{"special chars", "bus@1!", http.StatusBadRequest},
+		{"spaces", "bus 1", http.StatusBadRequest},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: tc.vehicleID})
+			assert.Equal(t, tc.code, w.Code)
+		})
+	}
 }
 
 func TestHandleStartTrip_InternalServerError(t *testing.T) {
