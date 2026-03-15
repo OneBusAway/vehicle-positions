@@ -199,3 +199,116 @@ func TestHandleEndTrip_MissingClaims(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestHandleStartTrip_TrailingJSON(t *testing.T) {
+	store := &mockTripStarter{}
+	handler := handleStartTrip(store)
+
+	body := []byte(`{"vehicle_id":"bus-1"}{"extra":true}`)
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	claims := jwt.MapClaims{"sub": "42"}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleEndTrip_TrailingJSON(t *testing.T) {
+	store := &mockTripEnder{}
+	handler := handleEndTrip(store)
+
+	body := []byte(`{"trip_id":1}{"extra":true}`)
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	claims := jwt.MapClaims{"sub": "42"}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleStartTrip_UnknownFields(t *testing.T) {
+	store := &mockTripStarter{}
+	handler := handleStartTrip(store)
+
+	body := []byte(`{"vehicle_id":"bus-1","unknown_field":"value"}`)
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	claims := jwt.MapClaims{"sub": "42"}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleStartTrip_InvalidSubClaim(t *testing.T) {
+	store := &mockTripStarter{}
+	handler := handleStartTrip(store)
+
+	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	// sub is not a valid integer string
+	claims := jwt.MapClaims{"sub": "not-a-number"}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleEndTrip_InvalidSubClaim(t *testing.T) {
+	store := &mockTripEnder{}
+	handler := handleEndTrip(store)
+
+	body, _ := json.Marshal(EndTripRequest{TripID: 1})
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	claims := jwt.MapClaims{"sub": "not-a-number"}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleStartTrip_EmptySub(t *testing.T) {
+	store := &mockTripStarter{}
+	handler := handleStartTrip(store)
+
+	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	claims := jwt.MapClaims{"sub": ""}
+	ctx := context.WithValue(req.Context(), claimsKey, claims)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleStartTrip_InternalServerError(t *testing.T) {
+	store := &mockTripStarter{err: assert.AnError}
+	handler := handleStartTrip(store)
+	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1"})
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandleEndTrip_InternalServerError(t *testing.T) {
+	store := &mockTripEnder{err: assert.AnError}
+	handler := handleEndTrip(store)
+	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 1})
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

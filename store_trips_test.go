@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -191,4 +192,86 @@ func TestStore_StartTrip_AfterEndingPrevious(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, trip1.ID, trip2.ID)
 	assert.Equal(t, "active", trip2.Status)
+}
+
+func TestStore_StartTrip_ConcurrentAttempts(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	successes := make(chan int64, goroutines)
+	failures := make(chan error, goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			trip, err := store.StartTrip(context.Background(), userID, "bus-trip-1", "route-5", "")
+			if err != nil {
+				failures <- err
+				return
+			}
+			successes <- trip.ID
+		}()
+	}
+
+	wg.Wait()
+	close(successes)
+	close(failures)
+
+	// Exactly one goroutine should succeed.
+	var successCount int
+	for range successes {
+		successCount++
+	}
+	assert.Equal(t, 1, successCount, "exactly one concurrent StartTrip should succeed")
+
+	// The rest should fail with ErrActiveTripExists or ErrNotAssigned (serialization error).
+	var failCount int
+	for range failures {
+		failCount++
+	}
+	assert.Equal(t, goroutines-1, failCount)
+
+	// Verify only one trip in DB.
+	var count int
+	err := store.pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM trips WHERE user_id = $1 AND status = 'active'", userID).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "only one active trip should exist after concurrent attempts")
+}
+
+func TestStore_StartTrip_EmptyOptionalFields(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx := context.Background()
+
+	// route_id and gtfs_trip_id are optional — empty strings should work.
+	trip, err := store.StartTrip(ctx, userID, "bus-trip-1", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, "", trip.RouteID)
+	assert.Equal(t, "", trip.GtfsTripID)
+}
+
+func TestStore_EndTrip_UpdatedAtChanges(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx := context.Background()
+
+	trip, err := store.StartTrip(ctx, userID, "bus-trip-1", "route-5", "")
+	require.NoError(t, err)
+
+	// Get created_at for comparison.
+	var createdAt, updatedAt interface{}
+	err = store.pool.QueryRow(ctx, "SELECT created_at, updated_at FROM trips WHERE id = $1", trip.ID).Scan(&createdAt, &updatedAt)
+	require.NoError(t, err)
+
+	err = store.EndTrip(ctx, trip.ID, userID)
+	require.NoError(t, err)
+
+	var newUpdatedAt interface{}
+	err = store.pool.QueryRow(ctx, "SELECT updated_at FROM trips WHERE id = $1", trip.ID).Scan(&newUpdatedAt)
+	require.NoError(t, err)
+	assert.NotEqual(t, updatedAt, newUpdatedAt, "updated_at should change after ending trip")
 }
