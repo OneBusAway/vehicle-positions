@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +78,7 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 }
 
 func TestHandleLogin_UserNotFound(t *testing.T) {
-	store := &mockUserStore{err: pgx.ErrNoRows}
+	store := &mockUserStore{err: ErrUserNotFound}
 
 	handler := handleLogin(store, testSecret)
 	w := postLogin(handler, "nobody@test.com", "password")

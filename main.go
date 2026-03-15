@@ -81,6 +81,13 @@ func main() {
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
 
+	// Admin user management
+	mux.Handle("GET /api/v1/admin/users", authMiddleware(handleListUsers(store)))
+	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(handleGetUser(store)))
+	mux.Handle("POST /api/v1/admin/users", authMiddleware(handleCreateUser(store)))
+	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(handleUpdateUser(store)))
+	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeactivateUser(store)))
+
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      requestLogger(mux),
