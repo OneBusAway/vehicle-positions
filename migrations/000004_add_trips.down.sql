@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS trips;
+DROP TABLE IF EXISTS user_vehicles;

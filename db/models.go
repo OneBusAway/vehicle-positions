@@ -22,6 +22,19 @@ type LocationPoint struct {
 	DriverID   string
 }
 
+type Trip struct {
+	ID         int64
+	UserID     int64
+	VehicleID  string
+	RouteID    string
+	GtfsTripID string
+	StartTime  pgtype.Timestamptz
+	EndTime    pgtype.Timestamptz
+	Status     string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
 type User struct {
 	ID           int64
 	Name         string
@@ -30,6 +43,11 @@ type User struct {
 	Role         string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
+}
+
+type UserVehicle struct {
+	UserID    int64
+	VehicleID string
 }
 
 type Vehicle struct {

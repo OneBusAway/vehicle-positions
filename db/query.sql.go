@@ -11,6 +11,83 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const assignUserVehicle = `-- name: AssignUserVehicle :exec
+INSERT INTO user_vehicles (user_id, vehicle_id)
+VALUES ($1, $2)
+ON CONFLICT (user_id, vehicle_id) DO NOTHING
+`
+
+type AssignUserVehicleParams struct {
+	UserID    int64
+	VehicleID string
+}
+
+func (q *Queries) AssignUserVehicle(ctx context.Context, arg AssignUserVehicleParams) error {
+	_, err := q.db.Exec(ctx, assignUserVehicle, arg.UserID, arg.VehicleID)
+	return err
+}
+
+const checkUserVehicleAssignment = `-- name: CheckUserVehicleAssignment :one
+SELECT user_id, vehicle_id
+FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2
+`
+
+type CheckUserVehicleAssignmentParams struct {
+	UserID    int64
+	VehicleID string
+}
+
+func (q *Queries) CheckUserVehicleAssignment(ctx context.Context, arg CheckUserVehicleAssignmentParams) (UserVehicle, error) {
+	row := q.db.QueryRow(ctx, checkUserVehicleAssignment, arg.UserID, arg.VehicleID)
+	var i UserVehicle
+	err := row.Scan(&i.UserID, &i.VehicleID)
+	return i, err
+}
+
+const endTrip = `-- name: EndTrip :execrows
+UPDATE trips
+SET status = 'completed', end_time = NOW(), updated_at = NOW()
+WHERE id = $1 AND user_id = $2 AND status = 'active'
+`
+
+type EndTripParams struct {
+	ID     int64
+	UserID int64
+}
+
+func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (int64, error) {
+	result, err := q.db.Exec(ctx, endTrip, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getActiveTripByUser = `-- name: GetActiveTripByUser :one
+SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+FROM trips
+WHERE user_id = $1 AND status = 'active'
+`
+
+func (q *Queries) GetActiveTripByUser(ctx context.Context, userID int64) (Trip, error) {
+	row := q.db.QueryRow(ctx, getActiveTripByUser, userID)
+	var i Trip
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.VehicleID,
+		&i.RouteID,
+		&i.GtfsTripID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getRecentLocations = `-- name: GetRecentLocations :many
 SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
@@ -91,6 +168,60 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 		arg.DriverID,
 	)
 	return err
+}
+
+const removeUserVehicle = `-- name: RemoveUserVehicle :execrows
+DELETE FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2
+`
+
+type RemoveUserVehicleParams struct {
+	UserID    int64
+	VehicleID string
+}
+
+func (q *Queries) RemoveUserVehicle(ctx context.Context, arg RemoveUserVehicleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeUserVehicle, arg.UserID, arg.VehicleID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const startTrip = `-- name: StartTrip :one
+INSERT INTO trips (user_id, vehicle_id, route_id, gtfs_trip_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+`
+
+type StartTripParams struct {
+	UserID     int64
+	VehicleID  string
+	RouteID    string
+	GtfsTripID string
+}
+
+func (q *Queries) StartTrip(ctx context.Context, arg StartTripParams) (Trip, error) {
+	row := q.db.QueryRow(ctx, startTrip,
+		arg.UserID,
+		arg.VehicleID,
+		arg.RouteID,
+		arg.GtfsTripID,
+	)
+	var i Trip
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.VehicleID,
+		&i.RouteID,
+		&i.GtfsTripID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertVehicle = `-- name: UpsertVehicle :exec

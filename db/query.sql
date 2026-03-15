@@ -13,3 +13,32 @@ SELECT DISTINCT ON (vehicle_id)
 FROM location_points
 WHERE received_at > $1
 ORDER BY vehicle_id, received_at DESC;
+
+-- name: CheckUserVehicleAssignment :one
+SELECT user_id, vehicle_id
+FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2;
+
+-- name: GetActiveTripByUser :one
+SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+FROM trips
+WHERE user_id = $1 AND status = 'active';
+
+-- name: StartTrip :one
+INSERT INTO trips (user_id, vehicle_id, route_id, gtfs_trip_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at;
+
+-- name: EndTrip :execrows
+UPDATE trips
+SET status = 'completed', end_time = NOW(), updated_at = NOW()
+WHERE id = $1 AND user_id = $2 AND status = 'active';
+
+-- name: AssignUserVehicle :exec
+INSERT INTO user_vehicles (user_id, vehicle_id)
+VALUES ($1, $2)
+ON CONFLICT (user_id, vehicle_id) DO NOTHING;
+
+-- name: RemoveUserVehicle :execrows
+DELETE FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2;
