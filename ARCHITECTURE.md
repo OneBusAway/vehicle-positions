@@ -170,7 +170,7 @@ A `map[string]*VehicleState` guarded by `sync.RWMutex`. A background goroutine t
 
 #### 4.2.5 `db/` — sqlc-Generated Layer
 
-Three generated files: `db.go` (DBTX interface + `Queries` type), `models.go` (`LocationPoint` and `Vehicle` structs), and `query.sql.go` (`UpsertVehicle`, `InsertLocationPoint`, `GetRecentLocations`). Generation is configured by `db/sqlc.yml` for PostgreSQL with `pgx/v5`, and the files are marked `DO NOT EDIT`.
+The directory contains two source files and three generated files. `query.sql` defines the named SQL queries (`UpsertVehicle`, `InsertLocationPoint`, `GetRecentLocations`), and `sqlc.yml` configures code generation (engine: PostgreSQL, sql package: `pgx/v5`, output package: `db`). Running `sqlc generate` from this directory regenerates the three output files: `db.go` (DBTX interface + `Queries` type), `models.go` (`LocationPoint` and `Vehicle` structs), and `query.sql.go` (typed Go wrappers for each query). The generated files are marked `DO NOT EDIT` — modify `query.sql` or `sqlc.yml` instead and regenerate.
 
 ---
 
