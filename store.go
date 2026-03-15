@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
+	gtfslocal "github.com/OneBusAway/vehicle-positions/gtfs"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -142,4 +144,54 @@ func (s *Store) GetRecentLocations(ctx context.Context, cutoff time.Time) ([]*Lo
 // Close shuts down the connection pool.
 func (s *Store) Close() {
 	s.pool.Close()
+}
+
+func (s *Store) ImportGTFS(ctx context.Context, stops []gtfslocal.Stop, routes []gtfslocal.Route, trips []gtfslocal.Trip, stopTimes []gtfslocal.StopTime) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, "TRUNCATE TABLE stop_times, trips, routes, stops"); err != nil {
+		return fmt.Errorf("truncate: %w", err)
+	}
+
+	batch := &pgx.Batch{}
+	for _, s := range stops {
+		batch.Queue(
+			"INSERT INTO stops (stop_id, stop_name, stop_lat, stop_lon) VALUES ($1, $2, $3, $4)",
+			s.StopID, s.Name, s.Lat, s.Lon,
+		)
+	}
+	for _, r := range routes {
+		batch.Queue(
+			"INSERT INTO routes (route_id, route_short_name, route_long_name) VALUES ($1, $2, $3)",
+			r.RouteID, r.ShortName, r.LongName,
+		)
+	}
+	for _, t := range trips {
+		batch.Queue(
+			"INSERT INTO trips (trip_id, route_id, service_id) VALUES ($1, $2, $3)",
+			t.TripID, t.RouteID, t.ServiceID,
+		)
+	}
+	for _, st := range stopTimes {
+		batch.Queue(
+			"INSERT INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence) VALUES ($1, $2, $3, $4, $5)",
+			st.TripID, st.ArrivalTime, st.DepartureTime, st.StopID, st.StopSequence,
+		)
+	}
+
+	if batch.Len() > 0 {
+		br := tx.SendBatch(ctx, batch)
+		if err := br.Close(); err != nil {
+			return fmt.Errorf("batch insert: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
 }

@@ -8,11 +8,14 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
+	gtfslocal "github.com/OneBusAway/vehicle-positions/gtfs"
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -230,5 +233,123 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.Error("failed to write JSON response", "error", err)
+	}
+}
+
+func badRequest(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
+}
+
+func internalError(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": message})
+}
+
+type GTFSImporter interface {
+	ImportGTFS(ctx context.Context, stops []gtfslocal.Stop, routes []gtfslocal.Route, trips []gtfslocal.Trip, stopTimes []gtfslocal.StopTime) error
+}
+
+const maxUploadBytes = 256 << 20
+
+func requireAdminToken(secret []byte) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return requireAuth(secret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+			if !ok {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return
+			}
+			if claims["role"] != "admin" {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+			next.ServeHTTP(w, r)
+		}))
+	}
+}
+
+func handleUploadGTFS(store GTFSImporter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rc := http.NewResponseController(w)
+		if err := rc.SetWriteDeadline(time.Now().Add(10 * time.Minute)); err != nil {
+			slog.Error("failed to extend write deadline", "error", err)
+		}
+
+		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			badRequest(w, "failed to parse multipart form: "+err.Error())
+			return
+		}
+
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			badRequest(w, "file field is required")
+			return
+		}
+		defer file.Close()
+
+		if !strings.EqualFold(filepath.Ext(header.Filename), ".zip") {
+			badRequest(w, "uploaded file must have a .zip extension")
+			return
+		}
+
+		tmpZip, err := os.CreateTemp("", "gtfs-upload-*.zip")
+		if err != nil {
+			internalError(w, "internal server error")
+			return
+		}
+		defer os.Remove(tmpZip.Name())
+
+		if _, err := io.Copy(tmpZip, file); err != nil {
+			tmpZip.Close()
+			internalError(w, "failed to save upload")
+			return
+		}
+		tmpZip.Close()
+
+		tmpDir, err := os.MkdirTemp("", "gtfs-extract-*")
+		if err != nil {
+			internalError(w, "internal server error")
+			return
+		}
+		defer os.RemoveAll(tmpDir)
+
+		if err := gtfslocal.Unzip(tmpZip.Name(), tmpDir); err != nil {
+			badRequest(w, "unzip: "+err.Error())
+			return
+		}
+
+		stops, err := gtfslocal.ParseStops(filepath.Join(tmpDir, "stops.txt"))
+		if err != nil {
+			badRequest(w, err.Error())
+			return
+		}
+		routes, err := gtfslocal.ParseRoutes(filepath.Join(tmpDir, "routes.txt"))
+		if err != nil {
+			badRequest(w, err.Error())
+			return
+		}
+		trips, err := gtfslocal.ParseTrips(filepath.Join(tmpDir, "trips.txt"))
+		if err != nil {
+			badRequest(w, err.Error())
+			return
+		}
+		stopTimes, err := gtfslocal.ParseStopTimes(filepath.Join(tmpDir, "stop_times.txt"))
+		if err != nil {
+			badRequest(w, err.Error())
+			return
+		}
+
+		if err := store.ImportGTFS(r.Context(), stops, routes, trips, stopTimes); err != nil {
+			slog.Error("failed to import GTFS data", "error", err)
+			internalError(w, "failed to import GTFS data")
+			return
+		}
+
+		writeJSON(w, http.StatusOK, gtfslocal.ImportResult{
+			Stops:     len(stops),
+			Routes:    len(routes),
+			Trips:     len(trips),
+			StopTimes: len(stopTimes),
+		})
 	}
 }

@@ -80,6 +80,7 @@ func main() {
 	authMiddleware := requireAuth(jwtSecret)
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/admin/gtfs/upload", requireAdminToken(jwtSecret)(handleUploadGTFS(store)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
@@ -134,6 +135,10 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
 }
 
 func requestLogger(next http.Handler) http.Handler {
