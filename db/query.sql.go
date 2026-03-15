@@ -181,7 +181,7 @@ func (q *Queries) ListVehicles(ctx context.Context) ([]ListVehiclesRow, error) {
 const upsertAdminVehicle = `-- name: UpsertAdminVehicle :one
 INSERT INTO vehicles (id, label, agency_tag)
 VALUES ($1, $2, $3)
-ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, agency_tag = EXCLUDED.agency_tag, updated_at = NOW()
+ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, agency_tag = EXCLUDED.agency_tag, active = true, updated_at = NOW()
 RETURNING id, label, agency_tag, active, created_at, updated_at
 `
 

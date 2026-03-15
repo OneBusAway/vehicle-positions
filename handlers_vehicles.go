@@ -15,6 +15,20 @@ import (
 
 const maxFieldLength = 255
 
+// validateVehicleID checks that a vehicle ID meets format and length requirements.
+func validateVehicleID(id string) error {
+	if id == "" {
+		return errors.New("vehicle id is required")
+	}
+	if len(id) > maxVehicleIDLength {
+		return fmt.Errorf("vehicle id must be at most %d characters", maxVehicleIDLength)
+	}
+	if !vehicleIDPattern.MatchString(id) {
+		return errors.New("vehicle id must contain only alphanumeric characters, dots, hyphens, and underscores")
+	}
+	return nil
+}
+
 type upsertVehicleRequest struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
@@ -22,14 +36,8 @@ type upsertVehicleRequest struct {
 }
 
 func (r *upsertVehicleRequest) validate() error {
-	if r.ID == "" {
-		return errors.New("id is required")
-	}
-	if len(r.ID) > maxVehicleIDLength {
-		return errors.New("id must be at most 50 characters")
-	}
-	if !vehicleIDPattern.MatchString(r.ID) {
-		return errors.New("id must contain only alphanumeric characters, dots, hyphens, and underscores")
+	if err := validateVehicleID(r.ID); err != nil {
+		return err
 	}
 	if len(r.Label) > maxFieldLength {
 		return fmt.Errorf("label must be at most %d characters", maxFieldLength)
@@ -55,8 +63,8 @@ func handleListVehicles(store VehicleManager) http.HandlerFunc {
 func handleGetVehicle(store VehicleManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if id == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "vehicle id is required"})
+		if err := validateVehicleID(id); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -89,14 +97,19 @@ func handleUpsertVehicle(store VehicleManager) http.HandlerFunc {
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+				return
+			}
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + sanitizeJSONError(err)})
 			return
 		}
 		if err := decoder.Decode(new(json.RawMessage)); err == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: request body must contain a single JSON object and no trailing data"})
 			return
 		} else if err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + sanitizeJSONError(err)})
 			return
 		}
 
@@ -118,8 +131,8 @@ func handleUpsertVehicle(store VehicleManager) http.HandlerFunc {
 func handleDeactivateVehicle(store VehicleManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if id == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "vehicle id is required"})
+		if err := validateVehicleID(id); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -135,4 +148,13 @@ func handleDeactivateVehicle(store VehicleManager) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// sanitizeJSONError strips internal Go struct names from JSON decoder error messages.
+func sanitizeJSONError(err error) string {
+	var unmarshalErr *json.UnmarshalTypeError
+	if errors.As(err, &unmarshalErr) {
+		return fmt.Sprintf("field %q has invalid type", unmarshalErr.Field)
+	}
+	return err.Error()
 }

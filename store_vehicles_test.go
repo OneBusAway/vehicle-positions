@@ -158,6 +158,29 @@ func TestStore_DeactivateVehicle_AlreadyInactive(t *testing.T) {
 	require.NoError(t, err, "deactivating an already-inactive vehicle should not error")
 }
 
+func TestStore_UpsertVehicle_ReactivatesDeactivatedVehicle(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	_, err := store.UpsertVehicle(ctx, "bus-react", "Bus React", "agency-1")
+	require.NoError(t, err)
+
+	err = store.DeactivateVehicle(ctx, "bus-react")
+	require.NoError(t, err)
+
+	v, err := store.GetVehicle(ctx, "bus-react")
+	require.NoError(t, err)
+	require.False(t, v.Active, "vehicle should be inactive after deactivation")
+
+	// Upserting a deactivated vehicle should reactivate it.
+	reactivated, err := store.UpsertVehicle(ctx, "bus-react", "Bus React Updated", "agency-2")
+	require.NoError(t, err)
+	assert.True(t, reactivated.Active, "upsert should reactivate a deactivated vehicle")
+	assert.Equal(t, "Bus React Updated", reactivated.Label)
+	assert.Equal(t, "agency-2", reactivated.AgencyTag)
+}
+
 func TestStore_UpsertVehicle_RoundTrip(t *testing.T) {
 	store := newTestStore(t)
 	cleanupVehicles(t, store)

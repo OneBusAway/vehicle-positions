@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +56,7 @@ func (m *mockVehicleStore) UpsertVehicle(_ context.Context, id, label, agencyTag
 	if v, exists := m.vehicles[id]; exists {
 		v.Label = label
 		v.AgencyTag = agencyTag
+		v.Active = true
 		v.UpdatedAt = now
 		return v, nil
 	}
@@ -178,6 +180,60 @@ func TestHandleGetVehicle_NotFound(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.Contains(t, resp["error"], "vehicle not found")
+}
+
+func TestHandleGetVehicle_StoreError(t *testing.T) {
+	store := newMockVehicleStore()
+	store.err = errors.New("database down")
+
+	handler := handleGetVehicle(store)
+	req := httptest.NewRequest("GET", "/api/v1/admin/vehicles/bus-1", nil)
+	req.SetPathValue("id", "bus-1")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "failed to get vehicle")
+}
+
+func TestHandleGetVehicle_InvalidID(t *testing.T) {
+	store := newMockVehicleStore()
+	handler := handleGetVehicle(store)
+
+	tests := []struct {
+		name string
+		id   string
+		want string
+	}{
+		{
+			name: "id with special characters",
+			id:   "bus@1!",
+			want: "alphanumeric characters",
+		},
+		{
+			name: "id too long",
+			id:   strings.Repeat("a", 51),
+			want: "at most 50 characters",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/v1/admin/vehicles/test", nil)
+			req.SetPathValue("id", tc.id)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			var resp map[string]string
+			err := json.NewDecoder(w.Body).Decode(&resp)
+			require.NoError(t, err)
+			assert.Contains(t, resp["error"], tc.want)
+		})
+	}
 }
 
 func TestHandleUpsertVehicle_CreateNew(t *testing.T) {
@@ -385,6 +441,40 @@ func TestHandleUpsertVehicle_StoreError(t *testing.T) {
 	assert.Contains(t, resp["error"], "failed to save vehicle")
 }
 
+func TestHandleUpsertVehicle_BodyTooLarge(t *testing.T) {
+	store := newMockVehicleStore()
+	handler := handleUpsertVehicle(store)
+
+	// Create a body larger than 1KB
+	largeBody := `{"id":"bus-1","label":"` + strings.Repeat("x", 2048) + `"}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/vehicles", strings.NewReader(largeBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "request body too large")
+}
+
+func TestHandleUpsertVehicle_TypeMismatchSanitized(t *testing.T) {
+	store := newMockVehicleStore()
+	handler := handleUpsertVehicle(store)
+
+	// Send a number where a string is expected
+	body := []byte(`{"id":12345}`)
+	w := postVehicle(handler, body)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "invalid type")
+	assert.NotContains(t, resp["error"], "upsertVehicleRequest", "error should not expose internal struct name")
+}
+
 func TestHandleDeactivateVehicle_HappyPath(t *testing.T) {
 	store := newMockVehicleStore()
 	now := time.Now()
@@ -414,4 +504,37 @@ func TestHandleDeactivateVehicle_NotFound(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.Contains(t, resp["error"], "vehicle not found")
+}
+
+func TestHandleDeactivateVehicle_StoreError(t *testing.T) {
+	store := newMockVehicleStore()
+	store.err = errors.New("database down")
+
+	handler := handleDeactivateVehicle(store)
+	req := httptest.NewRequest("DELETE", "/api/v1/admin/vehicles/bus-1", nil)
+	req.SetPathValue("id", "bus-1")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "failed to deactivate vehicle")
+}
+
+func TestHandleDeactivateVehicle_InvalidID(t *testing.T) {
+	store := newMockVehicleStore()
+	handler := handleDeactivateVehicle(store)
+
+	req := httptest.NewRequest("DELETE", "/api/v1/admin/vehicles/test", nil)
+	req.SetPathValue("id", "bus@1!")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp["error"], "alphanumeric characters")
 }
