@@ -69,15 +69,16 @@ func main() {
 	startTime := time.Now()
 
 	mux := http.NewServeMux()
+
+	authMiddleware := requireAuth(jwtSecret)
+	adminMiddleware := requireAdmin()
+
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
-	// TODO: protect with requireAuth once auth lands
-	mux.HandleFunc("GET /api/v1/admin/status", handleAdminStatus(tracker, startTime))
+	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-
-	authMiddleware := requireAuth(jwtSecret)
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
 
