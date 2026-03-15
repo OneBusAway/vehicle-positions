@@ -212,6 +212,29 @@ type adminStatusResponse struct {
 	LastUpdate           *time.Time `json:"last_update,omitempty"`
 }
 
+type HealthChecker interface {
+	Ping(ctx context.Context) error
+}
+
+type readinessResponse struct {
+	Status string `json:"status"`
+}
+
+func handleReadiness(checker HealthChecker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := checker.Ping(ctx); err != nil {
+			slog.Warn("readiness check failed", "error", err)
+			writeJSON(w, http.StatusServiceUnavailable, readinessResponse{Status: "degraded"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, readinessResponse{Status: "ok"})
+	}
+}
+
 func handleAdminStatus(tracker *Tracker, startTime time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ts := tracker.Status()

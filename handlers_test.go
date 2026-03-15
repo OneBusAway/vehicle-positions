@@ -352,6 +352,14 @@ type mockStore struct {
 	lastDriverID string
 }
 
+type mockHealthChecker struct {
+	err error
+}
+
+func (m mockHealthChecker) Ping(ctx context.Context) error {
+	return m.err
+}
+
 func (m *mockStore) SaveLocation(ctx context.Context, loc *LocationReport) error {
 	if m.err != nil {
 		return m.err
@@ -383,6 +391,38 @@ func TestHandlePostLocation_HappyPath(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.True(t, mStore.saved, "location should be saved to store")
 	assert.Len(t, tracker.ActiveVehicles(), 1, "tracker should be updated")
+}
+
+func TestHandleReadiness_OK(t *testing.T) {
+	handler := handleReadiness(mockHealthChecker{})
+	req := httptest.NewRequest("GET", "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var resp readinessResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", resp.Status)
+}
+
+func TestHandleReadiness_DBUnavailable(t *testing.T) {
+	handler := handleReadiness(mockHealthChecker{err: fmt.Errorf("db down")})
+	req := httptest.NewRequest("GET", "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var resp readinessResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "degraded", resp.Status)
 }
 
 func TestHandlePostLocation_StoreFailure(t *testing.T) {
