@@ -139,6 +139,11 @@ func (s *Store) GetRecentLocations(ctx context.Context, cutoff time.Time) ([]*Lo
 	return locations, nil
 }
 
+// Ping checks database connectivity.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 // Close shuts down the connection pool.
 func (s *Store) Close() {
 	s.pool.Close()

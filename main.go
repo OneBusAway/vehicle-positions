@@ -76,6 +76,7 @@ func main() {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /ready", handleReadiness(store))
 
 	authMiddleware := requireAuth(jwtSecret)
 
