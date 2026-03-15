@@ -268,3 +268,113 @@ func TestRequireAuth_AlgorithmConfusion(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
+
+func TestRequireAdmin_AdminAllowed(t *testing.T) {
+	token, err := generateJWT(&User{ID: 1, Email: "admin@test.com", Role: "admin"}, testSecret)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	var receivedRole string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+		require.True(t, ok)
+		receivedRole, _ = claims["role"].(string)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	requireAuth(testSecret)(requireAdmin()(handler)).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "admin", receivedRole)
+}
+
+func TestRequireAdmin_DriverDenied(t *testing.T) {
+	token, err := generateJWT(&User{ID: 2, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	var resp map[string]string
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "admin access required", resp["error"])
+}
+
+func TestRequireAdmin_MissingClaims(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+
+	requireAdmin()(dummyHandler()).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "unauthorized", resp["error"])
+}
+
+func TestRequireAdmin_EmptyRole(t *testing.T) {
+	token, err := generateJWT(&User{ID: 3, Email: "empty@test.com", Role: ""}, testSecret)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	var resp map[string]string
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "admin access required", resp["error"])
+}
+
+func TestRequireAdmin_InvalidRoleType(t *testing.T) {
+	// Manually craft JWT with role as a number instead of string
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"sub":   "99",
+		"email": "bad@test.com",
+		"role":  123,
+		"exp":   now.Add(24 * time.Hour).Unix(),
+		"iat":   now.Unix(),
+		"iss":   "vehicle-positions-api",
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenStr, err := token.SignedString(testSecret)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	w := httptest.NewRecorder()
+
+	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	var resp map[string]string
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "admin access required", resp["error"])
+}
+
+func TestRequireAdmin_NoAuthHeader(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+	w := httptest.NewRecorder()
+
+	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -112,6 +113,34 @@ func generateJWT(user *User, secret []byte) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(secret)
+}
+
+// requireAdmin is middleware that restricts access to admin-role users.
+// It must be chained after requireAuth, which sets JWT claims on the context.
+func requireAdmin() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+			if !ok {
+				slog.Warn("requireAdmin: claims missing from context")
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return
+			}
+
+			role, ok := claims["role"].(string)
+			if !ok || role != "admin" {
+				slog.Warn("requireAdmin: access denied",
+					"sub", claims["sub"],
+					"role", claims["role"],
+					"path", r.URL.Path,
+				)
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin access required"})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // requireAuth is middleware that validates the Bearer JWT on protected routes.
