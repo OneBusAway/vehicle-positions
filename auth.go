@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -47,6 +48,16 @@ type LoginResponse struct {
 // UserFetcher is the store interface needed by the login handler.
 type UserFetcher interface {
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
+}
+
+// TokenChecker can verify whether a JWT has been revoked.
+type TokenChecker interface {
+	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
+}
+
+// TokenRevoker can invalidate a JWT before its natural expiry.
+type TokenRevoker interface {
+	RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error
 }
 
 func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
@@ -99,6 +110,7 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 }
 
 // generateJWT creates a signed JWT valid for 24 hours.
+// A unique jti (JWT ID) claim is included so the token can be individually revoked.
 func generateJWT(user *User, secret []byte) (string, error) {
 	now := time.Now()
 
@@ -109,13 +121,15 @@ func generateJWT(user *User, secret []byte) (string, error) {
 		"exp":   now.Add(24 * time.Hour).Unix(),
 		"iat":   now.Unix(),
 		"iss":   "vehicle-positions-api",
+		"jti":   uuid.New().String(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(secret)
 }
 
 // requireAuth is middleware that validates the Bearer JWT on protected routes.
-func requireAuth(secret []byte) func(http.Handler) http.Handler {
+// It checks the token signature, expiry, and whether the jti has been revoked.
+func requireAuth(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -144,8 +158,53 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token claims"})
 				return
 			}
+
+			if jti, ok := claims["jti"].(string); ok && jti != "" {
+				revoked, err := checker.IsTokenRevoked(r.Context(), jti)
+				if err != nil {
+					log.Printf("auth: revocation check failed: %v", err)
+					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+					return
+				}
+				if revoked {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "token has been revoked"})
+					return
+				}
+			}
+
 			ctx := context.WithValue(r.Context(), claimsKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
+	}
+}
+
+func handleLogout(revoker TokenRevoker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+		if !ok {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		jti, ok := claims["jti"].(string)
+		if !ok || jti == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "token missing jti claim"})
+			return
+		}
+
+		expFloat, ok := claims["exp"].(float64)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "token missing exp claim"})
+			return
+		}
+		expiresAt := time.Unix(int64(expFloat), 0)
+
+		if err := revoker.RevokeToken(r.Context(), jti, expiresAt); err != nil {
+			log.Printf("logout: failed to revoke token: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"message": "logged out successfully"})
 	}
 }
