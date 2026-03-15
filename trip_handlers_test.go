@@ -36,11 +36,18 @@ func (m *mockTripEnder) EndTrip(ctx context.Context, tripID, userID int64) error
 	return m.err
 }
 
+// tripRequest sends a JSON request with JWT claims to the handler.
 func tripRequest(t *testing.T, handler http.HandlerFunc, userID string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	data, err := json.Marshal(body)
 	require.NoError(t, err)
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(data))
+	return tripRawRequest(t, handler, userID, data)
+}
+
+// tripRawRequest sends a raw byte body with JWT claims to the handler.
+func tripRawRequest(t *testing.T, handler http.HandlerFunc, userID string, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	claims := jwt.MapClaims{"sub": userID}
 	ctx := context.WithValue(req.Context(), claimsKey, claims)
@@ -48,6 +55,14 @@ func tripRequest(t *testing.T, handler http.HandlerFunc, userID string, body any
 	w := httptest.NewRecorder()
 	handler(w, req)
 	return w
+}
+
+// decodeError decodes the JSON error response body and returns the "error" field.
+func decodeError(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	var resp map[string]string
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	return resp["error"]
 }
 
 func TestHandleStartTrip_Success(t *testing.T) {
@@ -81,6 +96,7 @@ func TestHandleStartTrip_NotAssigned(t *testing.T) {
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1"})
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, decodeError(t, w), "not assigned")
 }
 
 func TestHandleStartTrip_AlreadyActive(t *testing.T) {
@@ -90,6 +106,7 @@ func TestHandleStartTrip_AlreadyActive(t *testing.T) {
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1"})
 
 	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, decodeError(t, w), "already has an active trip")
 }
 
 func TestHandleStartTrip_Validation(t *testing.T) {
@@ -97,29 +114,26 @@ func TestHandleStartTrip_Validation(t *testing.T) {
 	handler := handleStartTrip(store)
 
 	tests := []struct {
-		name string
-		body any
-		code int
+		name        string
+		body        any
+		raw         bool
+		code        int
+		errContains string
 	}{
-		{"missing vehicle_id", StartTripRequest{VehicleID: ""}, http.StatusBadRequest},
-		{"invalid JSON", "{bad", http.StatusBadRequest},
+		{"missing vehicle_id", StartTripRequest{VehicleID: ""}, false, http.StatusBadRequest, "vehicle_id is required"},
+		{"invalid JSON", nil, true, http.StatusBadRequest, "invalid JSON"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var w *httptest.ResponseRecorder
-			if s, ok := tc.body.(string); ok {
-				req := httptest.NewRequest("POST", "/", bytes.NewReader([]byte(s)))
-				req.Header.Set("Content-Type", "application/json")
-				claims := jwt.MapClaims{"sub": "42"}
-				ctx := context.WithValue(req.Context(), claimsKey, claims)
-				req = req.WithContext(ctx)
-				w = httptest.NewRecorder()
-				handler(w, req)
+			if tc.raw {
+				w = tripRawRequest(t, handler, "42", []byte("{bad"))
 			} else {
 				w = tripRequest(t, handler, "42", tc.body)
 			}
 			assert.Equal(t, tc.code, w.Code)
+			assert.Contains(t, decodeError(t, w), tc.errContains)
 		})
 	}
 }
@@ -135,6 +149,7 @@ func TestHandleStartTrip_MissingClaims(t *testing.T) {
 	handler(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, decodeError(t, w), "internal server error")
 }
 
 func TestHandleEndTrip_Success(t *testing.T) {
@@ -144,6 +159,10 @@ func TestHandleEndTrip_Success(t *testing.T) {
 	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 1})
 
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]string
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, "trip ended", resp["status"])
 }
 
 func TestHandleEndTrip_NotFound(t *testing.T) {
@@ -153,6 +172,7 @@ func TestHandleEndTrip_NotFound(t *testing.T) {
 	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 999})
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, decodeError(t, w), "active trip not found")
 }
 
 func TestHandleEndTrip_Validation(t *testing.T) {
@@ -160,30 +180,27 @@ func TestHandleEndTrip_Validation(t *testing.T) {
 	handler := handleEndTrip(store)
 
 	tests := []struct {
-		name string
-		body any
-		code int
+		name        string
+		body        any
+		raw         bool
+		code        int
+		errContains string
 	}{
-		{"missing trip_id", EndTripRequest{TripID: 0}, http.StatusBadRequest},
-		{"negative trip_id", EndTripRequest{TripID: -1}, http.StatusBadRequest},
-		{"invalid JSON", "{bad", http.StatusBadRequest},
+		{"missing trip_id", EndTripRequest{TripID: 0}, false, http.StatusBadRequest, "trip_id is required"},
+		{"negative trip_id", EndTripRequest{TripID: -1}, false, http.StatusBadRequest, "trip_id is required"},
+		{"invalid JSON", nil, true, http.StatusBadRequest, "invalid JSON"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var w *httptest.ResponseRecorder
-			if s, ok := tc.body.(string); ok {
-				req := httptest.NewRequest("POST", "/", bytes.NewReader([]byte(s)))
-				req.Header.Set("Content-Type", "application/json")
-				claims := jwt.MapClaims{"sub": "42"}
-				ctx := context.WithValue(req.Context(), claimsKey, claims)
-				req = req.WithContext(ctx)
-				w = httptest.NewRecorder()
-				handler(w, req)
+			if tc.raw {
+				w = tripRawRequest(t, handler, "42", []byte("{bad"))
 			} else {
 				w = tripRequest(t, handler, "42", tc.body)
 			}
 			assert.Equal(t, tc.code, w.Code)
+			assert.Contains(t, decodeError(t, w), tc.errContains)
 		})
 	}
 }
@@ -199,103 +216,67 @@ func TestHandleEndTrip_MissingClaims(t *testing.T) {
 	handler(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, decodeError(t, w), "internal server error")
 }
 
 func TestHandleStartTrip_TrailingJSON(t *testing.T) {
 	store := &mockTripStarter{}
 	handler := handleStartTrip(store)
 
-	body := []byte(`{"vehicle_id":"bus-1"}{"extra":true}`)
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	claims := jwt.MapClaims{"sub": "42"}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-	handler(w, req)
+	w := tripRawRequest(t, handler, "42", []byte(`{"vehicle_id":"bus-1"}{"extra":true}`))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, decodeError(t, w), "trailing data")
 }
 
 func TestHandleEndTrip_TrailingJSON(t *testing.T) {
 	store := &mockTripEnder{}
 	handler := handleEndTrip(store)
 
-	body := []byte(`{"trip_id":1}{"extra":true}`)
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	claims := jwt.MapClaims{"sub": "42"}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-	handler(w, req)
+	w := tripRawRequest(t, handler, "42", []byte(`{"trip_id":1}{"extra":true}`))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, decodeError(t, w), "trailing data")
 }
 
 func TestHandleStartTrip_UnknownFields(t *testing.T) {
 	store := &mockTripStarter{}
 	handler := handleStartTrip(store)
 
-	body := []byte(`{"vehicle_id":"bus-1","unknown_field":"value"}`)
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	claims := jwt.MapClaims{"sub": "42"}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-	handler(w, req)
+	w := tripRawRequest(t, handler, "42", []byte(`{"vehicle_id":"bus-1","unknown_field":"value"}`))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, decodeError(t, w), "unknown field")
 }
 
 func TestHandleStartTrip_InvalidSubClaim(t *testing.T) {
 	store := &mockTripStarter{}
 	handler := handleStartTrip(store)
 
-	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	// sub is not a valid integer string
-	claims := jwt.MapClaims{"sub": "not-a-number"}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-	handler(w, req)
+	w := tripRawRequest(t, handler, "not-a-number", []byte(`{"vehicle_id":"bus-1"}`))
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, decodeError(t, w), "invalid subject")
 }
 
 func TestHandleEndTrip_InvalidSubClaim(t *testing.T) {
 	store := &mockTripEnder{}
 	handler := handleEndTrip(store)
 
-	body, _ := json.Marshal(EndTripRequest{TripID: 1})
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	claims := jwt.MapClaims{"sub": "not-a-number"}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-	handler(w, req)
+	w := tripRawRequest(t, handler, "not-a-number", []byte(`{"trip_id":1}`))
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, decodeError(t, w), "invalid subject")
 }
 
 func TestHandleStartTrip_EmptySub(t *testing.T) {
 	store := &mockTripStarter{}
 	handler := handleStartTrip(store)
 
-	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
-	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	claims := jwt.MapClaims{"sub": ""}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-	handler(w, req)
+	w := tripRawRequest(t, handler, "", []byte(`{"vehicle_id":"bus-1"}`))
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, decodeError(t, w), "missing subject")
 }
 
 func TestHandleStartTrip_WrongContentType(t *testing.T) {
@@ -305,13 +286,11 @@ func TestHandleStartTrip_WrongContentType(t *testing.T) {
 	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "text/plain")
-	claims := jwt.MapClaims{"sub": "42"}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 	handler(w, req)
 
 	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+	assert.Contains(t, decodeError(t, w), "Content-Type must be application/json")
 }
 
 func TestHandleEndTrip_WrongContentType(t *testing.T) {
@@ -321,33 +300,40 @@ func TestHandleEndTrip_WrongContentType(t *testing.T) {
 	body, _ := json.Marshal(EndTripRequest{TripID: 1})
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "text/plain")
-	claims := jwt.MapClaims{"sub": "42"}
-	ctx := context.WithValue(req.Context(), claimsKey, claims)
-	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 	handler(w, req)
 
 	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+	assert.Contains(t, decodeError(t, w), "Content-Type must be application/json")
 }
 
 func TestHandleStartTrip_VehicleIDFormat(t *testing.T) {
-	store := &mockTripStarter{}
+	store := &mockTripStarter{trip: &TripResponse{
+		ID:        1,
+		VehicleID: strings.Repeat("a", 50),
+		Status:    "active",
+	}}
 	handler := handleStartTrip(store)
 
 	tests := []struct {
-		name      string
-		vehicleID string
-		code      int
+		name        string
+		vehicleID   string
+		code        int
+		errContains string
 	}{
-		{"too long", strings.Repeat("a", 51), http.StatusBadRequest},
-		{"special chars", "bus@1!", http.StatusBadRequest},
-		{"spaces", "bus 1", http.StatusBadRequest},
+		{"exactly 50 chars", strings.Repeat("a", 50), http.StatusCreated, ""},
+		{"too long", strings.Repeat("a", 51), http.StatusBadRequest, "at most 50 characters"},
+		{"special chars", "bus@1!", http.StatusBadRequest, "alphanumeric"},
+		{"spaces", "bus 1", http.StatusBadRequest, "alphanumeric"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: tc.vehicleID})
 			assert.Equal(t, tc.code, w.Code)
+			if tc.errContains != "" {
+				assert.Contains(t, decodeError(t, w), tc.errContains)
+			}
 		})
 	}
 }
@@ -358,6 +344,7 @@ func TestHandleStartTrip_InternalServerError(t *testing.T) {
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1"})
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, decodeError(t, w), "failed to start trip")
 }
 
 func TestHandleEndTrip_InternalServerError(t *testing.T) {
@@ -366,4 +353,5 @@ func TestHandleEndTrip_InternalServerError(t *testing.T) {
 	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 1})
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, decodeError(t, w), "failed to end trip")
 }

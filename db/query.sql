@@ -31,14 +31,5 @@ RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time,
 
 -- name: EndTrip :execrows
 UPDATE trips
-SET status = 'completed', end_time = NOW(), updated_at = NOW()
+SET status = 'completed', end_time = NOW()
 WHERE id = $1 AND user_id = $2 AND status = 'active';
-
--- name: AssignUserVehicle :exec
-INSERT INTO user_vehicles (user_id, vehicle_id)
-VALUES ($1, $2)
-ON CONFLICT (user_id, vehicle_id) DO NOTHING;
-
--- name: RemoveUserVehicle :execrows
-DELETE FROM user_vehicles
-WHERE user_id = $1 AND vehicle_id = $2;

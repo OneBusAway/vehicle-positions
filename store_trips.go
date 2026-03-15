@@ -48,7 +48,7 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(context.Background())
 
 	qtx := s.queries.WithTx(tx)
 
@@ -87,16 +87,18 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 
+	if !trip.StartTime.Valid {
+		return nil, fmt.Errorf("trip start_time unexpectedly null")
+	}
+
 	resp := &TripResponse{
 		ID:         trip.ID,
 		UserID:     trip.UserID,
 		VehicleID:  trip.VehicleID,
 		RouteID:    trip.RouteID,
 		GtfsTripID: trip.GtfsTripID,
+		StartTime:  trip.StartTime.Time,
 		Status:     trip.Status,
-	}
-	if trip.StartTime.Valid {
-		resp.StartTime = trip.StartTime.Time
 	}
 	if trip.EndTime.Valid {
 		resp.EndTime = &trip.EndTime.Time

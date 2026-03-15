@@ -11,22 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const assignUserVehicle = `-- name: AssignUserVehicle :exec
-INSERT INTO user_vehicles (user_id, vehicle_id)
-VALUES ($1, $2)
-ON CONFLICT (user_id, vehicle_id) DO NOTHING
-`
-
-type AssignUserVehicleParams struct {
-	UserID    int64
-	VehicleID string
-}
-
-func (q *Queries) AssignUserVehicle(ctx context.Context, arg AssignUserVehicleParams) error {
-	_, err := q.db.Exec(ctx, assignUserVehicle, arg.UserID, arg.VehicleID)
-	return err
-}
-
 const checkUserVehicleAssignment = `-- name: CheckUserVehicleAssignment :one
 SELECT user_id, vehicle_id
 FROM user_vehicles
@@ -47,7 +31,7 @@ func (q *Queries) CheckUserVehicleAssignment(ctx context.Context, arg CheckUserV
 
 const endTrip = `-- name: EndTrip :execrows
 UPDATE trips
-SET status = 'completed', end_time = NOW(), updated_at = NOW()
+SET status = 'completed', end_time = NOW()
 WHERE id = $1 AND user_id = $2 AND status = 'active'
 `
 
@@ -168,24 +152,6 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 		arg.DriverID,
 	)
 	return err
-}
-
-const removeUserVehicle = `-- name: RemoveUserVehicle :execrows
-DELETE FROM user_vehicles
-WHERE user_id = $1 AND vehicle_id = $2
-`
-
-type RemoveUserVehicleParams struct {
-	UserID    int64
-	VehicleID string
-}
-
-func (q *Queries) RemoveUserVehicle(ctx context.Context, arg RemoveUserVehicleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, removeUserVehicle, arg.UserID, arg.VehicleID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const startTrip = `-- name: StartTrip :one

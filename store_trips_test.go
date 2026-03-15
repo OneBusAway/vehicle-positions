@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -228,10 +230,12 @@ func TestStore_StartTrip_ConcurrentAttempts(t *testing.T) {
 	}
 	assert.Equal(t, 1, successCount, "exactly one concurrent StartTrip should succeed")
 
-	// The rest should fail with ErrActiveTripExists or ErrNotAssigned (serialization error).
+	// The rest should fail with a known error type.
 	var failCount int
-	for range failures {
+	for err := range failures {
 		failCount++
+		assert.True(t, errors.Is(err, ErrActiveTripExists) || errors.Is(err, ErrNotAssigned),
+			"unexpected failure: %v", err)
 	}
 	assert.Equal(t, goroutines-1, failCount)
 
@@ -262,16 +266,18 @@ func TestStore_EndTrip_UpdatedAtChanges(t *testing.T) {
 	trip, err := store.StartTrip(ctx, userID, "bus-trip-1", "route-5", "")
 	require.NoError(t, err)
 
-	// Get created_at for comparison.
-	var createdAt, updatedAt interface{}
-	err = store.pool.QueryRow(ctx, "SELECT created_at, updated_at FROM trips WHERE id = $1", trip.ID).Scan(&createdAt, &updatedAt)
+	var beforeUpdated time.Time
+	err = store.pool.QueryRow(ctx, "SELECT updated_at FROM trips WHERE id = $1", trip.ID).Scan(&beforeUpdated)
 	require.NoError(t, err)
+
+	// Small delay to ensure the DB clock advances.
+	time.Sleep(time.Millisecond)
 
 	err = store.EndTrip(ctx, trip.ID, userID)
 	require.NoError(t, err)
 
-	var newUpdatedAt interface{}
-	err = store.pool.QueryRow(ctx, "SELECT updated_at FROM trips WHERE id = $1", trip.ID).Scan(&newUpdatedAt)
+	var afterUpdated time.Time
+	err = store.pool.QueryRow(ctx, "SELECT updated_at FROM trips WHERE id = $1", trip.ID).Scan(&afterUpdated)
 	require.NoError(t, err)
-	assert.NotEqual(t, updatedAt, newUpdatedAt, "updated_at should change after ending trip")
+	assert.True(t, afterUpdated.After(beforeUpdated), "updated_at should advance after ending trip")
 }

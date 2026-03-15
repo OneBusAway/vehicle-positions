@@ -59,14 +59,14 @@ func handleStartTrip(store TripStarter) http.HandlerFunc {
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
 			return
 		}
 		if err := decoder.Decode(new(json.RawMessage)); err == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "request body must contain a single JSON object"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: request body must contain a single JSON object and no trailing data"})
 			return
 		} else if err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
 			return
 		}
 
@@ -136,14 +136,14 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
 			return
 		}
 		if err := decoder.Decode(new(json.RawMessage)); err == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "request body must contain a single JSON object"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: request body must contain a single JSON object and no trailing data"})
 			return
 		} else if err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
 			return
 		}
 

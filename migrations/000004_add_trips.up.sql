@@ -19,3 +19,16 @@ CREATE TABLE IF NOT EXISTS trips (
 
 CREATE INDEX IF NOT EXISTS idx_trips_user_status ON trips(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_trips_vehicle_status ON trips(vehicle_id, status);
+
+CREATE OR REPLACE FUNCTION set_trips_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_trips_updated_at
+BEFORE UPDATE ON trips
+FOR EACH ROW
+EXECUTE FUNCTION set_trips_updated_at();
