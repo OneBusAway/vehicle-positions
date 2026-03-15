@@ -37,4 +37,6 @@ type Vehicle struct {
 	Label     string
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+	AgencyTag string
+	Active    bool
 }
