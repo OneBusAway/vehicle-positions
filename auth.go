@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -82,7 +82,7 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: database error: %v", err)
+			slog.Error("login: database error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -93,14 +93,14 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: bcrypt error: %v", err)
+			slog.Error("login: bcrypt error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
 		tokenStr, err := generateJWT(user, secret)
 		if err != nil {
-			log.Printf("login: failed to generate JWT: %v", err)
+			slog.Error("login: failed to generate JWT", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -148,7 +148,7 @@ func requireAuth(secret []byte, checker TokenChecker) func(http.Handler) http.Ha
 			}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
 
 			if err != nil || !token.Valid {
-				log.Printf("auth: token validation failed: %v", err)
+				slog.Warn("auth: token validation failed", "error", err)
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}
@@ -162,7 +162,7 @@ func requireAuth(secret []byte, checker TokenChecker) func(http.Handler) http.Ha
 			if jti, ok := claims["jti"].(string); ok && jti != "" {
 				revoked, err := checker.IsTokenRevoked(r.Context(), jti)
 				if err != nil {
-					log.Printf("auth: revocation check failed: %v", err)
+					slog.Error("auth: revocation check failed", "error", err)
 					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 					return
 				}
@@ -200,7 +200,7 @@ func handleLogout(revoker TokenRevoker) http.HandlerFunc {
 		expiresAt := time.Unix(int64(expFloat), 0)
 
 		if err := revoker.RevokeToken(r.Context(), jti, expiresAt); err != nil {
-			log.Printf("logout: failed to revoke token: %v", err)
+			slog.Error("logout: failed to revoke token", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
