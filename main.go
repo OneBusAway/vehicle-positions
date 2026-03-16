@@ -77,9 +77,20 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+
 	authMiddleware := requireAuth(jwtSecret)
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+
+	// Admin UI — no auth for demo/pitch
+	mux.HandleFunc("GET /admin/login", AdminLoginHandler)
+	mux.HandleFunc("GET /admin/signup", AdminSignupHandler)
+	mux.HandleFunc("GET /admin/map", AdminMapHandler)
+	mux.HandleFunc("GET /admin/dashboard", AdminDashboardHandler)
+	mux.HandleFunc("GET /admin/vehicles", AdminVehiclesHandler)
+	mux.HandleFunc("GET /admin/users", AdminUsersHandler)
+	mux.HandleFunc("GET /admin/trips", AdminTripsHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
