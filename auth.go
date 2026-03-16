@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -38,10 +42,17 @@ type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
-
-// LoginResponse is returned on a successful login.
 type LoginResponse struct {
-	Token string `json:"token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+type RefreshResponse struct {
+	AccessToken string `json:"access_token"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
 }
 
 // UserFetcher is the store interface needed by the login handler.
@@ -49,7 +60,29 @@ type UserFetcher interface {
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 }
 
-func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
+type RefreshTokenCreator interface {
+	CreateRefreshToken(ctx context.Context, id string, userID int64, tokenHash string, issuedAt time.Time, expiresAt time.Time) error
+}
+
+type LoginStore interface {
+	UserFetcher
+	RefreshTokenCreator
+}
+
+type RefreshTokenGetter interface {
+	GetRefreshToken(ctx context.Context, tokenHash string) (*RefreshToken, error)
+}
+
+type UserByIDFetcher interface {
+	GetUserByID(ctx context.Context, userID int64) (*User, error)
+}
+
+type RefreshStore interface {
+	RefreshTokenGetter
+	UserByIDFetcher
+}
+
+func handleLogin(deps LoginStore, secret []byte, accessTTL, refreshTTL time.Duration) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
 
@@ -64,14 +97,14 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 			return
 		}
 
-		user, err := fetcher.GetUserByEmail(r.Context(), req.Email)
+		user, err := deps.GetUserByEmail(r.Context(), req.Email)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(req.Password)) // timing side-channel prevention
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: database error: %v", err)
+			slog.Error("login: database error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -82,31 +115,112 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: bcrypt error: %v", err)
+			slog.Error("login: bcrypt error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
-		tokenStr, err := generateJWT(user, secret)
+		accessToken, err := generateJWT(user, secret, accessTTL)
 		if err != nil {
-			log.Printf("login: failed to generate JWT: %v", err)
+			slog.Error("login: failed to generate jwt", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
-		writeJSON(w, http.StatusOK, LoginResponse{Token: tokenStr})
+		rawToken, tokenHash, err := generateRefreshToken()
+		if err != nil {
+			slog.Error("login: failed to generate refresh token", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		now := time.Now()
+		if err := deps.CreateRefreshToken(r.Context(), uuid.New().String(), user.ID, tokenHash, now, now.Add(refreshTTL)); err != nil {
+			slog.Error("login: failed to store refresh token", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, LoginResponse{AccessToken: accessToken, RefreshToken: rawToken})
 	}
 }
 
-// generateJWT creates a signed JWT valid for 24 hours.
-func generateJWT(user *User, secret []byte) (string, error) {
+func generateRefreshToken() (token string, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", "", fmt.Errorf("generate refresh token: %w", err)
+	}
+	token = base64.RawURLEncoding.EncodeToString(b)
+	sum := sha256.Sum256([]byte(token))
+	hash = fmt.Sprintf("%x", sum)
+	return token, hash, nil
+}
+
+func handleRefreshToken(deps RefreshStore, secret []byte, accessTTL time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
+
+		var req RefreshRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		if req.RefreshToken == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "refresh_token is required"})
+			return
+		}
+
+		sum := sha256.Sum256([]byte(req.RefreshToken))
+		tokenHash := fmt.Sprintf("%x", sum)
+
+		rt, err := deps.GetRefreshToken(r.Context(), tokenHash)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid refresh token"})
+				return
+			}
+			slog.Error("refresh: database error", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		if rt.Revoked {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "refresh token has been revoked"})
+			return
+		}
+
+		if time.Now().After(rt.ExpiresAt) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "refresh token has expired"})
+			return
+		}
+
+		user, err := deps.GetUserByID(r.Context(), rt.UserID)
+		if err != nil {
+			slog.Error("refresh: failed to fetch user", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		accessToken, err := generateJWT(user, secret, accessTTL)
+		if err != nil {
+			slog.Error("refresh: failed to generate jwt", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, RefreshResponse{AccessToken: accessToken})
+	}
+}
+
+func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
 	now := time.Now()
 
 	claims := jwt.MapClaims{
 		"sub":   fmt.Sprintf("%d", user.ID),
 		"email": user.Email,
 		"role":  user.Role,
-		"exp":   now.Add(24 * time.Hour).Unix(),
+		"exp":   now.Add(ttl).Unix(),
 		"iat":   now.Unix(),
 		"iss":   "vehicle-positions-api",
 	}
@@ -134,7 +248,7 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 			}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
 
 			if err != nil || !token.Valid {
-				log.Printf("auth: token validation failed: %v", err)
+				slog.Warn("auth: token validation failed", "error", err)
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}

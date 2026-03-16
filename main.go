@@ -33,6 +33,9 @@ func main() {
 	}
 	jwtSecret := []byte(jwtSecretStr)
 
+	accessTTL := envDurationOrDefault("ACCESS_TOKEN_TTL", 15*time.Minute)
+	refreshTTL := envDurationOrDefault("REFRESH_TOKEN_TTL", 7*24*time.Hour)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -69,7 +72,8 @@ func main() {
 	startTime := time.Now()
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret))
+	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, accessTTL, refreshTTL))
+	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, accessTTL))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
 	// TODO: protect with requireAuth once auth lands
 	mux.HandleFunc("GET /api/v1/admin/status", handleAdminStatus(tracker, startTime))
