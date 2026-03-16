@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -46,7 +46,7 @@ func (vrl *VehicleRateLimiter) Allow(key string) bool {
 	entry, ok := vrl.limiters[key]
 	if !ok {
 		if len(vrl.limiters) >= maxTrackedRates {
-			log.Printf("rate limiter at capacity (%d entries), allowing untracked key %q", maxTrackedRates, key)
+			slog.Warn("rate limiter at capacity, allowing untracked key", "capacity", maxTrackedRates, "key", key)
 			return true
 		}
 		entry = &rateLimiterEntry{
