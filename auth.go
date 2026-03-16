@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -104,7 +104,7 @@ func handleLogin(deps LoginStore, secret []byte, accessTTL, refreshTTL time.Dura
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: database error: %v", err)
+			slog.Error("login: database error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -115,28 +115,28 @@ func handleLogin(deps LoginStore, secret []byte, accessTTL, refreshTTL time.Dura
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: bcrypt error: %v", err)
+			slog.Error("login: bcrypt error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
 		accessToken, err := generateJWT(user, secret, accessTTL)
 		if err != nil {
-			log.Printf("login: failed to generate JWT: %v", err)
+			slog.Error("login: failed to generate jwt", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
 		rawToken, tokenHash, err := generateRefreshToken()
 		if err != nil {
-			log.Printf("login: failed to generate refresh token: %v", err)
+			slog.Error("login: failed to generate refresh token", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
 		now := time.Now()
 		if err := deps.CreateRefreshToken(r.Context(), uuid.New().String(), user.ID, tokenHash, now, now.Add(refreshTTL)); err != nil {
-			log.Printf("login: failed to store refresh token: %v", err)
+			slog.Error("login: failed to store refresh token", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -180,7 +180,7 @@ func handleRefreshToken(deps RefreshStore, secret []byte, accessTTL time.Duratio
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid refresh token"})
 				return
 			}
-			log.Printf("refresh: database error: %v", err)
+			slog.Error("refresh: database error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -197,14 +197,14 @@ func handleRefreshToken(deps RefreshStore, secret []byte, accessTTL time.Duratio
 
 		user, err := deps.GetUserByID(r.Context(), rt.UserID)
 		if err != nil {
-			log.Printf("refresh: failed to fetch user: %v", err)
+			slog.Error("refresh: failed to fetch user", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
 		accessToken, err := generateJWT(user, secret, accessTTL)
 		if err != nil {
-			log.Printf("refresh: failed to generate JWT: %v", err)
+			slog.Error("refresh: failed to generate jwt", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -248,7 +248,7 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 			}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
 
 			if err != nil || !token.Valid {
-				log.Printf("auth: token validation failed: %v", err)
+				slog.Warn("auth: token validation failed", "error", err)
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}
