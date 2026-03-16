@@ -115,7 +115,7 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 
 func TestGetFeed_Protobuf(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
-	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100})
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
 	handler := handleGetFeed(tracker)
 	w := getFeed(handler, "")
@@ -132,7 +132,7 @@ func TestGetFeed_Protobuf(t *testing.T) {
 
 func TestGetFeed_JSON(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
-	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100})
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
 	handler := handleGetFeed(tracker)
 	w := getFeed(handler, "format=json")
@@ -162,16 +162,17 @@ func TestGetFeed_Empty(t *testing.T) {
 
 func TestGetFeed_StaleExcluded(t *testing.T) {
 	tracker := NewTracker(1 * time.Millisecond)
-	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100})
-	time.Sleep(5 * time.Millisecond)
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
 	handler := handleGetFeed(tracker)
-	w := getFeed(handler, "")
-
-	var feed gtfs.FeedMessage
-	err := proto.Unmarshal(w.Body.Bytes(), &feed)
-	require.NoError(t, err)
-	assert.Empty(t, feed.Entity, "stale vehicle should be excluded from feed")
+	assert.Eventually(t, func() bool {
+		w := getFeed(handler, "")
+		var feed gtfs.FeedMessage
+		if err := proto.Unmarshal(w.Body.Bytes(), &feed); err != nil {
+			return false
+		}
+		return len(feed.Entity) == 0
+	}, 100*time.Millisecond, 2*time.Millisecond, "stale vehicle should be excluded from feed")
 }
 
 func TestHandlePostLocation_Validation(t *testing.T) {
@@ -187,27 +188,27 @@ func TestHandlePostLocation_Validation(t *testing.T) {
 	}{
 		{
 			name: "missing vehicle_id",
-			loc:  LocationReport{Latitude: 1, Longitude: 2, Timestamp: 100},
+			loc:  LocationReport{Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
 			want: "vehicle_id is required",
 		},
 		{
 			name: "latitude too high",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 91, Longitude: 2, Timestamp: 100},
+			loc:  LocationReport{VehicleID: "bus-1", Latitude: 91, Longitude: 2, Timestamp: time.Now().Unix()},
 			want: "latitude must be between -90 and 90",
 		},
 		{
 			name: "latitude too low",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: -91, Longitude: 2, Timestamp: 100},
+			loc:  LocationReport{VehicleID: "bus-1", Latitude: -91, Longitude: 2, Timestamp: time.Now().Unix()},
 			want: "latitude must be between -90 and 90",
 		},
 		{
 			name: "longitude too high",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 181, Timestamp: 100},
+			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 181, Timestamp: time.Now().Unix()},
 			want: "longitude must be between -180 and 180",
 		},
 		{
 			name: "reject null coordinates (0,0)",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 0, Longitude: 0, Timestamp: 100},
+			loc:  LocationReport{VehicleID: "bus-1", Latitude: 0, Longitude: 0, Timestamp: time.Now().Unix()},
 			want: "latitude and longitude cannot both be zero (likely GPS error)",
 		},
 		{
@@ -314,8 +315,8 @@ func TestHandleAdminStatus_WithVehicles(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100})
-	tracker.Update(&LocationReport{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: 200})
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
+	tracker.Update(&LocationReport{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: time.Now().Unix()})
 
 	handler := handleAdminStatus(tracker, time.Now())
 	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
