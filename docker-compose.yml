@@ -23,6 +23,9 @@ services:
       PORT: "8080"
       DATABASE_URL: "postgres://postgres:postgres@db:5432/vehicle_positions?sslmode=disable"
       STALENESS_THRESHOLD: "5m"
+      JWT_SECRET: "this-is-a-local-dev-secret-1234567890"
+      ACCESS_TOKEN_TTL: "15m"
+      REFRESH_TOKEN_TTL: "168h"
     depends_on:
       db:
         condition: service_healthy
