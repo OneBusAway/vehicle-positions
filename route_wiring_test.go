@@ -72,6 +72,12 @@ func (n *noopStore) EndTrip(_ context.Context, _, _ int64) error {
 func (n *noopStore) Ping(_ context.Context) error {
 	return nil
 }
+func (n *noopStore) GetLocationHistory(_ context.Context, _ string, _, _ int64, _ int) ([]LocationPoint, error) {
+	return make([]LocationPoint, 0), nil
+}
+func (n *noopStore) VehicleExists(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
 
 // TestAdminRoutes_DriverTokenRejected verifies that every /api/v1/admin/* route
 // is wrapped with adminMiddleware. A valid driver-role JWT must receive 403 on
@@ -94,6 +100,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 		{"GET", "/api/v1/admin/vehicles/bus-1"},
 		{"POST", "/api/v1/admin/vehicles"},
 		{"DELETE", "/api/v1/admin/vehicles/bus-1"},
+		{"GET", "/api/v1/admin/vehicles/bus-1/locations"},
 		{"GET", "/api/v1/admin/users"},
 		{"GET", "/api/v1/admin/users/1"},
 		{"POST", "/api/v1/admin/users"},
@@ -134,7 +141,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 
 	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{})
 
-	// Same 14 routes as the driver-rejection table — every admin route must
+	// Same routes as the driver-rejection table — every admin route must
 	// let a valid admin token through both middleware layers.
 	tests := []struct {
 		method string
@@ -145,6 +152,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 		{"GET", "/api/v1/admin/vehicles/bus-1"},
 		{"POST", "/api/v1/admin/vehicles"},
 		{"DELETE", "/api/v1/admin/vehicles/bus-1"},
+		{"GET", "/api/v1/admin/vehicles/bus-1/locations"},
 		{"GET", "/api/v1/admin/users"},
 		{"GET", "/api/v1/admin/users/1"},
 		{"POST", "/api/v1/admin/users"},
