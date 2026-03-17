@@ -78,6 +78,54 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const createAPIKey = `-- name: CreateAPIKey :one
+INSERT INTO api_keys (name, key_hash, active)
+VALUES ($1, $2, $3)
+RETURNING id, name, key_hash, active, last_used_at, created_at, updated_at
+`
+
+type CreateAPIKeyParams struct {
+	Name    string
+	KeyHash string
+	Active  bool
+}
+
+func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createAPIKey, arg.Name, arg.KeyHash, arg.Active)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.KeyHash,
+		&i.Active,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+WHERE key_hash = $1
+`
+
+func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByHash, keyHash)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.KeyHash,
+		&i.Active,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getRecentLocations = `-- name: GetRecentLocations :many
 SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
@@ -379,6 +427,17 @@ func (q *Queries) UpsertAdminVehicle(ctx context.Context, arg UpsertAdminVehicle
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateAPIKeyLastUsed = `-- name: UpdateAPIKeyLastUsed :exec
+UPDATE api_keys
+SET last_used_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, updateAPIKeyLastUsed, id)
+	return err
 }
 
 const upsertVehicle = `-- name: UpsertVehicle :exec

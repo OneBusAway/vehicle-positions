@@ -59,3 +59,18 @@ RETURNING id, label, agency_tag, active, created_at, updated_at;
 UPDATE vehicles
 SET active = false, updated_at = NOW()
 WHERE id = $1;
+
+-- name: GetAPIKeyByHash :one
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+WHERE key_hash = $1;
+
+-- name: UpdateAPIKeyLastUsed :exec
+UPDATE api_keys
+SET last_used_at = NOW()
+WHERE id = $1;
+
+-- name: CreateAPIKey :one
+INSERT INTO api_keys (name, key_hash, active)
+VALUES ($1, $2, $3)
+RETURNING id, name, key_hash, active, last_used_at, created_at, updated_at;

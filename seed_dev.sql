@@ -8,3 +8,13 @@ VALUES (
     'driver'
 )
 ON CONFLICT (email) DO NOTHING;
+
+-- Seed a development API key for feed access
+-- Raw key: dev-feed-key
+INSERT INTO api_keys (name, key_hash, active)
+VALUES (
+    'Local Dev Feed Consumer',
+    'ede86837a4b0c9da541548997b71fcbdd529c2fec605801694c704de466296e9',
+    TRUE
+)
+ON CONFLICT (key_hash) DO NOTHING;
