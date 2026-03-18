@@ -23,7 +23,6 @@ services:
       PORT: "8080"
       DATABASE_URL: "postgres://postgres:postgres@db:5432/vehicle_positions?sslmode=disable"
       STALENESS_THRESHOLD: "5m"
-      JWT_SECRET: "very-secure-secret-key-for-testing-that-is-at-least-32-characters-long"
     depends_on:
       db:
         condition: service_healthy

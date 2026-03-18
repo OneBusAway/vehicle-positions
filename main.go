@@ -61,7 +61,6 @@ func main() {
 	// TODO: Initialize admin middleware or audit middleware once the admin user CRUD endpoints are merged.
 	// Example:
 	// adminMiddleware := audit.NewAdminMiddleware(auditLogger)
-	// mux.Handle("POST /api/v1/admin/users", adminMiddleware(handleCreateUser(store)))
 	// mux.Handle("/api/v1/admin/users", createUser(store, auditStore)).Methods("POST")
 	// mux.Handle("/api/v1/admin/users/{id}", updateUser(store, auditStore)).Methods("PUT")
 	// mux.Handle("/api/v1/admin/users/{id}", deleteUser(store, auditStore)).Methods("DELETE")
