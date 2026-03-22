@@ -1,0 +1,13 @@
+# Copy this file to local.properties and fill in your values
+# DO NOT commit local.properties
+
+# Android SDK path — update to your local SDK location
+sdk.dir=/Users/YOUR_USERNAME/Library/Android/sdk
+
+# Google Maps API key — get from https://console.cloud.google.com
+MAPS_API_KEY=your_maps_api_key_here
+
+# Backend server URL
+# For local development: http://YOUR_MAC_IP:8080/
+# For production: https://your-production-server.com/
+BASE_URL=http://192.168.x.x:8080/
