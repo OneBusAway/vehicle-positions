@@ -78,9 +78,10 @@ func main() {
 	})
 	mux.HandleFunc("GET /ready", handleReadiness(store))
 
-	authMiddleware := requireAuth(jwtSecret)
+	authMiddleware := requireAuth(jwtSecret, store)
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
