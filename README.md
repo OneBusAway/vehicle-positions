@@ -120,6 +120,40 @@ Each location report is a single point sent directly from the Android app as it 
 
 The server updates its in-memory state with the latest position and persists the point to the database. Points older than a configurable staleness threshold (default 5 minutes) are excluded from the GTFS-RT feed.
 
+**`POST /api/v1/locations` validation and error contract**
+
+The ingest endpoint performs strict request validation before writing data:
+
+- `Content-Type` must be `application/json` (charset parameters are allowed).
+- The request body must contain exactly one JSON object.
+- Unknown JSON fields are rejected.
+- Standard payload validation still applies (`vehicle_id`, coordinates, timestamp).
+
+Response codes:
+
+- `201 Created` — location accepted and persisted.
+- `400 Bad Request` — invalid JSON or payload validation failure.
+- `415 Unsupported Media Type` — non-JSON `Content-Type`.
+
+Examples:
+
+```bash
+# Valid request
+curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Content-Type: application/json" \
+  -d '{"vehicle_id":"bus-1","trip_id":"route-5","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
+
+# Invalid content type -> 415
+curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Content-Type: text/plain" \
+  -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
+
+# Trailing JSON value -> 400
+curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Content-Type: application/json" \
+  -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}{"extra":1}'
+```
+
 **Technology Stack:**
 
 - **Language:** Go (aligns with Maglev and OTSF’s server-side direction)
