@@ -52,6 +52,20 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const deactivateVehicle = `-- name: DeactivateVehicle :execrows
+UPDATE vehicles
+SET active = false, updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) DeactivateVehicle(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateVehicle, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1
 `
@@ -143,6 +157,35 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+const getVehicleByID = `-- name: GetVehicleByID :one
+SELECT id, label, agency_tag, active, created_at, updated_at
+FROM vehicles
+WHERE id = $1
+`
+
+type GetVehicleByIDRow struct {
+	ID        string
+	Label     string
+	AgencyTag string
+	Active    bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetVehicleByID(ctx context.Context, id string) (GetVehicleByIDRow, error) {
+	row := q.db.QueryRow(ctx, getVehicleByID, id)
+	var i GetVehicleByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Label,
+		&i.AgencyTag,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertLocationPoint = `-- name: InsertLocationPoint :exec
 INSERT INTO location_points (vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -217,6 +260,48 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	return items, nil
 }
 
+const listVehicles = `-- name: ListVehicles :many
+SELECT id, label, agency_tag, active, created_at, updated_at
+FROM vehicles
+ORDER BY created_at DESC
+`
+
+type ListVehiclesRow struct {
+	ID        string
+	Label     string
+	AgencyTag string
+	Active    bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListVehicles(ctx context.Context) ([]ListVehiclesRow, error) {
+	rows, err := q.db.Query(ctx, listVehicles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVehiclesRow
+	for rows.Next() {
+		var i ListVehiclesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Label,
+			&i.AgencyTag,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET name = $1, email = $2, role = $3
@@ -240,6 +325,7 @@ type UpdateUserRow struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+// updated_at is maintained by the set_users_updated_at trigger.
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Name,
@@ -253,6 +339,42 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 		&i.Name,
 		&i.Email,
 		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertAdminVehicle = `-- name: UpsertAdminVehicle :one
+INSERT INTO vehicles (id, label, agency_tag)
+VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, agency_tag = EXCLUDED.agency_tag, active = true, updated_at = NOW()
+RETURNING id, label, agency_tag, active, created_at, updated_at
+`
+
+type UpsertAdminVehicleParams struct {
+	ID        string
+	Label     string
+	AgencyTag string
+}
+
+type UpsertAdminVehicleRow struct {
+	ID        string
+	Label     string
+	AgencyTag string
+	Active    bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertAdminVehicle(ctx context.Context, arg UpsertAdminVehicleParams) (UpsertAdminVehicleRow, error) {
+	row := q.db.QueryRow(ctx, upsertAdminVehicle, arg.ID, arg.Label, arg.AgencyTag)
+	var i UpsertAdminVehicleRow
+	err := row.Scan(
+		&i.ID,
+		&i.Label,
+		&i.AgencyTag,
+		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
