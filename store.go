@@ -69,6 +69,22 @@ func (s *Store) Migrate(databaseURL string) error {
 	return nil
 }
 
+// LogAudit to create new audit log entries in the DB for better tracing and error detection
+func (s *Store) LogAudit(ctx context.Context, log audit.AuditLogs) error {
+	query := `INSERT INTO audit_logs (user_id, action, ip_address, timestamp, details) 
+	VALUES ($1, $2, $3, $4, $5) 
+	RETURNING id`
+
+	var id int64
+	err := s.pool.QueryRow(ctx, query, log.UserID, log.Action, log.IPAddress, log.Timestamp, log.Details).Scan(&id)
+
+	if err != nil {
+		return fmt.Errorf("failed to insert audit logs: %w", err)
+	}
+	log.ID = id
+	return nil
+}
+
 // SaveLocation upserts the vehicle and inserts a location point in a single transaction.
 func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 	tx, err := s.pool.Begin(ctx)

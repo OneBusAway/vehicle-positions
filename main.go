@@ -49,6 +49,23 @@ func main() {
 
 	defer store.Close()
 
+	// TODO: Initialize audit logging system here once the admin user CRUD endpoints are merged.
+	// Example:
+	// auditLogger, err := audit.NewAuditLogger(store)
+	// if err != nil {
+	// 	slog.Error("failed to initialize audit logger", "error", err)
+	// 	os.Exit(1)
+	// }
+	// defer auditLogger.Close()
+
+	// TODO: Initialize admin middleware or audit middleware once the admin user CRUD endpoints are merged.
+	// Example:
+	// adminMiddleware := audit.NewAdminMiddleware(auditLogger)
+	// mux.Handle("/api/v1/admin/users", createUser(store, auditStore)).Methods("POST")
+	// mux.Handle("/api/v1/admin/users/{id}", updateUser(store, auditStore)).Methods("PUT")
+	// mux.Handle("/api/v1/admin/users/{id}", deleteUser(store, auditStore)).Methods("DELETE")
+	// mux.Handle("/api/v1/admin/vehicles/{id}", deleteVehicle(store, auditStore)).Methods("DELETE")
+
 	tracker := NewTracker(maxAge)
 	defer tracker.Stop()
 
