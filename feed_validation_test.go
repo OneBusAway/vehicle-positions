@@ -212,7 +212,7 @@ func TestFeedValidation_E026_BoundaryCoordinates(t *testing.T) {
 func TestFeedValidation_E027_ValidBearing(t *testing.T) {
 	now := time.Now().Unix()
 	vehicles := []*VehicleState{
-		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: 180, Timestamp: now},
+		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(180), Timestamp: now},
 	}
 	feed := buildFeed(vehicles)
 	violations := validateFeedCompliance(t, feed)
@@ -222,10 +222,10 @@ func TestFeedValidation_E027_ValidBearing(t *testing.T) {
 func TestFeedValidation_E027_BearingBoundaries(t *testing.T) {
 	now := time.Now().Unix()
 	vehicles := []*VehicleState{
-		{VehicleID: "north", Latitude: 1, Longitude: 2, Bearing: 0, Timestamp: now},
-		{VehicleID: "east", Latitude: 3, Longitude: 4, Bearing: 90, Timestamp: now},
-		{VehicleID: "south", Latitude: 5, Longitude: 6, Bearing: 180, Timestamp: now},
-		{VehicleID: "wrap", Latitude: 7, Longitude: 8, Bearing: 360, Timestamp: now},
+		{VehicleID: "north", Latitude: 1, Longitude: 2, Bearing: float64ptr(0), Timestamp: now},
+		{VehicleID: "east", Latitude: 3, Longitude: 4, Bearing: float64ptr(90), Timestamp: now},
+		{VehicleID: "south", Latitude: 5, Longitude: 6, Bearing: float64ptr(180), Timestamp: now},
+		{VehicleID: "wrap", Latitude: 7, Longitude: 8, Bearing: float64ptr(360), Timestamp: now},
 	}
 	feed := buildFeed(vehicles)
 
@@ -325,8 +325,8 @@ func TestFeedValidation_W002_VehicleIDPopulated(t *testing.T) {
 func TestFeedValidation_SpeedNonNegative(t *testing.T) {
 	now := time.Now().Unix()
 	vehicles := []*VehicleState{
-		{VehicleID: "stationary", Latitude: 1, Longitude: 2, Speed: 0, Timestamp: now},
-		{VehicleID: "moving", Latitude: 3, Longitude: 4, Speed: 15.5, Timestamp: now},
+		{VehicleID: "stationary", Latitude: 1, Longitude: 2, Speed: float64ptr(0), Timestamp: now},
+		{VehicleID: "moving", Latitude: 3, Longitude: 4, Speed: float64ptr(15.5), Timestamp: now},
 	}
 	feed := buildFeed(vehicles)
 	violations := validateFeedCompliance(t, feed)
@@ -355,16 +355,16 @@ func TestFeedValidation_FullFeedCompliance(t *testing.T) {
 			TripID:    "route_5_0830",
 			Latitude:  -1.2921,
 			Longitude: 36.8219,
-			Bearing:   180.0,
-			Speed:     8.5,
+			Bearing:   float64ptr(180.0),
+			Speed:     float64ptr(8.5),
 			Timestamp: now,
 		},
 		{
 			VehicleID: "vehicle-100",
 			Latitude:  -1.3000,
 			Longitude: 36.8300,
-			Bearing:   0.0, // heading north — valid
-			Speed:     0.0, // stationary — valid
+			Bearing:   float64ptr(0.0), // heading north — valid
+			Speed:     float64ptr(0.0), // stationary — valid
 			Timestamp: now - 30,
 		},
 		{
@@ -372,8 +372,8 @@ func TestFeedValidation_FullFeedCompliance(t *testing.T) {
 			TripID:    "route_10_0900",
 			Latitude:  40.7128,
 			Longitude: -74.0060,
-			Bearing:   270.0,
-			Speed:     12.5,
+			Bearing:   float64ptr(270.0),
+			Speed:     float64ptr(12.5),
 			Timestamp: now - 5,
 		},
 	}
@@ -423,7 +423,7 @@ func TestFeedValidation_FeedSerializesCleanly(t *testing.T) {
 	now := time.Now().Unix()
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", TripID: "trip-1", Latitude: -1.29, Longitude: 36.82,
-			Bearing: 180, Speed: 8.5, Timestamp: now},
+			Bearing: float64ptr(180), Speed: float64ptr(8.5), Timestamp: now},
 	}
 	feed := buildFeed(vehicles)
 
