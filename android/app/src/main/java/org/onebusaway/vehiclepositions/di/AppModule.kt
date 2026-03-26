@@ -21,13 +21,10 @@ object AppModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            // BODY in debug so we can inspect payloads; NONE in release to avoid
-            // leaking JWTs or GPS coordinates into logcat
-            level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
-            } else {
-                HttpLoggingInterceptor.Level.NONE
-            }
+            // BODY level logs Authorization headers and GPS coordinates —
+            // use HEADERS only, and only in debug builds
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS
+            else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)
