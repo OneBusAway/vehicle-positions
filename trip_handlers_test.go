@@ -307,6 +307,48 @@ func TestHandleEndTrip_WrongContentType(t *testing.T) {
 	assert.Contains(t, decodeError(t, w), "Content-Type must be application/json")
 }
 
+func TestHandleEndTrip_EmptySub(t *testing.T) {
+	store := &mockTripEnder{}
+	handler := handleEndTrip(store)
+
+	w := tripRawRequest(t, handler, "", []byte(`{"trip_id":1}`))
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, decodeError(t, w), "missing subject")
+}
+
+func TestHandleEndTrip_UnknownFields(t *testing.T) {
+	store := &mockTripEnder{}
+	handler := handleEndTrip(store)
+
+	w := tripRawRequest(t, handler, "42", []byte(`{"trip_id":1,"unknown_field":"value"}`))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, decodeError(t, w), "unknown field")
+}
+
+func TestHandleStartTrip_RequestBodyTooLarge(t *testing.T) {
+	store := &mockTripStarter{}
+	handler := handleStartTrip(store)
+
+	largeBody := `{"vehicle_id":"` + strings.Repeat("a", 2048) + `"}`
+	w := tripRawRequest(t, handler, "42", []byte(largeBody))
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	assert.Contains(t, decodeError(t, w), "request body too large")
+}
+
+func TestHandleEndTrip_RequestBodyTooLarge(t *testing.T) {
+	store := &mockTripEnder{}
+	handler := handleEndTrip(store)
+
+	largeBody := `{"trip_id":1,"padding":"` + strings.Repeat("x", 2048) + `"}`
+	w := tripRawRequest(t, handler, "42", []byte(largeBody))
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	assert.Contains(t, decodeError(t, w), "request body too large")
+}
+
 func TestHandleStartTrip_VehicleIDFormat(t *testing.T) {
 	store := &mockTripStarter{trip: &TripResponse{
 		ID:        1,

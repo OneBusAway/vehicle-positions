@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -12,6 +13,23 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// userIDFromClaims extracts the user ID from JWT claims on the request context.
+func userIDFromClaims(r *http.Request) (int64, error, int) {
+	claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+	if !ok {
+		return 0, errors.New("internal server error"), http.StatusInternalServerError
+	}
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		return 0, errors.New("invalid token: missing subject"), http.StatusUnauthorized
+	}
+	userID, err := strconv.ParseInt(sub, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid token: invalid subject"), http.StatusUnauthorized
+	}
+	return userID, nil, 0
+}
 
 // StartTripRequest is the JSON payload for POST /api/v1/trips/start.
 type StartTripRequest struct {
@@ -34,22 +52,10 @@ func handleStartTrip(store TripStarter) http.HandlerFunc {
 			return
 		}
 
-		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
-		if !ok {
-			slog.Warn("handleStartTrip: JWT claims missing from context")
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-			return
-		}
-		sub, ok := claims["sub"].(string)
-		if !ok || sub == "" {
-			slog.Warn("handleStartTrip: JWT sub claim missing or not a string")
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token: missing subject"})
-			return
-		}
-		userID, err := strconv.ParseInt(sub, 10, 64)
-		if err != nil {
-			slog.Warn("handleStartTrip: JWT sub claim is not a valid integer", "sub", sub)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token: invalid subject"})
+		userID, claimsErr, status := userIDFromClaims(r)
+		if claimsErr != nil {
+			slog.Warn("handleStartTrip: invalid claims", "error", claimsErr)
+			writeJSON(w, status, map[string]string{"error": claimsErr.Error()})
 			return
 		}
 
@@ -59,14 +65,19 @@ func handleStartTrip(store TripStarter) http.HandlerFunc {
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+				return
+			}
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + sanitizeJSONError(err)})
 			return
 		}
 		if err := decoder.Decode(new(json.RawMessage)); err == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: request body must contain a single JSON object and no trailing data"})
 			return
 		} else if err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + sanitizeJSONError(err)})
 			return
 		}
 
@@ -119,22 +130,10 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 			return
 		}
 
-		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
-		if !ok {
-			slog.Warn("handleEndTrip: JWT claims missing from context")
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-			return
-		}
-		sub, ok := claims["sub"].(string)
-		if !ok || sub == "" {
-			slog.Warn("handleEndTrip: JWT sub claim missing or not a string")
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token: missing subject"})
-			return
-		}
-		userID, err := strconv.ParseInt(sub, 10, 64)
-		if err != nil {
-			slog.Warn("handleEndTrip: JWT sub claim is not a valid integer", "sub", sub)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token: invalid subject"})
+		userID, claimsErr, status := userIDFromClaims(r)
+		if claimsErr != nil {
+			slog.Warn("handleEndTrip: invalid claims", "error", claimsErr)
+			writeJSON(w, status, map[string]string{"error": claimsErr.Error()})
 			return
 		}
 
@@ -144,14 +143,19 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+				return
+			}
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + sanitizeJSONError(err)})
 			return
 		}
 		if err := decoder.Decode(new(json.RawMessage)); err == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: request body must contain a single JSON object and no trailing data"})
 			return
 		} else if err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + sanitizeJSONError(err)})
 			return
 		}
 
@@ -163,6 +167,7 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 		err = store.EndTrip(r.Context(), req.TripID, userID)
 		if err != nil {
 			if errors.Is(err, ErrTripNotFound) {
+				slog.Warn("end trip: no matching active trip", "trip_id", req.TripID, "user_id", userID)
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "active trip not found"})
 				return
 			}

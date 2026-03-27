@@ -90,7 +90,8 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 		// The unique partial index idx_trips_one_active_per_user catches
 		// concurrent inserts that pass the SELECT check above.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" &&
+			pgErr.ConstraintName == "idx_trips_one_active_per_user" {
 			return nil, ErrActiveTripExists
 		}
 		return nil, fmt.Errorf("insert trip: %w", err)
