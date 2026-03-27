@@ -134,6 +134,7 @@ Response codes:
 - `201 Created` — location accepted and persisted.
 - `400 Bad Request` — invalid JSON or payload validation failure.
 - `415 Unsupported Media Type` — non-JSON `Content-Type`.
+- `500 Internal Server Error` — location could not be persisted (database error).
 
 Examples:
 
@@ -152,6 +153,11 @@ curl -i -X POST http://localhost:8080/api/v1/locations \
 curl -i -X POST http://localhost:8080/api/v1/locations \
   -H "Content-Type: application/json" \
   -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}{"extra":1}'
+
+# Database error -> 500
+curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Content-Type: application/json" \
+  -d '{"vehicle_id":"bus-1","trip_id":"route-5","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
 ```
 
 **Technology Stack:**
