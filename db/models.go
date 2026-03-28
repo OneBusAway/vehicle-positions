@@ -8,6 +8,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiKey struct {
+	ID         int64
+	Name       string
+	KeyHash    string
+	Active     bool
+	LastUsedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
 type LocationPoint struct {
 	ID         int64
 	VehicleID  string

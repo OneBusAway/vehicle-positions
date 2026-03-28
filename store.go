@@ -158,6 +158,66 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }
 
+// GetAPIKeyByHash looks up an API key by its hash for authentication.
+func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
+	row, err := s.queries.GetAPIKeyByHash(ctx, keyHash)
+	if err != nil {
+		return nil, fmt.Errorf("get api key by hash: %w", err)
+	}
+
+	var lastUsedAt *time.Time
+	if row.LastUsedAt.Valid {
+		t := row.LastUsedAt.Time
+		lastUsedAt = &t
+	}
+
+	return &APIKey{
+		ID:         row.ID,
+		Name:       row.Name,
+		KeyHash:    row.KeyHash,
+		Active:     row.Active,
+		LastUsedAt: lastUsedAt,
+		CreatedAt:  row.CreatedAt.Time,
+		UpdatedAt:  row.UpdatedAt.Time,
+	}, nil
+}
+
+// UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key.
+func (s *Store) UpdateAPIKeyLastUsed(ctx context.Context, id int64) error {
+	if err := s.queries.UpdateAPIKeyLastUsed(ctx, id); err != nil {
+		return fmt.Errorf("update api key last used: %w", err)
+	}
+	return nil
+}
+
+// CreateAPIKey creates a new API key with the given name, hash, and active status.
+func (s *Store) CreateAPIKey(ctx context.Context, name, keyHash string, active bool) (*APIKey, error) {
+	row, err := s.queries.CreateAPIKey(ctx, db.CreateAPIKeyParams{
+		Name:    name,
+		KeyHash: keyHash,
+		Active:  active,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create api key: %w", err)
+	}
+
+	var lastUsedAt *time.Time
+	if row.LastUsedAt.Valid {
+		t := row.LastUsedAt.Time
+		lastUsedAt = &t
+	}
+
+	return &APIKey{
+		ID:         row.ID,
+		Name:       row.Name,
+		KeyHash:    row.KeyHash,
+		Active:     row.Active,
+		LastUsedAt: lastUsedAt,
+		CreatedAt:  row.CreatedAt.Time,
+		UpdatedAt:  row.UpdatedAt.Time,
+	}, nil
+}
+
 // Close shuts down the connection pool.
 func (s *Store) Close() {
 	s.pool.Close()

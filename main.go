@@ -46,7 +46,6 @@ func main() {
 		slog.Error("could not run migrations", "error", err)
 		os.Exit(1)
 	}
-
 	defer store.Close()
 
 	tracker := NewTracker(maxAge)
@@ -72,27 +71,29 @@ func main() {
 
 	authMiddleware := requireAuth(jwtSecret)
 	adminMiddleware := requireAdmin()
+	feedAuth := requireAPIKey(store)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret))
-	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
+	mux.Handle("GET /gtfs-rt/vehicle-positions", feedAuth(handleGetFeed(tracker)))
+
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleGetVehicle(store))))
 	mux.Handle("POST /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleUpsertVehicle(store))))
 	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store))))
+
+	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))
+	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleGetUser(store))))
+	mux.Handle("POST /api/v1/admin/users", authMiddleware(adminMiddleware(handleCreateUser(store))))
+	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleUpdateUser(store))))
+	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleDeactivateUser(store))))
+
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /ready", handleReadiness(store))
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
-
-	// Admin user management
-	mux.Handle("GET /api/v1/admin/users", authMiddleware(handleListUsers(store)))
-	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(handleGetUser(store)))
-	mux.Handle("POST /api/v1/admin/users", authMiddleware(handleCreateUser(store)))
-	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(handleUpdateUser(store)))
-	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeactivateUser(store)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
