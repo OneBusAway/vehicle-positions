@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
@@ -39,6 +40,7 @@ func requireAPIKey(store APIKeyStore) func(http.Handler) http.Handler {
 					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid API key"})
 					return
 				}
+				slog.Error("failed to fetch api key", "error", err)
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 				return
 			}
@@ -49,8 +51,7 @@ func requireAPIKey(store APIKeyStore) func(http.Handler) http.Handler {
 			}
 
 			if err := store.UpdateAPIKeyLastUsed(r.Context(), apiKey.ID); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-				return
+				slog.Error("failed to update api key last_used_at", "api_key_id", apiKey.ID, "error", err)
 			}
 
 			next.ServeHTTP(w, r)

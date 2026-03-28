@@ -116,8 +116,8 @@ func TestRequireAPIKey_StoreFailure(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-// Update failure should result in 500 Internal Server Error
-func TestRequireAPIKey_UpdateLastUsedFailure(t *testing.T) {
+// Update last_used_at failure should be logged but must not block feed access.
+func TestRequireAPIKey_UpdateLastUsedFailure_DoesNotBlockRequest(t *testing.T) {
 	store := &mockAPIKeyStore{
 		apiKey: &APIKey{
 			ID:     7,
@@ -126,7 +126,10 @@ func TestRequireAPIKey_UpdateLastUsedFailure(t *testing.T) {
 		},
 		updateErr: errors.New("update failed"),
 	}
+
+	called := false
 	handler := requireAPIKey(store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -135,7 +138,8 @@ func TestRequireAPIKey_UpdateLastUsedFailure(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.True(t, called)
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 // Valid API key should call next handler and update last used timestamp
