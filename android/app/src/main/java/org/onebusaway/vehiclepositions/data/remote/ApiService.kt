@@ -16,5 +16,5 @@ interface ApiService {
     @POST("api/v1/auth/refresh")
     suspend fun refreshToken(
         @Body request: RefreshTokenRequest
-    ): RefreshTokenResponse
+    ): Response<RefreshTokenResponse>
 }
