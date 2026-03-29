@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/OneBusAway/vehicle-positions/db"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -45,13 +46,10 @@ type AssignmentListerByVehicle interface {
 
 // CreateAssignment inserts a user-vehicle assignment and returns the DB-generated created_at.
 func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID string) (*AssignmentResponse, error) {
-	query := `
-		INSERT INTO user_vehicles (user_id, vehicle_id)
-		VALUES ($1, $2)
-		RETURNING created_at
-	`
-	var createdAt time.Time
-	err := s.pool.QueryRow(ctx, query, userID, vehicleID).Scan(&createdAt)
+	row, err := s.queries.AssignUserVehicle(ctx, db.AssignUserVehicleParams{
+		UserID:    userID,
+		VehicleID: vehicleID,
+	})
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, ErrAssignmentExists
@@ -62,27 +60,30 @@ func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID st
 				return nil, ErrUserNotFoundFK
 			case "user_vehicles_vehicle_id_fkey":
 				return nil, ErrVehicleNotFoundFK
+			default:
+				return nil, fmt.Errorf("create assignment: unrecognized FK constraint %q: %w", fkConstraintName(err), err)
 			}
-			return nil, fmt.Errorf("create assignment: foreign key violation: %w", err)
 		}
 		return nil, fmt.Errorf("create assignment: %w", err)
 	}
 
 	return &AssignmentResponse{
-		UserID:    userID,
-		VehicleID: vehicleID,
-		CreatedAt: createdAt,
+		UserID:    row.UserID,
+		VehicleID: row.VehicleID,
+		CreatedAt: row.CreatedAt.Time,
 	}, nil
 }
 
 // DeleteAssignment removes a user-vehicle assignment. Returns ErrAssignmentNotFound if no row matched.
 func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID string) error {
-	query := `DELETE FROM user_vehicles WHERE user_id = $1 AND vehicle_id = $2`
-	ct, err := s.pool.Exec(ctx, query, userID, vehicleID)
+	rowsAffected, err := s.queries.UnassignUserVehicle(ctx, db.UnassignUserVehicleParams{
+		UserID:    userID,
+		VehicleID: vehicleID,
+	})
 	if err != nil {
 		return fmt.Errorf("delete assignment: %w", err)
 	}
-	if ct.RowsAffected() == 0 {
+	if rowsAffected == 0 {
 		return ErrAssignmentNotFound
 	}
 	return nil
@@ -90,46 +91,32 @@ func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID st
 
 // ListAssignmentsByUser returns all assignments for a user, ordered by created_at DESC.
 func (s *Store) ListAssignmentsByUser(ctx context.Context, userID int64) ([]AssignmentResponse, error) {
-	query := `
-		SELECT user_id, vehicle_id, created_at
-		FROM user_vehicles
-		WHERE user_id = $1
-		ORDER BY created_at DESC
-	`
-	return s.scanAssignments(ctx, query, userID)
+	rows, err := s.queries.ListVehiclesByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list assignments by user: %w", err)
+	}
+	return toAssignmentResponses(rows), nil
 }
 
 // ListAssignmentsByVehicle returns all assignments for a vehicle, ordered by created_at DESC.
 func (s *Store) ListAssignmentsByVehicle(ctx context.Context, vehicleID string) ([]AssignmentResponse, error) {
-	query := `
-		SELECT user_id, vehicle_id, created_at
-		FROM user_vehicles
-		WHERE vehicle_id = $1
-		ORDER BY created_at DESC
-	`
-	return s.scanAssignments(ctx, query, vehicleID)
+	rows, err := s.queries.ListUsersByVehicle(ctx, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("list assignments by vehicle: %w", err)
+	}
+	return toAssignmentResponses(rows), nil
 }
 
-func (s *Store) scanAssignments(ctx context.Context, query string, arg any) ([]AssignmentResponse, error) {
-	rows, err := s.pool.Query(ctx, query, arg)
-	if err != nil {
-		return nil, fmt.Errorf("list assignments: %w", err)
+func toAssignmentResponses(rows []db.UserVehicle) []AssignmentResponse {
+	assignments := make([]AssignmentResponse, 0, len(rows))
+	for _, row := range rows {
+		assignments = append(assignments, AssignmentResponse{
+			UserID:    row.UserID,
+			VehicleID: row.VehicleID,
+			CreatedAt: row.CreatedAt.Time,
+		})
 	}
-	defer rows.Close()
-
-	assignments := make([]AssignmentResponse, 0)
-	for rows.Next() {
-		var a AssignmentResponse
-		if err := rows.Scan(&a.UserID, &a.VehicleID, &a.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scan assignment: %w", err)
-		}
-		assignments = append(assignments, a)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate assignments: %w", err)
-	}
-
-	return assignments, nil
+	return assignments
 }
 
 func isUniqueViolation(err error) bool {

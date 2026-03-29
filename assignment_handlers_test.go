@@ -100,7 +100,7 @@ func listVehicleUsers(handler http.HandlerFunc, vehicleID string) *httptest.Resp
 	return w
 }
 
-func decodeErrorResponse(t *testing.T, w *httptest.ResponseRecorder) string {
+func decodeAssignmentError(t *testing.T, w *httptest.ResponseRecorder) string {
 	t.Helper()
 	var resp map[string]string
 	err := json.NewDecoder(w.Body).Decode(&resp)
@@ -162,31 +162,31 @@ func TestHandleCreateAssignment_Validation(t *testing.T) {
 			name:       "missing vehicle_id",
 			body:       `{"user_id": 1}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "vehicle_id is required",
+			wantError:  "vehicle id is required",
 		},
 		{
 			name:       "empty vehicle_id",
 			body:       `{"user_id": 1, "vehicle_id": ""}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "vehicle_id is required",
+			wantError:  "vehicle id is required",
 		},
 		{
 			name:       "vehicle_id with spaces",
 			body:       `{"user_id": 1, "vehicle_id": "bus 1"}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores",
+			wantError:  "vehicle id must contain only alphanumeric characters, dots, hyphens, and underscores",
 		},
 		{
 			name:       "vehicle_id with special chars",
 			body:       `{"user_id": 1, "vehicle_id": "bus@1!"}`,
 			wantStatus: http.StatusBadRequest,
-			wantError:  "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores",
+			wantError:  "vehicle id must contain only alphanumeric characters, dots, hyphens, and underscores",
 		},
 		{
 			name:       "vehicle_id too long 51 chars",
 			body:       fmt.Sprintf(`{"user_id": 1, "vehicle_id": "%s"}`, strings.Repeat("a", 51)),
 			wantStatus: http.StatusBadRequest,
-			wantError:  "vehicle_id must be at most 50 characters",
+			wantError:  "vehicle id must be at most 50 characters",
 		},
 	}
 
@@ -194,7 +194,7 @@ func TestHandleCreateAssignment_Validation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := postAssignment(handler, []byte(tc.body), "application/json")
 			assert.Equal(t, tc.wantStatus, w.Code)
-			errMsg := decodeErrorResponse(t, w)
+			errMsg := decodeAssignmentError(t, w)
 			assert.Contains(t, errMsg, tc.wantError)
 		})
 	}
@@ -222,7 +222,7 @@ func TestHandleCreateAssignment_DuplicateAssignment(t *testing.T) {
 	w := postAssignment(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusConflict, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "assignment already exists", errMsg)
 }
 
@@ -234,7 +234,7 @@ func TestHandleCreateAssignment_UserNotFound(t *testing.T) {
 	w := postAssignment(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "user not found", errMsg)
 }
 
@@ -246,7 +246,7 @@ func TestHandleCreateAssignment_VehicleNotFound(t *testing.T) {
 	w := postAssignment(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "vehicle not found", errMsg)
 }
 
@@ -258,7 +258,7 @@ func TestHandleCreateAssignment_DBError(t *testing.T) {
 	w := postAssignment(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "internal server error", errMsg)
 }
 
@@ -267,7 +267,7 @@ func TestHandleCreateAssignment_WrongContentType(t *testing.T) {
 
 	w := postAssignment(handler, []byte(`{}`), "text/plain")
 	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Contains(t, errMsg, "Content-Type must be application/json")
 }
 
@@ -285,7 +285,7 @@ func TestHandleCreateAssignment_UnknownFieldRejected(t *testing.T) {
 	w := postAssignment(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Contains(t, errMsg, "unknown field")
 }
 
@@ -296,7 +296,7 @@ func TestHandleCreateAssignment_TrailingDataRejected(t *testing.T) {
 	w := postAssignment(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Contains(t, errMsg, "single JSON object")
 }
 
@@ -307,7 +307,7 @@ func TestHandleCreateAssignment_TrailingGarbageRejected(t *testing.T) {
 	w := postAssignment(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Contains(t, errMsg, "invalid JSON:")
 }
 
@@ -317,7 +317,7 @@ func TestHandleCreateAssignment_EmptyBody(t *testing.T) {
 	w := postAssignment(handler, []byte(``), "application/json")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Contains(t, errMsg, "invalid JSON:")
 }
 
@@ -327,7 +327,7 @@ func TestHandleCreateAssignment_InvalidJSON(t *testing.T) {
 	w := postAssignment(handler, []byte(`{bad json`), "application/json")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Contains(t, errMsg, "invalid JSON:")
 }
 
@@ -367,7 +367,7 @@ func TestHandleDeleteAssignment_NotFound(t *testing.T) {
 	w := deleteAssignment(handler, "1", "bus-1")
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "assignment not found", errMsg)
 }
 
@@ -387,7 +387,7 @@ func TestHandleDeleteAssignment_InvalidUserID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := deleteAssignment(handler, tc.userID, "bus-1")
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			errMsg := decodeErrorResponse(t, w)
+			errMsg := decodeAssignmentError(t, w)
 			assert.Equal(t, "invalid user id", errMsg)
 		})
 	}
@@ -408,7 +408,7 @@ func TestHandleDeleteAssignment_InvalidVehicleID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := deleteAssignment(handler, "1", tc.vehicleID)
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			errMsg := decodeErrorResponse(t, w)
+			errMsg := decodeAssignmentError(t, w)
 			assert.Equal(t, "invalid vehicle id", errMsg)
 		})
 	}
@@ -421,7 +421,7 @@ func TestHandleDeleteAssignment_DBError(t *testing.T) {
 	w := deleteAssignment(handler, "1", "bus-1")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "internal server error", errMsg)
 }
 
@@ -478,7 +478,7 @@ func TestHandleListUserVehicles_InvalidUserID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := listUserVehicles(handler, tc.userID)
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			errMsg := decodeErrorResponse(t, w)
+			errMsg := decodeAssignmentError(t, w)
 			assert.Equal(t, "invalid user id", errMsg)
 		})
 	}
@@ -491,7 +491,7 @@ func TestHandleListUserVehicles_DBError(t *testing.T) {
 	w := listUserVehicles(handler, "1")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "internal server error", errMsg)
 }
 
@@ -546,7 +546,7 @@ func TestHandleListVehicleUsers_InvalidVehicleID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := listVehicleUsers(handler, tc.vehicleID)
 			assert.Equal(t, http.StatusBadRequest, w.Code)
-			errMsg := decodeErrorResponse(t, w)
+			errMsg := decodeAssignmentError(t, w)
 			assert.Equal(t, "invalid vehicle id", errMsg)
 		})
 	}
@@ -559,6 +559,6 @@ func TestHandleListVehicleUsers_DBError(t *testing.T) {
 	w := listVehicleUsers(handler, "bus-1")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	errMsg := decodeErrorResponse(t, w)
+	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "internal server error", errMsg)
 }

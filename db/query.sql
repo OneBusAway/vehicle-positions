@@ -79,3 +79,26 @@ RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time,
 UPDATE trips
 SET status = 'completed', end_time = NOW()
 WHERE id = $1 AND user_id = $2 AND status = 'active';
+
+-- name: AssignUserVehicle :one
+INSERT INTO user_vehicles (user_id, vehicle_id)
+VALUES ($1, $2)
+RETURNING user_id, vehicle_id, created_at;
+
+-- name: UnassignUserVehicle :execrows
+DELETE FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2;
+
+-- name: ListVehiclesByUser :many
+SELECT user_id, vehicle_id, created_at
+FROM user_vehicles
+WHERE user_id = $1
+ORDER BY created_at DESC
+LIMIT 1000;
+
+-- name: ListUsersByVehicle :many
+SELECT user_id, vehicle_id, created_at
+FROM user_vehicles
+WHERE vehicle_id = $1
+ORDER BY created_at DESC
+LIMIT 1000;

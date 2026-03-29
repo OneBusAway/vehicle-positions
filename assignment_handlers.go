@@ -47,16 +47,8 @@ func handleCreateAssignment(store AssignmentCreator) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required and must be positive"})
 			return
 		}
-		if req.VehicleID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "vehicle_id is required"})
-			return
-		}
-		if len(req.VehicleID) > maxVehicleIDLength {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "vehicle_id must be at most 50 characters"})
-			return
-		}
-		if !vehicleIDPattern.MatchString(req.VehicleID) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores"})
+		if err := validateVehicleID(req.VehicleID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -93,15 +85,7 @@ func handleDeleteAssignment(store AssignmentDeleter) http.HandlerFunc {
 		}
 
 		vehicleID := r.PathValue("vehicleID")
-		if vehicleID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid vehicle id"})
-			return
-		}
-		if len(vehicleID) > maxVehicleIDLength {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid vehicle id"})
-			return
-		}
-		if !vehicleIDPattern.MatchString(vehicleID) {
+		if err := validateVehicleID(vehicleID); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid vehicle id"})
 			return
 		}
@@ -109,7 +93,6 @@ func handleDeleteAssignment(store AssignmentDeleter) http.HandlerFunc {
 		err = store.DeleteAssignment(r.Context(), userID, vehicleID)
 		if err != nil {
 			if errors.Is(err, ErrAssignmentNotFound) {
-				slog.Warn("delete assignment: not found", "user_id", userID, "vehicle_id", vehicleID)
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "assignment not found"})
 				return
 			}
@@ -137,6 +120,9 @@ func handleListUserVehicles(store AssignmentListerByUser) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
+		if assignments == nil {
+			assignments = []AssignmentResponse{}
+		}
 
 		writeJSON(w, http.StatusOK, assignments)
 	}
@@ -145,7 +131,7 @@ func handleListUserVehicles(store AssignmentListerByUser) http.HandlerFunc {
 func handleListVehicleUsers(store AssignmentListerByVehicle) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vehicleID := r.PathValue("id")
-		if vehicleID == "" || len(vehicleID) > maxVehicleIDLength || !vehicleIDPattern.MatchString(vehicleID) {
+		if err := validateVehicleID(vehicleID); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid vehicle id"})
 			return
 		}
@@ -155,6 +141,9 @@ func handleListVehicleUsers(store AssignmentListerByVehicle) http.HandlerFunc {
 			slog.Error("failed to list assignments by vehicle", "vehicle_id", vehicleID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
+		}
+		if assignments == nil {
+			assignments = []AssignmentResponse{}
 		}
 
 		writeJSON(w, http.StatusOK, assignments)
