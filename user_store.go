@@ -42,8 +42,8 @@ type UserUpdater interface {
 	UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error)
 }
 
-type UserDeactivator interface {
-	DeactivateUser(ctx context.Context, id int64) error
+type UserDeleter interface {
+	DeleteUser(ctx context.Context, id int64) error
 }
 
 func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
@@ -143,10 +143,12 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 	}, nil
 }
 
-func (s *Store) DeactivateUser(ctx context.Context, id int64) error {
+// DeleteUser removes a user from the database by ID.
+func (s *Store) DeleteUser(ctx context.Context, id int64) error {
+
 	rowsAffected, err := s.queries.DeleteUser(ctx, id)
 	if err != nil {
-		return fmt.Errorf("deactivate user: %w", err)
+		return fmt.Errorf("delete user: %w", err)
 	}
 	if rowsAffected == 0 {
 		return ErrUserNotFound

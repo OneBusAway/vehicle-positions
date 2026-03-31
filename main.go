@@ -94,7 +94,7 @@ func main() {
 	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(handleGetUser(store)))
 	mux.Handle("POST /api/v1/admin/users", authMiddleware(handleCreateUser(store)))
 	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(handleUpdateUser(store)))
-	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeactivateUser(store)))
+	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeleteUser(store)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
