@@ -96,6 +96,12 @@ func main() {
 	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(handleUpdateUser(store)))
 	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeactivateUser(store)))
 
+	// Admin user-vehicle assignments
+	mux.Handle("POST /api/v1/admin/assignments", authMiddleware(adminMiddleware(handleCreateAssignment(store))))
+	mux.Handle("DELETE /api/v1/admin/users/{userID}/vehicles/{vehicleID}", authMiddleware(adminMiddleware(handleDeleteAssignment(store))))
+	mux.Handle("GET /api/v1/admin/users/{id}/vehicles", authMiddleware(adminMiddleware(handleListUserVehicles(store))))
+	mux.Handle("GET /api/v1/admin/vehicles/{id}/users", authMiddleware(adminMiddleware(handleListVehicleUsers(store))))
+
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      requestLogger(mux),

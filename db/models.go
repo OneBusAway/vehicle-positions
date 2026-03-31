@@ -48,6 +48,7 @@ type User struct {
 type UserVehicle struct {
 	UserID    int64
 	VehicleID string
+	CreatedAt pgtype.Timestamptz
 }
 
 type Vehicle struct {
