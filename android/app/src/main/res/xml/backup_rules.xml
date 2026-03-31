@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!--
+        Exclude EncryptedSharedPreferences — Keystore keys are device-specific.
+        Restoring to a new device will throw GeneralSecurityException.
+    -->
+    <exclude domain="sharedpref" path="secure_prefs.xml" />
+
+    <!--
+        Exclude DataStore shift state — shift lifecycle should not persist
+        across device restores.
+    -->
+    <exclude domain="file" path="datastore/shift_prefs.preferences_pb" />
+</full-backup-content>
