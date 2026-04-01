@@ -19,6 +19,33 @@ type embeddedTemplates struct {
 	admin  map[string]*template.Template
 }
 
+var templates = mustLoadTemplates()
+
+func mustLoadTemplates() *embeddedTemplates {
+	adminViews := []string{
+		"dashboard.html",
+		"map.html",
+		"trips.html",
+		"users.html",
+		"vehicles.html",
+	}
+
+	adminTemplates := make(map[string]*template.Template, len(adminViews))
+
+	for _, view := range adminViews {
+		adminTemplates[view] = template.Must(template.ParseFS(
+			files,
+			"web/templates/layout/*.html",
+			path.Join("web/templates/views", view),
+		))
+	}
+
+	return &embeddedTemplates{
+		public: template.Must(template.ParseFS(files, "web/templates/views/login.html")),
+		admin:  adminTemplates,
+	}
+}
+
 func adminViewName(data any) (string, error) {
 	templateData, ok := data.(map[string]interface{})
 	if !ok {
@@ -49,7 +76,7 @@ func withAdminTemplate(data map[string]interface{}, view string) map[string]inte
 
 func (t *embeddedTemplates) ExecuteTemplate(w io.Writer, name string, data any) error {
 	if name != "base.html" {
-		return t.public.ExecuteTemplate(w, name, data)
+		return t.public.Execute(w, data)
 	}
 
 	viewName, err := adminViewName(data)
@@ -66,29 +93,13 @@ func (t *embeddedTemplates) ExecuteTemplate(w io.Writer, name string, data any) 
 }
 
 func renderPublic(w http.ResponseWriter, view string, data map[string]interface{}) {
-	tmpl, err := template.ParseFS(files, view)
-	if err != nil {
-		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := templates.ExecuteTemplate(w, path.Base(view), data); err != nil {
 		http.Error(w, "render error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
 func renderAdmin(w http.ResponseWriter, view string, data map[string]interface{}) {
-	tmpl, err := template.ParseFS(
-		files,
-		"web/templates/layout/base.html",
-		"web/templates/layout/sidebar.html",
-		"web/templates/layout/header.html",
-		view,
-	)
-	if err != nil {
-		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := templates.ExecuteTemplate(w, "base.html", withAdminTemplate(data, view)); err != nil {
 		http.Error(w, "render error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
