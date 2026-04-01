@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 )
 
-// GetUserByEmail fetches a user by email address. (Returns an error if no user is found)
+// GetUserByEmail fetches a user by email address.
+// Returns ErrUserNotFound if no user exists with the given email.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
 		SELECT id, name, email, password_hash, role, created_at, updated_at
@@ -23,6 +27,9 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error)
 		&u.UpdatedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
 		return nil, fmt.Errorf("get user by email: %w", err)
 	}
 	return &u, nil

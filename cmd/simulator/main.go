@@ -22,6 +22,7 @@ type locationReport struct {
 	Longitude float64 `json:"longitude"`
 	Bearing   float64 `json:"bearing"`
 	Speed     float64 `json:"speed"`
+	Accuracy  float64 `json:"accuracy"`
 	Timestamp int64   `json:"timestamp"`
 }
 
@@ -125,6 +126,7 @@ func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleI
 				Longitude: pos.Lon,
 				Bearing:   brng,
 				Speed:     spd,
+				Accuracy:  5.0, // assume ~5m GPS accuracy for simulated reports
 				Timestamp: now.Unix(),
 			}
 

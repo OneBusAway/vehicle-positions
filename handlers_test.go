@@ -18,6 +18,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func float64ptr(v float64) *float64 {
+	return &v
+}
+
 func postLocation(handler http.HandlerFunc, loc LocationReport) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(loc)
 	req := httptest.NewRequest("POST", "/api/v1/locations", bytes.NewReader(body))
@@ -65,8 +69,8 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 			TripID:    "route-5",
 			Latitude:  -1.29,
 			Longitude: 36.82,
-			Bearing:   180,
-			Speed:     8.5,
+			Bearing:   float64ptr(180),
+			Speed:     float64ptr(8.5),
 			Timestamp: 1752566400,
 		},
 		{
@@ -352,6 +356,14 @@ type mockStore struct {
 	lastDriverID string
 }
 
+type mockHealthChecker struct {
+	err error
+}
+
+func (m mockHealthChecker) Ping(ctx context.Context) error {
+	return m.err
+}
+
 func (m *mockStore) SaveLocation(ctx context.Context, loc *LocationReport) error {
 	if m.err != nil {
 		return m.err
@@ -383,6 +395,38 @@ func TestHandlePostLocation_HappyPath(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.True(t, mStore.saved, "location should be saved to store")
 	assert.Len(t, tracker.ActiveVehicles(), 1, "tracker should be updated")
+}
+
+func TestHandleReadiness_OK(t *testing.T) {
+	handler := handleReadiness(mockHealthChecker{})
+	req := httptest.NewRequest("GET", "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var resp readinessResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", resp.Status)
+}
+
+func TestHandleReadiness_DBUnavailable(t *testing.T) {
+	handler := handleReadiness(mockHealthChecker{err: fmt.Errorf("db down")})
+	req := httptest.NewRequest("GET", "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var resp readinessResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "degraded", resp.Status)
 }
 
 func TestHandlePostLocation_StoreFailure(t *testing.T) {
@@ -668,4 +712,117 @@ func TestHandlePostLocation_RateLimitDifferentVehiclesAreIndependent(t *testing.
 
 	assert.Equal(t, http.StatusTooManyRequests, postLocationWithClaims(handler, locA, claimsA).Code)
 	assert.Equal(t, http.StatusTooManyRequests, postLocationWithClaims(handler, locB, claimsB).Code)
+}
+
+func TestHandlePostLocation_ExplicitZeroOptionalFieldsPreserved(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker, NewVehicleRateLimiter())
+
+	body := []byte(fmt.Sprintf(`{
+		"vehicle_id":"bus-1",
+		"latitude":1,
+		"longitude":2,
+		"bearing":0,
+		"speed":0,
+		"accuracy":0,
+		"timestamp":%d
+	}`, time.Now().Unix()))
+
+	req := httptest.NewRequest("POST", "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := context.WithValue(req.Context(), claimsKey, jwt.MapClaims{"sub": "driver-zero"})
+	w := httptest.NewRecorder()
+
+	handler(w, req.WithContext(ctx))
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+
+	require.NotNil(t, active[0].Bearing)
+	assert.Equal(t, 0.0, *active[0].Bearing)
+
+	require.NotNil(t, active[0].Speed)
+	assert.Equal(t, 0.0, *active[0].Speed)
+
+	require.NotNil(t, active[0].Accuracy)
+	assert.Equal(t, 0.0, *active[0].Accuracy)
+}
+
+func TestHandlePostLocation_MissingOptionalFieldsRemainNil(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker, NewVehicleRateLimiter())
+
+	body := []byte(fmt.Sprintf(`{
+		"vehicle_id":"bus-1",
+		"latitude":1,
+		"longitude":2,
+		"timestamp":%d
+	}`, time.Now().Unix()))
+
+	req := httptest.NewRequest("POST", "/api/v1/locations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := context.WithValue(req.Context(), claimsKey, jwt.MapClaims{"sub": "driver-nil"})
+	w := httptest.NewRecorder()
+
+	handler(w, req.WithContext(ctx))
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+	assert.Nil(t, active[0].Bearing)
+	assert.Nil(t, active[0].Speed)
+	assert.Nil(t, active[0].Accuracy)
+}
+
+func TestBuildFeed_PreservesExplicitZeroBearingAndSpeed(t *testing.T) {
+	zero := 0.0
+	vehicles := []*VehicleState{
+		{
+			VehicleID: "bus-1",
+			Latitude:  1,
+			Longitude: 2,
+			Bearing:   &zero,
+			Speed:     &zero,
+			Timestamp: 100,
+		},
+	}
+
+	feed := buildFeed(vehicles)
+	require.Len(t, feed.Entity, 1)
+
+	pos := feed.Entity[0].Vehicle.Position
+	require.NotNil(t, pos.Bearing)
+	assert.Equal(t, float32(0), pos.GetBearing())
+
+	require.NotNil(t, pos.Speed)
+	assert.Equal(t, float32(0), pos.GetSpeed())
+}
+
+func TestBuildFeed_OmitsUnsetBearingAndSpeed(t *testing.T) {
+	vehicles := []*VehicleState{
+		{
+			VehicleID: "bus-1",
+			Latitude:  1,
+			Longitude: 2,
+			Timestamp: 100,
+		},
+	}
+
+	feed := buildFeed(vehicles)
+	require.Len(t, feed.Entity, 1)
+
+	pos := feed.Entity[0].Vehicle.Position
+	assert.Equal(t, float32(1), pos.GetLatitude())
+	assert.Equal(t, float32(2), pos.GetLongitude())
+	assert.Nil(t, pos.Bearing)
+	assert.Nil(t, pos.Speed)
 }

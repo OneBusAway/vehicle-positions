@@ -80,19 +80,36 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+
+	authMiddleware := requireAuth(jwtSecret)
+	adminMiddleware := requireAdmin()
+
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
-	// TODO: protect with requireAuth once auth lands
-	mux.HandleFunc("GET /api/v1/admin/status", handleAdminStatus(tracker, startTime))
+	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
+	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
+	mux.Handle("GET /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleGetVehicle(store))))
+	mux.Handle("POST /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleUpsertVehicle(store))))
+	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
 
-	authMiddleware := requireAuth(jwtSecret)
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+  mux.HandleFunc("GET /ready", handleReadiness(store))
+
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
+	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
+
+	// Admin user management
+	mux.Handle("GET /api/v1/admin/users", authMiddleware(handleListUsers(store)))
+	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(handleGetUser(store)))
+	mux.Handle("POST /api/v1/admin/users", authMiddleware(handleCreateUser(store)))
+	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(handleUpdateUser(store)))
+	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeactivateUser(store)))
 
 	// Admin UI — no auth for demo/pitch
 	mux.HandleFunc("GET /admin/login", AdminLoginHandler)

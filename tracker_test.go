@@ -19,8 +19,9 @@ func TestTracker_Update(t *testing.T) {
 		TripID:    "route-5",
 		Latitude:  -1.29,
 		Longitude: 36.82,
-		Bearing:   180,
-		Speed:     8.5,
+		Bearing:   float64ptr(180),
+		Speed:     float64ptr(8.5),
+		Accuracy:  float64ptr(12.0),
 		Timestamp: 1000000,
 	}
 	tracker.Update(loc)
@@ -31,8 +32,12 @@ func TestTracker_Update(t *testing.T) {
 	assert.Equal(t, "route-5", active[0].TripID)
 	assert.Equal(t, -1.29, active[0].Latitude)
 	assert.Equal(t, 36.82, active[0].Longitude)
-	assert.Equal(t, 180.0, active[0].Bearing)
-	assert.Equal(t, 8.5, active[0].Speed)
+	require.NotNil(t, active[0].Bearing)
+	assert.Equal(t, 180.0, *active[0].Bearing)
+	require.NotNil(t, active[0].Speed)
+	assert.Equal(t, 8.5, *active[0].Speed)
+	require.NotNil(t, active[0].Accuracy)
+	assert.Equal(t, 12.0, *active[0].Accuracy)
 	assert.Equal(t, int64(1000000), active[0].Timestamp)
 }
 
@@ -240,4 +245,93 @@ func TestTracker_CleanupPreservesFreshVehicles(t *testing.T) {
 		return !hasOld && hasNew
 	}, 200*time.Millisecond, 5*time.Millisecond,
 		"cleanup should remove old-bus but keep new-bus")
+}
+
+func TestTracker_Update_PreservesNilOptionalFields(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	loc := &LocationReport{
+		VehicleID: "bus-1",
+		Latitude:  1,
+		Longitude: 2,
+		Timestamp: 100,
+	}
+
+	tracker.Update(loc)
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+	assert.Nil(t, active[0].Bearing)
+	assert.Nil(t, active[0].Speed)
+	assert.Nil(t, active[0].Accuracy)
+}
+
+func TestTracker_Update_PreservesExplicitZeroOptionalFields(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	zero := 0.0
+	loc := &LocationReport{
+		VehicleID: "bus-1",
+		Latitude:  1,
+		Longitude: 2,
+		Bearing:   &zero,
+		Speed:     &zero,
+		Accuracy:  &zero,
+		Timestamp: 100,
+	}
+
+	tracker.Update(loc)
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+
+	require.NotNil(t, active[0].Bearing)
+	assert.Equal(t, 0.0, *active[0].Bearing)
+
+	require.NotNil(t, active[0].Speed)
+	assert.Equal(t, 0.0, *active[0].Speed)
+
+	require.NotNil(t, active[0].Accuracy)
+	assert.Equal(t, 0.0, *active[0].Accuracy)
+}
+
+// This test ensures that the ActiveVehicles method returns deep copies of the vehicle states
+func TestTracker_ActiveVehicles_ReturnsDeepCopies(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	bearing := 10.0
+	speed := 20.0
+	accuracy := 30.0
+
+	tracker.Update(&LocationReport{
+		VehicleID: "bus-1",
+		Latitude:  1,
+		Longitude: 2,
+		Bearing:   &bearing,
+		Speed:     &speed,
+		Accuracy:  &accuracy,
+		Timestamp: 100,
+	})
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+
+	*active[0].Bearing = 100
+	*active[0].Speed = 200
+	*active[0].Accuracy = 300
+
+	fresh := tracker.ActiveVehicles()
+	require.Len(t, fresh, 1)
+
+	require.NotNil(t, fresh[0].Bearing)
+	assert.Equal(t, 10.0, *fresh[0].Bearing)
+
+	require.NotNil(t, fresh[0].Speed)
+	assert.Equal(t, 20.0, *fresh[0].Speed)
+
+	require.NotNil(t, fresh[0].Accuracy)
+	assert.Equal(t, 30.0, *fresh[0].Accuracy)
 }

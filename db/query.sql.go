@@ -11,6 +11,134 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkUserVehicleAssignment = `-- name: CheckUserVehicleAssignment :one
+SELECT user_id, vehicle_id
+FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2
+`
+
+type CheckUserVehicleAssignmentParams struct {
+	UserID    int64
+	VehicleID string
+}
+
+func (q *Queries) CheckUserVehicleAssignment(ctx context.Context, arg CheckUserVehicleAssignmentParams) (UserVehicle, error) {
+	row := q.db.QueryRow(ctx, checkUserVehicleAssignment, arg.UserID, arg.VehicleID)
+	var i UserVehicle
+	err := row.Scan(&i.UserID, &i.VehicleID)
+	return i, err
+}
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (name, email, password_hash, role)
+VALUES ($1, $2, $3, $4)
+RETURNING id, name, email, role, created_at, updated_at
+`
+
+type CreateUserParams struct {
+	Name         string
+	Email        string
+	PasswordHash string
+	Role         string
+}
+
+type CreateUserRow struct {
+	ID        int64
+	Name      string
+	Email     string
+	Role      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Name,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Role,
+	)
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deactivateVehicle = `-- name: DeactivateVehicle :execrows
+UPDATE vehicles
+SET active = false, updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) DeactivateVehicle(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateVehicle, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUser = `-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const endTrip = `-- name: EndTrip :execrows
+UPDATE trips
+SET status = 'completed', end_time = NOW()
+WHERE id = $1 AND user_id = $2 AND status = 'active'
+`
+
+type EndTripParams struct {
+	ID     int64
+	UserID int64
+}
+
+func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (int64, error) {
+	result, err := q.db.Exec(ctx, endTrip, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getActiveTripByUser = `-- name: GetActiveTripByUser :one
+SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+FROM trips
+WHERE user_id = $1 AND status = 'active'
+`
+
+func (q *Queries) GetActiveTripByUser(ctx context.Context, userID int64) (Trip, error) {
+	row := q.db.QueryRow(ctx, getActiveTripByUser, userID)
+	var i Trip
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.VehicleID,
+		&i.RouteID,
+		&i.GtfsTripID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getRecentLocations = `-- name: GetRecentLocations :many
 SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
@@ -61,6 +189,64 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 	return items, nil
 }
 
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, name, email, role, created_at, updated_at
+FROM users
+WHERE id = $1
+`
+
+type GetUserByIDRow struct {
+	ID        int64
+	Name      string
+	Email     string
+	Role      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i GetUserByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getVehicleByID = `-- name: GetVehicleByID :one
+SELECT id, label, agency_tag, active, created_at, updated_at
+FROM vehicles
+WHERE id = $1
+`
+
+type GetVehicleByIDRow struct {
+	ID        string
+	Label     string
+	AgencyTag string
+	Active    bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetVehicleByID(ctx context.Context, id string) (GetVehicleByIDRow, error) {
+	row := q.db.QueryRow(ctx, getVehicleByID, id)
+	var i GetVehicleByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Label,
+		&i.AgencyTag,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertLocationPoint = `-- name: InsertLocationPoint :exec
 INSERT INTO location_points (vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -91,6 +277,205 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 		arg.DriverID,
 	)
 	return err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, name, email, role, created_at, updated_at
+FROM users
+ORDER BY created_at DESC
+`
+
+type ListUsersRow struct {
+	ID        int64
+	Name      string
+	Email     string
+	Role      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersRow
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.Role,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVehicles = `-- name: ListVehicles :many
+SELECT id, label, agency_tag, active, created_at, updated_at
+FROM vehicles
+ORDER BY created_at DESC
+`
+
+type ListVehiclesRow struct {
+	ID        string
+	Label     string
+	AgencyTag string
+	Active    bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListVehicles(ctx context.Context) ([]ListVehiclesRow, error) {
+	rows, err := q.db.Query(ctx, listVehicles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVehiclesRow
+	for rows.Next() {
+		var i ListVehiclesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Label,
+			&i.AgencyTag,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const startTrip = `-- name: StartTrip :one
+INSERT INTO trips (user_id, vehicle_id, route_id, gtfs_trip_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+`
+
+type StartTripParams struct {
+	UserID     int64
+	VehicleID  string
+	RouteID    string
+	GtfsTripID string
+}
+
+func (q *Queries) StartTrip(ctx context.Context, arg StartTripParams) (Trip, error) {
+	row := q.db.QueryRow(ctx, startTrip,
+		arg.UserID,
+		arg.VehicleID,
+		arg.RouteID,
+		arg.GtfsTripID,
+	)
+	var i Trip
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.VehicleID,
+		&i.RouteID,
+		&i.GtfsTripID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET name = $1, email = $2, role = $3
+WHERE id = $4
+RETURNING id, name, email, role, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	Name  string
+	Email string
+	Role  string
+	ID    int64
+}
+
+type UpdateUserRow struct {
+	ID        int64
+	Name      string
+	Email     string
+	Role      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+// updated_at is maintained by the set_users_updated_at trigger.
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.Name,
+		arg.Email,
+		arg.Role,
+		arg.ID,
+	)
+	var i UpdateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertAdminVehicle = `-- name: UpsertAdminVehicle :one
+INSERT INTO vehicles (id, label, agency_tag)
+VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, agency_tag = EXCLUDED.agency_tag, active = true, updated_at = NOW()
+RETURNING id, label, agency_tag, active, created_at, updated_at
+`
+
+type UpsertAdminVehicleParams struct {
+	ID        string
+	Label     string
+	AgencyTag string
+}
+
+type UpsertAdminVehicleRow struct {
+	ID        string
+	Label     string
+	AgencyTag string
+	Active    bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertAdminVehicle(ctx context.Context, arg UpsertAdminVehicleParams) (UpsertAdminVehicleRow, error) {
+	row := q.db.QueryRow(ctx, upsertAdminVehicle, arg.ID, arg.Label, arg.AgencyTag)
+	var i UpsertAdminVehicleRow
+	err := row.Scan(
+		&i.ID,
+		&i.Label,
+		&i.AgencyTag,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertVehicle = `-- name: UpsertVehicle :exec

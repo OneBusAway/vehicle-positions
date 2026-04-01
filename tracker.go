@@ -11,8 +11,9 @@ type VehicleState struct {
 	TripID    string
 	Latitude  float64
 	Longitude float64
-	Bearing   float64
-	Speed     float64
+	Bearing   *float64
+	Speed     *float64
+	Accuracy  *float64
 	Timestamp int64
 	UpdatedAt time.Time // server time when this report was received
 }
@@ -67,13 +68,33 @@ func (t *Tracker) Update(loc *LocationReport) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.seen[loc.VehicleID] = struct{}{}
+
+	var bearing *float64
+	if loc.Bearing != nil {
+		v := *loc.Bearing
+		bearing = &v
+	}
+
+	var speed *float64
+	if loc.Speed != nil {
+		v := *loc.Speed
+		speed = &v
+	}
+
+	var accuracy *float64
+	if loc.Accuracy != nil {
+		v := *loc.Accuracy
+		accuracy = &v
+	}
+
 	t.vehicles[loc.VehicleID] = &VehicleState{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
 		Latitude:  loc.Latitude,
 		Longitude: loc.Longitude,
-		Bearing:   loc.Bearing,
-		Speed:     loc.Speed,
+		Bearing:   bearing,
+		Speed:     speed,
+		Accuracy:  accuracy,
 		Timestamp: loc.Timestamp,
 		UpdatedAt: time.Now(),
 	}
@@ -88,6 +109,18 @@ func (t *Tracker) ActiveVehicles() []*VehicleState {
 	for _, v := range t.vehicles {
 		if v.UpdatedAt.After(cutoff) {
 			copy := *v
+			if v.Bearing != nil {
+				b := *v.Bearing
+				copy.Bearing = &b
+			}
+			if v.Speed != nil {
+				s := *v.Speed
+				copy.Speed = &s
+			}
+			if v.Accuracy != nil {
+				a := *v.Accuracy
+				copy.Accuracy = &a
+			}
 			active = append(active, &copy)
 		}
 	}

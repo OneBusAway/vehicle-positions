@@ -155,6 +155,7 @@ func TestLocationReportJSONRoundTrip(t *testing.T) {
 		Longitude: 36.8172,
 		Bearing:   327.5,
 		Speed:     8.0,
+		Accuracy:  5.0,
 		Timestamp: 1752566400,
 	}
 
@@ -165,7 +166,7 @@ func TestLocationReportJSONRoundTrip(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &raw))
 
-	expectedFields := []string{"vehicle_id", "latitude", "longitude", "bearing", "speed", "timestamp"}
+	expectedFields := []string{"vehicle_id", "latitude", "longitude", "bearing", "speed", "accuracy", "timestamp"}
 	for _, field := range expectedFields {
 		assert.Contains(t, raw, field, "missing JSON field %q", field)
 	}
@@ -224,6 +225,7 @@ func TestSendReport_Success(t *testing.T) {
 		Longitude: 36.8172,
 		Bearing:   90.0,
 		Speed:     8.0,
+		Accuracy:  5.0,
 		Timestamp: time.Now().Unix(),
 	}
 
