@@ -2,12 +2,68 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
+	"io"
 	"net/http"
+	"path"
 )
 
 //go:embed web/templates web/static
 var files embed.FS
+
+const adminTemplateKey = "_admin_template"
+
+type embeddedTemplates struct {
+	public *template.Template
+	admin  map[string]*template.Template
+}
+
+func adminViewName(data any) (string, error) {
+	templateData, ok := data.(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("admin template data must be map[string]interface{}")
+	}
+
+	viewName, ok := templateData[adminTemplateKey].(string)
+	if !ok || viewName == "" {
+		return "", fmt.Errorf("admin template view is missing")
+	}
+
+	return viewName, nil
+}
+
+func withAdminTemplate(data map[string]interface{}, view string) map[string]interface{} {
+	if data == nil {
+		data = make(map[string]interface{}, 1)
+	}
+
+	renderData := make(map[string]interface{}, len(data)+1)
+	for k, v := range data {
+		renderData[k] = v
+	}
+
+	renderData[adminTemplateKey] = path.Base(view)
+	return renderData
+}
+
+func (t *embeddedTemplates) ExecuteTemplate(w io.Writer, name string, data any) error {
+	if name != "base.html" {
+		return t.public.ExecuteTemplate(w, name, data)
+	}
+
+	viewName, err := adminViewName(data)
+	if err != nil {
+		return err
+	}
+
+	tmpl, ok := t.admin[viewName]
+	if !ok {
+		return fmt.Errorf("unknown admin template: %s", viewName)
+	}
+
+	return tmpl.ExecuteTemplate(w, name, data)
+}
 
 func renderPublic(w http.ResponseWriter, view string, data map[string]interface{}) {
 	tmpl, err := template.ParseFS(files, view)
