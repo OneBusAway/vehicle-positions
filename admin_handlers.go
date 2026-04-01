@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log/slog"
 	"net/http"
 	"path"
-	"log/slog"
 )
 
 //go:embed web/templates web/static
