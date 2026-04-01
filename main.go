@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +12,9 @@ import (
 	"syscall"
 	"time"
 )
+
+//go:embed web/templates web/static
+var files embed.FS
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -68,6 +73,12 @@ func main() {
 
 	startTime := time.Now()
 
+	staticFiles, err := fs.Sub(files, "web/static")
+	if err != nil {
+		slog.Error("failed to prepare embedded static files", "error", err)
+		os.Exit(1)
+	}
+
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret)
@@ -83,7 +94,11 @@ func main() {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	mux.HandleFunc("GET /ready", handleReadiness(store))
+
+
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+  mux.HandleFunc("GET /ready", handleReadiness(store))
+
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
 	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
@@ -95,6 +110,15 @@ func main() {
 	mux.Handle("POST /api/v1/admin/users", authMiddleware(handleCreateUser(store)))
 	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(handleUpdateUser(store)))
 	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeactivateUser(store)))
+
+	// Admin UI — no auth for demo/pitch
+	mux.HandleFunc("GET /admin/login", AdminLoginHandler)
+	mux.HandleFunc("GET /admin/signup", AdminSignupHandler)
+	mux.HandleFunc("GET /admin/map", AdminMapHandler)
+	mux.HandleFunc("GET /admin/dashboard", AdminDashboardHandler)
+	mux.HandleFunc("GET /admin/vehicles", AdminVehiclesHandler)
+	mux.HandleFunc("GET /admin/users", AdminUsersHandler)
+	mux.HandleFunc("GET /admin/trips", AdminTripsHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
