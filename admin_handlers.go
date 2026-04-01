@@ -1,15 +1,16 @@
 package main
 
 import (
+	"embed"
 	"html/template"
 	"net/http"
-	"embed"
 )
 
 //go:embed web/templates web/static
 var files embed.FS
+
 func renderPublic(w http.ResponseWriter, view string, data map[string]interface{}) {
-	tmpl, err := template.ParseFiles(view)
+	tmpl, err := template.ParseFS(files, view)
 	if err != nil {
 		http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -20,7 +21,8 @@ func renderPublic(w http.ResponseWriter, view string, data map[string]interface{
 }
 
 func renderAdmin(w http.ResponseWriter, view string, data map[string]interface{}) {
-	tmpl, err := template.ParseFiles(
+	tmpl, err := template.ParseFS(
+		files,
 		"web/templates/layout/base.html",
 		"web/templates/layout/sidebar.html",
 		"web/templates/layout/header.html",
