@@ -3,8 +3,11 @@ package main
 import (
 	"html/template"
 	"net/http"
+	"embed"
 )
 
+//go:embed web/templates web/static
+var files embed.FS
 func renderPublic(w http.ResponseWriter, view string, data map[string]interface{}) {
 	tmpl, err := template.ParseFiles(view)
 	if err != nil {
