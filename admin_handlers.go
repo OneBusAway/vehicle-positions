@@ -1,7 +1,6 @@
 package main
 
 import (
-	"embed"
 	"fmt"
 	"html/template"
 	"io"
@@ -9,9 +8,6 @@ import (
 	"net/http"
 	"path"
 )
-
-//go:embed web/templates web/static
-var files embed.FS
 
 const adminTemplateKey = "_admin_template"
 

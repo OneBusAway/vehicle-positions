@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -11,6 +12,9 @@ import (
 	"syscall"
 	"time"
 )
+
+//go:embed web/templates web/static
+var files embed.FS
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
