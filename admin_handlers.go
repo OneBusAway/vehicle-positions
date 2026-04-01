@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"log/slog"
 )
 
 //go:embed web/templates web/static
@@ -94,13 +95,15 @@ func (t *embeddedTemplates) ExecuteTemplate(w io.Writer, name string, data any) 
 
 func renderPublic(w http.ResponseWriter, view string, data map[string]interface{}) {
 	if err := templates.ExecuteTemplate(w, path.Base(view), data); err != nil {
-		http.Error(w, "render error: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("template render failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
 
 func renderAdmin(w http.ResponseWriter, view string, data map[string]interface{}) {
 	if err := templates.ExecuteTemplate(w, "base.html", withAdminTemplate(data, view)); err != nil {
-		http.Error(w, "render error: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("template render failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
 
