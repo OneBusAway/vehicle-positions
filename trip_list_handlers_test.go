@@ -295,7 +295,7 @@ func TestHandleListTrips_BoundaryLimit(t *testing.T) {
 }
 
 func TestHandleGetTrip_Success(t *testing.T) {
-	now := time.Now().Truncate(time.Second)
+	now := time.Now().UTC().Truncate(time.Second)
 	endTime := now.Add(2 * time.Hour)
 	mock := &mockTripGetter{
 		trip: &TripResponse{
@@ -395,7 +395,7 @@ func TestHandleGetTrip_NullableEndTime_Nil(t *testing.T) {
 }
 
 func TestHandleGetTrip_NullableEndTime_Present(t *testing.T) {
-	now := time.Now().Truncate(time.Second)
+	now := time.Now().UTC().Truncate(time.Second)
 	endTime := now.Add(2 * time.Hour)
 	mock := &mockTripGetter{
 		trip: &TripResponse{
