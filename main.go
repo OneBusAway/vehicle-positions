@@ -85,6 +85,10 @@ func main() {
 	})
 	mux.HandleFunc("GET /ready", handleReadiness(store))
 
+	// Admin trip listing
+	mux.Handle("GET /api/v1/admin/trips", authMiddleware(adminMiddleware(handleListTrips(store))))
+	mux.Handle("GET /api/v1/admin/trips/{id}", authMiddleware(adminMiddleware(handleGetTrip(store))))
+
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
 	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
 	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))

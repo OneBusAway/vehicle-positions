@@ -189,6 +189,30 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 	return items, nil
 }
 
+const getTripByID = `-- name: GetTripByID :one
+SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+FROM trips
+WHERE id = $1
+`
+
+func (q *Queries) GetTripByID(ctx context.Context, id int64) (Trip, error) {
+	row := q.db.QueryRow(ctx, getTripByID, id)
+	var i Trip
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.VehicleID,
+		&i.RouteID,
+		&i.GtfsTripID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, name, email, role, created_at, updated_at
 FROM users
@@ -277,6 +301,61 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 		arg.DriverID,
 	)
 	return err
+}
+
+const listTripsFiltered = `-- name: ListTripsFiltered :many
+SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+FROM trips
+WHERE ($1::text IS NULL OR status = $1)
+  AND ($2::text IS NULL OR vehicle_id = $2)
+  AND ($3::bigint IS NULL OR user_id = $3)
+ORDER BY start_time DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListTripsFilteredParams struct {
+	Status      pgtype.Text
+	VehicleID   pgtype.Text
+	UserID      pgtype.Int8
+	QueryOffset int32
+	QueryLimit  int32
+}
+
+func (q *Queries) ListTripsFiltered(ctx context.Context, arg ListTripsFilteredParams) ([]Trip, error) {
+	rows, err := q.db.Query(ctx, listTripsFiltered,
+		arg.Status,
+		arg.VehicleID,
+		arg.UserID,
+		arg.QueryOffset,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Trip
+	for rows.Next() {
+		var i Trip
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.VehicleID,
+			&i.RouteID,
+			&i.GtfsTripID,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listUsers = `-- name: ListUsers :many

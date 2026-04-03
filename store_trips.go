@@ -23,6 +23,8 @@ type TripResponse struct {
 	StartTime  time.Time  `json:"start_time"`
 	EndTime    *time.Time `json:"end_time,omitempty"`
 	Status     string     `json:"status"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 // ErrNotAssigned is returned when a driver is not assigned to the requested vehicle.
@@ -31,8 +33,11 @@ var ErrNotAssigned = errors.New("driver is not assigned to this vehicle")
 // ErrActiveTripExists is returned when the driver already has an active trip.
 var ErrActiveTripExists = errors.New("driver already has an active trip")
 
-// ErrTripNotFound is returned when no matching active trip is found to end.
-var ErrTripNotFound = errors.New("active trip not found")
+// ErrTripNotFound is returned when no trip matches the given criteria.
+var ErrTripNotFound = errors.New("trip not found")
+
+// ErrActiveTripNotFound is returned when no matching active trip is found to end.
+var ErrActiveTripNotFound = errors.New("active trip not found")
 
 // TripStarter is the store interface for starting trips.
 type TripStarter interface {
@@ -109,6 +114,8 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 		GtfsTripID: trip.GtfsTripID,
 		StartTime:  trip.StartTime.Time,
 		Status:     trip.Status,
+		CreatedAt:  trip.CreatedAt.Time,
+		UpdatedAt:  trip.UpdatedAt.Time,
 	}
 	if trip.EndTime.Valid {
 		resp.EndTime = &trip.EndTime.Time
@@ -126,7 +133,7 @@ func (s *Store) EndTrip(ctx context.Context, tripID, userID int64) error {
 		return fmt.Errorf("end trip: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrTripNotFound
+		return ErrActiveTripNotFound
 	}
 	return nil
 }

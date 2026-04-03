@@ -166,7 +166,7 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 
 		err = store.EndTrip(r.Context(), req.TripID, userID)
 		if err != nil {
-			if errors.Is(err, ErrTripNotFound) {
+			if errors.Is(err, ErrActiveTripNotFound) {
 				slog.Warn("end trip: no matching active trip", "trip_id", req.TripID, "user_id", userID)
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "active trip not found"})
 				return

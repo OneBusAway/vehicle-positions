@@ -166,7 +166,7 @@ func TestHandleEndTrip_Success(t *testing.T) {
 }
 
 func TestHandleEndTrip_NotFound(t *testing.T) {
-	store := &mockTripEnder{err: ErrTripNotFound}
+	store := &mockTripEnder{err: ErrActiveTripNotFound}
 
 	handler := handleEndTrip(store)
 	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 999})

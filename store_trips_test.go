@@ -142,7 +142,7 @@ func TestStore_EndTrip_NotFound(t *testing.T) {
 
 	err := store.EndTrip(ctx, 99999, 1)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrTripNotFound)
+	assert.ErrorIs(t, err, ErrActiveTripNotFound)
 }
 
 func TestStore_EndTrip_WrongUser(t *testing.T) {
@@ -156,7 +156,7 @@ func TestStore_EndTrip_WrongUser(t *testing.T) {
 	// Try to end with a different user ID.
 	err = store.EndTrip(ctx, trip.ID, userID+999)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrTripNotFound, "should not allow ending another user's trip")
+	assert.ErrorIs(t, err, ErrActiveTripNotFound, "should not allow ending another user's trip")
 }
 
 func TestStore_EndTrip_AlreadyEnded(t *testing.T) {
@@ -174,7 +174,7 @@ func TestStore_EndTrip_AlreadyEnded(t *testing.T) {
 	// End again — should fail.
 	err = store.EndTrip(ctx, trip.ID, userID)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrTripNotFound, "ending an already-completed trip should return not found")
+	assert.ErrorIs(t, err, ErrActiveTripNotFound, "ending an already-completed trip should return not found")
 }
 
 func TestStore_StartTrip_AfterEndingPrevious(t *testing.T) {

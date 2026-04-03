@@ -79,3 +79,17 @@ RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time,
 UPDATE trips
 SET status = 'completed', end_time = NOW()
 WHERE id = $1 AND user_id = $2 AND status = 'active';
+
+-- name: ListTripsFiltered :many
+SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+FROM trips
+WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('vehicle_id')::text IS NULL OR vehicle_id = sqlc.narg('vehicle_id'))
+  AND (sqlc.narg('user_id')::bigint IS NULL OR user_id = sqlc.narg('user_id'))
+ORDER BY start_time DESC
+LIMIT sqlc.arg('query_limit') OFFSET sqlc.arg('query_offset');
+
+-- name: GetTripByID :one
+SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
+FROM trips
+WHERE id = $1;
