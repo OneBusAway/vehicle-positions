@@ -372,7 +372,7 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
   - Operator manual: how to onboard drivers, manage vehicles, monitor feed health
 - Write architecture documentation:
   - System architecture diagram
-  - API reference (OpenAPI/Swagger spec)
+  - API reference ([OpenAPI 3.1 spec](openapi.yaml))
   - Data retention and privacy considerations
 - Comprehensive testing:
   - Server: unit tests, integration tests, GTFS-RT feed validation
