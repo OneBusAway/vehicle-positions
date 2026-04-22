@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -71,7 +70,7 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: database error: %v", err)
+			slog.Error("login: database error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -82,14 +81,14 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
-			log.Printf("login: bcrypt error: %v", err)
+			slog.Error("login: bcrypt error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
 		tokenStr, err := generateJWT(user, secret)
 		if err != nil {
-			log.Printf("login: failed to generate JWT: %v", err)
+			slog.Error("token generation failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -161,8 +160,14 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 				return secret, nil
 			}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
 
-			if err != nil || !token.Valid {
-				log.Printf("auth: token validation failed: %v", err)
+			if err != nil {
+				slog.Warn("token validation failed", "error", err)
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+				return
+			}
+
+			if !token.Valid {
+				slog.Warn("token validation failed: token marked invalid")
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}
