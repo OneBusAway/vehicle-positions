@@ -182,7 +182,7 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 	}
 }
 
-func handleDeactivateUser(store UserDeactivator) http.HandlerFunc {
+func handleDeleteUser(store UserDeleter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := parseUserID(r)
 		if err != nil {
@@ -190,12 +190,12 @@ func handleDeactivateUser(store UserDeactivator) http.HandlerFunc {
 			return
 		}
 
-		if err := store.DeactivateUser(r.Context(), id); err != nil {
+		if err := store.DeleteUser(r.Context(), id); err != nil {
 			if errors.Is(err, ErrUserNotFound) {
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
-			slog.Error("failed to deactivate user", "id", id, "error", err)
+			slog.Error("failed to delete user", "id", id, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}

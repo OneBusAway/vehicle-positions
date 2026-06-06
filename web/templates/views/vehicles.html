@@ -1,0 +1,51 @@
+{{define "content"}}
+<div class="p-4 lg:p-5">
+  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
+      <div>
+        <h3 class="display-font text-lg font-bold text-slate-900">All Vehicles</h3>
+        <p class="mt-0.5 text-xs text-slate-400">{{len .Vehicles}} registered in fleet</p>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50/80">
+          <tr class="text-left">
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">ID</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Driver</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Status</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Last Seen</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {{range .Vehicles}}
+          <tr class="transition-colors hover:bg-slate-50/60">
+            <td class="px-5 py-4 font-mono text-xs font-medium text-slate-400">{{.ID}}</td>
+            <td class="px-5 py-4">
+              <div class="flex items-center gap-3">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-lg">&#128652;</span>
+                <p class="font-semibold text-slate-900">{{.Name}}</p>
+              </div>
+            </td>
+            <td class="px-5 py-4 text-slate-500">{{.Route}}</td>
+            <td class="px-5 py-4 text-slate-500">{{.Driver}}</td>
+            <td class="px-5 py-4">
+              {{if eq .Status "active"}}
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Active</span>
+              {{else if eq .Status "idle"}}
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>Idle</span>
+              {{else}}
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>Offline</span>
+              {{end}}
+            </td>
+            <td class="px-5 py-4 text-slate-400">{{.LastSeen}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{{end}}

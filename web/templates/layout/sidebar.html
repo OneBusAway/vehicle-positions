@@ -1,0 +1,57 @@
+{{define "sidebar"}}
+<aside class="sidebar-shell glass-panel flex shrink-0 flex-col overflow-hidden rounded-[28px] border border-white/10 text-white lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)] lg:w-72">
+  <div class="border-b border-white/10 px-5 py-5">
+    <div class="flex items-center gap-3">
+      <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl shadow-lg shadow-cyan-950/30">
+        &#128652;
+      </div>
+      <div>
+        <p class="display-font text-lg font-bold tracking-tight">Transit Tracker</p>
+        <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Fleet Operations</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="flex-1 space-y-1.5 p-3 text-sm">
+    <a href="/admin/map"
+       data-active="{{if eq .Page "map"}}true{{else}}false{{end}}"
+       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
+              {{if eq .Page "map"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
+      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128506;</span>
+      Live Map
+    </a>
+    <a href="/admin/dashboard"
+       data-active="{{if eq .Page "dashboard"}}true{{else}}false{{end}}"
+       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
+              {{if eq .Page "dashboard"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
+      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128200;</span>
+      Dashboard
+    </a>
+    <a href="/admin/vehicles"
+       data-active="{{if eq .Page "vehicles"}}true{{else}}false{{end}}"
+       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
+              {{if eq .Page "vehicles"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
+      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128652;</span>
+      Vehicles
+    </a>
+    <a href="/admin/users"
+       data-active="{{if eq .Page "users"}}true{{else}}false{{end}}"
+       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
+              {{if eq .Page "users"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
+      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128101;</span>
+      Users
+    </a>
+    <a href="/admin/trips"
+       data-active="{{if eq .Page "trips"}}true{{else}}false{{end}}"
+       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
+              {{if eq .Page "trips"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
+      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128339;</span>
+      Trips
+    </a>
+  </nav>
+
+  <div class="border-t border-white/10 px-5 py-4">
+    <p class="text-xs text-slate-500">v0.1.0</p>
+  </div>
+</aside>
+{{end}}

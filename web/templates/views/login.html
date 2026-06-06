@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transit Tracker - {{.Title}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: "#10233f",
+            mist: "#edf4fb",
+            line: "#d7e3f1",
+            ocean: "#0f766e",
+            sky: "#0369a1",
+            sand: "#f59e0b"
+          },
+          boxShadow: {
+            soft: "0 24px 70px rgba(15, 23, 42, 0.16)"
+          },
+          fontFamily: {
+            sans: ["Inter", "sans-serif"],
+            display: ["Space Grotesk", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body
+  class="min-h-screen bg-[#e9f2fb] font-sans text-slate-900"
+  data-mode="{{.Mode}}"
+  data-login-endpoint="{{.LoginEndpoint}}"
+  data-signup-endpoint="{{.SignupEndpoint}}">
+  <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.95),_transparent_28rem),linear-gradient(180deg,#eef6ff_0%,#dceaf6_100%)] px-4 py-8 sm:px-6 lg:px-8">
+    <div class="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+
+      <section class="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-soft backdrop-blur-xl sm:p-8">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.28em] text-sky-700">Access</p>
+            <h2 class="mt-2 font-display text-3xl font-bold tracking-tight text-ink">Login or create a demo account</h2>
+          </div>
+          <a href="/admin/dashboard" class="rounded-full border border-line px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900">Skip to dashboard</a>
+        </div>
+
+        <div class="mt-6 flex rounded-2xl bg-mist p-1.5">
+          <button type="button" data-auth-tab="login" class="auth-tab flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition">Login</button>
+          <button type="button" data-auth-tab="signup" class="auth-tab flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition">Sign up</button>
+        </div>
+
+        <div id="auth-status" class="mt-4 hidden rounded-2xl border px-4 py-3 text-sm"></div>
+
+        <form id="login-form" class="auth-panel mt-6 space-y-4" data-mode="login" novalidate>
+          <div>
+            <label for="login-email" class="mb-1.5 block text-sm font-semibold text-slate-700">Email</label>
+            <input id="login-email" name="email" type="email" autocomplete="email" required value="demo@transit.local" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          </div>
+          <div>
+            <label for="login-password" class="mb-1.5 block text-sm font-semibold text-slate-700">Password</label>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required value="password123" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          </div>
+          <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Sign in</button>
+        </form>
+
+        <form id="signup-form" class="auth-panel mt-6 hidden space-y-4" data-mode="signup" novalidate>
+          <div>
+            <label for="signup-name" class="mb-1.5 block text-sm font-semibold text-slate-700">Full name</label>
+            <input id="signup-name" name="name" type="text" autocomplete="name" required placeholder="Jane Doe" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          </div>
+          <div>
+            <label for="signup-email" class="mb-1.5 block text-sm font-semibold text-slate-700">Email</label>
+            <input id="signup-email" name="email" type="email" autocomplete="email" required placeholder="jane@transit.local" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="signup-password" class="mb-1.5 block text-sm font-semibold text-slate-700">Password</label>
+              <input id="signup-password" name="password" type="password" autocomplete="new-password" required placeholder="Minimum 8 characters" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+            </div>
+            <div>
+              <label for="signup-confirm" class="mb-1.5 block text-sm font-semibold text-slate-700">Confirm password</label>
+              <input id="signup-confirm" name="confirmPassword" type="password" autocomplete="new-password" required placeholder="Repeat password" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+            </div>
+          </div>
+          <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-sky px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700">Create account</button>
+        </form>
+        
+      </section>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const initialMode = document.body.dataset.mode || "login";
+      const loginEndpoint = document.body.dataset.loginEndpoint || "/api/v1/auth/login";
+      const signupEndpoint = document.body.dataset.signupEndpoint || "/api/v1/auth/signup";
+      const authTabs = document.querySelectorAll("[data-auth-tab]");
+      const panels = {
+        login: document.getElementById("login-form"),
+        signup: document.getElementById("signup-form")
+      };
+      const statusEl = document.getElementById("auth-status");
+      const loginForm = document.getElementById("login-form");
+      const signupForm = document.getElementById("signup-form");
+      const demoStorageKey = "transit-poc-users";
+      const tokenStorageKey = "transit-poc-token";
+
+      function seedDemoUsers() {
+        const existing = window.localStorage.getItem(demoStorageKey);
+        if (existing) {
+          return;
+        }
+
+        const demoUsers = [
+          {
+            name: "Transit Demo",
+            email: "demo@transit.local",
+            password: "password123"
+          }
+        ];
+        window.localStorage.setItem(demoStorageKey, JSON.stringify(demoUsers));
+      }
+
+      function readUsers() {
+        try {
+          return JSON.parse(window.localStorage.getItem(demoStorageKey) || "[]");
+        } catch (error) {
+          return [];
+        }
+      }
+
+      function writeUsers(users) {
+        window.localStorage.setItem(demoStorageKey, JSON.stringify(users));
+      }
+
+      function setStatus(kind, message) {
+        statusEl.className = "mt-4 rounded-2xl border px-4 py-3 text-sm";
+        if (kind === "success") {
+          statusEl.classList.add("border-emerald-200", "bg-emerald-50", "text-emerald-800");
+        } else {
+          statusEl.classList.add("border-rose-200", "bg-rose-50", "text-rose-700");
+        }
+        statusEl.textContent = message;
+        statusEl.classList.remove("hidden");
+      }
+
+      function setActiveMode(mode) {
+        authTabs.forEach(function (tab) {
+          const active = tab.dataset.authTab === mode;
+          tab.classList.toggle("bg-white", active);
+          tab.classList.toggle("text-slate-900", active);
+          tab.classList.toggle("shadow-sm", active);
+          tab.classList.toggle("text-slate-500", !active);
+        });
+
+        Object.keys(panels).forEach(function (key) {
+          panels[key].classList.toggle("hidden", key !== mode);
+        });
+      }
+
+      authTabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          setActiveMode(tab.dataset.authTab);
+          statusEl.classList.add("hidden");
+        });
+      });
+
+      loginForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const formData = new FormData(loginForm);
+        const email = String(formData.get("email") || "").trim().toLowerCase();
+        const password = String(formData.get("password") || "");
+        const users = readUsers();
+        const match = users.find(function (user) {
+          return user.email.toLowerCase() === email && user.password === password;
+        });
+
+        if (!email || !password) {
+          setStatus("error", "Enter both email and password.");
+          return;
+        }
+
+        if (!match) {
+          setStatus("error", "Dummy login failed. Try demo@transit.local / password123 or create a new fake account first.");
+          return;
+        }
+
+        window.localStorage.setItem(tokenStorageKey, JSON.stringify({
+          endpoint: loginEndpoint,
+          token: "demo-token",
+          email: match.email,
+          createdAt: new Date().toISOString()
+        }));
+        setStatus("success", "Dummy login successful. Redirecting to the dashboard...");
+        window.setTimeout(function () {
+          window.location.href = "/admin/dashboard";
+        }, 700);
+      });
+
+      signupForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const formData = new FormData(signupForm);
+        const name = String(formData.get("name") || "").trim();
+        const email = String(formData.get("email") || "").trim().toLowerCase();
+        const password = String(formData.get("password") || "");
+        const confirmPassword = String(formData.get("confirmPassword") || "");
+        const users = readUsers();
+
+        if (!name || !email || !password || !confirmPassword) {
+          setStatus("error", "Fill in all signup fields.");
+          return;
+        }
+
+        if (password.length < 8) {
+          setStatus("error", "Use at least 8 characters for the dummy password.");
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          setStatus("error", "Passwords do not match.");
+          return;
+        }
+
+        if (users.some(function (user) { return user.email.toLowerCase() === email; })) {
+          setStatus("error", "That dummy email already exists. Sign in instead.");
+          return;
+        }
+
+        users.push({
+          name: name,
+          email: email,
+          password: password,
+          endpoint: signupEndpoint
+        });
+        writeUsers(users);
+
+        loginForm.querySelector("[name=email]").value = email;
+        loginForm.querySelector("[name=password]").value = password;
+        signupForm.reset();
+        setActiveMode("login");
+        setStatus("success", "Dummy account created locally. You can sign in now.");
+      });
+
+      seedDemoUsers();
+      setActiveMode(initialMode === "signup" ? "signup" : "login");
+    }());
+  </script>
+</body>
+</html>

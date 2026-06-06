@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>{{.Title}} — Transit Tracker</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg-top: #f4f9ff;
+    --bg-bottom: #deebf7;
+    --panel: rgba(255, 255, 255, 0.8);
+    --panel-strong: rgba(255, 255, 255, 0.94);
+    --border: rgba(148, 163, 184, 0.22);
+    --text-strong: #0f172a;
+    --text-soft: #5b6473;
+    --sidebar-top: #0b1728;
+    --sidebar-bottom: #13233d;
+    --teal: #0f766e;
+    --sky: #0284c7;
+    --amber: #f59e0b;
+    --rose: #e11d48;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Inter", sans-serif;
+    color: var(--text-strong);
+    background:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 26rem),
+      linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  }
+
+  h1,
+  h2,
+  h3,
+  .display-font {
+    font-family: "Space Grotesk", sans-serif;
+  }
+
+  .glass-panel {
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+  }
+
+  .page-shell {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.86));
+    box-shadow:
+      0 18px 48px rgba(15, 23, 42, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  }
+
+  .sidebar-shell {
+    background:
+      radial-gradient(circle at top, rgba(56, 189, 248, 0.14), transparent 18rem),
+      linear-gradient(180deg, var(--sidebar-top), var(--sidebar-bottom));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 18px 42px rgba(8, 15, 30, 0.36);
+  }
+
+  .sidebar-link {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sidebar-link::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.16), rgba(45, 212, 191, 0.08));
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .sidebar-link:hover::before,
+  .sidebar-link[data-active="true"]::before {
+    opacity: 1;
+  }
+
+  .table-card {
+    background: var(--panel-strong);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+  }
+
+  .stat-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 249, 255, 0.9));
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.07);
+  }
+
+  .leaflet-container {
+    font-family: "Inter", sans-serif;
+    background: #dbeafe;
+  }
+
+  .leaflet-control-zoom {
+    border: 0 !important;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18) !important;
+  }
+
+  .leaflet-control-zoom a {
+    width: 38px !important;
+    height: 38px !important;
+    line-height: 38px !important;
+    color: var(--text-strong) !important;
+    border: 0 !important;
+  }
+
+  .leaflet-popup-content-wrapper {
+    border-radius: 18px;
+    padding: 0;
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.2);
+  }
+
+  .leaflet-popup-content {
+    margin: 0 !important;
+    width: 260px !important;
+  }
+
+  .leaflet-popup-tip {
+    box-shadow: none;
+  }
+
+  .map-popup {
+    padding: 1rem;
+    background: linear-gradient(180deg, #ffffff, #f4f9ff);
+  }
+
+  .map-popup__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .map-popup__title {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-strong);
+  }
+
+  .map-popup__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+
+  .map-popup__badge--active {
+    background: rgba(15, 118, 110, 0.12);
+    color: var(--teal);
+  }
+
+  .map-popup__badge--idle {
+    background: rgba(245, 158, 11, 0.12);
+    color: #b45309;
+  }
+
+  .map-popup__meta {
+    display: grid;
+    gap: 0.55rem;
+    font-size: 0.84rem;
+    color: var(--text-soft);
+  }
+
+  .map-popup__meta strong {
+    color: var(--text-strong);
+  }
+
+  .bus-marker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.92);
+    box-shadow: 0 16px 28px rgba(15, 23, 42, 0.24);
+    transform: translate(-50%, -50%);
+  }
+
+  .bus-marker--active {
+    background: linear-gradient(180deg, #14b8a6, #0f766e);
+  }
+
+  .bus-marker--idle {
+    background: linear-gradient(180deg, #fbbf24, #f59e0b);
+  }
+
+  .bus-marker__pulse {
+    position: absolute;
+    inset: -8px;
+    border-radius: 20px;
+    border: 2px solid rgba(20, 184, 166, 0.28);
+    opacity: 0;
+  }
+
+  .bus-marker--active .bus-marker__pulse {
+    animation: pulse-ring 2.1s ease-out infinite;
+  }
+
+  .bus-marker__icon {
+    position: relative;
+    z-index: 1;
+    font-size: 1.15rem;
+    line-height: 1;
+    filter: saturate(1.05);
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(0.86);
+      opacity: 0.88;
+    }
+
+    100% {
+      transform: scale(1.3);
+      opacity: 0;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    body {
+      overflow: auto;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="flex min-h-screen flex-col gap-4 p-3 lg:flex-row lg:items-start lg:p-5">
+{{template "sidebar" .}}
+
+<main class="page-shell flex min-w-0 flex-1 flex-col rounded-[30px] border border-white/60">
+
+{{template "header" .}}
+
+<div class="flex-1">
+
+{{template "content" .}}
+
+</div>
+
+</main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/admin.js"></script>
+</body>
+</html>

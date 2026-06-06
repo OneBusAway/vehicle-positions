@@ -194,16 +194,16 @@ func TestStore_GetUser_NotFound(t *testing.T) {
 	assert.Nil(t, user)
 }
 
-func TestStore_DeactivateUser(t *testing.T) {
+func TestStore_DeleteUser(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
-	cleanupTestUsers(t, store, "crud-deactivate@example.com")
-	t.Cleanup(func() { cleanupTestUsers(t, store, "crud-deactivate@example.com") })
+	cleanupTestUsers(t, store, "crud-delete@example.com")
+	t.Cleanup(func() { cleanupTestUsers(t, store, "crud-delete@example.com") })
 
-	created, err := store.CreateUser(ctx, "To Delete", "crud-deactivate@example.com", "securepass", "driver")
+	created, err := store.CreateUser(ctx, "To Delete", "crud-delete@example.com", "securepass", "driver")
 	require.NoError(t, err)
 
-	err = store.DeactivateUser(ctx, created.ID)
+	err = store.DeleteUser(ctx, created.ID)
 	require.NoError(t, err)
 
 	// Verify user is gone
@@ -211,10 +211,10 @@ func TestStore_DeactivateUser(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUserNotFound)
 }
 
-func TestStore_DeactivateUser_NotFound(t *testing.T) {
+func TestStore_DeleteUser_NotFound(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	err := store.DeactivateUser(ctx, 999999)
+	err := store.DeleteUser(ctx, 999999)
 	assert.ErrorIs(t, err, ErrUserNotFound)
 }

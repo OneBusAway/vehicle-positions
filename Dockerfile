@@ -2,8 +2,9 @@ FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-COPY migrations ./migrations 
+COPY migrations ./migrations
 COPY db ./db
+COPY web ./web
 COPY *.go ./
 RUN CGO_ENABLED=0 go build -o /vehicle-positions .
 

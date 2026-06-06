@@ -1,0 +1,137 @@
+{{define "content"}}
+<div class="p-4 lg:p-5">
+  <div class="grid gap-4 lg:grid-cols-[1fr_280px]">
+
+    <!-- Map -->
+    <div class="relative overflow-hidden rounded-[24px] border border-white/70 shadow-xl" style="height:calc(100vh - 9rem); min-height:480px">
+      <div id="main-map" class="absolute inset-0"></div>
+
+      <!-- Stats overlay top-left -->
+      <div class="pointer-events-none absolute left-4 top-4 z-[500]">
+        <div class="glass-panel pointer-events-auto inline-flex items-center gap-5 rounded-2xl border border-white/70 px-5 py-3 shadow-lg">
+          <div class="text-center">
+            <p class="display-font text-2xl font-bold text-slate-900">4</p>
+            <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Active</p>
+          </div>
+          <div class="h-7 w-px bg-slate-200"></div>
+          <div class="text-center">
+            <p class="display-font text-2xl font-bold text-slate-900">2</p>
+            <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-600">Idle</p>
+          </div>
+          <div class="h-7 w-px bg-slate-200"></div>
+          <div class="text-center">
+            <p class="display-font text-2xl font-bold text-slate-900">6</p>
+            <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Buses</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legend bottom-left -->
+      <div class="pointer-events-none absolute bottom-4 left-4 z-[500]">
+        <div class="glass-panel pointer-events-auto inline-flex items-center gap-4 rounded-xl border border-white/70 px-4 py-2.5 text-xs font-medium text-slate-700 shadow-md">
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-teal-600"></span>Active</span>
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>Idle</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fleet sidebar -->
+    <div class="space-y-4">
+      <!-- Vehicle list -->
+      <div class="table-card rounded-[20px] border border-white/80 p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="display-font text-sm font-bold text-slate-900">Fleet Status</h3>
+          <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">6 buses</span>
+        </div>
+        <div class="space-y-2">
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50/80 p-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm text-white">&#128652;</span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold text-slate-900">Bus 001</p>
+              <p class="truncate text-xs text-slate-400">Route A &middot; James Mwangi</p>
+            </div>
+            <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50/80 p-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm text-white">&#128652;</span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold text-slate-900">Bus 002</p>
+              <p class="truncate text-xs text-slate-400">Route B &middot; Brad Pitt</p>
+            </div>
+            <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50/80 p-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm text-white">&#128652;</span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold text-slate-900">Bus 003</p>
+              <p class="truncate text-xs text-slate-400">Route C &middot; Bruce Wayne</p>
+            </div>
+            <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50/80 p-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-sm text-white">&#128652;</span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold text-slate-900">Bus 004</p>
+              <p class="truncate text-xs text-slate-400">Route A &middot; Michael Phelps</p>
+            </div>
+            <span class="h-2 w-2 shrink-0 rounded-full bg-amber-400"></span>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50/80 p-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm text-white">&#128652;</span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold text-slate-900">Bus 005</p>
+              <p class="truncate text-xs text-slate-400">Route D &middot; Michael Jordan</p>
+            </div>
+            <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50/80 p-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-sm text-white">&#128652;</span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold text-slate-900">Bus 006</p>
+              <p class="truncate text-xs text-slate-400">Route B &middot; Unassigned</p>
+            </div>
+            <span class="h-2 w-2 shrink-0 rounded-full bg-amber-400"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Route summary -->
+      <div class="table-card rounded-[20px] border border-white/80 p-4">
+        <h3 class="display-font mb-3 text-sm font-bold text-slate-900">Active Routes</h3>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between rounded-xl bg-slate-50/80 px-3 py-2.5">
+            <div>
+              <p class="text-sm font-semibold text-slate-900">Route A</p>
+              <p class="text-xs text-slate-400">CBD &rarr; Westlands</p>
+            </div>
+            <span class="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">2 buses</span>
+          </div>
+          <div class="flex items-center justify-between rounded-xl bg-slate-50/80 px-3 py-2.5">
+            <div>
+              <p class="text-sm font-semibold text-slate-900">Route B</p>
+              <p class="text-xs text-slate-400">Ngong Rd &rarr; City</p>
+            </div>
+            <span class="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">2 buses</span>
+          </div>
+          <div class="flex items-center justify-between rounded-xl bg-slate-50/80 px-3 py-2.5">
+            <div>
+              <p class="text-sm font-semibold text-slate-900">Route C</p>
+              <p class="text-xs text-slate-400">Thika Rd &rarr; CBD</p>
+            </div>
+            <span class="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">1 bus</span>
+          </div>
+          <div class="flex items-center justify-between rounded-xl bg-slate-50/80 px-3 py-2.5">
+            <div>
+              <p class="text-sm font-semibold text-slate-900">Route D</p>
+              <p class="text-xs text-slate-400">Eastlands &rarr; City</p>
+            </div>
+            <span class="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">1 bus</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{{end}}
+

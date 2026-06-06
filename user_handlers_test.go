@@ -54,11 +54,11 @@ func (m *mockUserUpdater) UpdateUser(ctx context.Context, id int64, name, email,
 	return m.user, m.err
 }
 
-type mockUserDeactivator struct {
+type mockUserDeleter struct {
 	err error
 }
 
-func (m *mockUserDeactivator) DeactivateUser(ctx context.Context, id int64) error {
+func (m *mockUserDeleter) DeleteUser(ctx context.Context, id int64) error {
 	return m.err
 }
 
@@ -596,10 +596,10 @@ func TestHandleUpdateUser_BodyTooLarge(t *testing.T) {
 	assert.Contains(t, decodeErrorResponse(t, w), "invalid JSON")
 }
 
-// --- Deactivate User ---
+// --- Delete User ---
 
-func TestHandleDeactivateUser_HappyPath(t *testing.T) {
-	handler := handleDeactivateUser(&mockUserDeactivator{})
+func TestHandleDeleteUser_HappyPath(t *testing.T) {
+	handler := handleDeleteUser(&mockUserDeleter{})
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/users/1", nil)
 	req.SetPathValue("id", "1")
 	w := httptest.NewRecorder()
@@ -609,8 +609,8 @@ func TestHandleDeactivateUser_HappyPath(t *testing.T) {
 	assert.Empty(t, w.Body.String(), "204 No Content must have no response body")
 }
 
-func TestHandleDeactivateUser_NotFound(t *testing.T) {
-	handler := handleDeactivateUser(&mockUserDeactivator{err: ErrUserNotFound})
+func TestHandleDeleteUser_NotFound(t *testing.T) {
+	handler := handleDeleteUser(&mockUserDeleter{err: ErrUserNotFound})
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/users/999", nil)
 	req.SetPathValue("id", "999")
 	w := httptest.NewRecorder()
@@ -620,8 +620,8 @@ func TestHandleDeactivateUser_NotFound(t *testing.T) {
 	assert.Equal(t, "user not found", decodeErrorResponse(t, w))
 }
 
-func TestHandleDeactivateUser_InvalidID(t *testing.T) {
-	handler := handleDeactivateUser(&mockUserDeactivator{})
+func TestHandleDeleteUser_InvalidID(t *testing.T) {
+	handler := handleDeleteUser(&mockUserDeleter{})
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/users/abc", nil)
 	req.SetPathValue("id", "abc")
 	w := httptest.NewRecorder()
@@ -631,8 +631,8 @@ func TestHandleDeactivateUser_InvalidID(t *testing.T) {
 	assert.Equal(t, "invalid user id", decodeErrorResponse(t, w))
 }
 
-func TestHandleDeactivateUser_DBError(t *testing.T) {
-	handler := handleDeactivateUser(&mockUserDeactivator{err: fmt.Errorf("database down")})
+func TestHandleDeleteUser_DBError(t *testing.T) {
+	handler := handleDeleteUser(&mockUserDeleter{err: fmt.Errorf("database down")})
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/users/1", nil)
 	req.SetPathValue("id", "1")
 	w := httptest.NewRecorder()
