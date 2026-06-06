@@ -16,11 +16,13 @@ import (
 )
 
 type mockLocationHistoryLister struct {
-	points []LocationPoint
-	err    error
+	points       []LocationPoint
+	err          error
+	capturedFrom int64
 }
 
-func (m *mockLocationHistoryLister) GetLocationHistory(_ context.Context, _ string, _, _ int64, _ int) ([]LocationPoint, error) {
+func (m *mockLocationHistoryLister) GetLocationHistory(_ context.Context, _ string, from, _ int64, _ int) ([]LocationPoint, error) {
+	m.capturedFrom = from
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -46,17 +48,13 @@ func newHistoryRequest(vehicleID string, query string) *http.Request {
 	return r
 }
 
-func float64Ptr(v float64) *float64 {
-	return &v
-}
-
 func TestHandleGetLocationHistory_Success(t *testing.T) {
 	now := time.Now().UTC()
 	lister := &mockLocationHistoryLister{
 		points: []LocationPoint{
 			{
 				Latitude: -1.29, Longitude: 36.82,
-				Bearing: float64Ptr(180.0), Speed: float64Ptr(8.5), Accuracy: float64Ptr(12.0),
+				Bearing: float64ptr(180.0), Speed: float64ptr(8.5), Accuracy: float64ptr(12.0),
 				Timestamp: now.Unix(), TripID: "trip-1", ReceivedAt: now,
 			},
 		},
@@ -89,7 +87,7 @@ func TestHandleGetLocationHistory_CSV(t *testing.T) {
 		points: []LocationPoint{
 			{
 				Latitude: -1.29, Longitude: 36.82,
-				Bearing: float64Ptr(180.0), Speed: float64Ptr(8.5), Accuracy: float64Ptr(12.0),
+				Bearing: float64ptr(180.0), Speed: float64ptr(8.5), Accuracy: float64ptr(12.0),
 				Timestamp: 1752566400, TripID: "trip-1", ReceivedAt: now,
 			},
 		},
@@ -109,7 +107,7 @@ func TestHandleGetLocationHistory_CSV(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, records, 2, "header + 1 data row")
 
-	assert.Equal(t, []string{"timestamp", "latitude", "longitude", "bearing", "speed", "accuracy", "trip_id", "recorded_at"}, records[0])
+	assert.Equal(t, []string{"timestamp", "latitude", "longitude", "bearing", "speed", "accuracy", "trip_id", "received_at"}, records[0])
 	assert.Equal(t, "1752566400", records[1][0])
 	assert.Equal(t, "-1.29", records[1][1])
 	assert.Equal(t, "36.82", records[1][2])
@@ -124,6 +122,7 @@ func TestHandleGetLocationHistory_DefaultParams(t *testing.T) {
 	checker := &mockVehicleChecker{exists: true}
 	handler := handleGetLocationHistory(lister, checker)
 
+	expectedFrom := time.Now().Unix() - 86400
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, newHistoryRequest("bus-1", ""))
 
@@ -133,6 +132,7 @@ func TestHandleGetLocationHistory_DefaultParams(t *testing.T) {
 	assert.Equal(t, 0, resp.Count)
 	assert.NotNil(t, resp.Locations, "locations should be empty array, not null")
 	assert.Len(t, resp.Locations, 0)
+	assert.InDelta(t, expectedFrom, lister.capturedFrom, 2, "default from should be ~24h ago")
 }
 
 func TestHandleGetLocationHistory_EmptyHistory(t *testing.T) {
@@ -145,7 +145,6 @@ func TestHandleGetLocationHistory_EmptyHistory(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verify JSON contains [] not null
 	body := w.Body.String()
 	assert.Contains(t, body, `"locations":[]`)
 }
@@ -194,25 +193,33 @@ func TestHandleGetLocationHistory_InvalidVehicleID(t *testing.T) {
 }
 
 func TestHandleGetLocationHistory_VehicleIDTooLong(t *testing.T) {
-	lister := &mockLocationHistoryLister{}
-	checker := &mockVehicleChecker{}
-	handler := handleGetLocationHistory(lister, checker)
+	tests := []struct {
+		name       string
+		vehicleID  string
+		wantStatus int
+		wantErr    string
+	}{
+		{"50 chars accepted", strings.Repeat("a", 50), http.StatusOK, ""},
+		{"51 chars rejected", strings.Repeat("a", 51), http.StatusBadRequest, "at most 50"},
+	}
 
-	// Exactly 50 chars should pass validation (will hit vehicle check)
-	w50 := httptest.NewRecorder()
-	checker.exists = true
-	lister.points = make([]LocationPoint, 0)
-	handler.ServeHTTP(w50, newHistoryRequest(strings.Repeat("a", 50), ""))
-	assert.Equal(t, http.StatusOK, w50.Code, "50-char vehicle_id should be accepted")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lister := &mockLocationHistoryLister{points: make([]LocationPoint, 0)}
+			checker := &mockVehicleChecker{exists: true}
+			handler := handleGetLocationHistory(lister, checker)
 
-	// 51 chars should be rejected
-	w51 := httptest.NewRecorder()
-	handler.ServeHTTP(w51, newHistoryRequest(strings.Repeat("a", 51), ""))
-	assert.Equal(t, http.StatusBadRequest, w51.Code, "51-char vehicle_id should be rejected")
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, newHistoryRequest(tt.vehicleID, ""))
+			assert.Equal(t, tt.wantStatus, w.Code)
 
-	var resp map[string]string
-	require.NoError(t, json.NewDecoder(w51.Body).Decode(&resp))
-	assert.Contains(t, resp["error"], "at most 50")
+			if tt.wantErr != "" {
+				var resp map[string]string
+				require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+				assert.Contains(t, resp["error"], tt.wantErr)
+			}
+		})
+	}
 }
 
 func TestHandleGetLocationHistory_InvalidLimit(t *testing.T) {
@@ -316,7 +323,7 @@ func TestHandleGetLocationHistory_NullableFieldsJSON(t *testing.T) {
 	lister := &mockLocationHistoryLister{
 		points: []LocationPoint{
 			{Latitude: 1.0, Longitude: 2.0, Bearing: nil, Speed: nil, Accuracy: nil, Timestamp: time.Now().Unix(), ReceivedAt: time.Now()},
-			{Latitude: 3.0, Longitude: 4.0, Bearing: float64Ptr(0), Speed: float64Ptr(0), Accuracy: float64Ptr(0), Timestamp: time.Now().Unix() - 60, ReceivedAt: time.Now()},
+			{Latitude: 3.0, Longitude: 4.0, Bearing: float64ptr(0), Speed: float64ptr(0), Accuracy: float64ptr(0), Timestamp: time.Now().Unix() - 60, ReceivedAt: time.Now()},
 		},
 	}
 	checker := &mockVehicleChecker{exists: true}
@@ -331,12 +338,10 @@ func TestHandleGetLocationHistory_NullableFieldsJSON(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	require.Len(t, resp.Locations, 2)
 
-	// First: nil fields
 	assert.Nil(t, resp.Locations[0].Bearing, "nil bearing should serialize as null")
 	assert.Nil(t, resp.Locations[0].Speed)
 	assert.Nil(t, resp.Locations[0].Accuracy)
 
-	// Second: zero-valued fields (not nil)
 	require.NotNil(t, resp.Locations[1].Bearing, "zero bearing should not be nil")
 	assert.Equal(t, 0.0, *resp.Locations[1].Bearing)
 	require.NotNil(t, resp.Locations[1].Speed)
@@ -360,7 +365,6 @@ func TestHandleGetLocationHistory_CSVNullableFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, records, 2)
 
-	// bearing, speed, accuracy columns should be empty for nil
 	assert.Equal(t, "", records[1][3], "nil bearing should be empty in CSV")
 	assert.Equal(t, "", records[1][4], "nil speed should be empty in CSV")
 	assert.Equal(t, "", records[1][5], "nil accuracy should be empty in CSV")
@@ -371,17 +375,14 @@ func TestHandleGetLocationHistory_BoundaryLimit(t *testing.T) {
 	checker := &mockVehicleChecker{exists: true}
 	handler := handleGetLocationHistory(lister, checker)
 
-	// limit=1 should be accepted
 	w1 := httptest.NewRecorder()
 	handler.ServeHTTP(w1, newHistoryRequest("bus-1", "limit=1"))
 	assert.Equal(t, http.StatusOK, w1.Code, "limit=1 should be accepted")
 
-	// limit=1000 should be accepted
 	w1000 := httptest.NewRecorder()
 	handler.ServeHTTP(w1000, newHistoryRequest("bus-1", "limit=1000"))
 	assert.Equal(t, http.StatusOK, w1000.Code, "limit=1000 should be accepted")
 
-	// limit=1001 should be rejected
 	w1001 := httptest.NewRecorder()
 	handler.ServeHTTP(w1001, newHistoryRequest("bus-1", "limit=1001"))
 	assert.Equal(t, http.StatusBadRequest, w1001.Code, "limit=1001 should be rejected")

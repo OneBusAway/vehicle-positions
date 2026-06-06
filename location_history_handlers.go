@@ -28,7 +28,7 @@ type locationEntry struct {
 	Accuracy   *float64 `json:"accuracy"`
 	Timestamp  int64    `json:"timestamp"`
 	TripID     string   `json:"trip_id"`
-	ReceivedAt string   `json:"recorded_at"`
+	ReceivedAt string   `json:"received_at"`
 }
 
 func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleChecker) http.HandlerFunc {
@@ -49,7 +49,7 @@ func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleCheck
 
 		q := r.URL.Query()
 
-		from, err := parseOptionalInt64(q.Get("from"), 0)
+		from, err := parseOptionalInt64(q.Get("from"), time.Now().Unix()-86400)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "from must be a valid unix timestamp"})
 			return
@@ -132,9 +132,9 @@ func writeCSV(w http.ResponseWriter, vehicleID string, points []LocationPoint) {
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
-	header := []string{"timestamp", "latitude", "longitude", "bearing", "speed", "accuracy", "trip_id", "recorded_at"}
+	header := []string{"timestamp", "latitude", "longitude", "bearing", "speed", "accuracy", "trip_id", "received_at"}
 	if err := writer.Write(header); err != nil {
-		slog.Error("failed to write CSV header", "error", err)
+		slog.Error("failed to write CSV header", "vehicle_id", vehicleID, "error", err)
 		return
 	}
 
@@ -150,7 +150,7 @@ func writeCSV(w http.ResponseWriter, vehicleID string, points []LocationPoint) {
 			p.ReceivedAt.UTC().Format(time.RFC3339),
 		}
 		if err := writer.Write(record); err != nil {
-			slog.Error("failed to write CSV record", "error", err)
+			slog.Error("failed to write CSV record", "vehicle_id", vehicleID, "error", err)
 			return
 		}
 	}
