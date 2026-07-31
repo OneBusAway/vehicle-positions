@@ -15,6 +15,68 @@ import (
 //go:embed web/templates web/static
 var files embed.FS
 
+// appStore is the combined store interface required by newMux.
+// *Store implements all embedded interfaces.
+type appStore interface {
+	UserFetcher
+	UserLister
+	UserGetter
+	UserCreator
+	UserUpdater
+	UserDeleter
+	VehicleManager
+	LocationSaver
+	AssignmentCreator
+	AssignmentDeleter
+	AssignmentListerByUser
+	AssignmentListerByVehicle
+	TripStarter
+	TripEnder
+	HealthChecker
+}
+
+// newMux wires all application routes and returns the configured ServeMux.
+// Extracting route registration here allows tests to build the real mux
+// without a live database, catching middleware wiring gaps like the one fixed
+// in issue #82.
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time) *http.ServeMux {
+	mux := http.NewServeMux()
+
+	authMiddleware := requireAuth(jwtSecret)
+	adminMiddleware := requireAdmin()
+
+	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret))
+	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
+	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
+	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
+	mux.Handle("GET /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleGetVehicle(store))))
+	mux.Handle("POST /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleUpsertVehicle(store))))
+	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store))))
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("GET /ready", handleReadiness(store))
+
+	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
+	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
+
+	// Admin user management
+	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))
+	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleGetUser(store))))
+	mux.Handle("POST /api/v1/admin/users", authMiddleware(adminMiddleware(handleCreateUser(store))))
+	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleUpdateUser(store))))
+	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleDeleteUser(store))))
+
+	// Admin user-vehicle assignments
+	mux.Handle("POST /api/v1/admin/assignments", authMiddleware(adminMiddleware(handleCreateAssignment(store))))
+	mux.Handle("DELETE /api/v1/admin/users/{userID}/vehicles/{vehicleID}", authMiddleware(adminMiddleware(handleDeleteAssignment(store))))
+	mux.Handle("GET /api/v1/admin/users/{id}/vehicles", authMiddleware(adminMiddleware(handleListUserVehicles(store))))
+	mux.Handle("GET /api/v1/admin/vehicles/{id}/users", authMiddleware(adminMiddleware(handleListVehicleUsers(store))))
+
+	return mux
+}
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
@@ -72,39 +134,7 @@ func main() {
 
 	startTime := time.Now()
 
-	mux := http.NewServeMux()
-
-	authMiddleware := requireAuth(jwtSecret)
-	adminMiddleware := requireAdmin()
-
-	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret))
-	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
-	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
-	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
-	mux.Handle("GET /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleGetVehicle(store))))
-	mux.Handle("POST /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleUpsertVehicle(store))))
-	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store))))
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	mux.HandleFunc("GET /ready", handleReadiness(store))
-
-	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
-	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
-	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
-
-	// Admin user management
-	mux.Handle("GET /api/v1/admin/users", authMiddleware(handleListUsers(store)))
-	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(handleGetUser(store)))
-	mux.Handle("POST /api/v1/admin/users", authMiddleware(handleCreateUser(store)))
-	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(handleUpdateUser(store)))
-	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(handleDeleteUser(store)))
-
-	// Admin user-vehicle assignments
-	mux.Handle("POST /api/v1/admin/assignments", authMiddleware(adminMiddleware(handleCreateAssignment(store))))
-	mux.Handle("DELETE /api/v1/admin/users/{userID}/vehicles/{vehicleID}", authMiddleware(adminMiddleware(handleDeleteAssignment(store))))
-	mux.Handle("GET /api/v1/admin/users/{id}/vehicles", authMiddleware(adminMiddleware(handleListUserVehicles(store))))
-	mux.Handle("GET /api/v1/admin/vehicles/{id}/users", authMiddleware(adminMiddleware(handleListVehicleUsers(store))))
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime)
 
 	// Admin UI (server-rendered HTML). This is a proof-of-concept with
 	// placeholder data and no authentication, so it is disabled by default and
