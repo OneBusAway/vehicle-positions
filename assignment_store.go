@@ -51,21 +51,7 @@ func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID st
 		VehicleID: vehicleID,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			return nil, ErrAssignmentExists
-		}
-		if isFKViolation(err) {
-			name := fkConstraintName(err)
-			switch name {
-			case "user_vehicles_user_id_fkey":
-				return nil, ErrUserNotFoundFK
-			case "user_vehicles_vehicle_id_fkey":
-				return nil, ErrVehicleNotFoundFK
-			default:
-				return nil, fmt.Errorf("create assignment: unrecognized FK constraint %q: %w", name, err)
-			}
-		}
-		return nil, fmt.Errorf("create assignment: %w", err)
+		return nil, classifyAssignmentError(err)
 	}
 
 	return &AssignmentResponse{
@@ -73,6 +59,32 @@ func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID st
 		VehicleID: row.VehicleID,
 		CreatedAt: row.CreatedAt.Time,
 	}, nil
+}
+
+// classifyAssignmentError maps pgx constraint errors to domain errors.
+// Both the unique and FK paths check the constraint name explicitly: unrecognized
+// constraints return a wrapped 500 rather than a misleading domain sentinel, so
+// future schema additions surface as server errors instead of silent misclassifications.
+func classifyAssignmentError(err error) error {
+	if isUniqueViolation(err) {
+		name := pgConstraintName(err)
+		if name == "user_vehicles_pkey" {
+			return ErrAssignmentExists
+		}
+		return fmt.Errorf("create assignment: unrecognized unique constraint %q: %w", name, err)
+	}
+	if isFKViolation(err) {
+		name := pgConstraintName(err)
+		switch name {
+		case "user_vehicles_user_id_fkey":
+			return ErrUserNotFoundFK
+		case "user_vehicles_vehicle_id_fkey":
+			return ErrVehicleNotFoundFK
+		default:
+			return fmt.Errorf("create assignment: unrecognized FK constraint %q: %w", name, err)
+		}
+	}
+	return fmt.Errorf("create assignment: %w", err)
 }
 
 // DeleteAssignment removes a user-vehicle assignment. Returns ErrAssignmentNotFound if no row matched.
@@ -130,7 +142,7 @@ func isFKViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
-func fkConstraintName(err error) string {
+func pgConstraintName(err error) string {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		return pgErr.ConstraintName

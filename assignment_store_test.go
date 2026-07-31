@@ -316,52 +316,52 @@ func TestStore_CascadeDeleteVehicle(t *testing.T) {
 
 func TestPgErrorHelpers(t *testing.T) {
 	tests := []struct {
-		name           string
-		code           string
-		constraintName string
-		wantUnique     bool
-		wantFK         bool
-		wantFKName     string
+		name               string
+		code               string
+		constraintName     string
+		wantUnique         bool
+		wantFK             bool
+		wantConstraintName string
 	}{
 		{
-			name:           "unique violation",
-			code:           "23505",
-			constraintName: "user_vehicles_pkey",
-			wantUnique:     true,
-			wantFK:         false,
-			wantFKName:     "user_vehicles_pkey",
+			name:               "unique violation",
+			code:               "23505",
+			constraintName:     "user_vehicles_pkey",
+			wantUnique:         true,
+			wantFK:             false,
+			wantConstraintName: "user_vehicles_pkey",
 		},
 		{
-			name:           "FK violation user_id",
-			code:           "23503",
-			constraintName: "user_vehicles_user_id_fkey",
-			wantUnique:     false,
-			wantFK:         true,
-			wantFKName:     "user_vehicles_user_id_fkey",
+			name:               "FK violation user_id",
+			code:               "23503",
+			constraintName:     "user_vehicles_user_id_fkey",
+			wantUnique:         false,
+			wantFK:             true,
+			wantConstraintName: "user_vehicles_user_id_fkey",
 		},
 		{
-			name:           "FK violation vehicle_id",
-			code:           "23503",
-			constraintName: "user_vehicles_vehicle_id_fkey",
-			wantUnique:     false,
-			wantFK:         true,
-			wantFKName:     "user_vehicles_vehicle_id_fkey",
+			name:               "FK violation vehicle_id",
+			code:               "23503",
+			constraintName:     "user_vehicles_vehicle_id_fkey",
+			wantUnique:         false,
+			wantFK:             true,
+			wantConstraintName: "user_vehicles_vehicle_id_fkey",
 		},
 		{
-			name:           "FK violation unrecognized constraint",
-			code:           "23503",
-			constraintName: "user_vehicles_unknown_fkey",
-			wantUnique:     false,
-			wantFK:         true,
-			wantFKName:     "user_vehicles_unknown_fkey",
+			name:               "FK violation unrecognized constraint",
+			code:               "23503",
+			constraintName:     "user_vehicles_unknown_fkey",
+			wantUnique:         false,
+			wantFK:             true,
+			wantConstraintName: "user_vehicles_unknown_fkey",
 		},
 		{
-			name:           "other error code",
-			code:           "42P01",
-			constraintName: "",
-			wantUnique:     false,
-			wantFK:         false,
-			wantFKName:     "",
+			name:               "other error code",
+			code:               "42P01",
+			constraintName:     "",
+			wantUnique:         false,
+			wantFK:             false,
+			wantConstraintName: "",
 		},
 	}
 
@@ -370,14 +370,82 @@ func TestPgErrorHelpers(t *testing.T) {
 			pgErr := &pgconn.PgError{Code: tc.code, ConstraintName: tc.constraintName}
 			assert.Equal(t, tc.wantUnique, isUniqueViolation(pgErr))
 			assert.Equal(t, tc.wantFK, isFKViolation(pgErr))
-			assert.Equal(t, tc.wantFKName, fkConstraintName(pgErr))
+			assert.Equal(t, tc.wantConstraintName, pgConstraintName(pgErr))
 		})
 	}
 }
 
-func TestFkConstraintName_NonPgError(t *testing.T) {
+func TestPgConstraintName_NonPgError(t *testing.T) {
 	err := errors.New("not a pg error")
-	assert.Equal(t, "", fkConstraintName(err))
+	assert.Equal(t, "", pgConstraintName(err))
 	assert.False(t, isUniqueViolation(err))
 	assert.False(t, isFKViolation(err))
+}
+
+func TestClassifyAssignmentError(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantIs      error
+		wantNoneOf  []error
+		wantContain string
+		wantWraps   bool
+	}{
+		{
+			name:   "known unique constraint maps to ErrAssignmentExists",
+			err:    &pgconn.PgError{Code: "23505", ConstraintName: "user_vehicles_pkey"},
+			wantIs: ErrAssignmentExists,
+		},
+		{
+			name:        "unknown unique constraint returns wrapped 500",
+			err:         &pgconn.PgError{Code: "23505", ConstraintName: "user_vehicles_email_key"},
+			wantNoneOf:  []error{ErrAssignmentExists, ErrUserNotFoundFK, ErrVehicleNotFoundFK},
+			wantContain: "unrecognized unique constraint",
+			wantWraps:   true,
+		},
+		{
+			name:   "user FK violation maps to ErrUserNotFoundFK",
+			err:    &pgconn.PgError{Code: "23503", ConstraintName: "user_vehicles_user_id_fkey"},
+			wantIs: ErrUserNotFoundFK,
+		},
+		{
+			name:   "vehicle FK violation maps to ErrVehicleNotFoundFK",
+			err:    &pgconn.PgError{Code: "23503", ConstraintName: "user_vehicles_vehicle_id_fkey"},
+			wantIs: ErrVehicleNotFoundFK,
+		},
+		{
+			name:        "unknown FK constraint returns wrapped 500",
+			err:         &pgconn.PgError{Code: "23503", ConstraintName: "user_vehicles_unknown_fkey"},
+			wantNoneOf:  []error{ErrAssignmentExists, ErrUserNotFoundFK, ErrVehicleNotFoundFK},
+			wantContain: "unrecognized FK constraint",
+			wantWraps:   true,
+		},
+		{
+			name:        "non-constraint error is wrapped generically",
+			err:         errors.New("connection reset"),
+			wantNoneOf:  []error{ErrAssignmentExists, ErrUserNotFoundFK, ErrVehicleNotFoundFK},
+			wantContain: "create assignment",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := classifyAssignmentError(tc.err)
+			require.Error(t, result)
+
+			if tc.wantIs != nil {
+				assert.ErrorIs(t, result, tc.wantIs)
+			}
+			for _, sentinel := range tc.wantNoneOf {
+				assert.False(t, errors.Is(result, sentinel), "result must not match sentinel %v", sentinel)
+			}
+			if tc.wantContain != "" {
+				assert.Contains(t, result.Error(), tc.wantContain)
+			}
+			if tc.wantWraps {
+				var pgErr *pgconn.PgError
+				assert.True(t, errors.As(result, &pgErr), "expected original pgError to be preserved in the wrapped error chain")
+			}
+		})
+	}
 }
