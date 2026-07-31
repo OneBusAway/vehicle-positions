@@ -9,16 +9,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// clearVehicleData empties vehicles and every table holding a foreign key to
+// it, in dependency order, so each test starts from a known-empty state
+// regardless of rows left behind by other tests or local runs.
+func clearVehicleData(t *testing.T, store *Store) {
+	t.Helper()
+	ctx := context.Background()
+	for _, table := range []string{"location_points", "trips", "user_vehicles", "vehicles"} {
+		_, err := store.pool.Exec(ctx, "DELETE FROM "+table)
+		require.NoError(t, err)
+	}
+}
+
 func TestStore_GetLocationHistory_Success(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := store.pool.Exec(ctx, "DELETE FROM location_points")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM vehicles")
-	require.NoError(t, err)
+	clearVehicleData(t, store)
 
-	_, err = store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-1')")
+	_, err := store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-1')")
 	require.NoError(t, err)
 
 	now := time.Now().Unix()
@@ -54,12 +63,9 @@ func TestStore_GetLocationHistory_TimeRange(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := store.pool.Exec(ctx, "DELETE FROM location_points")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM vehicles")
-	require.NoError(t, err)
+	clearVehicleData(t, store)
 
-	_, err = store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-range')")
+	_, err := store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-range')")
 	require.NoError(t, err)
 
 	now := time.Now().Unix()
@@ -82,12 +88,9 @@ func TestStore_GetLocationHistory_Limit(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := store.pool.Exec(ctx, "DELETE FROM location_points")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM vehicles")
-	require.NoError(t, err)
+	clearVehicleData(t, store)
 
-	_, err = store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-limit')")
+	_, err := store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-limit')")
 	require.NoError(t, err)
 
 	now := time.Now().Unix()
@@ -107,12 +110,9 @@ func TestStore_GetLocationHistory_EmptyResult(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := store.pool.Exec(ctx, "DELETE FROM location_points")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM vehicles")
-	require.NoError(t, err)
+	clearVehicleData(t, store)
 
-	_, err = store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-empty')")
+	_, err := store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-empty')")
 	require.NoError(t, err)
 
 	points, err := store.GetLocationHistory(ctx, "hist-bus-empty", 0, time.Now().Unix(), 100)
@@ -125,12 +125,9 @@ func TestStore_GetLocationHistory_NullableFields(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := store.pool.Exec(ctx, "DELETE FROM location_points")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM vehicles")
-	require.NoError(t, err)
+	clearVehicleData(t, store)
 
-	_, err = store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-null')")
+	_, err := store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('hist-bus-null')")
 	require.NoError(t, err)
 
 	now := time.Now().Unix()
@@ -168,12 +165,9 @@ func TestStore_VehicleExists_Found(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := store.pool.Exec(ctx, "DELETE FROM location_points")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM vehicles")
-	require.NoError(t, err)
+	clearVehicleData(t, store)
 
-	_, err = store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('exists-bus')")
+	_, err := store.pool.Exec(ctx, "INSERT INTO vehicles (id) VALUES ('exists-bus')")
 	require.NoError(t, err)
 
 	exists, err := store.VehicleExists(ctx, "exists-bus")

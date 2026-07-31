@@ -17,6 +17,7 @@ const (
 type locationHistoryResponse struct {
 	VehicleID string          `json:"vehicle_id"`
 	Count     int             `json:"count"`
+	HasMore   bool            `json:"has_more"`
 	Locations []locationEntry `json:"locations"`
 }
 
@@ -49,14 +50,16 @@ func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleCheck
 
 		q := r.URL.Query()
 
-		from, err := parseOptionalInt64(q.Get("from"), time.Now().Unix()-86400)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "from must be a valid unix timestamp"})
-			return
-		}
 		to, err := parseOptionalInt64(q.Get("to"), time.Now().Unix())
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "to must be a valid unix timestamp"})
+			return
+		}
+		// Default from relative to to (not now) so a ?to= in the past selects
+		// the 24h window ending at to instead of tripping the from > to check.
+		from, err := parseOptionalInt64(q.Get("from"), to-86400)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "from must be a valid unix timestamp"})
 			return
 		}
 		if from > to {
@@ -90,11 +93,16 @@ func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleCheck
 			return
 		}
 
-		points, err := lister.GetLocationHistory(r.Context(), vehicleID, from, to, limit)
+		// Fetch one extra row to detect whether results were truncated at limit.
+		points, err := lister.GetLocationHistory(r.Context(), vehicleID, from, to, limit+1)
 		if err != nil {
 			slog.Error("failed to get location history", "vehicle_id", vehicleID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
+		}
+		hasMore := len(points) > limit
+		if hasMore {
+			points = points[:limit]
 		}
 
 		if format == "csv" {
@@ -119,6 +127,7 @@ func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleCheck
 		writeJSON(w, http.StatusOK, locationHistoryResponse{
 			VehicleID: vehicleID,
 			Count:     len(entries),
+			HasMore:   hasMore,
 			Locations: entries,
 		})
 	}
@@ -130,7 +139,6 @@ func writeCSV(w http.ResponseWriter, vehicleID string, points []LocationPoint) {
 	w.WriteHeader(http.StatusOK)
 
 	writer := csv.NewWriter(w)
-	defer writer.Flush()
 
 	header := []string{"timestamp", "latitude", "longitude", "bearing", "speed", "accuracy", "trip_id", "received_at"}
 	if err := writer.Write(header); err != nil {
@@ -146,7 +154,7 @@ func writeCSV(w http.ResponseWriter, vehicleID string, points []LocationPoint) {
 			formatOptionalFloat(p.Bearing),
 			formatOptionalFloat(p.Speed),
 			formatOptionalFloat(p.Accuracy),
-			p.TripID,
+			sanitizeCSVCell(p.TripID),
 			p.ReceivedAt.UTC().Format(time.RFC3339),
 		}
 		if err := writer.Write(record); err != nil {
@@ -154,6 +162,27 @@ func writeCSV(w http.ResponseWriter, vehicleID string, points []LocationPoint) {
 			return
 		}
 	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		slog.Error("failed to flush CSV response", "vehicle_id", vehicleID, "error", err)
+	}
+}
+
+// sanitizeCSVCell prevents CSV formula injection: cells beginning with =, +, -,
+// @, tab, or CR are evaluated as formulas by Excel, LibreOffice, and Google
+// Sheets. Prefixing with a single quote forces text interpretation. Only
+// user-supplied text cells (trip_id) need this — numeric cells are
+// server-formatted floats, and escaping them would corrupt negative values.
+func sanitizeCSVCell(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
 }
 
 func formatOptionalFloat(v *float64) string {
