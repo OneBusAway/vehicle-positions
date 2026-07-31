@@ -64,6 +64,12 @@ func (r *LocationReport) validate() error {
 	if r.Timestamp < now-int64(maxTimestampSkew.Seconds()) || r.Timestamp > now+int64(maxTimestampSkew.Seconds()) {
 		return fmt.Errorf("timestamp must be within %d minutes of server time", int(maxTimestampSkew.Minutes()))
 	}
+	if r.Bearing != nil && (*r.Bearing < 0 || *r.Bearing > 360) {
+		return fmt.Errorf("bearing must be between 0 and 360 (inclusive)")
+	}
+	if r.Speed != nil && *r.Speed < 0 {
+		return fmt.Errorf("speed must be non-negative")
+	}
 	return nil
 }
 
@@ -169,15 +175,20 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 	version := "2.0"
 	inc := gtfs.FeedHeader_FULL_DATASET
 
-	feed := &gtfs.FeedMessage{
-		Header: &gtfs.FeedHeader{
-			GtfsRealtimeVersion: &version,
-			Incrementality:      &inc,
-			Timestamp:           &now,
-		},
-	}
+	// E012 (gtfs-realtime-validator): header.timestamp must be >= all entity timestamps.
+	headerTimestamp := now
 
+	var entities []*gtfs.FeedEntity
 	for _, v := range vehicles {
+		if v.Timestamp <= 0 {
+			slog.Warn("buildFeed: skipping vehicle with non-positive timestamp", "vehicle_id", v.VehicleID, "timestamp", v.Timestamp)
+			continue
+		}
+		ts := uint64(v.Timestamp)
+		if ts > headerTimestamp {
+			headerTimestamp = ts
+		}
+
 		position := &gtfs.Position{
 			Latitude:  proto.Float32(float32(v.Latitude)),
 			Longitude: proto.Float32(float32(v.Longitude)),
@@ -196,7 +207,7 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 					Id: proto.String(v.VehicleID),
 				},
 				Position:  position,
-				Timestamp: proto.Uint64(uint64(v.Timestamp)),
+				Timestamp: proto.Uint64(ts),
 			},
 		}
 
@@ -205,10 +216,17 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 				TripId: proto.String(v.TripID),
 			}
 		}
-		feed.Entity = append(feed.Entity, entity)
+		entities = append(entities, entity)
 	}
 
-	return feed
+	return &gtfs.FeedMessage{
+		Header: &gtfs.FeedHeader{
+			GtfsRealtimeVersion: &version,
+			Incrementality:      &inc,
+			Timestamp:           &headerTimestamp,
+		},
+		Entity: entities,
+	}
 }
 
 type adminStatusResponse struct {
