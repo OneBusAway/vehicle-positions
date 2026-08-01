@@ -9,10 +9,22 @@ info:
     built for transit agencies in developing countries that have a GTFS static
     feed and a fleet of Android phones but no AVL infrastructure.
 
-    This document describes every HTTP endpoint currently registered in
-    `main.go`. Schemas, validation rules, and status codes are derived
-    directly from the handler source — see `openapi_test.go`, which asserts
-    that the spec and the code cannot drift apart.
+    This document describes every JSON API endpoint the server registers.
+    Schemas, validation rules, and status codes are derived directly from the
+    handler source.
+
+    `openapi_test.go` parses the server's Go source and holds this file to
+    it: routes must match the mux registrations in both directions, every
+    route behind `requireAuth` / `requireAdmin` must declare the matching
+    `401` / `403`, and the validation keywords that mirror a Go constant
+    must equal it. What none of that reaches is prose — descriptions still
+    have to be read against the handlers by hand.
+
+    Out of scope: the server-rendered admin UI (`/admin/*`, `/static/*`),
+    which is HTML rather than JSON and is registered only when
+    `ADMIN_UI_ENABLED` is set. Those routes are listed explicitly in
+    `openapi_test.go` so that adding one is a deliberate decision rather
+    than an invisible gap.
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -305,12 +317,7 @@ paths:
     get:
       tags: [admin]
       summary: List all users
-      description: |
-        **Note:** unlike other `/api/v1/admin/*` endpoints, this currently
-        only requires a valid bearer token — the admin-role check is
-        missing from the handler. Tracked by PR #79, which adds
-        `requireAdmin` to this route; when that merges, a `403` response
-        will be added here.
+      description: Requires the `admin` role.
       responses:
         '200':
           description: Users.
@@ -322,19 +329,15 @@ paths:
                   $ref: '#/components/schemas/User'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
       tags: [admin]
       summary: Create a user
       description: |
-        Request bodies are capped at 1 KiB.
-
-        **Note:** unlike other `/api/v1/admin/*` endpoints, this currently
-        only requires a valid bearer token — the admin-role check is
-        missing from the handler. Tracked by PR #79, which adds
-        `requireAdmin` to this route; when that merges, a `403` response
-        will be added here.
+        Requires the `admin` role. Request bodies are capped at 1 KiB.
       requestBody:
         required: true
         content:
@@ -352,6 +355,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           description: Email already exists.
           content:
@@ -369,12 +374,7 @@ paths:
     get:
       tags: [admin]
       summary: Get a user by id
-      description: |
-        **Note:** unlike other `/api/v1/admin/*` endpoints, this currently
-        only requires a valid bearer token — the admin-role check is
-        missing from the handler. Tracked by PR #79, which adds
-        `requireAdmin` to this route; when that merges, a `403` response
-        will be added here.
+      description: Requires the `admin` role.
       responses:
         '200':
           description: User.
@@ -386,6 +386,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -394,13 +396,8 @@ paths:
       tags: [admin]
       summary: Update a user
       description: |
-        Updates name, email, and role. Request bodies are capped at 1 KiB.
-
-        **Note:** unlike other `/api/v1/admin/*` endpoints, this currently
-        only requires a valid bearer token — the admin-role check is
-        missing from the handler. Tracked by PR #79, which adds
-        `requireAdmin` to this route; when that merges, a `403` response
-        will be added here.
+        Updates name, email, and role. Requires the `admin` role. Request
+        bodies are capped at 1 KiB.
       requestBody:
         required: true
         content:
@@ -418,6 +415,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -433,12 +432,7 @@ paths:
     delete:
       tags: [admin]
       summary: Delete a user
-      description: |
-        **Note:** unlike other `/api/v1/admin/*` endpoints, this currently
-        only requires a valid bearer token — the admin-role check is
-        missing from the handler. Tracked by PR #79, which adds
-        `requireAdmin` to this route; when that merges, a `403` response
-        will be added here.
+      description: Requires the `admin` role.
       responses:
         '204':
           description: User deleted.
@@ -446,8 +440,151 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/assignments:
+    post:
+      tags: [admin]
+      summary: Assign a driver to a vehicle
+      description: |
+        Links a driver to a vehicle. A driver must hold an assignment for a
+        vehicle before `POST /api/v1/trips/start` will accept a trip on it.
+        Requires the `admin` role. Request bodies are capped at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssignmentRequest'
+      responses:
+        '201':
+          description: Assignment created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assignment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: |
+            The referenced user or vehicle does not exist. Surfaced from the
+            foreign-key violation, so the message is either `user not found`
+            or `vehicle not found`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: This driver is already assigned to this vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/users/{id}/vehicles:
+    parameters:
+      - $ref: '#/components/parameters/UserIDPath'
+    get:
+      tags: [admin]
+      summary: List the vehicles assigned to a driver
+      description: |
+        Requires the `admin` role. The handler validates the id but does not
+        check that the user exists, so an unknown id returns `200` with an
+        empty array rather than `404`.
+      responses:
+        '200':
+          description: Assignments held by this driver.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Assignment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/users/{userID}/vehicles/{vehicleID}:
+    parameters:
+      - $ref: '#/components/parameters/AssignmentUserIDPath'
+      - $ref: '#/components/parameters/AssignmentVehicleIDPath'
+    delete:
+      tags: [admin]
+      summary: Remove a driver's vehicle assignment
+      description: |
+        Deletes the assignment linking a driver to a vehicle. Requires the
+        `admin` role. Unlike the other delete endpoints in this API, this one
+        answers `200` with a status body rather than `204`.
+      responses:
+        '200':
+          description: Assignment removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No assignment links this driver to this vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/vehicles/{id}/users:
+    parameters:
+      - $ref: '#/components/parameters/VehicleIDPath'
+    get:
+      tags: [admin]
+      summary: List the drivers assigned to a vehicle
+      description: |
+        Requires the `admin` role. The handler validates the id but does not
+        check that the vehicle exists, so an unknown id returns `200` with an
+        empty array rather than `404`.
+      responses:
+        '200':
+          description: |
+            Assignments on this vehicle. Each item is the same `Assignment`
+            object returned by the user-scoped listing, so `vehicle_id` is
+            constant across the array.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Assignment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -546,10 +683,7 @@ components:
       in: path
       required: true
       schema:
-        type: string
-        minLength: 1
-        maxLength: 50
-        pattern: '^[a-zA-Z0-9._-]+$'
+        $ref: '#/components/schemas/VehicleID'
       description: Vehicle identifier.
     UserIDPath:
       name: id
@@ -560,6 +694,22 @@ components:
         format: int64
         minimum: 1
       description: User identifier.
+    AssignmentUserIDPath:
+      name: userID
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      description: User identifier.
+    AssignmentVehicleIDPath:
+      name: vehicleID
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/VehicleID'
+      description: Vehicle identifier.
 
   responses:
     BadRequest:
@@ -606,6 +756,18 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    # Every vehicle-id-shaped field references this schema instead of
+    # restating the constraints, so the drift guard has a single place to
+    # compare against vehicleIDPattern / maxVehicleIDLength in handlers.go.
+    VehicleID:
+      type: string
+      minLength: 1
+      maxLength: 50
+      pattern: '^[a-zA-Z0-9._-]+$'
+      description: |
+        Agency-assigned vehicle identifier. Constraints mirror
+        `maxVehicleIDLength` and `vehicleIDPattern` in `handlers.go`.
+
     ErrorResponse:
       type: object
       required: [error]
@@ -644,15 +806,20 @@ components:
       type: object
       additionalProperties: false
       required: [vehicle_id, latitude, longitude, timestamp]
+      description: |
+        A single GPS fix. Beyond the per-field constraints below, the handler
+        rejects reports where `latitude` and `longitude` are *both* zero —
+        null island is far likelier to be a failed fix than a real position.
+        That is a cross-field rule no JSON Schema keyword can express, so it
+        is stated here rather than encoded.
       properties:
         vehicle_id:
-          type: string
-          minLength: 1
-          maxLength: 50
-          pattern: '^[a-zA-Z0-9._-]+$'
+          $ref: '#/components/schemas/VehicleID'
         trip_id:
           type: string
-          description: Optional GTFS trip identifier the driver is currently operating.
+          description: |
+            Optional GTFS trip identifier the driver is currently operating.
+            Not validated — any string is accepted and stored verbatim.
         latitude:
           type: number
           format: double
@@ -673,18 +840,24 @@ components:
           type: [number, 'null']
           format: double
           minimum: 0
-          description: Ground speed in metres per second. May be null or omitted if unknown.
+          description: |
+            Ground speed in metres per second. Rejected if negative; there is
+            no upper bound. May be null or omitted if unknown.
         accuracy:
           type: [number, 'null']
           format: double
-          minimum: 0
-          description: GPS horizontal accuracy in metres. May be null or omitted if unknown.
+          description: |
+            GPS horizontal accuracy in metres. May be null or omitted if
+            unknown. Unlike `bearing` and `speed`, this field is not
+            validated — any value the JSON decoder accepts is stored.
         timestamp:
           type: integer
           format: int64
+          minimum: 1
           description: |
-            Unix seconds. Must be within 5 minutes of the server clock;
-            reports outside that window are rejected with 400.
+            Unix seconds. Must be positive and within 5 minutes of the server
+            clock in either direction; reports outside that window are
+            rejected with 400.
 
     UpsertVehicleRequest:
       type: object
@@ -692,10 +865,7 @@ components:
       required: [id]
       properties:
         id:
-          type: string
-          minLength: 1
-          maxLength: 50
-          pattern: '^[a-zA-Z0-9._-]+$'
+          $ref: '#/components/schemas/VehicleID'
         label:
           type: string
           maxLength: 255
@@ -708,7 +878,7 @@ components:
       required: [id, label, agency_tag, active, created_at, updated_at]
       properties:
         id:
-          type: string
+          $ref: '#/components/schemas/VehicleID'
         label:
           type: string
         agency_tag:
@@ -778,16 +948,38 @@ components:
           type: string
           format: date-time
 
+    CreateAssignmentRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id, vehicle_id]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+          minimum: 1
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+
+    Assignment:
+      type: object
+      required: [user_id, vehicle_id, created_at]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        created_at:
+          type: string
+          format: date-time
+
     StartTripRequest:
       type: object
       additionalProperties: false
       required: [vehicle_id]
       properties:
         vehicle_id:
-          type: string
-          minLength: 1
-          maxLength: 50
-          pattern: '^[a-zA-Z0-9._-]+$'
+          $ref: '#/components/schemas/VehicleID'
         route_id:
           type: string
           maxLength: 100
@@ -823,7 +1015,7 @@ components:
           type: integer
           format: int64
         vehicle_id:
-          type: string
+          $ref: '#/components/schemas/VehicleID'
         route_id:
           type: string
         gtfs_trip_id:
