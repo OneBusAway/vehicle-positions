@@ -104,3 +104,15 @@ FROM user_vehicles
 WHERE vehicle_id = $1
 ORDER BY created_at DESC
 LIMIT 1000;
+
+-- name: GetLocationHistory :many
+SELECT latitude, longitude, bearing, speed, accuracy, timestamp, trip_id, received_at
+FROM location_points
+WHERE vehicle_id = $1
+  AND timestamp >= $2
+  AND timestamp <= $3
+ORDER BY timestamp DESC
+LIMIT $4;
+
+-- name: VehicleExists :one
+SELECT EXISTS(SELECT 1 FROM vehicles WHERE id = $1);

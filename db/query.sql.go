@@ -162,6 +162,68 @@ func (q *Queries) GetActiveTripByUser(ctx context.Context, userID int64) (Trip, 
 	return i, err
 }
 
+const getLocationHistory = `-- name: GetLocationHistory :many
+SELECT latitude, longitude, bearing, speed, accuracy, timestamp, trip_id, received_at
+FROM location_points
+WHERE vehicle_id = $1
+  AND timestamp >= $2
+  AND timestamp <= $3
+ORDER BY timestamp DESC
+LIMIT $4
+`
+
+type GetLocationHistoryParams struct {
+	VehicleID   string
+	Timestamp   int64
+	Timestamp_2 int64
+	Limit       int32
+}
+
+type GetLocationHistoryRow struct {
+	Latitude   float64
+	Longitude  float64
+	Bearing    pgtype.Float8
+	Speed      pgtype.Float8
+	Accuracy   pgtype.Float8
+	Timestamp  int64
+	TripID     string
+	ReceivedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetLocationHistory(ctx context.Context, arg GetLocationHistoryParams) ([]GetLocationHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getLocationHistory,
+		arg.VehicleID,
+		arg.Timestamp,
+		arg.Timestamp_2,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetLocationHistoryRow
+	for rows.Next() {
+		var i GetLocationHistoryRow
+		if err := rows.Scan(
+			&i.Latitude,
+			&i.Longitude,
+			&i.Bearing,
+			&i.Speed,
+			&i.Accuracy,
+			&i.Timestamp,
+			&i.TripID,
+			&i.ReceivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRecentLocations = `-- name: GetRecentLocations :many
 SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
@@ -352,6 +414,7 @@ ORDER BY created_at DESC
 LIMIT 1000
 `
 
+// safety bound; not pagination
 func (q *Queries) ListUsersByVehicle(ctx context.Context, vehicleID string) ([]UserVehicle, error) {
 	rows, err := q.db.Query(ctx, listUsersByVehicle, vehicleID)
 	if err != nil {
@@ -422,6 +485,7 @@ ORDER BY created_at DESC
 LIMIT 1000
 `
 
+// safety bound; not pagination
 func (q *Queries) ListVehiclesByUser(ctx context.Context, userID int64) ([]UserVehicle, error) {
 	rows, err := q.db.Query(ctx, listVehiclesByUser, userID)
 	if err != nil {
@@ -584,4 +648,15 @@ ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
 func (q *Queries) UpsertVehicle(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, upsertVehicle, id)
 	return err
+}
+
+const vehicleExists = `-- name: VehicleExists :one
+SELECT EXISTS(SELECT 1 FROM vehicles WHERE id = $1)
+`
+
+func (q *Queries) VehicleExists(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, vehicleExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
