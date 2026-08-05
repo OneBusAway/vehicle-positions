@@ -56,15 +56,19 @@ class PermissionFlowController internal constructor(private val start: () -> Uni
     fun begin() = start()
 }
 
-private fun hasAnyLocationPermission(context: Context): Boolean =
+private fun hasFineLocationPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
         PackageManager.PERMISSION_GRANTED
 
+/**
+ * Stage 2 (background location) is a settings-directed step that only makes sense after the
+ * user has granted precise (FINE) location — a coarse-only grant should skip straight past it,
+ * per spec: "background location as a separate settings-directed step AFTER FINE location is
+ * granted."
+ */
 private fun needsBackgroundLocationStage(context: Context): Boolean =
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-        hasAnyLocationPermission(context) &&
+        hasFineLocationPermission(context) &&
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) !=
         PackageManager.PERMISSION_GRANTED
 
