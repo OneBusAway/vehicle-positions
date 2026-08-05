@@ -35,6 +35,7 @@ type appStore interface {
 	HealthChecker
 	LocationHistoryLister
 	VehicleChecker
+	DriverVehicleLister
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
@@ -63,6 +64,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
 	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
 	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
+	mux.Handle("GET /api/v1/vehicles", authMiddleware(handleListMyVehicles(store)))
 
 	// Admin user management
 	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))

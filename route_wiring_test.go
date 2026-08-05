@@ -78,6 +78,9 @@ func (n *noopStore) GetLocationHistory(_ context.Context, _ string, _, _ int64, 
 func (n *noopStore) VehicleExists(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
+func (n *noopStore) ListActiveVehiclesByUser(_ context.Context, _ int64) ([]VehicleResponse, error) {
+	return make([]VehicleResponse, 0), nil
+}
 
 // TestAdminRoutes_DriverTokenRejected verifies that every /api/v1/admin/* route
 // is wrapped with adminMiddleware. A valid driver-role JWT must receive 403 on
@@ -173,6 +176,39 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 
 			assert.NotEqual(t, http.StatusForbidden, w.Code, "admin token must not be blocked by adminMiddleware on %s %s", tc.method, tc.path)
 			assert.NotEqual(t, http.StatusUnauthorized, w.Code, "admin token must not be rejected by authMiddleware on %s %s", tc.method, tc.path)
+		})
+	}
+}
+
+// TestDriverVehiclesRoute_Wiring verifies GET /api/v1/vehicles requires
+// authentication (401 with no token) and accepts any authenticated driver
+// (200 with a driver-role token) — no admin role required, unlike the
+// /api/v1/admin/* routes above.
+func TestDriverVehiclesRoute_Wiring(t *testing.T) {
+	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{})
+
+	tests := []struct {
+		name       string
+		authHeader string
+		wantStatus int
+	}{
+		{"no token", "", http.StatusUnauthorized},
+		{"driver token", "Bearer " + driverToken, http.StatusOK},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/vehicles", nil)
+			if tc.authHeader != "" {
+				req.Header.Set("Authorization", tc.authHeader)
+			}
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.wantStatus, w.Code)
 		})
 	}
 }
