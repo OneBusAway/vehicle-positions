@@ -117,7 +117,7 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
         composable(ROUTE_TRACKING) {
             TrackingScreen(
                 onTripEnded = {
-                    navController.navigate(ROUTE_LOGIN) {
+                    navController.navigate(ROUTE_VEHICLES) {
                         popUpTo(0) { inclusive = true }
                     }
                 },

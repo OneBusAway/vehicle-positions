@@ -10,6 +10,7 @@ import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.api.ApiFactory
+import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 
 class TripReporterTest {
     private val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", 100L)
@@ -18,7 +19,7 @@ class TripReporterTest {
     private fun reporterWith(server: MockWebServer): Pair<TripReporter, TrackingRepository> {
         val tracking = TrackingRepository()
         val api = ApiFactory { "jwt" }.create(server.url("/").toString())
-        return TripReporter(api, tracking) to tracking
+        return TripReporter(TrackerApiProvider { api }, tracking) to tracking
     }
 
     @Test fun `successful send increments counter and clears problem`() = runTest {
@@ -44,7 +45,7 @@ class TripReporterTest {
         val server2 = MockWebServer().apply { start() }
         server2.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
         val api2 = ApiFactory { "jwt" }.create(server2.url("/").toString())
-        val reporter2 = TripReporter(api2, tracking)
+        val reporter2 = TripReporter(TrackerApiProvider { api2 }, tracking)
         reporter2.report(trip, fix())
         assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
         server2.shutdown()

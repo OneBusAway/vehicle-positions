@@ -269,7 +269,8 @@ persisted).
    and mark the trip as complete.").
 
 **Expected outcome, immediately:**
-- The app navigates back to the Login screen.
+- The app navigates back to the vehicle-selection screen (the session token is
+  still fresh, so there's no need to log in again).
 - The notification is gone: `adb shell cmd notification list | grep
   vehicletracker` returns nothing.
 - The service is stopped: `adb shell dumpsys activity services

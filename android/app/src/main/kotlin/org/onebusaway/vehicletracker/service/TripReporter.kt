@@ -5,7 +5,7 @@ import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
-import org.onebusaway.vehicletracker.data.api.TrackerApi
+import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
@@ -24,7 +24,7 @@ data class LocationFix(
 private const val CLOCK_SKEW_THRESHOLD = 3
 
 class TripReporter @Inject constructor(
-    private val api: TrackerApi,
+    private val apiProvider: TrackerApiProvider,
     private val tracking: TrackingRepository,
 ) {
     private var gpsAvailable = true
@@ -48,7 +48,7 @@ class TripReporter @Inject constructor(
             timestamp = fix.timeEpochSec,
         )
         try {
-            api.postLocation(dto)
+            apiProvider.get().postLocation(dto)
             consecutiveTimestampRejects = 0
             tracking.update { it.copy(fixesSent = it.fixesSent + 1) }
             refreshProblem(sendProblem = TrackingProblem.NONE)

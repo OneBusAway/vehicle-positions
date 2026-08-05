@@ -125,9 +125,6 @@ object AppModule {
     @Singleton
     fun provideApiFactory(holder: ApiHolder): ApiFactory = holder.apiFactory
 
-    @Provides
-    fun provideTrackerApi(holder: ApiHolder): TrackerApi = holder.api()
-
     /**
      * A lazy accessor for repositories (`VehicleRepository`, `TripRepository`) that must not
      * eagerly resolve [TrackerApi] at Hilt-graph-construction time — [ApiHolder.api] can throw
