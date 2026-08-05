@@ -11,3 +11,13 @@ interface TrackerApi {
     @POST("api/v1/trips/end") suspend fun endTrip(@Body body: EndTripRequest)
     @POST("api/v1/locations") suspend fun postLocation(@Body body: LocationReportDto)
 }
+
+/**
+ * A lazy accessor for [TrackerApi], injected instead of a resolved [TrackerApi] wherever
+ * resolution can throw (e.g. [org.onebusaway.vehicletracker.di.ApiHolder.api] when the server
+ * URL is absent) and the caller wants that exception to surface inside its own try/catch rather
+ * than at Hilt-graph-construction time.
+ */
+fun interface TrackerApiProvider {
+    fun get(): TrackerApi
+}

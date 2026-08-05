@@ -1,5 +1,7 @@
 package org.onebusaway.vehicletracker.data
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
@@ -9,6 +11,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.api.ApiFactory
+import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.di.ApiHolder
 
 class RepositoriesTest {
     private fun apiFor(server: MockWebServer) =
@@ -51,7 +55,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setResponseCode(201).setBody(
             """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"trip-0830","start_time":"2026-08-04T08:30:00Z","status":"active"}"""))
         val store = FakeTripStateStore()
-        val repo = TripRepository(apiFor(server), store, clock = { 500L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, clock = { 500L })
 
         val result = repo.start("bus-1", "5", "trip-0830")
 
@@ -68,7 +72,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setResponseCode(201).setBody(
             """{"id":8,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"","start_time":"2026-08-04T08:30:00Z","status":"active"}"""))
         val store = FakeTripStateStore()
-        val repo = TripRepository(apiFor(server), store, clock = { 500L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, clock = { 500L })
 
         repo.start("bus-1", "5", "")
 
@@ -80,7 +84,7 @@ class RepositoriesTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"driver is not assigned to this vehicle"}"""))
         server.enqueue(MockResponse().setResponseCode(409).setBody("""{"error":"driver already has an active trip"}"""))
-        val repo = TripRepository(apiFor(server), FakeTripStateStore(), clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, FakeTripStateStore(), clock = { 0L })
 
         assertTrue(repo.start("bus-1", "5", "").exceptionOrNull() is ApiError.NotAssigned)
         assertTrue(repo.start("bus-1", "5", "").exceptionOrNull() is ApiError.TripAlreadyActive)
@@ -92,7 +96,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody("""{"status":"trip ended"}"""))
         val store = FakeTripStateStore()
         store.saveActiveTrip(ActiveTrip(7L, "trip-0830", "bus-1", "5", 100L))
-        val repo = TripRepository(apiFor(server), store, clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, clock = { 0L })
 
         assertTrue(repo.end(7L).isSuccess)
         assertNull(store.activeTrip.first())
@@ -103,5 +107,40 @@ class RepositoriesTest {
         val store = FakeTripStateStore()
         for (r in listOf("1", "2", "3", "1", "4", "5", "6")) store.addRecentRoute(r)
         assertEquals(listOf("6", "5", "4", "1", "3"), store.recentRoutes.first())
+    }
+
+    // --- Cold-start / no-server-URL crash regression coverage (Task 8 review finding) ---
+
+    @Test fun `ApiHolder seeds synchronously without waiting for the async session collector`() {
+        // A scope whose Job is already cancelled: launchIn's collector never runs, simulating
+        // the cold-start race where VehicleScreen's ViewModel is constructed before the
+        // background sessionStore.session collector has delivered its first emission.
+        val sessions = FakeSessionStore()
+        sessions.state.value = Session("http://example.com", "jwt", 1L)
+        val neverRunsScope = CoroutineScope(Job().apply { cancel() })
+        val holder = ApiHolder(sessions, neverRunsScope)
+
+        // Must not throw despite the async collector never having run.
+        holder.api()
+    }
+
+    @Test fun `vehicle repository returns failure instead of throwing when session has no server url`() = runTest {
+        val holder = ApiHolder(FakeSessionStore(), CoroutineScope(Job().apply { cancel() }))
+        val repo = VehicleRepository(TrackerApiProvider(holder::api))
+
+        val result = repo.myVehicles()
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is ApiError.Other)
+    }
+
+    @Test fun `trip repository returns failure instead of throwing when session has no server url`() = runTest {
+        val holder = ApiHolder(FakeSessionStore(), CoroutineScope(Job().apply { cancel() }))
+        val repo = TripRepository(TrackerApiProvider(holder::api), FakeTripStateStore(), clock = { 0L })
+
+        val result = repo.start("bus-1", "5", "trip-1")
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is ApiError.Other)
     }
 }
