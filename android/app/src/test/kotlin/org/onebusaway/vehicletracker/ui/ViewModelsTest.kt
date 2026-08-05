@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.*
@@ -24,6 +25,27 @@ class ViewModelsTest {
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
+
+    /**
+     * Bounded, real-time poll for [condition], driving [dispatcher]'s queue on every
+     * iteration. Needed for tests that go through a real `MockWebServer` request: Retrofit's
+     * suspend calls resolve via OkHttp's own background thread pool, so the continuation
+     * resumption is dispatched back onto [dispatcher] from a real thread at an unpredictable,
+     * non-zero wall-clock time after the coroutine suspends — a single `advanceUntilIdle()`
+     * call races that real completion and is not reliably sufficient. This polls instead of
+     * sleeping a fixed duration, and fails loudly (rather than silently passing on a lucky
+     * timing window, or hanging forever) if [condition] never becomes true within [timeoutMs].
+     */
+    private fun awaitCondition(timeoutMs: Long = 5_000, description: String, condition: () -> Boolean) {
+        val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000
+        while (System.nanoTime() < deadlineNanos) {
+            dispatcher.scheduler.advanceUntilIdle()
+            if (condition()) return
+            Thread.sleep(5)
+        }
+        dispatcher.scheduler.advanceUntilIdle()
+        if (!condition()) fail("Timed out after ${timeoutMs}ms waiting for: $description")
+    }
 
     @Test fun `login rejects blank fields without calling network`() = runTest(dispatcher) {
         val vm = LoginViewModel(AuthRepository(FakeSessionStore(), ApiFactory { null }, clock = { 0L }))
@@ -43,7 +65,7 @@ class ViewModelsTest {
         vm.onEmailChange("d@example.com"); vm.onPasswordChange("pw")
         var succeeded = false
         vm.onLogin { succeeded = true }
-        dispatcher.scheduler.advanceUntilIdle()
+        awaitCondition(description = "login onSuccess callback invoked") { succeeded }
         assertTrue(succeeded)
         server.shutdown()
     }
@@ -56,7 +78,7 @@ class ViewModelsTest {
         val vm = TripSetupViewModel(repo, store)
         vm.onRouteIdChange("5")
         vm.onStartTrip("bus-1") { }
-        dispatcher.scheduler.advanceUntilIdle()
+        awaitCondition(description = "trip setup error set") { vm.uiState.value.error != null }
         assertEquals(org.onebusaway.vehicletracker.ui.trip.TripError.NOT_ASSIGNED, vm.uiState.value.error)
         server.shutdown()
     }
