@@ -4,6 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
@@ -23,7 +27,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { AppTheme { AppNav() } }
+        setContent {
+            AppTheme {
+                // enableEdgeToEdge() draws content behind the system bars; without this, top/bottom
+                // content (e.g. the tracking screen's status banner and End Trip button) can be
+                // obscured by the status bar or gesture/navigation bar.
+                Surface(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+                    AppNav()
+                }
+            }
+        }
     }
 
     override fun onResume() {
