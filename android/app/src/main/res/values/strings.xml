@@ -1,3 +1,49 @@
 <resources>
     <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Login screen -->
+    <string name="login_title">Driver Login</string>
+    <string name="login_server_url_label">Server URL</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_button">Log In</string>
+    <string name="login_error_other">Enter a server URL, email, and password.</string>
+    <string name="login_error_invalid_credentials">Invalid email or password.</string>
+    <string name="login_error_network">Could not reach the server. Check your connection.</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Select a Vehicle</string>
+    <string name="vehicles_empty">No vehicles are assigned to you.</string>
+    <string name="vehicles_error_message">Could not load your vehicles.</string>
+    <string name="vehicles_retry_button">Retry</string>
+
+    <!-- Trip setup screen -->
+    <string name="trip_setup_title">Start a Trip</string>
+    <string name="trip_route_id_label">Route ID</string>
+    <string name="trip_gtfs_trip_id_label">GTFS Trip ID (optional)</string>
+    <string name="trip_recent_routes_label">Recent routes</string>
+    <string name="trip_start_button">Start Trip</string>
+    <string name="trip_error_not_assigned">You are not assigned to this vehicle.</string>
+    <string name="trip_error_trip_active">You already have an active trip.</string>
+    <string name="trip_error_network">Could not reach the server. Check your connection.</string>
+    <string name="trip_error_other">Enter a route ID to start a trip.</string>
+
+    <!-- Tracking screen -->
+    <string name="tracking_status_connected">Tracking – Connected</string>
+    <string name="tracking_status_no_network">No connection</string>
+    <string name="tracking_status_no_gps">GPS unavailable</string>
+    <string name="tracking_status_clock_skew">Check device clock</string>
+    <string name="tracking_status_auth_expired">Session expired – log in again</string>
+    <string name="tracking_route_label">Route %1$s</string>
+    <string name="tracking_duration_label">Trip duration: %1$s</string>
+    <string name="tracking_fixes_sent_label">Location updates sent: %1$d</string>
+    <string name="tracking_end_trip_button">End Trip</string>
+    <string name="tracking_end_trip_dialog_title">End this trip?</string>
+    <string name="tracking_end_trip_dialog_message">This will stop location tracking and mark the trip as complete.</string>
+    <string name="tracking_end_trip_dialog_confirm">End Trip</string>
+    <string name="tracking_end_trip_dialog_cancel">Cancel</string>
+    <string name="tracking_end_trip_error_title">Could not end trip</string>
+    <string name="tracking_end_trip_error_message">The server did not confirm the trip ended. You can retry, or end tracking on this device only.</string>
+    <string name="tracking_end_trip_error_retry">Retry</string>
+    <string name="tracking_end_trip_error_end_locally">End Locally</string>
 </resources>
