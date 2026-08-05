@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.data
 
+import kotlinx.coroutines.CancellationException
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.api.VehicleDto
 import javax.inject.Inject
@@ -12,6 +13,8 @@ class VehicleRepository @Inject constructor(
     // an uncaught exception during construction.
     suspend fun myVehicles(): Result<List<VehicleDto>> = try {
         Result.success(apiProvider.get().myVehicles())
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(mapHttpError(e))
     }

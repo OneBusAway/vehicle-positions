@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.data
 
+import kotlinx.coroutines.CancellationException
 import org.onebusaway.vehicletracker.data.api.EndTripRequest
 import org.onebusaway.vehicletracker.data.api.StartTripRequest
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
@@ -26,6 +27,8 @@ class TripRepository @Inject constructor(
         tripStateStore.saveActiveTrip(activeTrip)
         tripStateStore.addRecentRoute(routeId)
         Result.success(activeTrip)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(mapHttpError(e))
     }
@@ -34,6 +37,8 @@ class TripRepository @Inject constructor(
         apiProvider.get().endTrip(EndTripRequest(tripDbId))
         tripStateStore.clearActiveTrip()
         Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(mapHttpError(e))
     }

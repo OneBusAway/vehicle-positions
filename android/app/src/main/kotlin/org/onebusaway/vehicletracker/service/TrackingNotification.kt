@@ -48,7 +48,6 @@ class TrackingNotification(private val context: Context) {
     private fun baseBuilder(): NotificationCompat.Builder =
         NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_tracking_notification)
-            .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(contentIntent())
@@ -56,6 +55,7 @@ class TrackingNotification(private val context: Context) {
     /** The ongoing notification shown while location updates are actively being sent. */
     fun buildActiveNotification(statusText: String): Notification =
         baseBuilder()
+            .setOngoing(true)
             .setContentTitle(context.getString(R.string.tracking_notification_title))
             .setContentText(statusText)
             .build()

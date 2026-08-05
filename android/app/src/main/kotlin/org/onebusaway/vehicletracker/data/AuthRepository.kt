@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.data
 
+import kotlinx.coroutines.CancellationException
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.LoginRequest
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
@@ -14,6 +15,8 @@ class AuthRepository @Inject constructor(
         val resp = apiFactory.create(serverUrl).login(LoginRequest(email, password))
         sessionStore.saveLogin(serverUrl, resp.token, clock())
         Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(mapHttpError(e))
     }

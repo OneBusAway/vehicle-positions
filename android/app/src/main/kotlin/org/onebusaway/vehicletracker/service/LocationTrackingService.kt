@@ -118,7 +118,7 @@ class LocationTrackingService : Service() {
             val trip = runBlocking { tripStateStore.activeTrip.first() }
             if (trip == null) {
                 stopSelf()
-                return START_STICKY
+                return START_NOT_STICKY
             }
             activeTrip = trip
             initialized = true

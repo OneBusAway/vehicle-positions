@@ -46,7 +46,7 @@
     <string name="tracking_end_trip_error_message">The server did not confirm the trip ended. You can retry, or end tracking on this device only.</string>
     <string name="tracking_end_trip_error_retry">Retry</string>
     <string name="tracking_end_trip_error_end_locally">End Locally</string>
-    <string name="tracking_reauth_button">Session expired – log in again</string>
+    <string name="tracking_reauth_button">Log in</string>
 
     <!-- Tracking notification -->
     <string name="tracking_notification_channel_name">Trip Tracking</string>
