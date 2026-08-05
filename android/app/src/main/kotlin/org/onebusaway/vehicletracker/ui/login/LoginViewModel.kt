@@ -6,10 +6,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.AuthRepository
+import org.onebusaway.vehicletracker.data.SessionStore
 import javax.inject.Inject
 
 data class LoginUiState(
@@ -25,9 +28,23 @@ enum class LoginError { INVALID_CREDENTIALS, NETWORK, OTHER }
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    sessionStore: SessionStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
+
+    init {
+        // Prefill the server URL field from the last successful login, without clobbering
+        // anything the user has already typed (guards against a late/second emission).
+        sessionStore.session
+            .onEach { session ->
+                val savedUrl = session.serverUrl
+                if (!savedUrl.isNullOrBlank()) {
+                    _uiState.update { if (it.serverUrl.isBlank()) it.copy(serverUrl = savedUrl) else it }
+                }
+            }
+            .launchIn(viewModelScope)
+    }
 
     fun onServerUrlChange(value: String) = _uiState.update { it.copy(serverUrl = value, error = null) }
     fun onEmailChange(value: String) = _uiState.update { it.copy(email = value, error = null) }

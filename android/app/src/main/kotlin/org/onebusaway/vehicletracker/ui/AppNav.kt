@@ -97,7 +97,7 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
                 vehicleId = vehicleId,
                 onTripStarted = {
                     navController.navigate(ROUTE_TRACKING) {
-                        popUpTo(ROUTE_LOGIN) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
             )

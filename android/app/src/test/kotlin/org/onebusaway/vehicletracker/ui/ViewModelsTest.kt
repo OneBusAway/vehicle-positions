@@ -48,7 +48,8 @@ class ViewModelsTest {
     }
 
     @Test fun `login rejects blank fields without calling network`() = runTest(dispatcher) {
-        val vm = LoginViewModel(AuthRepository(FakeSessionStore(), ApiFactory { null }, clock = { 0L }))
+        val sessionStore = FakeSessionStore()
+        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
         vm.onServerUrlChange(""); vm.onEmailChange(""); vm.onPasswordChange("")
         var succeeded = false
         vm.onLogin { succeeded = true }
@@ -60,7 +61,8 @@ class ViewModelsTest {
     @Test fun `login success invokes callback`() = runTest(dispatcher) {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody("""{"token":"jwt"}"""))
-        val vm = LoginViewModel(AuthRepository(FakeSessionStore(), ApiFactory { null }, clock = { 0L }))
+        val sessionStore = FakeSessionStore()
+        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
         vm.onServerUrlChange(server.url("/").toString())
         vm.onEmailChange("d@example.com"); vm.onPasswordChange("pw")
         var succeeded = false
@@ -68,6 +70,19 @@ class ViewModelsTest {
         awaitCondition(description = "login onSuccess callback invoked") { succeeded }
         assertTrue(succeeded)
         server.shutdown()
+    }
+
+    @Test fun `login prefills server url from session store`() = runTest(dispatcher) {
+        val sessionStore = FakeSessionStore().apply {
+            state.value = Session("https://saved.example.com", null, null)
+        }
+        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
+        vm.uiState.test {
+            var state = awaitItem()
+            while (state.serverUrl.isEmpty()) state = awaitItem()
+            assertEquals("https://saved.example.com", state.serverUrl)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test fun `trip setup maps 403 to NOT_ASSIGNED error`() = runTest(dispatcher) {
