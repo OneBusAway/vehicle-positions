@@ -17,8 +17,8 @@ import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApi
-import org.onebusaway.vehicletracker.service.NoOpServiceController
 import org.onebusaway.vehicletracker.service.ServiceController
+import org.onebusaway.vehicletracker.service.ServiceControllerImpl
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -95,5 +95,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideServiceController(): ServiceController = NoOpServiceController() // replaced in Task 8
+    fun provideServiceController(@ApplicationContext context: Context): ServiceController =
+        ServiceControllerImpl(context)
 }

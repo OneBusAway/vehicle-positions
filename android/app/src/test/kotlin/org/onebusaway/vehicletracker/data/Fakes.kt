@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.onebusaway.vehicletracker.service.ServiceController
 
 class FakeSessionStore : SessionStore {
     val state = MutableStateFlow(Session(null, null, null))
@@ -21,4 +22,11 @@ class FakeTripStateStore : TripStateStore {
     override suspend fun addRecentRoute(routeId: String) {
         routesState.value = (listOf(routeId) + routesState.value.filter { it != routeId }).take(5)
     }
+}
+
+class FakeServiceController : ServiceController {
+    var startCount = 0
+    var stopCount = 0
+    override fun startTracking() { startCount++ }
+    override fun stopTracking() { stopCount++ }
 }

@@ -41,6 +41,7 @@ import java.util.Locale
 @Composable
 fun TrackingScreen(
     onTripEnded: () -> Unit,
+    onReauthRequired: () -> Unit,
     viewModel: TrackingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -49,6 +50,7 @@ fun TrackingScreen(
         onEndTripClick = { viewModel.onEndTrip(onTripEnded) },
         onEndTripLocallyClick = { viewModel.onEndTripLocally(onTripEnded) },
         onDismissError = viewModel::dismissEndTripError,
+        onReauthClick = onReauthRequired,
     )
 }
 
@@ -58,6 +60,7 @@ fun TrackingScreenContent(
     onEndTripClick: () -> Unit,
     onEndTripLocallyClick: () -> Unit,
     onDismissError: () -> Unit,
+    onReauthClick: () -> Unit,
 ) {
     var showConfirmDialog by remember { mutableStateOf(false) }
     var elapsedSeconds by remember { mutableLongStateOf(0L) }
@@ -80,6 +83,16 @@ fun TrackingScreenContent(
         Column(
             modifier = Modifier.weight(2f).fillMaxWidth().padding(24.dp),
         ) {
+            if (state.tracking.problem == TrackingProblem.AUTH_EXPIRED) {
+                Button(
+                    onClick = onReauthClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = StatusRed),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                ) {
+                    Text(stringResource(R.string.tracking_reauth_button))
+                }
+                Spacer(Modifier.height(16.dp))
+            }
             state.activeTrip?.let { trip ->
                 Text(
                     text = stringResource(R.string.tracking_route_label, trip.routeId),

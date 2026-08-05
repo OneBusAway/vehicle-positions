@@ -32,6 +32,10 @@ import org.onebusaway.vehicletracker.ui.vehicles.VehicleScreen
 import javax.inject.Inject
 
 private const val ROUTE_LOGIN = "login"
+// Distinct route (rather than an optional nav argument on ROUTE_LOGIN) so `popUpTo`/start-destination
+// string matching stays unambiguous; reuses the same LoginScreen composable with a different
+// post-login destination — returns to the still-active Tracking screen instead of Vehicles.
+private const val ROUTE_LOGIN_REAUTH = "login_reauth"
 private const val ROUTE_VEHICLES = "vehicles"
 private const val ROUTE_TRIP = "trip/{vehicleId}"
 private const val ROUTE_TRACKING = "tracking"
@@ -83,6 +87,14 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
                 },
             )
         }
+        composable(ROUTE_LOGIN_REAUTH) {
+            LoginScreen(
+                onLoginSuccess = {
+                    // Trip state was never cleared; just return to the still-active Tracking screen.
+                    navController.popBackStack(ROUTE_TRACKING, /* inclusive = */ false)
+                },
+            )
+        }
         composable(ROUTE_VEHICLES) {
             VehicleScreen(
                 onVehicleSelected = { vehicleId -> navController.navigate("trip/$vehicleId") },
@@ -109,6 +121,7 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
                         popUpTo(0) { inclusive = true }
                     }
                 },
+                onReauthRequired = { navController.navigate(ROUTE_LOGIN_REAUTH) },
             )
         }
     }

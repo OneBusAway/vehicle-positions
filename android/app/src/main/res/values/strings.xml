@@ -46,4 +46,30 @@
     <string name="tracking_end_trip_error_message">The server did not confirm the trip ended. You can retry, or end tracking on this device only.</string>
     <string name="tracking_end_trip_error_retry">Retry</string>
     <string name="tracking_end_trip_error_end_locally">End Locally</string>
+    <string name="tracking_reauth_button">Session expired – log in again</string>
+
+    <!-- Tracking notification -->
+    <string name="tracking_notification_channel_name">Trip Tracking</string>
+    <string name="tracking_notification_title">OBA Tracker is active</string>
+    <string name="tracking_notification_resume_title">Tap to resume tracking</string>
+    <string name="tracking_notification_resume_text">Location tracking paused. Open the app to resume.</string>
+
+    <!-- Permission flow -->
+    <string name="permission_location_approx_title">Approximate Location Only</string>
+    <string name="permission_location_approx_message">Precise location wasn\'t granted, so tracking will be less accurate. You can grant precise location or continue with approximate location.</string>
+    <string name="permission_grant_precise_button">Grant Precise Location</string>
+    <string name="permission_continue_button">Continue</string>
+    <string name="permission_location_denied_title">Location Access Needed</string>
+    <string name="permission_location_denied_message">Location permission is required to start tracking a trip.</string>
+    <string name="permission_retry_button">Try Again</string>
+    <string name="permission_cancel_button">Cancel</string>
+    <string name="permission_background_title">Keep Tracking in the Background</string>
+    <string name="permission_background_message">To keep sending your location when the app isn\'t on screen, choose \"Allow all the time\" on the next screen.</string>
+    <string name="permission_skip_button">Not Now</string>
+    <string name="permission_notifications_denied_message">Notifications were not granted. You won\'t see the tracking status notification, but tracking will still run.</string>
+    <string name="permission_ok_button">OK</string>
+    <string name="permission_battery_title">Prevent Battery Optimization</string>
+    <string name="permission_battery_message">To keep tracking reliably in the background, allow this app to ignore battery optimizations.</string>
+    <string name="permission_location_services_off_title">Turn On Location Services</string>
+    <string name="permission_location_services_off_message">Device location services must be turned on to start tracking.</string>
 </resources>

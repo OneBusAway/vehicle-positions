@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.service.ServiceController
 import javax.inject.Inject
 
 data class TripSetupUiState(
@@ -29,6 +30,7 @@ enum class TripError { NOT_ASSIGNED, TRIP_ACTIVE, NETWORK, OTHER }
 class TripSetupViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val tripStateStore: TripStateStore,
+    private val serviceController: ServiceController,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TripSetupUiState())
     val uiState: StateFlow<TripSetupUiState> = _uiState.asStateFlow()
@@ -53,6 +55,7 @@ class TripSetupViewModel @Inject constructor(
             val result = tripRepository.start(vehicleId, state.routeId, state.gtfsTripId)
             result.fold(
                 onSuccess = {
+                    serviceController.startTracking()
                     _uiState.update { it.copy(loading = false, error = null) }
                     onStarted()
                 },

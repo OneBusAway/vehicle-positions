@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFlow
 
 @Composable
 fun TripSetupScreen(
@@ -31,12 +32,23 @@ fun TripSetupScreen(
     viewModel: TripSetupViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val permissionFlow = rememberPermissionFlow(
+        onReady = { viewModel.onStartTrip(vehicleId, onTripStarted) },
+    )
     TripSetupScreenContent(
         state = state,
         onRouteIdChange = viewModel::onRouteIdChange,
         onGtfsTripIdChange = viewModel::onGtfsTripIdChange,
         onRecentRouteClick = viewModel::onRouteIdChange,
-        onStartTripClick = { viewModel.onStartTrip(vehicleId, onTripStarted) },
+        onStartTripClick = {
+            if (state.routeId.isBlank()) {
+                // Let the existing client-side validation set its error state; no point
+                // running the driver through permission prompts for an invalid form.
+                viewModel.onStartTrip(vehicleId, onTripStarted)
+            } else {
+                permissionFlow.begin()
+            }
+        },
     )
 }
 

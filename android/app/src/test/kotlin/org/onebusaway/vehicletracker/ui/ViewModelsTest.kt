@@ -90,7 +90,7 @@ class ViewModelsTest {
         server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"not assigned"}"""))
         val store = FakeTripStateStore()
         val repo = TripRepository(ApiFactory { "jwt" }.create(server.url("/").toString()), store, clock = { 0L })
-        val vm = TripSetupViewModel(repo, store)
+        val vm = TripSetupViewModel(repo, store, FakeServiceController())
         vm.onRouteIdChange("5")
         vm.onStartTrip("bus-1") { }
         awaitCondition(description = "trip setup error set") { vm.uiState.value.error != null }
@@ -103,7 +103,7 @@ class ViewModelsTest {
         store.addRecentRoute("12"); store.addRecentRoute("5")
         val server = MockWebServer().apply { start() }
         val repo = TripRepository(ApiFactory { "jwt" }.create(server.url("/").toString()), store, clock = { 0L })
-        val vm = TripSetupViewModel(repo, store)
+        val vm = TripSetupViewModel(repo, store, FakeServiceController())
         vm.uiState.test {
             var state = awaitItem()
             while (state.recentRoutes.isEmpty()) state = awaitItem()
