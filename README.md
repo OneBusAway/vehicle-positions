@@ -13,6 +13,38 @@
 
 -----
 
+## Getting Started
+
+### Server (Go)
+
+Quick-start instructions for running the server locally with Docker Compose,
+plus API sanity checks and troubleshooting, live in
+[`docs/development.md`](docs/development.md).
+
+### Android driver app
+
+The companion driver app lives in [`android/`](android/) (Gradle root —
+open that directory in Android Studio). It's a Kotlin/Jetpack Compose app
+(min SDK 26 / target SDK 36) that drivers use to log in, select their
+vehicle and route, and report their location to the server for the duration
+of a trip.
+
+Build the debug APK:
+
+```bash
+cd android
+./gradlew :app:assembleDebug
+```
+
+For a full manual end-to-end walkthrough — server setup with a real
+`JWT_SECRET`, seeding a driver/vehicle/assignment, emulator GPS playback,
+and the app's behavior under network loss and task removal — see
+[`docs/android-smoke-test.md`](docs/android-smoke-test.md). For the full
+design (screens, data flow, permissions, error handling), see
+[`docs/superpowers/specs/2026-08-04-android-driver-app-design.md`](docs/superpowers/specs/2026-08-04-android-driver-app-design.md).
+
+-----
+
 ## 1. Problem Statement
 
 The OneBusAway server relies on specialized software and hardware — Automatic Vehicle Location (AVL) systems, SIRI feeds, proprietary APIs — to generate the realtime vehicle position data that powers its rider-facing apps. This works well for transit agencies in developed countries that have already invested in this infrastructure, but it creates a significant barrier for transit systems in developing countries that are building out fixed-route transit for the first time.
