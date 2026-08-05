@@ -199,3 +199,55 @@ func TestStore_UpsertVehicle_RoundTrip(t *testing.T) {
 	assert.Equal(t, created.CreatedAt.Unix(), fetched.CreatedAt.Unix(), "created_at should round-trip")
 	assert.Equal(t, created.UpdatedAt.Unix(), fetched.UpdatedAt.Unix(), "updated_at should round-trip")
 }
+
+func cleanupDriverVehicles(t *testing.T, store *Store) {
+	t.Helper()
+	clean := func() {
+		ctx := context.Background()
+		for _, table := range []string{"location_points", "user_vehicles", "trips", "vehicles", "users"} {
+			_, err := store.pool.Exec(ctx, "DELETE FROM "+table)
+			require.NoError(t, err)
+		}
+	}
+	t.Cleanup(clean)
+	clean()
+}
+
+func TestStore_ListActiveVehiclesByUser(t *testing.T) {
+	store := newTestStore(t)
+	cleanupDriverVehicles(t, store)
+	ctx := context.Background()
+
+	user, err := store.CreateUser(ctx, "Driver", "driver-lav@example.com", "pw-hash", "driver")
+	require.NoError(t, err)
+
+	_, err = store.UpsertVehicle(ctx, "bus-active", "Bus Active", "agency")
+	require.NoError(t, err)
+	_, err = store.UpsertVehicle(ctx, "bus-inactive", "Bus Inactive", "agency")
+	require.NoError(t, err)
+	_, err = store.UpsertVehicle(ctx, "bus-unassigned", "Bus Unassigned", "agency")
+	require.NoError(t, err)
+
+	_, err = store.CreateAssignment(ctx, user.ID, "bus-active")
+	require.NoError(t, err)
+	_, err = store.CreateAssignment(ctx, user.ID, "bus-inactive")
+	require.NoError(t, err)
+	require.NoError(t, store.DeactivateVehicle(ctx, "bus-inactive"))
+
+	vehicles, err := store.ListActiveVehiclesByUser(ctx, user.ID)
+	require.NoError(t, err)
+	require.Len(t, vehicles, 1, "only active, assigned vehicles")
+	assert.Equal(t, "bus-active", vehicles[0].ID)
+	assert.Equal(t, "Bus Active", vehicles[0].Label)
+	assert.True(t, vehicles[0].Active)
+}
+
+func TestStore_ListActiveVehiclesByUser_Empty(t *testing.T) {
+	store := newTestStore(t)
+	cleanupDriverVehicles(t, store)
+
+	vehicles, err := store.ListActiveVehiclesByUser(context.Background(), 999999)
+	require.NoError(t, err)
+	assert.NotNil(t, vehicles, "empty list should be [], not nil")
+	assert.Empty(t, vehicles)
+}

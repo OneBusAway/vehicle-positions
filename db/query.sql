@@ -105,6 +105,15 @@ WHERE vehicle_id = $1
 ORDER BY created_at DESC
 LIMIT 1000;
 
+-- name: ListActiveVehiclesByUser :many
+-- Driver-facing: active vehicles assigned to a user. LIMIT is a safety bound, not pagination.
+SELECT v.id, v.label, v.agency_tag, v.active, v.created_at, v.updated_at
+FROM vehicles v
+JOIN user_vehicles uv ON uv.vehicle_id = v.id
+WHERE uv.user_id = $1 AND v.active = TRUE
+ORDER BY v.label, v.id
+LIMIT 1000;
+
 -- name: GetLocationHistory :many
 SELECT latitude, longitude, bearing, speed, accuracy, timestamp, trip_id, received_at
 FROM location_points

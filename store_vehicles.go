@@ -80,6 +80,26 @@ func (s *Store) DeactivateVehicle(ctx context.Context, id string) error {
 	return nil
 }
 
+// DriverVehicleLister lists the active vehicles assigned to a driver.
+type DriverVehicleLister interface {
+	ListActiveVehiclesByUser(ctx context.Context, userID int64) ([]VehicleResponse, error)
+}
+
+// ListActiveVehiclesByUser returns the active vehicles assigned to the given user.
+func (s *Store) ListActiveVehiclesByUser(ctx context.Context, userID int64) ([]VehicleResponse, error) {
+	rows, err := s.queries.ListActiveVehiclesByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list active vehicles by user: %w", err)
+	}
+	vehicles := make([]VehicleResponse, 0, len(rows))
+	for _, row := range rows {
+		vehicles = append(vehicles, toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt))
+	}
+	return vehicles, nil
+}
+
+var _ DriverVehicleLister = (*Store)(nil)
+
 // toVehicleResponse maps a DB row to the API response type.
 // created_at and updated_at are NOT NULL in the schema, so .Valid is always true.
 func toVehicleResponse(id, label, agencyTag string, active bool, createdAt, updatedAt pgtype.Timestamptz) VehicleResponse {
