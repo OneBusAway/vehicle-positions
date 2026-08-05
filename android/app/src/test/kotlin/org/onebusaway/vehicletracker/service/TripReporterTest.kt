@@ -115,4 +115,49 @@ class TripReporterTest {
         assertEquals("0.0", sent["speed"].toString())
         server.shutdown()
     }
+
+    @Test fun `HTTP 500 leaves status unchanged and does not increment counter`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"internal error"}"""))
+        val (reporter, tracking) = reporterWith(server)
+
+        reporter.report(trip, fix())
+
+        assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
+        assertEquals(0, tracking.state.value.fixesSent)
+        server.shutdown()
+    }
+
+    @Test fun `400 without timestamp in body leaves status unchanged and does not increment counter`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":"invalid vehicle_id"}"""))
+        val (reporter, tracking) = reporterWith(server)
+
+        reporter.report(trip, fix())
+
+        assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
+        assertEquals(0, tracking.state.value.fixesSent)
+        server.shutdown()
+    }
+
+    @Test fun `success resets the consecutive timestamp reject streak`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(2) {
+            server.enqueue(MockResponse().setResponseCode(400)
+                .setBody("""{"error":"timestamp must be within 5 minutes of server time"}"""))
+        }
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        repeat(2) {
+            server.enqueue(MockResponse().setResponseCode(400)
+                .setBody("""{"error":"timestamp must be within 5 minutes of server time"}"""))
+        }
+        val (reporter, tracking) = reporterWith(server)
+
+        repeat(2) { reporter.report(trip, fix()) } // two rejects, no flip yet
+        reporter.report(trip, fix()) // success resets streak
+        repeat(2) { reporter.report(trip, fix()) } // two more rejects, streak restarted so still below threshold
+
+        assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
+        server.shutdown()
+    }
 }

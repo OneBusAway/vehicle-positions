@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.service
 
+import android.util.Log
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
@@ -8,6 +9,8 @@ import org.onebusaway.vehicletracker.data.api.TrackerApi
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
+
+private const val TAG = "TripReporter"
 
 data class LocationFix(
     val latitude: Double,
@@ -50,18 +53,23 @@ class TripReporter @Inject constructor(
             tracking.update { it.copy(fixesSent = it.fixesSent + 1) }
             refreshProblem(sendProblem = TrackingProblem.NONE)
         } catch (e: HttpException) {
+            val is400WithTimestamp = e.code() == 400 &&
+                runCatching { e.response()?.errorBody()?.string() }
+                    .getOrNull()
+                    ?.contains("timestamp") == true
             when {
                 e.code() == 401 -> refreshProblem(sendProblem = TrackingProblem.AUTH_EXPIRED)
                 e.code() == 429 -> Unit // rate-limited: drop silently, keep current status
-                e.code() == 400 && e.response()?.errorBody()?.string()?.contains("timestamp") == true -> {
+                is400WithTimestamp -> {
                     consecutiveTimestampRejects++
                     if (consecutiveTimestampRejects >= CLOCK_SKEW_THRESHOLD) {
                         refreshProblem(sendProblem = TrackingProblem.CLOCK_SKEW)
                     }
                 }
-                else -> Unit // other 4xx/5xx: log-and-drop per spec, keep current status
+                else -> Log.w(TAG, "Dropping location report after HTTP ${e.code()}", e) // other 4xx/5xx: log-and-drop per spec, keep current status
             }
         } catch (e: IOException) {
+            Log.w(TAG, "Dropping location report after network failure", e)
             refreshProblem(sendProblem = TrackingProblem.NO_NETWORK)
         }
     }
