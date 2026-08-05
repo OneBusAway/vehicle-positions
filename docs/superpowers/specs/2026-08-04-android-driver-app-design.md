@@ -25,6 +25,8 @@ The vehicle-positions Go server (this repo) ingests driver location reports and 
 
 `GET /api/v1/vehicles` — authenticated (non-admin) — returns the calling driver's assigned, **active** vehicles. Implementation mirrors `handleListUserVehicles` but derives the user ID from JWT claims instead of a path parameter. Reuses the existing assignment store. Includes route-wiring and handler tests in the existing Go test style.
 
+*Server-side note (no app change):* when the app falls back to sending the route ID as `trip_id`, the server publishes it verbatim into GTFS-RT `TripDescriptor.trip_id` and never sets `route_id` (handlers.go:215-216) — semantically off for GTFS-RT consumers. Flagged for a separate server issue; out of scope here.
+
 ## Project Layout
 
 ```
@@ -38,6 +40,7 @@ android/                          # Gradle root (open this in Android Studio)
 ```
 
 - Gradle Kotlin DSL, version catalog (`libs.versions.toml`).
+- Target 36 UI requirements: edge-to-edge is mandatory (`enableEdgeToEdge()` + Scaffold inset handling); predictive back is on by default (safe — no custom back interception planned).
 - Dependencies (complete list): Compose BOM, Compose Navigation, Hilt, Retrofit, OkHttp, kotlinx.serialization, Play Services Location, DataStore, Lifecycle. Tests: JUnit, Turbine, MockWebServer, Compose UI test.
 - CI: GitHub Actions workflow (assembleDebug + unit tests) alongside the existing Go workflow.
 
@@ -61,8 +64,16 @@ Single activity, Compose Navigation, four screens:
 - Payload conforms exactly to the server's strict contract: `Content-Type: application/json`, no unknown fields, single JSON object, vehicle ID pattern `[A-Za-z0-9._-]{1,50}`.
 - Status published as a `TrackingStatus` StateFlow (`Connected`, `NoNetwork`, `NoGps`, `AuthExpired` + counters) via a singleton `TrackingRepository`; the Tracking screen collects it. Network state from `ConnectivityManager` callbacks; GPS availability from `LocationAvailability` callbacks.
 - Persistent notification ("OBA Tracker is active") mirrors the status.
-- **Process death:** `START_STICKY`; active trip (trip ID, vehicle ID, route) persisted in DataStore, so a restarted service resumes reporting and a relaunched app rehydrates directly to the Tracking screen.
-- **Permissions:** fine location and notifications requested in-flow before trip start; battery-optimization exemption requested with a one-line explanation the first time tracking starts. Exemption denial is non-blocking (warn only).
+- **Process death:** `START_STICKY`; active trip state persisted in DataStore — both the numeric `trip_id` returned by `trips/start` (needed for `trips/end`) and the string trip identifier sent with each location report, plus vehicle ID and route. A relaunched app rehydrates directly to the Tracking screen. **Resuming location delivery after an OS kill requires `ACCESS_BACKGROUND_LOCATION`** ("Allow all the time"): on Android 14+, a location-type FGS restarted from the background gets no location access with only while-in-use permission. We request it (see Permissions); if the driver declines, a sticky restart shows a "tap to resume tracking" notification and reporting resumes when the app returns to the foreground — documented as the degraded path.
+- **Permissions flow** (in order, each with a one-line explanation, all before first trip start):
+  1. `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` requested **together** (required on Android 12+; system may grant approximate-only → warn and offer to re-request precise; tracking still runs degraded).
+  2. `ACCESS_BACKGROUND_LOCATION` as a separate, settings-directed step after fine location is granted (platform requires the two-step sequence). Decline is non-blocking (degraded restart path above). Play policy is not a concern — distribution is sideloaded APK.
+  3. `POST_NOTIFICATIONS` (API 33+). Denial is non-blocking: service runs without a visible notification; show an in-app warning.
+  4. Battery-optimization exemption via `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` the first time tracking starts. Denial non-blocking (warn only).
+- **Pre-start check:** device location services must be ON before starting the FGS (a platform prerequisite for the `location` service type) — checked via Play Services `SettingsClient` with its resolution dialog at trip start.
+- **Manifest checklist:** `INTERNET`, `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` (API 34+ — SecurityException without it), `POST_NOTIFICATIONS`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`; service declared with `foregroundServiceType="location"`.
+- **Notification details:** dedicated `NotificationChannel` (minSdk 26 requirement). On Android 14+ users can swipe the FGS notification away — tracking continues; the in-app status remains the source of truth.
+- **Timestamps:** each report's `timestamp` is the GPS fix time in Unix seconds. The server rejects timestamps outside ±5 minutes of its clock — common on low-end devices with wrong clocks — so repeated 400s are surfaced as a distinct "check device clock" status rather than a generic send failure.
 - The send loop and status machine live in a plain class (`TripReporter`) injected into the service; the `Service` subclass stays a thin shell.
 
 ## Error Handling
@@ -73,6 +84,8 @@ Single activity, Compose Navigation, four screens:
 | 401 mid-trip | Status → `AuthExpired`; notification + UI prompt to re-login; service keeps running; after re-login, sending resumes on the same trip |
 | 403/409 on trip start | Inline human-readable error on Trip Setup |
 | GPS lost | Status → red `NoGps`; keep requesting fixes |
+| Repeated 400s (clock skew) | Distinct "check device clock" status — server rejects timestamps outside ±5 min of its clock |
+| OS kill without background-location grant | Sticky restart posts "tap to resume tracking" notification; reporting resumes when app foregrounds |
 | App swiped away / OS kill | Foreground service continues (or restarts sticky); trip state rehydrated from DataStore |
 | End-trip POST fails | Dialog with retry; "end locally anyway" option (server trip left open — known v1 limitation, closed by ops) |
 
