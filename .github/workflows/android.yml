@@ -25,3 +25,5 @@ jobs:
         run: ./gradlew :app:assembleDebug
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest
+      - name: Build release
+        run: ./gradlew :app:assembleRelease

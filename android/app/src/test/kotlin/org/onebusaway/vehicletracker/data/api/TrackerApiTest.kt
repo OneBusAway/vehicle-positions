@@ -81,4 +81,14 @@ class TrackerApiTest {
         val sent = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
         assertEquals(setOf("vehicle_id", "route_id", "gtfs_trip_id"), sent.keys)
     }
+
+    @Test fun `base URL without trailing slash is normalized and still reaches the right path`() = runTest {
+        val baseUrlWithoutSlash = server.url("/").toString().trimEnd('/')
+        val apiFromUnslashedUrl = ApiFactory { token }.create(baseUrlWithoutSlash)
+        server.enqueue(MockResponse().setBody("""[]"""))
+
+        apiFromUnslashedUrl.myVehicles()
+
+        assertEquals("/api/v1/vehicles", server.takeRequest().path)
+    }
 }
