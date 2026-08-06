@@ -35,3 +35,9 @@ Thumbs.db
 
 # Local configuration
 settings.local.json
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
