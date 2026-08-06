@@ -467,3 +467,4 @@ This is a significant engineering effort (estimated 60–80 hours) involving car
 - [Don’t Kill My App — OEM battery optimization reference](https://dontkillmyapp.com)
 - [GSoC 2026 Timeline](https://developers.google.com/open-source/gsoc/timeline)
 - [GSoC Contributor Time Management Guide](https://google.github.io/gsocguides/student/time-management-for-students)
+
