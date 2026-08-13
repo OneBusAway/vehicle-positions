@@ -347,7 +347,10 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 	spec := loadOpenAPISpec(t)
 	mappings := spec.mappings()
 
-	const upsertVehicle = "#/components/schemas/UpsertVehicleRequest/properties"
+	const (
+		upsertVehicle = "#/components/schemas/UpsertVehicleRequest/properties"
+		historyLimit  = "#/components/schemas/HistoryLimit"
+	)
 
 	constraints := []struct {
 		location string
@@ -359,6 +362,8 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		{vehicleIDSchemaRef, "maxLength", maxVehicleIDLength, "maxVehicleIDLength"},
 		{upsertVehicle + "/label", "maxLength", maxFieldLength, "maxFieldLength"},
 		{upsertVehicle + "/agency_tag", "maxLength", maxFieldLength, "maxFieldLength"},
+		{historyLimit, "maximum", maxHistoryLimit, "maxHistoryLimit"},
+		{historyLimit, "default", defaultHistoryLimit, "defaultHistoryLimit"},
 	}
 
 	for _, constraint := range constraints {
