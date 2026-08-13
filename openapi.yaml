@@ -46,6 +46,8 @@ tags:
     description: Administrative management endpoints.
   - name: trips
     description: Driver trip lifecycle.
+  - name: vehicles
+    description: Driver-facing vehicle access.
 
 # All endpoints require a bearer JWT unless they explicitly opt out with `security: []`.
 security:
@@ -127,6 +129,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/vehicles:
+    get:
+      tags: [vehicles]
+      summary: List the vehicles assigned to the authenticated driver
+      description: |
+        Returns the active vehicles the calling driver is assigned to. The
+        driver identity comes from the JWT `sub` claim, so there is no path
+        or query parameter. Requires a valid bearer token but not the
+        `admin` role — this is the driver-facing counterpart to
+        `GET /api/v1/admin/vehicles`.
+      responses:
+        '200':
+          description: |
+            Vehicles assigned to this driver. Empty array when the driver has
+            no active assignments.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vehicle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -310,6 +338,90 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/vehicles/{vehicleID}/locations:
+    parameters:
+      - $ref: '#/components/parameters/VehicleIDPathNamed'
+    get:
+      tags: [admin]
+      summary: Export a vehicle's location history
+      description: |
+        Returns the GPS fixes recorded for a vehicle within a time window,
+        as JSON or as a CSV download. Requires the `admin` role.
+
+        The window defaults to the 24 hours ending at `to` rather than to
+        all of history, so an unbounded request cannot trigger a full-table
+        scan. Note that `from` defaults relative to `to`, not to the current
+        time: a `to` in the past selects the 24 hours ending there instead
+        of failing the `from <= to` check.
+
+        Results are capped by `limit`. The handler reads one row beyond the
+        cap to set `has_more`, so a truncated response is distinguishable
+        from an exact fit.
+      parameters:
+        - in: query
+          name: from
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: |
+            Start of the window, Unix seconds, inclusive. Defaults to
+            `to - 86400`. Must be less than or equal to `to`.
+        - in: query
+          name: to
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: End of the window, Unix seconds, inclusive. Defaults to the current server time.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            $ref: '#/components/schemas/HistoryLimit'
+          description: Maximum number of fixes to return.
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+          description: |
+            Response encoding. `csv` returns `text/csv` with a
+            `Content-Disposition: attachment` header naming the file
+            `<vehicle_id>_locations.csv`.
+      responses:
+        '200':
+          description: |
+            Location history. The CSV variant carries the same rows with the
+            header `timestamp,latitude,longitude,bearing,speed,accuracy,trip_id,received_at`;
+            absent `bearing` / `speed` / `accuracy` render as empty cells, and
+            `trip_id` is prefixed with `'` when it starts with a character a
+            spreadsheet would treat as a formula.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationHistory'
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No vehicle exists with this id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -527,7 +639,7 @@ paths:
   /api/v1/admin/users/{userID}/vehicles/{vehicleID}:
     parameters:
       - $ref: '#/components/parameters/AssignmentUserIDPath'
-      - $ref: '#/components/parameters/AssignmentVehicleIDPath'
+      - $ref: '#/components/parameters/VehicleIDPathNamed'
     delete:
       tags: [admin]
       summary: Remove a driver's vehicle assignment
@@ -703,7 +815,11 @@ components:
         format: int64
         minimum: 1
       description: User identifier.
-    AssignmentVehicleIDPath:
+    # Two components describe the same vehicle id because the routes spell the
+    # path variable differently: most use {id}, while the assignment-delete and
+    # location-history routes use {vehicleID}. OpenAPI requires `name` to match
+    # the template variable, so the pair cannot be collapsed.
+    VehicleIDPathNamed:
       name: vehicleID
       in: path
       required: true
@@ -947,6 +1063,78 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultHistoryLimit / maxHistoryLimit in location_history_handlers.go.
+    HistoryLimit:
+      type: integer
+      minimum: 1
+      maximum: 1000
+      default: 100
+
+    LocationHistory:
+      type: object
+      required: [vehicle_id, count, has_more, locations]
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        count:
+          type: integer
+          minimum: 0
+          description: Number of fixes in `locations`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: |
+            True when more fixes exist in the window than `limit` allowed.
+            Narrow the window or raise `limit` to see them.
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocationHistoryEntry'
+
+    LocationHistoryEntry:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - bearing
+        - speed
+        - accuracy
+        - timestamp
+        - trip_id
+        - received_at
+      description: |
+        `bearing`, `speed`, and `accuracy` carry no `omitempty`, so they are
+        always present and are explicitly `null` when the device did not
+        report them. That distinguishes "unknown" from a real zero — a
+        bearing of 0 is due north, not a missing value.
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        accuracy:
+          type: [number, 'null']
+          format: double
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix seconds, as reported by the device.
+        trip_id:
+          type: string
+          description: Empty string when the fix was not associated with a trip.
+        received_at:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC timestamp of when the server stored the fix.
 
     CreateAssignmentRequest:
       type: object
