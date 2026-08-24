@@ -10,27 +10,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// clearTripTestData empties trips and every table holding a foreign key to
+// the rows setupTripTestData creates, in dependency order, so tests start
+// from (and leave behind) a known-empty state regardless of what other
+// tests in the suite do with vehicles/users.
+func clearTripTestData(t *testing.T, store *Store) {
+	t.Helper()
+	ctx := context.Background()
+	for _, table := range []string{"location_points", "trips", "user_vehicles", "vehicles", "users"} {
+		_, err := store.pool.Exec(ctx, "DELETE FROM "+table)
+		require.NoError(t, err)
+	}
+}
+
 // setupTripTestData creates a user, a vehicle, and assigns them for trip tests.
 // Returns the user ID.
 func setupTripTestData(t *testing.T, store *Store) int64 {
 	t.Helper()
 	ctx := context.Background()
 
-	// Clean up in correct order (respect FK constraints).
-	_, err := store.pool.Exec(ctx, "DELETE FROM trips")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM location_points")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM user_vehicles")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM vehicles")
-	require.NoError(t, err)
-	_, err = store.pool.Exec(ctx, "DELETE FROM users")
-	require.NoError(t, err)
+	// Clean up in correct order (respect FK constraints), both before (in
+	// case a prior test panicked before its t.Cleanup ran) and after.
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
 
 	// Create a test user.
 	var userID int64
-	err = store.pool.QueryRow(ctx,
+	err := store.pool.QueryRow(ctx,
 		`INSERT INTO users (name, email, password_hash, role)
 		 VALUES ('Trip Driver', 'tripdriver@test.com', '$2a$10$dummyhash000000000000000000000000000000000000000000', 'driver')
 		 RETURNING id`,
