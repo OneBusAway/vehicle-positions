@@ -912,6 +912,12 @@ func (ui *adminUI) setUserActive(w http.ResponseWriter, r *http.Request, active 
 // and redirects back to the edit page, where the newly-assigned vehicle now
 // shows up in the current-assignments list. An empty vehicle_id is a no-op
 // (no flash) rather than attempting an assignment with an empty vehicle id.
+//
+// CreateAssignment's sentinel errors are mapped the same way the JSON API
+// does in handleCreateAssignment (assignment_handlers.go): ErrAssignmentExists
+// (a double-submit or a race with another admin) is treated as success — the
+// end state is what the admin wanted, so it just redirects without a flash —
+// and ErrVehicleNotFoundFK 404s rather than surfacing a raw 500.
 func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -926,11 +932,21 @@ func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 	vehicleID := r.PostFormValue("vehicle_id")
 	if vehicleID != "" {
 		if _, err := ui.assignments.CreateAssignment(r.Context(), id, vehicleID); err != nil {
-			slog.Error("user assign vehicle", "user_id", id, "vehicle_id", vehicleID, "error", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
+			if errors.Is(err, ErrVehicleNotFoundFK) {
+				http.NotFound(w, r)
+				return
+			}
+			if !errors.Is(err, ErrAssignmentExists) {
+				slog.Error("user assign vehicle", "user_id", id, "vehicle_id", vehicleID, "error", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			// ErrAssignmentExists: fall through to the redirect below without
+			// a flash — the assignment already exists, which is the state
+			// the admin wanted.
+		} else {
+			setFlash(w, "vehicle_assigned")
 		}
-		setFlash(w, "vehicle_assigned")
 	}
 	http.Redirect(w, r, "/admin/users/"+idStr+"/edit", http.StatusSeeOther)
 }

@@ -709,17 +709,31 @@ func (f *fakeUserStore) UpdateUserPassword(_ context.Context, id int64, password
 
 // fakeAssignmentStore is an in-memory double implementing
 // AssignmentCreator/Deleter/ListerByUser, keyed by user ID then vehicle ID.
+// missingVehicle lets a test mark specific vehicle IDs as nonexistent, so
+// CreateAssignment can exercise the same ErrVehicleNotFoundFK path the real
+// store reports on an FK violation.
 type fakeAssignmentStore struct {
-	byUser map[int64]map[string]bool
+	byUser         map[int64]map[string]bool
+	missingVehicle map[string]bool
 }
 
 func newFakeAssignmentStore() *fakeAssignmentStore {
-	return &fakeAssignmentStore{byUser: map[int64]map[string]bool{}}
+	return &fakeAssignmentStore{byUser: map[int64]map[string]bool{}, missingVehicle: map[string]bool{}}
 }
 
+// CreateAssignment mirrors the real store's constraint behavior: a
+// duplicate (userID, vehicleID) pair reports ErrAssignmentExists (the real
+// store's unique-violation mapping) and a vehicleID marked missing reports
+// ErrVehicleNotFoundFK (the real store's FK-violation mapping).
 func (f *fakeAssignmentStore) CreateAssignment(_ context.Context, userID int64, vehicleID string) (*AssignmentResponse, error) {
+	if f.missingVehicle[vehicleID] {
+		return nil, ErrVehicleNotFoundFK
+	}
 	if f.byUser[userID] == nil {
 		f.byUser[userID] = map[string]bool{}
+	}
+	if f.byUser[userID][vehicleID] {
+		return nil, ErrAssignmentExists
 	}
 	f.byUser[userID][vehicleID] = true
 	return &AssignmentResponse{UserID: userID, VehicleID: vehicleID}, nil
@@ -1055,4 +1069,58 @@ func TestUserAssignUnassignVehicle(t *testing.T) {
 		}
 	}
 	assert.True(t, flashed, "expected vehicle_unassigned flash")
+}
+
+// TestUserAssignVehicle_AlreadyAssigned verifies that a double-submit (or a
+// race with another admin) — CreateAssignment returning ErrAssignmentExists
+// — redirects back to the edit page like the happy path, rather than
+// surfacing a raw 500. No flash is expected since nothing changed.
+func TestUserAssignVehicle_AlreadyAssigned(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+	assignments := newFakeAssignmentStore()
+	_, err := assignments.CreateAssignment(context.Background(), 1, "bus-1")
+	require.NoError(t, err)
+	wireFakeUserStore(ui, users, assignments)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(VehicleResponse{ID: "bus-1", Label: "Bus One", Active: true}))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	form := url.Values{"vehicle_id": {"bus-1"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/vehicles", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/users/1/edit", w.Header().Get("Location"))
+	assert.True(t, assignments.byUser[1]["bus-1"], "assignment should still be present")
+	for _, c := range w.Result().Cookies() {
+		assert.NotEqual(t, flashCookieName, c.Name, "no flash expected when the assignment already existed")
+	}
+}
+
+// TestUserAssignVehicle_UnknownVehicle verifies that CreateAssignment
+// returning ErrVehicleNotFoundFK (an FK violation on a vehicle id that
+// doesn't exist) 404s rather than surfacing a raw 500.
+func TestUserAssignVehicle_UnknownVehicle(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+	assignments := newFakeAssignmentStore()
+	assignments.missingVehicle["ghost-bus"] = true
+	wireFakeUserStore(ui, users, assignments)
+	wireFakeVehicleStore(ui, newFakeVehicleStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	form := url.Values{"vehicle_id": {"ghost-bus"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/vehicles", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.False(t, assignments.byUser[1]["ghost-bus"])
 }
