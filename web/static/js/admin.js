@@ -9,13 +9,6 @@
   }).addTo(map);
   L.control.zoom({ position: "bottomright" }).addTo(map);
 
-  const tripUrl = el.dataset.tripUrl;
-  if (tripUrl) {
-    renderTrail(tripUrl);
-  } else {
-    startLive(el.dataset.liveUrl);
-  }
-
   // busIcon returns the shared divIcon markup used for every marker (live
   // fleet vehicles and trail start/end points). There is only one visual
   // style now that the map no longer distinguishes idle vehicles.
@@ -273,5 +266,14 @@
     if (trip.end_time) card.appendChild(metaRow("Ended", trip.end_time));
 
     list.appendChild(card);
+  }
+
+  // Mode dispatch runs last so every let-bound module state (markers, fitted,
+  // timer) is initialized before startLive's first refresh touches it.
+  const tripUrl = el.dataset.tripUrl;
+  if (tripUrl) {
+    renderTrail(tripUrl);
+  } else {
+    startLive(el.dataset.liveUrl);
   }
 })();
