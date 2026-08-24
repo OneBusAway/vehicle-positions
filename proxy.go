@@ -1,0 +1,35 @@
+package main
+
+import (
+	"net"
+	"net/http"
+	"strings"
+)
+
+// clientIP extracts the caller's IP. With trustProxy (TRUST_PROXY_HEADERS=true)
+// the rightmost X-Forwarded-For hop is used — the value appended by our own
+// reverse proxy. Without it, only the direct connection is trusted (spec §4.10).
+func clientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
+				return ip
+			}
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// requestIsSecure reports whether the request arrived over HTTPS, honoring
+// X-Forwarded-Proto only when proxy headers are trusted.
+func requestIsSecure(r *http.Request, trustProxy bool) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return trustProxy && r.Header.Get("X-Forwarded-Proto") == "https"
+}
