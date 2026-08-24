@@ -159,6 +159,31 @@ func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (i
 	return result.RowsAffected(), nil
 }
 
+const deleteLocationPointsBefore = `-- name: DeleteLocationPointsBefore :execrows
+DELETE FROM location_points
+WHERE ctid IN (
+    SELECT expired.ctid FROM location_points AS expired
+    WHERE expired.received_at < $1
+    ORDER BY expired.received_at
+    LIMIT $2
+)
+`
+
+type DeleteLocationPointsBeforeParams struct {
+	Cutoff    pgtype.Timestamptz
+	BatchSize int32
+}
+
+// Batched retention delete. The ctid subquery bounds each statement so a large
+// backlog is removed over many small transactions instead of one long lock.
+func (q *Queries) DeleteLocationPointsBefore(ctx context.Context, arg DeleteLocationPointsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLocationPointsBefore, arg.Cutoff, arg.BatchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1
 `

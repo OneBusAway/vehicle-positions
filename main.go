@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -181,6 +182,24 @@ func main() {
 	loginLimiter := NewLoginRateLimiter()
 	defer loginLimiter.Stop()
 
+	// Retention is opt-in: a zero period means keep location history forever,
+	// which is the behavior every existing deployment has today.
+	if retentionPeriod := envDurationOrDefault("LOCATION_RETENTION_PERIOD", 0); retentionPeriod > 0 {
+		pruneInterval := envDurationOrDefault("LOCATION_PRUNE_INTERVAL", time.Hour)
+		batchSize := envInt32OrDefault("LOCATION_PRUNE_BATCH_SIZE", 10_000)
+
+		if pruneInterval > retentionPeriod {
+			slog.Warn("prune interval is longer than the retention period, so points outlive it by up to one interval",
+				"interval", pruneInterval.String(), "retention", retentionPeriod.String())
+		}
+
+		pruner := NewLocationPruner(store, retentionPeriod, pruneInterval, batchSize)
+		defer pruner.Stop()
+
+		slog.Info("location retention enabled",
+			"retention", retentionPeriod.String(), "interval", pruneInterval.String(), "batch_size", batchSize)
+	}
+
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)
 	if err != nil {
@@ -242,6 +261,21 @@ func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
 			return fallback
 		}
 		return d
+	}
+	return fallback
+}
+
+// envInt32OrDefault reads a positive 32-bit integer from the environment. The
+// 32-bit bound is deliberate: these values reach the database as int32 query
+// parameters, and parsing wider would let an oversized value wrap to a negative.
+func envInt32OrDefault(key string, fallback int32) int32 {
+	if v := os.Getenv(key); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n < 1 {
+			slog.Warn("invalid positive integer, using default", "key", key, "value", v, "default", fallback)
+			return fallback
+		}
+		return int32(n)
 	}
 	return fallback
 }

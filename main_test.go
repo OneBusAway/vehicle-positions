@@ -72,3 +72,34 @@ func TestStatusRecorder_CapturesStatus(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.status)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+func TestEnvInt32OrDefault(t *testing.T) {
+	// Not safe for t.Parallel(); uses t.Setenv and the global logger
+	const key = "TEST_PRUNE_BATCH_SIZE"
+
+	tests := []struct {
+		name     string
+		value    string
+		set      bool
+		expected int32
+	}{
+		{name: "valid", value: "5000", set: true, expected: 5000},
+		{name: "unset", set: false, expected: 10_000},
+		{name: "empty", value: "", set: true, expected: 10_000},
+		{name: "non-numeric", value: "many", set: true, expected: 10_000},
+		{name: "negative", value: "-1", set: true, expected: 10_000},
+		{name: "zero", value: "0", set: true, expected: 10_000},
+		{name: "exceeds int32", value: "2147483648", set: true, expected: 10_000},
+		{name: "max int32", value: "2147483647", set: true, expected: 2147483647},
+		{name: "float", value: "1.5", set: true, expected: 10_000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.set {
+				t.Setenv(key, tt.value)
+			}
+			assert.Equal(t, tt.expected, envInt32OrDefault(key, 10_000))
+		})
+	}
+}
