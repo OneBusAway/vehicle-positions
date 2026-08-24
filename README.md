@@ -42,6 +42,10 @@ Sign in with an existing admin account. To create the first one:
 - **Local development:** load [`seed_dev.sql`](seed_dev.sql), which seeds
   `admin@test.com` / `password` (alongside a seed driver).
 
+Deactivating a user blocks new logins immediately, but it doesn't revoke
+sessions already issued — any existing session cookie or JWT for that user
+stays valid until it expires (up to 24 hours).
+
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
 `X-Forwarded-Proto` — this affects the admin login rate limiter's per-IP

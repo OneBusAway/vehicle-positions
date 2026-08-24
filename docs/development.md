@@ -89,6 +89,10 @@ instead of the seed one, set `ADMIN_BOOTSTRAP_EMAIL` /
 `ADMIN_BOOTSTRAP_PASSWORD` before the server's first boot — it only creates
 an admin when none exist yet, so it's safe to leave set across restarts.
 
+Deactivating a user blocks new logins immediately, but existing sessions and
+tokens for that user remain valid until they expire (up to 24 hours) — this
+isn't instant revocation.
+
 If you're changing anything under `web/templates` or `web/styles/input.css`,
 rebuild the compiled Tailwind CSS before checking your changes in the
 browser:

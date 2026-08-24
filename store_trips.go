@@ -212,7 +212,7 @@ func (s *Store) ListTrips(ctx context.Context, f TripFilter) ([]TripSummary, err
 	if len(conds) > 0 {
 		query += " WHERE " + strings.Join(conds, " AND ")
 	}
-	query += " ORDER BY t.start_time DESC LIMIT " + arg(f.Limit) + " OFFSET " + arg(f.Offset)
+	query += " ORDER BY t.start_time DESC, t.id DESC LIMIT " + arg(f.Limit) + " OFFSET " + arg(f.Offset)
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
