@@ -20,6 +20,11 @@ const claimsKey contextKey = "claims"
 
 const bcryptCost = bcrypt.DefaultCost
 
+// sessionCookieName is the cookie holding the admin UI's browser session
+// JWT. requireAuth falls back to it only when the Authorization header is
+// entirely absent (see requireAuth). Task 7's session helpers reuse it.
+const sessionCookieName = "vp_session"
+
 var dummyHash []byte
 
 func init() {
@@ -151,12 +156,24 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			var tokenString string
+			switch {
+			case authHeader == "":
+				// Cookie fallback for the admin UI's browser session
+				// (spec §4.2). Applies ONLY when the header is entirely
+				// absent — a present-but-bad header never falls back.
+				c, err := r.Cookie(sessionCookieName)
+				if err != nil || c.Value == "" {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid authorization header"})
+					return
+				}
+				tokenString = c.Value
+			case strings.HasPrefix(authHeader, "Bearer "):
+				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			default:
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid authorization header"})
 				return
 			}
-
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 			token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
