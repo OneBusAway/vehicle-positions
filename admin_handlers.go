@@ -44,6 +44,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 		"users.html",
 		"vehicles.html",
 		"vehicle_form.html",
+		"user_form.html",
 	}
 
 	admin := make(map[string]*template.Template, len(adminViews))

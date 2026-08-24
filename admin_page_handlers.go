@@ -42,6 +42,26 @@ type vehicleEditor interface {
 	VehicleActivator
 }
 
+// userManager is the narrow interface the user CRUD pages need. It's kept
+// separate from UserFetcher (used only by the login flow) so the login path
+// doesn't depend on write methods it never calls.
+type userManager interface {
+	UserLister
+	UserGetter
+	UserCreator
+	UserUpdater
+	UserActivator
+	UserPasswordUpdater
+}
+
+// assignmentManager is the narrow interface the user edit page's
+// vehicle-assignments section needs.
+type assignmentManager interface {
+	AssignmentCreator
+	AssignmentDeleter
+	AssignmentListerByUser
+}
+
 // adminUI owns the parsed templates and dependencies for all admin pages.
 type adminUI struct {
 	tmpl           *embeddedTemplates
@@ -52,6 +72,8 @@ type adminUI struct {
 	vehicles       VehicleManager
 	vehicleEditor  vehicleEditor
 	vehicleChecker VehicleChecker
+	userManager    userManager
+	assignments    assignmentManager
 	jwtSecret      []byte
 	loginLimiter   *LoginRateLimiter
 	cfg            adminUIConfig
@@ -76,6 +98,8 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		vehicles:       store,
 		vehicleEditor:  store,
 		vehicleChecker: store,
+		userManager:    store,
+		assignments:    store,
 		jwtSecret:      jwtSecret,
 		loginLimiter:   limiter,
 		cfg:            cfg,
@@ -103,8 +127,15 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("POST /admin/vehicles/{id}/deactivate", protect(http.HandlerFunc(ui.vehicleDeactivate)))
 	mux.Handle("POST /admin/vehicles/{id}/activate", protect(http.HandlerFunc(ui.vehicleActivate)))
 	mux.Handle("GET /admin/users", protect(http.HandlerFunc(ui.usersPage)))
+	mux.Handle("GET /admin/users/new", protect(http.HandlerFunc(ui.userNewPage)))
+	mux.Handle("POST /admin/users", protect(http.HandlerFunc(ui.userCreate)))
+	mux.Handle("GET /admin/users/{id}/edit", protect(http.HandlerFunc(ui.userEditPage)))
+	mux.Handle("POST /admin/users/{id}", protect(http.HandlerFunc(ui.userUpdate)))
+	mux.Handle("POST /admin/users/{id}/deactivate", protect(http.HandlerFunc(ui.userDeactivate)))
+	mux.Handle("POST /admin/users/{id}/activate", protect(http.HandlerFunc(ui.userActivate)))
+	mux.Handle("POST /admin/users/{id}/vehicles", protect(http.HandlerFunc(ui.userAssignVehicle)))
+	mux.Handle("POST /admin/users/{id}/vehicles/{vehicleID}/remove", protect(http.HandlerFunc(ui.userUnassignVehicle)))
 	mux.Handle("GET /admin/trips", protect(http.HandlerFunc(ui.tripsPage)))
-	// Remaining CRUD form routes (users) are added by later tasks.
 }
 
 func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
@@ -554,16 +585,378 @@ func (ui *adminUI) setVehicleActive(w http.ResponseWriter, r *http.Request, acti
 	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
 }
 
+// minPasswordLength is the minimum length required for a new or changed
+// user password (create form and edit form's optional password field).
+const minPasswordLength = 8
+
+// userRow is a single row in the user list table: the user's stored fields
+// plus how many vehicles are currently assigned to them.
+type userRow struct {
+	ID           int64
+	Name         string
+	Email        string
+	Role         string
+	Active       bool
+	VehicleCount int
+}
+
+// usersPage renders the user list: real users from the store, each joined
+// with its assigned-vehicle count via a per-user ListAssignmentsByUser call.
+// This is an N+1 query pattern, but it's fine at admin scale (dozens of
+// users, not thousands) and keeps the assignment store's query surface
+// simple (no bulk "counts by user" query needed just for this list).
 func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	all, err := ui.userManager.ListUsers(ctx)
+	if err != nil {
+		slog.Error("users: list users", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	rows := make([]userRow, 0, len(all))
+	for _, u := range all {
+		assignments, err := ui.assignments.ListAssignmentsByUser(ctx, u.ID)
+		if err != nil {
+			slog.Error("users: list assignments", "user_id", u.ID, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		rows = append(rows, userRow{
+			ID:           u.ID,
+			Name:         u.Name,
+			Email:        u.Email,
+			Role:         u.Role,
+			Active:       u.Active,
+			VehicleCount: len(assignments),
+		})
+	}
+
 	ui.renderAdmin(w, r, "users.html", map[string]interface{}{
 		"Title": "Users",
 		"Page":  "users",
-		"Users": []map[string]string{
-			{"Name": "Chaitanya K", "Email": "kbc@transit.co.ke", "Role": "driver", "LastSeen": "Today"},
-			{"Name": "To Holland", "Email": "tom@transit.co.ke", "Role": "driver", "LastSeen": "Today"},
-			{"Name": "Open transit", "Email": "brian@transit.co.ke", "Role": "driver", "LastSeen": "Yesterday"},
-		},
+		"Users": rows,
 	})
+}
+
+// assignmentRow is a single currently-assigned vehicle shown in the user
+// edit page's assignments section, with the vehicle's label joined in for
+// display (assignments themselves only carry the vehicle id).
+type assignmentRow struct {
+	VehicleID string
+	Label     string
+}
+
+// userFormData carries the user_form.html template's fields for both the
+// create and edit flows (distinguished by IsEdit), including any submitted
+// values and validation error to re-render on failure. Assignments and
+// AvailableVehicles are only populated (and only rendered) in edit mode.
+type userFormData struct {
+	IsEdit            bool
+	ID                string
+	Name              string
+	Email             string
+	Role              string
+	Error             string
+	Assignments       []assignmentRow
+	AvailableVehicles []VehicleResponse
+}
+
+func (ui *adminUI) renderUserForm(w http.ResponseWriter, r *http.Request, status int, data userFormData) {
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
+	title := "New User"
+	if data.IsEdit {
+		title = "Edit User"
+	}
+	ui.renderAdmin(w, r, "user_form.html", map[string]interface{}{
+		"Title":             title,
+		"Page":              "users",
+		"IsEdit":            data.IsEdit,
+		"ID":                data.ID,
+		"Name":              data.Name,
+		"Email":             data.Email,
+		"Role":              data.Role,
+		"Error":             data.Error,
+		"Assignments":       data.Assignments,
+		"AvailableVehicles": data.AvailableVehicles,
+	})
+}
+
+// validUserRole reports whether role is one of the two roles the form
+// offers. Anything else (including empty) is rejected server-side even
+// though the <select> only ever submits one of these two values, since form
+// submissions aren't trustworthy.
+func validUserRole(role string) bool {
+	return role == "driver" || role == "admin"
+}
+
+// userNewPage renders the blank create-user form.
+func (ui *adminUI) userNewPage(w http.ResponseWriter, r *http.Request) {
+	ui.renderUserForm(w, r, http.StatusOK, userFormData{Role: "driver"})
+}
+
+// userCreate validates and saves a new user. A 422 re-renders the form with
+// the submitted name/email/role (but never the password) so the admin
+// doesn't have to retype everything.
+func (ui *adminUI) userCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		ui.renderUserForm(w, r, http.StatusBadRequest, userFormData{Error: "Invalid form submission."})
+		return
+	}
+	name := r.PostFormValue("name")
+	email := r.PostFormValue("email")
+	password := r.PostFormValue("password")
+	role := r.PostFormValue("role")
+
+	if len(password) < minPasswordLength {
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "password must be at least 8 characters"})
+		return
+	}
+	if !validUserRole(role) {
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "role must be driver or admin"})
+		return
+	}
+
+	if _, err := ui.userManager.CreateUser(r.Context(), name, email, password, role); err != nil {
+		if errors.Is(err, ErrDuplicateEmail) {
+			ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email already exists"})
+			return
+		}
+		slog.Error("user create: create user", "email", email, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	setFlash(w, "user_created")
+	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}
+
+// buildUserFormData assembles the edit form's assignments section: the
+// user's current assignments joined with vehicle labels, and the active
+// vehicles not already assigned to them (candidates for the assign
+// dropdown).
+func (ui *adminUI) buildUserFormData(ctx context.Context, id int64, name, email, role string) (userFormData, error) {
+	assignments, err := ui.assignments.ListAssignmentsByUser(ctx, id)
+	if err != nil {
+		return userFormData{}, fmt.Errorf("list assignments: %w", err)
+	}
+	allVehicles, err := ui.vehicles.ListVehicles(ctx)
+	if err != nil {
+		return userFormData{}, fmt.Errorf("list vehicles: %w", err)
+	}
+
+	vehicleLabels := make(map[string]string, len(allVehicles))
+	for _, v := range allVehicles {
+		vehicleLabels[v.ID] = v.Label
+	}
+
+	assigned := make(map[string]bool, len(assignments))
+	rows := make([]assignmentRow, 0, len(assignments))
+	for _, a := range assignments {
+		assigned[a.VehicleID] = true
+		rows = append(rows, assignmentRow{VehicleID: a.VehicleID, Label: vehicleLabels[a.VehicleID]})
+	}
+
+	available := make([]VehicleResponse, 0, len(allVehicles))
+	for _, v := range allVehicles {
+		if v.Active && !assigned[v.ID] {
+			available = append(available, v)
+		}
+	}
+
+	return userFormData{
+		IsEdit:            true,
+		ID:                strconv.FormatInt(id, 10),
+		Name:              name,
+		Email:             email,
+		Role:              role,
+		Assignments:       rows,
+		AvailableVehicles: available,
+	}, nil
+}
+
+// userEditPage renders the edit form pre-filled with the user's current
+// name/email/role and the assignments section. An unknown id 404s rather
+// than showing a blank or error-banner form.
+func (ui *adminUI) userEditPage(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	u, err := ui.userManager.GetUser(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("user edit: get user", "user_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	data, err := ui.buildUserFormData(r.Context(), u.ID, u.Name, u.Email, u.Role)
+	if err != nil {
+		slog.Error("user edit: build form data", "user_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	ui.renderUserForm(w, r, http.StatusOK, data)
+}
+
+// renderUserEditError re-renders the edit form for id with the submitted
+// name/email/role values and an error message, refetching the current
+// assignments/available-vehicles for the assignments section so it isn't
+// blank on a validation failure.
+func (ui *adminUI) renderUserEditError(w http.ResponseWriter, r *http.Request, status int, id int64, name, email, role, errMsg string) {
+	data, err := ui.buildUserFormData(r.Context(), id, name, email, role)
+	if err != nil {
+		slog.Error("user edit: rebuild form data", "user_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	data.Error = errMsg
+	ui.renderUserForm(w, r, status, data)
+}
+
+// userUpdate saves name/email/role edits for an existing user. If the
+// password field is non-empty, it's validated the same way as the create
+// form and, on success, also written via UpdateUserPassword — leaving it
+// blank keeps the current password untouched.
+func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		ui.renderUserForm(w, r, http.StatusBadRequest, userFormData{IsEdit: true, ID: idStr, Error: "Invalid form submission."})
+		return
+	}
+	name := r.PostFormValue("name")
+	email := r.PostFormValue("email")
+	role := r.PostFormValue("role")
+	password := r.PostFormValue("password")
+
+	if !validUserRole(role) {
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role must be driver or admin")
+		return
+	}
+	if password != "" && len(password) < minPasswordLength {
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "password must be at least 8 characters")
+		return
+	}
+
+	if _, err := ui.userManager.UpdateUser(r.Context(), id, name, email, role); err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, ErrDuplicateEmail) {
+			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email already exists")
+			return
+		}
+		slog.Error("user update: update user", "user_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if password != "" {
+		if err := ui.userManager.UpdateUserPassword(r.Context(), id, password); err != nil {
+			if errors.Is(err, ErrUserNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			slog.Error("user update: update password", "user_id", id, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	setFlash(w, "user_updated")
+	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}
+
+// userDeactivate and userActivate toggle a user's active flag via
+// setUserActive, sharing the same 404/error/flash/redirect handling.
+func (ui *adminUI) userDeactivate(w http.ResponseWriter, r *http.Request) {
+	ui.setUserActive(w, r, false, "user_deactivated")
+}
+
+func (ui *adminUI) userActivate(w http.ResponseWriter, r *http.Request) {
+	ui.setUserActive(w, r, true, "user_activated")
+}
+
+func (ui *adminUI) setUserActive(w http.ResponseWriter, r *http.Request, active bool, flashCode string) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := ui.userManager.SetUserActive(r.Context(), id, active); err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("user set active", "user_id", id, "active", active, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	setFlash(w, flashCode)
+	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}
+
+// userAssignVehicle assigns a vehicle (form field vehicle_id) to the user
+// and redirects back to the edit page, where the newly-assigned vehicle now
+// shows up in the current-assignments list. An empty vehicle_id is a no-op
+// (no flash) rather than attempting an assignment with an empty vehicle id.
+func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form submission", http.StatusBadRequest)
+		return
+	}
+	vehicleID := r.PostFormValue("vehicle_id")
+	if vehicleID != "" {
+		if _, err := ui.assignments.CreateAssignment(r.Context(), id, vehicleID); err != nil {
+			slog.Error("user assign vehicle", "user_id", id, "vehicle_id", vehicleID, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		setFlash(w, "vehicle_assigned")
+	}
+	http.Redirect(w, r, "/admin/users/"+idStr+"/edit", http.StatusSeeOther)
+}
+
+// userUnassignVehicle removes a vehicle assignment (vehicleID from the URL)
+// and redirects back to the edit page. An assignment that's already gone
+// (e.g. a double-submitted remove) 404s rather than silently succeeding.
+func (ui *adminUI) userUnassignVehicle(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	vehicleID := r.PathValue("vehicleID")
+	if err := ui.assignments.DeleteAssignment(r.Context(), id, vehicleID); err != nil {
+		if errors.Is(err, ErrAssignmentNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("user unassign vehicle", "user_id", id, "vehicle_id", vehicleID, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	setFlash(w, "vehicle_unassigned")
+	http.Redirect(w, r, "/admin/users/"+idStr+"/edit", http.StatusSeeOther)
 }
 
 func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {

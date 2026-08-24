@@ -27,6 +27,7 @@ type appStore interface {
 	UserUpdater
 	UserDeleter
 	UserActivator
+	UserPasswordUpdater
 	UserRoleCounter
 	VehicleManager
 	VehicleInfoUpdater

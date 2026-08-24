@@ -877,6 +877,23 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 	return i, err
 }
 
+const updateUserPassword = `-- name: UpdateUserPassword :execrows
+UPDATE users SET password_hash = $2 WHERE id = $1
+`
+
+type UpdateUserPasswordParams struct {
+	ID           int64
+	PasswordHash string
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateVehicleInfo = `-- name: UpdateVehicleInfo :execrows
 UPDATE vehicles SET label = $2, agency_tag = $3, updated_at = NOW() WHERE id = $1
 `

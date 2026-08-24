@@ -1,0 +1,70 @@
+{{define "content"}}
+<div class="p-4 lg:p-5">
+  <div class="table-card mx-auto max-w-xl overflow-hidden rounded-[20px] border border-white/80 p-6 sm:p-8">
+    <h3 class="display-font text-lg font-bold text-slate-900">{{if .IsEdit}}Edit User{{else}}New User{{end}}</h3>
+    <p class="mt-0.5 text-xs text-slate-400">{{if .IsEdit}}Update this account's details or password.{{else}}Create a new admin or driver account.{{end}}</p>
+
+    {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{.Error}}</div>{{end}}
+
+    <form method="post" action="{{if .IsEdit}}/admin/users/{{.ID}}{{else}}/admin/users{{end}}" class="mt-6 space-y-4">
+      <div>
+        <label for="name" class="mb-1.5 block text-sm font-semibold text-slate-700">Name</label>
+        <input id="name" name="name" type="text" required value="{{.Name}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+      </div>
+      <div>
+        <label for="email" class="mb-1.5 block text-sm font-semibold text-slate-700">Email</label>
+        <input id="email" name="email" type="email" required value="{{.Email}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+      </div>
+      <div>
+        <label for="password" class="mb-1.5 block text-sm font-semibold text-slate-700">{{if .IsEdit}}New password (leave blank to keep current){{else}}Password{{end}}</label>
+        <input id="password" name="password" type="password" {{if not .IsEdit}}required{{end}} class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+      </div>
+      <div>
+        <label for="role" class="mb-1.5 block text-sm font-semibold text-slate-700">Role</label>
+        <select id="role" name="role" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          <option value="driver" {{if eq .Role "driver"}}selected{{end}}>Driver</option>
+          <option value="admin" {{if eq .Role "admin"}}selected{{end}}>Admin</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">{{if .IsEdit}}Save changes{{else}}Create user{{end}}</button>
+        <a href="/admin/users" class="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</a>
+      </div>
+    </form>
+
+    {{if .IsEdit}}
+    <div class="mt-8 border-t border-slate-200/60 pt-6">
+      <h4 class="text-sm font-bold text-slate-900">Assigned vehicles</h4>
+      <p class="mt-0.5 text-xs text-slate-400">{{len .Assignments}} assigned</p>
+
+      <ul class="mt-4 space-y-2">
+        {{if not .Assignments}}
+        <li class="text-sm text-slate-400">No vehicles assigned.</li>
+        {{end}}
+        {{range .Assignments}}
+        <li class="flex items-center justify-between rounded-2xl border border-line bg-white px-4 py-3 text-sm">
+          <span class="font-semibold text-slate-900">{{.Label}}</span>
+          <form method="post" action="/admin/users/{{$.ID}}/vehicles/{{.VehicleID}}/remove" onsubmit="return confirm('Remove this vehicle assignment?')">
+            <button type="submit" class="text-xs font-semibold text-rose-600 hover:text-rose-800">Remove</button>
+          </form>
+        </li>
+        {{end}}
+      </ul>
+
+      {{if .AvailableVehicles}}
+      <form method="post" action="/admin/users/{{.ID}}/vehicles" class="mt-4 flex items-center gap-3">
+        <select name="vehicle_id" class="flex-1 rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          {{range .AvailableVehicles}}
+          <option value="{{.ID}}">{{.Label}}</option>
+          {{end}}
+        </select>
+        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Assign</button>
+      </form>
+      {{else}}
+      <p class="mt-4 text-xs text-slate-400">No active vehicles available to assign.</p>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}

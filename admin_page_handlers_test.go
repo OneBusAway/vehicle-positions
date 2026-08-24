@@ -170,7 +170,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 	}{
 		{"dashboard", "/admin/dashboard", "Active Trips"},
 		{"vehicles", "/admin/vehicles", "New vehicle"},
-		{"users", "/admin/users", "Chaitanya K"},
+		{"users", "/admin/users", "New user"},
 		{"trips", "/admin/trips", "Route A"},
 		{"map", "/admin/map", "Live Map"},
 	}
@@ -618,4 +618,441 @@ func TestVehicleDeactivateActivate(t *testing.T) {
 		}
 	}
 	assert.True(t, flashed, "expected vehicle_activated flash")
+}
+
+// fakeUserStore is an in-memory double implementing userManager
+// (UserLister/Getter/Creator/Updater/Activator/UserPasswordUpdater), covering
+// everything the user pages need without a database.
+type fakeUserStore struct {
+	users           map[int64]*UserResponse
+	nextID          int64
+	passwordUpdates map[int64]string
+}
+
+func newFakeUserStore(users ...UserResponse) *fakeUserStore {
+	m := make(map[int64]*UserResponse, len(users))
+	var maxID int64
+	for i := range users {
+		u := users[i]
+		m[u.ID] = &u
+		if u.ID > maxID {
+			maxID = u.ID
+		}
+	}
+	return &fakeUserStore{users: m, nextID: maxID + 1, passwordUpdates: map[int64]string{}}
+}
+
+func (f *fakeUserStore) ListUsers(_ context.Context) ([]UserResponse, error) {
+	out := make([]UserResponse, 0, len(f.users))
+	for _, u := range f.users {
+		out = append(out, *u)
+	}
+	return out, nil
+}
+
+func (f *fakeUserStore) GetUser(_ context.Context, id int64) (*UserResponse, error) {
+	u, ok := f.users[id]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	cp := *u
+	return &cp, nil
+}
+
+func (f *fakeUserStore) CreateUser(_ context.Context, name, email, _, role string) (*UserResponse, error) {
+	for _, u := range f.users {
+		if u.Email == email {
+			return nil, ErrDuplicateEmail
+		}
+	}
+	id := f.nextID
+	f.nextID++
+	u := &UserResponse{ID: id, Name: name, Email: email, Role: role, Active: true}
+	f.users[id] = u
+	cp := *u
+	return &cp, nil
+}
+
+func (f *fakeUserStore) UpdateUser(_ context.Context, id int64, name, email, role string) (*UserResponse, error) {
+	u, ok := f.users[id]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	for otherID, other := range f.users {
+		if otherID != id && other.Email == email {
+			return nil, ErrDuplicateEmail
+		}
+	}
+	u.Name = name
+	u.Email = email
+	u.Role = role
+	cp := *u
+	return &cp, nil
+}
+
+func (f *fakeUserStore) SetUserActive(_ context.Context, id int64, active bool) error {
+	u, ok := f.users[id]
+	if !ok {
+		return ErrUserNotFound
+	}
+	u.Active = active
+	return nil
+}
+
+func (f *fakeUserStore) UpdateUserPassword(_ context.Context, id int64, password string) error {
+	if _, ok := f.users[id]; !ok {
+		return ErrUserNotFound
+	}
+	f.passwordUpdates[id] = password
+	return nil
+}
+
+// fakeAssignmentStore is an in-memory double implementing
+// AssignmentCreator/Deleter/ListerByUser, keyed by user ID then vehicle ID.
+type fakeAssignmentStore struct {
+	byUser map[int64]map[string]bool
+}
+
+func newFakeAssignmentStore() *fakeAssignmentStore {
+	return &fakeAssignmentStore{byUser: map[int64]map[string]bool{}}
+}
+
+func (f *fakeAssignmentStore) CreateAssignment(_ context.Context, userID int64, vehicleID string) (*AssignmentResponse, error) {
+	if f.byUser[userID] == nil {
+		f.byUser[userID] = map[string]bool{}
+	}
+	f.byUser[userID][vehicleID] = true
+	return &AssignmentResponse{UserID: userID, VehicleID: vehicleID}, nil
+}
+
+func (f *fakeAssignmentStore) DeleteAssignment(_ context.Context, userID int64, vehicleID string) error {
+	if f.byUser[userID] == nil || !f.byUser[userID][vehicleID] {
+		return ErrAssignmentNotFound
+	}
+	delete(f.byUser[userID], vehicleID)
+	return nil
+}
+
+func (f *fakeAssignmentStore) ListAssignmentsByUser(_ context.Context, userID int64) ([]AssignmentResponse, error) {
+	out := make([]AssignmentResponse, 0)
+	for vID := range f.byUser[userID] {
+		out = append(out, AssignmentResponse{UserID: userID, VehicleID: vID})
+	}
+	return out, nil
+}
+
+// wireFakeUserStore points the adminUI's user-management and assignment
+// fields at the given fakes, mirroring how newAdminUI wires them from a
+// single appStore.
+func wireFakeUserStore(ui *adminUI, u *fakeUserStore, a *fakeAssignmentStore) {
+	ui.userManager = u
+	ui.assignments = a
+}
+
+// TestUsersPageListsRealData verifies the list page renders each user's
+// name, email, role badge, active/deactivated badge, and assigned-vehicle
+// count, and that the old mock data is gone.
+func TestUsersPageListsRealData(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(
+		UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true},
+		UserResponse{ID: 2, Name: "Dana Driver", Email: "dana@test.com", Role: "driver", Active: false},
+	)
+	assignments := newFakeAssignmentStore()
+	_, err := assignments.CreateAssignment(context.Background(), 2, "bus-1")
+	require.NoError(t, err)
+	wireFakeUserStore(ui, users, assignments)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "Ada Admin")
+	assert.Contains(t, body, "ada@test.com")
+	assert.Contains(t, body, "Admin")
+	assert.Contains(t, body, "Dana Driver")
+	assert.Contains(t, body, "Driver")
+	assert.Contains(t, body, "Deactivated")
+	assert.Contains(t, body, ">1<") // Dana's assigned-vehicle count
+	assert.NotContains(t, body, "Chaitanya K", "mock data must be gone")
+	assert.NotContains(t, body, "Last Seen", "mock Last Seen column must be dropped")
+}
+
+// TestUserCreate covers the create form's validation (short password, bad
+// role, duplicate email all 422 and re-render submitted values) and the
+// happy path (303 + flash).
+func TestUserCreate(t *testing.T) {
+	post := func(mux *http.ServeMux, name, email, password, role string) *httptest.ResponseRecorder {
+		form := url.Values{"name": {name}, "email": {email}, "password": {password}, "role": {role}}
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("short password 422s and re-renders values", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeUserStore(ui, newFakeUserStore(), newFakeAssignmentStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(mux, "New Guy", "newguy@test.com", "short", "driver")
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "password must be at least 8 characters")
+		assert.Contains(t, w.Body.String(), `value="newguy@test.com"`)
+	})
+
+	t.Run("bad role 422s", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeUserStore(ui, newFakeUserStore(), newFakeAssignmentStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(mux, "New Guy", "newguy2@test.com", "longenoughpassword", "superadmin")
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("duplicate email 422s", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeUserStore(ui, newFakeUserStore(UserResponse{ID: 1, Name: "Existing", Email: "dupe@test.com", Role: "driver", Active: true}), newFakeAssignmentStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(mux, "New Guy", "dupe@test.com", "longenoughpassword", "driver")
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "email already exists")
+	})
+
+	t.Run("success redirects with flash", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeUserStore(ui, newFakeUserStore(), newFakeAssignmentStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(mux, "New Guy", "newguy3@test.com", "longenoughpassword", "driver")
+		require.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "/admin/users", w.Header().Get("Location"))
+		found := false
+		for _, c := range w.Result().Cookies() {
+			if c.Name == flashCookieName {
+				assert.Equal(t, "user_created", c.Value)
+				found = true
+			}
+		}
+		assert.True(t, found, "expected user_created flash cookie")
+	})
+}
+
+// TestUserEditPage covers rendering the edit form for a known user
+// (including the assignments section) and 404ing for an unknown one.
+func TestUserEditPage(t *testing.T) {
+	t.Run("known id renders form with values and assignments", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+		assignments := newFakeAssignmentStore()
+		_, err := assignments.CreateAssignment(context.Background(), 1, "bus-1")
+		require.NoError(t, err)
+		wireFakeUserStore(ui, users, assignments)
+		wireFakeVehicleStore(ui, newFakeVehicleStore(
+			VehicleResponse{ID: "bus-1", Label: "Bus One", Active: true},
+			VehicleResponse{ID: "bus-2", Label: "Bus Two", Active: true},
+			VehicleResponse{ID: "bus-3", Label: "Retired Bus", Active: false},
+		))
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		req := httptest.NewRequest(http.MethodGet, "/admin/users/1/edit", nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		body := w.Body.String()
+		assert.Contains(t, body, "Ada Admin")
+		assert.Contains(t, body, "Bus One", "currently-assigned vehicle should be listed")
+		assert.Contains(t, body, "Bus Two", "unassigned active vehicle should be selectable")
+		assert.NotContains(t, body, "Retired Bus", "inactive vehicles must not be offered for assignment")
+		assert.Contains(t, body, "leave blank to keep current")
+	})
+
+	t.Run("unknown id 404s", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeUserStore(ui, newFakeUserStore(), newFakeAssignmentStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		req := httptest.NewRequest(http.MethodGet, "/admin/users/999/edit", nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+// TestUserUpdate covers the edit POST's name/email/role update, the optional
+// password path calling UpdateUserPassword, and validation.
+func TestUserUpdate(t *testing.T) {
+	postTo := func(mux *http.ServeMux, path string, values url.Values) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(values.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("updates name/email/role without touching password", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		users := newFakeUserStore(UserResponse{ID: 1, Name: "Old Name", Email: "old@test.com", Role: "driver", Active: true})
+		wireFakeUserStore(ui, users, newFakeAssignmentStore())
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		form := url.Values{"name": {"New Name"}, "email": {"new@test.com"}, "role": {"admin"}, "password": {""}}
+		w := postTo(mux, "/admin/users/1", form)
+		require.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "/admin/users", w.Header().Get("Location"))
+		assert.Equal(t, "New Name", users.users[1].Name)
+		assert.Equal(t, "new@test.com", users.users[1].Email)
+		assert.Equal(t, "admin", users.users[1].Role)
+		assert.Empty(t, users.passwordUpdates, "password must not be touched when the field is blank")
+	})
+
+	t.Run("non-empty password also calls UpdateUserPassword", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		users := newFakeUserStore(UserResponse{ID: 1, Name: "Old Name", Email: "old@test.com", Role: "driver", Active: true})
+		wireFakeUserStore(ui, users, newFakeAssignmentStore())
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		form := url.Values{"name": {"Old Name"}, "email": {"old@test.com"}, "role": {"driver"}, "password": {"newlongpassword"}}
+		w := postTo(mux, "/admin/users/1", form)
+		require.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "newlongpassword", users.passwordUpdates[1])
+	})
+
+	t.Run("short password 422s without updating", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		users := newFakeUserStore(UserResponse{ID: 1, Name: "Old Name", Email: "old@test.com", Role: "driver", Active: true})
+		wireFakeUserStore(ui, users, newFakeAssignmentStore())
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		form := url.Values{"name": {"Old Name"}, "email": {"old@test.com"}, "role": {"driver"}, "password": {"short"}}
+		w := postTo(mux, "/admin/users/1", form)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "password must be at least 8 characters")
+		assert.Empty(t, users.passwordUpdates)
+	})
+
+	t.Run("unknown id 404s", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeUserStore(ui, newFakeUserStore(), newFakeAssignmentStore())
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		form := url.Values{"name": {"X"}, "email": {"x@test.com"}, "role": {"driver"}}
+		w := postTo(mux, "/admin/users/999", form)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+// TestUserDeactivateActivate verifies both POST endpoints redirect with the
+// correct flash and flip the active flag.
+func TestUserDeactivateActivate(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+	wireFakeUserStore(ui, users, newFakeAssignmentStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	postTo := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w
+	}
+
+	w := postTo("/admin/users/1/deactivate")
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/users", w.Header().Get("Location"))
+	assert.False(t, users.users[1].Active)
+	var flashed bool
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName && c.Value == "user_deactivated" {
+			flashed = true
+		}
+	}
+	assert.True(t, flashed, "expected user_deactivated flash")
+
+	w = postTo("/admin/users/1/activate")
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.True(t, users.users[1].Active)
+	flashed = false
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName && c.Value == "user_activated" {
+			flashed = true
+		}
+	}
+	assert.True(t, flashed, "expected user_activated flash")
+
+	t.Run("unknown id 404s", func(t *testing.T) {
+		w := postTo("/admin/users/999/deactivate")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+// TestUserAssignUnassignVehicle covers the assign/unassign POST endpoints:
+// both redirect back to the edit page with the appropriate flash.
+func TestUserAssignUnassignVehicle(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+	assignments := newFakeAssignmentStore()
+	wireFakeUserStore(ui, users, assignments)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(VehicleResponse{ID: "bus-1", Label: "Bus One", Active: true}))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	form := url.Values{"vehicle_id": {"bus-1"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/vehicles", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/users/1/edit", w.Header().Get("Location"))
+	assert.True(t, assignments.byUser[1]["bus-1"])
+	var flashed bool
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName && c.Value == "vehicle_assigned" {
+			flashed = true
+		}
+	}
+	assert.True(t, flashed, "expected vehicle_assigned flash")
+
+	req = httptest.NewRequest(http.MethodPost, "/admin/users/1/vehicles/bus-1/remove", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/users/1/edit", w.Header().Get("Location"))
+	assert.False(t, assignments.byUser[1]["bus-1"])
+	flashed = false
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName && c.Value == "vehicle_unassigned" {
+			flashed = true
+		}
+	}
+	assert.True(t, flashed, "expected vehicle_unassigned flash")
 }

@@ -52,6 +52,12 @@ type UserActivator interface {
 	SetUserActive(ctx context.Context, id int64, active bool) error
 }
 
+// UserPasswordUpdater updates a user's password. The plaintext password is
+// bcrypt-hashed inside the implementation before it ever reaches storage.
+type UserPasswordUpdater interface {
+	UpdateUserPassword(ctx context.Context, id int64, password string) error
+}
+
 // UserRoleCounter provides role-based user counts, used by the admin
 // dashboard and by bootstrapAdmin to detect whether an admin already exists.
 type UserRoleCounter interface {
@@ -178,6 +184,27 @@ func (s *Store) SetUserActive(ctx context.Context, id int64, active bool) error 
 	rows, err := s.queries.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active})
 	if err != nil {
 		return fmt.Errorf("set user active: %w", err)
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// UpdateUserPassword bcrypt-hashes password and replaces the stored hash for
+// the given user. Returns ErrUserNotFound if no user matches id.
+func (s *Store) UpdateUserPassword(ctx context.Context, id int64, password string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	rows, err := s.queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		ID:           id,
+		PasswordHash: string(hash),
+	})
+	if err != nil {
+		return fmt.Errorf("update user password: %w", err)
 	}
 	if rows == 0 {
 		return ErrUserNotFound

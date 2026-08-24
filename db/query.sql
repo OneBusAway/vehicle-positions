@@ -42,6 +42,9 @@ DELETE FROM users WHERE id = $1;
 -- name: SetUserActive :execrows
 UPDATE users SET active = $2 WHERE id = $1;
 
+-- name: UpdateUserPassword :execrows
+UPDATE users SET password_hash = $2 WHERE id = $1;
+
 -- name: CountUsersByRole :one
 SELECT COUNT(*) FROM users WHERE role = $1;
 

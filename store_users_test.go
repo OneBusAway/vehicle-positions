@@ -288,3 +288,29 @@ func TestCountUsersByRole(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, active-1, active2)
 }
+
+// TestStore_UpdateUserPassword_RoundTrip verifies UpdateUserPassword
+// bcrypt-hashes and stores a new password, that the old password no longer
+// compares, and that an unknown id reports ErrUserNotFound.
+func TestStore_UpdateUserPassword_RoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+
+	u, err := store.CreateUser(ctx, "Password Rotator", email, "originalpass", "driver")
+	require.NoError(t, err)
+
+	require.NoError(t, store.UpdateUserPassword(ctx, u.ID, "newpassword123"))
+
+	fetched, err := store.GetUserByEmail(ctx, email)
+	require.NoError(t, err)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(fetched.PasswordHash), []byte("newpassword123")))
+	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(fetched.PasswordHash), []byte("originalpass")))
+}
+
+func TestStore_UpdateUserPassword_NotFound(t *testing.T) {
+	store := newTestStore(t)
+	err := store.UpdateUserPassword(context.Background(), 999999999, "somepassword")
+	assert.ErrorIs(t, err, ErrUserNotFound)
+}
