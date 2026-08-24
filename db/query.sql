@@ -146,3 +146,35 @@ SELECT COUNT(*) FROM vehicles WHERE active = true;
 
 -- name: CountActiveTrips :one
 SELECT COUNT(*) FROM trips WHERE status = 'active';
+
+-- name: GetTripSummary :one
+SELECT t.id, t.vehicle_id, v.label AS vehicle_label, t.user_id, u.name AS driver_name,
+       t.route_id, t.gtfs_trip_id, t.start_time, t.end_time, t.status
+FROM trips t
+JOIN users u ON u.id = t.user_id
+JOIN vehicles v ON v.id = t.vehicle_id
+WHERE t.id = $1;
+
+-- name: ListTripLocations :many
+-- Trail derivation per spec §4.5: location_points.trip_id is a client string,
+-- not trips.id, so trail points are matched by vehicle + driver + time window.
+SELECT lp.latitude, lp.longitude, lp.bearing, lp.speed, lp.accuracy,
+       lp.timestamp, lp.trip_id, lp.received_at
+FROM location_points lp
+JOIN trips t ON t.id = $1
+WHERE lp.vehicle_id = t.vehicle_id
+  AND lp.driver_id = t.user_id::text
+  AND lp.received_at >= t.start_time
+  AND lp.received_at <= COALESCE(t.end_time, NOW())
+ORDER BY lp.received_at ASC
+LIMIT 10000;
+
+-- name: ListActiveTripsByVehicle :many
+-- Schema guarantees one active trip per USER, not per vehicle; newest active
+-- trip per vehicle is the defined tiebreak (spec §4.8).
+SELECT DISTINCT ON (t.vehicle_id)
+       t.vehicle_id, t.id, t.route_id, t.gtfs_trip_id, t.user_id, u.name AS driver_name
+FROM trips t
+JOIN users u ON u.id = t.user_id
+WHERE t.status = 'active'
+ORDER BY t.vehicle_id, t.start_time DESC;

@@ -320,6 +320,46 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 	return items, nil
 }
 
+const getTripSummary = `-- name: GetTripSummary :one
+SELECT t.id, t.vehicle_id, v.label AS vehicle_label, t.user_id, u.name AS driver_name,
+       t.route_id, t.gtfs_trip_id, t.start_time, t.end_time, t.status
+FROM trips t
+JOIN users u ON u.id = t.user_id
+JOIN vehicles v ON v.id = t.vehicle_id
+WHERE t.id = $1
+`
+
+type GetTripSummaryRow struct {
+	ID           int64
+	VehicleID    string
+	VehicleLabel string
+	UserID       int64
+	DriverName   string
+	RouteID      string
+	GtfsTripID   string
+	StartTime    pgtype.Timestamptz
+	EndTime      pgtype.Timestamptz
+	Status       string
+}
+
+func (q *Queries) GetTripSummary(ctx context.Context, id int64) (GetTripSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getTripSummary, id)
+	var i GetTripSummaryRow
+	err := row.Scan(
+		&i.ID,
+		&i.VehicleID,
+		&i.VehicleLabel,
+		&i.UserID,
+		&i.DriverName,
+		&i.RouteID,
+		&i.GtfsTripID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, name, email, role, active, created_at, updated_at
 FROM users
@@ -412,6 +452,53 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 	return err
 }
 
+const listActiveTripsByVehicle = `-- name: ListActiveTripsByVehicle :many
+SELECT DISTINCT ON (t.vehicle_id)
+       t.vehicle_id, t.id, t.route_id, t.gtfs_trip_id, t.user_id, u.name AS driver_name
+FROM trips t
+JOIN users u ON u.id = t.user_id
+WHERE t.status = 'active'
+ORDER BY t.vehicle_id, t.start_time DESC
+`
+
+type ListActiveTripsByVehicleRow struct {
+	VehicleID  string
+	ID         int64
+	RouteID    string
+	GtfsTripID string
+	UserID     int64
+	DriverName string
+}
+
+// Schema guarantees one active trip per USER, not per vehicle; newest active
+// trip per vehicle is the defined tiebreak (spec §4.8).
+func (q *Queries) ListActiveTripsByVehicle(ctx context.Context) ([]ListActiveTripsByVehicleRow, error) {
+	rows, err := q.db.Query(ctx, listActiveTripsByVehicle)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveTripsByVehicleRow
+	for rows.Next() {
+		var i ListActiveTripsByVehicleRow
+		if err := rows.Scan(
+			&i.VehicleID,
+			&i.ID,
+			&i.RouteID,
+			&i.GtfsTripID,
+			&i.UserID,
+			&i.DriverName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveVehiclesByUser = `-- name: ListActiveVehiclesByUser :many
 SELECT v.id, v.label, v.agency_tag, v.active, v.created_at, v.updated_at
 FROM vehicles v
@@ -447,6 +534,61 @@ func (q *Queries) ListActiveVehiclesByUser(ctx context.Context, userID int64) ([
 			&i.Active,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTripLocations = `-- name: ListTripLocations :many
+SELECT lp.latitude, lp.longitude, lp.bearing, lp.speed, lp.accuracy,
+       lp.timestamp, lp.trip_id, lp.received_at
+FROM location_points lp
+JOIN trips t ON t.id = $1
+WHERE lp.vehicle_id = t.vehicle_id
+  AND lp.driver_id = t.user_id::text
+  AND lp.received_at >= t.start_time
+  AND lp.received_at <= COALESCE(t.end_time, NOW())
+ORDER BY lp.received_at ASC
+LIMIT 10000
+`
+
+type ListTripLocationsRow struct {
+	Latitude   float64
+	Longitude  float64
+	Bearing    pgtype.Float8
+	Speed      pgtype.Float8
+	Accuracy   pgtype.Float8
+	Timestamp  int64
+	TripID     string
+	ReceivedAt pgtype.Timestamptz
+}
+
+// Trail derivation per spec §4.5: location_points.trip_id is a client string,
+// not trips.id, so trail points are matched by vehicle + driver + time window.
+func (q *Queries) ListTripLocations(ctx context.Context, id int64) ([]ListTripLocationsRow, error) {
+	rows, err := q.db.Query(ctx, listTripLocations, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTripLocationsRow
+	for rows.Next() {
+		var i ListTripLocationsRow
+		if err := rows.Scan(
+			&i.Latitude,
+			&i.Longitude,
+			&i.Bearing,
+			&i.Speed,
+			&i.Accuracy,
+			&i.Timestamp,
+			&i.TripID,
+			&i.ReceivedAt,
 		); err != nil {
 			return nil, err
 		}
