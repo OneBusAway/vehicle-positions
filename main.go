@@ -32,6 +32,7 @@ type appStore interface {
 	VehicleManager
 	VehicleInfoUpdater
 	VehicleActivator
+	VehicleCreator
 	LocationSaver
 	AssignmentCreator
 	AssignmentDeleter

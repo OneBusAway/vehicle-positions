@@ -39,6 +39,13 @@ type VehicleActivator interface {
 	SetVehicleActive(ctx context.Context, id string, active bool) error
 }
 
+// VehicleCreator inserts brand-new vehicles only. Unlike
+// VehicleManager.UpsertVehicle it never overwrites or reactivates an
+// existing row: created is false (with no error) when the id already exists.
+type VehicleCreator interface {
+	CreateVehicle(ctx context.Context, id, label, agencyTag string) (created bool, err error)
+}
+
 // ListVehicles returns all vehicles ordered by creation time.
 func (s *Store) ListVehicles(ctx context.Context) ([]VehicleResponse, error) {
 	rows, err := s.queries.ListVehicles(ctx)
@@ -75,6 +82,23 @@ func (s *Store) UpsertVehicle(ctx context.Context, id, label, agencyTag string) 
 	}
 	v := toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt)
 	return &v, nil
+}
+
+// CreateVehicle inserts a new vehicle, reporting created=false (and no
+// error) when a vehicle with the same id already exists. The single
+// ON CONFLICT DO NOTHING insert makes concurrent duplicate creates safe:
+// exactly one wins, and the loser can't overwrite or reactivate the row the
+// way a check-then-upsert sequence could.
+func (s *Store) CreateVehicle(ctx context.Context, id, label, agencyTag string) (bool, error) {
+	rows, err := s.queries.CreateVehicle(ctx, db.CreateVehicleParams{
+		ID:        id,
+		Label:     label,
+		AgencyTag: agencyTag,
+	})
+	if err != nil {
+		return false, fmt.Errorf("create vehicle: %w", err)
+	}
+	return rows > 0, nil
 }
 
 // DeactivateVehicle sets a vehicle's active flag to false. It delegates to

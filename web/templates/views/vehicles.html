@@ -56,7 +56,8 @@
             <td class="px-5 py-4">
               <div class="flex items-center gap-3 text-xs font-semibold">
                 <a href="/admin/vehicles/{{.ID}}/edit" class="text-sky-600 hover:text-sky-800">Edit</a>
-                <a href="/api/v1/admin/vehicles/{{.ID}}/locations?format=csv" class="text-sky-600 hover:text-sky-800">CSV</a>
+                {{/* limit=1000 is the endpoint's maximum; without it the export silently caps at the default 100 points. */}}
+                <a href="/api/v1/admin/vehicles/{{.ID}}/locations?format=csv&amp;limit=1000" class="text-sky-600 hover:text-sky-800">CSV</a>
                 {{if .Active}}
                 <form method="post" action="/admin/vehicles/{{.ID}}/deactivate" onsubmit="return confirm('Deactivate this vehicle?')">
                   <button type="submit" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Deactivate</button>

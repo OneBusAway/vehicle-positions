@@ -334,8 +334,8 @@ func (erroringAdminStats) CountActiveTrips(_ context.Context) (int, error) {
 }
 
 // fakeVehicleStore is an in-memory double implementing VehicleManager,
-// vehicleEditor (UpdateVehicleInfo/SetVehicleActive), and VehicleChecker
-// (VehicleExists), covering everything the vehicle pages need without a
+// vehicleEditor (UpdateVehicleInfo/SetVehicleActive), and VehicleCreator
+// (CreateVehicle), covering everything the vehicle pages need without a
 // database.
 type fakeVehicleStore struct {
 	vehicles map[string]*VehicleResponse
@@ -402,9 +402,14 @@ func (f *fakeVehicleStore) SetVehicleActive(_ context.Context, id string, active
 	return nil
 }
 
-func (f *fakeVehicleStore) VehicleExists(_ context.Context, id string) (bool, error) {
-	_, ok := f.vehicles[id]
-	return ok, nil
+// CreateVehicle mirrors the real store's ON CONFLICT DO NOTHING insert: an
+// existing id reports created=false without touching the stored vehicle.
+func (f *fakeVehicleStore) CreateVehicle(_ context.Context, id, label, agencyTag string) (bool, error) {
+	if _, ok := f.vehicles[id]; ok {
+		return false, nil
+	}
+	f.vehicles[id] = &VehicleResponse{ID: id, Label: label, AgencyTag: agencyTag, Active: true}
+	return true, nil
 }
 
 // wireFakeVehicleStore points every vehicle-related adminUI field at the
@@ -412,7 +417,7 @@ func (f *fakeVehicleStore) VehicleExists(_ context.Context, id string) (bool, er
 func wireFakeVehicleStore(ui *adminUI, f *fakeVehicleStore) {
 	ui.vehicles = f
 	ui.vehicleEditor = f
-	ui.vehicleChecker = f
+	ui.vehicleCreator = f
 }
 
 // TestVehiclesPageListsRealVehicles verifies the list page renders a seeded
@@ -987,6 +992,9 @@ func TestUserDeactivateActivate(t *testing.T) {
 	ui := newTestAdminUI(t)
 	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
 	wireFakeUserStore(ui, users, newFakeAssignmentStore())
+	// Two active admins so the last-active-admin guard permits deactivation
+	// (fakeAdminStats returns the same count for every role).
+	ui.stats = &fakeAdminStats{drivers: 2}
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 
@@ -1025,6 +1033,52 @@ func TestUserDeactivateActivate(t *testing.T) {
 		w := postTo("/admin/users/999/deactivate")
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
+}
+
+// TestUserDeactivateLastAdminBlocked verifies the lockout guard: deactivating
+// the only active admin is refused (422) and the account stays active, since
+// no active admin would be able to sign in afterwards and ADMIN_BOOTSTRAP
+// doesn't recreate an admin while a deactivated one still exists.
+func TestUserDeactivateLastAdminBlocked(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+	wireFakeUserStore(ui, users, newFakeAssignmentStore())
+	ui.stats = &fakeAdminStats{drivers: 1} // exactly one active admin
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/deactivate", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	assert.Contains(t, w.Body.String(), "cannot deactivate the last active admin")
+	assert.True(t, users.users[1].Active, "the last active admin must stay active")
+}
+
+// TestUserUpdateLastAdminDemotionBlocked verifies the matching guard on the
+// edit form: demoting the only active admin to driver 422s with the form
+// error rather than leaving the deployment with no active admin.
+func TestUserUpdateLastAdminDemotionBlocked(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+	wireFakeUserStore(ui, users, newFakeAssignmentStore())
+	wireFakeVehicleStore(ui, newFakeVehicleStore())
+	ui.stats = &fakeAdminStats{drivers: 1} // exactly one active admin
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	form := url.Values{"name": {"Ada Admin"}, "email": {"ada@test.com"}, "role": {"driver"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	assert.Contains(t, w.Body.String(), "cannot demote the last active admin")
+	assert.Equal(t, "admin", users.users[1].Role, "the last active admin must keep the admin role")
 }
 
 // TestUserAssignUnassignVehicle covers the assign/unassign POST endpoints:

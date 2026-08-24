@@ -73,7 +73,7 @@ type adminUI struct {
 	trips          TripLister
 	vehicles       VehicleManager
 	vehicleEditor  vehicleEditor
-	vehicleChecker VehicleChecker
+	vehicleCreator VehicleCreator
 	userManager    userManager
 	assignments    assignmentManager
 	jwtSecret      []byte
@@ -100,7 +100,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		trips:          store,
 		vehicles:       store,
 		vehicleEditor:  store,
-		vehicleChecker: store,
+		vehicleCreator: store,
 		userManager:    store,
 		assignments:    store,
 		jwtSecret:      jwtSecret,
@@ -197,6 +197,10 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email)
 		return
 	}
+	// Successful authentication: clear the per-email rate-limit window so
+	// legitimate repeat logins aren't counted toward the brute-force budget
+	// (mirrors handleLogin in auth.go).
+	ui.loginLimiter.ResetEmail(email)
 	if user.Role != "admin" {
 		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email)
 		return
@@ -211,13 +215,10 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 }
 
-// renderLogin sets the response status before rendering (renderInto never
-// calls WriteHeader on the success path), so non-200 statuses land correctly.
+// renderLogin renders the login form with the given status (renderInto
+// writes the status line after a successful render).
 func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email string) {
-	if status != http.StatusOK {
-		w.WriteHeader(status)
-	}
-	renderInto(w, ui.tmpl.public, "login.html", "login.html", map[string]interface{}{
+	renderInto(w, status, ui.tmpl.public, "login.html", "login.html", map[string]interface{}{
 		"Title": "Sign In", "Error": errMsg, "Email": email,
 	})
 }
@@ -229,10 +230,12 @@ func (ui *adminUI) logout(w http.ResponseWriter, r *http.Request) {
 
 // renderAdmin renders an admin page through the shared base.html layout,
 // which pulls in the view's {{define "content"}} block, and threads through
-// any pending flash message.
-func (ui *adminUI) renderAdmin(w http.ResponseWriter, r *http.Request, view string, data map[string]interface{}) {
+// any pending flash message. takeFlash's clearing Set-Cookie must land before
+// the status line is committed, which renderInto guarantees by calling
+// WriteHeader(status) only after the template has rendered successfully.
+func (ui *adminUI) renderAdmin(w http.ResponseWriter, r *http.Request, status int, view string, data map[string]interface{}) {
 	data["Flash"] = takeFlash(w, r)
-	renderInto(w, ui.tmpl.admin, view, "base.html", data)
+	renderInto(w, status, ui.tmpl.admin, view, "base.html", data)
 }
 
 // mapPage renders the live fleet map, or (with a ?trip_id= query param) a
@@ -248,7 +251,7 @@ func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
 		}
 		tripID = raw
 	}
-	ui.renderAdmin(w, r, "map.html", map[string]interface{}{
+	ui.renderAdmin(w, r, http.StatusOK, "map.html", map[string]interface{}{
 		"Title":  "Live Map",
 		"Page":   "map",
 		"TripID": tripID,
@@ -342,7 +345,7 @@ func (ui *adminUI) dashboardPage(w http.ResponseWriter, r *http.Request) {
 		lastUpdate = humanizeAge(*status.LastUpdate)
 	}
 
-	ui.renderAdmin(w, r, "dashboard.html", map[string]interface{}{
+	ui.renderAdmin(w, r, http.StatusOK, "dashboard.html", map[string]interface{}{
 		"Title":              "Dashboard",
 		"Page":               "dashboard",
 		"TotalVehicles":      totalVehicles,
@@ -437,7 +440,7 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 
-	ui.renderAdmin(w, r, "vehicles.html", map[string]interface{}{
+	ui.renderAdmin(w, r, http.StatusOK, "vehicles.html", map[string]interface{}{
 		"Title":           "Vehicles",
 		"Page":            "vehicles",
 		"Vehicles":        rows,
@@ -457,14 +460,11 @@ type vehicleFormData struct {
 }
 
 func (ui *adminUI) renderVehicleForm(w http.ResponseWriter, r *http.Request, status int, data vehicleFormData) {
-	if status != http.StatusOK {
-		w.WriteHeader(status)
-	}
 	title := "New Vehicle"
 	if data.IsEdit {
 		title = "Edit Vehicle"
 	}
-	ui.renderAdmin(w, r, "vehicle_form.html", map[string]interface{}{
+	ui.renderAdmin(w, r, status, "vehicle_form.html", map[string]interface{}{
 		"Title":     title,
 		"Page":      "vehicles",
 		"IsEdit":    data.IsEdit,
@@ -485,6 +485,12 @@ func (ui *adminUI) vehicleNewPage(w http.ResponseWriter, r *http.Request) {
 // validation stay in lockstep, and reports the exact same error text on
 // failure. A 422 re-renders the form with the submitted values so the admin
 // doesn't have to retype everything.
+//
+// The insert is a single conditional CreateVehicle (ON CONFLICT DO NOTHING)
+// rather than a VehicleExists check followed by UpsertVehicle: the
+// check-then-act version had a race window where two concurrent creates with
+// the same id both passed the check and the loser silently overwrote (and
+// force-reactivated) the winner's vehicle.
 func (ui *adminUI) vehicleCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		ui.renderVehicleForm(w, r, http.StatusBadRequest, vehicleFormData{Error: "Invalid form submission."})
@@ -499,20 +505,14 @@ func (ui *adminUI) vehicleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exists, err := ui.vehicleChecker.VehicleExists(r.Context(), id)
+	created, err := ui.vehicleCreator.CreateVehicle(r.Context(), id, label, agencyTag)
 	if err != nil {
-		slog.Error("vehicle create: check existence", "vehicle_id", id, "error", err)
+		slog.Error("vehicle create: create vehicle", "vehicle_id", id, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	if exists {
+	if !created {
 		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: "vehicle id already exists"})
-		return
-	}
-
-	if _, err := ui.vehicles.UpsertVehicle(r.Context(), id, label, agencyTag); err != nil {
-		slog.Error("vehicle create: upsert vehicle", "vehicle_id", id, "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	setFlash(w, "vehicle_created")
@@ -645,7 +645,7 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	ui.renderAdmin(w, r, "users.html", map[string]interface{}{
+	ui.renderAdmin(w, r, http.StatusOK, "users.html", map[string]interface{}{
 		"Title": "Users",
 		"Page":  "users",
 		"Users": rows,
@@ -676,14 +676,11 @@ type userFormData struct {
 }
 
 func (ui *adminUI) renderUserForm(w http.ResponseWriter, r *http.Request, status int, data userFormData) {
-	if status != http.StatusOK {
-		w.WriteHeader(status)
-	}
 	title := "New User"
 	if data.IsEdit {
 		title = "Edit User"
 	}
-	ui.renderAdmin(w, r, "user_form.html", map[string]interface{}{
+	ui.renderAdmin(w, r, status, "user_form.html", map[string]interface{}{
 		"Title":             title,
 		"Page":              "users",
 		"IsEdit":            data.IsEdit,
@@ -729,6 +726,17 @@ func (ui *adminUI) userCreate(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
 	role := r.PostFormValue("role")
 
+	// The form marks name/email required client-side, but form submissions
+	// aren't trustworthy — enforce it server-side with the same error text as
+	// the JSON API (handleCreateUser).
+	if name == "" {
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "name is required"})
+		return
+	}
+	if email == "" {
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email is required"})
+		return
+	}
 	if err := validatePassword(password); err != nil {
 		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: err.Error()})
 		return
@@ -858,6 +866,16 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 	role := r.PostFormValue("role")
 	password := r.PostFormValue("password")
 
+	// Server-side required checks mirroring the JSON API (handleUpdateUser);
+	// the form's client-side `required` attributes aren't trustworthy.
+	if name == "" {
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "name is required")
+		return
+	}
+	if email == "" {
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email is required")
+		return
+	}
 	if !validUserRole(role) {
 		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role must be driver or admin")
 		return
@@ -865,6 +883,33 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 	if password != "" {
 		if err := validatePassword(password); err != nil {
 			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, err.Error())
+			return
+		}
+	}
+
+	// Refuse to demote the last active admin: with no active admin left, no
+	// one can sign in to the admin UI (and ADMIN_BOOTSTRAP doesn't recover,
+	// since bootstrapAdmin counts existing admins regardless of active flag).
+	// The check-then-act window here is acceptable for an admin UI guard.
+	current, err := ui.userManager.GetUser(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("user update: get user", "user_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if current.Role == "admin" && current.Active && role != "admin" {
+		admins, err := ui.stats.CountActiveUsersByRole(r.Context(), "admin")
+		if err != nil {
+			slog.Error("user update: count active admins", "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		if admins <= 1 {
+			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "cannot demote the last active admin")
 			return
 		}
 	}
@@ -914,6 +959,35 @@ func (ui *adminUI) setUserActive(w http.ResponseWriter, r *http.Request, active 
 	if err != nil {
 		http.NotFound(w, r)
 		return
+	}
+	// Refuse to deactivate the last active admin: with no active admin left,
+	// no one can sign in to the admin UI, and restarting with ADMIN_BOOTSTRAP
+	// doesn't recover (bootstrapAdmin counts existing admins regardless of
+	// active flag), so the lockout would require manual SQL to undo. The
+	// check-then-act window here is acceptable for an admin UI guard.
+	if !active {
+		target, err := ui.userManager.GetUser(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, ErrUserNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			slog.Error("user set active: get user", "user_id", id, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		if target.Role == "admin" && target.Active {
+			admins, err := ui.stats.CountActiveUsersByRole(r.Context(), "admin")
+			if err != nil {
+				slog.Error("user set active: count active admins", "error", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			if admins <= 1 {
+				http.Error(w, "cannot deactivate the last active admin", http.StatusUnprocessableEntity)
+				return
+			}
+		}
 	}
 	if err := ui.userManager.SetUserActive(r.Context(), id, active); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
@@ -1001,6 +1075,10 @@ func (ui *adminUI) userUnassignVehicle(w http.ResponseWriter, r *http.Request) {
 // separate COUNT query.
 const tripsPageSize = 50
 
+// maxTripsPage bounds the ?page= query param so the offset arithmetic can
+// never overflow into a negative OFFSET; values past it fall back to page 1.
+const maxTripsPage = 1_000_000
+
 // tripRow is a single row in the trips table: a trip's joined display fields
 // plus pre-formatted start/end times and duration, ready for the template.
 type tripRow struct {
@@ -1073,7 +1151,10 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 
 	page := 1
 	if raw := query.Get("page"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n >= 1 {
+		// The upper bound keeps (page-1)*tripsPageSize from overflowing int
+		// into a negative OFFSET (a Postgres error → 500); an absurd page
+		// number falls back to page 1 like any other invalid value.
+		if n, err := strconv.Atoi(raw); err == nil && n >= 1 && n <= maxTripsPage {
 			page = n
 		}
 	}
@@ -1131,7 +1212,7 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
-	ui.renderAdmin(w, r, "trips.html", map[string]interface{}{
+	ui.renderAdmin(w, r, http.StatusOK, "trips.html", map[string]interface{}{
 		"Title":     "Trips",
 		"Page":      "trips",
 		"Trips":     rows,

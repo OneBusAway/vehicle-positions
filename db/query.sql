@@ -61,6 +61,11 @@ SELECT id, label, agency_tag, active, created_at, updated_at
 FROM vehicles
 WHERE id = $1;
 
+-- name: CreateVehicle :execrows
+INSERT INTO vehicles (id, label, agency_tag)
+VALUES ($1, $2, $3)
+ON CONFLICT (id) DO NOTHING;
+
 -- name: UpsertAdminVehicle :one
 INSERT INTO vehicles (id, label, agency_tag)
 VALUES ($1, $2, $3)

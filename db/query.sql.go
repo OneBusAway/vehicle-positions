@@ -139,6 +139,26 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const createVehicle = `-- name: CreateVehicle :execrows
+INSERT INTO vehicles (id, label, agency_tag)
+VALUES ($1, $2, $3)
+ON CONFLICT (id) DO NOTHING
+`
+
+type CreateVehicleParams struct {
+	ID        string
+	Label     string
+	AgencyTag string
+}
+
+func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createVehicle, arg.ID, arg.Label, arg.AgencyTag)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1
 `

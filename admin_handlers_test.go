@@ -2,6 +2,7 @@ package main
 
 import (
 	"html/template"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestRenderUnknownViewWritesCleanError(t *testing.T) {
 
 	for _, set := range []map[string]*template.Template{tmpls.admin, tmpls.public} {
 		rec := httptest.NewRecorder()
-		renderInto(rec, set, "ghost.html", "base.html", map[string]interface{}{})
+		renderInto(rec, http.StatusOK, set, "ghost.html", "base.html", map[string]interface{}{})
 
 		assert.Equal(t, 500, rec.Code)
 		assert.Contains(t, rec.Body.String(), "internal server error")
@@ -66,7 +67,7 @@ func TestRenderExecutionErrorIsCleanError(t *testing.T) {
 	set := map[string]*template.Template{"boom.html": tmpl}
 
 	rec := httptest.NewRecorder()
-	renderInto(rec, set, "boom.html", "base.html", map[string]interface{}{"Items": []int{}})
+	renderInto(rec, http.StatusOK, set, "boom.html", "base.html", map[string]interface{}{"Items": []int{}})
 
 	assert.Equal(t, 500, rec.Code)
 	assert.Contains(t, rec.Body.String(), "internal server error")

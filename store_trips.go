@@ -206,7 +206,11 @@ func (s *Store) ListTrips(ctx context.Context, f TripFilter) ([]TripSummary, err
 		conds = append(conds, "t.vehicle_id = "+arg(f.VehicleID))
 	}
 	if f.Q != "" {
-		p := arg("%" + f.Q + "%")
+		// Escape LIKE metacharacters so a search for a literal % or _
+		// (common in GTFS ids) matches the literal text instead of acting
+		// as a wildcard. Backslash is Postgres's default LIKE escape char.
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Q)
+		p := arg("%" + escaped + "%")
 		conds = append(conds, fmt.Sprintf("(u.name ILIKE %s OR t.route_id ILIKE %s OR t.gtfs_trip_id ILIKE %s)", p, p, p))
 	}
 	if len(conds) > 0 {

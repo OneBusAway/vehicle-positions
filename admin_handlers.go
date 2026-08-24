@@ -22,6 +22,8 @@ func adminUIEnabled() bool {
 	}
 	enabled, err := strconv.ParseBool(v)
 	if err != nil {
+		slog.Warn("ADMIN_UI_ENABLED is not a valid boolean; leaving the admin UI enabled",
+			"value", v)
 		return true
 	}
 	return enabled
@@ -77,12 +79,12 @@ func loadTemplates() (*embeddedTemplates, error) {
 // programmer error (the route registered it) but is still reported rather
 // than silently ignored.
 //
-// renderInto never calls WriteHeader itself on the success path: callers that
-// need a non-200 status (e.g. a failed login re-rendering the form) must call
-// w.WriteHeader before invoking renderInto. On template failure it falls back
-// to http.Error, which is a no-op on the status line if one was already
-// written but still logs and emits an error body.
-func renderInto(w http.ResponseWriter, set map[string]*template.Template, view, rootName string, data map[string]interface{}) {
+// renderInto owns writing the status line: it calls WriteHeader(status) only
+// after the template has rendered successfully, so callers can keep setting
+// headers (e.g. takeFlash's clearing Set-Cookie) right up until the render,
+// and a template failure still yields a clean 500 via http.Error rather than
+// an error body under an already-committed non-200 status.
+func renderInto(w http.ResponseWriter, status int, set map[string]*template.Template, view, rootName string, data map[string]interface{}) {
 	tmpl, ok := set[path.Base(view)]
 	if !ok {
 		slog.Error("template render failed", "view", view, "error", "no such template")
@@ -95,6 +97,9 @@ func renderInto(w http.ResponseWriter, set map[string]*template.Template, view, 
 		slog.Error("template render failed", "view", view, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
+	}
+	if status != http.StatusOK {
+		w.WriteHeader(status)
 	}
 	if _, err := buf.WriteTo(w); err != nil {
 		// The header is already committed, so we can't convert this to a

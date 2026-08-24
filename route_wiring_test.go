@@ -78,6 +78,9 @@ func (n *noopStore) GetLocationHistory(_ context.Context, _ string, _, _ int64, 
 func (n *noopStore) VehicleExists(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
+func (n *noopStore) CreateVehicle(_ context.Context, _, _, _ string) (bool, error) {
+	return true, nil
+}
 func (n *noopStore) ListActiveVehiclesByUser(_ context.Context, _ int64) ([]VehicleResponse, error) {
 	return make([]VehicleResponse, 0), nil
 }

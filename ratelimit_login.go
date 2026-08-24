@@ -58,6 +58,18 @@ func (l *LoginRateLimiter) Allow(ip, email string) bool {
 	return allowInWindow(l.byEmail, email, loginEmailLimit, now)
 }
 
+// ResetEmail clears the per-email window after a successful authentication,
+// so an account legitimately signing in several times a minute (a shared
+// account, or the driver app plus the admin form) isn't 429'd despite zero
+// failed attempts. Only the email dimension is reset — an attacker can't
+// trigger it without valid credentials, and the per-IP budget (the
+// map-filling-DoS defense) is never relaxed.
+func (l *LoginRateLimiter) ResetEmail(email string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.byEmail, email)
+}
+
 func allowInWindow(m map[string]*loginWindowEntry, key string, limit int, now time.Time) bool {
 	e, ok := m[key]
 	if !ok {

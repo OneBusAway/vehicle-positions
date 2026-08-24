@@ -112,6 +112,12 @@ func handleLogin(fetcher UserFetcher, secret []byte, limiter *LoginRateLimiter, 
 			return
 		}
 
+		// Successful authentication: clear the per-email rate-limit window so
+		// legitimate repeat logins aren't counted toward the brute-force budget.
+		if limiter != nil {
+			limiter.ResetEmail(req.Email)
+		}
+
 		tokenStr, err := generateJWT(user, secret)
 		if err != nil {
 			slog.Error("token generation failed", "error", err)
