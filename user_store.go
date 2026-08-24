@@ -19,6 +19,7 @@ type UserResponse struct {
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
+	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -59,6 +60,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 			Name:      row.Name,
 			Email:     row.Email,
 			Role:      row.Role,
+			Active:    row.Active,
 			CreatedAt: row.CreatedAt.Time,
 			UpdatedAt: row.UpdatedAt.Time,
 		})
@@ -80,6 +82,7 @@ func (s *Store) GetUser(ctx context.Context, id int64) (*UserResponse, error) {
 		Name:      row.Name,
 		Email:     row.Email,
 		Role:      row.Role,
+		Active:    row.Active,
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
 	}, nil
@@ -109,6 +112,7 @@ func (s *Store) CreateUser(ctx context.Context, name, email, password, role stri
 		Name:      row.Name,
 		Email:     row.Email,
 		Role:      row.Role,
+		Active:    row.Active,
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
 	}, nil
@@ -138,6 +142,7 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 		Name:      row.Name,
 		Email:     row.Email,
 		Role:      row.Role,
+		Active:    row.Active,
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
 	}, nil
@@ -154,6 +159,36 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 		return ErrUserNotFound
 	}
 	return nil
+}
+
+// SetUserActive flips a user's active flag. Deactivated users cannot log in.
+func (s *Store) SetUserActive(ctx context.Context, id int64, active bool) error {
+	rows, err := s.queries.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active})
+	if err != nil {
+		return fmt.Errorf("set user active: %w", err)
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// CountUsersByRole returns the total number of users with the given role.
+func (s *Store) CountUsersByRole(ctx context.Context, role string) (int, error) {
+	n, err := s.queries.CountUsersByRole(ctx, role)
+	if err != nil {
+		return 0, fmt.Errorf("count users by role: %w", err)
+	}
+	return int(n), nil
+}
+
+// CountActiveUsersByRole returns the number of active users with the given role.
+func (s *Store) CountActiveUsersByRole(ctx context.Context, role string) (int, error) {
+	n, err := s.queries.CountActiveUsersByRole(ctx, role)
+	if err != nil {
+		return 0, fmt.Errorf("count active users by role: %w", err)
+	}
+	return int(n), nil
 }
 
 // isDuplicateEmail checks if the error is a PostgreSQL unique violation on the email column.

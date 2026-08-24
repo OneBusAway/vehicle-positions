@@ -12,7 +12,7 @@ import (
 // Returns ErrUserNotFound if no user exists with the given email.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, name, email, password_hash, role, created_at, updated_at
+		SELECT id, name, email, password_hash, role, active, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -23,6 +23,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error)
 		&u.Email,
 		&u.PasswordHash,
 		&u.Role,
+		&u.Active,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)

@@ -15,29 +15,38 @@ WHERE received_at > $1
 ORDER BY vehicle_id, received_at DESC;
 
 -- name: ListUsers :many
-SELECT id, name, email, role, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at
 FROM users
 ORDER BY created_at DESC;
 
 -- name: GetUserByID :one
-SELECT id, name, email, role, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at
 FROM users
 WHERE id = $1;
 
 -- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, role)
 VALUES ($1, $2, $3, $4)
-RETURNING id, name, email, role, created_at, updated_at;
+RETURNING id, name, email, role, active, created_at, updated_at;
 
 -- name: UpdateUser :one
 -- updated_at is maintained by the set_users_updated_at trigger.
 UPDATE users
 SET name = $1, email = $2, role = $3
 WHERE id = $4
-RETURNING id, name, email, role, created_at, updated_at;
+RETURNING id, name, email, role, active, created_at, updated_at;
 
 -- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1;
+
+-- name: SetUserActive :execrows
+UPDATE users SET active = $2 WHERE id = $1;
+
+-- name: CountUsersByRole :one
+SELECT COUNT(*) FROM users WHERE role = $1;
+
+-- name: CountActiveUsersByRole :one
+SELECT COUNT(*) FROM users WHERE role = $1 AND active = true;
 
 -- name: ListVehicles :many
 SELECT id, label, agency_tag, active, created_at, updated_at

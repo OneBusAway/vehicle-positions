@@ -9,6 +9,7 @@ type User struct {
 	Email        string
 	PasswordHash string
 	Role         string
+	Active       bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

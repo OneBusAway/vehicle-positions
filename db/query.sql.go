@@ -52,10 +52,32 @@ func (q *Queries) CheckUserVehicleAssignment(ctx context.Context, arg CheckUserV
 	return i, err
 }
 
+const countActiveUsersByRole = `-- name: CountActiveUsersByRole :one
+SELECT COUNT(*) FROM users WHERE role = $1 AND active = true
+`
+
+func (q *Queries) CountActiveUsersByRole(ctx context.Context, role string) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveUsersByRole, role)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUsersByRole = `-- name: CountUsersByRole :one
+SELECT COUNT(*) FROM users WHERE role = $1
+`
+
+func (q *Queries) CountUsersByRole(ctx context.Context, role string) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsersByRole, role)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, role)
 VALUES ($1, $2, $3, $4)
-RETURNING id, name, email, role, created_at, updated_at
+RETURNING id, name, email, role, active, created_at, updated_at
 `
 
 type CreateUserParams struct {
@@ -70,6 +92,7 @@ type CreateUserRow struct {
 	Name      string
 	Email     string
 	Role      string
+	Active    bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
@@ -87,6 +110,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.Name,
 		&i.Email,
 		&i.Role,
+		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -275,7 +299,7 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, role, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at
 FROM users
 WHERE id = $1
 `
@@ -285,6 +309,7 @@ type GetUserByIDRow struct {
 	Name      string
 	Email     string
 	Role      string
+	Active    bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
@@ -297,6 +322,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.Name,
 		&i.Email,
 		&i.Role,
+		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -411,7 +437,7 @@ func (q *Queries) ListActiveVehiclesByUser(ctx context.Context, userID int64) ([
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, email, role, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at
 FROM users
 ORDER BY created_at DESC
 `
@@ -421,6 +447,7 @@ type ListUsersRow struct {
 	Name      string
 	Email     string
 	Role      string
+	Active    bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
@@ -439,6 +466,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.Name,
 			&i.Email,
 			&i.Role,
+			&i.Active,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -552,6 +580,23 @@ func (q *Queries) ListVehiclesByUser(ctx context.Context, userID int64) ([]UserV
 	return items, nil
 }
 
+const setUserActive = `-- name: SetUserActive :execrows
+UPDATE users SET active = $2 WHERE id = $1
+`
+
+type SetUserActiveParams struct {
+	ID     int64
+	Active bool
+}
+
+func (q *Queries) SetUserActive(ctx context.Context, arg SetUserActiveParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserActive, arg.ID, arg.Active)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const startTrip = `-- name: StartTrip :one
 INSERT INTO trips (user_id, vehicle_id, route_id, gtfs_trip_id)
 VALUES ($1, $2, $3, $4)
@@ -610,7 +655,7 @@ const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET name = $1, email = $2, role = $3
 WHERE id = $4
-RETURNING id, name, email, role, created_at, updated_at
+RETURNING id, name, email, role, active, created_at, updated_at
 `
 
 type UpdateUserParams struct {
@@ -625,6 +670,7 @@ type UpdateUserRow struct {
 	Name      string
 	Email     string
 	Role      string
+	Active    bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
@@ -643,6 +689,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 		&i.Name,
 		&i.Email,
 		&i.Role,
+		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
