@@ -62,6 +62,14 @@ You can run Postgres in Docker and run the Go server directly:
    export STALENESS_THRESHOLD=5m
    ```
 
+   Location retention is optional and off unless you set it:
+
+   ```bash
+   export LOCATION_RETENTION_PERIOD=720h   # keep 30 days; 0 or unset keeps forever
+   export LOCATION_PRUNE_INTERVAL=1h       # how often the pruner sweeps
+   export LOCATION_PRUNE_BATCH_SIZE=10000  # rows deleted per statement
+   ```
+
 3. Run server:
 
    ```bash
@@ -141,6 +149,38 @@ Custom example:
 ```bash
 go run ./cmd/simulator -url http://localhost:8080 -vehicles 20 -interval 2s -duration 2m
 ```
+
+## Watching Retention Prune Locally
+
+Retention deletes location points older than `LOCATION_RETENTION_PERIOD`, measured from
+`received_at` (when the server stored the point), not the device-reported `timestamp`.
+The first sweep runs one full `LOCATION_PRUNE_INTERVAL` after startup.
+
+To watch it work without waiting hours, run the server with a very short retention:
+
+```bash
+export LOCATION_RETENTION_PERIOD=2m
+export LOCATION_PRUNE_INTERVAL=30s
+make run
+```
+
+Then generate some points and wait for the sweep:
+
+```bash
+make simulate
+```
+
+The server logs `location retention enabled` at startup, and each sweep that removes
+anything logs `pruned expired location points` with the row count and cutoff. Confirm
+against the database:
+
+```bash
+docker compose exec db psql -U postgres -d vehicle_positions \
+  -c "SELECT count(*), min(received_at) FROM location_points;"
+```
+
+Deletion is permanent, so use a scratch database for this rather than one holding data
+you care about.
 
 ## API Sanity Checks
 

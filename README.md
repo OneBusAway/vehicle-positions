@@ -218,6 +218,34 @@ curl -i -X POST http://localhost:8080/api/v1/locations \
   -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}{"extra":1}'
 ```
 
+**Data Retention & Privacy**
+
+`location_points` is the highest-volume table in the system: the server stores one row per vehicle per reporting interval, so a 50-vehicle agency reporting every 10 seconds accumulates roughly 13 million rows per year. That data is also a per-driver GPS trace, which most agencies should not keep indefinitely.
+
+The server can delete location points once they pass a configured age:
+
+|Variable                   |Default|Purpose                                               |
+|---------------------------|-------|------------------------------------------------------|
+|`LOCATION_RETENTION_PERIOD`|`0`    |How long to keep location points. `0` disables pruning|
+|`LOCATION_PRUNE_INTERVAL`  |`1h`   |How often the pruner runs                             |
+|`LOCATION_PRUNE_BATCH_SIZE`|`10000`|Maximum rows deleted per statement                    |
+
+Notes for operators:
+
+- **Retention is off by default.** With `LOCATION_RETENTION_PERIOD` unset (or `0`), history is kept forever, which is the behavior of every release before this feature. Pruning starts only when an agency opts in.
+- **Deletion is permanent.** There is no archival or export step; pruned points are gone. Export anything worth keeping before enabling retention.
+- **Retention is measured from server receipt time** (`received_at`), not the device-reported `timestamp` in the payload. A driver phone with a wrong clock can therefore neither keep its history past the retention period nor have it deleted early.
+- Deletes run in batches of `LOCATION_PRUNE_BATCH_SIZE`, each in its own transaction, so clearing a large backlog does not hold locks long enough to stall location ingest.
+- The first pass runs one full interval after startup, not at boot.
+- Agencies should pick a retention period consistent with local law and their own driver-privacy policy.
+
+Example — keep 90 days of history, sweeping hourly:
+
+```bash
+export LOCATION_RETENTION_PERIOD=2160h
+export LOCATION_PRUNE_INTERVAL=1h
+```
+
 **Technology Stack:**
 
 - **Language:** Go (aligns with Maglev and OTSF’s server-side direction)
