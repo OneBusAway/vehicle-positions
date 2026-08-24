@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -96,6 +99,153 @@ func handleLiveVehicles(tracker *Tracker, vehicles VehicleManager, trips ActiveT
 		writeJSON(w, http.StatusOK, liveVehiclesResponse{
 			Count:    len(entries),
 			Vehicles: entries,
+		})
+	}
+}
+
+const (
+	defaultTripListLimit = 50
+	maxTripListLimit     = 200
+)
+
+// TripTrailStore is the store interface required to serve a single trip's
+// summary and location trail, for the admin trip detail/map view.
+type TripTrailStore interface {
+	GetTripSummary(ctx context.Context, id int64) (*TripSummary, error)
+	ListTripLocations(ctx context.Context, tripID int64) ([]LocationPoint, error)
+}
+
+type tripListResponse struct {
+	Count   int           `json:"count"`
+	HasMore bool          `json:"has_more"`
+	Trips   []TripSummary `json:"trips"`
+}
+
+// tripTrailPoint is the JSON representation of a single point in a trip's
+// location trail. Field names are consumed directly by the admin map JS.
+type tripTrailPoint struct {
+	Latitude   float64  `json:"latitude"`
+	Longitude  float64  `json:"longitude"`
+	Bearing    *float64 `json:"bearing"`
+	Speed      *float64 `json:"speed"`
+	Accuracy   *float64 `json:"accuracy"`
+	ReportedAt int64    `json:"reported_at"`
+	ReceivedAt string   `json:"received_at"` // RFC3339 UTC
+}
+
+type tripTrailResponse struct {
+	Trip   TripSummary      `json:"trip"`
+	Points []tripTrailPoint `json:"points"`
+}
+
+// handleListTrips returns trip summaries for the admin trips list, filtered
+// by status/vehicle_id/q and paginated by limit/offset. It fetches limit+1
+// rows from the store to detect has_more without a separate count query.
+func handleListTrips(store TripLister) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+
+		status := q.Get("status")
+		if status != "" && status != "active" && status != "completed" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `status must be "", "active", or "completed"`})
+			return
+		}
+
+		limit, err := parseOptionalInt(q.Get("limit"), defaultTripListLimit)
+		if err != nil || limit < 1 || limit > maxTripListLimit {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("limit must be between 1 and %d", maxTripListLimit)})
+			return
+		}
+
+		offset, err := parseOptionalInt(q.Get("offset"), 0)
+		if err != nil || offset < 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "offset must be a non-negative integer"})
+			return
+		}
+
+		filter := TripFilter{
+			Status:    status,
+			VehicleID: q.Get("vehicle_id"),
+			Q:         q.Get("q"),
+			// Fetch one extra row to detect whether results were truncated at limit.
+			Limit:  limit + 1,
+			Offset: offset,
+		}
+
+		trips, err := store.ListTrips(r.Context(), filter)
+		if err != nil {
+			slog.Error("failed to list trips", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		hasMore := len(trips) > limit
+		if hasMore {
+			trips = trips[:limit]
+		}
+		if trips == nil {
+			trips = []TripSummary{}
+		}
+
+		writeJSON(w, http.StatusOK, tripListResponse{
+			Count:   len(trips),
+			HasMore: hasMore,
+			Trips:   trips,
+		})
+	}
+}
+
+// handleTripLocations returns a single trip's summary joined with its
+// location trail, for the admin trip detail/map view. A non-numeric or
+// unknown {id} both produce 404, since neither identifies a real trip.
+func handleTripLocations(store TripTrailStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+			return
+		}
+
+		trip, err := store.GetTripSummary(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, ErrTripNotFound) {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+				return
+			}
+			slog.Error("failed to get trip summary", "trip_id", id, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+		if trip == nil {
+			// Defensive: a well-behaved store returns ErrTripNotFound rather
+			// than (nil, nil), but guard against it to avoid a nil dereference.
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+			return
+		}
+
+		points, err := store.ListTripLocations(r.Context(), id)
+		if err != nil {
+			slog.Error("failed to list trip locations", "trip_id", id, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		entries := make([]tripTrailPoint, 0, len(points))
+		for _, p := range points {
+			entries = append(entries, tripTrailPoint{
+				Latitude:   p.Latitude,
+				Longitude:  p.Longitude,
+				Bearing:    p.Bearing,
+				Speed:      p.Speed,
+				Accuracy:   p.Accuracy,
+				ReportedAt: p.Timestamp,
+				ReceivedAt: p.ReceivedAt.UTC().Format(time.RFC3339),
+			})
+		}
+
+		writeJSON(w, http.StatusOK, tripTrailResponse{
+			Trip:   *trip,
+			Points: entries,
 		})
 	}
 }
