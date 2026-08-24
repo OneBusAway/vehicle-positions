@@ -133,6 +133,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 	}{
 		{"GET", "/api/v1/admin/status"},
 		{"GET", "/api/v1/admin/vehicles"},
+		{"GET", "/api/v1/admin/vehicles/live"},
 		{"GET", "/api/v1/admin/vehicles/bus-1"},
 		{"POST", "/api/v1/admin/vehicles"},
 		{"DELETE", "/api/v1/admin/vehicles/bus-1"},
@@ -185,6 +186,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	}{
 		{"GET", "/api/v1/admin/status"},
 		{"GET", "/api/v1/admin/vehicles"},
+		{"GET", "/api/v1/admin/vehicles/live"},
 		{"GET", "/api/v1/admin/vehicles/bus-1"},
 		{"POST", "/api/v1/admin/vehicles"},
 		{"DELETE", "/api/v1/admin/vehicles/bus-1"},
@@ -211,6 +213,38 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 			assert.NotEqual(t, http.StatusUnauthorized, w.Code, "admin token must not be rejected by authMiddleware on %s %s", tc.method, tc.path)
 		})
 	}
+}
+
+// TestLiveVehiclesRoute_DoesNotHitGetVehicle verifies that Go's 1.22+ mux
+// routes GET /api/v1/admin/vehicles/live to handleLiveVehicles rather than
+// treating "live" as the {id} path parameter of GET
+// /api/v1/admin/vehicles/{id} (handleGetVehicle). A noopStore GetVehicle
+// stub returns (nil, nil), which handleGetVehicle would serialize as a
+// literal JSON "null" body with 200 OK; handleLiveVehicles always returns an
+// object with "count" and "vehicles" keys, so decoding into that shape is
+// enough to distinguish the two handlers.
+func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
+	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret)
+	require.NoError(t, err)
+
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/vehicles/live", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	_, hasCount := resp["count"]
+	_, hasVehicles := resp["vehicles"]
+	assert.True(t, hasCount, "response must have a \"count\" key, proving handleLiveVehicles served the request, not handleGetVehicle")
+	assert.True(t, hasVehicles, "response must have a \"vehicles\" key, proving handleLiveVehicles served the request, not handleGetVehicle")
 }
 
 // TestDriverVehiclesRoute_Wiring verifies GET /api/v1/vehicles requires
