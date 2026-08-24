@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"time"
@@ -69,6 +70,7 @@ type adminUI struct {
 	tracker        *Tracker
 	stats          adminStatsStore
 	activeTrips    ActiveTripLister
+	trips          TripLister
 	vehicles       VehicleManager
 	vehicleEditor  vehicleEditor
 	vehicleChecker VehicleChecker
@@ -95,6 +97,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		tracker:        tracker,
 		stats:          store,
 		activeTrips:    store,
+		trips:          store,
 		vehicles:       store,
 		vehicleEditor:  store,
 		vehicleChecker: store,
@@ -975,14 +978,153 @@ func (ui *adminUI) userUnassignVehicle(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/users/"+idStr+"/edit", http.StatusSeeOther)
 }
 
+// tripsPageSize is the number of trips shown per page on the admin trips
+// list. ListTrips is called with Limit: tripsPageSize+1 so an extra row past
+// the page boundary reveals whether there's a next page (HasMore), without a
+// separate COUNT query.
+const tripsPageSize = 50
+
+// tripRow is a single row in the trips table: a trip's joined display fields
+// plus pre-formatted start/end times and duration, ready for the template.
+type tripRow struct {
+	ID           int64
+	VehicleLabel string
+	DriverName   string
+	RouteID      string
+	GtfsTripID   string
+	Start        string
+	End          string
+	Status       string
+	Duration     string
+}
+
+// formatTripTimestamp renders a trip's start/end time in the admin UI's
+// fixed UTC display format, regardless of the server's local timezone.
+func formatTripTimestamp(t time.Time) string {
+	return t.UTC().Format("2006-01-02 15:04") + " UTC"
+}
+
+// formatTripDuration renders how long a completed trip took, rounded to the
+// nearest minute. Active trips (nil end) have no duration yet.
+func formatTripDuration(start time.Time, end *time.Time) string {
+	if end == nil {
+		return "—"
+	}
+	d := end.Sub(start).Round(time.Minute)
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	return fmt.Sprintf("%dm", m)
+}
+
+// tripsPageURL builds a /admin/trips link preserving the current filter
+// values with page set to the given page number, for the prev/next
+// pagination links.
+func tripsPageURL(status, vehicleID, q string, page int) string {
+	v := url.Values{}
+	if status != "" {
+		v.Set("status", status)
+	}
+	if vehicleID != "" {
+		v.Set("vehicle_id", vehicleID)
+	}
+	if q != "" {
+		v.Set("q", q)
+	}
+	v.Set("page", strconv.Itoa(page))
+	return "/admin/trips?" + v.Encode()
+}
+
+// tripsPage renders the trip history list: real trips from the store,
+// filtered by status/vehicle/free-text query, 50 per page. status must be
+// ""/active/completed (else 400); an invalid or missing page falls back to
+// page 1 rather than erroring, since it's a bookmarkable/shareable URL param
+// that's easy to hand-edit into something invalid.
 func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	query := r.URL.Query()
+
+	status := query.Get("status")
+	if status != "" && status != "active" && status != "completed" {
+		http.Error(w, "status must be active or completed", http.StatusBadRequest)
+		return
+	}
+	vehicleID := query.Get("vehicle_id")
+	q := query.Get("q")
+
+	page := 1
+	if raw := query.Get("page"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 1 {
+			page = n
+		}
+	}
+
+	filter := TripFilter{
+		Status:    status,
+		VehicleID: vehicleID,
+		Q:         q,
+		Limit:     tripsPageSize + 1,
+		Offset:    (page - 1) * tripsPageSize,
+	}
+
+	trips, err := ui.trips.ListTrips(ctx, filter)
+	if err != nil {
+		slog.Error("trips: list trips", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	hasMore := len(trips) > tripsPageSize
+	if hasMore {
+		trips = trips[:tripsPageSize]
+	}
+
+	allVehicles, err := ui.vehicles.ListVehicles(ctx)
+	if err != nil {
+		slog.Error("trips: list vehicles", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	activeVehicles := make([]VehicleResponse, 0, len(allVehicles))
+	for _, v := range allVehicles {
+		if v.Active {
+			activeVehicles = append(activeVehicles, v)
+		}
+	}
+	sort.Slice(activeVehicles, func(i, j int) bool { return activeVehicles[i].ID < activeVehicles[j].ID })
+
+	rows := make([]tripRow, 0, len(trips))
+	for _, t := range trips {
+		row := tripRow{
+			ID:           t.ID,
+			VehicleLabel: t.VehicleLabel,
+			DriverName:   t.DriverName,
+			RouteID:      t.RouteID,
+			GtfsTripID:   t.GtfsTripID,
+			Start:        formatTripTimestamp(t.StartTime),
+			End:          "—",
+			Status:       t.Status,
+			Duration:     formatTripDuration(t.StartTime, t.EndTime),
+		}
+		if t.EndTime != nil {
+			row.End = formatTripTimestamp(*t.EndTime)
+		}
+		rows = append(rows, row)
+	}
+
 	ui.renderAdmin(w, r, "trips.html", map[string]interface{}{
-		"Title": "Trips",
-		"Page":  "trips",
-		"Trips": []map[string]string{
-			{"ID": "T001", "Vehicle": "Bus 001", "Driver": "Tom Hiddlestone", "Route": "Route A", "Start": "07:00", "End": "08:45", "Status": "completed"},
-			{"ID": "T002", "Vehicle": "Bus 002", "Driver": "Chris Hensworth", "Route": "Route B", "Start": "07:15", "End": "—", "Status": "active"},
-			{"ID": "T003", "Vehicle": "Bus 003", "Driver": "Bruce Wayne", "Route": "Route C", "Start": "06:45", "End": "08:30", "Status": "completed"},
-		},
+		"Title":     "Trips",
+		"Page":      "trips",
+		"Trips":     rows,
+		"Vehicles":  activeVehicles,
+		"Status":    status,
+		"VehicleID": vehicleID,
+		"Q":         q,
+		"PageNum":   page,
+		"HasMore":   hasMore,
+		"PrevURL":   tripsPageURL(status, vehicleID, q, page-1),
+		"NextURL":   tripsPageURL(status, vehicleID, q, page+1),
 	})
 }

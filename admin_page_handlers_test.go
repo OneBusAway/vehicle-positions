@@ -171,7 +171,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		{"dashboard", "/admin/dashboard", "Active Trips"},
 		{"vehicles", "/admin/vehicles", "New vehicle"},
 		{"users", "/admin/users", "New user"},
-		{"trips", "/admin/trips", "Route A"},
+		{"trips", "/admin/trips", "No trips found."},
 		{"map", "/admin/map", "Live Map"},
 	}
 	for _, tc := range cases {
@@ -1123,4 +1123,211 @@ func TestUserAssignVehicle_UnknownVehicle(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.False(t, assignments.byUser[1]["ghost-bus"])
+}
+
+// TestTripsPageRendersRealTrips verifies the trips table renders a seeded
+// trip's vehicle label, driver name, UTC-suffixed start/end times, duration,
+// and a "View trail" link into the map trail view — and that the old mock
+// data is gone.
+func TestTripsPageRendersRealTrips(t *testing.T) {
+	ui := newTestAdminUI(t)
+	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 1, 2, 8, 45, 0, 0, time.UTC)
+	fake := &fakeTripLister{trips: []TripSummary{
+		{ID: 42, VehicleID: "bus-1", VehicleLabel: "Bus One", UserID: 7, DriverName: "Asha Patel", RouteID: "12", GtfsTripID: "trip-99", StartTime: start, EndTime: &end, Status: "completed"},
+	}}
+	ui.trips = fake
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "Bus One")
+	assert.Contains(t, body, "Asha Patel")
+	assert.Contains(t, body, "12")
+	assert.Contains(t, body, "trip-99")
+	assert.Contains(t, body, "2026-01-02 07:00 UTC")
+	assert.Contains(t, body, "2026-01-02 08:45 UTC")
+	assert.Contains(t, body, "1h 45m")
+	assert.Contains(t, body, `href="/admin/map?trip_id=42"`)
+	assert.NotContains(t, body, "T001", "mock data must be gone")
+	assert.NotContains(t, body, "Tom Hiddlestone", "mock data must be gone")
+}
+
+// TestTripsPageActiveTripHasNoEndOrDuration verifies an active trip (nil
+// EndTime) renders em-dashes for end time and duration rather than zero
+// values.
+func TestTripsPageActiveTripHasNoEndOrDuration(t *testing.T) {
+	ui := newTestAdminUI(t)
+	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
+	fake := &fakeTripLister{trips: []TripSummary{
+		{ID: 43, VehicleID: "bus-2", VehicleLabel: "Bus Two", UserID: 8, DriverName: "Chris H", RouteID: "13", GtfsTripID: "trip-100", StartTime: start, EndTime: nil, Status: "active"},
+	}}
+	ui.trips = fake
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "2026-01-02 07:00 UTC")
+	assert.Contains(t, body, "—")
+}
+
+// TestTripsPageFilterPassthrough verifies status/vehicle_id/q/page query
+// params are translated into the TripFilter passed to ListTrips, including
+// the Limit:51/Offset math for page 2.
+func TestTripsPageFilterPassthrough(t *testing.T) {
+	ui := newTestAdminUI(t)
+	fake := &fakeTripLister{}
+	ui.trips = fake
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips?status=active&vehicle_id=bus-1&q=asha&page=2", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, TripFilter{Status: "active", VehicleID: "bus-1", Q: "asha", Limit: 51, Offset: 50}, fake.captured)
+}
+
+// TestTripsPageBadStatusReturns400 verifies a status value outside
+// ""/active/completed is rejected.
+func TestTripsPageBadStatusReturns400(t *testing.T) {
+	ui := newTestAdminUI(t)
+	ui.trips = &fakeTripLister{}
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips?status=bogus", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// TestTripsPageInvalidPageDefaultsToOne verifies a missing or non-numeric
+// page param falls back to page 1 (Offset 0) rather than erroring.
+func TestTripsPageInvalidPageDefaultsToOne(t *testing.T) {
+	for _, page := range []string{"", "abc", "0", "-1"} {
+		t.Run("page="+page, func(t *testing.T) {
+			ui := newTestAdminUI(t)
+			fake := &fakeTripLister{}
+			ui.trips = fake
+			mux := http.NewServeMux()
+			registerAdminUI(mux, ui)
+
+			path := "/admin/trips"
+			if page != "" {
+				path += "?page=" + page
+			}
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.AddCookie(cookieFor(t, "admin"))
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, 0, fake.captured.Offset)
+		})
+	}
+}
+
+// TestTripsPageHasMorePagination verifies a full page (51 rows returned for
+// Limit:51) trims to 50 and shows a Next link, and that page 2 shows a
+// Previous link back to page 1.
+func TestTripsPageHasMorePagination(t *testing.T) {
+	ui := newTestAdminUI(t)
+	trips := make([]TripSummary, 51)
+	for i := range trips {
+		trips[i] = TripSummary{ID: int64(i + 1), VehicleID: "bus-1", VehicleLabel: "Bus One", DriverName: "Driver", RouteID: "1", GtfsTripID: "g1", StartTime: time.Now(), Status: "completed"}
+	}
+	fake := &fakeTripLister{trips: trips}
+	ui.trips = fake
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "page=2")
+	assert.NotContains(t, body, "Previous")
+
+	req = httptest.NewRequest(http.MethodGet, "/admin/trips?page=2", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	body = w.Body.String()
+	assert.Contains(t, body, "Previous")
+	assert.Contains(t, body, "page=1")
+}
+
+// TestTripsPageEmptyState covers the empty-state row when no trips match.
+func TestTripsPageEmptyState(t *testing.T) {
+	ui := newTestAdminUI(t)
+	ui.trips = &fakeTripLister{}
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "No trips found.")
+}
+
+// TestTripsPageStoreErrorReturns500 verifies a ListTrips failure produces a
+// 500 rather than a partially-rendered page.
+func TestTripsPageStoreErrorReturns500(t *testing.T) {
+	ui := newTestAdminUI(t)
+	ui.trips = &fakeTripLister{err: errors.New("boom")}
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// TestTripsPageVehicleSelectActiveOnly verifies the vehicle filter dropdown
+// is populated from active vehicles only.
+func TestTripsPageVehicleSelectActiveOnly(t *testing.T) {
+	ui := newTestAdminUI(t)
+	ui.trips = &fakeTripLister{}
+	wireFakeVehicleStore(ui, newFakeVehicleStore(
+		VehicleResponse{ID: "bus-1", Label: "Active Bus", Active: true},
+		VehicleResponse{ID: "bus-2", Label: "Retired Bus", Active: false},
+	))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "Active Bus")
+	assert.NotContains(t, body, "Retired Bus")
 }

@@ -1,11 +1,27 @@
 {{define "content"}}
 <div class="p-4 lg:p-5">
   <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
       <div>
         <h3 class="display-font text-lg font-bold text-slate-900">Trip History</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{len .Trips}} trips today</p>
+        <p class="mt-0.5 text-xs text-slate-400">{{len .Trips}} trips shown</p>
       </div>
+      <form method="get" action="/admin/trips" class="flex flex-wrap items-center gap-2">
+        <select name="status" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          <option value="" {{if eq .Status ""}}selected{{end}}>All statuses</option>
+          <option value="active" {{if eq .Status "active"}}selected{{end}}>Active</option>
+          <option value="completed" {{if eq .Status "completed"}}selected{{end}}>Completed</option>
+        </select>
+        <select name="vehicle_id" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          <option value="" {{if eq .VehicleID ""}}selected{{end}}>All vehicles</option>
+          {{$vehicleID := .VehicleID}}
+          {{range .Vehicles}}
+          <option value="{{.ID}}" {{if eq $vehicleID .ID}}selected{{end}}>{{.Label}}</option>
+          {{end}}
+        </select>
+        <input type="text" name="q" placeholder="Search driver, route, trip id" value="{{.Q}}" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">Apply</button>
+      </form>
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm">
@@ -15,18 +31,27 @@
             <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</th>
             <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Driver</th>
             <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">GTFS trip</th>
             <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Start</th>
             <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">End</th>
             <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Status</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Duration</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
+          {{if not .Trips}}
+          <tr>
+            <td class="px-5 py-6 text-center text-slate-400" colspan="10">No trips found.</td>
+          </tr>
+          {{end}}
           {{range .Trips}}
           <tr class="transition-colors hover:bg-slate-50/60">
             <td class="px-5 py-4 font-mono text-xs font-medium text-slate-400">{{.ID}}</td>
-            <td class="px-5 py-4 font-semibold text-slate-900">{{.Vehicle}}</td>
-            <td class="px-5 py-4 text-slate-500">{{.Driver}}</td>
-            <td class="px-5 py-4 text-slate-500">{{.Route}}</td>
+            <td class="px-5 py-4 font-semibold text-slate-900">{{.VehicleLabel}}</td>
+            <td class="px-5 py-4 text-slate-500">{{.DriverName}}</td>
+            <td class="px-5 py-4 text-slate-500">{{.RouteID}}</td>
+            <td class="px-5 py-4 font-mono text-xs text-slate-400">{{.GtfsTripID}}</td>
             <td class="px-5 py-4 text-slate-500">{{.Start}}</td>
             <td class="px-5 py-4 text-slate-400">{{.End}}</td>
             <td class="px-5 py-4">
@@ -38,11 +63,30 @@
               <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>{{.Status}}</span>
               {{end}}
             </td>
+            <td class="px-5 py-4 text-slate-400">{{.Duration}}</td>
+            <td class="px-5 py-4">
+              <a href="/admin/map?trip_id={{.ID}}" class="text-xs font-semibold text-sky-600 hover:text-sky-800">View trail</a>
+            </td>
           </tr>
           {{end}}
         </tbody>
       </table>
     </div>
+    {{if or (gt .PageNum 1) .HasMore}}
+    <div class="flex items-center justify-between border-t border-slate-200/60 px-5 py-4 text-xs font-semibold text-slate-500">
+      <div>
+        {{if gt .PageNum 1}}
+        <a href="{{.PrevURL}}" class="text-sky-600 hover:text-sky-800">&larr; Previous</a>
+        {{end}}
+      </div>
+      <div>Page {{.PageNum}}</div>
+      <div>
+        {{if .HasMore}}
+        <a href="{{.NextURL}}" class="text-sky-600 hover:text-sky-800">Next &rarr;</a>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
   </div>
 </div>
 {{end}}
