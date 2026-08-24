@@ -1,26 +1,43 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 // adminUIConfig holds the runtime knobs for the admin UI that vary by
-// deployment (whether it's served at all, and whether proxy headers are
-// trusted for client-IP/HTTPS detection).
+// deployment (whether it's served at all, whether proxy headers are trusted
+// for client-IP/HTTPS detection, and the feed staleness threshold shown on
+// the dashboard's feed-health strip — mirrors main's STALENESS_THRESHOLD).
 type adminUIConfig struct {
-	enabled    bool
-	trustProxy bool
+	enabled            bool
+	trustProxy         bool
+	stalenessThreshold time.Duration
+}
+
+// adminStatsStore provides the aggregate counts shown on the admin
+// dashboard.
+type adminStatsStore interface {
+	CountActiveVehicles(ctx context.Context) (int, error)
+	CountActiveUsersByRole(ctx context.Context, role string) (int, error)
+	CountActiveTrips(ctx context.Context) (int, error)
 }
 
 // adminUI owns the parsed templates and dependencies for all admin pages.
-// Page-data deps grow in later tasks (tracker, stats, trips, vehicles...).
 type adminUI struct {
 	tmpl         *embeddedTemplates
 	users        UserFetcher
+	tracker      *Tracker
+	stats        adminStatsStore
+	activeTrips  ActiveTripLister
+	vehicles     VehicleManager
 	jwtSecret    []byte
 	loginLimiter *LoginRateLimiter
 	cfg          adminUIConfig
@@ -28,13 +45,25 @@ type adminUI struct {
 
 // newAdminUI loads the embedded templates and wires the admin UI's
 // dependencies. It returns an error rather than panicking so callers can log
-// it with context and exit cleanly.
-func newAdminUI(users UserFetcher, jwtSecret []byte, limiter *LoginRateLimiter, cfg adminUIConfig) (*adminUI, error) {
+// it with context and exit cleanly. store supplies the user, stats, active
+// trips, and vehicle dependencies (it implements appStore, a superset of all
+// of them).
+func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *LoginRateLimiter, cfg adminUIConfig) (*adminUI, error) {
 	tmpl, err := loadTemplates()
 	if err != nil {
 		return nil, err
 	}
-	return &adminUI{tmpl: tmpl, users: users, jwtSecret: jwtSecret, loginLimiter: limiter, cfg: cfg}, nil
+	return &adminUI{
+		tmpl:         tmpl,
+		users:        store,
+		tracker:      tracker,
+		stats:        store,
+		activeTrips:  store,
+		vehicles:     store,
+		jwtSecret:    jwtSecret,
+		loginLimiter: limiter,
+		cfg:          cfg,
+	}, nil
 }
 
 // registerAdminUI registers the admin routes on mux. It does not mount
@@ -157,22 +186,132 @@ func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// dashboardRow is a single row in the dashboard's recent-activity table: a
+// vehicle's label, its current route (if it has an active trip), and how
+// long ago it last reported.
+type dashboardRow struct {
+	Label    string
+	RouteID  string
+	LastSeen string
+}
+
+// recentActivityLimit caps the dashboard's recent-activity table so it stays
+// scannable regardless of fleet size.
+const recentActivityLimit = 10
+
+// dashboardPage renders the admin dashboard: aggregate stats from the store,
+// the tracker's live feed status, and the most recently reported vehicles
+// joined with their labels and (if any) active trip's route.
 func (ui *adminUI) dashboardPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	totalVehicles, err := ui.stats.CountActiveVehicles(ctx)
+	if err != nil {
+		slog.Error("dashboard: count active vehicles", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	totalDrivers, err := ui.stats.CountActiveUsersByRole(ctx, "driver")
+	if err != nil {
+		slog.Error("dashboard: count active drivers", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	activeTripCount, err := ui.stats.CountActiveTrips(ctx)
+	if err != nil {
+		slog.Error("dashboard: count active trips", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	vehicleList, err := ui.vehicles.ListVehicles(ctx)
+	if err != nil {
+		slog.Error("dashboard: list vehicles", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	labels := make(map[string]string, len(vehicleList))
+	for _, v := range vehicleList {
+		labels[v.ID] = v.Label
+	}
+
+	tripsByVehicle, err := ui.activeTrips.ListActiveTripsByVehicle(ctx)
+	if err != nil {
+		slog.Error("dashboard: list active trips by vehicle", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	status := ui.tracker.Status()
+
+	active := ui.tracker.ActiveVehicles()
+	sort.Slice(active, func(i, j int) bool { return active[i].UpdatedAt.After(active[j].UpdatedAt) })
+	if len(active) > recentActivityLimit {
+		active = active[:recentActivityLimit]
+	}
+	recent := make([]dashboardRow, 0, len(active))
+	for _, v := range active {
+		label := v.VehicleID
+		if l, ok := labels[v.VehicleID]; ok {
+			label = l
+		}
+		var routeID string
+		if trip, ok := tripsByVehicle[v.VehicleID]; ok {
+			routeID = trip.RouteID
+		}
+		recent = append(recent, dashboardRow{
+			Label:    label,
+			RouteID:  routeID,
+			LastSeen: humanizeAge(v.UpdatedAt),
+		})
+	}
+
+	lastUpdate := "never"
+	if status.LastUpdate != nil {
+		lastUpdate = humanizeAge(*status.LastUpdate)
+	}
+
 	ui.renderAdmin(w, r, "dashboard.html", map[string]interface{}{
-		"Title":          "Dashboard",
-		"Page":           "dashboard",
-		"TotalVehicles":  "24",
-		"ActiveVehicles": "18",
-		"TotalDrivers":   "32",
-		"ActiveTrips":    "15",
-		"RecentVehicles": []map[string]string{
-			{"Name": "Bus 001", "Route": "Route A", "Status": "active", "LastSeen": "2 min ago"},
-			{"Name": "Bus 002", "Route": "Route B", "Status": "active", "LastSeen": "5 min ago"},
-			{"Name": "Bus 003", "Route": "Route C", "Status": "idle", "LastSeen": "12 min ago"},
-			{"Name": "Bus 004", "Route": "Route A", "Status": "active", "LastSeen": "1 min ago"},
-			{"Name": "Bus 005", "Route": "Route D", "Status": "active", "LastSeen": "3 min ago"},
-		},
+		"Title":              "Dashboard",
+		"Page":               "dashboard",
+		"TotalVehicles":      totalVehicles,
+		"ActiveVehicles":     status.ActiveVehicles,
+		"TotalDrivers":       totalDrivers,
+		"ActiveTrips":        activeTripCount,
+		"LastUpdate":         lastUpdate,
+		"StalenessThreshold": humanizeDuration(ui.cfg.stalenessThreshold),
+		"RecentVehicles":     recent,
 	})
+}
+
+// humanizeAge renders how long ago t was, in a compact human form: "just
+// now" for anything under a minute, then whole minutes, then whole hours.
+func humanizeAge(t time.Time) string {
+	age := time.Since(t)
+	switch {
+	case age < time.Minute:
+		return "just now"
+	case age < time.Hour:
+		return fmt.Sprintf("%d min ago", int(age.Minutes()))
+	default:
+		return fmt.Sprintf("%d h ago", int(age.Hours()))
+	}
+}
+
+// humanizeDuration renders a duration in the same compact style as
+// humanizeAge, without the "ago" suffix — used for the feed-health strip's
+// staleness threshold.
+func humanizeDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%d min", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%d h", int(d.Hours()))
+	}
 }
 
 func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {

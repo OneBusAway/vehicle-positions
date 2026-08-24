@@ -107,7 +107,7 @@ func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimite
 	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy)
 
 	if cfg.enabled {
-		ui, err := newAdminUI(store, jwtSecret, loginLimiter, cfg)
+		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("init admin UI: %w", err)
 		}
@@ -193,7 +193,7 @@ func main() {
 	startTime := time.Now()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders()})
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge})
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)

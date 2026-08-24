@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,11 +32,27 @@ func (f *fakeUserFetcher) GetUserByEmail(_ context.Context, email string) (*User
 
 func newTestAdminUI(t *testing.T) *adminUI {
 	t.Helper()
-	ui, err := newAdminUI(&noopStore{}, testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true})
+	tracker := NewTracker(5 * time.Minute)
+	t.Cleanup(tracker.Stop)
+	ui, err := newAdminUI(&noopStore{}, tracker, testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
 	require.NoError(t, err)
 	t.Cleanup(ui.loginLimiter.Stop)
 	return ui
 }
+
+// fakeAdminStats is a configurable adminStatsStore double for dashboard tests
+// that need specific counts, independent of the tracker's own vehicle count.
+type fakeAdminStats struct {
+	vehicles int
+	drivers  int
+	trips    int
+}
+
+func (f *fakeAdminStats) CountActiveVehicles(_ context.Context) (int, error) { return f.vehicles, nil }
+func (f *fakeAdminStats) CountActiveUsersByRole(_ context.Context, _ string) (int, error) {
+	return f.drivers, nil
+}
+func (f *fakeAdminStats) CountActiveTrips(_ context.Context) (int, error) { return f.trips, nil }
 
 func TestAdminLoginPageRenders(t *testing.T) {
 	ui := newTestAdminUI(t)
@@ -149,7 +167,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		path string
 		want string
 	}{
-		{"dashboard", "/admin/dashboard", "Bus 001"},
+		{"dashboard", "/admin/dashboard", "Active Trips"},
 		{"vehicles", "/admin/vehicles", "Bus 001"},
 		{"users", "/admin/users", "Chaitanya K"},
 		{"trips", "/admin/trips", "Route A"},
@@ -206,4 +224,66 @@ func TestAdminLoginPageRedirectsWhenAlreadyAuthenticated(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+}
+
+// TestDashboardRendersRealCounts verifies the dashboard renders live stats
+// (from a fake stats store), the tracker's active-vehicle count/recent
+// activity, and that the old mock data is gone.
+func TestDashboardRendersRealCounts(t *testing.T) {
+	ui := newTestAdminUI(t)
+	ui.stats = &fakeAdminStats{vehicles: 7, drivers: 5, trips: 3}
+	ui.tracker.Update(&LocationReport{VehicleID: "bus-1", TripID: "g1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, ">7<")   // total vehicles stat
+	assert.Contains(t, body, ">5<")   // drivers stat
+	assert.Contains(t, body, ">3<")   // active trips stat
+	assert.Contains(t, body, "bus-1") // recent activity row (label falls back to id)
+	assert.NotContains(t, body, "Bus 001", "mock data must be gone")
+}
+
+// TestDashboardRecentActivityEmptyState covers the empty-state row when the
+// tracker has no active vehicles.
+func TestDashboardRecentActivityEmptyState(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "No vehicles have reported recently")
+}
+
+// TestDashboardStoreErrorReturns500 verifies a stats-store failure produces a
+// 500 rather than a partially-rendered page.
+func TestDashboardStoreErrorReturns500(t *testing.T) {
+	ui := newTestAdminUI(t)
+	ui.stats = &erroringAdminStats{}
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+type erroringAdminStats struct{}
+
+func (erroringAdminStats) CountActiveVehicles(_ context.Context) (int, error) {
+	return 0, errors.New("boom")
+}
+func (erroringAdminStats) CountActiveUsersByRole(_ context.Context, _ string) (int, error) {
+	return 0, errors.New("boom")
+}
+func (erroringAdminStats) CountActiveTrips(_ context.Context) (int, error) {
+	return 0, errors.New("boom")
 }
