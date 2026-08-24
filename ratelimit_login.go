@@ -41,13 +41,21 @@ func NewLoginRateLimiter() *LoginRateLimiter {
 
 func (l *LoginRateLimiter) Stop() { l.once.Do(func() { close(l.stop) }) }
 
+// Allow checks the IP dimension first and returns false immediately, without
+// touching byEmail, when the IP is already blocked. This prevents a single
+// IP from spraying distinct emails to fill byEmail up to maxTrackedLogins
+// while it is itself IP-blocked, which would otherwise fail every new key
+// closed once the map hit capacity (a map-filling DoS from one IP). When the
+// IP is not blocked, a single Allow call still consumes budget from both
+// dimensions, matching prior behavior.
 func (l *LoginRateLimiter) Allow(ip, email string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
-	okIP := allowInWindow(l.byIP, ip, loginIPLimit, now)
-	okEmail := allowInWindow(l.byEmail, email, loginEmailLimit, now)
-	return okIP && okEmail
+	if !allowInWindow(l.byIP, ip, loginIPLimit, now) {
+		return false
+	}
+	return allowInWindow(l.byEmail, email, loginEmailLimit, now)
 }
 
 func allowInWindow(m map[string]*loginWindowEntry, key string, limit int, now time.Time) bool {

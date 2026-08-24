@@ -170,12 +170,12 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
-	if !ui.loginLimiter.Allow(clientIP(r, ui.cfg.trustProxy), email) {
-		ui.renderLogin(w, http.StatusTooManyRequests, "Too many attempts, try again shortly.", email)
-		return
-	}
 	if email == "" || password == "" {
 		ui.renderLogin(w, http.StatusUnprocessableEntity, "Email and password are required.", email)
+		return
+	}
+	if !ui.loginLimiter.Allow(clientIP(r, ui.cfg.trustProxy), email) {
+		ui.renderLogin(w, http.StatusTooManyRequests, "Too many attempts, try again shortly.", email)
 		return
 	}
 	user, err := ui.users.GetUserByEmail(r.Context(), email)
