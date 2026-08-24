@@ -254,6 +254,65 @@ func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
 	assert.True(t, hasVehicles, "response must have a \"vehicles\" key, proving handleLiveVehicles served the request, not handleGetVehicle")
 }
 
+// TestAdminPageRoutes_Wiring verifies every protected /admin/* page and POST
+// route registered by registerAdminUI (Tasks 8, 15, 16, 17) enforces
+// requireAdminPage: an unauthenticated visitor and a driver-role session
+// cookie are both redirected (303) to /admin/login rather than reaching the
+// handler. This is the page-route counterpart to
+// TestAdminRoutes_DriverTokenRejected/AdminTokenAllowed above, which cover
+// the JSON /api/v1/admin/* routes. Add new admin page/POST routes to this
+// table so it catches future wiring gaps. (/admin/login, /admin/logout, and
+// /admin, /admin/{$} are intentionally excluded — they're unprotected by
+// design: the login page/submit must be reachable without a session, and
+// logout must work even for an expired one.)
+func TestAdminPageRoutes_Wiring(t *testing.T) {
+	h := newTestHandler(t, true)
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{"GET", "/admin/dashboard"},
+		{"GET", "/admin/map"},
+		{"GET", "/admin/vehicles"},
+		{"GET", "/admin/vehicles/new"},
+		{"POST", "/admin/vehicles"},
+		{"GET", "/admin/vehicles/bus-1/edit"},
+		{"POST", "/admin/vehicles/bus-1"},
+		{"POST", "/admin/vehicles/bus-1/deactivate"},
+		{"POST", "/admin/vehicles/bus-1/activate"},
+		{"GET", "/admin/users"},
+		{"GET", "/admin/users/new"},
+		{"POST", "/admin/users"},
+		{"GET", "/admin/users/1/edit"},
+		{"POST", "/admin/users/1"},
+		{"POST", "/admin/users/1/deactivate"},
+		{"POST", "/admin/users/1/activate"},
+		{"POST", "/admin/users/1/vehicles"},
+		{"POST", "/admin/users/1/vehicles/bus-1/remove"},
+		{"GET", "/admin/trips"},
+	}
+
+	for _, tc := range tests {
+		t.Run("unauthenticated "+tc.method+" "+tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusSeeOther, w.Code, "unauthenticated request to %s %s must redirect", tc.method, tc.path)
+			assert.Equal(t, "/admin/login", w.Header().Get("Location"), "%s %s", tc.method, tc.path)
+		})
+
+		t.Run("driver session "+tc.method+" "+tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.AddCookie(cookieFor(t, "driver"))
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusSeeOther, w.Code, "driver session on %s %s must redirect, not reach the handler", tc.method, tc.path)
+			assert.Equal(t, "/admin/login", w.Header().Get("Location"), "%s %s", tc.method, tc.path)
+		})
+	}
+}
+
 // TestDriverVehiclesRoute_Wiring verifies GET /api/v1/vehicles requires
 // authentication (401 with no token) and accepts any authenticated driver
 // (200 with a driver-role token) — no admin role required, unlike the

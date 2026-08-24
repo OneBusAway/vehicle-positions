@@ -61,23 +61,23 @@ curl -s http://localhost:8080/health
 # {"status":"ok"}
 ```
 
-### 2. Create an admin user (no bootstrap path exists)
+### 2. Create an admin user
 
-Neither `seed_dev.sql` nor the migrations create an admin user — only a
-driver (see step 3). Every admin endpoint requires an admin-role JWT
-(`requireAdmin` in `auth.go`, wired in `main.go`), and account creation
-itself is an admin-only endpoint, so the very first admin has to be inserted
-directly into the database. Insert one via `psql`, reusing the bcrypt hash
-already checked into `seed_dev.sql` (it hashes the password `password`, cost
-10, matching the server's `bcrypt.DefaultCost`):
+`seed_dev.sql` seeds both a driver and an admin (`admin@test.com` /
+`password`). Every admin endpoint requires an admin-role JWT (`requireAdmin`
+in `auth.go`, wired in `main.go`), and account creation itself is an
+admin-only endpoint, so getting that seed admin in place is the easiest way
+to bootstrap:
 
 ```bash
-docker compose exec -T db psql -U postgres -d vehicle_positions -c "
-INSERT INTO users (name, email, password_hash, role)
-VALUES ('Admin', 'admin@test.com', '\$2a\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin')
-ON CONFLICT (email) DO NOTHING;
-"
+docker compose exec -T db psql -U postgres -d vehicle_positions < seed_dev.sql
 ```
+
+(Alternatively, for production/staging deployments rather than local dev, set
+`ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` before the server's first
+boot — it creates that admin once, only when the `users` table has zero
+admins. See `docs/development.md` for the full admin-UI setup, including the
+server-rendered UI at `/admin` itself.)
 
 Log in to confirm and capture the admin token for the next step:
 

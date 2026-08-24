@@ -70,6 +70,47 @@ You can run Postgres in Docker and run the Go server directly:
 
 Migrations are applied automatically on server startup.
 
+## Admin Web UI
+
+The server also serves a session-authenticated admin UI at `/admin`
+(dashboard, live map + trails, vehicle/user CRUD, assignments, trip history).
+It's on by default; set `ADMIN_UI_ENABLED=false` if you want to run the
+server with just the JSON API.
+
+To sign in locally, seed the dev admin (`admin@test.com` / `password`) the
+same way you'd seed the dev driver:
+
+```bash
+docker compose exec -T db psql -U postgres -d vehicle_positions < seed_dev.sql
+```
+
+Then visit `http://localhost:8080/admin/login`. For a from-scratch admin
+instead of the seed one, set `ADMIN_BOOTSTRAP_EMAIL` /
+`ADMIN_BOOTSTRAP_PASSWORD` before the server's first boot — it only creates
+an admin when none exist yet, so it's safe to leave set across restarts.
+
+If you're changing anything under `web/templates` or `web/styles/input.css`,
+rebuild the compiled Tailwind CSS before checking your changes in the
+browser:
+
+```bash
+make css
+```
+
+This compiles `web/styles/input.css` to `web/static/css/admin.css` (which is
+what the server actually embeds and serves — the browser never sees
+`input.css`) using a pinned Tailwind CLI binary (currently `v4.2.0`, see
+`TAILWIND_VERSION` in the `Makefile`) that `make css` downloads to `.tools/`
+on first use. CI checks in `web/static/css/admin.css` against the same
+pinned version, so if you bump `TAILWIND_VERSION` in the `Makefile`, also
+bump the version CI downloads in `.github/workflows/ci.yml` and re-run `make
+css` to regenerate the checked-in output.
+
+Running behind a reverse proxy locally (rare, but if you're testing that
+path)? Set `TRUST_PROXY_HEADERS=true` so client-IP-based rate limiting and
+the session cookie's `Secure` flag look at `X-Forwarded-For` /
+`X-Forwarded-Proto` instead of the raw connection.
+
 ## Running Tests
 
 Run all tests:
