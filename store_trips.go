@@ -284,18 +284,9 @@ func (s *Store) ListTripLocations(ctx context.Context, tripID int64) ([]Location
 			TripID:     row.TripID,
 			ReceivedAt: row.ReceivedAt.Time,
 		}
-		if row.Bearing.Valid {
-			v := row.Bearing.Float64
-			p.Bearing = &v
-		}
-		if row.Speed.Valid {
-			v := row.Speed.Float64
-			p.Speed = &v
-		}
-		if row.Accuracy.Valid {
-			v := row.Accuracy.Float64
-			p.Accuracy = &v
-		}
+		p.Bearing = nullableFloat(row.Bearing)
+		p.Speed = nullableFloat(row.Speed)
+		p.Accuracy = nullableFloat(row.Accuracy)
 		points = append(points, p)
 	}
 	return points, nil

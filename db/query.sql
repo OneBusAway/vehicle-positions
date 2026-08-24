@@ -67,11 +67,6 @@ VALUES ($1, $2, $3)
 ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, agency_tag = EXCLUDED.agency_tag, active = true, updated_at = NOW()
 RETURNING id, label, agency_tag, active, created_at, updated_at;
 
--- name: DeactivateVehicle :execrows
-UPDATE vehicles
-SET active = false, updated_at = NOW()
-WHERE id = $1;
-
 -- name: CheckUserVehicleAssignment :one
 SELECT user_id, vehicle_id
 FROM user_vehicles

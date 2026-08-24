@@ -588,9 +588,18 @@ func (ui *adminUI) setVehicleActive(w http.ResponseWriter, r *http.Request, acti
 	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
 }
 
-// minPasswordLength is the minimum length required for a new or changed
-// user password (create form and edit form's optional password field).
+// minPasswordLength is the minimum length required for a user password. It is
+// enforced everywhere passwords are set — the users API, the admin UI forms,
+// and the bootstrap admin path — via validatePassword.
 const minPasswordLength = 8
+
+// validatePassword enforces the shared minimum-password-length policy.
+func validatePassword(password string) error {
+	if len(password) < minPasswordLength {
+		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
+	}
+	return nil
+}
 
 // userRow is a single row in the user list table: the user's stored fields
 // plus how many vehicles are currently assigned to them.
@@ -696,6 +705,12 @@ func validUserRole(role string) bool {
 	return role == "driver" || role == "admin"
 }
 
+// validTripStatus reports whether s is a valid trips status filter value,
+// shared by the trips JSON endpoint and the trips admin page.
+func validTripStatus(s string) bool {
+	return s == "" || s == "active" || s == "completed"
+}
+
 // userNewPage renders the blank create-user form.
 func (ui *adminUI) userNewPage(w http.ResponseWriter, r *http.Request) {
 	ui.renderUserForm(w, r, http.StatusOK, userFormData{Role: "driver"})
@@ -714,8 +729,8 @@ func (ui *adminUI) userCreate(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
 	role := r.PostFormValue("role")
 
-	if len(password) < minPasswordLength {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "password must be at least 8 characters"})
+	if err := validatePassword(password); err != nil {
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: err.Error()})
 		return
 	}
 	if !validUserRole(role) {
@@ -847,9 +862,11 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role must be driver or admin")
 		return
 	}
-	if password != "" && len(password) < minPasswordLength {
-		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "password must be at least 8 characters")
-		return
+	if password != "" {
+		if err := validatePassword(password); err != nil {
+			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, err.Error())
+			return
+		}
 	}
 
 	if _, err := ui.userManager.UpdateUser(r.Context(), id, name, email, role); err != nil {
@@ -1047,7 +1064,7 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	status := query.Get("status")
-	if status != "" && status != "active" && status != "completed" {
+	if !validTripStatus(status) {
 		http.Error(w, "status must be active or completed", http.StatusBadRequest)
 		return
 	}

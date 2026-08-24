@@ -23,8 +23,8 @@ func bootstrapAdmin(ctx context.Context, store adminBootstrapStore, email, passw
 		slog.Info("admin bootstrap skipped: admin users already exist", "count", n)
 		return nil
 	}
-	if len(password) < 8 {
-		return fmt.Errorf("bootstrap admin: password must be at least 8 characters")
+	if err := validatePassword(password); err != nil {
+		return fmt.Errorf("bootstrap admin: %w", err)
 	}
 	if _, err := store.CreateUser(ctx, "Administrator", email, password, "admin"); err != nil {
 		return fmt.Errorf("bootstrap admin: create: %w", err)

@@ -77,18 +77,10 @@ func (s *Store) UpsertVehicle(ctx context.Context, id, label, agencyTag string) 
 	return &v, nil
 }
 
-// DeactivateVehicle sets a vehicle's active flag to false.
+// DeactivateVehicle sets a vehicle's active flag to false. It delegates to
+// SetVehicleActive so the active flag has a single write path.
 func (s *Store) DeactivateVehicle(ctx context.Context, id string) error {
-	rowsAffected, err := s.queries.DeactivateVehicle(ctx, id)
-	if err != nil {
-		return fmt.Errorf("deactivate vehicle: %w", err)
-	}
-	// DeactivateVehicle uses :execrows, which returns the count of affected rows
-	// instead of the row itself. A zero count means no vehicle matched the ID.
-	if rowsAffected == 0 {
-		return fmt.Errorf("deactivate vehicle: %w", pgx.ErrNoRows)
-	}
-	return nil
+	return s.SetVehicleActive(ctx, id, false)
 }
 
 // UpdateVehicleInfo updates label/agency tag WITHOUT touching the active flag,

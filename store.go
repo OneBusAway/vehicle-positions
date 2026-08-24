@@ -135,22 +135,22 @@ func (s *Store) GetRecentLocations(ctx context.Context, cutoff time.Time) ([]*Lo
 			Timestamp: row.Timestamp,
 			DriverID:  row.DriverID,
 		}
-		if row.Bearing.Valid {
-			v := row.Bearing.Float64
-			loc.Bearing = &v
-		}
-		if row.Speed.Valid {
-			v := row.Speed.Float64
-			loc.Speed = &v
-		}
-		if row.Accuracy.Valid {
-			v := row.Accuracy.Float64
-			loc.Accuracy = &v
-		}
+		loc.Bearing = nullableFloat(row.Bearing)
+		loc.Speed = nullableFloat(row.Speed)
+		loc.Accuracy = nullableFloat(row.Accuracy)
 		locations = append(locations, loc)
 	}
 
 	return locations, nil
+}
+
+// nullableFloat converts a pgtype.Float8 to a *float64 (nil when NULL).
+func nullableFloat(v pgtype.Float8) *float64 {
+	if !v.Valid {
+		return nil
+	}
+	f := v.Float64
+	return &f
 }
 
 // Ping checks database connectivity.

@@ -77,6 +77,16 @@ func allowInWindow(m map[string]*loginWindowEntry, key string, limit int, now ti
 	return e.count <= limit
 }
 
+// pruneStaleWindows deletes entries whose window started before cutoff.
+// Caller must hold the limiter's mutex.
+func pruneStaleWindows(m map[string]*loginWindowEntry, cutoff time.Time) {
+	for k, e := range m {
+		if e.windowStart.Before(cutoff) {
+			delete(m, k)
+		}
+	}
+}
+
 func (l *LoginRateLimiter) cleanup() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
@@ -85,16 +95,8 @@ func (l *LoginRateLimiter) cleanup() {
 		case <-ticker.C:
 			cutoff := time.Now().Add(-2 * loginWindow)
 			l.mu.Lock()
-			for k, e := range l.byIP {
-				if e.windowStart.Before(cutoff) {
-					delete(l.byIP, k)
-				}
-			}
-			for k, e := range l.byEmail {
-				if e.windowStart.Before(cutoff) {
-					delete(l.byEmail, k)
-				}
-			}
+			pruneStaleWindows(l.byIP, cutoff)
+			pruneStaleWindows(l.byEmail, cutoff)
 			l.mu.Unlock()
 		case <-l.stop:
 			return

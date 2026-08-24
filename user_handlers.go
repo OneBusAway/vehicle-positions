@@ -96,11 +96,11 @@ func handleCreateUser(store UserCreator) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password is required"})
 			return
 		}
-		if len(req.Password) < 8 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
+		if err := validatePassword(req.Password); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if req.Role != "driver" && req.Role != "admin" {
+		if !validUserRole(req.Role) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver' or 'admin'"})
 			return
 		}
@@ -159,7 +159,7 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email is required"})
 			return
 		}
-		if req.Role != "driver" && req.Role != "admin" {
+		if !validUserRole(req.Role) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver' or 'admin'"})
 			return
 		}

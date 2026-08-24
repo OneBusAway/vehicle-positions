@@ -1,0 +1,63 @@
+- generic [ref=f4e2]:
+  - complementary [ref=f4e3]:
+    - generic [ref=f4e5]:
+      - generic [ref=f4e6]: 🚌
+      - generic [ref=f4e7]:
+        - paragraph [ref=f4e8]: Transit Tracker
+        - paragraph [ref=f4e9]: Fleet Operations
+    - navigation [ref=f4e10]:
+      - link "🗺 Live Map" [ref=f4e11] [cursor=pointer]:
+        - /url: /admin/map
+        - generic [ref=f4e12]: 🗺
+        - text: Live Map
+      - link "📈 Dashboard" [ref=f4e13] [cursor=pointer]:
+        - /url: /admin/dashboard
+        - generic [ref=f4e14]: 📈
+        - text: Dashboard
+      - link "🚌 Vehicles" [ref=f4e15] [cursor=pointer]:
+        - /url: /admin/vehicles
+        - generic [ref=f4e16]: 🚌
+        - text: Vehicles
+      - link "👥 Users" [ref=f4e17] [cursor=pointer]:
+        - /url: /admin/users
+        - generic [ref=f4e18]: 👥
+        - text: Users
+      - link "🕓 Trips" [ref=f4e19] [cursor=pointer]:
+        - /url: /admin/trips
+        - generic [ref=f4e20]: 🕓
+        - text: Trips
+    - paragraph [ref=f4e22]: v0.1.0
+  - main [ref=f4e23]:
+    - generic [ref=f4e24]:
+      - generic [ref=f4e25]:
+        - paragraph [ref=f4e26]: Transit control
+        - heading "Live Map" [level=1] [ref=f4e27]
+      - button "Sign out" [ref=f4e30]
+    - generic [ref=f4e33]:
+      - generic [ref=f4e34]:
+        - generic [ref=f4e35]:
+          - button "🚌" [ref=f4e36] [cursor=pointer]
+          - generic:
+            - generic:
+              - generic [ref=f4e40]:
+                - button "Zoom in" [ref=f4e41] [cursor=pointer]: +
+                - button "Zoom out" [ref=f4e42] [cursor=pointer]: −
+              - generic [ref=f4e43]:
+                - link "Leaflet" [ref=f4e44] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                - text: "| © OpenStreetMap contributors © CARTO"
+        - generic [ref=f4e49]:
+          - generic [ref=f4e50]:
+            - paragraph [ref=f4e51]: "1"
+            - paragraph [ref=f4e52]: Active
+          - generic [ref=f4e54]:
+            - paragraph [ref=f4e55]: "1"
+            - paragraph [ref=f4e56]: Routes
+        - generic: Active
+      - generic [ref=f4e61]:
+        - heading "Fleet Status" [level=3] [ref=f4e63]
+        - generic [ref=f4e65]:
+          - generic [ref=f4e66]: 🚌
+          - generic [ref=f4e67]:
+            - paragraph [ref=f4e68]: Go Bus 1
+            - paragraph [ref=f4e69]: route-5 · Go Driver

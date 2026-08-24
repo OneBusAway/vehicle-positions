@@ -146,7 +146,7 @@ func handleListTrips(store TripLister) http.HandlerFunc {
 		q := r.URL.Query()
 
 		status := q.Get("status")
-		if status != "" && status != "active" && status != "completed" {
+		if !validTripStatus(status) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `status must be "", "active", or "completed"`})
 			return
 		}

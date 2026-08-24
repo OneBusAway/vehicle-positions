@@ -1,0 +1,78 @@
+- generic [ref=f5e2]:
+  - complementary [ref=f5e3]:
+    - generic [ref=f5e5]:
+      - generic [ref=f5e6]: 🚌
+      - generic [ref=f5e7]:
+        - paragraph [ref=f5e8]: Transit Tracker
+        - paragraph [ref=f5e9]: Fleet Operations
+    - navigation [ref=f5e10]:
+      - link "🗺 Live Map" [ref=f5e11] [cursor=pointer]:
+        - /url: /admin/map
+        - generic [ref=f5e12]: 🗺
+        - text: Live Map
+      - link "📈 Dashboard" [ref=f5e13] [cursor=pointer]:
+        - /url: /admin/dashboard
+        - generic [ref=f5e14]: 📈
+        - text: Dashboard
+      - link "🚌 Vehicles" [ref=f5e15] [cursor=pointer]:
+        - /url: /admin/vehicles
+        - generic [ref=f5e16]: 🚌
+        - text: Vehicles
+      - link "👥 Users" [ref=f5e17] [cursor=pointer]:
+        - /url: /admin/users
+        - generic [ref=f5e18]: 👥
+        - text: Users
+      - link "🕓 Trips" [ref=f5e19] [cursor=pointer]:
+        - /url: /admin/trips
+        - generic [ref=f5e20]: 🕓
+        - text: Trips
+    - paragraph [ref=f5e22]: v0.1.0
+  - main [ref=f5e23]:
+    - generic [ref=f5e24]:
+      - generic [ref=f5e25]:
+        - paragraph [ref=f5e26]: Transit control
+        - heading "Live Map" [level=1] [ref=f5e27]
+      - button "Sign out" [ref=f5e30]
+    - generic [ref=f5e33]:
+      - generic [ref=f5e34]:
+        - generic [ref=f5e35]:
+          - generic:
+            - generic:
+              - img:
+                - generic [ref=f5e36] [cursor=pointer]
+            - generic:
+              - button "🚌" [ref=f5e37] [cursor=pointer]
+              - button "🚌" [ref=f5e41] [cursor=pointer]
+          - generic:
+            - generic:
+              - generic [ref=f5e45]:
+                - button "Zoom in" [disabled] [ref=f5e46]: +
+                - button "Zoom out" [ref=f5e47] [cursor=pointer]: −
+              - generic [ref=f5e48]:
+                - link "Leaflet" [ref=f5e49] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                - text: "| © OpenStreetMap contributors © CARTO"
+        - generic [ref=f5e54]:
+          - generic [ref=f5e55]:
+            - paragraph [ref=f5e56]: "0"
+            - paragraph [ref=f5e57]: Active
+          - generic [ref=f5e59]:
+            - paragraph [ref=f5e60]: "0"
+            - paragraph [ref=f5e61]: Routes
+        - generic: Active
+      - generic [ref=f5e66]:
+        - heading "Trip Detail" [level=3] [ref=f5e68]
+        - generic [ref=f5e70]:
+          - paragraph [ref=f5e71]: Go Bus 1
+          - generic [ref=f5e72]:
+            - strong [ref=f5e73]: Driver
+            - text: Go Driver
+          - generic [ref=f5e74]:
+            - strong [ref=f5e75]: Route
+            - text: route-5
+          - generic [ref=f5e76]:
+            - strong [ref=f5e77]: Status
+            - text: active
+          - generic [ref=f5e78]:
+            - strong [ref=f5e79]: Started
+            - text: 2026-08-24T03:02:48.4744-07:00

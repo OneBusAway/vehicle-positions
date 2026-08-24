@@ -1,0 +1,13 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - paragraph [ref=e4]: Access
+    - heading "Transit Tracker" [level=1] [ref=e5]
+    - paragraph [ref=e6]: Fleet operations sign in
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e9]: Email
+        - textbox "Email" [ref=e10]
+      - generic [ref=e11]:
+        - generic [ref=e12]: Password
+        - textbox "Password" [ref=e13]
+      - button "Sign in" [ref=e14]

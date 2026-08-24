@@ -167,6 +167,30 @@ func requireAdmin() func(http.Handler) http.Handler {
 	}
 }
 
+// parseSessionToken validates an HS256 session JWT (algorithm, issuer) and
+// returns its claims. It is the single validation path shared by the API
+// middleware and the admin UI's cookie session (adminClaimsFromCookie), so
+// changes to token validation cannot silently diverge between the two.
+func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return secret, nil
+	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid {
+		return nil, errors.New("token marked invalid")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
+	return claims, nil
+}
+
 // requireAuth is middleware that validates the Bearer JWT on protected routes.
 func requireAuth(secret []byte) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -191,28 +215,10 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 				return
 			}
 
-			token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-				}
-				return secret, nil
-			}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
-
+			claims, err := parseSessionToken(tokenString, secret)
 			if err != nil {
 				slog.Warn("token validation failed", "error", err)
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
-				return
-			}
-
-			if !token.Valid {
-				slog.Warn("token validation failed: token marked invalid")
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
-				return
-			}
-
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token claims"})
 				return
 			}
 			ctx := contextWithClaims(r.Context(), claims)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -50,24 +49,15 @@ func clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// adminClaimsFromCookie validates the session cookie's JWT and requires the
-// admin role. It mirrors requireAuth's validation exactly (HS256, issuer).
+// adminClaimsFromCookie validates the session cookie's JWT via the shared
+// parseSessionToken path and additionally requires the admin role.
 func adminClaimsFromCookie(r *http.Request, secret []byte) (jwt.MapClaims, bool) {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil || c.Value == "" {
 		return nil, false
 	}
-	token, err := jwt.Parse(c.Value, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
-	if err != nil || !token.Valid {
-		return nil, false
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
+	claims, err := parseSessionToken(c.Value, secret)
+	if err != nil {
 		return nil, false
 	}
 	if role, _ := claims["role"].(string); role != "admin" {

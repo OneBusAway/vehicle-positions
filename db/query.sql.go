@@ -139,20 +139,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
-const deactivateVehicle = `-- name: DeactivateVehicle :execrows
-UPDATE vehicles
-SET active = false, updated_at = NOW()
-WHERE id = $1
-`
-
-func (q *Queries) DeactivateVehicle(ctx context.Context, id string) (int64, error) {
-	result, err := q.db.Exec(ctx, deactivateVehicle, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1
 `
