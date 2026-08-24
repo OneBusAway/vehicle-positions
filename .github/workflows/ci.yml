@@ -21,3 +21,12 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Verify committed Tailwind CSS is current
+        if: runner.os == 'Linux'
+        run: |
+          # Pinned to the same tailwindcss release as Makefile's TAILWIND_VERSION.
+          curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/v4.2.0/tailwindcss-linux-x64 -o /tmp/tailwindcss
+          chmod +x /tmp/tailwindcss
+          /tmp/tailwindcss -i web/styles/input.css -o /tmp/admin.css --minify
+          diff -q /tmp/admin.css web/static/css/admin.css || { echo "web/static/css/admin.css is stale — run 'make css' and commit"; exit 1; }

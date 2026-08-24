@@ -41,3 +41,6 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
+
+# Pinned tool binaries (downloaded by `make css`; see Makefile)
+.tools/

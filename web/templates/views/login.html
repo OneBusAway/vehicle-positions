@@ -4,44 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{.Title}} — Transit Tracker</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <!-- TODO(task-10): remove this CDN script once web/static/css/admin.css lands. -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            ink: "#10233f",
-            mist: "#edf4fb",
-            line: "#d7e3f1",
-            ocean: "#0f766e",
-            sky: "#0369a1",
-            sand: "#f59e0b"
-          },
-          boxShadow: {
-            soft: "0 24px 70px rgba(15, 23, 42, 0.16)"
-          },
-          fontFamily: {
-            sans: ["Inter", "sans-serif"],
-            display: ["Space Grotesk", "sans-serif"]
-          }
-        }
-      }
-    }
-  </script>
   <link rel="stylesheet" href="/static/css/admin.css">
 </head>
-<body class="login-body min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.95),_transparent_28rem),linear-gradient(180deg,#eef6ff_0%,#dceaf6_100%)] font-sans text-slate-900">
-  <main class="login-card mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-8">
+<body class="login-body">
+  <main class="login-card">
     <section class="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-soft backdrop-blur-xl sm:p-8">
       <p class="text-xs font-semibold uppercase tracking-[0.28em] text-sky-700">Access</p>
       <h1 class="font-display mt-2 text-3xl font-bold tracking-tight text-ink">Transit Tracker</h1>
       <p class="login-sub mt-1 text-sm text-slate-600">Fleet operations sign in</p>
 
-      {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">{{.Error}}</div>{{end}}
+      {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{.Error}}</div>{{end}}
 
       <form method="post" action="/admin/login" class="mt-6 space-y-4">
         <div>

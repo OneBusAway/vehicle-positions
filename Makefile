@@ -1,4 +1,13 @@
-.PHONY: help generate fmt vet test up down run smoke simulate
+.PHONY: help generate fmt vet test up down run smoke simulate css
+
+# Tailwind CSS CLI version pinned for reproducible admin-UI builds. The Go CI
+# workflow (.github/workflows/ci.yml) downloads the linux-x64 binary of this
+# SAME version to verify web/static/css/admin.css is up to date — bump both
+# together.
+TAILWIND_VERSION := v4.2.0
+TAILWIND_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/')
+TAILWIND_ARCH := $(shell uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
+TAILWIND_BIN := .tools/tailwindcss-$(TAILWIND_VERSION)-$(TAILWIND_OS)-$(TAILWIND_ARCH)
 
 help:
 	@echo "Available targets:"
@@ -11,6 +20,7 @@ help:
 	@echo "  make fmt       - Format Go code"
 	@echo "  make vet       - Run go vet"
 	@echo "  make test      - Run test suite"
+	@echo "  make css       - Compile web/styles/input.css to web/static/css/admin.css"
 
 generate:
 	cd db && sqlc generate
@@ -49,3 +59,11 @@ smoke:
 
 simulate:
 	go run ./cmd/simulator -url http://localhost:8080 -vehicles 5 -interval 3s -duration 30s
+
+css: $(TAILWIND_BIN)
+	$(TAILWIND_BIN) -i web/styles/input.css -o web/static/css/admin.css --minify
+
+$(TAILWIND_BIN):
+	mkdir -p .tools
+	curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_OS)-$(TAILWIND_ARCH) -o $(TAILWIND_BIN)
+	chmod +x $(TAILWIND_BIN)
