@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -168,7 +169,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		want string
 	}{
 		{"dashboard", "/admin/dashboard", "Active Trips"},
-		{"vehicles", "/admin/vehicles", "Bus 001"},
+		{"vehicles", "/admin/vehicles", "New vehicle"},
 		{"users", "/admin/users", "Chaitanya K"},
 		{"trips", "/admin/trips", "Route A"},
 		{"map", "/admin/map", "Live Map"},
@@ -330,4 +331,291 @@ func (erroringAdminStats) CountActiveUsersByRole(_ context.Context, _ string) (i
 }
 func (erroringAdminStats) CountActiveTrips(_ context.Context) (int, error) {
 	return 0, errors.New("boom")
+}
+
+// fakeVehicleStore is an in-memory double implementing VehicleManager,
+// vehicleEditor (UpdateVehicleInfo/SetVehicleActive), and VehicleChecker
+// (VehicleExists), covering everything the vehicle pages need without a
+// database.
+type fakeVehicleStore struct {
+	vehicles map[string]*VehicleResponse
+}
+
+func newFakeVehicleStore(vehicles ...VehicleResponse) *fakeVehicleStore {
+	m := make(map[string]*VehicleResponse, len(vehicles))
+	for i := range vehicles {
+		v := vehicles[i]
+		m[v.ID] = &v
+	}
+	return &fakeVehicleStore{vehicles: m}
+}
+
+func (f *fakeVehicleStore) ListVehicles(_ context.Context) ([]VehicleResponse, error) {
+	out := make([]VehicleResponse, 0, len(f.vehicles))
+	for _, v := range f.vehicles {
+		out = append(out, *v)
+	}
+	return out, nil
+}
+
+func (f *fakeVehicleStore) GetVehicle(_ context.Context, id string) (*VehicleResponse, error) {
+	v, ok := f.vehicles[id]
+	if !ok {
+		return nil, pgx.ErrNoRows
+	}
+	cp := *v
+	return &cp, nil
+}
+
+func (f *fakeVehicleStore) UpsertVehicle(_ context.Context, id, label, agencyTag string) (*VehicleResponse, error) {
+	v := &VehicleResponse{ID: id, Label: label, AgencyTag: agencyTag, Active: true}
+	f.vehicles[id] = v
+	cp := *v
+	return &cp, nil
+}
+
+func (f *fakeVehicleStore) DeactivateVehicle(_ context.Context, id string) error {
+	v, ok := f.vehicles[id]
+	if !ok {
+		return pgx.ErrNoRows
+	}
+	v.Active = false
+	return nil
+}
+
+func (f *fakeVehicleStore) UpdateVehicleInfo(_ context.Context, id, label, agencyTag string) error {
+	v, ok := f.vehicles[id]
+	if !ok {
+		return pgx.ErrNoRows
+	}
+	v.Label = label
+	v.AgencyTag = agencyTag
+	return nil
+}
+
+func (f *fakeVehicleStore) SetVehicleActive(_ context.Context, id string, active bool) error {
+	v, ok := f.vehicles[id]
+	if !ok {
+		return pgx.ErrNoRows
+	}
+	v.Active = active
+	return nil
+}
+
+func (f *fakeVehicleStore) VehicleExists(_ context.Context, id string) (bool, error) {
+	_, ok := f.vehicles[id]
+	return ok, nil
+}
+
+// wireFakeVehicleStore points every vehicle-related adminUI field at the
+// same fake, mirroring how newAdminUI wires them all from a single appStore.
+func wireFakeVehicleStore(ui *adminUI, f *fakeVehicleStore) {
+	ui.vehicles = f
+	ui.vehicleEditor = f
+	ui.vehicleChecker = f
+}
+
+// TestVehiclesPageListsRealVehicles verifies the list page renders a seeded
+// vehicle's label and a CSV export link for it, and that the old mock data
+// is gone.
+func TestVehiclesPageListsRealVehicles(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(VehicleResponse{ID: "bus-1", Label: "Bus One", AgencyTag: "metro", Active: true}))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/vehicles", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "Bus One")
+	assert.Contains(t, body, "/api/v1/admin/vehicles/bus-1/locations?format=csv")
+	assert.NotContains(t, body, "Bus 001", "mock data must be gone")
+}
+
+// TestVehiclesPageInactiveFilter verifies the list hides inactive vehicles
+// by default and shows them with ?include_inactive=1.
+func TestVehiclesPageInactiveFilter(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(
+		VehicleResponse{ID: "active-1", Label: "Active Bus", Active: true},
+		VehicleResponse{ID: "inactive-1", Label: "Retired Bus", Active: false},
+	))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	get := func(path string) string {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		return w.Body.String()
+	}
+
+	t.Run("default hides inactive", func(t *testing.T) {
+		body := get("/admin/vehicles")
+		assert.Contains(t, body, "Active Bus")
+		assert.NotContains(t, body, "Retired Bus")
+	})
+
+	t.Run("include_inactive shows all", func(t *testing.T) {
+		body := get("/admin/vehicles?include_inactive=1")
+		assert.Contains(t, body, "Active Bus")
+		assert.Contains(t, body, "Retired Bus")
+	})
+}
+
+// TestVehicleCreate covers the create form's happy path, validation-error
+// re-render, and duplicate-id rejection.
+func TestVehicleCreate(t *testing.T) {
+	post := func(ui *adminUI, mux *http.ServeMux, id, label, agencyTag string) *httptest.ResponseRecorder {
+		form := url.Values{"id": {id}, "label": {label}, "agency_tag": {agencyTag}}
+		req := httptest.NewRequest(http.MethodPost, "/admin/vehicles", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("success redirects with flash", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(ui, mux, "bus-42", "Bus 42", "metro")
+		require.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "/admin/vehicles", w.Header().Get("Location"))
+		require.NotEmpty(t, w.Result().Cookies())
+		found := false
+		for _, c := range w.Result().Cookies() {
+			if c.Name == flashCookieName {
+				assert.Equal(t, "vehicle_created", c.Value)
+				found = true
+			}
+		}
+		assert.True(t, found, "expected vehicle_created flash cookie")
+	})
+
+	t.Run("invalid id re-renders 422 with API error text", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(ui, mux, "bad id!", "Bad Bus", "")
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "vehicle id must contain only alphanumeric characters, dots, hyphens, and underscores")
+		assert.Contains(t, w.Body.String(), `value="bad id!"`)
+	})
+
+	t.Run("duplicate id re-renders 422", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeVehicleStore(ui, newFakeVehicleStore(VehicleResponse{ID: "bus-1", Label: "Existing", Active: true}))
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(ui, mux, "bus-1", "New Label", "")
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "vehicle id already exists")
+	})
+}
+
+// TestVehicleEditPage covers rendering the edit form for a known vehicle and
+// 404ing for an unknown one.
+func TestVehicleEditPage(t *testing.T) {
+	t.Run("known id renders form with values", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeVehicleStore(ui, newFakeVehicleStore(VehicleResponse{ID: "bus-1", Label: "Bus One", AgencyTag: "metro", Active: true}))
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		req := httptest.NewRequest(http.MethodGet, "/admin/vehicles/bus-1/edit", nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "Bus One")
+	})
+
+	t.Run("unknown id 404s", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		req := httptest.NewRequest(http.MethodGet, "/admin/vehicles/ghost/edit", nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+// TestVehicleUpdate verifies the edit POST updates label/agency_tag and
+// redirects with a flash.
+func TestVehicleUpdate(t *testing.T) {
+	ui := newTestAdminUI(t)
+	fake := newFakeVehicleStore(VehicleResponse{ID: "bus-1", Label: "Old Label", AgencyTag: "old-tag", Active: true})
+	wireFakeVehicleStore(ui, fake)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	form := url.Values{"label": {"New Label"}, "agency_tag": {"new-tag"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/vehicles/bus-1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/vehicles", w.Header().Get("Location"))
+	assert.Equal(t, "New Label", fake.vehicles["bus-1"].Label)
+	assert.Equal(t, "new-tag", fake.vehicles["bus-1"].AgencyTag)
+}
+
+// TestVehicleDeactivateActivate verifies both POST endpoints redirect with
+// the correct flash and flip the active flag.
+func TestVehicleDeactivateActivate(t *testing.T) {
+	ui := newTestAdminUI(t)
+	fake := newFakeVehicleStore(VehicleResponse{ID: "bus-1", Label: "Bus One", Active: true})
+	wireFakeVehicleStore(ui, fake)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	postTo := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w
+	}
+
+	w := postTo("/admin/vehicles/bus-1/deactivate")
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/vehicles", w.Header().Get("Location"))
+	assert.False(t, fake.vehicles["bus-1"].Active)
+	var flashed bool
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName && c.Value == "vehicle_deactivated" {
+			flashed = true
+		}
+	}
+	assert.True(t, flashed, "expected vehicle_deactivated flash")
+
+	w = postTo("/admin/vehicles/bus-1/activate")
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.True(t, fake.vehicles["bus-1"].Active)
+	flashed = false
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName && c.Value == "vehicle_activated" {
+			flashed = true
+		}
+	}
+	assert.True(t, flashed, "expected vehicle_activated flash")
 }

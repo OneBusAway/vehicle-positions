@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -31,17 +32,29 @@ type adminStatsStore interface {
 	CountActiveTrips(ctx context.Context) (int, error)
 }
 
+// vehicleEditor is the narrow interface the vehicle edit/deactivate/activate
+// pages need: label/agency-tag updates and active-flag toggling. It's kept
+// separate from VehicleManager because UpsertVehicle (used by the create
+// page) force-reactivates a vehicle, which the edit/deactivate/activate
+// flows must not do.
+type vehicleEditor interface {
+	VehicleInfoUpdater
+	VehicleActivator
+}
+
 // adminUI owns the parsed templates and dependencies for all admin pages.
 type adminUI struct {
-	tmpl         *embeddedTemplates
-	users        UserFetcher
-	tracker      *Tracker
-	stats        adminStatsStore
-	activeTrips  ActiveTripLister
-	vehicles     VehicleManager
-	jwtSecret    []byte
-	loginLimiter *LoginRateLimiter
-	cfg          adminUIConfig
+	tmpl           *embeddedTemplates
+	users          UserFetcher
+	tracker        *Tracker
+	stats          adminStatsStore
+	activeTrips    ActiveTripLister
+	vehicles       VehicleManager
+	vehicleEditor  vehicleEditor
+	vehicleChecker VehicleChecker
+	jwtSecret      []byte
+	loginLimiter   *LoginRateLimiter
+	cfg            adminUIConfig
 }
 
 // newAdminUI loads the embedded templates and wires the admin UI's
@@ -55,15 +68,17 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		return nil, err
 	}
 	return &adminUI{
-		tmpl:         tmpl,
-		users:        store,
-		tracker:      tracker,
-		stats:        store,
-		activeTrips:  store,
-		vehicles:     store,
-		jwtSecret:    jwtSecret,
-		loginLimiter: limiter,
-		cfg:          cfg,
+		tmpl:           tmpl,
+		users:          store,
+		tracker:        tracker,
+		stats:          store,
+		activeTrips:    store,
+		vehicles:       store,
+		vehicleEditor:  store,
+		vehicleChecker: store,
+		jwtSecret:      jwtSecret,
+		loginLimiter:   limiter,
+		cfg:            cfg,
 	}, nil
 }
 
@@ -81,9 +96,15 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("GET /admin/dashboard", protect(http.HandlerFunc(ui.dashboardPage)))
 	mux.Handle("GET /admin/map", protect(http.HandlerFunc(ui.mapPage)))
 	mux.Handle("GET /admin/vehicles", protect(http.HandlerFunc(ui.vehiclesPage)))
+	mux.Handle("GET /admin/vehicles/new", protect(http.HandlerFunc(ui.vehicleNewPage)))
+	mux.Handle("POST /admin/vehicles", protect(http.HandlerFunc(ui.vehicleCreate)))
+	mux.Handle("GET /admin/vehicles/{id}/edit", protect(http.HandlerFunc(ui.vehicleEditPage)))
+	mux.Handle("POST /admin/vehicles/{id}", protect(http.HandlerFunc(ui.vehicleUpdate)))
+	mux.Handle("POST /admin/vehicles/{id}/deactivate", protect(http.HandlerFunc(ui.vehicleDeactivate)))
+	mux.Handle("POST /admin/vehicles/{id}/activate", protect(http.HandlerFunc(ui.vehicleActivate)))
 	mux.Handle("GET /admin/users", protect(http.HandlerFunc(ui.usersPage)))
 	mux.Handle("GET /admin/trips", protect(http.HandlerFunc(ui.tripsPage)))
-	// CRUD form routes are added by later tasks.
+	// Remaining CRUD form routes (users) are added by later tasks.
 }
 
 func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
@@ -328,16 +349,209 @@ func humanizeDuration(d time.Duration) string {
 	}
 }
 
+// vehicleRow is a single row in the vehicle list table: the vehicle's
+// stored fields plus whatever live state we can join in (last-seen from the
+// tracker, current driver from the active-trips map).
+type vehicleRow struct {
+	ID        string
+	Label     string
+	AgencyTag string
+	Active    bool
+	LastSeen  string
+	Driver    string
+}
+
+// vehiclesPage renders the vehicle list: real vehicles from the store,
+// joined with the tracker's live last-seen data and the current driver (if
+// any) from the active-trips map. Inactive vehicles are hidden unless
+// ?include_inactive=1 is set — the store itself always returns everything;
+// filtering happens here so the store's ListVehicles stays a plain listing.
 func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	includeInactive := r.URL.Query().Get("include_inactive") == "1"
+
+	all, err := ui.vehicles.ListVehicles(ctx)
+	if err != nil {
+		slog.Error("vehicles: list vehicles", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	lastSeen := make(map[string]string, len(all))
+	for _, v := range ui.tracker.ActiveVehicles() {
+		lastSeen[v.VehicleID] = humanizeAge(v.UpdatedAt)
+	}
+
+	tripsByVehicle, err := ui.activeTrips.ListActiveTripsByVehicle(ctx)
+	if err != nil {
+		slog.Error("vehicles: list active trips by vehicle", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	rows := make([]vehicleRow, 0, len(all))
+	for _, v := range all {
+		if !v.Active && !includeInactive {
+			continue
+		}
+		row := vehicleRow{ID: v.ID, Label: v.Label, AgencyTag: v.AgencyTag, Active: v.Active}
+		row.LastSeen = lastSeen[v.ID]
+		if trip, ok := tripsByVehicle[v.ID]; ok {
+			row.Driver = trip.DriverName
+		}
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+
 	ui.renderAdmin(w, r, "vehicles.html", map[string]interface{}{
-		"Title": "Vehicles",
-		"Page":  "vehicles",
-		"Vehicles": []map[string]string{
-			{"ID": "V001", "Name": "Bus 001", "Route": "Route A", "Driver": "Chaitanya K", "Status": "active", "LastSeen": "2 min ago"},
-			{"ID": "V002", "Name": "Bus 002", "Route": "Route B", "Driver": "Aron", "Status": "active", "LastSeen": "5 min ago"},
-			{"ID": "V003", "Name": "Bus 003", "Route": "Route C", "Driver": "Brad Pitt", "Status": "idle", "LastSeen": "12 min ago"},
-		},
+		"Title":           "Vehicles",
+		"Page":            "vehicles",
+		"Vehicles":        rows,
+		"IncludeInactive": includeInactive,
 	})
+}
+
+// vehicleFormData carries the vehicle_form.html template's fields for both
+// the create and edit flows (distinguished by IsEdit), including any
+// submitted values and validation error to re-render on failure.
+type vehicleFormData struct {
+	IsEdit    bool
+	ID        string
+	Label     string
+	AgencyTag string
+	Error     string
+}
+
+func (ui *adminUI) renderVehicleForm(w http.ResponseWriter, r *http.Request, status int, data vehicleFormData) {
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
+	title := "New Vehicle"
+	if data.IsEdit {
+		title = "Edit Vehicle"
+	}
+	ui.renderAdmin(w, r, "vehicle_form.html", map[string]interface{}{
+		"Title":     title,
+		"Page":      "vehicles",
+		"IsEdit":    data.IsEdit,
+		"ID":        data.ID,
+		"Label":     data.Label,
+		"AgencyTag": data.AgencyTag,
+		"Error":     data.Error,
+	})
+}
+
+// vehicleNewPage renders the blank create-vehicle form.
+func (ui *adminUI) vehicleNewPage(w http.ResponseWriter, r *http.Request) {
+	ui.renderVehicleForm(w, r, http.StatusOK, vehicleFormData{})
+}
+
+// vehicleCreate validates and saves a new vehicle. It reuses
+// validateVehicleID — the same helper the JSON API uses — so form and API
+// validation stay in lockstep, and reports the exact same error text on
+// failure. A 422 re-renders the form with the submitted values so the admin
+// doesn't have to retype everything.
+func (ui *adminUI) vehicleCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		ui.renderVehicleForm(w, r, http.StatusBadRequest, vehicleFormData{Error: "Invalid form submission."})
+		return
+	}
+	id := r.PostFormValue("id")
+	label := r.PostFormValue("label")
+	agencyTag := r.PostFormValue("agency_tag")
+
+	if err := validateVehicleID(id); err != nil {
+		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: err.Error()})
+		return
+	}
+
+	exists, err := ui.vehicleChecker.VehicleExists(r.Context(), id)
+	if err != nil {
+		slog.Error("vehicle create: check existence", "vehicle_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if exists {
+		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: "vehicle id already exists"})
+		return
+	}
+
+	if _, err := ui.vehicles.UpsertVehicle(r.Context(), id, label, agencyTag); err != nil {
+		slog.Error("vehicle create: upsert vehicle", "vehicle_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	setFlash(w, "vehicle_created")
+	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
+}
+
+// vehicleEditPage renders the edit form pre-filled with the vehicle's
+// current label/agency tag. An unknown id 404s rather than showing a blank
+// or error-banner form.
+func (ui *adminUI) vehicleEditPage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	v, err := ui.vehicles.GetVehicle(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("vehicle edit: get vehicle", "vehicle_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	ui.renderVehicleForm(w, r, http.StatusOK, vehicleFormData{IsEdit: true, ID: v.ID, Label: v.Label, AgencyTag: v.AgencyTag})
+}
+
+// vehicleUpdate saves label/agency_tag edits for an existing vehicle. The id
+// is read-only in the form (it's part of the URL, not submitted), and this
+// uses UpdateVehicleInfo rather than UpsertVehicle so it never touches the
+// active flag.
+func (ui *adminUI) vehicleUpdate(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := r.ParseForm(); err != nil {
+		ui.renderVehicleForm(w, r, http.StatusBadRequest, vehicleFormData{IsEdit: true, ID: id, Error: "Invalid form submission."})
+		return
+	}
+	label := r.PostFormValue("label")
+	agencyTag := r.PostFormValue("agency_tag")
+
+	if err := ui.vehicleEditor.UpdateVehicleInfo(r.Context(), id, label, agencyTag); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("vehicle update: update info", "vehicle_id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	setFlash(w, "vehicle_updated")
+	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
+}
+
+// vehicleDeactivate and vehicleActivate toggle a vehicle's active flag via
+// setVehicleActive, sharing the same 404/error/flash/redirect handling.
+func (ui *adminUI) vehicleDeactivate(w http.ResponseWriter, r *http.Request) {
+	ui.setVehicleActive(w, r, false, "vehicle_deactivated")
+}
+
+func (ui *adminUI) vehicleActivate(w http.ResponseWriter, r *http.Request) {
+	ui.setVehicleActive(w, r, true, "vehicle_activated")
+}
+
+func (ui *adminUI) setVehicleActive(w http.ResponseWriter, r *http.Request, active bool, flashCode string) {
+	id := r.PathValue("id")
+	if err := ui.vehicleEditor.SetVehicleActive(r.Context(), id, active); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("vehicle set active", "vehicle_id", id, "active", active, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	setFlash(w, flashCode)
+	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
 }
 
 func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {

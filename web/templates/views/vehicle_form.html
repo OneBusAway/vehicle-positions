@@ -1,0 +1,33 @@
+{{define "content"}}
+<div class="p-4 lg:p-5">
+  <div class="table-card mx-auto max-w-xl overflow-hidden rounded-[20px] border border-white/80 p-6 sm:p-8">
+    <h3 class="display-font text-lg font-bold text-slate-900">{{if .IsEdit}}Edit Vehicle{{else}}New Vehicle{{end}}</h3>
+    <p class="mt-0.5 text-xs text-slate-400">{{if .IsEdit}}Update the vehicle's label and agency tag.{{else}}Register a new vehicle in the fleet.{{end}}</p>
+
+    {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{.Error}}</div>{{end}}
+
+    <form method="post" action="{{if .IsEdit}}/admin/vehicles/{{.ID}}{{else}}/admin/vehicles{{end}}" class="mt-6 space-y-4">
+      <div>
+        <label for="id" class="mb-1.5 block text-sm font-semibold text-slate-700">Vehicle ID</label>
+        {{if .IsEdit}}
+        <input id="id" name="id" type="text" value="{{.ID}}" readonly class="w-full rounded-2xl border border-line bg-slate-50 px-4 py-3 text-sm text-slate-500 outline-none">
+        {{else}}
+        <input id="id" name="id" type="text" required value="{{.ID}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+        {{end}}
+      </div>
+      <div>
+        <label for="label" class="mb-1.5 block text-sm font-semibold text-slate-700">Label</label>
+        <input id="label" name="label" type="text" value="{{.Label}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+      </div>
+      <div>
+        <label for="agency_tag" class="mb-1.5 block text-sm font-semibold text-slate-700">Agency tag</label>
+        <input id="agency_tag" name="agency_tag" type="text" value="{{.AgencyTag}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">{{if .IsEdit}}Save changes{{else}}Create vehicle{{end}}</button>
+        <a href="/admin/vehicles" class="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
