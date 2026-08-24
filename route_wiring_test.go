@@ -19,7 +19,7 @@ import (
 type noopStore struct{}
 
 func (n *noopStore) GetUserByEmail(_ context.Context, _ string) (*User, error) {
-	return nil, nil
+	return nil, ErrUserNotFound
 }
 func (n *noopStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
@@ -81,6 +81,39 @@ func (n *noopStore) VehicleExists(_ context.Context, _ string) (bool, error) {
 func (n *noopStore) ListActiveVehiclesByUser(_ context.Context, _ int64) ([]VehicleResponse, error) {
 	return make([]VehicleResponse, 0), nil
 }
+func (n *noopStore) SetUserActive(_ context.Context, _ int64, _ bool) error {
+	return nil
+}
+func (n *noopStore) CountUsersByRole(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (n *noopStore) CountActiveUsersByRole(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (n *noopStore) UpdateVehicleInfo(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (n *noopStore) SetVehicleActive(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+func (n *noopStore) CountActiveVehicles(_ context.Context) (int, error) {
+	return 0, nil
+}
+func (n *noopStore) CountActiveTrips(_ context.Context) (int, error) {
+	return 0, nil
+}
+func (n *noopStore) ListTrips(_ context.Context, _ TripFilter) ([]TripSummary, error) {
+	return nil, nil
+}
+func (n *noopStore) GetTripSummary(_ context.Context, _ int64) (*TripSummary, error) {
+	return nil, nil
+}
+func (n *noopStore) ListTripLocations(_ context.Context, _ int64) ([]LocationPoint, error) {
+	return nil, nil
+}
+func (n *noopStore) ListActiveTripsByVehicle(_ context.Context) (map[string]ActiveTripInfo, error) {
+	return nil, nil
+}
 
 // TestAdminRoutes_DriverTokenRejected verifies that every /api/v1/admin/* route
 // is wrapped with adminMiddleware. A valid driver-role JWT must receive 403 on
@@ -92,7 +125,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 
 	// nil tracker and rateLimiter are safe: adminMiddleware rejects driver
 	// tokens before any handler body runs, so neither is dereferenced.
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{})
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false)
 
 	tests := []struct {
 		method string
@@ -142,7 +175,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{})
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false)
 
 	// Same routes as the driver-rejection table — every admin route must
 	// let a valid admin token through both middleware layers.
@@ -188,7 +221,7 @@ func TestDriverVehiclesRoute_Wiring(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{})
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false)
 
 	tests := []struct {
 		name       string

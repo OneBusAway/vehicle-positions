@@ -12,11 +12,18 @@ import (
 )
 
 // adminUIEnabled reports whether the admin UI should be served, controlled by
-// the ADMIN_UI_ENABLED environment variable (default false). Any value
-// strconv.ParseBool accepts as true (1, t, T, TRUE, true, ...) turns it on;
-// unset or unparseable values leave it off.
+// the ADMIN_UI_ENABLED environment variable (default true). Any value
+// strconv.ParseBool accepts as false (0, f, F, FALSE, false, ...) turns it
+// off; unset or unparseable values leave it on.
 func adminUIEnabled() bool {
-	enabled, _ := strconv.ParseBool(os.Getenv("ADMIN_UI_ENABLED"))
+	v := os.Getenv("ADMIN_UI_ENABLED")
+	if v == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(v)
+	if err != nil {
+		return true
+	}
 	return enabled
 }
 

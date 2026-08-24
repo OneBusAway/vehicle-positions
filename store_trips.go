@@ -79,6 +79,27 @@ type TripEnder interface {
 	EndTrip(ctx context.Context, tripID, userID int64) error
 }
 
+// TripLister lists trip summaries with optional filters, for the admin trips page.
+type TripLister interface {
+	ListTrips(ctx context.Context, f TripFilter) ([]TripSummary, error)
+}
+
+// TripSummaryGetter fetches a single trip's summary, for the admin trip detail page.
+type TripSummaryGetter interface {
+	GetTripSummary(ctx context.Context, id int64) (*TripSummary, error)
+}
+
+// TripLocationLister returns the trail of location points for a trip.
+type TripLocationLister interface {
+	ListTripLocations(ctx context.Context, tripID int64) ([]LocationPoint, error)
+}
+
+// ActiveTripsByVehicleLister returns the current active trip for each
+// vehicle that has one, keyed by vehicle ID.
+type ActiveTripsByVehicleLister interface {
+	ListActiveTripsByVehicle(ctx context.Context) (map[string]ActiveTripInfo, error)
+}
+
 // StartTrip validates the driver-vehicle assignment, checks for an existing active trip,
 // and creates a new trip.
 func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID, gtfsTripID string) (*TripResponse, error) {

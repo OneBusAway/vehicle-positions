@@ -28,6 +28,17 @@ type VehicleManager interface {
 	DeactivateVehicle(ctx context.Context, id string) error
 }
 
+// VehicleInfoUpdater updates a vehicle's label/agency tag without touching
+// its active flag (unlike VehicleManager.UpsertVehicle, which reactivates).
+type VehicleInfoUpdater interface {
+	UpdateVehicleInfo(ctx context.Context, id, label, agencyTag string) error
+}
+
+// VehicleActivator toggles a vehicle's active flag (deactivate/reactivate).
+type VehicleActivator interface {
+	SetVehicleActive(ctx context.Context, id string, active bool) error
+}
+
 // ListVehicles returns all vehicles ordered by creation time.
 func (s *Store) ListVehicles(ctx context.Context) ([]VehicleResponse, error) {
 	rows, err := s.queries.ListVehicles(ctx)

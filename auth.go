@@ -60,7 +60,11 @@ type UserFetcher interface {
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 }
 
-func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
+// handleLogin returns the JSON API login handler. limiter may be nil (e.g. in
+// tests that don't exercise rate limiting); trustProxy controls which IP
+// clientIP() reports to the limiter. When present, the rate-limit check runs
+// before the store is touched.
+func handleLogin(fetcher UserFetcher, secret []byte, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
 
@@ -72,6 +76,11 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 
 		if req.Email == "" || req.Password == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email and password are required"})
+			return
+		}
+
+		if limiter != nil && !limiter.Allow(clientIP(r, trustProxy), req.Email) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts"})
 			return
 		}
 

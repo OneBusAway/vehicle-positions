@@ -47,6 +47,18 @@ type UserDeleter interface {
 	DeleteUser(ctx context.Context, id int64) error
 }
 
+// UserActivator toggles a user's active flag.
+type UserActivator interface {
+	SetUserActive(ctx context.Context, id int64, active bool) error
+}
+
+// UserRoleCounter provides role-based user counts, used by the admin
+// dashboard and by bootstrapAdmin to detect whether an admin already exists.
+type UserRoleCounter interface {
+	CountUsersByRole(ctx context.Context, role string) (int, error)
+	CountActiveUsersByRole(ctx context.Context, role string) (int, error)
+}
+
 func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 	rows, err := s.queries.ListUsers(ctx)
 	if err != nil {

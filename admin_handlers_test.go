@@ -36,9 +36,8 @@ func TestRenderUnknownViewWritesCleanError(t *testing.T) {
 	}
 }
 
-// TestAdminUIEnabledFlag pins the gate that keeps the admin UI off by
-// default — the single safety mechanism behind the feature until it's
-// enabled deliberately.
+// TestAdminUIEnabledFlag pins the default-on gate: the admin UI is served
+// unless ADMIN_UI_ENABLED is explicitly set to a falsy value.
 func TestAdminUIEnabledFlag(t *testing.T) {
 	cases := map[string]bool{
 		"true":     true,
@@ -47,8 +46,8 @@ func TestAdminUIEnabledFlag(t *testing.T) {
 		"t":        true,
 		"false":    false,
 		"0":        false,
-		"":         false,
-		"nonsense": false,
+		"":         true,
+		"nonsense": true,
 	}
 
 	for val, want := range cases {

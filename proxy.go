@@ -3,6 +3,8 @@ package main
 import (
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -32,4 +34,13 @@ func requestIsSecure(r *http.Request, trustProxy bool) bool {
 		return true
 	}
 	return trustProxy && r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+// trustProxyHeaders reports whether X-Forwarded-For/-Proto should be trusted
+// for client-IP and HTTPS detection, controlled by TRUST_PROXY_HEADERS
+// (default false — only set this behind a reverse proxy that overwrites
+// those headers itself).
+func trustProxyHeaders() bool {
+	trust, _ := strconv.ParseBool(os.Getenv("TRUST_PROXY_HEADERS"))
+	return trust
 }
