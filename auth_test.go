@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // mockUserStore implements UserFetcher for tests.
@@ -45,6 +46,7 @@ func TestHandleLogin_Success(t *testing.T) {
 		Email:        "driver@test.com",
 		PasswordHash: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
 		Role:         "driver",
+		Active:       true,
 	}}
 
 	handler := handleLogin(store, testSecret)
@@ -64,6 +66,7 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 		Email:        "driver@test.com",
 		PasswordHash: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
 		Role:         "driver",
+		Active:       true,
 	}}
 
 	handler := handleLogin(store, testSecret)
@@ -73,6 +76,28 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 
 	var resp map[string]string
 	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "invalid email or password", resp["error"])
+}
+
+func TestHandleLogin_DeactivatedUser(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
+	require.NoError(t, err)
+	store := &mockUserStore{user: &User{
+		ID:           7,
+		Email:        "gone@test.com",
+		PasswordHash: string(hash),
+		Role:         "driver",
+		Active:       false,
+	}}
+
+	handler := handleLogin(store, testSecret)
+	w := postLogin(handler, "gone@test.com", "password123")
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var resp map[string]string
+	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.Equal(t, "invalid email or password", resp["error"])
 }

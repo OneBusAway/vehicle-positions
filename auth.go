@@ -86,6 +86,11 @@ func handleLogin(fetcher UserFetcher, secret []byte) http.HandlerFunc {
 			return
 		}
 
+		if !user.Active {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
+			return
+		}
+
 		tokenStr, err := generateJWT(user, secret)
 		if err != nil {
 			slog.Error("token generation failed", "error", err)
