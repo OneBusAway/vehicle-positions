@@ -80,6 +80,31 @@ func (s *Store) DeactivateVehicle(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateVehicleInfo updates label/agency tag WITHOUT touching the active flag,
+// unlike UpsertVehicle which force-reactivates.
+func (s *Store) UpdateVehicleInfo(ctx context.Context, id, label, agencyTag string) error {
+	rows, err := s.queries.UpdateVehicleInfo(ctx, db.UpdateVehicleInfoParams{ID: id, Label: label, AgencyTag: agencyTag})
+	if err != nil {
+		return fmt.Errorf("update vehicle info: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("update vehicle info: %w", pgx.ErrNoRows)
+	}
+	return nil
+}
+
+// SetVehicleActive flips a vehicle's active flag (deactivate/reactivate).
+func (s *Store) SetVehicleActive(ctx context.Context, id string, active bool) error {
+	rows, err := s.queries.SetVehicleActive(ctx, db.SetVehicleActiveParams{ID: id, Active: active})
+	if err != nil {
+		return fmt.Errorf("set vehicle active: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("set vehicle active: %w", pgx.ErrNoRows)
+	}
+	return nil
+}
+
 // DriverVehicleLister lists the active vehicles assigned to a driver.
 type DriverVehicleLister interface {
 	ListActiveVehiclesByUser(ctx context.Context, userID int64) ([]VehicleResponse, error)

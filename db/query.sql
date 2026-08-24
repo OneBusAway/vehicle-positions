@@ -134,3 +134,15 @@ LIMIT $4;
 
 -- name: VehicleExists :one
 SELECT EXISTS(SELECT 1 FROM vehicles WHERE id = $1);
+
+-- name: UpdateVehicleInfo :execrows
+UPDATE vehicles SET label = $2, agency_tag = $3, updated_at = NOW() WHERE id = $1;
+
+-- name: SetVehicleActive :execrows
+UPDATE vehicles SET active = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: CountActiveVehicles :one
+SELECT COUNT(*) FROM vehicles WHERE active = true;
+
+-- name: CountActiveTrips :one
+SELECT COUNT(*) FROM trips WHERE status = 'active';

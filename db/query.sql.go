@@ -52,12 +52,34 @@ func (q *Queries) CheckUserVehicleAssignment(ctx context.Context, arg CheckUserV
 	return i, err
 }
 
+const countActiveTrips = `-- name: CountActiveTrips :one
+SELECT COUNT(*) FROM trips WHERE status = 'active'
+`
+
+func (q *Queries) CountActiveTrips(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveTrips)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countActiveUsersByRole = `-- name: CountActiveUsersByRole :one
 SELECT COUNT(*) FROM users WHERE role = $1 AND active = true
 `
 
 func (q *Queries) CountActiveUsersByRole(ctx context.Context, role string) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveUsersByRole, role)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countActiveVehicles = `-- name: CountActiveVehicles :one
+SELECT COUNT(*) FROM vehicles WHERE active = true
+`
+
+func (q *Queries) CountActiveVehicles(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveVehicles)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -597,6 +619,23 @@ func (q *Queries) SetUserActive(ctx context.Context, arg SetUserActiveParams) (i
 	return result.RowsAffected(), nil
 }
 
+const setVehicleActive = `-- name: SetVehicleActive :execrows
+UPDATE vehicles SET active = $2, updated_at = NOW() WHERE id = $1
+`
+
+type SetVehicleActiveParams struct {
+	ID     string
+	Active bool
+}
+
+func (q *Queries) SetVehicleActive(ctx context.Context, arg SetVehicleActiveParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setVehicleActive, arg.ID, arg.Active)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const startTrip = `-- name: StartTrip :one
 INSERT INTO trips (user_id, vehicle_id, route_id, gtfs_trip_id)
 VALUES ($1, $2, $3, $4)
@@ -694,6 +733,24 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateVehicleInfo = `-- name: UpdateVehicleInfo :execrows
+UPDATE vehicles SET label = $2, agency_tag = $3, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateVehicleInfoParams struct {
+	ID        string
+	Label     string
+	AgencyTag string
+}
+
+func (q *Queries) UpdateVehicleInfo(ctx context.Context, arg UpdateVehicleInfoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateVehicleInfo, arg.ID, arg.Label, arg.AgencyTag)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertAdminVehicle = `-- name: UpsertAdminVehicle :one
