@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -179,10 +180,23 @@ func (ui *adminUI) renderAdmin(w http.ResponseWriter, r *http.Request, view stri
 	renderInto(w, ui.tmpl.admin, view, "base.html", data)
 }
 
+// mapPage renders the live fleet map, or (with a ?trip_id= query param) a
+// single trip's trail. trip_id must be a valid int64 when present; a
+// non-numeric value produces 404 rather than silently falling back to live
+// mode, since it can't identify any real trip.
 func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
+	tripID := ""
+	if raw := r.URL.Query().Get("trip_id"); raw != "" {
+		if _, err := strconv.ParseInt(raw, 10, 64); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		tripID = raw
+	}
 	ui.renderAdmin(w, r, "map.html", map[string]interface{}{
-		"Title": "Live Map",
-		"Page":  "map",
+		"Title":  "Live Map",
+		"Page":   "map",
+		"TripID": tripID,
 	})
 }
 

@@ -185,6 +185,50 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 	}
 }
 
+// TestMapPageLiveMode verifies the live-map view (no trip_id) tags the map
+// container with the live-feed data attribute and omits the trail attribute.
+func TestMapPageLiveMode(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/map", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, `id="main-map"`)
+	assert.Contains(t, body, `data-live-url="/api/v1/admin/vehicles/live"`)
+	assert.NotContains(t, body, "data-trip-url")
+}
+
+// TestMapPageTrailMode verifies a numeric trip_id query param tags the map
+// container with the trail-locations data attribute.
+func TestMapPageTrailMode(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/map?trip_id=42", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `data-trip-url="/api/v1/admin/trips/42/locations"`)
+}
+
+// TestMapPageInvalidTripIDReturns404 verifies a non-numeric trip_id is
+// rejected as 404 rather than silently falling back to live mode.
+func TestMapPageInvalidTripIDReturns404(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/map?trip_id=not-a-number", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
 // TestAdminRootRedirect covers both branches of rootRedirect: an
 // authenticated visitor goes straight to the dashboard, an unauthenticated
 // one goes to the login page.
