@@ -18,6 +18,13 @@ type contextKey string
 
 const claimsKey contextKey = "claims"
 
+// contextWithClaims stores validated JWT claims on the context. Shared by
+// requireAuth and requireAdminPage so both middlewares wire claims the same
+// way.
+func contextWithClaims(ctx context.Context, claims jwt.MapClaims) context.Context {
+	return context.WithValue(ctx, claimsKey, claims)
+}
+
 const bcryptCost = bcrypt.DefaultCost
 
 // sessionCookieName is the cookie holding the admin UI's browser session
@@ -199,7 +206,7 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token claims"})
 				return
 			}
-			ctx := context.WithValue(r.Context(), claimsKey, claims)
+			ctx := contextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
