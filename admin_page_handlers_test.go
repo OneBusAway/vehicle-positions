@@ -1,0 +1,209 @@
+package main
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
+)
+
+// fakeUserFetcher is a minimal UserFetcher backed by an in-memory map, used by
+// both the login-flow tests here and anywhere else a UserFetcher double is
+// needed (merge target for any future Task 2-style fake of the same shape).
+type fakeUserFetcher struct {
+	users map[string]*User
+}
+
+func (f *fakeUserFetcher) GetUserByEmail(_ context.Context, email string) (*User, error) {
+	u, ok := f.users[email]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	return u, nil
+}
+
+func newTestAdminUI(t *testing.T) *adminUI {
+	t.Helper()
+	ui, err := newAdminUI(&noopStore{}, testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true})
+	require.NoError(t, err)
+	t.Cleanup(ui.loginLimiter.Stop)
+	return ui
+}
+
+func TestAdminLoginPageRenders(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `method="post"`)
+	assert.Contains(t, w.Body.String(), `action="/admin/login"`)
+	assert.NotContains(t, w.Body.String(), "signup")
+}
+
+func TestAdminLoginFlow(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
+	admin := &User{ID: 1, Email: "boss@test.com", PasswordHash: string(hash), Role: "admin", Active: true}
+	driver := &User{ID: 2, Email: "drv@test.com", PasswordHash: string(hash), Role: "driver", Active: true}
+	ui := newTestAdminUI(t)
+	ui.users = &fakeUserFetcher{users: map[string]*User{admin.Email: admin, driver.Email: driver}}
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	post := func(email, pw string) *httptest.ResponseRecorder {
+		form := url.Values{"email": {email}, "password": {pw}}
+		req := httptest.NewRequest(http.MethodPost, "/admin/login", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("success sets cookie and redirects", func(t *testing.T) {
+		w := post(admin.Email, "password123")
+		assert.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+		require.NotEmpty(t, w.Result().Cookies())
+		assert.Equal(t, sessionCookieName, w.Result().Cookies()[0].Name)
+	})
+	t.Run("wrong password re-renders 401", func(t *testing.T) {
+		w := post(admin.Email, "nope")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "Invalid email or password")
+	})
+	t.Run("unknown email re-renders 401 identically", func(t *testing.T) {
+		w := post("ghost@test.com", "nope")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "Invalid email or password")
+	})
+	t.Run("deactivated user re-renders 401 identically", func(t *testing.T) {
+		inactive := &User{ID: 3, Email: "inactive@test.com", PasswordHash: string(hash), Role: "admin", Active: false}
+		ui.users = &fakeUserFetcher{users: map[string]*User{admin.Email: admin, driver.Email: driver, inactive.Email: inactive}}
+		w := post(inactive.Email, "password123")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "Invalid email or password")
+	})
+	t.Run("driver role gets 403 admin-required", func(t *testing.T) {
+		w := post(driver.Email, "password123")
+		assert.Equal(t, http.StatusForbidden, w.Code)
+		assert.Contains(t, w.Body.String(), "Admin access required")
+	})
+	t.Run("missing fields get 422", func(t *testing.T) {
+		w := post("", "")
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+	t.Run("rate limited after repeated attempts", func(t *testing.T) {
+		var last *httptest.ResponseRecorder
+		for i := 0; i < 12; i++ {
+			last = post("x@test.com", "nope")
+		}
+		assert.Equal(t, http.StatusTooManyRequests, last.Code)
+		assert.Contains(t, last.Body.String(), "Too many attempts, try again shortly.")
+	})
+}
+
+func TestAdminLogout(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	require.NotEmpty(t, w.Result().Cookies())
+	assert.Equal(t, -1, w.Result().Cookies()[0].MaxAge)
+}
+
+func TestAdminPagesRedirectWithoutSession(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	for _, path := range []string{"/admin", "/admin/dashboard", "/admin/map", "/admin/vehicles", "/admin/users", "/admin/trips"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusSeeOther, w.Code, path)
+		assert.Equal(t, "/admin/login", w.Header().Get("Location"), path)
+	}
+}
+
+// TestAdminPagesRenderWithSession exercises the protected pages with a valid
+// admin session cookie, verifying the mock data carried over from the old
+// package-level handlers still renders through the new adminUI methods.
+func TestAdminPagesRenderWithSession(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"dashboard", "/admin/dashboard", "Bus 001"},
+		{"vehicles", "/admin/vehicles", "Bus 001"},
+		{"users", "/admin/users", "Chaitanya K"},
+		{"trips", "/admin/trips", "Route A"},
+		{"map", "/admin/map", "Live Map"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.AddCookie(cookieFor(t, "admin"))
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), tc.want)
+		})
+	}
+}
+
+// TestAdminRootRedirect covers both branches of rootRedirect: an
+// authenticated visitor goes straight to the dashboard, an unauthenticated
+// one goes to the login page.
+func TestAdminRootRedirect(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	t.Run("authenticated", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+	})
+
+	t.Run("unauthenticated", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	})
+}
+
+// TestAdminLoginPageRedirectsWhenAlreadyAuthenticated ensures a signed-in
+// admin hitting the login page is bounced to the dashboard instead of seeing
+// the form again.
+func TestAdminLoginPageRedirectsWhenAlreadyAuthenticated(t *testing.T) {
+	ui := newTestAdminUI(t)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	req := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+}

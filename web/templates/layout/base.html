@@ -264,6 +264,8 @@
 
 {{template "header" .}}
 
+{{if .Flash}}<div class="glass-panel mx-5 mt-4 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm font-semibold text-emerald-800" role="status">{{.Flash}}</div>{{end}}
+
 <div class="flex-1">
 
 {{template "content" .}}

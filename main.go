@@ -4,10 +4,12 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -141,16 +143,27 @@ func main() {
 
 	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime)
 
-	// Admin UI (server-rendered HTML). This is a proof-of-concept with
-	// placeholder data and no authentication, so it is disabled by default and
-	// must be explicitly turned on via ADMIN_UI_ENABLED. Do not enable it in
-	// production until the routes are gated behind real session auth.
+	// Admin UI (server-rendered HTML), gated behind session-cookie auth
+	// (requireAdminPage) and disabled by default via ADMIN_UI_ENABLED.
 	if adminUIEnabled() {
-		if err := registerAdminUI(mux); err != nil {
+		staticFiles, err := fs.Sub(files, "web/static")
+		if err != nil {
+			slog.Error("failed to prepare admin UI static files", "error", err)
+			os.Exit(1)
+		}
+		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+
+		loginLimiter := NewLoginRateLimiter()
+		defer loginLimiter.Stop()
+
+		cfg := adminUIConfig{enabled: true, trustProxy: trustProxyHeaders()}
+		ui, err := newAdminUI(store, jwtSecret, loginLimiter, cfg)
+		if err != nil {
 			slog.Error("failed to enable admin UI", "error", err)
 			os.Exit(1)
 		}
-		slog.Warn("admin UI enabled with no authentication — for demo use only, do not expose in production")
+		registerAdminUI(mux, ui)
+		slog.Info("admin UI enabled", "trust_proxy", cfg.trustProxy)
 	}
 
 	srv := &http.Server{
@@ -177,6 +190,15 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("shutdown error", "error", err)
 	}
+}
+
+// trustProxyHeaders reports whether X-Forwarded-For/-Proto should be trusted
+// for client-IP and HTTPS detection, controlled by TRUST_PROXY_HEADERS
+// (default false — only set this behind a reverse proxy that overwrites
+// those headers itself).
+func trustProxyHeaders() bool {
+	trust, _ := strconv.ParseBool(os.Getenv("TRUST_PROXY_HEADERS"))
+	return trust
 }
 
 func envOrDefault(key, fallback string) string {
