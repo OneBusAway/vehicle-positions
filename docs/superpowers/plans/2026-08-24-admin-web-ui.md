@@ -1721,7 +1721,7 @@ In `login.html`, point at `/static/css/admin.css` only. `display-font` keeps `fo
 ```yaml
 - name: Verify committed Tailwind CSS is current
   run: |
-    curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.16/tailwindcss-linux-x64 -o /tmp/tailwindcss
+    curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/v4.2.0/tailwindcss-linux-x64 -o /tmp/tailwindcss
     chmod +x /tmp/tailwindcss
     /tmp/tailwindcss -i web/styles/input.css -o /tmp/admin.css --minify
     diff -q /tmp/admin.css web/static/css/admin.css || { echo "web/static/css/admin.css is stale — run 'make css' and commit"; exit 1; }

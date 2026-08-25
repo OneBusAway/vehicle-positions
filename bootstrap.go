@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 )
@@ -27,6 +28,14 @@ func bootstrapAdmin(ctx context.Context, store adminBootstrapStore, email, passw
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
 	if _, err := store.CreateUser(ctx, "Administrator", email, password, "admin"); err != nil {
+		// Two instances starting concurrently can both observe zero admins;
+		// the users.email unique index makes the INSERT the arbiter. The
+		// loser sees a duplicate-email error and must treat it as "already
+		// bootstrapped" rather than fail startup.
+		if errors.Is(err, ErrDuplicateEmail) {
+			slog.Info("admin bootstrap skipped: bootstrap email already exists", "email", email)
+			return nil
+		}
 		return fmt.Errorf("bootstrap admin: create: %w", err)
 	}
 	slog.Info("bootstrapped initial admin user", "email", email)

@@ -202,6 +202,9 @@
   async function renderTrail(url) {
     try {
       const data = await fetchJSON(url);
+      // Header first so a trip with no recorded points still shows its
+      // summary alongside the empty banner.
+      renderTripHeader(data.trip);
       const pts = (data.points || []).map(p => [p.latitude, p.longitude]);
       if (!pts.length) {
         document.getElementById("empty-banner")?.classList.remove("hidden");
@@ -211,7 +214,6 @@
       L.marker(pts[0], { icon: busIcon() }).addTo(map).bindPopup(trailPopup("Start", data.trip));
       L.marker(pts[pts.length - 1], { icon: busIcon() }).addTo(map).bindPopup(trailPopup("End", data.trip));
       map.fitBounds(pts, { padding: [40, 40] });
-      renderTripHeader(data.trip);
     } catch (e) {
       console.error("trail load failed", e);
     }

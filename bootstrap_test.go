@@ -64,6 +64,14 @@ func TestBootstrapAdminPropagatesCountError(t *testing.T) {
 	require.Error(t, err)
 }
 
+// Concurrent startup: both instances read zero admins, one INSERT wins on the
+// email unique index, the other must not fail startup.
+func TestBootstrapAdminTreatsDuplicateEmailAsAlreadyBootstrapped(t *testing.T) {
+	store := &fakeBootstrapStore{adminCount: 0, createErr: ErrDuplicateEmail}
+	err := bootstrapAdmin(context.Background(), store, "admin@example.com", "supersecret123")
+	require.NoError(t, err)
+}
+
 func TestBootstrapAdminPropagatesCreateError(t *testing.T) {
 	store := &fakeBootstrapStore{adminCount: 0, createErr: assert.AnError}
 	err := bootstrapAdmin(context.Background(), store, "admin@example.com", "supersecret123")

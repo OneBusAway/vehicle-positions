@@ -46,11 +46,18 @@ func newTestAdminUI(t *testing.T) *adminUI {
 type fakeAdminStats struct {
 	vehicles int
 	drivers  int
+	admins   int
 	trips    int
 }
 
 func (f *fakeAdminStats) CountActiveVehicles(_ context.Context) (int, error) { return f.vehicles, nil }
-func (f *fakeAdminStats) CountActiveUsersByRole(_ context.Context, _ string) (int, error) {
+
+// CountActiveUsersByRole is role-aware so the last-admin guard tests only
+// pass when the handler actually queries the "admin" role.
+func (f *fakeAdminStats) CountActiveUsersByRole(_ context.Context, role string) (int, error) {
+	if role == "admin" {
+		return f.admins, nil
+	}
 	return f.drivers, nil
 }
 func (f *fakeAdminStats) CountActiveTrips(_ context.Context) (int, error) { return f.trips, nil }
@@ -994,7 +1001,7 @@ func TestUserDeactivateActivate(t *testing.T) {
 	wireFakeUserStore(ui, users, newFakeAssignmentStore())
 	// Two active admins so the last-active-admin guard permits deactivation
 	// (fakeAdminStats returns the same count for every role).
-	ui.stats = &fakeAdminStats{drivers: 2}
+	ui.stats = &fakeAdminStats{admins: 2}
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 
@@ -1043,7 +1050,7 @@ func TestUserDeactivateLastAdminBlocked(t *testing.T) {
 	ui := newTestAdminUI(t)
 	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
 	wireFakeUserStore(ui, users, newFakeAssignmentStore())
-	ui.stats = &fakeAdminStats{drivers: 1} // exactly one active admin
+	ui.stats = &fakeAdminStats{admins: 1} // exactly one active admin
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 
@@ -1065,7 +1072,7 @@ func TestUserUpdateLastAdminDemotionBlocked(t *testing.T) {
 	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
 	wireFakeUserStore(ui, users, newFakeAssignmentStore())
 	wireFakeVehicleStore(ui, newFakeVehicleStore())
-	ui.stats = &fakeAdminStats{drivers: 1} // exactly one active admin
+	ui.stats = &fakeAdminStats{admins: 1} // exactly one active admin
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 

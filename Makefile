@@ -8,6 +8,13 @@ TAILWIND_VERSION := v4.2.0
 TAILWIND_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/')
 TAILWIND_ARCH := $(shell uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
 TAILWIND_BIN := .tools/tailwindcss-$(TAILWIND_VERSION)-$(TAILWIND_OS)-$(TAILWIND_ARCH)
+# Expected SHA-256 per platform, from the release's sha256sums.txt:
+# https://github.com/tailwindlabs/tailwindcss/releases/download/$(TAILWIND_VERSION)/sha256sums.txt
+TAILWIND_SHA256_linux_x64   := 8f65e2d21c675f1e8d265219979d17d10634c1f553a2f583265b7edb28726432
+TAILWIND_SHA256_linux_arm64 := 376fd4da2c29eb81ae0638cd2f84a4304af92532f2f1576555f41bdb44c185da
+TAILWIND_SHA256_macos_x64   := 18cd6bb94d0f26ff8a0fa8a966beb9ea36bea2c7c444397f7619a2b880260e65
+TAILWIND_SHA256_macos_arm64 := d9e759fd6612dd442a9caa49d366b24e5097ea9802d35829da3f6db6ee5c2043
+TAILWIND_SHA256 := $(TAILWIND_SHA256_$(TAILWIND_OS)_$(TAILWIND_ARCH))
 
 help:
 	@echo "Available targets:"
@@ -65,5 +72,8 @@ css: $(TAILWIND_BIN)
 
 $(TAILWIND_BIN):
 	mkdir -p .tools
-	curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_OS)-$(TAILWIND_ARCH) -o $(TAILWIND_BIN)
+	@test -n "$(TAILWIND_SHA256)" || { echo "no pinned Tailwind checksum for $(TAILWIND_OS)-$(TAILWIND_ARCH); add TAILWIND_SHA256_$(TAILWIND_OS)_$(TAILWIND_ARCH) to Makefile"; exit 1; }
+	curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_OS)-$(TAILWIND_ARCH) -o $(TAILWIND_BIN).tmp
+	echo "$(TAILWIND_SHA256)  $(TAILWIND_BIN).tmp" | shasum -a 256 -c - || { rm -f $(TAILWIND_BIN).tmp; exit 1; }
+	mv $(TAILWIND_BIN).tmp $(TAILWIND_BIN)
 	chmod +x $(TAILWIND_BIN)
