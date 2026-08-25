@@ -21,6 +21,38 @@ Quick-start instructions for running the server locally with Docker Compose,
 plus API sanity checks and troubleshooting, live in
 [`docs/development.md`](docs/development.md).
 
+### Admin web UI
+
+The server also ships a server-rendered admin web UI at `/admin` — sign in,
+dashboard, live fleet map with per-trip trails, vehicle CRUD (with CSV export
+of location history), user CRUD, vehicle assignments, and trip history. It's
+built into the same binary and enabled by default; set
+`ADMIN_UI_ENABLED=false` to disable it entirely (the route returns 404).
+
+**Note for operators upgrading from an earlier version:** the admin UI used to
+not exist, so there's nothing to opt into — this is a new default-on surface.
+If you don't want it exposed, set `ADMIN_UI_ENABLED=false` before deploying.
+
+Sign in with an existing admin account. To create the first one:
+
+- **Production/staging:** set `ADMIN_BOOTSTRAP_EMAIL` and
+  `ADMIN_BOOTSTRAP_PASSWORD` (8+ characters) before the server's first boot.
+  It creates that admin account once, only when the `users` table has zero
+  admins, and is a no-op on every subsequent boot.
+- **Local development:** load [`seed_dev.sql`](seed_dev.sql), which seeds
+  `admin@test.com` / `password` (alongside a seed driver).
+
+Deactivating a user blocks new logins immediately, but it doesn't revoke
+sessions already issued — any existing session cookie or JWT for that user
+stays valid until it expires (up to 24 hours).
+
+Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
+so the server reads the real client IP and scheme from `X-Forwarded-For` /
+`X-Forwarded-Proto` — this affects the admin login rate limiter's per-IP
+bucketing and whether the session cookie is marked `Secure`. Leave it unset
+(false) when the server is reachable directly, since trusting those headers
+from an untrusted client would let it spoof its IP.
+
 ### Android driver app
 
 The companion driver app lives in [`android/`](android/) (Gradle root —

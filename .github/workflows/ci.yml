@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -21,3 +24,14 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Verify committed Tailwind CSS is current
+        if: runner.os == 'Linux'
+        run: |
+          # Pinned to the same tailwindcss release (and SHA-256 from its
+          # sha256sums.txt) as Makefile's TAILWIND_VERSION — bump together.
+          curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/v4.2.0/tailwindcss-linux-x64 -o /tmp/tailwindcss
+          echo "8f65e2d21c675f1e8d265219979d17d10634c1f553a2f583265b7edb28726432  /tmp/tailwindcss" | sha256sum -c -
+          chmod +x /tmp/tailwindcss
+          /tmp/tailwindcss -i web/styles/input.css -o /tmp/admin.css --minify
+          diff -q /tmp/admin.css web/static/css/admin.css || { echo "web/static/css/admin.css is stale — run 'make css' and commit"; exit 1; }

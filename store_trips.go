@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // TripResponse is the API representation of a trip.
@@ -31,8 +33,41 @@ var ErrNotAssigned = errors.New("driver is not assigned to this vehicle")
 // ErrActiveTripExists is returned when the driver already has an active trip.
 var ErrActiveTripExists = errors.New("driver already has an active trip")
 
-// ErrTripNotFound is returned when no matching active trip is found to end.
+// ErrTripNotFound is returned when no matching active trip is found to end,
+// or when GetTripSummary is given an id that doesn't exist.
 var ErrTripNotFound = errors.New("active trip not found")
+
+// TripSummary is the API representation of a trip for admin listing/detail views.
+type TripSummary struct {
+	ID           int64      `json:"id"`
+	VehicleID    string     `json:"vehicle_id"`
+	VehicleLabel string     `json:"vehicle_label"`
+	UserID       int64      `json:"user_id"`
+	DriverName   string     `json:"driver_name"`
+	RouteID      string     `json:"route_id"`
+	GtfsTripID   string     `json:"gtfs_trip_id"`
+	StartTime    time.Time  `json:"start_time"`
+	EndTime      *time.Time `json:"end_time,omitempty"`
+	Status       string     `json:"status"`
+}
+
+// TripFilter narrows ListTrips results.
+type TripFilter struct {
+	Status    string // "", "active", "completed"
+	VehicleID string // "" = all
+	Q         string // ILIKE substring on driver name, route_id, gtfs_trip_id
+	Limit     int    // callers pass limit+1 to detect hasMore
+	Offset    int
+}
+
+// ActiveTripInfo describes the active trip currently associated with a vehicle.
+type ActiveTripInfo struct {
+	TripID     int64
+	RouteID    string
+	GtfsTripID string
+	UserID     int64
+	DriverName string
+}
 
 // TripStarter is the store interface for starting trips.
 type TripStarter interface {
@@ -42,6 +77,27 @@ type TripStarter interface {
 // TripEnder is the store interface for ending trips.
 type TripEnder interface {
 	EndTrip(ctx context.Context, tripID, userID int64) error
+}
+
+// TripLister lists trip summaries with optional filters, for the admin trips page.
+type TripLister interface {
+	ListTrips(ctx context.Context, f TripFilter) ([]TripSummary, error)
+}
+
+// TripSummaryGetter fetches a single trip's summary, for the admin trip detail page.
+type TripSummaryGetter interface {
+	GetTripSummary(ctx context.Context, id int64) (*TripSummary, error)
+}
+
+// TripLocationLister returns the trail of location points for a trip.
+type TripLocationLister interface {
+	ListTripLocations(ctx context.Context, tripID int64) ([]LocationPoint, error)
+}
+
+// ActiveTripsByVehicleLister returns the current active trip for each
+// vehicle that has one, keyed by vehicle ID.
+type ActiveTripsByVehicleLister interface {
+	ListActiveTripsByVehicle(ctx context.Context) (map[string]ActiveTripInfo, error)
 }
 
 // StartTrip validates the driver-vehicle assignment, checks for an existing active trip,
@@ -129,4 +185,136 @@ func (s *Store) EndTrip(ctx context.Context, tripID, userID int64) error {
 		return ErrTripNotFound
 	}
 	return nil
+}
+
+// ListTrips returns trip summaries newest-first with optional filters.
+// Dynamic WHERE clauses make this a hand-written query rather than sqlc.
+func (s *Store) ListTrips(ctx context.Context, f TripFilter) ([]TripSummary, error) {
+	query := `
+		SELECT t.id, t.vehicle_id, v.label, t.user_id, u.name,
+		       t.route_id, t.gtfs_trip_id, t.start_time, t.end_time, t.status
+		FROM trips t
+		JOIN users u ON u.id = t.user_id
+		JOIN vehicles v ON v.id = t.vehicle_id`
+	var conds []string
+	var args []any
+	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
+	if f.Status != "" {
+		conds = append(conds, "t.status = "+arg(f.Status))
+	}
+	if f.VehicleID != "" {
+		conds = append(conds, "t.vehicle_id = "+arg(f.VehicleID))
+	}
+	if f.Q != "" {
+		// Escape LIKE metacharacters so a search for a literal % or _
+		// (common in GTFS ids) matches the literal text instead of acting
+		// as a wildcard. Backslash is Postgres's default LIKE escape char.
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Q)
+		p := arg("%" + escaped + "%")
+		conds = append(conds, fmt.Sprintf("(u.name ILIKE %s OR t.route_id ILIKE %s OR t.gtfs_trip_id ILIKE %s)", p, p, p))
+	}
+	if len(conds) > 0 {
+		query += " WHERE " + strings.Join(conds, " AND ")
+	}
+	query += " ORDER BY t.start_time DESC, t.id DESC LIMIT " + arg(f.Limit) + " OFFSET " + arg(f.Offset)
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list trips: %w", err)
+	}
+	defer rows.Close()
+
+	var trips []TripSummary
+	for rows.Next() {
+		var tr TripSummary
+		var endTime pgtype.Timestamptz
+		if err := rows.Scan(&tr.ID, &tr.VehicleID, &tr.VehicleLabel, &tr.UserID, &tr.DriverName,
+			&tr.RouteID, &tr.GtfsTripID, &tr.StartTime, &endTime, &tr.Status); err != nil {
+			return nil, fmt.Errorf("scan trip: %w", err)
+		}
+		if endTime.Valid {
+			t := endTime.Time
+			tr.EndTime = &t
+		}
+		trips = append(trips, tr)
+	}
+	return trips, rows.Err()
+}
+
+// GetTripSummary returns a single trip's summary, joined with vehicle label
+// and driver name. Returns ErrTripNotFound when no trip matches id.
+func (s *Store) GetTripSummary(ctx context.Context, id int64) (*TripSummary, error) {
+	row, err := s.queries.GetTripSummary(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTripNotFound
+		}
+		return nil, fmt.Errorf("get trip summary: %w", err)
+	}
+
+	tr := &TripSummary{
+		ID:           row.ID,
+		VehicleID:    row.VehicleID,
+		VehicleLabel: row.VehicleLabel,
+		UserID:       row.UserID,
+		DriverName:   row.DriverName,
+		RouteID:      row.RouteID,
+		GtfsTripID:   row.GtfsTripID,
+		StartTime:    row.StartTime.Time,
+		Status:       row.Status,
+	}
+	if row.EndTime.Valid {
+		tr.EndTime = &row.EndTime.Time
+	}
+	return tr, nil
+}
+
+// ListTripLocations returns the trail of location points for a trip.
+// Per spec §4.5, location_points.trip_id is a client-supplied GTFS string
+// (not trips.id), so the trail is derived by matching vehicle + driver +
+// the trip's start/end time window rather than a direct trip_id join.
+func (s *Store) ListTripLocations(ctx context.Context, tripID int64) ([]LocationPoint, error) {
+	rows, err := s.queries.ListTripLocations(ctx, tripID)
+	if err != nil {
+		return nil, fmt.Errorf("list trip locations: %w", err)
+	}
+
+	points := make([]LocationPoint, 0, len(rows))
+	for _, row := range rows {
+		p := LocationPoint{
+			Latitude:   row.Latitude,
+			Longitude:  row.Longitude,
+			Timestamp:  row.Timestamp,
+			TripID:     row.TripID,
+			ReceivedAt: row.ReceivedAt.Time,
+		}
+		p.Bearing = nullableFloat(row.Bearing)
+		p.Speed = nullableFloat(row.Speed)
+		p.Accuracy = nullableFloat(row.Accuracy)
+		points = append(points, p)
+	}
+	return points, nil
+}
+
+// ListActiveTripsByVehicle returns the current active trip for each vehicle
+// that has one, keyed by vehicle ID. The schema only guarantees one active
+// trip per user (not per vehicle); when multiple drivers have active trips
+// on the same vehicle, the most recently started trip wins (spec §4.8).
+func (s *Store) ListActiveTripsByVehicle(ctx context.Context) (map[string]ActiveTripInfo, error) {
+	rows, err := s.queries.ListActiveTripsByVehicle(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list active trips by vehicle: %w", err)
+	}
+
+	result := make(map[string]ActiveTripInfo, len(rows))
+	for _, row := range rows {
+		result[row.VehicleID] = ActiveTripInfo{
+			TripID:     row.ID,
+			RouteID:    row.RouteID,
+			GtfsTripID: row.GtfsTripID,
+			UserID:     row.UserID,
+			DriverName: row.DriverName,
+		}
+	}
+	return result, nil
 }

@@ -2,12 +2,33 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// uniqueEmail generates a unique test email address to avoid cross-test collisions.
+func uniqueEmail(t *testing.T) string {
+	t.Helper()
+	return fmt.Sprintf("u-%d-%s@test.com", time.Now().UnixNano(), sanitizeTestName(t.Name()))
+}
+
+// sanitizeTestName replaces characters that are invalid in email local-parts.
+func sanitizeTestName(name string) string {
+	out := make([]rune, 0, len(name))
+	for _, r := range name {
+		if r == '/' || r == ' ' {
+			out = append(out, '-')
+			continue
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
 
 func TestStore_GetUserByEmail_Found(t *testing.T) {
 	store := newTestStore(t)
@@ -216,5 +237,80 @@ func TestStore_DeleteUser_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	err := store.DeleteUser(ctx, 999999)
+	assert.ErrorIs(t, err, ErrUserNotFound)
+}
+
+func TestSetUserActive(t *testing.T) {
+	store := newTestStore(t)
+	u, err := store.CreateUser(context.Background(), "Deact Me", uniqueEmail(t), "password123", "driver")
+	require.NoError(t, err)
+	require.True(t, u.Active)
+
+	require.NoError(t, store.SetUserActive(context.Background(), u.ID, false))
+	got, err := store.GetUser(context.Background(), u.ID)
+	require.NoError(t, err)
+	assert.False(t, got.Active)
+
+	require.NoError(t, store.SetUserActive(context.Background(), u.ID, true))
+	got, err = store.GetUser(context.Background(), u.ID)
+	require.NoError(t, err)
+	assert.True(t, got.Active)
+
+	assert.ErrorIs(t, store.SetUserActive(context.Background(), 999999999, false), ErrUserNotFound)
+}
+
+func TestGetUserByEmailIncludesActive(t *testing.T) {
+	store := newTestStore(t)
+	email := uniqueEmail(t)
+	u, err := store.CreateUser(context.Background(), "Flag Check", email, "password123", "driver")
+	require.NoError(t, err)
+	require.NoError(t, store.SetUserActive(context.Background(), u.ID, false))
+
+	fetched, err := store.GetUserByEmail(context.Background(), email)
+	require.NoError(t, err)
+	assert.False(t, fetched.Active)
+}
+
+func TestCountUsersByRole(t *testing.T) {
+	store := newTestStore(t)
+	u, err := store.CreateUser(context.Background(), "Count Me", uniqueEmail(t), "password123", "driver")
+	require.NoError(t, err)
+
+	total, err := store.CountUsersByRole(context.Background(), "driver")
+	require.NoError(t, err)
+	active, err := store.CountActiveUsersByRole(context.Background(), "driver")
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, total, 1)
+	assert.GreaterOrEqual(t, active, 1)
+
+	require.NoError(t, store.SetUserActive(context.Background(), u.ID, false))
+	active2, err := store.CountActiveUsersByRole(context.Background(), "driver")
+	require.NoError(t, err)
+	assert.Equal(t, active-1, active2)
+}
+
+// TestStore_UpdateUserPassword_RoundTrip verifies UpdateUserPassword
+// bcrypt-hashes and stores a new password, that the old password no longer
+// compares, and that an unknown id reports ErrUserNotFound.
+func TestStore_UpdateUserPassword_RoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+
+	u, err := store.CreateUser(ctx, "Password Rotator", email, "originalpass", "driver")
+	require.NoError(t, err)
+
+	require.NoError(t, store.UpdateUserPassword(ctx, u.ID, "newpassword123"))
+
+	fetched, err := store.GetUserByEmail(ctx, email)
+	require.NoError(t, err)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(fetched.PasswordHash), []byte("newpassword123")))
+	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(fetched.PasswordHash), []byte("originalpass")))
+}
+
+func TestStore_UpdateUserPassword_NotFound(t *testing.T) {
+	store := newTestStore(t)
+	err := store.UpdateUserPassword(context.Background(), 999999999, "somepassword")
 	assert.ErrorIs(t, err, ErrUserNotFound)
 }

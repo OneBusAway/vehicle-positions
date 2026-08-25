@@ -1,0 +1,72 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]: 🚌
+      - generic [ref=f1e7]:
+        - paragraph [ref=f1e8]: Transit Tracker
+        - paragraph [ref=f1e9]: Fleet Operations
+    - navigation [ref=f1e10]:
+      - link "🗺 Live Map" [ref=f1e11] [cursor=pointer]:
+        - /url: /admin/map
+        - generic [ref=f1e12]: 🗺
+        - text: Live Map
+      - link "📈 Dashboard" [ref=f1e13] [cursor=pointer]:
+        - /url: /admin/dashboard
+        - generic [ref=f1e14]: 📈
+        - text: Dashboard
+      - link "🚌 Vehicles" [ref=f1e15] [cursor=pointer]:
+        - /url: /admin/vehicles
+        - generic [ref=f1e16]: 🚌
+        - text: Vehicles
+      - link "👥 Users" [ref=f1e17] [cursor=pointer]:
+        - /url: /admin/users
+        - generic [ref=f1e18]: 👥
+        - text: Users
+      - link "🕓 Trips" [ref=f1e19] [cursor=pointer]:
+        - /url: /admin/trips
+        - generic [ref=f1e20]: 🕓
+        - text: Trips
+    - paragraph [ref=f1e22]: v0.1.0
+  - main [ref=f1e23]:
+    - generic [ref=f1e24]:
+      - generic [ref=f1e25]:
+        - paragraph [ref=f1e26]: Transit control
+        - heading "Dashboard" [level=1] [ref=f1e27]
+      - button "Sign out" [ref=f1e30]
+    - generic [ref=f1e32]:
+      - generic [ref=f1e33]:
+        - generic [ref=f1e34]:
+          - paragraph [ref=f1e35]: Total Fleet
+          - paragraph [ref=f1e36]: "1"
+          - paragraph [ref=f1e37]: Registered vehicles
+        - generic [ref=f1e38]:
+          - paragraph [ref=f1e39]: Active Now
+          - paragraph [ref=f1e40]: "1"
+          - paragraph [ref=f1e41]: On route
+        - generic [ref=f1e42]:
+          - paragraph [ref=f1e43]: Drivers
+          - paragraph [ref=f1e44]: "0"
+          - paragraph [ref=f1e45]: Active
+        - generic [ref=f1e46]:
+          - paragraph [ref=f1e47]: Active Trips
+          - paragraph [ref=f1e48]: "1"
+          - paragraph [ref=f1e49]: In progress
+      - generic [ref=f1e50]:
+        - generic [ref=f1e51]: "Feed last updated: just now"
+        - generic [ref=f1e52]: "Staleness threshold: 5 min"
+      - generic [ref=f1e53]:
+        - generic [ref=f1e54]:
+          - heading "Recent Activity" [level=3] [ref=f1e55]
+          - link "View all →" [ref=f1e56] [cursor=pointer]:
+            - /url: /admin/vehicles
+        - table [ref=f1e58]:
+          - rowgroup [ref=f1e59]:
+            - row [ref=f1e60]:
+              - columnheader "Vehicle" [ref=f1e61]
+              - columnheader "Route" [ref=f1e62]
+              - columnheader "Last Update" [ref=f1e63]
+          - rowgroup [ref=f1e64]:
+            - row [ref=f1e65]:
+              - cell "Go Bus 1" [ref=f1e66]
+              - cell "route-5" [ref=f1e67]
+              - cell "just now" [ref=f1e68]

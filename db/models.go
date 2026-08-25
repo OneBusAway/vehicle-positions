@@ -43,6 +43,7 @@ type User struct {
 	Role         string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
+	Active       bool
 }
 
 type UserVehicle struct {

@@ -19,6 +19,7 @@ type UserResponse struct {
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
+	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -46,6 +47,24 @@ type UserDeleter interface {
 	DeleteUser(ctx context.Context, id int64) error
 }
 
+// UserActivator toggles a user's active flag.
+type UserActivator interface {
+	SetUserActive(ctx context.Context, id int64, active bool) error
+}
+
+// UserPasswordUpdater updates a user's password. The plaintext password is
+// bcrypt-hashed inside the implementation before it ever reaches storage.
+type UserPasswordUpdater interface {
+	UpdateUserPassword(ctx context.Context, id int64, password string) error
+}
+
+// UserRoleCounter provides role-based user counts, used by the admin
+// dashboard and by bootstrapAdmin to detect whether an admin already exists.
+type UserRoleCounter interface {
+	CountUsersByRole(ctx context.Context, role string) (int, error)
+	CountActiveUsersByRole(ctx context.Context, role string) (int, error)
+}
+
 func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 	rows, err := s.queries.ListUsers(ctx)
 	if err != nil {
@@ -59,6 +78,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 			Name:      row.Name,
 			Email:     row.Email,
 			Role:      row.Role,
+			Active:    row.Active,
 			CreatedAt: row.CreatedAt.Time,
 			UpdatedAt: row.UpdatedAt.Time,
 		})
@@ -80,6 +100,7 @@ func (s *Store) GetUser(ctx context.Context, id int64) (*UserResponse, error) {
 		Name:      row.Name,
 		Email:     row.Email,
 		Role:      row.Role,
+		Active:    row.Active,
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
 	}, nil
@@ -109,6 +130,7 @@ func (s *Store) CreateUser(ctx context.Context, name, email, password, role stri
 		Name:      row.Name,
 		Email:     row.Email,
 		Role:      row.Role,
+		Active:    row.Active,
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
 	}, nil
@@ -138,6 +160,7 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 		Name:      row.Name,
 		Email:     row.Email,
 		Role:      row.Role,
+		Active:    row.Active,
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
 	}, nil
@@ -154,6 +177,57 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 		return ErrUserNotFound
 	}
 	return nil
+}
+
+// SetUserActive flips a user's active flag. Deactivated users cannot log in.
+func (s *Store) SetUserActive(ctx context.Context, id int64, active bool) error {
+	rows, err := s.queries.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active})
+	if err != nil {
+		return fmt.Errorf("set user active: %w", err)
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// UpdateUserPassword bcrypt-hashes password and replaces the stored hash for
+// the given user. Returns ErrUserNotFound if no user matches id.
+func (s *Store) UpdateUserPassword(ctx context.Context, id int64, password string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	rows, err := s.queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		ID:           id,
+		PasswordHash: string(hash),
+	})
+	if err != nil {
+		return fmt.Errorf("update user password: %w", err)
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// CountUsersByRole returns the total number of users with the given role.
+func (s *Store) CountUsersByRole(ctx context.Context, role string) (int, error) {
+	n, err := s.queries.CountUsersByRole(ctx, role)
+	if err != nil {
+		return 0, fmt.Errorf("count users by role: %w", err)
+	}
+	return int(n), nil
+}
+
+// CountActiveUsersByRole returns the number of active users with the given role.
+func (s *Store) CountActiveUsersByRole(ctx context.Context, role string) (int, error) {
+	n, err := s.queries.CountActiveUsersByRole(ctx, role)
+	if err != nil {
+		return 0, fmt.Errorf("count active users by role: %w", err)
+	}
+	return int(n), nil
 }
 
 // isDuplicateEmail checks if the error is a PostgreSQL unique violation on the email column.

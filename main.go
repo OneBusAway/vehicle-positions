@@ -4,6 +4,8 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,7 +17,7 @@ import (
 //go:embed web/templates web/static
 var files embed.FS
 
-// appStore is the combined store interface required by newMux.
+// appStore is the combined store interface required by newMux and newHandler.
 // *Store implements all embedded interfaces.
 type appStore interface {
 	UserFetcher
@@ -24,7 +26,13 @@ type appStore interface {
 	UserCreator
 	UserUpdater
 	UserDeleter
+	UserActivator
+	UserPasswordUpdater
+	UserRoleCounter
 	VehicleManager
+	VehicleInfoUpdater
+	VehicleActivator
+	VehicleCreator
 	LocationSaver
 	AssignmentCreator
 	AssignmentDeleter
@@ -32,30 +40,38 @@ type appStore interface {
 	AssignmentListerByVehicle
 	TripStarter
 	TripEnder
+	TripLister
+	TripSummaryGetter
+	TripLocationLister
+	ActiveTripsByVehicleLister
 	HealthChecker
 	LocationHistoryLister
 	VehicleChecker
 	DriverVehicleLister
+	AdminStatsCounter
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy bool) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret)
 	adminMiddleware := requireAdmin()
 
-	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret))
+	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
+	mux.Handle("GET /api/v1/admin/vehicles/live", authMiddleware(adminMiddleware(handleLiveVehicles(tracker, store, store))))
 	mux.Handle("GET /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleGetVehicle(store))))
 	mux.Handle("POST /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleUpsertVehicle(store))))
 	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/{vehicleID}/locations", authMiddleware(adminMiddleware(handleGetLocationHistory(store, store))))
+	mux.Handle("GET /api/v1/admin/trips", authMiddleware(adminMiddleware(handleListTrips(store))))
+	mux.Handle("GET /api/v1/admin/trips/{id}/locations", authMiddleware(adminMiddleware(handleTripLocations(store))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -80,6 +96,35 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/vehicles/{id}/users", authMiddleware(adminMiddleware(handleListVehicleUsers(store))))
 
 	return mux
+}
+
+// newHandler composes the full application handler: the JSON API mux, the
+// optional server-rendered admin UI (mounted only when cfg.enabled), and
+// CSRF protection wrapping the whole thing. It is the single place routes
+// and cross-cutting middleware come together.
+func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
+	loginLimiter *LoginRateLimiter, jwtSecret []byte, startTime time.Time,
+	cfg adminUIConfig) (http.Handler, error) {
+
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy)
+
+	if cfg.enabled {
+		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("init admin UI: %w", err)
+		}
+		staticFiles, err := fs.Sub(files, "web/static")
+		if err != nil {
+			return nil, fmt.Errorf("prepare static files: %w", err)
+		}
+		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFiles))))
+		registerAdminUI(mux, ui)
+	}
+
+	// CSRF: rejects browser cross-origin non-safe requests; clients without
+	// Sec-Fetch-Site/Origin headers (Retrofit, curl) are unaffected (spec §4.3).
+	csrf := http.NewCrossOriginProtection()
+	return csrf.Handler(mux), nil
 }
 
 func main() {
@@ -120,11 +165,21 @@ func main() {
 
 	defer store.Close()
 
+	if be, bp := os.Getenv("ADMIN_BOOTSTRAP_EMAIL"), os.Getenv("ADMIN_BOOTSTRAP_PASSWORD"); be != "" && bp != "" {
+		if err := bootstrapAdmin(ctx, store, be, bp); err != nil {
+			slog.Error("admin bootstrap failed", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	tracker := NewTracker(maxAge)
 	defer tracker.Stop()
 
 	rateLimiter := NewVehicleRateLimiter()
 	defer rateLimiter.Stop()
+
+	loginLimiter := NewLoginRateLimiter()
+	defer loginLimiter.Stop()
 
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)
@@ -139,23 +194,16 @@ func main() {
 
 	startTime := time.Now()
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime)
-
-	// Admin UI (server-rendered HTML). This is a proof-of-concept with
-	// placeholder data and no authentication, so it is disabled by default and
-	// must be explicitly turned on via ADMIN_UI_ENABLED. Do not enable it in
-	// production until the routes are gated behind real session auth.
-	if adminUIEnabled() {
-		if err := registerAdminUI(mux); err != nil {
-			slog.Error("failed to enable admin UI", "error", err)
-			os.Exit(1)
-		}
-		slog.Warn("admin UI enabled with no authentication — for demo use only, do not expose in production")
+	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, startTime,
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge})
+	if err != nil {
+		slog.Error("failed to build handler", "error", err)
+		os.Exit(1)
 	}
 
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      requestLogger(mux),
+		Handler:      requestLogger(handler),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,

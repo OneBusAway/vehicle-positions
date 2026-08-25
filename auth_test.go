@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // mockUserStore implements UserFetcher for tests.
@@ -45,9 +46,10 @@ func TestHandleLogin_Success(t *testing.T) {
 		Email:        "driver@test.com",
 		PasswordHash: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
 		Role:         "driver",
+		Active:       true,
 	}}
 
-	handler := handleLogin(store, testSecret)
+	handler := handleLogin(store, testSecret, nil, false)
 	w := postLogin(handler, "driver@test.com", "password")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -64,9 +66,10 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 		Email:        "driver@test.com",
 		PasswordHash: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
 		Role:         "driver",
+		Active:       true,
 	}}
 
-	handler := handleLogin(store, testSecret)
+	handler := handleLogin(store, testSecret, nil, false)
 	w := postLogin(handler, "driver@test.com", "wrongpassword")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -77,10 +80,32 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 	assert.Equal(t, "invalid email or password", resp["error"])
 }
 
+func TestHandleLogin_DeactivatedUser(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
+	require.NoError(t, err)
+	store := &mockUserStore{user: &User{
+		ID:           7,
+		Email:        "gone@test.com",
+		PasswordHash: string(hash),
+		Role:         "driver",
+		Active:       false,
+	}}
+
+	handler := handleLogin(store, testSecret, nil, false)
+	w := postLogin(handler, "gone@test.com", "password123")
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var resp map[string]string
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "invalid email or password", resp["error"])
+}
+
 func TestHandleLogin_UserNotFound(t *testing.T) {
 	store := &mockUserStore{err: ErrUserNotFound}
 
-	handler := handleLogin(store, testSecret)
+	handler := handleLogin(store, testSecret, nil, false)
 	w := postLogin(handler, "nobody@test.com", "password")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -88,7 +113,7 @@ func TestHandleLogin_UserNotFound(t *testing.T) {
 
 func TestHandleLogin_MissingFields(t *testing.T) {
 	store := &mockUserStore{}
-	handler := handleLogin(store, testSecret)
+	handler := handleLogin(store, testSecret, nil, false)
 
 	tests := []struct {
 		name     string
@@ -108,9 +133,39 @@ func TestHandleLogin_MissingFields(t *testing.T) {
 	}
 }
 
+// TestHandleLogin_RateLimited verifies the limiter is checked before the
+// store is touched: once the per-email window is exhausted, further attempts
+// get 429 even against a store that would otherwise succeed.
+func TestHandleLogin_RateLimited(t *testing.T) {
+	store := &mockUserStore{user: &User{
+		ID:           1,
+		Email:        "driver@test.com",
+		PasswordHash: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
+		Role:         "driver",
+		Active:       true,
+	}}
+	limiter := NewLoginRateLimiter()
+	defer limiter.Stop()
+
+	handler := handleLogin(store, testSecret, limiter, false)
+
+	for range loginEmailLimit {
+		w := postLogin(handler, "driver@test.com", "wrongpassword")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	}
+
+	w := postLogin(handler, "driver@test.com", "password")
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+
+	var resp map[string]string
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, "too many attempts", resp["error"])
+}
+
 func TestHandleLogin_InvalidJSON(t *testing.T) {
 	store := &mockUserStore{}
-	handler := handleLogin(store, testSecret)
+	handler := handleLogin(store, testSecret, nil, false)
 
 	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader([]byte("{bad json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -208,6 +263,44 @@ func TestRequireAuth_ValidToken(t *testing.T) {
 	requireAuth(testSecret)(handler).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestRequireAuthCookieFallback(t *testing.T) {
+	token, err := generateJWT(&User{ID: 3, Email: "admin@test.com", Role: "admin", Active: true}, testSecret)
+	require.NoError(t, err)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	h := requireAuth(testSecret)(next)
+
+	t.Run("cookie only → 200", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+	t.Run("invalid bearer + valid cookie → 401, no fallback", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer garbage")
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+	t.Run("malformed header + valid cookie → 401, no fallback", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Basic abc")
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+	t.Run("bad cookie only → 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "garbage"})
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
 }
 
 func TestGenerateJWT_Claims(t *testing.T) {

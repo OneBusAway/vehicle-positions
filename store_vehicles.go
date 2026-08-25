@@ -28,6 +28,24 @@ type VehicleManager interface {
 	DeactivateVehicle(ctx context.Context, id string) error
 }
 
+// VehicleInfoUpdater updates a vehicle's label/agency tag without touching
+// its active flag (unlike VehicleManager.UpsertVehicle, which reactivates).
+type VehicleInfoUpdater interface {
+	UpdateVehicleInfo(ctx context.Context, id, label, agencyTag string) error
+}
+
+// VehicleActivator toggles a vehicle's active flag (deactivate/reactivate).
+type VehicleActivator interface {
+	SetVehicleActive(ctx context.Context, id string, active bool) error
+}
+
+// VehicleCreator inserts brand-new vehicles only. Unlike
+// VehicleManager.UpsertVehicle it never overwrites or reactivates an
+// existing row: created is false (with no error) when the id already exists.
+type VehicleCreator interface {
+	CreateVehicle(ctx context.Context, id, label, agencyTag string) (created bool, err error)
+}
+
 // ListVehicles returns all vehicles ordered by creation time.
 func (s *Store) ListVehicles(ctx context.Context) ([]VehicleResponse, error) {
 	rows, err := s.queries.ListVehicles(ctx)
@@ -66,16 +84,50 @@ func (s *Store) UpsertVehicle(ctx context.Context, id, label, agencyTag string) 
 	return &v, nil
 }
 
-// DeactivateVehicle sets a vehicle's active flag to false.
-func (s *Store) DeactivateVehicle(ctx context.Context, id string) error {
-	rowsAffected, err := s.queries.DeactivateVehicle(ctx, id)
+// CreateVehicle inserts a new vehicle, reporting created=false (and no
+// error) when a vehicle with the same id already exists. The single
+// ON CONFLICT DO NOTHING insert makes concurrent duplicate creates safe:
+// exactly one wins, and the loser can't overwrite or reactivate the row the
+// way a check-then-upsert sequence could.
+func (s *Store) CreateVehicle(ctx context.Context, id, label, agencyTag string) (bool, error) {
+	rows, err := s.queries.CreateVehicle(ctx, db.CreateVehicleParams{
+		ID:        id,
+		Label:     label,
+		AgencyTag: agencyTag,
+	})
 	if err != nil {
-		return fmt.Errorf("deactivate vehicle: %w", err)
+		return false, fmt.Errorf("create vehicle: %w", err)
 	}
-	// DeactivateVehicle uses :execrows, which returns the count of affected rows
-	// instead of the row itself. A zero count means no vehicle matched the ID.
-	if rowsAffected == 0 {
-		return fmt.Errorf("deactivate vehicle: %w", pgx.ErrNoRows)
+	return rows > 0, nil
+}
+
+// DeactivateVehicle sets a vehicle's active flag to false. It delegates to
+// SetVehicleActive so the active flag has a single write path.
+func (s *Store) DeactivateVehicle(ctx context.Context, id string) error {
+	return s.SetVehicleActive(ctx, id, false)
+}
+
+// UpdateVehicleInfo updates label/agency tag WITHOUT touching the active flag,
+// unlike UpsertVehicle which force-reactivates.
+func (s *Store) UpdateVehicleInfo(ctx context.Context, id, label, agencyTag string) error {
+	rows, err := s.queries.UpdateVehicleInfo(ctx, db.UpdateVehicleInfoParams{ID: id, Label: label, AgencyTag: agencyTag})
+	if err != nil {
+		return fmt.Errorf("update vehicle info: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("update vehicle info: %w", pgx.ErrNoRows)
+	}
+	return nil
+}
+
+// SetVehicleActive flips a vehicle's active flag (deactivate/reactivate).
+func (s *Store) SetVehicleActive(ctx context.Context, id string, active bool) error {
+	rows, err := s.queries.SetVehicleActive(ctx, db.SetVehicleActiveParams{ID: id, Active: active})
+	if err != nil {
+		return fmt.Errorf("set vehicle active: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("set vehicle active: %w", pgx.ErrNoRows)
 	}
 	return nil
 }

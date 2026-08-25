@@ -3,12 +3,33 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// uniqueVehicleID generates a unique test vehicle ID to avoid cross-test collisions.
+func uniqueVehicleID(t *testing.T) string {
+	t.Helper()
+	return fmt.Sprintf("veh-%d-%s", time.Now().UnixNano(), sanitizeTestName(t.Name()))
+}
+
+// cleanupVehicleID registers cleanup to delete a single test vehicle's dependent
+// rows and the vehicle itself, in FK-safe order (dependents before the row itself).
+func cleanupVehicleID(t *testing.T, store *Store, id string) {
+	t.Helper()
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_, err := store.pool.Exec(ctx, "DELETE FROM location_points WHERE vehicle_id = $1", id)
+		require.NoError(t, err)
+		_, err = store.pool.Exec(ctx, "DELETE FROM vehicles WHERE id = $1", id)
+		require.NoError(t, err)
+	})
+}
 
 // cleanupVehicles ensures a clean slate before and after each test.
 // Pre-test cleanup handles cases where a prior test panicked before its t.Cleanup ran.
@@ -250,4 +271,54 @@ func TestStore_ListActiveVehiclesByUser_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, vehicles, "empty list should be [], not nil")
 	assert.Empty(t, vehicles)
+}
+
+func TestUpdateVehicleInfoDoesNotReactivate(t *testing.T) {
+	store := newTestStore(t)
+	id := uniqueVehicleID(t)
+	cleanupVehicleID(t, store, id)
+	_, err := store.UpsertVehicle(context.Background(), id, "Old", "tag")
+	require.NoError(t, err)
+	require.NoError(t, store.DeactivateVehicle(context.Background(), id))
+
+	require.NoError(t, store.UpdateVehicleInfo(context.Background(), id, "New Label", "newtag"))
+	v, err := store.GetVehicle(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, "New Label", v.Label)
+	assert.False(t, v.Active, "editing must not reactivate a deactivated vehicle")
+
+	err = store.UpdateVehicleInfo(context.Background(), "no-such-vehicle-xyz", "x", "y")
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestSetVehicleActive(t *testing.T) {
+	store := newTestStore(t)
+	id := uniqueVehicleID(t)
+	cleanupVehicleID(t, store, id)
+	_, err := store.UpsertVehicle(context.Background(), id, "Bus", "")
+	require.NoError(t, err)
+
+	require.NoError(t, store.SetVehicleActive(context.Background(), id, false))
+	v, _ := store.GetVehicle(context.Background(), id)
+	assert.False(t, v.Active)
+	require.NoError(t, store.SetVehicleActive(context.Background(), id, true))
+	v, _ = store.GetVehicle(context.Background(), id)
+	assert.True(t, v.Active)
+	assert.ErrorIs(t, store.SetVehicleActive(context.Background(), "no-such-vehicle-xyz", true), pgx.ErrNoRows)
+}
+
+func TestCountActiveVehiclesAndTrips(t *testing.T) {
+	store := newTestStore(t)
+	before, err := store.CountActiveVehicles(context.Background())
+	require.NoError(t, err)
+	id := uniqueVehicleID(t)
+	cleanupVehicleID(t, store, id)
+	_, err = store.UpsertVehicle(context.Background(), id, "Bus", "")
+	require.NoError(t, err)
+	after, err := store.CountActiveVehicles(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, before+1, after)
+
+	_, err = store.CountActiveTrips(context.Background())
+	require.NoError(t, err) // exact value covered by trip tests; here just exercises the query
 }
