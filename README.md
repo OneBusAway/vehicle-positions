@@ -186,37 +186,56 @@ The server updates its in-memory state with the latest position and persists the
 
 **`POST /api/v1/locations` validation and error contract**
 
-The ingest endpoint performs strict request validation before writing data:
+The ingest endpoint requires a driver JWT (`Authorization: Bearer <token>`)
+and performs strict request validation before writing data:
 
 - `Content-Type` must be `application/json` (charset parameters are allowed).
 - The request body must contain exactly one JSON object.
 - Unknown JSON fields are rejected.
 - Standard payload validation still applies (`vehicle_id`, coordinates, timestamp).
+- Reports are rate limited to one per five seconds per driver.
 
 Response codes:
 
 - `201 Created` — location accepted and persisted.
 - `400 Bad Request` — invalid JSON or payload validation failure.
+- `401 Unauthorized` — missing, malformed, or expired bearer token.
 - `415 Unsupported Media Type` — non-JSON `Content-Type`.
+- `429 Too Many Requests` — driver exceeded the ingest rate limit.
+- `500 Internal Server Error` — the location could not be persisted. The
+  in-memory tracker is left untouched, so a failed write never reaches the
+  GTFS-RT feed.
 
 Examples:
 
 ```bash
 # Valid request
 curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"vehicle_id":"bus-1","trip_id":"route-5","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
+  -d '{"vehicle_id":"bus-1","trip_id":"route-5","latitude":-1.29,"longitude":36.82,"timestamp":'"$(date +%s)"'}'
+
+# Missing bearer token -> 401
+curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Content-Type: application/json" \
+  -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":'"$(date +%s)"'}'
 
 # Invalid content type -> 415
 curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/plain" \
-  -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
+  -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":'"$(date +%s)"'}'
 
 # Trailing JSON value -> 400
 curl -i -X POST http://localhost:8080/api/v1/locations \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}{"extra":1}'
+  -d '{"vehicle_id":"bus-1","latitude":-1.29,"longitude":36.82,"timestamp":'"$(date +%s)"'}{"extra":1}'
 ```
+
+`$TOKEN` is the JWT returned by `POST /api/v1/auth/login`. The examples use
+`$(date +%s)` rather than a fixed timestamp because reports more than five
+minutes from server time are rejected with `400`.
 
 **Technology Stack:**
 
