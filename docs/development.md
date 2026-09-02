@@ -262,8 +262,14 @@ T1/9d1b2e6f: ended arrived after 1001m along the shape (101 points sent, 0 dropp
 all 1 rides ended as expected
 ```
 
-The process exits non-zero if any ride ends with a reason other than
-`-expect-end`.
+The process exits 1 if any ride ends with a reason other than `-expect-end`,
+and 2 if the invocation itself is wrong (an unknown `-expect-end` reason, say).
+
+Corroboration flaps while the driver is parked — you will see it move between
+`corroborated`, `none` and `unavailable` as the rider walks past `bus-1` and
+the odd jittered fix fails to match. That is expected; what matters is that
+`published` stays `true` once it flips, since a ride stays corroborated for
+good after twelve corroborated points.
 
 ### 4. Watch the rider take over from the agency feed
 
@@ -307,8 +313,8 @@ be empty.
 
 ### Simulator flags
 
-`make ridersim` runs the default one-rider case against `localhost:8080`. The
-full set:
+`make ridersim` runs the default one-rider case against `localhost:$(PORT)`
+(8080 unless `PORT` is set, matching `make run`). The full set:
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -319,15 +325,23 @@ full set:
 | `-start-date` | today | Service date, `YYYYMMDD`, in the feed's timezone |
 | `-interval` | `5s` | Time between simulated GPS fixes |
 | `-speed` | `10` | Metres per second along the shape |
-| `-noise` | `8` | Metres of Gaussian jitter added to each fix |
+| `-noise` | `8` | Metres of Gaussian jitter added to each fix, and the accuracy each fix reports (floor 5 m) |
 | `-offroute-after` | `0` | Leave the shape by 300 m after this long |
 | `-riders-per-trip` | `1` | Riders on each trip |
 | `-duration` | `0` | Stop each ride after this long (0 = when the shape ends) |
 | `-expect-end` | — | Require every ride to end with this reason |
 
-Two server limits bound how hard you can push it: registration is capped at
-five riders per minute per IP (more than that gets `429 too many
-registrations`), and each ride may report only once every two seconds.
+Two server limits bound how hard you can push it. Registration is capped at
+five riders per minute per IP: the simulator registers riders one at a time,
+250 ms apart, and a rider that is refused waits 12 s and tries again (ten
+attempts), so a large `-random`/`-riders-per-trip` run ramps up over a couple
+of minutes rather than failing. Each ride may also report only once every two
+seconds, which is why `report_interval_seconds` from the server, not
+`-interval`, decides how often a batch goes out.
+
+Timestamps go over the wire as whole seconds and the server ignores a fix that
+is not newer than the last one, so `-interval` below `1s` samples the shape
+more finely but still uploads at most one fix per second.
 
 ## API Sanity Checks
 

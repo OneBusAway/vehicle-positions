@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -34,13 +35,24 @@ const (
 	// offRouteMetres is how far east of the shape an -offroute-after rider
 	// steps: far enough to be off route whatever the accuracy allowance.
 	offRouteMetres = 300
-	// reportedAccuracy is the horizontal accuracy every simulated fix claims,
-	// comfortably inside the server's 100 m ceiling.
-	reportedAccuracy = 5
+	// minAccuracy is the floor on the accuracy a simulated fix reports. A fix
+	// jittered by -noise metres is that far out, so the device reports the
+	// larger of the two rather than pretending to a precision it does not have.
+	minAccuracy = 5
 	// pickSeed keeps -random reproducible from run to run.
 	pickSeed = 1
 	// httpTimeout bounds one API call.
 	httpTimeout = 10 * time.Second
+	// registerStagger spaces registrations out, and registerBackoff is how long
+	// a refused one waits before trying again: the server allows five per IP per
+	// minute, so a refusal has to sit out most of that window. Ten attempts
+	// covers two full windows.
+	registerStagger  = 250 * time.Millisecond
+	registerBackoff  = 12 * time.Second
+	registerAttempts = 10
+	// batchRetryDelay is how long a failed position report waits before its one
+	// retry, so a blip does not cost the whole ride.
+	batchRetryDelay = 2 * time.Second
 	// metresPerDegree is the local equirectangular scale factor, matching the
 	// one the rider package uses.
 	metresPerDegree = 111_320.0
@@ -50,6 +62,7 @@ const (
 // by every rider goroutine.
 type config struct {
 	api           *apiClient
+	reg           *registrar
 	index         *rider.Index
 	startDate     string
 	interval      time.Duration
@@ -168,6 +181,63 @@ func (a *apiClient) postJSON(ctx context.Context, path, token string, in, out an
 	return nil
 }
 
+// sleep waits for d, or returns false if the context is cancelled first.
+func sleep(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// registrar hands out rider credentials one at a time. Registration is capped
+// per IP per minute, so riders queue behind one another with a short stagger
+// and a refusal simply waits the window out instead of failing the run.
+type registrar struct {
+	mu sync.Mutex
+}
+
+func (g *registrar) register(ctx context.Context, api *apiClient) (registerResponse, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	var reg registerResponse
+	for attempt := 1; ; attempt++ {
+		status, body, err := api.post(ctx, "/api/v1/rider/register", "", registerRequest{
+			InstallationID: uuid.NewString(),
+			Platform:       "other",
+			AppID:          "org.onebusaway.ridersim",
+			AppVersion:     "1.0",
+		})
+		if err != nil {
+			return reg, err
+		}
+		switch status {
+		case http.StatusCreated, http.StatusOK:
+			if err := json.Unmarshal(body, &reg); err != nil {
+				return reg, fmt.Errorf("decode register response: %w", err)
+			}
+			// Hold the lock over the stagger so the next rider starts late
+			// rather than alongside this one.
+			sleep(ctx, registerStagger)
+			return reg, nil
+		case http.StatusTooManyRequests:
+			if attempt == registerAttempts {
+				return reg, fmt.Errorf("registration refused %d times: %s", attempt, bytes.TrimSpace(body))
+			}
+			log.Printf("registration refused (429), waiting %s (attempt %d/%d)", registerBackoff, attempt, registerAttempts)
+			if !sleep(ctx, registerBackoff) {
+				return reg, ctx.Err()
+			}
+		default:
+			return reg, fmt.Errorf("POST /api/v1/rider/register: %d: %s", status, bytes.TrimSpace(body))
+		}
+	}
+}
+
 // --- pure helpers ----------------------------------------------------------
 
 // jitter displaces pos by an independent Gaussian of metres standard deviation
@@ -220,18 +290,21 @@ func pickTrips(ix *rider.Index, requested []string, random int, serviceDate stri
 		return trips, nil
 	}
 
+	// Trips already named by -trip are out of the draw: -random is for trips
+	// the caller did not choose, and picking one twice would just put two
+	// riders on it.
 	var active []string
 	for _, id := range ix.TripIDs() {
 		trip, ok := ix.Trip(id)
-		if ok && ix.ActiveOn(trip, serviceDate) {
+		if ok && ix.ActiveOn(trip, serviceDate) && !slices.Contains(trips, id) {
 			active = append(active, id)
 		}
 	}
 	if len(active) == 0 {
-		return nil, fmt.Errorf("no trips run on %s", serviceDate)
+		return nil, fmt.Errorf("no further trips run on %s", serviceDate)
 	}
 	if random > len(active) {
-		return nil, fmt.Errorf("-random %d: only %d trips run on %s", random, len(active), serviceDate)
+		return nil, fmt.Errorf("-random %d: only %d further trips run on %s", random, len(active), serviceDate)
 	}
 	rng := rand.New(rand.NewSource(pickSeed))
 	rng.Shuffle(len(active), func(i, j int) { active[i], active[j] = active[j], active[i] })
@@ -249,13 +322,7 @@ func runRider(ctx context.Context, cfg *config, tripID string, rng *rand.Rand) (
 		return "", fmt.Errorf("trip %q is not in the feed", tripID)
 	}
 
-	var reg registerResponse
-	err := cfg.api.postJSON(ctx, "/api/v1/rider/register", "", registerRequest{
-		InstallationID: uuid.NewString(),
-		Platform:       "other",
-		AppID:          "org.onebusaway.ridersim",
-		AppVersion:     "1.0",
-	}, &reg, http.StatusCreated, http.StatusOK)
+	reg, err := cfg.reg.register(ctx, cfg.api)
 	if err != nil {
 		return "", err
 	}
@@ -298,10 +365,12 @@ type riderRun struct {
 	maxBatch int
 	rng      *rand.Rand
 
-	along   float64
-	buf     []position
-	sent    int
-	dropped int
+	along     float64
+	buf       []position
+	sent      int
+	dropped   int
+	lastStamp int64 // Unix second of the last buffered fix
+	warnedSub bool  // whether the sub-second-sampling note has been printed
 
 	state         string
 	corroboration string
@@ -339,8 +408,11 @@ func (r *riderRun) walk(ctx context.Context) (string, error) {
 			clientReason = rider.EndArrived
 		case <-upload.C:
 			reason, err := r.flush(ctx)
-			if err != nil || reason != "" {
-				return reason, err
+			if err != nil {
+				return r.abandon(err)
+			}
+			if reason != "" {
+				return reason, nil
 			}
 			continue
 		}
@@ -351,7 +423,7 @@ func (r *riderRun) walk(ctx context.Context) (string, error) {
 		if ctx.Err() == nil {
 			reason, err := r.flush(ctx)
 			if err != nil {
-				return "", err
+				return r.abandon(err)
 			}
 			if reason != "" {
 				return reason, nil
@@ -370,6 +442,19 @@ func (r *riderRun) advance(started time.Time) bool {
 		r.along = r.trip.Shape.Length
 	}
 
+	// Timestamps go over the wire as whole seconds, and the server ignores a
+	// point that is not newer than the one before it. Two fixes inside one
+	// second are one fix as far as the API is concerned.
+	stamp := time.Now().Unix()
+	if stamp <= r.lastStamp {
+		if !r.warnedSub {
+			log.Printf("%s: two fixes landed in the same second; the wire carries whole seconds, so the extra ones are skipped", r.tag)
+			r.warnedSub = true
+		}
+		return arrived
+	}
+	r.lastStamp = stamp
+
 	pos := jitter(r.trip.Shape.PointAt(r.along), r.cfg.noise, r.rng)
 	if r.cfg.offRouteAfter > 0 && time.Since(started) >= r.cfg.offRouteAfter {
 		pos = offsetEast(pos, offRouteMetres)
@@ -377,10 +462,12 @@ func (r *riderRun) advance(started time.Time) bool {
 	r.buf = append(r.buf, position{
 		Latitude:  pos.Lat,
 		Longitude: pos.Lon,
-		Accuracy:  reportedAccuracy,
+		// A jittered fix really is -noise metres out; saying so is what lets
+		// the server widen its own tolerance accordingly.
+		Accuracy:  math.Max(r.cfg.noise, minAccuracy),
 		Speed:     r.cfg.speed,
 		Bearing:   r.trip.Shape.BearingAt(r.along),
-		Timestamp: time.Now().Unix(),
+		Timestamp: stamp,
 	})
 	return arrived
 }
@@ -398,7 +485,18 @@ func (r *riderRun) flush(ctx context.Context) (string, error) {
 		r.buf = append(r.buf[:0], r.buf[len(r.buf)-r.maxBatch:]...)
 	}
 
-	status, body, err := r.cfg.api.post(ctx, "/api/v1/rider/rides/"+r.rideID+"/positions", r.token, positionsRequest{Positions: r.buf})
+	path := "/api/v1/rider/rides/" + r.rideID + "/positions"
+	req := positionsRequest{Positions: r.buf}
+	status, body, err := r.cfg.api.post(ctx, path, r.token, req)
+	// A transport blip or a server hiccup gets one more go before it costs the
+	// ride; the statuses below are answers, not failures, so they are not
+	// retried.
+	if handled := err == nil && slices.Contains([]int{http.StatusOK, http.StatusTooManyRequests, http.StatusConflict}, status); !handled {
+		log.Printf("%s: batch failed (%s), retrying in %s", r.tag, failure(status, err), batchRetryDelay)
+		if sleep(ctx, batchRetryDelay) {
+			status, body, err = r.cfg.api.post(ctx, path, r.token, req)
+		}
+	}
 	if err != nil {
 		return "", err
 	}
@@ -414,6 +512,7 @@ func (r *riderRun) flush(ctx context.Context) (string, error) {
 		// reason to be had from it any more.
 		log.Printf("%s: ride is gone (409)", r.tag)
 		r.buf = r.buf[:0]
+		r.summarize("gone")
 		return "gone", nil
 	default:
 		return "", fmt.Errorf("POST positions: %d: %s", status, bytes.TrimSpace(body))
@@ -433,9 +532,35 @@ func (r *riderRun) flush(ctx context.Context) (string, error) {
 	}
 	if res.Ended {
 		log.Printf("%s: server ended the ride: %s", r.tag, res.EndReason)
+		r.summarize(res.EndReason)
 		return res.EndReason, nil
 	}
 	return "", nil
+}
+
+// failure describes why one call did not come back usable, for the retry log.
+func failure(status int, err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return fmt.Sprintf("HTTP %d", status)
+}
+
+// summarize prints how the ride went. Every path out of walk prints one of
+// these, so a ride the server ended reads the same as one the client closed.
+func (r *riderRun) summarize(reason string) {
+	log.Printf("%s: ended %s after %.0fm along the shape (%d points sent, %d dropped)",
+		r.tag, reason, r.along, r.sent, r.dropped)
+}
+
+// abandon ends the ride after a failure so the server does not have to reap it,
+// then hands the original error back. The ride is over either way, so a failure
+// to end it is only worth a line.
+func (r *riderRun) abandon(cause error) (string, error) {
+	if _, err := r.end(rider.EndNetworkFailure); err != nil {
+		log.Printf("%s: could not end the ride after the failure: %v", r.tag, err)
+	}
+	return "", cause
 }
 
 // end closes the ride from the client's side. A ride the server has already
@@ -450,12 +575,29 @@ func (r *riderRun) end(reason rider.EndReason) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Printf("%s: ended %s after %.0fm along the shape (%d points sent, %d dropped)",
-		r.tag, reason, r.along, r.sent, r.dropped)
+	r.summarize(string(reason))
 	return string(reason), nil
 }
 
 // --- main ------------------------------------------------------------------
+
+// knownEndReasons is every reason a ride can be reported as ending with: the
+// ones a client may send, and the ones the server decides for itself. It is
+// what -expect-end is checked against, so a typo is caught before the run.
+var knownEndReasons = []rider.EndReason{
+	rider.EndUserRequested, rider.EndArrived, rider.EndStationary, rider.EndMaxDuration,
+	rider.EndLocationUnavailable, rider.EndAuthorizationDenied, rider.EndNetworkFailure,
+	rider.EndAppTerminated, rider.EndOffRoute, rider.EndContradicted, rider.EndImplausible,
+	rider.EndOffSchedule, rider.EndSuperseded, rider.EndServerRestart, rider.EndIdle,
+}
+
+// usageError is a bad invocation rather than a failed simulation. main exits 2
+// for it, keeping exit 1 for "a ride did not end the way it was meant to".
+type usageError struct{ msg string }
+
+func (e usageError) Error() string { return e.msg }
+
+func usagef(format string, a ...any) error { return usageError{fmt.Sprintf(format, a...)} }
 
 func main() {
 	baseURL := flag.String("url", "http://localhost:8080", "Server base URL")
@@ -488,6 +630,9 @@ func main() {
 		duration:      *duration,
 	}); err != nil {
 		log.Print(err)
+		if errors.As(err, &usageError{}) {
+			os.Exit(2)
+		}
 		os.Exit(1)
 	}
 }
@@ -495,13 +640,16 @@ func main() {
 // run sets the simulation up and reports whether every ride ended as expected.
 func run(baseURL, gtfsSource, startDate, expectEnd string, requested []string, random, ridersPerTrip int, cfg *config) error {
 	if cfg.interval <= 0 {
-		return errors.New("-interval must be positive")
+		return usagef("-interval must be positive")
 	}
 	if cfg.speed <= 0 {
-		return errors.New("-speed must be positive")
+		return usagef("-speed must be positive")
 	}
 	if ridersPerTrip < 1 {
-		return errors.New("-riders-per-trip must be at least 1")
+		return usagef("-riders-per-trip must be at least 1")
+	}
+	if expectEnd != "" && !slices.Contains(knownEndReasons, rider.EndReason(expectEnd)) {
+		return usagef("-expect-end %q is not an end reason; one of: %s", expectEnd, joinReasons(knownEndReasons))
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -525,6 +673,7 @@ func run(baseURL, gtfsSource, startDate, expectEnd string, requested []string, r
 	}
 
 	cfg.api = &apiClient{base: baseURL, http: client}
+	cfg.reg = &registrar{}
 	cfg.index = index
 	cfg.startDate = startDate
 	log.Printf("simulating %d trips × %d riders on %s: %v", len(trips), ridersPerTrip, startDate, trips)
@@ -570,4 +719,13 @@ func run(baseURL, gtfsSource, startDate, expectEnd string, requested []string, r
 	}
 	log.Printf("all %d rides ended as expected", len(results))
 	return nil
+}
+
+// joinReasons renders the end reasons for a usage message.
+func joinReasons(reasons []rider.EndReason) string {
+	out := make([]string, len(reasons))
+	for i, r := range reasons {
+		out[i] = string(r)
+	}
+	return strings.Join(out, ", ")
 }
