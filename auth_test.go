@@ -423,14 +423,20 @@ func TestRequireAdmin_EmptyRole(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
+	// Over the real chain requireAuth now rejects any role outside
+	// driver/admin at the door, so the token never reaches requireAdmin.
 	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "forbidden", decodeError(t, w))
 
-	var resp map[string]string
-	err = json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
-	assert.Equal(t, "admin access required", resp["error"])
+	// requireAdmin itself still denies an empty role when reached directly.
+	w = httptest.NewRecorder()
+	req = req.WithContext(contextWithClaims(req.Context(), jwt.MapClaims{"sub": "3", "role": ""}))
+	requireAdmin()(dummyHandler()).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "admin access required", decodeError(t, w))
 }
 
 func TestRequireAdmin_InvalidRoleType(t *testing.T) {
@@ -452,14 +458,20 @@ func TestRequireAdmin_InvalidRoleType(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	w := httptest.NewRecorder()
 
+	// A non-string role reads as "" to requireAuth's role check, so the
+	// request is denied at the door before requireAdmin runs.
 	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "forbidden", decodeError(t, w))
 
-	var resp map[string]string
-	err = json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
-	assert.Equal(t, "admin access required", resp["error"])
+	// requireAdmin itself still denies a non-string role when reached directly.
+	w = httptest.NewRecorder()
+	req = req.WithContext(contextWithClaims(req.Context(), claims))
+	requireAdmin()(dummyHandler()).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "admin access required", decodeError(t, w))
 }
 
 func TestRequireAdmin_NoAuthHeader(t *testing.T) {
@@ -469,4 +481,17 @@ func TestRequireAdmin_NoAuthHeader(t *testing.T) {
 	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestRequireAuth_RejectsRiderRole(t *testing.T) {
+	riderTok, _ := generateRiderJWT("rider-1", testSecret, time.Hour)
+	called := false
+	h := requireAuth(testSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.Header.Set("Authorization", "Bearer "+riderTok)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.False(t, called)
+	assert.Equal(t, "forbidden", decodeError(t, w))
 }

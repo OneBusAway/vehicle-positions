@@ -227,6 +227,21 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}
+			// Staff routes accept staff roles only. A rider token is signed
+			// with the same secret and would otherwise validate here, so the
+			// role is checked at the door rather than at each handler.
+			switch role, _ := claims["role"].(string); role {
+			case "driver", "admin":
+			default:
+				slog.Warn("requireAuth: role not permitted",
+					"sub", claims["sub"],
+					"role", claims["role"],
+					"path", r.URL.Path,
+				)
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+
 			ctx := contextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

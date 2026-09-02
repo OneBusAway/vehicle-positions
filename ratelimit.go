@@ -16,6 +16,8 @@ const (
 type VehicleRateLimiter struct {
 	mu       sync.Mutex
 	limiters map[string]*rateLimiterEntry
+	interval time.Duration
+	burst    int
 	stop     chan struct{}
 	once     sync.Once
 }
@@ -26,8 +28,17 @@ type rateLimiterEntry struct {
 }
 
 func NewVehicleRateLimiter() *VehicleRateLimiter {
+	return NewKeyedRateLimiter(rateInterval, 1)
+}
+
+// NewKeyedRateLimiter builds a per-key token-bucket limiter allowing one event
+// every interval with the given burst. It is the general form of
+// NewVehicleRateLimiter, which is exactly NewKeyedRateLimiter(rateInterval, 1).
+func NewKeyedRateLimiter(interval time.Duration, burst int) *VehicleRateLimiter {
 	vrl := &VehicleRateLimiter{
 		limiters: make(map[string]*rateLimiterEntry),
+		interval: interval,
+		burst:    burst,
 		stop:     make(chan struct{}),
 	}
 	go vrl.cleanup()
@@ -50,7 +61,7 @@ func (vrl *VehicleRateLimiter) Allow(key string) bool {
 			return true
 		}
 		entry = &rateLimiterEntry{
-			limiter: rate.NewLimiter(rate.Every(rateInterval), 1),
+			limiter: rate.NewLimiter(rate.Every(vrl.interval), vrl.burst),
 		}
 		vrl.limiters[key] = entry
 	}
