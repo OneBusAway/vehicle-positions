@@ -54,7 +54,7 @@ func TestProject_OnShape(t *testing.T) {
 	p := s.Project(LatLon{47.6045, -122.3300}, nil)
 	assert.InDelta(t, 500, p.AlongShape, 3)
 	assert.InDelta(t, 0, p.DistanceToShape, 0.5)
-	assert.InDelta(t, 0, p.SegmentBearing, 1)
+	assert.InDelta(t, 0, s.BearingAt(p.AlongShape), 1)
 }
 
 func TestProject_OffShape(t *testing.T) {

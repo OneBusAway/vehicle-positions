@@ -64,31 +64,32 @@ func NewTrustedFeed(urls []string, client *http.Client, maxAge time.Duration) *T
 // Configured reports whether any feed URL was supplied.
 func (f *TrustedFeed) Configured() bool { return len(f.feeds) > 0 }
 
-// Poll fetches every configured feed once, sequentially. It never returns an
-// error: per-feed failures are recorded in Health and leave that feed's
-// previously fetched entities in place.
+// Poll fetches every configured feed once, concurrently: a slow or hanging
+// feed must not delay the others, and each feed's state is written under the
+// same lock, so the fetches are independent. Completion order does not matter
+// — Lookup resolves a key that several feeds carry by configuration order, not
+// by which answered last. It never returns an error: per-feed failures are
+// recorded in Health and leave that feed's previously fetched entities in
+// place.
 func (f *TrustedFeed) Poll(ctx context.Context) {
-	for _, feed := range f.feeds {
-		if ctx.Err() != nil {
-			return
-		}
-		f.pollOne(ctx, feed)
+	if ctx.Err() != nil {
+		return
 	}
+	var wg sync.WaitGroup
+	for _, feed := range f.feeds {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f.pollOne(ctx, feed)
+		}()
+	}
+	wg.Wait()
 }
 
 // Start polls immediately and then every `every` until ctx is done.
 func (f *TrustedFeed) Start(ctx context.Context, every time.Duration) {
 	f.Poll(ctx)
-	ticker := time.NewTicker(every)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			f.Poll(ctx)
-		}
-	}
+	tickUntilDone(ctx, every, func() { f.Poll(ctx) })
 }
 
 // pollOne fetches a single feed and folds the result into its state.
@@ -97,7 +98,7 @@ func (f *TrustedFeed) pollOne(ctx context.Context, feed *feedState) {
 	etag, lastModified := feed.etag, feed.lastModified
 	f.mu.RUnlock()
 
-	entities, newETag, newLastModified, notModified, err := f.fetch(ctx, feed.url, etag, lastModified)
+	got, err := f.fetch(ctx, feed.url, etag, lastModified)
 	now := time.Now()
 
 	f.mu.Lock()
@@ -109,22 +110,31 @@ func (f *TrustedFeed) pollOne(ctx context.Context, feed *feedState) {
 	}
 	feed.lastError = ""
 	feed.lastSuccess = now
-	if notModified {
+	if got.notModified {
 		return
 	}
-	feed.entities = entities
-	feed.etag = newETag
-	feed.lastModified = newLastModified
+	feed.entities = got.entities
+	feed.etag = got.etag
+	feed.lastModified = got.lastModified
+}
+
+// fetchResult is one conditional GET's answer: either the feed was unchanged,
+// or these are its vehicles and the validators to send next time.
+type fetchResult struct {
+	entities     map[TripKey]TrustedVehicle
+	etag         string
+	lastModified string
+	notModified  bool
 }
 
 // fetch performs one conditional GET and decodes the vehicle positions in it.
-func (f *TrustedFeed) fetch(ctx context.Context, url, etag, lastModified string) (entities map[TripKey]TrustedVehicle, newETag, newLastModified string, notModified bool, err error) {
+func (f *TrustedFeed) fetch(ctx context.Context, url, etag, lastModified string) (fetchResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, trustedRequestTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, "", "", false, err
+		return fetchResult{}, err
 	}
 	if etag != "" {
 		req.Header.Set("If-None-Match", etag)
@@ -135,31 +145,35 @@ func (f *TrustedFeed) fetch(ctx context.Context, url, etag, lastModified string)
 
 	resp, err := f.client.Do(req)
 	if err != nil {
-		return nil, "", "", false, err
+		return fetchResult{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusNotModified:
-		return nil, "", "", true, nil
+		return fetchResult{notModified: true}, nil
 	case http.StatusOK:
 	default:
-		return nil, "", "", false, fmt.Errorf("status %d", resp.StatusCode)
+		return fetchResult{}, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, trustedMaxBodyBytes+1))
 	if err != nil {
-		return nil, "", "", false, err
+		return fetchResult{}, err
 	}
 	if len(body) > trustedMaxBodyBytes {
-		return nil, "", "", false, fmt.Errorf("feed body exceeds %d bytes", trustedMaxBodyBytes)
+		return fetchResult{}, fmt.Errorf("feed body exceeds %d bytes", trustedMaxBodyBytes)
 	}
 
 	var msg gtfsrt.FeedMessage
 	if err := proto.Unmarshal(body, &msg); err != nil {
-		return nil, "", "", false, fmt.Errorf("decode GTFS-RT: %w", err)
+		return fetchResult{}, fmt.Errorf("decode GTFS-RT: %w", err)
 	}
-	return vehiclesByTrip(&msg), resp.Header.Get("ETag"), resp.Header.Get("Last-Modified"), false, nil
+	return fetchResult{
+		entities:     vehiclesByTrip(&msg),
+		etag:         resp.Header.Get("ETag"),
+		lastModified: resp.Header.Get("Last-Modified"),
+	}, nil
 }
 
 // vehiclesByTrip indexes the usable vehicle positions in a feed by trip.

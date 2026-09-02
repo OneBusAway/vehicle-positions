@@ -71,9 +71,10 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 
 	authMiddleware := requireAuth(jwtSecret)
 	adminMiddleware := requireAdmin()
+	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
-	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker, estimatesOrNil(riderSvc)))
+	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker, riderEstimates))
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/live", authMiddleware(adminMiddleware(handleLiveVehicles(tracker, store, store))))
@@ -110,7 +111,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	// Rider mode. The admin endpoints exist whether or not it is enabled — a
 	// disabled server reports {"enabled":false} rather than 404 — while the
 	// rider API itself is registered only when there is a service to serve it.
-	mux.Handle("GET /api/v1/admin/rider/status", authMiddleware(adminMiddleware(handleRiderAdminStatus(statusOrNil(riderSvc)))))
+	mux.Handle("GET /api/v1/admin/rider/status", authMiddleware(adminMiddleware(handleRiderAdminStatus(riderStatus))))
 	mux.Handle("GET /api/v1/admin/rider/rides", authMiddleware(adminMiddleware(handleRiderAdminRides(store))))
 	if riderSvc != nil {
 		registerRiderRoutes(mux, riderSvc)
@@ -296,6 +297,22 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envBoolOrDefault reads a boolean setting. An unset value, and one that does
+// not parse, both fall back — a typo must not flip a flag either way — and the
+// unparseable case is logged so the operator learns their setting was ignored.
+func envBoolOrDefault(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		slog.Warn("invalid boolean, using default", "key", key, "value", v, "default", fallback)
+		return fallback
+	}
+	return b
 }
 
 func envDurationOrDefault(key string, fallback time.Duration) time.Duration {

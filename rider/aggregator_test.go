@@ -67,9 +67,10 @@ func TestAggregator_ApplyBatch_VerifiesAndReportsResult(t *testing.T) {
 	assert.Equal(t, Matched, res.Points[0].Verdict.Outcome)
 	assert.False(t, res.Ended)
 
-	owner, ok := f.agg.Owner("r1")
+	snap, ok := f.agg.Snapshot("r1")
 	assert.True(t, ok)
-	assert.Equal(t, "rider-a", owner)
+	assert.Equal(t, "rider-a", snap.RiderID)
+	assert.False(t, snap.Ended)
 	id, ok := f.agg.ActiveRideForRider("rider-a")
 	assert.True(t, ok)
 	assert.Equal(t, "r1", id)
@@ -103,8 +104,9 @@ func TestAggregator_ApplyBatch_SortsAndStopsAtEnd(t *testing.T) {
 	assert.Equal(t, Rejected, res.State)
 	assert.Equal(t, 5, res.Accepted)
 	assert.Equal(t, 2, res.Ignored)
-	_, ok := f.agg.Owner("r1")
-	assert.False(t, ok, "ended sessions are not owners")
+	snap, ok := f.agg.Snapshot("r1")
+	require.True(t, ok, "an ended ride stays registered until it is filed")
+	assert.True(t, snap.Ended, "the session records that it ended")
 	_, err = f.agg.ApplyBatch("r1", pts[:1], nil, f.base)
 	assert.ErrorIs(t, err, ErrUnknownRide)
 	assert.NotNil(t, f.agg.Remove("r1"))
@@ -165,7 +167,7 @@ func TestAggregator_CorroboratedNewRiderPublishes(t *testing.T) {
 		return TrustedVehicle{VehicleID: "v", Pos: f.t1.Shape.PointAt(80), Timestamp: f.base.Add(50 * time.Second)}, true
 	}
 	res := f.walk(t, "r1", 0, 110, 10, lookup) // 12 points, each within 150 m + age allowance
-	assert.True(t, res.Corroborated)
+	assert.True(t, res.Summary.Corroborated)
 	assert.True(t, res.Published)
 	assert.Equal(t, Corroborated, res.Corroboration)
 }
@@ -285,12 +287,19 @@ func TestAggregator_Reap(t *testing.T) {
 	// At 08:16 every session's last accepted point (or start, for "old") is
 	// more than 15 minutes old, so all three are reaped as idle.
 	reaped := f.agg.Reap(f.base.Add(16 * time.Minute))
-	require.Len(t, reaped, 3)
-	for _, s := range reaped {
-		assert.Equal(t, EndIdle, s.EndReason(), s.ID())
-		assert.True(t, s.Ended())
+	assert.Equal(t, []string{"idle", "live", "old"}, reaped)
+	for _, id := range reaped {
+		snap, ok := f.agg.Snapshot(id)
+		require.True(t, ok, "a reaped ride stays registered until it is filed")
+		assert.True(t, snap.Ended, id)
+		assert.Equal(t, EndIdle, snap.Summary.EndReason, id)
 	}
-	assert.Equal(t, 0, f.agg.ActiveCount())
+	assert.Equal(t, 0, f.agg.ActiveCount(), "an ended ride is not an active one")
+	_, ok := f.agg.ActiveRideForRider("rider-a")
+	assert.False(t, ok, "an ended ride is not the rider's active ride")
+
+	// Reaping again returns the same ids: their outcomes are still unfiled.
+	assert.Equal(t, reaped, f.agg.Reap(f.base.Add(17*time.Minute)))
 
 	g := newAggFixture(t)
 	g.addSession("old", "rider-b", TierNew)
@@ -298,7 +307,9 @@ func TestAggregator_Reap(t *testing.T) {
 	require.NoError(t, err)
 	// Keep it non-idle but past 3 h: the max-duration rule wins.
 	reaped = g.agg.Reap(g.base.Add(3*time.Hour + time.Second))
-	require.Len(t, reaped, 1)
-	assert.Equal(t, EndMaxDuration, reaped[0].EndReason())
+	require.Equal(t, []string{"old"}, reaped)
+	snap, ok := g.agg.Snapshot("old")
+	require.True(t, ok)
+	assert.Equal(t, EndMaxDuration, snap.Summary.EndReason)
 	assert.Equal(t, 0, g.agg.ActiveCount())
 }

@@ -304,10 +304,11 @@ func (q *Queries) EndAllActiveRides(ctx context.Context, endReason string) (int6
 	return result.RowsAffected(), nil
 }
 
-const endRide = `-- name: EndRide :execrows
+const endRide = `-- name: EndRide :one
 UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $2, state = $3, corroborated = $4,
   points_total = $5, points_matched = $6, points_corroborated = $7, points_contradicted = $8, updated_at = NOW()
 WHERE id = $1 AND status = 'active'
+RETURNING rider_id
 `
 
 type EndRideParams struct {
@@ -321,8 +322,11 @@ type EndRideParams struct {
 	PointsContradicted int32
 }
 
-func (q *Queries) EndRide(ctx context.Context, arg EndRideParams) (int64, error) {
-	result, err := q.db.Exec(ctx, endRide,
+// Returning the rider is what makes ending a ride one round trip: no row came
+// back means the ride was not active, and the id is the one whose reputation
+// the outcome is applied to.
+func (q *Queries) EndRide(ctx context.Context, arg EndRideParams) (string, error) {
+	row := q.db.QueryRow(ctx, endRide,
 		arg.ID,
 		arg.EndReason,
 		arg.State,
@@ -332,10 +336,9 @@ func (q *Queries) EndRide(ctx context.Context, arg EndRideParams) (int64, error)
 		arg.PointsCorroborated,
 		arg.PointsContradicted,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var rider_id string
+	err := row.Scan(&rider_id)
+	return rider_id, err
 }
 
 const endTrip = `-- name: EndTrip :execrows

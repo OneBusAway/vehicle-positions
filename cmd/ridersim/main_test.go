@@ -2,7 +2,6 @@ package main
 
 import (
 	"math/rand"
-	"os"
 	"testing"
 	"time"
 
@@ -14,11 +13,7 @@ import (
 
 func fixtureIndex(t *testing.T) *rider.Index {
 	t.Helper()
-	b, err := os.ReadFile("../../rider/testdata/fixture.zip")
-	require.NoError(t, err)
-	static, err := rider.ParseStaticBytes(b)
-	require.NoError(t, err)
-	ix, err := rider.BuildIndex(static, "fixture", time.Now())
+	ix, err := rider.LoadIndex(t.Context(), "../../rider/testdata/fixture.zip", nil, time.Now())
 	require.NoError(t, err)
 	return ix
 }

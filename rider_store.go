@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
@@ -286,7 +285,7 @@ func (s *Store) FinishRide(ctx context.Context, rideID string, outcome RideOutco
 
 	qtx := s.queries.WithTx(tx)
 
-	rows, err := qtx.EndRide(ctx, db.EndRideParams{
+	riderID, err := qtx.EndRide(ctx, db.EndRideParams{
 		ID:                 rideID,
 		EndReason:          outcome.EndReason,
 		State:              outcome.Progress.State,
@@ -297,19 +296,15 @@ func (s *Store) FinishRide(ctx context.Context, rideID string, outcome RideOutco
 		PointsContradicted: int32(outcome.Progress.PointsContradicted),
 	})
 	if err != nil {
+		// No row came back: the ride does not exist, or has already ended.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRideNotFound
+		}
 		return nil, fmt.Errorf("end ride: %w", err)
-	}
-	if rows == 0 {
-		return nil, ErrRideNotFound
-	}
-
-	ride, err := qtx.GetRide(ctx, rideID)
-	if err != nil {
-		return nil, fmt.Errorf("get ride: %w", err)
 	}
 
 	row, err := qtx.ApplyRideOutcome(ctx, db.ApplyRideOutcomeParams{
-		ID:                ride.RiderID,
+		ID:                riderID,
 		Score:             int32(outcome.ScoreDelta),
 		RidesCorroborated: boolCount(outcome.Corroborated),
 		RidesRejected:     boolCount(outcome.Rejected),
@@ -388,14 +383,6 @@ func (s *Store) DeleteRidePointsBefore(ctx context.Context, cutoff time.Time) (i
 	return n, nil
 }
 
-// rollbackTx undoes a transaction that was not committed. An already-committed
-// transaction reports ErrTxClosed, which is the normal path and not an error.
-func rollbackTx(tx pgx.Tx) {
-	if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-		slog.Error("failed to rollback transaction", "error", err)
-	}
-}
-
 // riderFromRow maps a stored rider onto the API/domain representation.
 func riderFromRow(row db.Rider) *Rider {
 	return &Rider{
@@ -441,14 +428,6 @@ func rideFromRow(row db.Ride) *Ride {
 		ride.EndedAt = &endedAt
 	}
 	return ride
-}
-
-// optionalFloat converts a *float64 to a pgtype.Float8 (NULL when nil).
-func optionalFloat(v *float64) pgtype.Float8 {
-	if v == nil {
-		return pgtype.Float8{}
-	}
-	return pgtype.Float8{Float64: *v, Valid: true}
 }
 
 // boolCount turns a "did this happen" flag into the 0 or 1 a counter column

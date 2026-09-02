@@ -141,7 +141,8 @@ func handlePostLocation(store LocationSaver, tracker *Tracker, rl *VehicleRateLi
 }
 
 // estimateSource supplies the rider-reported trip estimates that the feed
-// merges alongside driver-reported positions.
+// merges alongside driver-reported positions. A server with rider mode off
+// supplies riderOff, which has none, so the feed never has to ask.
 type estimateSource interface {
 	Estimates(now time.Time) []rider.TripEstimate
 }
@@ -164,7 +165,7 @@ func handleGetFeed(tracker *Tracker, estimates estimateSource) http.HandlerFunc 
 		if wantDriver {
 			vehicles = tracker.ActiveVehicles()
 		}
-		if wantRider && estimates != nil {
+		if wantRider {
 			ests = estimates.Estimates(time.Now())
 		}
 		feed := buildFeed(vehicles, ests)

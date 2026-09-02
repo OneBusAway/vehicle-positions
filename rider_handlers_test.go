@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -225,11 +224,7 @@ type riderTestEnv struct {
 
 func loadFixtureIndex(t *testing.T) *rider.Index {
 	t.Helper()
-	b, err := os.ReadFile("rider/testdata/fixture.zip")
-	require.NoError(t, err)
-	static, err := rider.ParseStaticBytes(b)
-	require.NoError(t, err)
-	ix, err := rider.BuildIndex(static, "fixture", time.Now())
+	ix, err := rider.LoadIndex(t.Context(), "rider/testdata/fixture.zip", nil, time.Now())
 	require.NoError(t, err)
 	return ix
 }
@@ -240,7 +235,7 @@ func newRiderTestEnv(t *testing.T) *riderTestEnv {
 	env := &riderTestEnv{store: newFakeRiderStore(), trusted: newFakeTrusted(), index: ix}
 	env.now = time.Date(2026, 9, 2, 8, 0, 0, 0, ix.Timezone())
 	agg := rider.NewAggregator(rider.DefaultThresholds(), ix.Timezone())
-	env.svc = newRiderService(env.store, agg, func() *rider.Index { return ix }, env.trusted, testSecret, time.Hour, false, rider.DefaultThresholds())
+	env.svc = newRiderService(env.store, agg, func() *rider.Index { return ix }, env.trusted, testSecret, time.Hour, false)
 	env.svc.now = func() time.Time { return env.now }
 	// Permissive limiters by default so unrelated tests never trip them; the
 	// rate-limit tests install strict ones explicitly.

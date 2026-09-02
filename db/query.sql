@@ -265,10 +265,14 @@ UPDATE rides SET state = $2, corroborated = $3, points_total = $4, points_matche
   points_corroborated = $6, points_contradicted = $7, updated_at = NOW()
 WHERE id = $1 AND status = 'active';
 
--- name: EndRide :execrows
+-- Returning the rider is what makes ending a ride one round trip: no row came
+-- back means the ride was not active, and the id is the one whose reputation
+-- the outcome is applied to.
+-- name: EndRide :one
 UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $2, state = $3, corroborated = $4,
   points_total = $5, points_matched = $6, points_corroborated = $7, points_contradicted = $8, updated_at = NOW()
-WHERE id = $1 AND status = 'active';
+WHERE id = $1 AND status = 'active'
+RETURNING rider_id;
 
 -- name: EndAllActiveRides :execrows
 UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $1, updated_at = NOW() WHERE status = 'active';

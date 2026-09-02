@@ -1,6 +1,9 @@
 package rider
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // State is how much the engine believes a ride is really on its trip.
 type State int
@@ -48,6 +51,27 @@ const (
 	EndServerRestart EndReason = "server_restart"
 	EndIdle          EndReason = "idle"
 )
+
+// endReasons is every reason a ride can end with, in declaration order: the
+// ones a client may report, then the ones the server decides for itself.
+var endReasons = []EndReason{
+	EndUserRequested, EndArrived, EndStationary, EndMaxDuration,
+	EndLocationUnavailable, EndAuthorizationDenied, EndNetworkFailure,
+	EndAppTerminated, EndOffRoute, EndContradicted, EndImplausible,
+	EndOffSchedule, EndSuperseded, EndServerRestart, EndIdle,
+}
+
+// EndReasons returns every end reason, in declaration order. The slice is a
+// copy, so callers may sort or filter it.
+func EndReasons() []EndReason { return slices.Clone(endReasons) }
+
+// ParseEndReason converts a string into an EndReason, reporting whether it
+// names one. Unlike ParseClientEndReason it admits the server's own reasons
+// too, so tools that report on any ride can name them.
+func ParseEndReason(s string) (EndReason, bool) {
+	r := EndReason(s)
+	return r, slices.Contains(endReasons, r)
+}
 
 // clientEndReasons are the only reasons a client is allowed to report; a rider
 // cannot, for instance, claim its own ride was superseded or rejected.

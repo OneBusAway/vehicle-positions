@@ -22,7 +22,8 @@ const (
 )
 
 // LoadStatic reads and parses a GTFS static feed. The source is an http(s) URL
-// or a local file path.
+// or a local file path. A nil client means http.DefaultClient, which is what a
+// local path needs no client at all for.
 func LoadStatic(ctx context.Context, source string, client *http.Client) (*gtfs.Static, error) {
 	body, err := fetchFeed(ctx, source, client)
 	if err != nil {
@@ -52,6 +53,10 @@ func fetchFeed(ctx context.Context, source string, client *http.Client) ([]byte,
 			return nil, fmt.Errorf("rider: read GTFS file: %w", err)
 		}
 		return body, nil
+	}
+
+	if client == nil {
+		client = http.DefaultClient
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
@@ -109,6 +114,16 @@ func (r *Refresher) RefreshNow(ctx context.Context) error {
 // Start reloads the index every `every` until ctx is done. It blocks, so
 // callers run it in a goroutine.
 func (r *Refresher) Start(ctx context.Context, every time.Duration) {
+	tickUntilDone(ctx, every, func() {
+		if err := r.RefreshNow(ctx); err != nil {
+			slog.Warn("rider: GTFS refresh failed, keeping the previous index", "error", err)
+		}
+	})
+}
+
+// tickUntilDone calls fn on every tick of a `every`-interval ticker until ctx
+// is done. It is the shape both background pollers in this package have.
+func tickUntilDone(ctx context.Context, every time.Duration, fn func()) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -116,15 +131,7 @@ func (r *Refresher) Start(ctx context.Context, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := r.RefreshNow(ctx); err != nil {
-				slog.Warn("rider: GTFS refresh failed, keeping the previous index", "error", err)
-			}
+			fn()
 		}
 	}
-}
-
-// ParseStaticBytes parses an in-memory GTFS static feed. It exists so callers
-// outside this package — tests, mainly — need not import go-gtfs themselves.
-func ParseStaticBytes(b []byte) (*gtfs.Static, error) {
-	return gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
 }

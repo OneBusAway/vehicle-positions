@@ -53,9 +53,6 @@ const (
 	// batchRetryDelay is how long a failed position report waits before its one
 	// retry, so a blip does not cost the whole ride.
 	batchRetryDelay = 2 * time.Second
-	// metresPerDegree is the local equirectangular scale factor, matching the
-	// one the rider package uses.
-	metresPerDegree = 111_320.0
 )
 
 // config is the simulation as the flags describe it. It is shared, read-only,
@@ -81,11 +78,11 @@ type registerRequest struct {
 	AppVersion     string `json:"app_version"`
 }
 
+// registerResponse is the part of the registration answer the simulator uses:
+// the report interval and batch size that matter are the ones the ride itself
+// comes back with.
 type registerResponse struct {
-	RiderID               string `json:"rider_id"`
-	Token                 string `json:"token"`
-	ReportIntervalSeconds int    `json:"report_interval_seconds"`
-	MaxBatchSize          int    `json:"max_batch_size"`
+	Token string `json:"token"`
 }
 
 type startRideRequest struct {
@@ -246,24 +243,13 @@ func jitter(pos rider.LatLon, metres float64, rng *rand.Rand) rider.LatLon {
 	if metres <= 0 {
 		return pos
 	}
-	cosLat := math.Cos(pos.Lat * math.Pi / 180)
-	if cosLat < 1e-6 {
-		cosLat = 1e-6
-	}
-	return rider.LatLon{
-		Lat: pos.Lat + rng.NormFloat64()*metres/metresPerDegree,
-		Lon: pos.Lon + rng.NormFloat64()*metres/(metresPerDegree*cosLat),
-	}
+	return rider.OffsetMetres(pos, rng.NormFloat64()*metres, rng.NormFloat64()*metres)
 }
 
 // offsetEast moves pos the given number of metres due east, which is how the
 // simulator leaves the shape on purpose.
 func offsetEast(pos rider.LatLon, metres float64) rider.LatLon {
-	cosLat := math.Cos(pos.Lat * math.Pi / 180)
-	if cosLat < 1e-6 {
-		cosLat = 1e-6
-	}
-	return rider.LatLon{Lat: pos.Lat, Lon: pos.Lon + metres/(metresPerDegree*cosLat)}
+	return rider.OffsetMetres(pos, 0, metres)
 }
 
 // pickTrips resolves the trips to simulate: every explicitly requested id
@@ -581,16 +567,6 @@ func (r *riderRun) end(reason rider.EndReason) (string, error) {
 
 // --- main ------------------------------------------------------------------
 
-// knownEndReasons is every reason a ride can be reported as ending with: the
-// ones a client may send, and the ones the server decides for itself. It is
-// what -expect-end is checked against, so a typo is caught before the run.
-var knownEndReasons = []rider.EndReason{
-	rider.EndUserRequested, rider.EndArrived, rider.EndStationary, rider.EndMaxDuration,
-	rider.EndLocationUnavailable, rider.EndAuthorizationDenied, rider.EndNetworkFailure,
-	rider.EndAppTerminated, rider.EndOffRoute, rider.EndContradicted, rider.EndImplausible,
-	rider.EndOffSchedule, rider.EndSuperseded, rider.EndServerRestart, rider.EndIdle,
-}
-
 // usageError is a bad invocation rather than a failed simulation. main exits 2
 // for it, keeping exit 1 for "a ride did not end the way it was meant to".
 type usageError struct{ msg string }
@@ -648,21 +624,17 @@ func run(baseURL, gtfsSource, startDate, expectEnd string, requested []string, r
 	if ridersPerTrip < 1 {
 		return usagef("-riders-per-trip must be at least 1")
 	}
-	if expectEnd != "" && !slices.Contains(knownEndReasons, rider.EndReason(expectEnd)) {
-		return usagef("-expect-end %q is not an end reason; one of: %s", expectEnd, joinReasons(knownEndReasons))
+	if _, ok := rider.ParseEndReason(expectEnd); expectEnd != "" && !ok {
+		return usagef("-expect-end %q is not an end reason; one of: %s", expectEnd, joinReasons(rider.EndReasons()))
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	client := &http.Client{Timeout: httpTimeout}
-	static, err := rider.LoadStatic(ctx, gtfsSource, client)
+	index, err := rider.LoadIndex(ctx, gtfsSource, client, time.Now())
 	if err != nil {
 		return fmt.Errorf("load GTFS: %w", err)
-	}
-	index, err := rider.BuildIndex(static, gtfsSource, time.Now())
-	if err != nil {
-		return fmt.Errorf("build index: %w", err)
 	}
 	if startDate == "" {
 		startDate = index.ServiceDate(time.Now())

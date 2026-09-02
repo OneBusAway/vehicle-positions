@@ -124,14 +124,20 @@ func (c Corroboration) String() string {
 
 // VerifyInput is everything Verify needs to judge one point.
 type VerifyInput struct {
-	Trip       *TripInfo
-	Timezone   *time.Location
-	StartDate  string // YYYYMMDD service date the trip started on
-	Prev       *AcceptedPoint
-	Point      Point
-	Trusted    *TrustedVehicle
-	Thresholds Thresholds
-	Now        time.Time
+	Trip      *TripInfo
+	Timezone  *time.Location
+	StartDate string // YYYYMMDD service date the trip started on
+	Prev      *AcceptedPoint
+	Point     Point
+	// Trusted is the agency's own position for the trip, and TrustedAlong is
+	// that position projected onto the trip's shape. They travel together:
+	// the projection is per trip, not per point, so the caller computes it
+	// once for a batch rather than once for every point in it. Both are nil
+	// when no trusted vehicle is on hand.
+	Trusted      *TrustedVehicle
+	TrustedAlong *float64
+	Thresholds   Thresholds
+	Now          time.Time
 }
 
 // Verdict is the result of verifying one point.
@@ -229,10 +235,10 @@ func ignoreReason(in VerifyInput) (string, bool) {
 // grows with the age difference between the two fixes, because a trip keeps
 // moving between them.
 func corroborate(in VerifyInput, along float64) Corroboration {
-	if in.Trusted == nil {
+	if in.Trusted == nil || in.TrustedAlong == nil {
 		return Unavailable
 	}
-	gap := math.Abs(in.Trip.Shape.Project(in.Trusted.Pos, nil).AlongShape - along)
+	gap := math.Abs(*in.TrustedAlong - along)
 	skew := in.Trusted.Timestamp.Sub(in.Point.Timestamp).Abs()
 	allowance := in.Thresholds.CorroborationBase + in.Thresholds.MaxSpeed*skew.Seconds()
 

@@ -2,19 +2,12 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
-
-// riderRole is the JWT role claim carried by anonymous rider tokens. It is
-// deliberately distinct from "driver"/"admin": requireAuth rejects it, and
-// requireRider accepts nothing else.
-const riderRole = "rider"
 
 // generateRiderJWT signs a rider session token. The subject is the rider's
 // store id; there is no email claim because riders are anonymous.
@@ -23,7 +16,7 @@ func generateRiderJWT(riderID string, secret []byte, ttl time.Duration) (string,
 
 	claims := jwt.MapClaims{
 		"sub":  riderID,
-		"role": riderRole,
+		"role": roleRider,
 		"exp":  now.Add(ttl).Unix(),
 		"iat":  now.Unix(),
 		"iss":  "vehicle-positions-api",
@@ -36,32 +29,7 @@ func generateRiderJWT(riderID string, secret []byte, ttl time.Duration) (string,
 // API. Unlike requireAuth there is no cookie fallback — rider tokens belong to
 // a mobile client, never to a browser session, so a cookie is never accepted.
 func requireRider(secret []byte) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if !strings.HasPrefix(authHeader, "Bearer ") {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid authorization header"})
-				return
-			}
-
-			claims, err := parseSessionToken(strings.TrimPrefix(authHeader, "Bearer "), secret)
-			if err != nil {
-				slog.Warn("rider token validation failed", "error", err)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
-				return
-			}
-
-			role, _ := claims["role"].(string)
-			if role != riderRole {
-				slog.Warn("requireRider: access denied", "sub", claims["sub"], "role", claims["role"], "path", r.URL.Path)
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-				return
-			}
-
-			ctx := contextWithClaims(r.Context(), claims)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
+	return requireRoles(secret, false, roleRider)
 }
 
 // riderIDFromContext returns the rider id from claims stored by requireRider.
@@ -72,7 +40,7 @@ func riderIDFromContext(ctx context.Context) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if role, _ := claims["role"].(string); role != riderRole {
+	if role, _ := claims["role"].(string); role != roleRider {
 		return "", false
 	}
 	id, ok := claims["sub"].(string)

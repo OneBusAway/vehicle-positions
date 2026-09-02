@@ -3,6 +3,7 @@ package rider
 import (
 	"cmp"
 	"errors"
+	"log/slog"
 	"math"
 	"slices"
 	"sync"
@@ -35,7 +36,10 @@ type AppliedPoint struct {
 	Verdict Verdict
 }
 
-// BatchResult is what applying a batch of points did to a ride.
+// BatchResult is what applying a batch of points did to a ride. Everything the
+// ride has amounted to so far — its state, counts and corroboration — is in
+// Summary; the rest describes this batch and the session's standing at the end
+// of it.
 type BatchResult struct {
 	State          State
 	Published      bool          // Session.Publishable at the end of the batch
@@ -46,8 +50,7 @@ type BatchResult struct {
 	Ended          bool
 	EndReason      EndReason
 	Points         []AppliedPoint // non-ignored points, in application order (for persistence)
-	Counts         Counts
-	Corroborated   bool
+	Summary        RideSummary
 }
 
 // TripEstimate is the vehicle position the riders of one trip add up to.
@@ -95,34 +98,21 @@ func (a *Aggregator) Add(s *Session) {
 	a.byRider[s.RiderID()] = s.ID()
 }
 
-// Owner returns the rider a live ride belongs to. An ended ride has no owner:
-// nobody may post to it any more.
-func (a *Aggregator) Owner(rideID string) (string, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	s, ok := a.sessions[rideID]
-	if !ok || s.Ended() {
-		return "", false
-	}
-	return s.RiderID(), true
-}
-
 // RideSnapshot is everything a caller outside this package needs to know about
 // a live ride, copied out by value. It exists so that no registered session's
 // pointer ever escapes the aggregator: a registered session is read and written
 // only under a.mu, and a snapshot is the way to read one.
 type RideSnapshot struct {
-	ID           string
-	RiderID      string
-	Key          TripKey
-	Tier         Tier
-	State        State
-	Corroborated bool
-	Ended        bool
-	EndReason    EndReason
-	StartedAt    time.Time
-	Counts       Counts
-	Summary      RideSummary
+	ID        string
+	RiderID   string
+	Key       TripKey
+	Tier      Tier
+	StartedAt time.Time
+	Ended     bool
+	// Summary is everything the ride amounts to — its state, why it ended, its
+	// counts. It is the single carrier of those facts, so a caller cannot read
+	// a state from one field and counts from another that disagree.
+	Summary RideSummary
 }
 
 // Snapshot copies out the state of a registered ride, whether or not it has
@@ -138,17 +128,13 @@ func (a *Aggregator) Snapshot(rideID string) (RideSnapshot, bool) {
 		return RideSnapshot{}, false
 	}
 	return RideSnapshot{
-		ID:           s.ID(),
-		RiderID:      s.RiderID(),
-		Key:          s.Key(),
-		Tier:         s.Tier(),
-		State:        s.State(),
-		Corroborated: s.Corroborated(),
-		Ended:        s.Ended(),
-		EndReason:    s.EndReason(),
-		StartedAt:    s.StartedAt(),
-		Counts:       s.Counts(),
-		Summary:      s.Summary(),
+		ID:        s.ID(),
+		RiderID:   s.RiderID(),
+		Key:       s.Key(),
+		Tier:      s.Tier(),
+		StartedAt: s.StartedAt(),
+		Ended:     s.Ended(),
+		Summary:   s.Summary(),
 	}, true
 }
 
@@ -226,6 +212,14 @@ func (a *Aggregator) ApplyBatch(rideID string, points []Point, lookup func(TripK
 		return BatchResult{}, ErrUnknownRide
 	}
 
+	// The trusted position is per trip, not per point: projecting it onto the
+	// shape once here spares the projection on every point of the batch.
+	var trustedAlong *float64
+	if trusted != nil && s.Trip() != nil && s.Trip().Shape != nil {
+		along := s.Trip().Shape.Project(trusted.Pos, nil).AlongShape
+		trustedAlong = &along
+	}
+
 	res := BatchResult{}
 	for i, p := range sorted {
 		if s.Ended() {
@@ -239,15 +233,23 @@ func (a *Aggregator) ApplyBatch(rideID string, points []Point, lookup func(TripK
 			// The baseline is the latest point whose geometry matched, not the
 			// latest accepted point: an off-route or implausible point is
 			// exactly the position the next point must not be judged against.
-			Prev:       s.LatestMatched(),
-			Point:      p,
-			Trusted:    trusted,
-			Thresholds: a.th,
-			Now:        now,
+			Prev:         s.LatestMatched(),
+			Point:        p,
+			Trusted:      trusted,
+			TrustedAlong: trustedAlong,
+			Thresholds:   a.th,
+			Now:          now,
 		})
 		if v.Outcome == Ignored {
 			res.Ignored++
+			slog.Debug("rider: point ignored", "ride_id", rideID, "reason", v.Reason)
 			continue
+		}
+		if v.Outcome != Matched {
+			// The verdict's reason is the only account of *why* a point failed;
+			// nothing else records it, so it is logged here rather than lost.
+			slog.Debug("rider: point did not match the trip", "ride_id", rideID,
+				"outcome", v.Outcome.String(), "reason", v.Reason)
 		}
 		s.Apply(v, p)
 		res.Accepted++
@@ -260,29 +262,36 @@ func (a *Aggregator) ApplyBatch(rideID string, points []Point, lookup func(TripK
 	res.OffRouteStreak = s.OffRouteStreak()
 	res.Ended = s.Ended()
 	res.EndReason = s.EndReason()
-	res.Counts = s.Counts()
-	res.Corroborated = s.Corroborated()
+	res.Summary = s.Summary()
 	return res, nil
 }
 
-// Reap ends and unregisters the rides that have run out of time: one that has
-// gone quiet for idleTimeout, and one that has been going for longer than any
-// trip could last. The returned sessions are the caller's to persist.
-func (a *Aggregator) Reap(now time.Time) []*Session {
+// Reap ends, in place, the rides that have run out of time: one that has gone
+// quiet for idleTimeout, and one that has been going for longer than any trip
+// could last. It returns the ride ids of every ended-but-still-registered
+// session — the ones it just ended, and any ended earlier whose outcome has
+// not been persisted yet — so the caller can file each one through the single
+// ride-ending path and retry the ones that failed. Nothing is unregistered
+// here: the session goes only once the store has accepted its outcome. An
+// ended session no longer counts as active, publishes nothing and cannot be
+// posted to, so leaving it registered changes nothing but where it is filed
+// from.
+func (a *Aggregator) Reap(now time.Time) []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	var reaped []*Session
+	var reaped []string
 	for id, s := range a.sessions {
-		reason, expired := expiry(s, now)
-		if !expired {
-			continue
+		if !s.Ended() {
+			reason, expired := expiry(s, now)
+			if !expired {
+				continue
+			}
+			s.End(reason, now)
 		}
-		s.End(reason, now)
-		a.removeLocked(id)
-		reaped = append(reaped, s)
+		reaped = append(reaped, id)
 	}
-	slices.SortFunc(reaped, func(x, y *Session) int { return cmp.Compare(x.ID(), y.ID()) })
+	slices.Sort(reaped)
 	return reaped
 }
 
@@ -310,8 +319,20 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 }
 
 // PublishableCount is how many trips currently have a rider-derived position.
+// It applies exactly the rules Estimates does — the same groups, the same
+// publishable predicate — but stops short of computing a position for each,
+// which is all a count needs.
 func (a *Aggregator) PublishableCount(now time.Time, covered func(TripKey) bool) int {
-	return len(a.Estimates(now, covered))
+	n := 0
+	for key, g := range a.groups(now) {
+		if covered != nil && covered(key) {
+			continue
+		}
+		if g.canEstimate() {
+			n++
+		}
+	}
+	return n
 }
 
 // TripStatus answers what the riders are saying about one trip: whether their
@@ -321,7 +342,7 @@ func (a *Aggregator) PublishableCount(now time.Time, covered func(TripKey) bool)
 // the TripEstimate for the same trip, which counts only the riders left after
 // the trim. A rider whose points have gone stale counts in neither.
 func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey) bool) (riderReported bool, riders int) {
-	g, ok := a.groups(now)[key]
+	g, ok := a.groupFor(key, now)
 	if !ok {
 		return false, 0
 	}
@@ -420,35 +441,70 @@ func (a *Aggregator) groups(now time.Time) map[TripKey]*tripGroup {
 
 	out := make(map[TripKey]*tripGroup)
 	for _, s := range a.sessions {
-		if s.Ended() || s.Tier() == TierBlocked || s.State() != Verified || !s.Fresh(now, a.th.PointMaxAge) {
-			continue
-		}
-		// A verified session always has a matched point; the check is what makes
-		// that an invariant of the group rather than an assumption.
-		matched := s.LatestMatched()
-		if matched == nil {
-			continue
-		}
-		g, ok := out[s.Key()]
+		m, ok := a.memberOfLocked(s, now)
 		if !ok {
+			continue
+		}
+		g := out[s.Key()]
+		if g == nil {
 			g = &tripGroup{trip: s.Trip()}
 			out[s.Key()] = g
 		}
-		g.members = append(g.members, estimateMember{
-			riderID:     s.RiderID(),
-			along:       matched.AlongShape,
-			speed:       matched.Speed,
-			timestamp:   matched.Timestamp,
-			publishable: s.Publishable(now, a.th.PointMaxAge),
-		})
+		g.members = append(g.members, m)
 	}
 	return out
+}
+
+// groupFor snapshots the contributing rides of one trip. TripStatus asks about
+// a single trip, and building every other trip's group to throw it away is
+// work proportional to the whole registry for an answer about one ride.
+func (a *Aggregator) groupFor(key TripKey, now time.Time) (*tripGroup, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	var g *tripGroup
+	for _, s := range a.sessions {
+		if s.Key() != key {
+			continue
+		}
+		m, ok := a.memberOfLocked(s, now)
+		if !ok {
+			continue
+		}
+		if g == nil {
+			g = &tripGroup{trip: s.Trip()}
+		}
+		g.members = append(g.members, m)
+	}
+	return g, g != nil
+}
+
+// memberOfLocked is one session's contribution to its trip's group, and
+// whether it contributes at all. It is the single definition of "counts
+// towards this trip", shared by groups and groupFor.
+func (a *Aggregator) memberOfLocked(s *Session, now time.Time) (estimateMember, bool) {
+	if s.Ended() || s.Tier() == TierBlocked || s.State() != Verified || !s.Fresh(now, a.th.PointMaxAge) {
+		return estimateMember{}, false
+	}
+	// A verified session always has a matched point; the check is what makes
+	// that an invariant of the group rather than an assumption.
+	matched := s.LatestMatched()
+	if matched == nil {
+		return estimateMember{}, false
+	}
+	return estimateMember{
+		riderID:     s.RiderID(),
+		along:       matched.AlongShape,
+		speed:       matched.Speed,
+		timestamp:   matched.Timestamp,
+		publishable: s.Publishable(now, a.th.PointMaxAge),
+	}, true
 }
 
 // estimate combines the group's members into one vehicle position, reporting
 // false when the riders are not credible enough to publish.
 func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
-	if g.trip == nil || g.trip.Shape == nil || !g.publishable() {
+	if !g.canEstimate() {
 		return TripEstimate{}, false
 	}
 
@@ -474,6 +530,14 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
 		est.StopID, est.StopSequence = stop.StopID, stop.Sequence
 	}
 	return est, true
+}
+
+// canEstimate reports whether the group can and may be turned into a position:
+// it has the geometry to place one on, and its riders are credible enough to
+// publish. It is the whole of estimate's precondition, so counting the groups
+// that satisfy it counts exactly the estimates Estimates would produce.
+func (g *tripGroup) canEstimate() bool {
+	return g.trip != nil && g.trip.Shape != nil && g.publishable()
 }
 
 // publishable reports whether the group may be published: either one rider is

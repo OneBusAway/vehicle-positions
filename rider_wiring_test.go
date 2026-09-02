@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -146,11 +147,10 @@ func TestRiderRoutes_RoleIsolation(t *testing.T) {
 	assert.Equal(t, http.StatusOK, call("GET", "/api/v1/rider/trips/T1/status", riderTok))
 }
 
-// TestFileReaped_PersistsAnAlreadyRemovedSession covers the path the reap
-// ticker takes: Reap ends and unregisters a session before handing it over, so
-// finishRide would find nothing and fileReaped has to persist the loose
-// session itself. Filing the same session twice is a no-op, not an error.
-func TestFileReaped_PersistsAnAlreadyRemovedSession(t *testing.T) {
+// TestReapedRidesArePersistedThroughFinishRide covers the path the reap ticker
+// takes: Reap ends its sessions in place and leaves them registered, so each
+// one is filed through finishRide under the reason the session ended with.
+func TestReapedRidesArePersistedThroughFinishRide(t *testing.T) {
 	env := newRiderTestEnv(t)
 	_, tok := env.register(t)
 	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1", "start_date": "20260902"})
@@ -158,15 +158,41 @@ func TestFileReaped_PersistsAnAlreadyRemovedSession(t *testing.T) {
 	// The session's start time comes from the stored ride, which the fake
 	// store stamps with the wall clock, so the reap clock follows it.
 	reaped := env.svc.agg.Reap(time.Now().Add(20 * time.Minute))
-	require.Len(t, reaped, 1)
-	require.Equal(t, ride.RideID, reaped[0].ID())
+	require.Equal(t, []string{ride.RideID}, reaped)
 
-	require.NoError(t, env.svc.fileReaped(context.Background(), reaped[0]))
+	// The reason passed in is not the one recorded: the session ended itself.
+	_, err := env.svc.finishRide(context.Background(), ride.RideID, rider.EndIdle)
+	require.NoError(t, err)
 	stored := env.store.rides[ride.RideID]
 	assert.Equal(t, "ended", stored.Status)
 	assert.Equal(t, "idle", stored.EndReason)
 
-	assert.NoError(t, env.svc.fileReaped(context.Background(), reaped[0]), "a ride already filed is not an error")
+	// Filed and unregistered: a later sweep has nothing left to retry.
+	assert.Empty(t, env.svc.agg.Reap(time.Now().Add(21*time.Minute)))
+	_, err = env.svc.finishRide(context.Background(), ride.RideID, rider.EndIdle)
+	assert.ErrorIs(t, err, errRideNotActive)
+}
+
+// TestReapedRideIsRetriedWhenTheStoreFails pins the retry: a ride whose
+// outcome could not be written stays registered and ended, so the next sweep
+// returns it again and the write is tried once more.
+func TestReapedRideIsRetriedWhenTheStoreFails(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1", "start_date": "20260902"})
+
+	require.Equal(t, []string{ride.RideID}, env.svc.agg.Reap(time.Now().Add(20*time.Minute)))
+	env.store.failNext = errors.New("write failed")
+	_, err := env.svc.finishRide(context.Background(), ride.RideID, rider.EndIdle)
+	require.Error(t, err)
+	assert.Equal(t, "active", env.store.rides[ride.RideID].Status, "nothing was written")
+
+	// Still registered and still ended, so the next sweep offers it again.
+	require.Equal(t, []string{ride.RideID}, env.svc.agg.Reap(time.Now().Add(21*time.Minute)))
+	_, err = env.svc.finishRide(context.Background(), ride.RideID, rider.EndIdle)
+	require.NoError(t, err)
+	assert.Equal(t, "ended", env.store.rides[ride.RideID].Status)
+	assert.Equal(t, "idle", env.store.rides[ride.RideID].EndReason)
 }
 
 func TestMain_GTFSFixtureExists(t *testing.T) {

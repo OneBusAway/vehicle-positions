@@ -15,7 +15,7 @@ import (
 
 func TestRiderAdminStatus_Disabled(t *testing.T) {
 	w := httptest.NewRecorder()
-	handleRiderAdminStatus(nil).ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/admin/rider/status", nil))
+	handleRiderAdminStatus(riderOff{}).ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/admin/rider/status", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.JSONEq(t, `{"enabled":false}`, w.Body.String())
 }

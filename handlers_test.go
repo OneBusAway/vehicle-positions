@@ -119,7 +119,7 @@ func TestGetFeed_Protobuf(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
-	handler := handleGetFeed(tracker, nil)
+	handler := handleGetFeed(tracker, riderOff{})
 	w := getFeed(handler, "")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -136,7 +136,7 @@ func TestGetFeed_JSON(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
-	handler := handleGetFeed(tracker, nil)
+	handler := handleGetFeed(tracker, riderOff{})
 	w := getFeed(handler, "format=json")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -151,7 +151,7 @@ func TestGetFeed_JSON(t *testing.T) {
 func TestGetFeed_Empty(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 
-	handler := handleGetFeed(tracker, nil)
+	handler := handleGetFeed(tracker, riderOff{})
 	w := getFeed(handler, "")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -166,7 +166,7 @@ func TestGetFeed_StaleExcluded(t *testing.T) {
 	tracker := NewTracker(1 * time.Millisecond)
 	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
-	handler := handleGetFeed(tracker, nil)
+	handler := handleGetFeed(tracker, riderOff{})
 	assert.Eventually(t, func() bool {
 		w := getFeed(handler, "")
 		var feed gtfsrt.FeedMessage

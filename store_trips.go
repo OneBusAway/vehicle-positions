@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
-	"log/slog"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -108,11 +106,7 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	defer func() {
-		if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			slog.Error("failed to rollback transaction", "error", err)
-		}
-	}()
+	defer rollbackTx(tx)
 
 	qtx := s.queries.WithTx(tx)
 

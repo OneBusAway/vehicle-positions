@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -22,8 +21,8 @@ const (
 var riderRideStatuses = map[string]bool{"active": true, "ended": true}
 
 // riderStatusProvider is the rider subsystem's own account of itself, as the
-// admin status endpoint needs it. *riderService implements it; a nil provider
-// is rider mode being off.
+// admin status endpoint needs it. *riderService implements it, and riderOff
+// stands in for it when rider mode is off.
 type riderStatusProvider interface {
 	RiderStatus(ctx context.Context) (riderStatusResponse, error)
 }
@@ -95,15 +94,11 @@ type adminRidesResponse struct {
 	Rides   []adminRideEntry `json:"rides"`
 }
 
-// handleRiderAdminStatus reports the rider subsystem's health. A nil provider
-// is rider mode being off, which is a fact about the server rather than an
-// error: the answer is 200 with enabled false.
+// handleRiderAdminStatus reports the rider subsystem's health. Rider mode
+// being off is a fact about the server rather than an error, and riderOff
+// reports it: the answer either way is 200 with the provider's own account.
 func handleRiderAdminStatus(p riderStatusProvider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if p == nil {
-			writeJSON(w, http.StatusOK, riderStatusResponse{})
-			return
-		}
 		status, err := p.RiderStatus(r.Context())
 		if err != nil {
 			slog.Error("failed to build rider status", "error", err)
@@ -129,15 +124,9 @@ func handleRiderAdminRides(store RideLister) http.HandlerFunc {
 			return
 		}
 
-		limit, err := parseOptionalInt(q.Get("limit"), defaultRiderRideListLimit)
-		if err != nil || limit < 1 || limit > maxRiderRideListLimit {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("limit must be between 1 and %d", maxRiderRideListLimit)})
-			return
-		}
-
-		offset, err := parseOptionalInt(q.Get("offset"), 0)
-		if err != nil || offset < 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "offset must be a non-negative integer"})
+		limit, offset, err := parsePage(q, defaultRiderRideListLimit, maxRiderRideListLimit)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 

@@ -58,48 +58,35 @@ func riderConfigFromEnv() (riderConfig, error) {
 	// A non-positive distance or speed is not a stricter setting, it is a
 	// broken one: zero metres rejects every point as off-route, and zero m/s
 	// makes every movement implausible.
-	th.MaxShapeDistance = positiveFloatOr("RIDER_MAX_SHAPE_DISTANCE",
-		envFloatOrDefault("RIDER_MAX_SHAPE_DISTANCE", defaults.MaxShapeDistance), defaults.MaxShapeDistance)
-	th.MaxSpeed = positiveFloatOr("RIDER_MAX_SPEED",
-		envFloatOrDefault("RIDER_MAX_SPEED", defaults.MaxSpeed), defaults.MaxSpeed)
+	th.MaxShapeDistance = envPositiveFloatOrDefault("RIDER_MAX_SHAPE_DISTANCE", defaults.MaxShapeDistance)
+	th.MaxSpeed = envPositiveFloatOrDefault("RIDER_MAX_SPEED", defaults.MaxSpeed)
 	th.ScheduleEarly = envDurationOrDefault("RIDER_SCHEDULE_EARLY", defaults.ScheduleEarly)
 	th.ScheduleLate = envDurationOrDefault("RIDER_SCHEDULE_LATE", defaults.ScheduleLate)
 	// Freshness of zero would expire every ride the moment it reported.
-	th.PointMaxAge = positiveOr("RIDER_POINT_MAX_AGE",
-		envDurationOrDefault("RIDER_POINT_MAX_AGE", defaults.PointMaxAge), defaults.PointMaxAge)
+	th.PointMaxAge = envPositiveDurationOrDefault("RIDER_POINT_MAX_AGE", defaults.PointMaxAge)
 
+	// Every duration below is one nothing downstream can survive a
+	// non-positive value of, so each is clamped as it is read and the config
+	// that comes back is valid by construction: a ticker interval of zero
+	// panics, a non-positive staleness window discards every trusted entity, a
+	// non-positive token lifetime issues tokens already expired, and a
+	// non-positive retention window puts the deletion cutoff in the future and
+	// takes every ride point with it.
 	cfg := riderConfig{
-		Enabled:     envBoolOrFalse("RIDER_MODE_ENABLED"),
-		GTFSSource:  os.Getenv("GTFS_STATIC_URL"),
-		GTFSRefresh: envDurationOrDefault("GTFS_STATIC_REFRESH", defaultGTFSRefresh),
-		TrustedURLs: splitURLs(os.Getenv("TRUSTED_GTFS_RT_URLS")),
-		TrustedPoll: envDurationOrDefault("TRUSTED_FEED_POLL", defaultTrustedPoll),
-		// A non-positive staleness window would discard every trusted entity;
-		// a non-positive token lifetime would issue tokens already expired.
-		TrustedMaxAge:  positiveOr("TRUSTED_FEED_MAX_AGE", envDurationOrDefault("TRUSTED_FEED_MAX_AGE", defaultTrustedMaxAge), defaultTrustedMaxAge),
-		JWTTTL:         positiveOr("RIDER_JWT_TTL", envDurationOrDefault("RIDER_JWT_TTL", defaultRiderJWTTTL), defaultRiderJWTTTL),
-		PointRetention: envDurationOrDefault("RIDER_POINT_RETENTION", defaultPointRetention),
+		Enabled:        envBoolOrDefault("RIDER_MODE_ENABLED", false),
+		GTFSSource:     os.Getenv("GTFS_STATIC_URL"),
+		GTFSRefresh:    envPositiveDurationOrDefault("GTFS_STATIC_REFRESH", defaultGTFSRefresh),
+		TrustedURLs:    splitURLs(os.Getenv("TRUSTED_GTFS_RT_URLS")),
+		TrustedPoll:    envPositiveDurationOrDefault("TRUSTED_FEED_POLL", defaultTrustedPoll),
+		TrustedMaxAge:  envPositiveDurationOrDefault("TRUSTED_FEED_MAX_AGE", defaultTrustedMaxAge),
+		JWTTTL:         envPositiveDurationOrDefault("RIDER_JWT_TTL", defaultRiderJWTTTL),
+		PointRetention: envPositiveDurationOrDefault("RIDER_POINT_RETENTION", defaultPointRetention),
 		Thresholds:     th,
 	}
 	if cfg.Enabled && cfg.GTFSSource == "" {
 		return riderConfig{}, errors.New("GTFS_STATIC_URL is required when RIDER_MODE_ENABLED is true")
 	}
 	return cfg, nil
-}
-
-// envBoolOrFalse reads a boolean setting. Anything that does not parse is
-// treated as "off": rider mode is opt-in, so a typo must not enable it.
-func envBoolOrFalse(key string) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return false
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		slog.Warn("invalid boolean, treating as false", "key", key, "value", v)
-		return false
-	}
-	return b
 }
 
 // envFloatOrDefault reads a float setting, falling back to the default when it
@@ -115,6 +102,32 @@ func envFloatOrDefault(key string, fallback float64) float64 {
 		return fallback
 	}
 	return f
+}
+
+// envPositiveDurationOrDefault reads a duration setting that must be positive.
+// A value an operator can configure but nothing below can survive — a ticker
+// interval, a freshness or staleness window, a token lifetime, a retention
+// window — falls back to the default rather than disabling the thing it
+// measures.
+func envPositiveDurationOrDefault(key string, fallback time.Duration) time.Duration {
+	d := envDurationOrDefault(key, fallback)
+	if d <= 0 {
+		slog.Warn("rider: duration must be positive, using default", "key", key, "value", d, "default", fallback)
+		return fallback
+	}
+	return d
+}
+
+// envPositiveFloatOrDefault is envPositiveDurationOrDefault for the thresholds
+// measured in metres and metres per second: zero metres rejects every point as
+// off-route, and zero m/s makes every movement implausible.
+func envPositiveFloatOrDefault(key string, fallback float64) float64 {
+	v := envFloatOrDefault(key, fallback)
+	if v <= 0 {
+		slog.Warn("rider: value must be positive, using default", "key", key, "value", v, "default", fallback)
+		return fallback
+	}
+	return v
 }
 
 // splitURLs parses a comma-separated URL list, dropping surrounding spaces and
@@ -174,16 +187,14 @@ func newRiderRuntime(ctx context.Context, cfg riderConfig, store riderStore, jwt
 	})
 	trusted := rider.NewTrustedFeed(cfg.TrustedURLs, client, cfg.TrustedMaxAge)
 	agg := rider.NewAggregator(cfg.Thresholds, index.Timezone())
-	svc := newRiderService(store, agg, refresher.Current, trusted, jwtSecret, cfg.JWTTTL, trustProxy, cfg.Thresholds)
+	svc := newRiderService(store, agg, refresher.Current, trusted, jwtSecret, cfg.JWTTTL, trustProxy)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	rt := &riderRuntime{cfg: cfg, refresher: refresher, trusted: trusted, svc: svc, cancel: cancel}
 
-	refresh := positiveOr("GTFS_STATIC_REFRESH", cfg.GTFSRefresh, defaultGTFSRefresh)
-	rt.goroutine(func() { refresher.Start(runCtx, refresh) })
+	rt.goroutine(func() { refresher.Start(runCtx, cfg.GTFSRefresh) })
 	if trusted.Configured() {
-		poll := positiveOr("TRUSTED_FEED_POLL", cfg.TrustedPoll, defaultTrustedPoll)
-		rt.goroutine(func() { trusted.Start(runCtx, poll) })
+		rt.goroutine(func() { trusted.Start(runCtx, cfg.TrustedPoll) })
 	}
 	rt.goroutine(func() { rt.reapLoop(runCtx) })
 	rt.goroutine(func() { rt.retentionLoop(runCtx, store) })
@@ -199,77 +210,54 @@ func (rt *riderRuntime) goroutine(fn func()) {
 	}()
 }
 
-// positiveOr rejects a duration an operator can configure but nothing below
-// can survive: rider.Refresher.Start and rider.TrustedFeed.Start build a
-// time.Ticker, which panics on a non-positive interval; a non-positive
-// retention window would put the deletion cutoff in the future and take every
-// ride point with it; and a non-positive freshness, staleness or token
-// lifetime would silently disable the thing it measures.
-func positiveOr(key string, d, fallback time.Duration) time.Duration {
-	if d <= 0 {
-		slog.Warn("rider: duration must be positive, using default", "key", key, "value", d, "default", fallback)
-		return fallback
-	}
-	return d
-}
-
-// positiveFloatOr is positiveOr for the thresholds measured in metres and
-// metres per second.
-func positiveFloatOr(key string, v, fallback float64) float64 {
-	if v <= 0 {
-		slog.Warn("rider: value must be positive, using default", "key", key, "value", v, "default", fallback)
-		return fallback
-	}
-	return v
-}
-
-// reapLoop ends rides that have gone quiet or run too long and files what they
-// amounted to. Reap has already ended and unregistered each session it returns,
-// so the aggregator no longer knows about them: they are persisted through
-// fileReaped rather than finishRide.
-func (rt *riderRuntime) reapLoop(ctx context.Context) {
-	ticker := time.NewTicker(riderReapInterval)
+// tickUntilDone calls fn on every tick of a `every`-interval ticker until ctx
+// is done. It is the shape every background loop here has; `every` must be
+// positive, which riderConfig guarantees.
+func tickUntilDone(ctx context.Context, every time.Duration, fn func(now time.Time)) {
+	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			for _, sess := range rt.svc.agg.Reap(now) {
-				if err := rt.svc.fileReaped(ctx, sess); err != nil {
-					// The session is gone from the aggregator and cannot be
-					// put back — re-adding it would republish a ride that has
-					// already ended. The ride's row stays `active` until the
-					// next restart's EndAllActiveRides closes it, and the
-					// admin rides list shows it in the meantime.
-					slog.Error("rider: could not file a reaped ride, dropping it",
-						"ride_id", sess.ID(), "rider_id", sess.RiderID(), "error", err)
-				}
-			}
+			fn(now)
 		}
 	}
 }
 
-// retentionLoop enforces the ride-point retention window (spec §4.1).
-func (rt *riderRuntime) retentionLoop(ctx context.Context, store RidePointPruner) {
-	retention := positiveOr("RIDER_POINT_RETENTION", rt.cfg.PointRetention, defaultPointRetention)
-	ticker := time.NewTicker(riderRetentionInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			deleted, err := store.DeleteRidePointsBefore(ctx, time.Now().Add(-retention))
-			if err != nil {
-				slog.Warn("rider: ride point retention sweep failed", "error", err)
-				continue
-			}
-			if deleted > 0 {
-				slog.Info("rider: deleted expired ride points", "count", deleted)
+// reapLoop ends rides that have gone quiet or run too long and files what they
+// amounted to. Reap ends its sessions in place and leaves them registered, so
+// each one is filed through finishRide — the single ride-ending path — which
+// keeps the session's own end reason and unregisters it only once the store
+// has accepted the outcome. A write that fails leaves the ride registered and
+// ended, so the next tick simply tries again.
+func (rt *riderRuntime) reapLoop(ctx context.Context) {
+	tickUntilDone(ctx, riderReapInterval, func(now time.Time) {
+		for _, rideID := range rt.svc.agg.Reap(now) {
+			// Every id Reap returns names an already-ended session, so
+			// finishRide files it under the reason the session ended with;
+			// this one is never the one recorded.
+			if _, err := rt.svc.finishRide(ctx, rideID, rider.EndIdle); err != nil && !errors.Is(err, errRideNotActive) {
+				slog.Error("rider: could not file a reaped ride, retrying next sweep",
+					"ride_id", rideID, "error", err)
 			}
 		}
-	}
+	})
+}
+
+// retentionLoop enforces the ride-point retention window (spec §4.1).
+func (rt *riderRuntime) retentionLoop(ctx context.Context, store RidePointPruner) {
+	tickUntilDone(ctx, riderRetentionInterval, func(now time.Time) {
+		deleted, err := store.DeleteRidePointsBefore(ctx, now.Add(-rt.cfg.PointRetention))
+		if err != nil {
+			slog.Warn("rider: ride point retention sweep failed", "error", err)
+			return
+		}
+		if deleted > 0 {
+			slog.Info("rider: deleted expired ride points", "count", deleted)
+		}
+	})
 }
 
 // Stop shuts the background loops down and waits for them, then stops the
@@ -280,22 +268,26 @@ func (rt *riderRuntime) Stop() {
 	rt.svc.Stop()
 }
 
-// estimatesOrNil is the rider service as a feed estimate source, or a true nil
-// interface when rider mode is off. Passing the *riderService straight through
-// would hand handleGetFeed a non-nil interface holding a nil pointer.
-func estimatesOrNil(svc *riderService) estimateSource {
-	if svc == nil {
-		return nil
-	}
-	return svc
+// riderOff stands in for the rider service when rider mode is off: it has no
+// estimates to contribute to the feed, and reports itself as disabled. It
+// exists so the handlers never have to ask whether rider mode is on — being
+// off is just another answer, given by a value rather than by a nil check.
+type riderOff struct{}
+
+// Estimates: a server with no rider engine has no rider-derived positions.
+func (riderOff) Estimates(time.Time) []rider.TripEstimate { return nil }
+
+// RiderStatus: the zero riderStatusResponse is exactly {"enabled":false}.
+func (riderOff) RiderStatus(context.Context) (riderStatusResponse, error) {
+	return riderStatusResponse{}, nil
 }
 
-// statusOrNil is the rider service as an admin status provider, or a true nil
-// interface when rider mode is off — which handleRiderAdminStatus reports as
-// {"enabled":false}.
-func statusOrNil(svc *riderService) riderStatusProvider {
+// riderOrOff is the rider service, or the null object when rider mode is off.
+// It exists because passing a nil *riderService straight through would hand a
+// handler a non-nil interface holding a nil pointer.
+func riderOrOff(svc *riderService) (estimateSource, riderStatusProvider) {
 	if svc == nil {
-		return nil
+		return riderOff{}, riderOff{}
 	}
-	return svc
+	return svc, svc
 }

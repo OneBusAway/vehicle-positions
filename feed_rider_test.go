@@ -94,7 +94,7 @@ func TestHandleGetFeed_SourceFilter(t *testing.T) {
 
 	// nil estimate source behaves like the old feed.
 	w := httptest.NewRecorder()
-	handleGetFeed(tracker, nil).ServeHTTP(w, httptest.NewRequest("GET", "/gtfs-rt/vehicle-positions?source=rider&format=json", nil))
+	handleGetFeed(tracker, riderOff{}).ServeHTTP(w, httptest.NewRequest("GET", "/gtfs-rt/vehicle-positions?source=rider&format=json", nil))
 	var feed gtfsrt.FeedMessage
 	require.NoError(t, protojson.Unmarshal(w.Body.Bytes(), &feed))
 	assert.Empty(t, feed.Entity)

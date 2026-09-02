@@ -150,9 +150,7 @@ func TestVerify_Corroboration(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			in := base
-			tr := tc.trusted
-			in.Trusted = &tr
+			in := withTrusted(base, tc.trusted)
 			v := Verify(in)
 			require.Equal(t, Matched, v.Outcome)
 			assert.Equal(t, tc.want, v.Corroboration)
@@ -160,14 +158,20 @@ func TestVerify_Corroboration(t *testing.T) {
 	}
 
 	t.Run("not computed for non-matched points", func(t *testing.T) {
-		in := base
+		in := withTrusted(base, TrustedVehicle{"v1", trip.Shape.PointAt(250), base.Now})
 		in.Point.Accuracy = 500
-		tr := TrustedVehicle{"v1", trip.Shape.PointAt(250), base.Now}
-		in.Trusted = &tr
 		v := Verify(in)
 		assert.Equal(t, Ignored, v.Outcome)
 		assert.Equal(t, Unavailable, v.Corroboration)
 	})
+}
+
+// withTrusted attaches a trusted vehicle to an input the way ApplyBatch does:
+// with its position already projected onto the trip's shape.
+func withTrusted(in VerifyInput, tv TrustedVehicle) VerifyInput {
+	along := in.Trip.Shape.Project(tv.Pos, nil).AlongShape
+	in.Trusted, in.TrustedAlong = &tv, &along
+	return in
 }
 
 func TestOutcomeAndCorroborationStrings(t *testing.T) {

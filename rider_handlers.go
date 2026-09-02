@@ -79,7 +79,6 @@ type riderService struct {
 	jwtSecret    []byte
 	jwtTTL       time.Duration
 	trustProxy   bool
-	thresholds   rider.Thresholds
 	now          func() time.Time
 
 	reportIntervalSeconds int
@@ -89,7 +88,7 @@ type riderService struct {
 // newRiderService wires the rider API together. It starts both rate limiters,
 // so every caller must Stop the service it gets back.
 func newRiderService(store riderStore, agg *rider.Aggregator, index func() *rider.Index, trusted trustedLookup,
-	jwtSecret []byte, jwtTTL time.Duration, trustProxy bool, th rider.Thresholds) *riderService {
+	jwtSecret []byte, jwtTTL time.Duration, trustProxy bool) *riderService {
 	return &riderService{
 		store:                 store,
 		agg:                   agg,
@@ -100,7 +99,6 @@ func newRiderService(store riderStore, agg *rider.Aggregator, index func() *ride
 		jwtSecret:             jwtSecret,
 		jwtTTL:                jwtTTL,
 		trustProxy:            trustProxy,
-		thresholds:            th,
 		now:                   time.Now,
 		reportIntervalSeconds: riderReportIntervalSeconds,
 		maxBatchSize:          riderMaxBatchSize,
@@ -352,25 +350,32 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 
 		// One rider rides one vehicle. The old ride goes through finishRide so
 		// its reputation outcome is applied and its session stops publishing.
-		// A ride that has already gone is nothing to supersede.
+		// A ride that has already gone is nothing to supersede. finishRide
+		// hands back the rider it has just re-scored, which is the rider this
+		// new ride needs; only when nothing was superseded is a read needed.
+		var rd *Rider
 		if oldID, ok := s.agg.ActiveRideForRider(riderID); ok {
-			if _, err := s.finishRide(r.Context(), oldID, rider.EndSuperseded); err != nil && !errors.Is(err, errRideNotActive) {
+			superseded, err := s.finishRide(r.Context(), oldID, rider.EndSuperseded)
+			if err != nil && !errors.Is(err, errRideNotActive) {
 				slog.Error("failed to supersede the rider's previous ride", "ride_id", oldID, "error", err)
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 				return
 			}
+			rd = superseded
 		}
-
-		rd, err := s.store.GetRider(r.Context(), riderID)
-		if err != nil {
-			if errors.Is(err, ErrRiderNotFound) {
-				slog.Warn("start ride: rider not found", "rider_id", riderID)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unknown rider"})
+		if rd == nil {
+			loaded, err := s.store.GetRider(r.Context(), riderID)
+			if err != nil {
+				if errors.Is(err, ErrRiderNotFound) {
+					slog.Warn("start ride: rider not found", "rider_id", riderID)
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unknown rider"})
+					return
+				}
+				slog.Error("failed to load rider", "rider_id", riderID, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 				return
 			}
-			slog.Error("failed to load rider", "rider_id", riderID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-			return
+			rd = loaded
 		}
 
 		routeID := req.RouteID
@@ -470,9 +475,9 @@ func (s *riderService) handleEndRide() http.HandlerFunc {
 		writeJSON(w, http.StatusOK, endRideResponse{
 			Status: "ride ended",
 			Summary: rideSummaryJSON{
-				Points:          snap.Counts.Total,
-				Matched:         snap.Counts.Matched,
-				Corroborated:    snap.Counts.Corroborated,
+				Points:          snap.Summary.Counts.Total,
+				Matched:         snap.Summary.Counts.Matched,
+				Corroborated:    snap.Summary.Counts.Corroborated,
 				DurationSeconds: int(duration.Seconds()),
 			},
 		})
@@ -550,7 +555,7 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 		// are exactly as the store already has them.
 		var storeErr error
 		if snap.Tier != rider.TierBlocked && len(res.Points) > 0 {
-			progress := progressOf(res.State, res.Corroborated, res.Counts)
+			progress := progressOf(res.Summary)
 			// The session has already advanced, so this batch cannot be
 			// replayed; the counters are absolute, so the next successful write
 			// heals the record.
@@ -776,10 +781,10 @@ func (s *riderService) finishRide(ctx context.Context, rideID string, reason rid
 		return nil, errRideNotActive
 	}
 	if snap.Ended {
-		reason = snap.EndReason
+		reason = snap.Summary.EndReason
 	}
 
-	outcome := rideOutcomeOf(snap.State, snap.Corroborated, snap.Counts, snap.Summary, reason)
+	outcome := rideOutcomeOf(snap.Summary, reason)
 
 	updated, err := s.store.FinishRide(ctx, rideID, outcome)
 	if err != nil {
@@ -804,57 +809,31 @@ func (s *riderService) finishRide(ctx context.Context, rideID string, reason rid
 	return updated, nil
 }
 
-// fileReaped persists a session the aggregator has already ended and let go
-// of. The reaper takes its sessions out of the registry before handing them
-// over, so finishRide — which works from a registered session's snapshot —
-// would find nothing; this is the same outcome built from the loose session.
-// A ride whose row has already ended is not an error: some other path filed it
-// first.
-func (s *riderService) fileReaped(ctx context.Context, sess *rider.Session) error {
-	outcome := rideOutcomeOf(sess.State(), sess.Corroborated(), sess.Counts(), sess.Summary(), sess.EndReason())
-	updated, err := s.store.FinishRide(ctx, sess.ID(), outcome)
-	if err != nil {
-		if errors.Is(err, ErrRideNotFound) {
-			return nil
-		}
-		return err
-	}
-	// A score change lands on the ride the rider has in flight, if any.
-	s.agg.SetTier(updated.ID, rider.ParseTier(updated.Tier))
-	return nil
-}
-
 // rideOutcomeOf is what a finished ride amounts to for the store: the progress
 // it reached, the reputation it earned and why it ended. The end reason
 // overrides the summary's own, so that a caller-supplied reason is the one
 // scored.
-func rideOutcomeOf(state rider.State, corroborated bool, counts rider.Counts, summary rider.RideSummary, reason rider.EndReason) RideOutcome {
+func rideOutcomeOf(summary rider.RideSummary, reason rider.EndReason) RideOutcome {
 	summary.EndReason = reason
 	return RideOutcome{
 		EndReason:    string(reason),
-		Progress:     progressOf(state, corroborated, counts),
+		Progress:     progressOf(summary),
 		ScoreDelta:   rider.ScoreDelta(summary),
-		Rejected:     state == rider.Rejected,
-		Corroborated: corroborated,
+		Rejected:     summary.State == rider.Rejected,
+		Corroborated: summary.Corroborated,
 	}
 }
 
-// progressFrom is the ride progress a snapshot has accumulated.
-func progressFrom(snap rider.RideSnapshot) RideProgress {
-	return progressOf(snap.State, snap.Corroborated, snap.Counts)
-}
-
-// progressOf is the ride progress a state, corroboration flag and set of counts
-// amount to. The counts are absolute, so writing them heals a record whose
-// earlier write failed.
-func progressOf(state rider.State, corroborated bool, counts rider.Counts) RideProgress {
+// progressOf is the ride progress a summary amounts to. The counts are
+// absolute, so writing them heals a record whose earlier write failed.
+func progressOf(summary rider.RideSummary) RideProgress {
 	return RideProgress{
-		State:              state.String(),
-		Corroborated:       corroborated,
-		PointsTotal:        counts.Total,
-		PointsMatched:      counts.Matched,
-		PointsCorroborated: counts.Corroborated,
-		PointsContradicted: counts.Contradicted,
+		State:              summary.State.String(),
+		Corroborated:       summary.Corroborated,
+		PointsTotal:        summary.Counts.Total,
+		PointsMatched:      summary.Counts.Matched,
+		PointsCorroborated: summary.Counts.Corroborated,
+		PointsContradicted: summary.Counts.Contradicted,
 	}
 }
 
