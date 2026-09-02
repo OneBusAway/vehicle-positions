@@ -318,6 +318,100 @@ import Testing
         await env.reporter.end()
     }
 
+    @Test func endReturnsWithinItsBudgetWhenTheServerHangs() async throws {
+        let env = Env(); env.scriptHappyPath()
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+
+        // The end call never answers: `end` must still return, on the clock.
+        env.transport.hold("POST end", .waitForRelease)
+        let ending = Task { await env.reporter.end(reason: .userRequested) }
+        #expect(await env.transport.waitForRequest(matching: "POST end"))
+        #expect(await env.clock.waitForSleepers(atLeast: 1), "the 10 s budget is sleeping")
+        env.clock.advance(by: .seconds(10))
+
+        await ending.value
+        #expect(await events.waitForEnd() == .userRequested)
+        #expect(await env.reporter.isActive == false)
+        env.transport.release("POST end") // let the detached teardown finish
+    }
+
+    @Test func finalFlushIsCappedAtTwoBatches() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        // The first upload fails, which parks the ride in backoff so the fixes
+        // that follow pile up instead of going out a batch at a time.
+        env.transport.script("POST positions", FakeRideTransport.transportFailure, FakeRideTransport.ok(json: Env.positionsJSON()))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+
+        env.emitFixes(12) // four batches at max_batch_size 3
+        #expect(await events.wait { $0.contains(.warning(.uploadRetrying(attempt: 1))) })
+        #expect(await env.waitForBuffered(12))
+
+        await env.reporter.end(reason: .appTerminated)
+        #expect(await events.waitForEnd() == .appTerminated)
+        // The failed mid-ride upload, plus exactly two from the teardown: the
+        // rest is abandoned rather than sent past the budget.
+        #expect(env.transport.requests(matching: "POST positions").count == 3)
+    }
+
+    @Test func stationaryTimeoutEndsRideWithNoFurtherSample() async throws {
+        var cfg = RideReporterConfiguration(serverURL: URL(string: "https://vp.example.org")!, appID: "a", appVersion: "1")
+        cfg.stationaryTimeout = .seconds(20)
+        let env = Env(config: cfg); env.scriptHappyPath()
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+
+        // Core Location pauses updates while the device is still, so this one
+        // stationary sample may be the last one ever delivered.
+        env.location.emitFix(lat: 47.6, lon: -122.33, at: env.clock.now, stationary: true)
+        #expect(await env.waitForBuffered(1))
+        #expect(await env.clock.waitForSleepers(atLeast: 1))
+        env.clock.advance(by: .seconds(25))
+        #expect(await events.waitForEnd() == .stationary)
+    }
+
+    @Test func rejectedBatchIsDroppedNotRetried() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST positions", FakeRideTransport.error(422, message: "batch too large"))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+
+        env.emitFixes(3)
+        #expect(await events.wait { $0.contains(.warning(.batchRejected(status: 422))) })
+        #expect(await env.reporter.pendingFixCount == 0, "a rejected batch is dropped, not restored")
+        #expect(await events.events.contains(.warning(.uploadRetrying(attempt: 1))) == false, "and it costs no retry budget")
+        #expect(await env.reporter.isActive, "the ride carries on")
+        await env.reporter.end()
+    }
+
+    @Test func undecodableResponseDropsTheBatch() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST positions", FakeRideTransport.ok(json: "not json at all"))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+
+        env.emitFixes(3)
+        #expect(await events.wait { $0.contains(.warning(.batchRejected(status: 0))) })
+        #expect(await env.reporter.pendingFixCount == 0)
+        #expect(await env.reporter.isActive)
+        await env.reporter.end()
+    }
+
     @Test func tripStatusRegistersWhenNeeded() async throws {
         let env = Env()
         env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))

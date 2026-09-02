@@ -4,7 +4,8 @@ import Foundation
 /// can inspect it and fakes can answer it.
 public struct RiderRequest: Sendable, Equatable {
     public var method: String
-    /// Path relative to the server URL, without a leading slash.
+    /// Path relative to the server URL, without a leading slash, and already
+    /// percent-encoded: a transport must not escape it a second time.
     public var path: String
     public var query: [String: String]
     public var body: Data?
@@ -60,10 +61,7 @@ public struct URLSessionRideTransport: RideTransport {
     }
 
     public func send(_ request: RiderRequest, baseURL: URL) async throws -> RiderResponse {
-        var url = baseURL.appending(path: request.path)
-        if !request.query.isEmpty {
-            url.append(queryItems: request.query.sorted { $0.key < $1.key }.map(URLQueryItem.init))
-        }
+        guard let url = Self.url(for: request, baseURL: baseURL) else { throw URLError(.badURL) }
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = request.method
@@ -79,5 +77,19 @@ public struct URLSessionRideTransport: RideTransport {
         let (data, response) = try await session.data(for: urlRequest)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         return RiderResponse(status: http.statusCode, body: data)
+    }
+
+    /// Joins a request onto the server URL. The path is set through
+    /// `percentEncodedPath` rather than `URL.appending(path:)`, which would
+    /// escape the escapes an already-encoded id carries ("%2F" → "%252F").
+    static func url(for request: RiderRequest, baseURL: URL) -> URL? {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
+        var prefix = components.percentEncodedPath
+        if prefix.hasSuffix("/") { prefix.removeLast() }
+        components.percentEncodedPath = prefix + "/" + request.path
+        if !request.query.isEmpty {
+            components.queryItems = request.query.sorted { $0.key < $1.key }.map(URLQueryItem.init)
+        }
+        return components.url
     }
 }

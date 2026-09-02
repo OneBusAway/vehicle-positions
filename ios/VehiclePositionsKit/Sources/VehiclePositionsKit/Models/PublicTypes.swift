@@ -68,13 +68,30 @@ public struct TripDescriptor: Sendable, Codable, Equatable {
 }
 
 /// How far the server has got in believing a ride.
+///
+/// ``unknown`` is forward compatibility, not a state the server has today: a
+/// newer server that grows a fourth state must not make an older app throw
+/// mid-ride over a word it has never heard.
 public enum RideState: String, Sendable, Codable {
-    case pending, verified, rejected
+    case pending, verified, rejected, unknown
+
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = RideState(rawValue: raw) ?? .unknown
+    }
 }
 
 /// What a trusted feed had to say about the rider's reported positions.
+///
+/// ``unknown`` covers a value a later server adds, for the same reason as
+/// ``RideState/unknown``.
 public enum Corroboration: String, Sendable, Codable {
-    case unavailable, none, corroborated, contradicted
+    case unavailable, none, corroborated, contradicted, unknown
+
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = Corroboration(rawValue: raw) ?? .unknown
+    }
 }
 
 /// Why a ride stopped. The first eight are the reasons a client may report;
@@ -170,6 +187,10 @@ public struct TripStatus: Sendable, Codable, Equatable {
 /// A degraded condition the ride survived; the ride keeps running.
 public enum RideWarning: Sendable, Equatable {
     case uploadRetrying(attempt: Int), accuracyLimited, insufficientlyInUse
+    /// A batch the server refused outright, or could not be understood, and
+    /// which was therefore dropped rather than retried. `status` is the HTTP
+    /// status, or `0` when the response could not be decoded.
+    case batchRejected(status: Int)
 }
 
 /// Everything a ride tells its host app about, in order.
@@ -188,5 +209,4 @@ public enum RideError: Error, Sendable, Equatable {
     case transport(String)
     case alreadyEnded
     case decoding(String)
-    case notActive
 }

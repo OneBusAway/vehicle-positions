@@ -54,6 +54,28 @@ import Testing
         #expect(req.query == ["start_date": "20260902"])
     }
 
+    @Test func pathSegmentsArePercentEncoded() async throws {
+        let t = FakeRideTransport()
+        t.script("POST end", FakeRideTransport.ok(json: #"{"status":"ride ended","summary":{"points":1,"matched":1,"corroborated":0,"duration_seconds":10}}"#))
+        t.script("GET status", FakeRideTransport.ok(json: #"{"trip_id":"T 1/N","start_date":"20260902","trusted":false,"rider_reported":false,"riders":0}"#))
+        let c = RiderClient(serverURL: base, transport: t)
+        _ = try await c.endRide(token: "tok", rideID: "ride 1/2", reason: .arrived)
+        _ = try await c.tripStatus(token: "tok", tripID: "T 1/N", startDate: nil)
+
+        // A raw slash would address a different endpoint entirely.
+        #expect(t.requests(matching: "POST end").first?.path == "api/v1/rider/rides/ride%201%2F2/end")
+        #expect(t.requests(matching: "GET status").first?.path == "api/v1/rider/trips/T%201%2FN/status")
+    }
+
+    @Test func transportDoesNotEncodeAnAlreadyEncodedPath() throws {
+        let request = RiderRequest(method: "GET", path: "api/v1/rider/trips/T%201%2FN/status", query: ["start_date": "20260902"])
+        let url = try #require(URLSessionRideTransport.url(for: request, baseURL: base))
+        #expect(url.absoluteString == "https://vp.example.org/api/v1/rider/trips/T%201%2FN/status?start_date=20260902")
+        // A server URL that already carries a path keeps it, with one separator.
+        let nested = try #require(URLSessionRideTransport.url(for: RiderRequest(method: "GET", path: "api/v1/rider/rides"), baseURL: URL(string: "https://vp.example.org/vp/")!))
+        #expect(nested.absoluteString == "https://vp.example.org/vp/api/v1/rider/rides")
+    }
+
     @Test func cancellationPassesThrough() async throws {
         let t = FakeRideTransport()
         t.script("POST positions",

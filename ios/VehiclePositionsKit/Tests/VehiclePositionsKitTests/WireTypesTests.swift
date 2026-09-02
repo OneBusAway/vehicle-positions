@@ -52,6 +52,8 @@ import Testing
         let obj = try json(RiderAPICodec.encode(req))
         let positions = try #require(obj["positions"] as? [[String: Any]])
         #expect(positions.count == 1)
+        #expect(positions[0]["latitude"] as? Double == 47.60)
+        #expect(positions[0]["longitude"] as? Double == -122.33)
         #expect(positions[0]["accuracy"] as? Double == 8)
         #expect(positions[0]["speed"] == nil)
         #expect(positions[0]["bearing"] as? Double == 184)
@@ -85,12 +87,49 @@ import Testing
     }
 
     @Test func endReasonWireValuesAndClientReportability() {
-        #expect(RideEndReason.maxDuration.rawValue == "max_duration")
-        #expect(RideEndReason.userRequested.isClientReportable)
-        #expect(RideEndReason.appTerminated.isClientReportable)
-        #expect(!RideEndReason.offRoute.isClientReportable)
-        #expect(!RideEndReason.superseded.isClientReportable)
+        // The whole table, in the order spec §4.4 lists it: raw value on the
+        // wire, and whether a client may claim it.
+        let expected: [(RideEndReason, String, Bool)] = [
+            (.userRequested, "user_requested", true),
+            (.arrived, "arrived", true),
+            (.stationary, "stationary", true),
+            (.maxDuration, "max_duration", true),
+            (.locationUnavailable, "location_unavailable", true),
+            (.authorizationDenied, "authorization_denied", true),
+            (.networkFailure, "network_failure", true),
+            (.appTerminated, "app_terminated", true),
+            (.offRoute, "off_route", false),
+            (.contradicted, "contradicted", false),
+            (.implausible, "implausible", false),
+            (.offSchedule, "off_schedule", false),
+            (.superseded, "superseded", false),
+            (.serverRestart, "server_restart", false),
+            (.idle, "idle", false),
+        ]
+        #expect(RideEndReason.allCases.count == expected.count, "a new end reason needs a row here")
+        for (reason, raw, reportable) in expected {
+            #expect(reason.rawValue == raw)
+            #expect(reason.isClientReportable == reportable, "\(raw)")
+            #expect(RideEndReason(rawValue: raw) == reason)
+        }
         #expect(RideEndReason.allCases.filter(\.isClientReportable).count == 8)
+    }
+
+    @Test func unknownEnumValuesDecodeRatherThanThrow() throws {
+        // A server that grows a new state or corroboration value must not make
+        // an older app throw in the middle of a ride.
+        let data = Data(#"{"state":"weird","published":false,"corroboration":"sideways","accepted":1,"ignored":0,"off_route_streak":0,"ended":false,"end_reason":""}"#.utf8)
+        let r = try RiderAPICodec.decode(PositionsResponse.self, from: data)
+        #expect(r.state == .unknown)
+        #expect(r.corroboration == .unknown)
+        #expect(r.accepted == 1)
+
+        let start = Data(#"{"ride_id":"c9e2","state":"quantum","report_interval_seconds":5,"max_batch_size":12}"#.utf8)
+        #expect(try RiderAPICodec.decode(StartRideResponse.self, from: start).state == .unknown)
+        #expect(try RiderAPICodec.decode(RideState.self, from: Data(#""verified""#.utf8)) == .verified)
+        // And the round trip still spells the known cases the way the server does.
+        #expect(String(data: try RiderAPICodec.encode(RideState.rejected), encoding: .utf8) == #""rejected""#)
+        #expect(String(data: try RiderAPICodec.encode(Corroboration.unknown), encoding: .utf8) == #""unknown""#)
     }
 
     @Test func serverErrorBodyDecodes() throws {

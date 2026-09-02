@@ -94,9 +94,16 @@ for await event in try await reporter.start(trip) {
 `start` returns a buffered stream, so no event is missed however late iteration
 begins, and it finishes when the ride ends. Cancelling the task that awaits
 `start` cancels the start: nothing is installed and `CancellationError` is
-thrown. Cancellation after `start` has returned does not stop the ride — the
+thrown. If the cancellation lands after the server has already accepted the
+ride, the SDK installs nothing locally and never reports a position for it; the
+server-side ride is left to its reaper (`idle`, about 15 minutes on) or is
+superseded by this device's next `start`, whichever comes first. Cancellation after `start` has returned does not stop the ride — the
 reporter outlives the task that began it — so call `end()` yourself when the
 view that started the ride goes away.
+
+`RideState` and `Corroboration` both carry an `unknown` case. A server that
+grows a new value must not make an older app fail mid-ride, so an unrecognised
+string decodes as `unknown` rather than throwing.
 
 ## Events
 
@@ -105,7 +112,7 @@ view that started the ride goes away.
 | `.registered(riderID:)` | This device registered (or re-registered) with the server. |
 | `.started(rideID:)` | The server opened a ride. |
 | `.progress(RideProgress)` | An upload was accepted: state, whether the ride is published, corroboration, points accepted, off-route streak. |
-| `.warning(RideWarning)` | Degraded but still running: `.uploadRetrying(attempt:)`, `.accuracyLimited`, `.insufficientlyInUse`. |
+| `.warning(RideWarning)` | Degraded but still running: `.uploadRetrying(attempt:)`, `.accuracyLimited`, `.insufficientlyInUse`, `.batchRejected(status:)` (a batch the server refused, or an answer this build could not read — dropped, not retried). |
 | `.ended(RideEndReason, summary:)` | The ride is over; the stream finishes. |
 
 ### End reasons

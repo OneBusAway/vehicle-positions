@@ -37,6 +37,10 @@ public actor RideReporter {
     }
 
     private var active: ActiveRide?
+    /// True while ``flush()`` is waiting on the server. The upload loop and a
+    /// full buffer can both ask for a flush, and two in flight would upload two
+    /// batches the server then has to order for itself.
+    private var isUploading = false
     private var locationTask: Task<Void, Never>?
     private var uploadTask: Task<Void, Never>?
     /// The most recent `start`, so the next one can queue behind it.
@@ -60,6 +64,7 @@ public actor RideReporter {
     /// not leave its loops running or its consumer waiting on a stream that
     /// will never produce another event.
     deinit {
+        startTask?.cancel()
         locationTask?.cancel()
         uploadTask?.cancel()
         active?.continuation.finish()
@@ -193,7 +198,7 @@ public actor RideReporter {
         // what is still buffered before it goes.
         var batches: [[PositionUpload]] = []
         if !reason.isServerInitiated {
-            while ride.buffer.count > 0 {
+            while ride.buffer.count > 0, batches.count < Self.endFlushBatchLimit {
                 batches.append(ride.buffer.take(max: ride.maxBatchSize).map(Self.upload))
             }
         }
@@ -208,7 +213,7 @@ public actor RideReporter {
             let rideID = ride.rideID
             // Unstructured so this teardown outlives the cancellation of the
             // loop it may have been called from; every call is best-effort.
-            summary = await Task { () -> RideSummary? in
+            let teardown = Task { () -> RideSummary? in
                 for batch in pending {
                     do {
                         _ = try await client.uploadPositions(token: token, rideID: rideID, positions: batch)
@@ -218,7 +223,8 @@ public actor RideReporter {
                 }
                 guard reportsEnd else { return nil }
                 return try? await client.endRide(token: token, rideID: rideID, reason: reason).summary
-            }.value
+            }
+            summary = await withinEndBudget(teardown)
         }
 
         ride.continuation.yield(.ended(reason, summary: summary))
@@ -227,6 +233,38 @@ public actor RideReporter {
         // A `start` that ran while this teardown awaited the server owns the
         // slot now; clearing it would orphan the ride it just installed.
         if active?.rideID == ride.rideID { active = nil }
+    }
+
+    /// The most batches a final flush may send. A device that has been offline
+    /// can hold ten minutes of fixes; uploading all of them would blow the
+    /// budget below, and the ride is over either way.
+    private static let endFlushBatchLimit = 2
+    /// The whole of `end` — final flush and end-ride call — gets this long.
+    private static let endBudget: Duration = .seconds(10)
+
+    /// Waits for `teardown`, or for the budget to run out, whichever comes
+    /// first. A teardown that loses the race is not cancelled: it keeps trying
+    /// in the background, so the server still hears about the ride if the
+    /// network recovers, while `end` returns to its caller now.
+    private func withinEndBudget(_ teardown: Task<RideSummary?, Never>) async -> RideSummary? {
+        let (results, continuation) = AsyncStream<RideSummary?>.makeStream()
+        let finish = Task {
+            let summary = await teardown.value
+            continuation.yield(summary)
+            continuation.finish()
+        }
+        let budget = Task { [clock] in
+            try? await clock.sleep(for: Self.endBudget)
+            continuation.yield(nil)
+            continuation.finish()
+        }
+        defer {
+            // Whoever lost the race has nothing left to report.
+            finish.cancel()
+            budget.cancel()
+        }
+        var iterator = results.makeAsyncIterator()
+        return await iterator.next() ?? nil
     }
 
     /// How the server sees `tripID` right now, registering first if this device
@@ -344,6 +382,14 @@ public actor RideReporter {
                 await end(reason: .maxDuration)
                 return
             }
+            // Core Location pauses `liveUpdates` while the device is still, so
+            // the sample that would have proved the timeout may never arrive.
+            // The clock has to decide it instead.
+            if let since = current.evaluator.stationarySince,
+               clock.now.timeIntervalSince(since) >= configuration.stationaryTimeout.timeInterval {
+                await end(reason: .stationary)
+                return
+            }
             await flush()
         }
     }
@@ -355,11 +401,14 @@ public actor RideReporter {
 
     /// Sends one batch, if there is one, and folds the answer back into the ride.
     private func flush() async {
+        guard !isUploading else { return }
         guard var ride = active, !ride.ending, ride.buffer.count > 0 else { return }
         let rideID = ride.rideID
         let token = ride.token
         let batch = ride.buffer.take(max: ride.maxBatchSize)
         active = ride
+        isUploading = true
+        defer { isUploading = false }
 
         do {
             let response = try await client.uploadPositions(
@@ -390,9 +439,29 @@ public actor RideReporter {
         } catch RideError.notAuthorized {
             clearStoredToken()
             await endIfCurrent(rideID: rideID, reason: .serverRestart)
+        } catch RideError.server(let status, _) where Self.isPermanentRejection(status) {
+            dropBatch(status: status, rideID: rideID)
+        } catch RideError.decoding {
+            // The server answered something this build cannot read. Retrying
+            // sends the same bytes again; the batch goes.
+            dropBatch(status: 0, rideID: rideID)
         } catch {
             await recordUploadFailure(batch, rideID: rideID)
         }
+    }
+
+    /// A 4xx other than 401, 409 and 429 is the server saying this batch is
+    /// wrong, not that it is busy: putting it back would resend it every cycle
+    /// for the rest of the ride.
+    private static func isPermanentRejection(_ status: Int) -> Bool {
+        (400..<500).contains(status) && status != 401 && status != 409 && status != 429
+    }
+
+    /// Drops a batch the server will never accept: not restored to the buffer,
+    /// and not counted against the retry budget, since nothing is being retried.
+    private func dropBatch(status: Int, rideID: String) {
+        guard let ride = active, ride.rideID == rideID, !ride.ending else { return }
+        ride.continuation.yield(.warning(.batchRejected(status: status)))
     }
 
     private func restore(_ batch: [LocationFix], rideID: String) {

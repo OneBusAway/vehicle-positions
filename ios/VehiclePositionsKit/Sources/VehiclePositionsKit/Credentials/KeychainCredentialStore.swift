@@ -32,7 +32,15 @@ public final class KeychainCredentialStore: CredentialStore {
         switch status {
         case errSecSuccess:
             guard let data = item as? Data else { throw KeychainError.status(errSecInvalidData) }
-            return try JSONDecoder().decode(RiderCredentials.self, from: data)
+            do {
+                return try JSONDecoder().decode(RiderCredentials.self, from: data)
+            } catch is DecodingError {
+                // An item written by an incompatible build. Throwing would make
+                // every `start` fail forever; treat it as no credentials and
+                // clear it, so the next call registers the device afresh.
+                try? clear()
+                return nil
+            }
         case errSecItemNotFound:
             return nil
         default:
