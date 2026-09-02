@@ -267,18 +267,20 @@ func (a *Aggregator) PublishableCount(now time.Time, covered func(TripKey) bool)
 }
 
 // TripStatus answers what the riders are saying about one trip: whether their
-// position is being published for it, and how many riders are on it. A rider
-// counts even when their points have gone stale, because they are still riding.
+// position is being published for it, and how many riders are contributing to
+// it. Only the riders behind the estimate count — a rider whose points have
+// gone stale is no longer saying anything about where the vehicle is.
 func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey) bool) (riderReported bool, riders int) {
 	g, ok := a.groups(now)[key]
 	if !ok {
 		return false, 0
 	}
+	riders = distinctRiders(g.members)
 	if covered != nil && covered(key) {
-		return false, len(g.riders)
+		return false, riders
 	}
 	_, reported := g.estimate(key, now)
-	return reported, len(g.riders)
+	return reported, riders
 }
 
 // activeForRiderLocked returns the rider's newest live session, or nil.
@@ -347,34 +349,29 @@ type estimateMember struct {
 	publishable bool
 }
 
-// tripGroup is every rider on one trip: riders is all of them, members only
-// those whose latest point is fresh enough to position the vehicle with.
+// tripGroup is the riders contributing to one trip: those whose ride is live,
+// verified, not blocked, and whose latest point is fresh enough to position the
+// vehicle with. Every consumer of a group — the estimate and the trip status —
+// works from this one selection, so the two cannot disagree about who counts.
 type tripGroup struct {
 	trip    *TripInfo
-	riders  map[string]bool
 	members []estimateMember
 }
 
-// groups snapshots the live rides by trip. Blocked riders are left out
-// entirely: they neither position a vehicle nor count as riding it.
+// groups snapshots the contributing rides by trip.
 func (a *Aggregator) groups(now time.Time) map[TripKey]*tripGroup {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	out := make(map[TripKey]*tripGroup)
 	for _, s := range a.sessions {
-		if s.Ended() || s.Tier() == TierBlocked {
+		if s.Ended() || s.Tier() == TierBlocked || s.State() != Verified || !s.Fresh(now, a.th.PointMaxAge) {
 			continue
 		}
 		g, ok := out[s.Key()]
 		if !ok {
-			g = &tripGroup{trip: s.Trip(), riders: make(map[string]bool)}
+			g = &tripGroup{trip: s.Trip()}
 			out[s.Key()] = g
-		}
-		g.riders[s.RiderID()] = true
-
-		if s.State() != Verified || !s.Fresh(now, a.th.PointMaxAge) {
-			continue
 		}
 		latest := s.Latest()
 		g.members = append(g.members, estimateMember{

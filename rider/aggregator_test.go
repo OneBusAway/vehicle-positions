@@ -159,6 +159,11 @@ func TestAggregator_ConsensusPublishes(t *testing.T) {
 	reported, riders := f.agg.TripStatus(TripKey{"T1", "20260902"}, now, noCover)
 	assert.True(t, reported)
 	assert.Equal(t, 2, riders)
+
+	// A blocked rider contributes nothing, so the trip is down to one rider.
+	f.agg.SetTier("rider-b", TierBlocked)
+	_, riders = f.agg.TripStatus(TripKey{"T1", "20260902"}, now, noCover)
+	assert.Equal(t, 1, riders)
 }
 
 func TestAggregator_NoConsensusWhenSameRiderOrFarApart(t *testing.T) {
@@ -179,7 +184,9 @@ func TestAggregator_NoConsensusWhenSameRiderOrFarApart(t *testing.T) {
 	assert.Empty(t, g.agg.Estimates(now, noCover), "300 m apart is not consensus")
 	reported, riders := g.agg.TripStatus(TripKey{"T1", "20260902"}, now, noCover)
 	assert.False(t, reported)
-	assert.Equal(t, 2, riders)
+	// Only r2 still counts: by 08:03:22 r1's last point is over three minutes
+	// old, and a stale rider is no longer saying where the vehicle is.
+	assert.Equal(t, 1, riders)
 }
 
 func TestAggregator_OutlierExcludedFromEstimate(t *testing.T) {
