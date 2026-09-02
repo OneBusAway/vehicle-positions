@@ -111,3 +111,26 @@ func TestPointAt_And_BearingAt(t *testing.T) {
 		assert.False(t, math.IsNaN(q.DistanceToShape))
 	}
 }
+
+func TestProject_SharedLoopPoint_HintPicksLastPass(t *testing.T) {
+	s := loopShape()
+	// The loop starts and ends at this exact point, so both passes are 0 m away
+	// and only the hint can tell them apart.
+	shared := LatLon{47.6000, -122.3300}
+
+	unhinted := s.Project(shared, nil)
+	assert.Less(t, unhinted.AlongShape, 1.0, "without a hint the first pass wins")
+
+	hint := s.Length - 30
+	hinted := s.Project(shared, &hint)
+	assert.Greater(t, hinted.AlongShape, s.Length-60, "with a late hint the last pass wins")
+
+	// Near, but not on, the shared corner: ~5 m from the first pass and ~15 m
+	// from the last. A purely proportional band (2*5+1 = 11 m) would exclude the
+	// last pass outright; hintCandidateBand keeps it in play for the hint.
+	nearCorner := LatLon{47.6001347, -122.3299334}
+	assert.Less(t, s.Project(nearCorner, nil).AlongShape, 50.0)
+	offset := s.Project(nearCorner, &hint)
+	assert.Greater(t, offset.AlongShape, s.Length-60, "the band must be wide enough to reach the last pass")
+	assert.InDelta(t, 15, offset.DistanceToShape, 2)
+}

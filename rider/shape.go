@@ -7,6 +7,11 @@ const (
 	earthRadiusM = 6_371_000.0
 	// metresPerDegree is the local equirectangular scale factor.
 	metresPerDegree = 111_320.0
+	// hintCandidateBand is the minimum width, in metres, of the band of local
+	// minima a hint may choose between. It lets a hint choose between passes of
+	// a loop that share a point, where the closest distance is near zero and a
+	// purely proportional band would admit only the one pass.
+	hintCandidateBand = 30.0
 )
 
 // LatLon is a WGS84 coordinate in degrees.
@@ -108,7 +113,7 @@ func (s *ShapeGeom) Project(p LatLon, hint *float64) Projection {
 
 	chosen := best
 	if hint != nil {
-		threshold := 2*dists[best] + 1
+		threshold := math.Max(2*dists[best]+1, hintCandidateBand)
 		closest := math.Inf(1)
 		for i := range segments {
 			if dists[i] > threshold || !isLocalMin(dists, i) {
