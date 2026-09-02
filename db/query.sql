@@ -276,10 +276,14 @@ UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $1, updated_at
 -- name: ListRides :many
 SELECT * FROM rides WHERE status = $1 ORDER BY started_at DESC LIMIT $2 OFFSET $3;
 
--- name: InsertRidePoint :exec
+-- Points are appended in one pgx batch per request. The EXISTS guard keeps a
+-- late batch from appending points to a ride that has already ended, matching
+-- the "status = 'active'" guard on UpdateRideProgress.
+-- name: InsertRidePoint :batchexec
 INSERT INTO ride_points (ride_id, latitude, longitude, accuracy, speed, bearing, timestamp, outcome, corroboration,
   along_shape, distance_to_shape, schedule_deviation_seconds)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+WHERE EXISTS (SELECT 1 FROM rides WHERE id = $1 AND status = 'active');
 
 -- name: CountRidePointsForRide :one
 SELECT COUNT(*) FROM ride_points WHERE ride_id = $1;

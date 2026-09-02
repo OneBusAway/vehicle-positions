@@ -271,6 +271,9 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 // riderEntity renders one rider-consensus trip estimate as a FeedEntity. The
 // "rider:" prefixes keep these ids from colliding with driver-reported
 // vehicles, and the label marks the position as rider-reported for consumers.
+// vehicle.id repeats the entity id (trip + start date) rather than the trip id
+// alone: the same trip running on two service dates is two vehicles, and E052
+// requires vehicle.id to be unique across the feed.
 func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 	position := &gtfsrt.Position{
 		Latitude:  proto.Float32(float32(est.Pos.Lat)),
@@ -291,7 +294,7 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 
 	vp := &gtfsrt.VehiclePosition{
 		Vehicle: &gtfsrt.VehicleDescriptor{
-			Id:    proto.String("rider:" + est.Key.TripID),
+			Id:    proto.String(riderEntityID(est.Key)),
 			Label: proto.String("Rider-reported"),
 		},
 		Trip:      trip,
@@ -305,9 +308,15 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 	}
 
 	return &gtfsrt.FeedEntity{
-		Id:      proto.String("rider:" + est.Key.TripID + ":" + est.Key.StartDate),
+		Id:      proto.String(riderEntityID(est.Key)),
 		Vehicle: vp,
 	}
+}
+
+// riderEntityID is the feed id of a rider-reported trip instance, used both as
+// the FeedEntity id and as vehicle.id.
+func riderEntityID(key rider.TripKey) string {
+	return "rider:" + key.TripID + ":" + key.StartDate
 }
 
 type adminStatusResponse struct {

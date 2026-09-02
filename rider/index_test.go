@@ -55,6 +55,40 @@ func TestBuildIndex_RescalesShapeDistUnits(t *testing.T) {
 	assert.InDelta(t, 500, trip.StopTimes[1].AlongShape, 2)
 }
 
+func TestBuildIndex_ProjectsWhenShapeDistIsAllZero(t *testing.T) {
+	// Every stop time carries shape_dist_traveled, but the column never grows:
+	// the values say nothing, so the stops must be projected instead of being
+	// scaled to zero.
+	ix := fixtureIndexEdited(t, "stop_times.txt",
+		"trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n"+
+			stopTimeRow("T1", "08:00:00", "ST1", 1, "0.000000")+
+			stopTimeRow("T1", "08:05:00", "ST2", 2, "0.000000")+
+			stopTimeRow("T1", "08:10:00", "ST3", 3, "0.000000"))
+
+	trip, ok := ix.Trip("T1")
+	require.True(t, ok)
+	require.Len(t, trip.StopTimes, 3)
+	assert.InDelta(t, 0, trip.StopTimes[0].AlongShape, 2)
+	assert.InDelta(t, 500, trip.StopTimes[1].AlongShape, 5, "projected, not scaled to zero")
+	assert.InDelta(t, trip.Shape.Length, trip.StopTimes[2].AlongShape, 5)
+}
+
+func TestBuildIndex_SkipsTripsWithoutStopTimes(t *testing.T) {
+	// T5 has a perfectly good shape but no stop_times rows: nothing can be
+	// interpolated for it, so it is skipped alongside the shapeless T4.
+	ix := fixtureIndexEdited(t, "trips.txt", "route_id,service_id,trip_id,shape_id\n"+
+		"R1,WEEKDAY,T1,S1\n"+
+		"R1,SAT,T2,S1\n"+
+		"R2,WEEKDAY,T3,S2\n"+
+		"R1,WEEKDAY,T4,\n"+
+		"R1,WEEKDAY,T5,S1\n")
+
+	_, ok := ix.Trip("T5")
+	assert.False(t, ok, "a trip with no stop times is not indexed")
+	assert.Equal(t, []string{"T1", "T2", "T3"}, ix.TripIDs())
+	assert.Equal(t, 3, ix.Stats().Trips)
+}
+
 func TestActiveOn(t *testing.T) {
 	ix := fixtureIndex(t)
 	t1, _ := ix.Trip("T1")                       // WEEKDAY

@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // validateFeedCompliance checks a FeedMessage against applicable
@@ -39,13 +41,14 @@ func validateFeedCompliance(t *testing.T, feed *gtfsrt.FeedMessage) []string {
 	headerTs := feed.Header.GetTimestamp()
 	now := uint64(time.Now().Unix())
 	seenIDs := make(map[string]struct{})
+	seenVehicleIDs := make(map[string]string)
 
 	for _, entity := range feed.Entity {
 		id := entity.GetId()
 
-		// E052: unique entity IDs
+		// Unique entity ids (GTFS-RT spec requirement; no numbered rule).
 		if _, exists := seenIDs[id]; exists {
-			violations = append(violations, fmt.Sprintf("E052: duplicate entity id %q", id))
+			violations = append(violations, fmt.Sprintf("duplicate entity id %q", id))
 		}
 		seenIDs[id] = struct{}{}
 
@@ -55,8 +58,19 @@ func validateFeedCompliance(t *testing.T, feed *gtfsrt.FeedMessage) []string {
 		}
 
 		// W002: vehicle.id populated
-		if vp.GetVehicle().GetId() == "" {
+		vehicleID := vp.GetVehicle().GetId()
+		if vehicleID == "" {
 			violations = append(violations, fmt.Sprintf("W002: vehicle.id empty for entity %q", id))
+		} else {
+			// E052: vehicle.id must be unique across the feed — two entities
+			// describing the same vehicle at once is the error MobilityData
+			// names. Driver ids cannot contain ":" (vehicleIDPattern), and
+			// rider ids carry the trip and the start date, so the two halves
+			// of the feed cannot collide.
+			if prev, exists := seenVehicleIDs[vehicleID]; exists {
+				violations = append(violations, fmt.Sprintf("E052: vehicle.id %q not unique (entities %q and %q)", vehicleID, prev, id))
+			}
+			seenVehicleIDs[vehicleID] = id
 		}
 
 		// W001: timestamp populated
@@ -332,6 +346,38 @@ func TestFeedValidation_E052_RejectsDuplicateIDs(t *testing.T) {
 	joined := strings.Join(violations, "|")
 	assert.Contains(t, joined, "E052:")
 	assert.Contains(t, joined, "bus-1")
+}
+
+func TestFeedValidation_E052_RiderVehicleIDsUniqueAcrossStartDates(t *testing.T) {
+	// The same trip running on two service dates is two vehicles. When
+	// vehicle.id was just "rider:<trip_id>" both entities claimed one vehicle.
+	yesterday := sampleEstimate()
+	yesterday.Key.StartDate = "20260901"
+	feed := buildFeed(nil, []rider.TripEstimate{sampleEstimate(), yesterday})
+	require.Len(t, feed.Entity, 2)
+	assert.Equal(t, "rider:T1:20260902", feed.Entity[0].GetVehicle().GetVehicle().GetId())
+	assert.Equal(t, "rider:T1:20260901", feed.Entity[1].GetVehicle().GetVehicle().GetId())
+	assert.Empty(t, validateFeedCompliance(t, feed))
+}
+
+func TestFeedValidation_E052_RejectsDuplicateVehicleIDs(t *testing.T) {
+	now := time.Now().Unix()
+	feed := buildFeed([]*VehicleState{
+		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
+	}, nil)
+	// Distinct entity id, same vehicle.id: exactly what E052 forbids.
+	feed.Entity = append(feed.Entity, &gtfsrt.FeedEntity{
+		Id: proto.String("bus-1-second-entity"),
+		Vehicle: &gtfsrt.VehiclePosition{
+			Vehicle:   &gtfsrt.VehicleDescriptor{Id: proto.String("bus-1")},
+			Position:  &gtfsrt.Position{Latitude: proto.Float32(1), Longitude: proto.Float32(2)},
+			Timestamp: proto.Uint64(uint64(now)),
+		},
+	})
+
+	violations := validateFeedCompliance(t, feed)
+	require.NotEmpty(t, violations)
+	assert.Contains(t, strings.Join(violations, "|"), `E052: vehicle.id "bus-1" not unique`)
 }
 
 func TestFeedValidation_W001_TimestampsPopulated(t *testing.T) {

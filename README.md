@@ -83,7 +83,7 @@ unparseable value logs and falls back to its default.
 | `RIDER_MAX_SHAPE_DISTANCE` | `60` | Metres from shape (plus reported accuracy) for a point to match. |
 | `RIDER_MAX_SPEED` | `35` | Metres per second; implied along-shape speed above this is implausible. |
 | `RIDER_SCHEDULE_EARLY` / `RIDER_SCHEDULE_LATE` | `15m` / `90m` | Schedule-adherence window. |
-| `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest matched point is older than this stops contributing to the feed. |
+| `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest accepted point (of any outcome) is older than this stops contributing to the feed. The position published for it is always its latest *matched* point. |
 | `RIDER_POINT_RETENTION` | `168h` | `ride_points` rows older than this are deleted hourly. |
 
 Rider mode shares `JWT_SECRET` with the rest of the API, but rider tokens carry
@@ -104,15 +104,18 @@ fields are rejected.
 | `GET /api/v1/rider/trips/{trip_id}/status?start_date=YYYYMMDD` | Whether this trip instance currently has trusted or rider-derived coverage. |
 
 Two admin endpoints report on the subsystem: `GET /api/v1/admin/rider/status`
-(schedule snapshot, trusted-feed health, rider tiers, live ride counts) and
+(schedule snapshot, trusted-feed health, rider tiers, live ride counts — where
+`rides.publishable` counts *trips* being published, one per estimate, not
+rides, so several riders on one bus count once) and
 `GET /api/v1/admin/rider/rides?status=active|ended` (recent rides, newest
 first). Both require an admin token, like every other `/api/v1/admin/*` route.
 
 The published feed carries both halves. `GET /gtfs-rt/vehicle-positions` takes
 a `source` parameter — `driver`, `rider`, or `all` (the default) — so a
 consumer can take the driver-reported entities alone. Rider entities are
-distinguishable by construction: their id is `rider:<trip_id>:<start_date>` and
-their vehicle label is `Rider-reported`. A rider-reported position is always
+distinguishable by construction: their id — and their `vehicle.id`, so that two
+service dates of one trip are two vehicles — is `rider:<trip_id>:<start_date>`,
+and their vehicle label is `Rider-reported`. A rider-reported position is always
 snapped to the route shape, never a raw GPS fix, and a trip the trusted feed
 already reports is never published from rider data.
 
@@ -620,7 +623,7 @@ This is a significant engineering effort (estimated 60–80 hours) involving car
 - [GTFS-RT Specification](https://gtfs.org/documentation/realtime/proto/)
 - [GTFS-RT Vehicle Positions — Google reference](https://developers.google.com/transit/gtfs-realtime)
 - [GTFS-RT Validator (MobilityData)](https://github.com/MobilityData/gtfs-realtime-validator)
-- [gtfs-realtime-bindings for Go](https://github.com/MobilityData/gtfs-realtime-bindings)
+- [gtfs-realtime-bindings (MobilityData)](https://github.com/MobilityData/gtfs-realtime-bindings) — the upstream bindings; the server links the identical generated types from [`github.com/OneBusAway/go-gtfs/proto`](https://github.com/OneBusAway/go-gtfs) instead, because both register the same protobuf file names and linking both panics the registry
 - [Maglev — OneBusAway next-generation server (Go)](https://github.com/OneBusAway/maglev)
 - [OneBusAway Android app](https://github.com/OneBusAway/onebusaway-android)
 - [OneBusAway REST API documentation](https://developer.onebusaway.org/api/where)

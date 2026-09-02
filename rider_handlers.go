@@ -564,7 +564,12 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 		// engine has finished with must be filed and its reputation effect
 		// applied, or it lingers in the aggregator until the reaper notices.
 		if res.Ended {
-			if _, err := s.finishRide(r.Context(), rideID, res.EndReason); err != nil && !errors.Is(err, errRideNotActive) {
+			// WithoutCancel: the rejection and its reputation penalty are the
+			// server's decision, not the client's request. A phone that hangs
+			// up as the response is written must not defer the write to the
+			// reaper — which would only end the ride as "idle" 15 minutes on.
+			endCtx := context.WithoutCancel(r.Context())
+			if _, err := s.finishRide(endCtx, rideID, res.EndReason); err != nil && !errors.Is(err, errRideNotActive) {
 				slog.Error("failed to finish a ride the engine ended", "ride_id", rideID, "error", err)
 			}
 		}

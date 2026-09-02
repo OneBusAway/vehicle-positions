@@ -79,7 +79,7 @@ There is no service layer, repository pattern, or middleware chain. Handlers cal
 | Query Layer | sqlc-generated typed query package (`db/`) |
 | Migrations | `github.com/golang-migrate/migrate/v4` with embedded SQL migration files |
 | Feed Format | GTFS-Realtime 2.0 protobuf, with optional JSON serialization for debugging |
-| GTFS-Realtime Bindings | `github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs` v1.0.0 |
+| GTFS-Realtime Bindings | `github.com/OneBusAway/go-gtfs/proto` v1.1.1 (the same generated bindings, re-exported by the GTFS library the rider engine already uses; MobilityData's `gtfs-realtime-bindings` registers the same protobuf file names, so linking both panics the protobuf registry at init) |
 | Containerization | Multi-stage Docker build (`golang:1.24-alpine` -> `alpine:3.21`) plus Docker Compose with `postgres:17-alpine` |
 
 ### 3.2 System Actors
@@ -385,7 +385,9 @@ sequenceDiagram
 
 The feed is generated on every request entirely from the in-memory Tracker — the database is **not** read during feed generation. This keeps feed latency low and independent of database load.
 
-`buildFeed()` uses `github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs` types together with `google.golang.org/protobuf/proto` and `protojson` to construct a `FeedMessage` with:
+`buildFeed()` uses `github.com/OneBusAway/go-gtfs/proto` types together with `google.golang.org/protobuf/proto` and `protojson` to construct a `FeedMessage` with:
+
+(Those are the same generated GTFS-RT bindings as MobilityData's `gtfs-realtime-bindings`; only one of the two may be linked into the binary, because both register the same protobuf file names and the second registration panics at init. The rider engine already depends on `go-gtfs` for static GTFS, so that copy is the one the server uses.)
 
 - **Header:** GTFS-Realtime version `2.0`, incrementality `FULL_DATASET`, current Unix timestamp.
 - One `FeedEntity` per active vehicle (`id = vehicle_id`).
@@ -548,9 +550,14 @@ GET /gtfs-rt/vehicle-positions ──▶ Tracker.ActiveVehicles()  (driver entit
 ```
 
 A rider's raw fixes never reach the feed. The published position is the
-along-shape median of the trip's contributing riders, snapped back onto the
-route with `ShapeGeom.PointAt`, so the entity says where the vehicle is on its
-route rather than where any phone was.
+along-shape median of the trip's contributing riders' latest matched points,
+snapped back onto the route with `ShapeGeom.PointAt`, so the entity says where
+the vehicle is on its route rather than where any phone was.
+
+`GET /api/v1/admin/rider/status` reports both ends of that pipeline:
+`rides.active` counts live sessions, one per ride, while `rides.publishable`
+counts the estimates the feed would carry right now — one per *trip*, so three
+riders on one bus are one publishable trip, not three.
 
 ### 8.4 Trust states
 
@@ -567,8 +574,10 @@ blocked rider still receives normal responses, so an abuser learns nothing from
 them, but their points are never persisted or published.
 
 A ride contributes to the feed only while it is `Verified`, not ended, fresh
-(its latest matched point is younger than `RIDER_POINT_MAX_AGE`) and its rider
-is not blocked — and then only if that rider is `Trusted`, or the ride has been
+(its latest *accepted* point — of whatever outcome — is younger than
+`RIDER_POINT_MAX_AGE`, so a rider whose phone is still reporting is judged on
+that, not on the last point that happened to match) and its rider is not
+blocked — and then only if that rider is `Trusted`, or the ride has been
 corroborated by the trusted feed, or a second rider on the same trip
 independently agrees within 100 m.
 
@@ -576,9 +585,13 @@ independently agrees within 100 m.
 
 `handleGetFeed` asks the tracker for driver entities and the aggregator for
 rider entities, and `buildFeed` emits both into one `FeedMessage`. Rider
-entities take the id `rider:<trip_id>:<start_date>` and the vehicle label
-`Rider-reported`; driver vehicle ids cannot contain a colon, so entity ids stay
-unique by construction. The header timestamp is still the newest of now and
+entities take the id `rider:<trip_id>:<start_date>` — repeated as `vehicle.id`,
+so the same trip on two service dates is two vehicles (E052) — and the vehicle
+label `Rider-reported`; driver vehicle ids cannot contain a colon, so entity and
+vehicle ids stay unique across both halves by construction. The position
+published for a ride comes from its latest *matched* point, snapped to the
+shape: an off-route or implausible fix keeps the ride fresh but never moves the
+published estimate. The header timestamp is still the newest of now and
 every entity's timestamp.
 
 The trusted feed always wins: any trip the agency's own GTFS-RT feed currently

@@ -34,10 +34,17 @@ func buildFixtureZip(t *testing.T) []byte {
 // written in a fixed order with a zero modification time.
 func buildFixtureZipWith(t *testing.T, timezone string, distScale float64) []byte {
 	t.Helper()
+	return zipFixtureFiles(t, fixtureFiles(timezone, distScale))
+}
+
+// zipFixtureFiles renders CSV members as a GTFS zip. Entries are written in
+// the given order with a zero modification time, so the bytes are stable.
+func zipFixtureFiles(t *testing.T, files []fixtureFile) []byte {
+	t.Helper()
 
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
-	for _, f := range fixtureFiles(timezone, distScale) {
+	for _, f := range files {
 		entry, err := w.CreateHeader(&zip.FileHeader{Name: f.name, Method: zip.Deflate})
 		require.NoError(t, err)
 		_, err = entry.Write([]byte(f.body))
@@ -45,6 +52,27 @@ func buildFixtureZipWith(t *testing.T, timezone string, distScale float64) []byt
 	}
 	require.NoError(t, w.Close())
 	return buf.Bytes()
+}
+
+// fixtureIndexEdited builds an index over the test feed with one CSV member
+// replaced. The committed fixture is left untouched, so cases that only one
+// test needs do not have to live in it.
+func fixtureIndexEdited(t *testing.T, name, body string) *Index {
+	t.Helper()
+	files := fixtureFiles(fixtureTimezone, 1)
+	replaced := false
+	for i := range files {
+		if files[i].name == name {
+			files[i].body = body
+			replaced = true
+		}
+	}
+	require.True(t, replaced, "no fixture member named %q", name)
+	static, err := gtfs.ParseStatic(zipFixtureFiles(t, files), gtfs.ParseStaticOptions{})
+	require.NoError(t, err)
+	ix, err := BuildIndex(static, "fixture", fixtureLoadedAt)
+	require.NoError(t, err)
+	return ix
 }
 
 // fixtureStatic parses the test feed with the given agency timezone.

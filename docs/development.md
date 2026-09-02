@@ -286,7 +286,7 @@ empties, and the rider's estimate appears instead:
 
 ```bash
 curl -s 'localhost:18080/gtfs-rt/vehicle-positions?format=json&source=rider' | jq '.entity[0].vehicle.vehicle'
-# {"id":"rider:T1","label":"Rider-reported"}
+# {"id":"rider:T1:20260902","label":"Rider-reported"}
 ```
 
 ### 5. Check that an off-route rider is thrown out

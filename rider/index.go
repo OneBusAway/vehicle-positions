@@ -73,7 +73,8 @@ type serviceCalendar struct {
 }
 
 // BuildIndex indexes the trips of a parsed GTFS feed. Trips without a usable
-// shape are skipped. The static feed is not retained.
+// shape, and trips with no stop times, are skipped: neither can be verified
+// against a schedule. The static feed is not retained.
 func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index, error) {
 	tz, err := feedTimezone(static)
 	if err != nil {
@@ -91,12 +92,19 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 	}
 
 	shapes := make(map[string]*ShapeGeom)
-	skipped := 0
+	skippedShapeless, skippedNoStopTimes := 0, 0
 	for i := range static.Trips {
 		trip := &static.Trips[i]
 		shape := shapeFor(shapes, trip.Shape)
 		if shape == nil {
-			skipped++
+			skippedShapeless++
+			continue
+		}
+		if len(trip.StopTimes) == 0 {
+			// Verify interpolates a scheduled time at the point's position, and
+			// the aggregator reports the next stop; neither has an answer for a
+			// trip with no stop times.
+			skippedNoStopTimes++
 			continue
 		}
 		info := &TripInfo{
@@ -121,8 +129,9 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 		LoadedAt: loadedAt,
 		Source:   source,
 	}
-	if skipped > 0 {
-		slog.Info("rider: skipped GTFS trips without a usable shape", "source", source, "skipped", skipped, "indexed", ix.stats.Trips)
+	if skippedShapeless > 0 || skippedNoStopTimes > 0 {
+		slog.Info("rider: skipped unusable GTFS trips", "source", source,
+			"no_shape", skippedShapeless, "no_stop_times", skippedNoStopTimes, "indexed", ix.stats.Trips)
 	}
 	return ix, nil
 }
@@ -340,7 +349,12 @@ func shapeDistScale(stopTimes []gtfs.ScheduledStopTime, shapeLength float64) (fl
 		}
 		last = *st.ShapeDistanceTraveled
 	}
-	if last <= 0 || shapeLength <= 0 {
+	if last <= 0 {
+		// Present but useless: every value is zero, or the column decreases to
+		// nothing. Projecting the stops onto the shape is the better answer.
+		return 0, false
+	}
+	if shapeLength <= 0 {
 		return 1, true
 	}
 	ratio := last / shapeLength

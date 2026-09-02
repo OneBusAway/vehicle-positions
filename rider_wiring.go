@@ -53,21 +53,31 @@ type riderConfig struct {
 // every other value falls back to its default, logging when what was supplied
 // could not be parsed.
 func riderConfigFromEnv() (riderConfig, error) {
-	th := rider.DefaultThresholds()
-	th.MaxShapeDistance = envFloatOrDefault("RIDER_MAX_SHAPE_DISTANCE", th.MaxShapeDistance)
-	th.MaxSpeed = envFloatOrDefault("RIDER_MAX_SPEED", th.MaxSpeed)
-	th.ScheduleEarly = envDurationOrDefault("RIDER_SCHEDULE_EARLY", th.ScheduleEarly)
-	th.ScheduleLate = envDurationOrDefault("RIDER_SCHEDULE_LATE", th.ScheduleLate)
-	th.PointMaxAge = envDurationOrDefault("RIDER_POINT_MAX_AGE", th.PointMaxAge)
+	defaults := rider.DefaultThresholds()
+	th := defaults
+	// A non-positive distance or speed is not a stricter setting, it is a
+	// broken one: zero metres rejects every point as off-route, and zero m/s
+	// makes every movement implausible.
+	th.MaxShapeDistance = positiveFloatOr("RIDER_MAX_SHAPE_DISTANCE",
+		envFloatOrDefault("RIDER_MAX_SHAPE_DISTANCE", defaults.MaxShapeDistance), defaults.MaxShapeDistance)
+	th.MaxSpeed = positiveFloatOr("RIDER_MAX_SPEED",
+		envFloatOrDefault("RIDER_MAX_SPEED", defaults.MaxSpeed), defaults.MaxSpeed)
+	th.ScheduleEarly = envDurationOrDefault("RIDER_SCHEDULE_EARLY", defaults.ScheduleEarly)
+	th.ScheduleLate = envDurationOrDefault("RIDER_SCHEDULE_LATE", defaults.ScheduleLate)
+	// Freshness of zero would expire every ride the moment it reported.
+	th.PointMaxAge = positiveOr("RIDER_POINT_MAX_AGE",
+		envDurationOrDefault("RIDER_POINT_MAX_AGE", defaults.PointMaxAge), defaults.PointMaxAge)
 
 	cfg := riderConfig{
-		Enabled:        envBoolOrFalse("RIDER_MODE_ENABLED"),
-		GTFSSource:     os.Getenv("GTFS_STATIC_URL"),
-		GTFSRefresh:    envDurationOrDefault("GTFS_STATIC_REFRESH", defaultGTFSRefresh),
-		TrustedURLs:    splitURLs(os.Getenv("TRUSTED_GTFS_RT_URLS")),
-		TrustedPoll:    envDurationOrDefault("TRUSTED_FEED_POLL", defaultTrustedPoll),
-		TrustedMaxAge:  envDurationOrDefault("TRUSTED_FEED_MAX_AGE", defaultTrustedMaxAge),
-		JWTTTL:         envDurationOrDefault("RIDER_JWT_TTL", defaultRiderJWTTTL),
+		Enabled:     envBoolOrFalse("RIDER_MODE_ENABLED"),
+		GTFSSource:  os.Getenv("GTFS_STATIC_URL"),
+		GTFSRefresh: envDurationOrDefault("GTFS_STATIC_REFRESH", defaultGTFSRefresh),
+		TrustedURLs: splitURLs(os.Getenv("TRUSTED_GTFS_RT_URLS")),
+		TrustedPoll: envDurationOrDefault("TRUSTED_FEED_POLL", defaultTrustedPoll),
+		// A non-positive staleness window would discard every trusted entity;
+		// a non-positive token lifetime would issue tokens already expired.
+		TrustedMaxAge:  positiveOr("TRUSTED_FEED_MAX_AGE", envDurationOrDefault("TRUSTED_FEED_MAX_AGE", defaultTrustedMaxAge), defaultTrustedMaxAge),
+		JWTTTL:         positiveOr("RIDER_JWT_TTL", envDurationOrDefault("RIDER_JWT_TTL", defaultRiderJWTTTL), defaultRiderJWTTTL),
 		PointRetention: envDurationOrDefault("RIDER_POINT_RETENTION", defaultPointRetention),
 		Thresholds:     th,
 	}
@@ -191,15 +201,26 @@ func (rt *riderRuntime) goroutine(fn func()) {
 
 // positiveOr rejects a duration an operator can configure but nothing below
 // can survive: rider.Refresher.Start and rider.TrustedFeed.Start build a
-// time.Ticker, which panics on a non-positive interval, and a non-positive
+// time.Ticker, which panics on a non-positive interval; a non-positive
 // retention window would put the deletion cutoff in the future and take every
-// ride point with it.
+// ride point with it; and a non-positive freshness, staleness or token
+// lifetime would silently disable the thing it measures.
 func positiveOr(key string, d, fallback time.Duration) time.Duration {
 	if d <= 0 {
 		slog.Warn("rider: duration must be positive, using default", "key", key, "value", d, "default", fallback)
 		return fallback
 	}
 	return d
+}
+
+// positiveFloatOr is positiveOr for the thresholds measured in metres and
+// metres per second.
+func positiveFloatOr(key string, v, fallback float64) float64 {
+	if v <= 0 {
+		slog.Warn("rider: value must be positive, using default", "key", key, "value", v, "default", fallback)
+		return fallback
+	}
+	return v
 }
 
 // reapLoop ends rides that have gone quiet or run too long and files what they

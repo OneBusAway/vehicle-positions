@@ -14,7 +14,21 @@ import (
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
+// riderEnvKeys is every environment variable riderConfigFromEnv reads. The
+// config test clears them all first so an ambient value in the developer's
+// shell cannot make an assertion pass or fail by accident.
+var riderEnvKeys = []string{
+	"RIDER_MODE_ENABLED", "GTFS_STATIC_URL", "GTFS_STATIC_REFRESH", "TRUSTED_GTFS_RT_URLS",
+	"TRUSTED_FEED_POLL", "TRUSTED_FEED_MAX_AGE", "RIDER_JWT_TTL", "RIDER_POINT_RETENTION",
+	"RIDER_MAX_SHAPE_DISTANCE", "RIDER_MAX_SPEED", "RIDER_SCHEDULE_EARLY", "RIDER_SCHEDULE_LATE",
+	"RIDER_POINT_MAX_AGE",
+}
+
 func TestRiderConfigFromEnv(t *testing.T) {
+	for _, k := range riderEnvKeys {
+		t.Setenv(k, "")
+	}
+
 	t.Setenv("RIDER_MODE_ENABLED", "false")
 	cfg, err := riderConfigFromEnv()
 	require.NoError(t, err)
@@ -42,6 +56,31 @@ func TestRiderConfigFromEnv(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, cfg.TrustedMaxAge)
 	assert.Equal(t, 8760*time.Hour, cfg.JWTTTL)
 	assert.Equal(t, 168*time.Hour, cfg.PointRetention)
+	assert.Equal(t, 15*time.Minute, cfg.Thresholds.ScheduleEarly)
+	assert.Equal(t, 90*time.Second, cfg.Thresholds.PointMaxAge)
+}
+
+func TestRiderConfigFromEnv_RejectsNonPositiveValues(t *testing.T) {
+	for _, k := range riderEnvKeys {
+		t.Setenv(k, "")
+	}
+	t.Setenv("RIDER_MODE_ENABLED", "true")
+	t.Setenv("GTFS_STATIC_URL", "rider/testdata/fixture.zip")
+	// Every one of these would disable the check it configures rather than
+	// tighten it, so each falls back to its default.
+	t.Setenv("RIDER_MAX_SHAPE_DISTANCE", "0")
+	t.Setenv("RIDER_MAX_SPEED", "-1")
+	t.Setenv("RIDER_POINT_MAX_AGE", "0s")
+	t.Setenv("TRUSTED_FEED_MAX_AGE", "-1m")
+	t.Setenv("RIDER_JWT_TTL", "0")
+
+	cfg, err := riderConfigFromEnv()
+	require.NoError(t, err)
+	assert.Equal(t, 60.0, cfg.Thresholds.MaxShapeDistance)
+	assert.Equal(t, 35.0, cfg.Thresholds.MaxSpeed)
+	assert.Equal(t, 90*time.Second, cfg.Thresholds.PointMaxAge)
+	assert.Equal(t, defaultTrustedMaxAge, cfg.TrustedMaxAge)
+	assert.Equal(t, defaultRiderJWTTTL, cfg.JWTTTL)
 }
 
 func TestNewRiderRuntime_LoadsIndexAndEndsStaleRides(t *testing.T) {

@@ -34,7 +34,7 @@ func TestBuildFeed_RiderEntities(t *testing.T) {
 	e := feed.Entity[1]
 	assert.Equal(t, "rider:T1:20260902", e.GetId())
 	vp := e.GetVehicle()
-	assert.Equal(t, "rider:T1", vp.GetVehicle().GetId())
+	assert.Equal(t, "rider:T1:20260902", vp.GetVehicle().GetId(), "vehicle.id carries the start date so two service dates are two vehicles")
 	assert.Equal(t, "Rider-reported", vp.GetVehicle().GetLabel())
 	assert.Equal(t, "T1", vp.GetTrip().GetTripId())
 	assert.Equal(t, "R1", vp.GetTrip().GetRouteId())

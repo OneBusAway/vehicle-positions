@@ -216,22 +216,39 @@ func (s *Store) RecordRidePoints(ctx context.Context, rideID, riderID string, po
 
 	qtx := s.queries.WithTx(tx)
 
-	for _, p := range points {
-		if err := qtx.InsertRidePoint(ctx, db.InsertRidePointParams{
-			RideID:                   rideID,
-			Latitude:                 p.Latitude,
-			Longitude:                p.Longitude,
-			Accuracy:                 optionalFloat(p.Accuracy),
-			Speed:                    optionalFloat(p.Speed),
-			Bearing:                  optionalFloat(p.Bearing),
-			Timestamp:                p.Timestamp,
-			Outcome:                  p.Outcome,
-			Corroboration:            p.Corroboration,
-			AlongShape:               pgtype.Float8{Float64: p.AlongShape, Valid: true},
-			DistanceToShape:          pgtype.Float8{Float64: p.DistanceToShape, Valid: true},
-			ScheduleDeviationSeconds: pgtype.Int4{Int32: int32(p.ScheduleDeviationSeconds), Valid: true},
-		}); err != nil {
-			return fmt.Errorf("insert ride point: %w", err)
+	// One round trip for the whole batch: sqlc's :batchexec queues every insert
+	// on a pgx.Batch and sends it on the transaction. The results must be
+	// drained and closed before any further query runs on the same connection.
+	if len(points) > 0 {
+		params := make([]db.InsertRidePointParams, 0, len(points))
+		for _, p := range points {
+			params = append(params, db.InsertRidePointParams{
+				RideID:                   rideID,
+				Latitude:                 p.Latitude,
+				Longitude:                p.Longitude,
+				Accuracy:                 optionalFloat(p.Accuracy),
+				Speed:                    optionalFloat(p.Speed),
+				Bearing:                  optionalFloat(p.Bearing),
+				Timestamp:                p.Timestamp,
+				Outcome:                  p.Outcome,
+				Corroboration:            p.Corroboration,
+				AlongShape:               pgtype.Float8{Float64: p.AlongShape, Valid: true},
+				DistanceToShape:          pgtype.Float8{Float64: p.DistanceToShape, Valid: true},
+				ScheduleDeviationSeconds: pgtype.Int4{Int32: int32(p.ScheduleDeviationSeconds), Valid: true},
+			})
+		}
+		results := qtx.InsertRidePoint(ctx, params)
+		var insertErr error
+		results.Exec(func(_ int, err error) {
+			if err != nil && insertErr == nil {
+				insertErr = err
+			}
+		})
+		if err := results.Close(); err != nil && insertErr == nil {
+			insertErr = err
+		}
+		if insertErr != nil {
+			return fmt.Errorf("insert ride points: %w", insertErr)
 		}
 	}
 

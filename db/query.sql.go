@@ -734,45 +734,6 @@ func (q *Queries) InsertRide(ctx context.Context, arg InsertRideParams) (Ride, e
 	return i, err
 }
 
-const insertRidePoint = `-- name: InsertRidePoint :exec
-INSERT INTO ride_points (ride_id, latitude, longitude, accuracy, speed, bearing, timestamp, outcome, corroboration,
-  along_shape, distance_to_shape, schedule_deviation_seconds)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-`
-
-type InsertRidePointParams struct {
-	RideID                   string
-	Latitude                 float64
-	Longitude                float64
-	Accuracy                 pgtype.Float8
-	Speed                    pgtype.Float8
-	Bearing                  pgtype.Float8
-	Timestamp                int64
-	Outcome                  string
-	Corroboration            string
-	AlongShape               pgtype.Float8
-	DistanceToShape          pgtype.Float8
-	ScheduleDeviationSeconds pgtype.Int4
-}
-
-func (q *Queries) InsertRidePoint(ctx context.Context, arg InsertRidePointParams) error {
-	_, err := q.db.Exec(ctx, insertRidePoint,
-		arg.RideID,
-		arg.Latitude,
-		arg.Longitude,
-		arg.Accuracy,
-		arg.Speed,
-		arg.Bearing,
-		arg.Timestamp,
-		arg.Outcome,
-		arg.Corroboration,
-		arg.AlongShape,
-		arg.DistanceToShape,
-		arg.ScheduleDeviationSeconds,
-	)
-	return err
-}
-
 const listActiveTripsByVehicle = `-- name: ListActiveTripsByVehicle :many
 SELECT DISTINCT ON (t.vehicle_id)
        t.vehicle_id, t.id, t.route_id, t.gtfs_trip_id, t.user_id, u.name AS driver_name

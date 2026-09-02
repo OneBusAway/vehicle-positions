@@ -137,6 +137,15 @@ func TestRiderStore_EndAllActiveRides_AndCascade(t *testing.T) {
 	r := registerTestRider(t, store)
 	a := startTestRide(t, store, r.ID)
 	b := startTestRide(t, store, r.ID)
+	// Recorded while a is still active; the cascade assertion below needs a
+	// point row to exist in the first place.
+	require.NoError(t, store.RecordRidePoints(context.Background(), a.ID, r.ID,
+		[]RidePointRecord{{Latitude: 1, Longitude: 1, Timestamp: 1, Outcome: "matched", Corroboration: "none"}},
+		RideProgress{State: "pending", PointsTotal: 1, PointsMatched: 1}))
+	before, err := store.queries.CountRidePointsForRide(context.Background(), a.ID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, before)
+
 	n, err := store.EndAllActiveRides(context.Background(), "server_restart")
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, n, int64(2))
@@ -155,8 +164,6 @@ func TestRiderStore_EndAllActiveRides_AndCascade(t *testing.T) {
 	assert.GreaterOrEqual(t, tiers["new"], 1)
 
 	// Deleting the rider cascades to rides and points.
-	require.NoError(t, store.RecordRidePoints(context.Background(), a.ID, r.ID,
-		[]RidePointRecord{{Latitude: 1, Longitude: 1, Timestamp: 1, Outcome: "matched", Corroboration: "none"}}, RideProgress{State: "pending", PointsTotal: 1, PointsMatched: 1}))
 	_, err = store.pool.Exec(context.Background(), "DELETE FROM riders WHERE id = $1", r.ID)
 	require.NoError(t, err)
 	_, err = store.queries.GetRide(context.Background(), a.ID)
@@ -198,9 +205,8 @@ func TestRiderStore_RecordRidePointsDoesNotResurrectEndedRide(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// A batch that was in flight when the ride ended, arriving late. Its points
-	// may still land — they belong to the ride either way — but the ride itself
-	// is finished, and nothing about it may be rewritten.
+	// A batch that was in flight when the ride ended, arriving late. Neither the
+	// ride's counters nor its point history may be rewritten.
 	require.NoError(t, store.RecordRidePoints(context.Background(), ride.ID, r.ID,
 		[]RidePointRecord{{Latitude: 47.6, Longitude: -122.33, Timestamp: 1756800000, Outcome: "matched", Corroboration: "none"}},
 		RideProgress{State: "pending", PointsTotal: 99, PointsMatched: 99}))
@@ -212,4 +218,8 @@ func TestRiderStore_RecordRidePointsDoesNotResurrectEndedRide(t *testing.T) {
 	assert.True(t, got.Corroborated)
 	assert.EqualValues(t, 3, got.PointsTotal, "the finished ride's counters stand")
 	assert.EqualValues(t, 2, got.PointsCorroborated)
+
+	points, err := store.queries.CountRidePointsForRide(context.Background(), ride.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, points, "no points are appended to an ended ride")
 }
