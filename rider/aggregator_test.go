@@ -1,0 +1,248 @@
+package rider
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// aggFixture returns an aggregator plus helpers to build on-schedule points
+// for T1 on 20260902 starting at 08:00 local.
+type aggFixture struct {
+	ix   *Index
+	agg  *Aggregator
+	t1   *TripInfo
+	base time.Time // 08:00 local
+}
+
+func newAggFixture(t *testing.T) *aggFixture {
+	t.Helper()
+	ix := fixtureIndex(t)
+	t1, _ := ix.Trip("T1")
+	return &aggFixture{
+		ix: ix, agg: NewAggregator(DefaultThresholds(), ix.Timezone()), t1: t1,
+		base: time.Date(2026, 9, 2, 8, 0, 0, 0, ix.Timezone()),
+	}
+}
+
+// onSchedulePoint is at `along` metres at the scheduled time for that spot
+// (T1 runs 1001 m in 10 minutes ≈ 1.67 m/s) plus `offset`.
+func (f *aggFixture) onSchedulePoint(along float64, offset time.Duration) Point {
+	ts := f.base.Add(time.Duration(along/1001*600) * time.Second).Add(offset)
+	return Point{Pos: f.t1.Shape.PointAt(along), Accuracy: 5, Speed: 1.7, Bearing: 0, Timestamp: ts}
+}
+
+func (f *aggFixture) addSession(id, riderID string, tier Tier) *Session {
+	s := NewSession(id, riderID, TripKey{"T1", "20260902"}, f.t1, tier, f.base)
+	f.agg.Add(s)
+	return s
+}
+
+func (f *aggFixture) walk(t *testing.T, rideID string, from, to, step float64, lookup func(TripKey) (TrustedVehicle, bool)) BatchResult {
+	t.Helper()
+	var pts []Point
+	for a := from; a <= to; a += step {
+		pts = append(pts, f.onSchedulePoint(a, 0))
+	}
+	now := pts[len(pts)-1].Timestamp.Add(2 * time.Second)
+	res, err := f.agg.ApplyBatch(rideID, pts, lookup, now)
+	require.NoError(t, err)
+	return res
+}
+
+func noCover(TripKey) bool { return false }
+
+func TestAggregator_ApplyBatch_VerifiesAndReportsResult(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierNew)
+	res := f.walk(t, "r1", 0, 60, 10, nil) // 7 points, 6 s apart... all matched
+	assert.Equal(t, Verified, res.State)
+	assert.Equal(t, 7, res.Accepted)
+	assert.Equal(t, 0, res.Ignored)
+	assert.False(t, res.Published, "new rider without corroboration")
+	assert.Equal(t, Unavailable, res.Corroboration)
+	assert.Len(t, res.Points, 7)
+	assert.Equal(t, Matched, res.Points[0].Verdict.Outcome)
+	assert.False(t, res.Ended)
+
+	owner, ok := f.agg.Owner("r1")
+	assert.True(t, ok)
+	assert.Equal(t, "rider-a", owner)
+	id, ok := f.agg.ActiveRideForRider("rider-a")
+	assert.True(t, ok)
+	assert.Equal(t, "r1", id)
+	assert.Equal(t, 1, f.agg.ActiveCount())
+}
+
+func TestAggregator_ApplyBatch_UnknownRide(t *testing.T) {
+	f := newAggFixture(t)
+	_, err := f.agg.ApplyBatch("nope", []Point{f.onSchedulePoint(0, 0)}, nil, f.base)
+	assert.ErrorIs(t, err, ErrUnknownRide)
+}
+
+func TestAggregator_ApplyBatch_SortsAndStopsAtEnd(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierNew)
+	// Reversed order + 6 off-route points: 5 reject, the 6th and the trailing on-route point are ignored.
+	off := LatLon{47.6045, -122.3200} // ~750 m east of the line
+	pts := []Point{
+		{Pos: off, Accuracy: 5, Timestamp: f.base.Add(50 * time.Second)},
+		{Pos: off, Accuracy: 5, Timestamp: f.base.Add(40 * time.Second)},
+		{Pos: off, Accuracy: 5, Timestamp: f.base.Add(30 * time.Second)},
+		{Pos: off, Accuracy: 5, Timestamp: f.base.Add(20 * time.Second)},
+		{Pos: off, Accuracy: 5, Timestamp: f.base.Add(10 * time.Second)},
+		{Pos: off, Accuracy: 5, Timestamp: f.base.Add(60 * time.Second)},
+		f.onSchedulePoint(100, 0),
+	}
+	res, err := f.agg.ApplyBatch("r1", pts, nil, f.base.Add(70*time.Second))
+	require.NoError(t, err)
+	assert.True(t, res.Ended)
+	assert.Equal(t, EndOffRoute, res.EndReason)
+	assert.Equal(t, Rejected, res.State)
+	assert.Equal(t, 5, res.Accepted)
+	assert.Equal(t, 2, res.Ignored)
+	_, ok := f.agg.Owner("r1")
+	assert.False(t, ok, "ended sessions are not owners")
+	_, err = f.agg.ApplyBatch("r1", pts[:1], nil, f.base)
+	assert.ErrorIs(t, err, ErrUnknownRide)
+	assert.NotNil(t, f.agg.Remove("r1"))
+	assert.Nil(t, f.agg.Remove("r1"))
+}
+
+func TestAggregator_TrustedRiderPublishes(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierTrusted)
+	res := f.walk(t, "r1", 0, 30, 10, nil)
+	assert.True(t, res.Published)
+	now := f.onSchedulePoint(30, 5*time.Second).Timestamp
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.Equal(t, TripKey{"T1", "20260902"}, est[0].Key)
+	assert.Equal(t, "R1", est[0].RouteID)
+	assert.Equal(t, 1, est[0].Riders)
+	assert.InDelta(t, 30, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 2)
+	assert.InDelta(t, 0, est[0].Bearing, 1)
+	assert.Equal(t, "ST2", est[0].StopID)
+	assert.Equal(t, 2, est[0].StopSequence)
+	require.NotNil(t, est[0].Speed)
+	assert.InDelta(t, 1.7, *est[0].Speed, 0.01)
+	assert.False(t, est[0].Timestamp.After(now))
+	assert.Equal(t, 1, f.agg.PublishableCount(now, noCover))
+}
+
+func TestAggregator_CorroboratedNewRiderPublishes(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierNew)
+	lookup := func(k TripKey) (TrustedVehicle, bool) {
+		return TrustedVehicle{VehicleID: "v", Pos: f.t1.Shape.PointAt(80), Timestamp: f.base.Add(50 * time.Second)}, true
+	}
+	res := f.walk(t, "r1", 0, 110, 10, lookup) // 12 points, each within 150 m + age allowance
+	assert.True(t, res.Corroborated)
+	assert.True(t, res.Published)
+	assert.Equal(t, Corroborated, res.Corroboration)
+}
+
+func TestAggregator_ConsensusPublishes(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierNew)
+	f.addSession("r2", "rider-b", TierNew)
+	f.walk(t, "r1", 0, 30, 10, nil)
+	f.walk(t, "r2", 20, 50, 10, nil)
+	now := f.onSchedulePoint(50, 5*time.Second).Timestamp
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1, "two new riders within 100 m reach consensus")
+	assert.Equal(t, 2, est[0].Riders)
+	assert.InDelta(t, 40, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 3, "median of 30 and 50")
+
+	reported, riders := f.agg.TripStatus(TripKey{"T1", "20260902"}, now, noCover)
+	assert.True(t, reported)
+	assert.Equal(t, 2, riders)
+}
+
+func TestAggregator_NoConsensusWhenSameRiderOrFarApart(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierNew)
+	f.addSession("r2", "rider-a", TierNew) // same rider id → r1 is replaced as active ride but both sessions exist
+	f.walk(t, "r1", 0, 30, 10, nil)
+	f.walk(t, "r2", 20, 50, 10, nil)
+	now := f.onSchedulePoint(50, 5*time.Second).Timestamp
+	assert.Empty(t, f.agg.Estimates(now, noCover), "same rider twice is not consensus")
+
+	g := newAggFixture(t)
+	g.addSession("r1", "rider-a", TierNew)
+	g.addSession("r2", "rider-b", TierNew)
+	g.walk(t, "r1", 0, 30, 10, nil)
+	g.walk(t, "r2", 300, 330, 10, nil)
+	now = g.onSchedulePoint(330, 5*time.Second).Timestamp
+	assert.Empty(t, g.agg.Estimates(now, noCover), "300 m apart is not consensus")
+	reported, riders := g.agg.TripStatus(TripKey{"T1", "20260902"}, now, noCover)
+	assert.False(t, reported)
+	assert.Equal(t, 2, riders)
+}
+
+func TestAggregator_OutlierExcludedFromEstimate(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierTrusted)
+	f.addSession("r2", "rider-b", TierTrusted)
+	f.addSession("r3", "rider-c", TierTrusted)
+	f.walk(t, "r1", 0, 100, 10, nil)
+	f.walk(t, "r2", 10, 110, 10, nil)
+	// r3 is 400 m ahead but reports at the same wall-clock times as r1, so it
+	// stays fresh (3 min early is inside the schedule window).
+	var pts []Point
+	for i, a := 0, 400.0; a <= 500; a, i = a+10, i+1 {
+		pts = append(pts, Point{Pos: f.t1.Shape.PointAt(a), Accuracy: 5, Speed: 1.7, Timestamp: f.base.Add(time.Duration(i*6) * time.Second)})
+	}
+	_, err := f.agg.ApplyBatch("r3", pts, nil, f.base.Add(70*time.Second))
+	require.NoError(t, err)
+	now := f.base.Add(70 * time.Second)
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.Equal(t, 2, est[0].Riders)
+	assert.InDelta(t, 105, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 3)
+}
+
+func TestAggregator_CoveredAndStaleAndBlocked(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierTrusted)
+	f.walk(t, "r1", 0, 30, 10, nil)
+	now := f.onSchedulePoint(30, 5*time.Second).Timestamp
+	assert.Empty(t, f.agg.Estimates(now, func(TripKey) bool { return true }), "trusted feed covers the trip")
+	assert.Empty(t, f.agg.Estimates(now.Add(2*time.Minute), noCover), "stale after 90 s")
+	f.agg.SetTier("rider-a", TierBlocked)
+	assert.Empty(t, f.agg.Estimates(now, noCover))
+	f.agg.SetTier("rider-a", TierTrusted)
+	assert.Len(t, f.agg.Estimates(now, noCover), 1)
+}
+
+func TestAggregator_Reap(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("idle", "rider-a", TierNew)
+	f.addSession("old", "rider-b", TierNew)
+	f.addSession("live", "rider-c", TierNew)
+	f.walk(t, "live", 0, 10, 10, nil)
+	_, err := f.agg.ApplyBatch("idle", []Point{f.onSchedulePoint(0, 0)}, nil, f.base.Add(5*time.Second))
+	require.NoError(t, err)
+
+	// At 08:16 every session's last accepted point (or start, for "old") is
+	// more than 15 minutes old, so all three are reaped as idle.
+	reaped := f.agg.Reap(f.base.Add(16 * time.Minute))
+	require.Len(t, reaped, 3)
+	for _, s := range reaped {
+		assert.Equal(t, EndIdle, s.EndReason(), s.ID())
+		assert.True(t, s.Ended())
+	}
+	assert.Equal(t, 0, f.agg.ActiveCount())
+
+	g := newAggFixture(t)
+	g.addSession("old", "rider-b", TierNew)
+	_, err = g.agg.ApplyBatch("old", []Point{g.onSchedulePoint(0, 0)}, nil, g.base.Add(5*time.Second))
+	require.NoError(t, err)
+	// Keep it non-idle but past 3 h: the max-duration rule wins.
+	reaped = g.agg.Reap(g.base.Add(3*time.Hour + time.Second))
+	require.Len(t, reaped, 1)
+	assert.Equal(t, EndMaxDuration, reaped[0].EndReason())
+	assert.Equal(t, 0, g.agg.ActiveCount())
+}
