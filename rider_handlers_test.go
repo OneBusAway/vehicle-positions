@@ -556,8 +556,8 @@ func TestPositions_Validation(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, code, "batch too large")
 	_, code = env.upload(t, tok, ride.RideID, []map[string]any{{"latitude": 1, "longitude": 1}})
 	assert.Equal(t, http.StatusBadRequest, code, "missing timestamp")
-	_, code = env.upload(t, tok, ride.RideID, []map[string]any{{"timestamp": env.now.Unix()}})
-	assert.Equal(t, http.StatusBadRequest, code, "missing latitude and longitude")
+	_, code = env.upload(t, tok, ride.RideID, []map[string]any{{"latitude": 91.0, "longitude": 0, "timestamp": env.now.Unix()}})
+	assert.Equal(t, http.StatusBadRequest, code, "coordinates off the globe")
 	_, code = env.upload(t, otherTok, ride.RideID, env.walkPoints(0, 1))
 	assert.Equal(t, http.StatusNotFound, code, "someone else's ride")
 	_, code = env.upload(t, tok, "not-a-uuid", env.walkPoints(0, 1))
@@ -626,6 +626,26 @@ func TestPositions_StoreFailureReturns500(t *testing.T) {
 	assert.Equal(t, 4, env.store.rides[ride.RideID].PointsTotal, "absolute counters heal the record")
 }
 
+func TestPositions_StoreFailureStillFilesAnEndedRide(t *testing.T) {
+	env := newRiderTestEnv(t)
+	riderID, tok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+	pts := env.walkPoints(0, 6)
+	for i := range pts {
+		pts[i]["longitude"] = -122.3200 // ~750 m east of the shape
+	}
+	// failNext is consumed by the first mutating call — recording the points —
+	// so filing the ride afterwards succeeds. The rider is told the batch was
+	// not stored; the ride is over either way.
+	env.store.failNext = assert.AnError
+	_, code := env.upload(t, tok, ride.RideID, pts)
+	assert.Equal(t, http.StatusInternalServerError, code)
+	assert.Equal(t, "ended", env.store.rides[ride.RideID].Status, "the engine ended it, so it is filed")
+	assert.Equal(t, "off_route", env.store.rides[ride.RideID].EndReason)
+	assert.Equal(t, -1, env.store.riders[riderID].Score)
+	assert.Equal(t, 0, env.svc.agg.ActiveCount(), "no session left behind for the reaper")
+}
+
 func TestTripStatus(t *testing.T) {
 	env := newRiderTestEnv(t)
 	_, tok := env.register(t)
@@ -644,4 +664,36 @@ func TestTripStatus(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, env.do(t, "GET", "/api/v1/rider/trips/NOPE/status", tok, nil).Code)
 	assert.Equal(t, http.StatusBadRequest, env.do(t, "GET", "/api/v1/rider/trips/T1/status?start_date=x", tok, nil).Code)
 	assert.Equal(t, http.StatusUnauthorized, env.do(t, "GET", "/api/v1/rider/trips/T1/status", "", nil).Code)
+
+	// A trusted rider riding the trip is enough to publish a position on their
+	// own, so the trip becomes rider-reported once the feed is out of the way.
+	env.trusted.clear(rider.TripKey{TripID: "T1", StartDate: "20260902"})
+	riderID, riderTok := env.register(t)
+	env.store.riders[riderID].Tier = "trusted"
+	ride := env.startRide(t, riderTok, map[string]any{"trip_id": "T1"})
+	_, code := env.upload(t, riderTok, ride.RideID, env.walkPoints(0, 5))
+	require.Equal(t, http.StatusOK, code)
+
+	st = env.tripStatus(t, tok, "T1")
+	assert.True(t, st.RiderReported)
+	assert.Equal(t, 1, st.Riders)
+	assert.False(t, st.Trusted)
+
+	// The agency's own position wins: a covered trip is never rider-reported,
+	// though its riders are still counted.
+	env.trusted.set(rider.TripKey{TripID: "T1", StartDate: "20260902"}, rider.TrustedVehicle{VehicleID: "bus", Timestamp: env.now})
+	st = env.tripStatus(t, tok, "T1")
+	assert.True(t, st.Trusted)
+	assert.False(t, st.RiderReported, "the trusted feed speaks for this trip")
+	assert.Equal(t, 1, st.Riders)
+}
+
+// tripStatus fetches the status of a trip on the current service date.
+func (e *riderTestEnv) tripStatus(t *testing.T, token, tripID string) tripStatusResponse {
+	t.Helper()
+	w := e.do(t, "GET", "/api/v1/rider/trips/"+tripID+"/status", token, nil)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var st tripStatusResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&st))
+	return st
 }

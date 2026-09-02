@@ -406,6 +406,28 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 	}
 }
 
+// resolveRide finds the live ride a client is addressing, and reports whether
+// the caller may go on. It writes the refusal itself: a ride the aggregator no
+// longer holds — or holds only until its outcome is written — has ended, and a
+// ride belonging to someone else is one this rider has no business knowing
+// exists. Both the end and the positions endpoints start here.
+func (s *riderService) resolveRide(w http.ResponseWriter, rideID, riderID string) (rider.RideSnapshot, bool) {
+	snap, ok := s.agg.Snapshot(rideID)
+	if !ok && uuid.Validate(rideID) != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+		return rider.RideSnapshot{}, false
+	}
+	if !ok || snap.Ended {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
+		return rider.RideSnapshot{}, false
+	}
+	if snap.RiderID != riderID {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+		return rider.RideSnapshot{}, false
+	}
+	return snap, true
+}
+
 // handleEndRide closes a ride at the client's request.
 func (s *riderService) handleEndRide() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -425,23 +447,11 @@ func (s *riderService) handleEndRide() http.HandlerFunc {
 			return
 		}
 
-		rideID := r.PathValue("id")
-		snap, ok := s.agg.Snapshot(rideID)
-		if !ok && uuid.Validate(rideID) != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+		snap, ok := s.resolveRide(w, r.PathValue("id"), riderID)
+		if !ok {
 			return
 		}
-		// A well-formed id we no longer hold, or hold only until its outcome is
-		// written, is a ride that has ended.
-		if !ok || snap.Ended {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
-			return
-		}
-		// Another rider's ride is not theirs to know about.
-		if snap.RiderID != riderID {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
-			return
-		}
+		rideID := snap.ID
 
 		if _, err := s.finishRide(r.Context(), rideID, reason); err != nil {
 			if errors.Is(err, errRideNotActive) {
@@ -487,24 +497,11 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 			return
 		}
 
-		rideID := r.PathValue("id")
-		snap, ok := s.agg.Snapshot(rideID)
-		if !ok && uuid.Validate(rideID) != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+		snap, ok := s.resolveRide(w, r.PathValue("id"), riderID)
+		if !ok {
 			return
 		}
-		// A well-formed id the aggregator no longer holds — or holds only until
-		// its outcome is written — is a ride that has ended. The client must
-		// start a new one; its points have nowhere to go.
-		if !ok || snap.Ended {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
-			return
-		}
-		// Another rider's ride is not theirs to know about, let alone report on.
-		if snap.RiderID != riderID {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
-			return
-		}
+		rideID := snap.ID
 
 		var req positionsRequest
 		if !decodeRiderJSON(w, r, &req) {
@@ -548,27 +545,34 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 		}
 
 		// Nothing a blocked rider reports is stored: their points are neither
-		// evidence nor a position, so keeping them would only cost storage.
-		if snap.Tier != rider.TierBlocked {
+		// evidence nor a position, so keeping them would only cost storage. A
+		// batch that produced no points has nothing to say either: the counters
+		// are exactly as the store already has them.
+		var storeErr error
+		if snap.Tier != rider.TierBlocked && len(res.Points) > 0 {
 			progress := progressOf(res.State, res.Corroborated, res.Counts)
-			if err := s.store.RecordRidePoints(r.Context(), rideID, riderID, ridePointRecords(res.Points), progress); err != nil {
-				// The session has already advanced, so this batch cannot be
-				// replayed; the counters are absolute, so the next successful
-				// write heals the record.
-				slog.Error("failed to record ride points", "ride_id", rideID, "error", err)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-				return
+			// The session has already advanced, so this batch cannot be
+			// replayed; the counters are absolute, so the next successful write
+			// heals the record.
+			if storeErr = s.store.RecordRidePoints(r.Context(), rideID, riderID, ridePointRecords(res.Points), progress); storeErr != nil {
+				slog.Error("failed to record ride points", "ride_id", rideID, "error", storeErr)
 			}
 		}
 
 		// The engine ended the ride itself: it was rejected, or contradicted.
-		// The client still gets its verdicts back; the outcome is ours to file.
+		// This happens whether or not the batch could be stored — a ride the
+		// engine has finished with must be filed and its reputation effect
+		// applied, or it lingers in the aggregator until the reaper notices.
 		if res.Ended {
 			if _, err := s.finishRide(r.Context(), rideID, res.EndReason); err != nil && !errors.Is(err, errRideNotActive) {
 				slog.Error("failed to finish a ride the engine ended", "ride_id", rideID, "error", err)
 			}
 		}
 
+		if storeErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
 		writeJSON(w, http.StatusOK, positionsResponse{
 			State:          res.State.String(),
 			Published:      res.Published,
@@ -640,13 +644,14 @@ func (s *riderService) coveredFunc(now time.Time) func(rider.TripKey) bool {
 // engine judges everything else; this only rejects what could not have come
 // from a working device.
 func (p positionUpload) validate() (string, bool) {
-	if p.Timestamp == 0 {
+	if p.Timestamp <= 0 {
 		return "each position needs a timestamp", false
 	}
-	// Null island is what an unset or broken fix reports, so it stands in for
-	// the missing latitude and longitude the wire format cannot express.
-	if p.Latitude < -90 || p.Latitude > 90 || p.Longitude < -180 || p.Longitude > 180 || (p.Latitude == 0 && p.Longitude == 0) {
-		return "each position needs a valid latitude and longitude", false
+	// Coordinates off the globe cannot be judged at all. A zeroed fix is left
+	// to the engine, which ignores null island along with every other point it
+	// cannot use.
+	if p.Latitude < -90 || p.Latitude > 90 || p.Longitude < -180 || p.Longitude > 180 {
+		return "latitude and longitude must be valid coordinates", false
 	}
 	return "", true
 }
@@ -674,8 +679,10 @@ func orMissing(v *float64) float64 {
 
 // reported turns the engine's -1 sentinel back into an absent value, so a
 // reading the device never made is stored as NULL rather than as a number.
+// Only the sentinel itself is absent: a genuinely negative reading is the
+// device's, and stays.
 func reported(v float64) *float64 {
-	if v < 0 {
+	if v == -1 {
 		return nil
 	}
 	return &v
