@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-02 (revised after Fable design review, same day)
 **Status:** Approved for implementation (autonomous run; user pre-approved the pipeline and asked for no further questions)
+**Revision:** revised 2026-09-02 after final review
 **Scope:** A crowdsourced, low-trust vehicle-position ingestion mode for the `vehicle-positions` server, plus an iOS 18+ SwiftPM SDK (`VehiclePositionsKit`) that rider-facing apps (OneBusAway iOS first) use to report their position while aboard a transit vehicle.
 
 ---
@@ -228,7 +229,7 @@ Individual publishability of a ride = `State == Verified && !ended && fresh && t
 
 Feed merge, in `package main`:
 
-- `buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfs.FeedMessage` — driver entities are built exactly as today; rider entities are appended with `id = "rider:" + trip_id + ":" + start_date`, `vehicle.id = "rider:" + trip_id`, `vehicle.label = "Rider-reported"`, `trip.trip_id`, `trip.route_id`, `trip.start_date`, snapped `position` (lat, lon, bearing, optional speed), `timestamp`, `current_stop_sequence`, `stop_id`, `current_status`. Header timestamp remains `max(now, all entity timestamps)` (E012). Driver vehicle ids match `^[a-zA-Z0-9._-]+$` and can never contain `:`, so E052 uniqueness holds by construction.
+- `buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfs.FeedMessage` — driver entities are built exactly as today; rider entities are appended with `id = "rider:" + trip_id + ":" + start_date`, `vehicle.id = "rider:" + trip_id + ":" + start_date` (the same string as the entity id: the same trip on two service dates is two vehicles, and E052 requires vehicle.id to be unique), `vehicle.label = "Rider-reported"`, `trip.trip_id`, `trip.route_id`, `trip.start_date`, snapped `position` (lat, lon, bearing, optional speed), `timestamp`, `current_stop_sequence`, `stop_id`, `current_status`. Header timestamp remains `max(now, all entity timestamps)` (E012). Driver vehicle ids match `^[a-zA-Z0-9._-]+$` and can never contain `:`, so E052 uniqueness holds by construction.
 - `handleGetFeed(tracker *Tracker, estimates estimateSource)` where `type estimateSource interface{ Estimates(now time.Time) []rider.TripEstimate }`; `nil` (mode disabled) means no rider entities. `riderRuntime` implements it by calling the aggregator with `trusted.Covers`.
 - Query `source=driver|rider|all` (default `all`); any other value → `400 {"error":"invalid source"}`. `format` is parsed independently as today.
 
@@ -334,8 +335,10 @@ public struct TripDescriptor: Sendable, Codable, Equatable {
     public var destinationStopID: String?
 }
 
-public enum RideState: String, Sendable, Codable { case pending, verified, rejected }
-public enum Corroboration: String, Sendable, Codable { case unavailable, none, corroborated, contradicted }
+// Both enums carry `unknown` for forward compatibility: a tolerant `init(from:)`
+// maps any raw value this build does not know to `.unknown` rather than throwing.
+public enum RideState: String, Sendable, Codable { case pending, verified, rejected, unknown }
+public enum Corroboration: String, Sendable, Codable { case unavailable, none, corroborated, contradicted, unknown }
 public enum RideEndReason: String, Sendable, Codable {
     case userRequested = "user_requested", arrived, stationary, maxDuration = "max_duration",
          locationUnavailable = "location_unavailable", authorizationDenied = "authorization_denied",
@@ -349,7 +352,7 @@ public struct RideProgress: Sendable, Equatable {
 }
 public struct RideSummary: Sendable, Codable, Equatable { points, matched, corroborated: Int; durationSeconds: Int }
 public struct TripStatus: Sendable, Codable, Equatable { tripID, startDate: String; trusted, riderReported: Bool; riders: Int }
-public enum RideWarning: Sendable, Equatable { case uploadRetrying(attempt: Int), accuracyLimited, insufficientlyInUse }
+public enum RideWarning: Sendable, Equatable { case uploadRetrying(attempt: Int), accuracyLimited, insufficientlyInUse, batchRejected(status: Int) }
 public enum RideEvent: Sendable, Equatable {
     case registered(riderID: String)
     case started(rideID: String)
@@ -376,18 +379,18 @@ public actor RideReporter {
 ```
 
 Seams (all `Sendable` protocols):
-- `RideTransport`: `func send(_ request: RiderRequest) async throws -> RiderResponse` where `RiderRequest{method, path, body: Data?, bearerToken: String?}` and `RiderResponse{status: Int, body: Data}`. `URLSessionRideTransport` uses a regular `URLSession` (10 s request timeout); background sessions are wrong for a 5 s cadence.
+- `RideTransport`: `func send(_ request: RiderRequest, baseURL: URL) async throws -> RiderResponse` where `RiderRequest{method, path, query: [String: String], body: Data?, bearerToken: String?}` and `RiderResponse{status: Int, body: Data}`. `path` is already percent-encoded (trip and ride ids are escaped with `.urlPathAllowed` minus `/`), so a transport must not escape it again. `RiderClient`, which builds these five requests, is **internal**: `RideReporter` is the public surface. `URLSessionRideTransport` uses a regular `URLSession` (10 s request timeout); background sessions are wrong for a 5 s cadence.
 - `LocationSource`: `func updates() -> AsyncThrowingStream<LocationSample, Error>` and `func beginBackgroundActivity() -> any BackgroundActivityHandle` (`invalidate()`); `LocationSample{coordinate, horizontalAccuracy, speed, course, timestamp, isStationary, diagnostic: LocationDiagnostic?}` with `LocationDiagnostic` ∈ `authorizationDenied, locationUnavailable, accuracyLimited, insufficientlyInUse`. `CoreLocationSource` iterates `CLLocationUpdate.liveUpdates(.otherNavigation)`, maps `update.stationary` and the iOS 18 diagnostic Bools, creates a `CLServiceSession(authorization: .whenInUse)` and a `CLBackgroundActivitySession` (both retained for the ride, invalidated on end).
 - `CredentialStore`: `load() -> RiderCredentials?`, `save(_:)`, `clear()` with `RiderCredentials{installationID, riderID, token}`; `KeychainCredentialStore` (service `org.onebusaway.vehiclepositionskit`) in production, `InMemoryCredentialStore` in tests.
-- `RideClock`: `now() -> ContinuousClock.Instant`-style abstraction plus `sleep(for:)`; `ManualRideClock` in tests drives batching, stationary and max-duration timers deterministically.
+- `RideClock`: `var now: Date` (wall clock — a jump may make a timer fire once early or late, which is accepted for a ride that lasts minutes) plus `sleep(for:)`; `ManualRideClock` in tests drives batching, stationary and max-duration timers deterministically.
 
 **Behaviour**
 
 1. `start` must be called while the app is in the foreground (a `CLBackgroundActivitySession` can only be created there; this is documented, not enforced). If a ride is active it is ended first with `.superseded`. The reporter loads credentials, registers when none exist (or re-registers once after a `401`), calls start-ride, stores `report_interval_seconds`, `max_batch_size` and `destination`, begins the background activity, and consumes `updates()`. Authorization prompting is CoreLocation's: iterating `liveUpdates` prompts if needed; hosts are advised to request When-In-Use up front for better UX. When-In-Use is sufficient; Always is not requested.
 2. Samples are buffered; every `report_interval_seconds` or when `max_batch_size` samples are buffered, a batch is uploaded. Failed uploads retry with exponential backoff (1, 2, 4, … 30 s cap) and the buffer keeps the newest 10 minutes of samples. After `uploadFailureTimeout` of continuous failure the ride ends locally with `.networkFailure` (the server reaps it as `idle`).
-3. Each positions response updates `currentState` and emits `.progress`; `"ended": true` ends the ride locally with the server's reason. A `409` ends the ride with `.serverRestart` (the server no longer knows it).
-4. The reporter ends the ride itself on: the destination coordinate coming within `arrivalRadiusMeters` after the ride has travelled ≥ `minimumTravelBeforeArrivalMeters` straight-line from its first fix; `isStationary` persisting for `stationaryTimeout`; `maxRideDuration`; an `authorizationDenied` or `locationUnavailable` diagnostic (`.authorizationDenied` / `.locationUnavailable`); the host calling `end`. `accuracyLimited` and `insufficientlyInUse` are surfaced as warnings only.
-5. Ending always performs one final flush and the end-ride call (best effort, 10 s total), emits `.ended`, finishes the stream, and invalidates the background activity.
+3. Each positions response updates `currentState` and emits `.progress`; `"ended": true` ends the ride locally with the server's reason. A `409` ends the ride with `.serverRestart` (the server no longer knows it). A 4xx other than `401`, `409` and `429`, and a response this build cannot decode, **drop** the batch — it is not restored to the buffer and does not count against the retry budget — and emit `.warning(.batchRejected(status:))` (`0` for a decoding failure); `429`, 5xx and transport failures keep the retry-with-backoff path.
+4. The reporter ends the ride itself on: the destination coordinate coming within `arrivalRadiusMeters` after the ride has travelled ≥ `minimumTravelBeforeArrivalMeters` straight-line from its first fix; `isStationary` persisting for `stationaryTimeout` (judged on the clock in the upload tick, not only on arriving samples: `liveUpdates` pauses while the device is still, so a second stationary sample may never come); `maxRideDuration`; an `authorizationDenied` or `locationUnavailable` diagnostic (`.authorizationDenied` / `.locationUnavailable`); the host calling `end`. `accuracyLimited` and `insufficientlyInUse` are surfaced as warnings only.
+5. Ending always performs one final flush — at most two batches, so a device with ten minutes of buffered fixes cannot outrun the budget — and the end-ride call (best effort, 10 s total, raced against `clock.sleep`; a teardown that loses the race keeps running detached while `end` returns), emits `.ended`, finishes the stream, and invalidates the background activity.
 6. The stream returned by `start` finishes exactly once, after `.ended`. Registration and ride lifecycle never include any identifier other than the random installation UUID; the SDK exposes no way to attach user identity.
 
 **Host integration notes** (documented in the package README, not implemented here): add `location` to `UIBackgroundModes` (the OneBusAway app currently has only `remote-notification`); `NSLocationWhenInUseUsageDescription` is already declared; the blue location pill is shown for the duration of the ride, matching Transit's visible-while-active behaviour; recreate the reporter when the region (server URL) changes, exactly as the app does for `RESTAPIService`.
