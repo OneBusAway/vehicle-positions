@@ -4,6 +4,8 @@ github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERo
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs v1.0.0 h1:f4P+fVYmSIWj4b/jvbMdmrmsx/Xb+5xCpYYtVXOdKoc=
 github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs v1.0.0/go.mod h1:nSmbVVQSM4lp9gYvVaaTotnRxSwZXEdFnJARofg5V4g=
+github.com/OneBusAway/go-gtfs v1.1.1 h1:JWl0ndXHBED6PAh8v3w0UgSDYWBg2OmHvAJb5RXX3Ss=
+github.com/OneBusAway/go-gtfs v1.1.1/go.mod h1:MJqNyFOJs+iE1R6uerTyfBY6g3/sxvTvVdRhDeN1bu8=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
 github.com/containerd/errdefs v1.0.0/go.mod h1:+YBYIdtsnF4Iw6nWZhJcqGSg/dwvV7tyJ/kCkyJ2k+M=
 github.com/containerd/errdefs/pkg v0.3.0 h1:9IKJ06FvyNlexW690DXuQNx2KA2cUJXx151Xdx3ZPPE=
