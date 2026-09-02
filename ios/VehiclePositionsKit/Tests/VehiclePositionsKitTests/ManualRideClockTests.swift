@@ -32,9 +32,18 @@ import Testing
         }
         #expect(await clock.waitForSleepers(atLeast: 2))
 
-        clock.advance(by: .seconds(10))
-        try await long.value
+        // Advance past only the shorter deadline first: the later-registered
+        // sleeper must wake alone, which no registration-order scheme could
+        // produce. Then advance past the longer one. Waiting on each task
+        // before the next advance keeps the observed order independent of
+        // how the executor happens to schedule two simultaneously-resumed
+        // tasks.
+        clock.advance(by: .seconds(1))
         try await short.value
+        #expect(log.entries == ["short"])
+        #expect(clock.sleeperCount == 1)
+        clock.advance(by: .seconds(9))
+        try await long.value
         #expect(log.entries == ["short", "long"])
     }
 
