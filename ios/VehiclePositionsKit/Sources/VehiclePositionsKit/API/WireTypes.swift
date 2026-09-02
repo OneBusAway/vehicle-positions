@@ -1,8 +1,9 @@
 import Foundation
 
-// The rider API speaks snake_case JSON (spec §4.3–4.4). Every type below spells
-// its keys out explicitly rather than relying on a key-encoding strategy, so the
-// wire format is readable here and cannot drift with encoder configuration.
+// The rider API speaks snake_case JSON (spec §4.3–4.4). Every key that is not
+// already its property's name is spelled out here rather than left to a
+// key-encoding strategy, so the wire format is readable in the type and cannot
+// drift with encoder configuration.
 
 /// `POST /api/v1/rider/register` body.
 public struct RegisterRequest: Codable, Sendable, Equatable {
@@ -62,34 +63,6 @@ public struct RegisterResponse: Codable, Sendable, Equatable {
         case token
         case reportIntervalSeconds = "report_interval_seconds"
         case maxBatchSize = "max_batch_size"
-    }
-}
-
-/// `POST /api/v1/rider/rides` body. Absent detail is omitted, not sent empty.
-public struct StartRideRequest: Codable, Sendable, Equatable {
-    public var tripID: String
-    public var startDate: String?
-    public var routeID: String?
-    public var vehicleID: String?
-    public var boardingStopID: String?
-    public var destinationStopID: String?
-
-    public init(_ trip: TripDescriptor) {
-        tripID = trip.tripID
-        startDate = trip.startDate
-        routeID = trip.routeID
-        vehicleID = trip.vehicleID
-        boardingStopID = trip.boardingStopID
-        destinationStopID = trip.destinationStopID
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case tripID = "trip_id"
-        case startDate = "start_date"
-        case routeID = "route_id"
-        case vehicleID = "vehicle_id"
-        case boardingStopID = "boarding_stop_id"
-        case destinationStopID = "destination_stop_id"
     }
 }
 
@@ -169,10 +142,6 @@ public struct PositionUpload: Codable, Sendable, Equatable {
         self.bearing = bearing
         self.timestamp = timestamp
     }
-
-    private enum CodingKeys: String, CodingKey {
-        case latitude, longitude, accuracy, speed, bearing, timestamp
-    }
 }
 
 /// `POST /api/v1/rider/rides/{id}/positions` body.
@@ -181,10 +150,6 @@ public struct PositionsRequest: Codable, Sendable, Equatable {
 
     public init(positions: [PositionUpload]) {
         self.positions = positions
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case positions
     }
 }
 
@@ -240,10 +205,6 @@ public struct EndRideRequest: Codable, Sendable, Equatable {
     public init(reason: RideEndReason) {
         self.reason = reason
     }
-
-    private enum CodingKeys: String, CodingKey {
-        case reason
-    }
 }
 
 /// `POST /api/v1/rider/rides/{id}/end` response.
@@ -255,10 +216,6 @@ public struct EndRideResponse: Codable, Sendable, Equatable {
         self.status = status
         self.summary = summary
     }
-
-    private enum CodingKeys: String, CodingKey {
-        case status, summary
-    }
 }
 
 /// The body the server returns with a non-2xx status.
@@ -267,10 +224,6 @@ public struct ServerErrorBody: Codable, Sendable {
 
     public init(error: String) {
         self.error = error
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case error
     }
 }
 

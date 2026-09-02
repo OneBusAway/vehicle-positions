@@ -13,13 +13,11 @@ actor EventCollector {
     }
     private func append(_ e: RideEvent) { events.append(e) }
     /// Polls until `predicate` is satisfied or `timeout` elapses (real time).
-    func wait(timeout: Duration = .seconds(5), _ predicate: @Sendable ([RideEvent]) -> Bool) async -> Bool {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
-            if predicate(events) { return true }
-            try? await Task.sleep(for: .milliseconds(5))
+    func wait(timeout: Duration = .seconds(5), _ predicate: @Sendable @escaping ([RideEvent]) -> Bool) async -> Bool {
+        await poll(timeout: timeout) { [weak self] in
+            guard let self else { return false }
+            return await predicate(self.events)
         }
-        return predicate(events)
     }
     func waitForEnd(timeout: Duration = .seconds(5)) async -> RideEndReason? {
         _ = await wait(timeout: timeout) { $0.contains { if case .ended = $0 { return true }; return false } }

@@ -26,7 +26,7 @@ import Testing
 
     @Test func startRideRequestOmitsNilKeys() throws {
         let trip = TripDescriptor(tripID: "1_604321", startDate: "20260902", destinationStopID: "1_75414")
-        let obj = try json(RiderAPICodec.encode(StartRideRequest(trip)))
+        let obj = try json(RiderAPICodec.encode(trip))
         #expect(obj["trip_id"] as? String == "1_604321")
         #expect(obj["start_date"] as? String == "20260902")
         #expect(obj["destination_stop_id"] as? String == "1_75414")

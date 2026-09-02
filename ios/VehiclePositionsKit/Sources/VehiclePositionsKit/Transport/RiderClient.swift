@@ -33,7 +33,7 @@ struct RiderClient: Sendable {
             RiderRequest(
                 method: "POST",
                 path: "api/v1/rider/rides",
-                body: try encode(StartRideRequest(trip)),
+                body: try encode(trip),
                 bearerToken: token
             ),
             decoding: StartRideResponse.self

@@ -35,12 +35,8 @@ import Testing
         /// fixes: the sync point tests need before they move the manual clock,
         /// since emitting a sample says nothing about it having been consumed.
         func waitForBuffered(_ count: Int, timeout: Duration = .seconds(5)) async -> Bool {
-            let deadline = ContinuousClock.now + timeout
-            while ContinuousClock.now < deadline {
-                if await reporter.pendingFixCount >= count { return true }
-                try? await Task.sleep(for: .milliseconds(5))
-            }
-            return await reporter.pendingFixCount >= count
+            let reporter = self.reporter
+            return await poll(timeout: timeout) { await reporter.pendingFixCount >= count }
         }
     }
 

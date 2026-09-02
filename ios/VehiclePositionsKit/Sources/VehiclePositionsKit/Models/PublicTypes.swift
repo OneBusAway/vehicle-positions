@@ -65,6 +65,18 @@ public struct TripDescriptor: Sendable, Codable, Equatable {
         self.boardingStopID = boardingStopID
         self.destinationStopID = destinationStopID
     }
+
+    // A trip descriptor is the body of `POST /api/v1/rider/rides` as it
+    // stands, so it spells its own wire keys; the synthesized encoding omits
+    // the ones that are nil.
+    private enum CodingKeys: String, CodingKey {
+        case tripID = "trip_id"
+        case startDate = "start_date"
+        case routeID = "route_id"
+        case vehicleID = "vehicle_id"
+        case boardingStopID = "boarding_stop_id"
+        case destinationStopID = "destination_stop_id"
+    }
 }
 
 /// How far the server has got in believing a ride.
@@ -103,17 +115,37 @@ public enum RideEndReason: String, Sendable, Codable, CaseIterable {
     case offRoute = "off_route", contradicted, implausible, offSchedule = "off_schedule"
     case superseded, serverRestart = "server_restart", idle
 
-    /// Reasons the server accepts from a client (spec §4.4).
-    public var isClientReportable: Bool {
+    /// What ending a ride for this reason asks of the client: one switch over
+    /// the reasons, so a reason added later cannot be classified one way in the
+    /// wire layer and another in the reporter.
+    var disposition: EndDisposition {
         switch self {
         case .userRequested, .arrived, .stationary, .maxDuration,
              .locationUnavailable, .authorizationDenied, .networkFailure, .appTerminated:
-            true
-        case .offRoute, .contradicted, .implausible, .offSchedule,
-             .superseded, .serverRestart, .idle:
-            false
+            .reportable
+        // The client decided this one, but the ride that supersedes this one
+        // tells the server so; this one only owes it the last of its fixes.
+        case .superseded:
+            .flushOnly
+        // The server reached these on its own. It ended the ride before the
+        // client knew, so there is nothing left worth sending it.
+        case .offRoute, .contradicted, .implausible, .offSchedule, .serverRestart, .idle:
+            .silent
         }
     }
+
+    /// Reasons the server accepts from a client (spec §4.4).
+    public var isClientReportable: Bool { disposition == .reportable }
+}
+
+/// What a client still owes the server when a ride ends.
+enum EndDisposition {
+    /// Send the last of the buffered fixes, then report the end.
+    case reportable
+    /// Send the last of the buffered fixes, but do not report the end.
+    case flushOnly
+    /// Send nothing: the server reached this reason itself and knows already.
+    case silent
 }
 
 /// The server's running verdict on an in-flight ride.

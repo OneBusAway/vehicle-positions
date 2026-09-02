@@ -125,20 +125,15 @@ public actor RideReporter {
 
         let (stream, continuation) = AsyncStream<RideEvent>.makeStream()
         do {
-            let credentials = try loadOrCreateCredentials()
-            var token: String
-            if let stored = credentials.token {
-                token = stored
-            } else {
-                token = try await register(installationID: credentials.installationID, into: continuation)
-            }
+            var token = try await authorizedToken(into: continuation)
 
             let response: StartRideResponse
             do {
                 response = try await client.startRide(token: token, trip: trip)
             } catch RideError.notAuthorized {
                 // The stored token has expired: one fresh registration, one retry.
-                token = try await register(installationID: credentials.installationID, into: continuation)
+                clearStoredToken()
+                token = try await authorizedToken(into: continuation)
                 response = try await client.startRide(token: token, trip: trip)
             }
 
@@ -184,9 +179,15 @@ public actor RideReporter {
 
     /// Ends the running ride. Idempotent, and safe to call from either loop.
     public func end(reason: RideEndReason = .userRequested) async {
-        guard var ride = active, !ride.ending else { return }
-        ride.ending = true
-        active = ride
+        guard active?.ending == false,
+              let rideID = active?.rideID, let token = active?.token,
+              let maxBatchSize = active?.maxBatchSize,
+              // The stream and the background handle are this ride's, and the
+              // teardown below suspends: a `start` may install another ride
+              // meanwhile, and these two must still be the old one's.
+              let continuation = active?.continuation, let handle = active?.handle
+        else { return }
+        active?.ending = true
 
         locationTask?.cancel()
         uploadTask?.cancel()
@@ -197,9 +198,10 @@ public actor RideReporter {
         // every other reason — superseded and abandoned rides included — sends
         // what is still buffered before it goes.
         var batches: [[PositionUpload]] = []
-        if !reason.isServerInitiated {
-            while ride.buffer.count > 0, batches.count < Self.endFlushBatchLimit {
-                batches.append(ride.buffer.take(max: ride.maxBatchSize).map(Self.upload))
+        if reason.disposition != .silent {
+            // Drained in place, through `active`: see `consume`.
+            while (active?.buffer.count ?? 0) > 0, batches.count < Self.endFlushBatchLimit {
+                batches.append((active?.buffer.take(max: maxBatchSize) ?? []).map(Self.upload))
             }
         }
         // Reasons only the server may reach are already known to it: reporting
@@ -209,8 +211,6 @@ public actor RideReporter {
         if !batches.isEmpty || reportsEnd {
             let pending = batches
             let client = self.client
-            let token = ride.token
-            let rideID = ride.rideID
             // Unstructured so this teardown outlives the cancellation of the
             // loop it may have been called from; every call is best-effort.
             let teardown = Task { () -> RideSummary? in
@@ -227,12 +227,12 @@ public actor RideReporter {
             summary = await withinEndBudget(teardown)
         }
 
-        ride.continuation.yield(.ended(reason, summary: summary))
-        ride.continuation.finish()
-        ride.handle.invalidate()
+        continuation.yield(.ended(reason, summary: summary))
+        continuation.finish()
+        handle.invalidate()
         // A `start` that ran while this teardown awaited the server owns the
         // slot now; clearing it would orphan the ride it just installed.
-        if active?.rideID == ride.rideID { active = nil }
+        if active?.rideID == rideID { active = nil }
     }
 
     /// The most batches a final flush may send. A device that has been offline
@@ -270,17 +270,20 @@ public actor RideReporter {
     /// How the server sees `tripID` right now, registering first if this device
     /// has never registered.
     public func tripStatus(tripID: String, startDate: String?) async throws -> TripStatus {
-        let credentials = try loadOrCreateCredentials()
-        let token: String
-        if let stored = credentials.token {
-            token = stored
-        } else {
-            token = try await register(installationID: credentials.installationID, into: nil)
-        }
+        let token = try await authorizedToken(into: nil)
         return try await client.tripStatus(token: token, tripID: tripID, startDate: startDate)
     }
 
     // MARK: - Credentials
+
+    /// The token to call the API with: the one this device has stored, or the
+    /// one a fresh registration issues when it has none. `into` receives the
+    /// `.registered` event when a registration happens.
+    private func authorizedToken(into continuation: AsyncStream<RideEvent>.Continuation?) async throws -> String {
+        let credentials = try loadOrCreateCredentials()
+        if let stored = credentials.token { return stored }
+        return try await register(installationID: credentials.installationID, into: continuation)
+    }
 
     private func loadOrCreateCredentials() throws -> RiderCredentials {
         if let existing = try credentialStore.load() { return existing }
@@ -334,33 +337,38 @@ public actor RideReporter {
     }
 
     /// Applies one sample. Returns true when the loop should stop.
+    ///
+    /// The ride is mutated in place, through `active`, rather than read into a
+    /// local and written back: `ActiveRide` holds the sample buffer, and while
+    /// a copy of the ride is alive the buffer's array is shared, so appending
+    /// to the copy would deep-copy every buffered fix on every single sample.
+    /// Nothing between the first read and the last write suspends, so no other
+    /// call can interleave and see the ride half-updated.
     private func consume(_ sample: LocationSample, rideID: String) async -> Bool {
-        guard var ride = active, ride.rideID == rideID, !ride.ending else { return true }
+        guard active?.rideID == rideID, active?.ending == false else { return true }
 
-        if let reason = ride.evaluator.evaluate(sample, now: clock.now) {
-            active = ride
+        if let reason = active?.evaluator.evaluate(sample, now: clock.now) {
             await end(reason: reason)
             return true
         }
 
         switch sample.diagnostic {
-        case .accuracyLimited where !ride.warnedAccuracy:
-            ride.warnedAccuracy = true
-            ride.continuation.yield(.warning(.accuracyLimited))
-        case .insufficientlyInUse where !ride.warnedInUse:
-            ride.warnedInUse = true
-            ride.continuation.yield(.warning(.insufficientlyInUse))
+        case .accuracyLimited where active?.warnedAccuracy == false:
+            active?.warnedAccuracy = true
+            active?.continuation.yield(.warning(.accuracyLimited))
+        case .insufficientlyInUse where active?.warnedInUse == false:
+            active?.warnedInUse = true
+            active?.continuation.yield(.warning(.insufficientlyInUse))
         default:
             break
         }
 
         if let fix = sample.fix {
-            ride.buffer.append(fix, now: clock.now)
+            active?.buffer.append(fix, now: clock.now)
         }
         // A full batch goes now rather than waiting out the interval — but not
         // while uploads are failing, which would ride straight over the backoff.
-        let batchIsFull = ride.buffer.count >= ride.maxBatchSize && ride.failureAttempts == 0
-        active = ride
+        let batchIsFull = active.map { $0.buffer.count >= $0.maxBatchSize && $0.failureAttempts == 0 } ?? false
         if batchIsFull { await flush() }
         return false
     }
@@ -401,12 +409,13 @@ public actor RideReporter {
 
     /// Sends one batch, if there is one, and folds the answer back into the ride.
     private func flush() async {
-        guard !isUploading else { return }
-        guard var ride = active, !ride.ending, ride.buffer.count > 0 else { return }
-        let rideID = ride.rideID
-        let token = ride.token
-        let batch = ride.buffer.take(max: ride.maxBatchSize)
-        active = ride
+        guard !isUploading, active?.ending == false,
+              let rideID = active?.rideID, let token = active?.token,
+              let maxBatchSize = active?.maxBatchSize
+        else { return }
+        // Taken in place, through `active`: see `consume`.
+        let batch = active?.buffer.take(max: maxBatchSize) ?? []
+        guard !batch.isEmpty else { return }
         isUploading = true
         defer { isUploading = false }
 
@@ -465,19 +474,20 @@ public actor RideReporter {
     }
 
     private func restore(_ batch: [LocationFix], rideID: String) {
-        guard var ride = active, ride.rideID == rideID else { return }
-        ride.buffer.restore(batch)
-        active = ride
+        guard active?.rideID == rideID else { return }
+        // Restored in place, through `active`: see `consume`.
+        active?.buffer.restore(batch)
     }
 
     private func recordUploadFailure(_ batch: [LocationFix], rideID: String) async {
-        guard var ride = active, ride.rideID == rideID, !ride.ending else { return }
-        ride.buffer.restore(batch)
-        ride.failureAttempts += 1
-        let since = ride.failingSince ?? clock.now
-        ride.failingSince = since
-        ride.continuation.yield(.warning(.uploadRetrying(attempt: ride.failureAttempts)))
-        active = ride
+        guard active?.rideID == rideID, active?.ending == false else { return }
+        // Restored in place, through `active`: see `consume`.
+        active?.buffer.restore(batch)
+        let attempt = (active?.failureAttempts ?? 0) + 1
+        let since = active?.failingSince ?? clock.now
+        active?.failureAttempts = attempt
+        active?.failingSince = since
+        active?.continuation.yield(.warning(.uploadRetrying(attempt: attempt)))
 
         if clock.now.timeIntervalSince(since) >= configuration.uploadFailureTimeout.timeInterval {
             await end(reason: .networkFailure)
@@ -506,16 +516,3 @@ public actor RideReporter {
     }
 }
 
-extension RideEndReason {
-    /// Reasons the server reaches on its own. It ended the ride before we knew,
-    /// so there is nothing left worth sending it.
-    var isServerInitiated: Bool {
-        switch self {
-        case .offRoute, .contradicted, .implausible, .offSchedule, .serverRestart, .idle:
-            true
-        case .userRequested, .arrived, .stationary, .maxDuration, .locationUnavailable,
-             .authorizationDenied, .networkFailure, .appTerminated, .superseded:
-            false
-        }
-    }
-}

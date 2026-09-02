@@ -15,8 +15,15 @@ struct SampleBuffer: Sendable {
 
     mutating func append(_ fix: LocationFix, now: Date) {
         fixes.append(fix)
+        // Fixes go in oldest-first, so everything past its retention is a
+        // prefix: find where the retained window starts and drop up to there,
+        // rather than testing — and re-packing around — every element.
         let cutoff = now.addingTimeInterval(-retention.timeInterval)
-        fixes.removeAll { $0.timestamp < cutoff }
+        guard let firstKept = fixes.firstIndex(where: { $0.timestamp >= cutoff }) else {
+            fixes.removeAll(keepingCapacity: true)
+            return
+        }
+        if firstKept > 0 { fixes.removeFirst(firstKept) }
     }
 
     /// Removes and returns up to `max` fixes, oldest first.

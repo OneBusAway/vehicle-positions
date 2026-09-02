@@ -94,19 +94,9 @@ final class FakeRideTransport: RideTransport, @unchecked Sendable {
         recorded.map(\.request).filter { Self.key(for: $0) == key }
     }
 
-    /// Polls (real time) until a request for `key` has been recorded. A
-    /// cancelled caller gives up rather than spinning out the timeout.
+    /// Polls (real time) until a request for `key` has been recorded.
     func waitForRequest(matching key: String, timeout: Duration = .seconds(5)) async -> Bool {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
-            if !requests(matching: key).isEmpty { return true }
-            do {
-                try await Task.sleep(for: .milliseconds(5))
-            } catch {
-                return false
-            }
-        }
-        return !requests(matching: key).isEmpty
+        await poll(timeout: timeout) { !self.requests(matching: key).isEmpty }
     }
 
     static func ok(_ status: Int = 200, json: String) -> Result<RiderResponse, any Error> {
