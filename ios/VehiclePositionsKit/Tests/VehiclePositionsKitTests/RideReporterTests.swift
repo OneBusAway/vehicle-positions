@@ -1,0 +1,227 @@
+import Foundation
+import Testing
+@testable import VehiclePositionsKit
+
+@Suite(.serialized) struct RideReporterTests {
+    struct Env {
+        let transport = FakeRideTransport()
+        let location = FakeLocationSource()
+        let credentials = InMemoryCredentialStore()
+        let clock = ManualRideClock()
+        let reporter: RideReporter
+        init(config: RideReporterConfiguration? = nil) {
+            let cfg = config ?? RideReporterConfiguration(serverURL: URL(string: "https://vp.example.org")!, appID: "org.test", appVersion: "1")
+            reporter = RideReporter(configuration: cfg, transport: transport, locationSource: location, credentialStore: credentials, clock: clock)
+        }
+        static let registerJSON = #"{"rider_id":"r1","token":"tok","report_interval_seconds":5,"max_batch_size":3}"#
+        static let startJSON = #"{"ride_id":"ride1","state":"pending","report_interval_seconds":5,"max_batch_size":3,"destination":{"stop_id":"S","latitude":47.6090,"longitude":-122.33}}"#
+        static func positionsJSON(state: String = "verified", published: Bool = false, ended: Bool = false, reason: String = "") -> String {
+            #"{"state":"\#(state)","published":\#(published),"corroboration":"unavailable","accepted":3,"ignored":0,"off_route_streak":0,"ended":\#(ended),"end_reason":"\#(reason)"}"#
+        }
+        static let endJSON = #"{"status":"ride ended","summary":{"points":3,"matched":3,"corroborated":0,"duration_seconds":30}}"#
+        func scriptHappyPath() {
+            transport.script("POST register", FakeRideTransport.ok(201, json: Self.registerJSON))
+            transport.script("POST rides", FakeRideTransport.ok(201, json: Self.startJSON))
+            transport.script("POST positions", FakeRideTransport.ok(json: Self.positionsJSON()))
+            transport.script("POST end", FakeRideTransport.ok(json: Self.endJSON))
+        }
+        /// Emits `n` fixes moving north from 47.6000 in 10 m steps, timestamps from the manual clock.
+        func emitFixes(_ n: Int, startLat: Double = 47.6000) {
+            for i in 0..<n {
+                location.emitFix(lat: startLat + Double(i) * 0.00009, lon: -122.33, at: clock.now.addingTimeInterval(Double(i)))
+            }
+        }
+    }
+
+    @Test func registersStartsUploadsAndEnds() async throws {
+        let env = Env(); env.scriptHappyPath()
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        #expect(await events.wait { $0.contains(.registered(riderID: "r1")) && $0.contains(.started(rideID: "ride1")) })
+        #expect(await env.reporter.currentState == .pending)
+        #expect(try env.credentials.load()?.token == "tok")
+        #expect(env.location.handles.count == 1)
+
+        env.emitFixes(2)
+        #expect(await env.clock.waitForSleepers(atLeast: 1))
+        env.clock.advance(by: .seconds(5))
+        #expect(await events.wait { $0.contains { if case .progress(let p) = $0 { return p.state == .verified }; return false } })
+        #expect(await env.reporter.currentState == .verified)
+        let upload = try #require(env.transport.requests(matching: "POST positions").first)
+        let body = try #require(JSONSerialization.jsonObject(with: upload.body!) as? [String: Any])
+        #expect((body["positions"] as? [[String: Any]])?.count == 2)
+
+        await env.reporter.end(reason: .userRequested)
+        #expect(await events.waitForEnd() == .userRequested)
+        let endReq = try #require(env.transport.requests(matching: "POST end").first)
+        #expect(String(data: endReq.body!, encoding: .utf8)!.contains("user_requested"))
+        #expect(env.location.lastHandleInvalidated)
+        #expect(await env.reporter.isActive == false)
+        #expect(await env.reporter.currentState == nil)
+    }
+
+    @Test func batchSizeTriggersImmediateUpload() async throws {
+        let env = Env(); env.scriptHappyPath()
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.emitFixes(3) // max_batch_size = 3
+        #expect(await events.wait { $0.contains { if case .progress = $0 { return true }; return false } })
+        #expect(env.transport.requests(matching: "POST positions").count == 1)
+        await env.reporter.end()
+    }
+
+    @Test func reusesStoredCredentialsAndReRegistersOn401() async throws {
+        let env = Env()
+        try env.credentials.save(RiderCredentials(installationID: "inst", riderID: "old", token: "expired"))
+        env.transport.script("POST rides", FakeRideTransport.error(401, message: "invalid token"), FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST register", FakeRideTransport.ok(200, json: Env.registerJSON))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        #expect(await events.wait { $0.contains(.started(rideID: "ride1")) })
+        #expect(env.transport.requests(matching: "POST register").count == 1)
+        #expect(env.transport.requests(matching: "POST rides").count == 2)
+        #expect(try env.credentials.load()?.token == "tok")
+        #expect(try env.credentials.load()?.installationID == "inst", "installation id is stable across re-registration")
+        await env.reporter.end()
+    }
+
+    @Test func serverEndsRideViaPositionsResponse() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST positions", FakeRideTransport.ok(json: Env.positionsJSON(state: "rejected", ended: true, reason: "off_route")))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.emitFixes(3)
+        #expect(await events.waitForEnd() == .offRoute)
+        #expect(env.transport.requests(matching: "POST end").isEmpty, "server-initiated end sends no end request")
+        #expect(await env.reporter.isActive == false)
+    }
+
+    @Test func conflictMeansServerRestart() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST positions", FakeRideTransport.error(409, message: "ride ended"))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.emitFixes(3)
+        #expect(await events.waitForEnd() == .serverRestart)
+    }
+
+    @Test func retriesWithBackoffThenGivesUp() async throws {
+        var cfg = RideReporterConfiguration(serverURL: URL(string: "https://vp.example.org")!, appID: "a", appVersion: "1")
+        cfg.uploadFailureTimeout = .seconds(60)
+        let env = Env(config: cfg)
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST positions", FakeRideTransport.transportFailure)
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.emitFixes(3) // immediate upload → fails → warning(attempt 1)
+        #expect(await events.wait { $0.contains(.warning(.uploadRetrying(attempt: 1))) })
+        // backoff 1 s, 2 s, 4 s, 8 s, 16 s, 32→30 s: after 60 s of failure the ride ends.
+        for _ in 0..<8 {
+            _ = await env.clock.waitForSleepers(atLeast: 1)
+            env.clock.advance(by: .seconds(16))
+        }
+        #expect(await events.waitForEnd() == .networkFailure)
+        #expect(env.transport.requests(matching: "POST positions").count >= 4)
+    }
+
+    @Test func arrivalEndsRide() async throws {
+        let env = Env(); env.scriptHappyPath()
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1", destinationStopID: "S"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.location.emitFix(lat: 47.6000, lon: -122.33, at: env.clock.now)
+        env.location.emitFix(lat: 47.6050, lon: -122.33, at: env.clock.now)
+        env.location.emitFix(lat: 47.6087, lon: -122.33, at: env.clock.now) // ~33 m from the destination
+        #expect(await events.waitForEnd() == .arrived)
+        let endReq = try #require(env.transport.requests(matching: "POST end").first)
+        #expect(String(data: endReq.body!, encoding: .utf8)!.contains("arrived"))
+    }
+
+    @Test func stationaryAndMaxDurationEndRide() async throws {
+        var cfg = RideReporterConfiguration(serverURL: URL(string: "https://vp.example.org")!, appID: "a", appVersion: "1")
+        cfg.stationaryTimeout = .seconds(20)
+        let env = Env(config: cfg); env.scriptHappyPath()
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        // A full batch, so the progress event proves the reporter consumed the
+        // stationary run while the clock still read t0 — advancing before it
+        // does would start the stationary timer 25 s late.
+        for _ in 0..<3 { env.location.emitFix(lat: 47.6, lon: -122.33, at: env.clock.now, stationary: true) }
+        #expect(await events.wait { $0.contains { if case .progress = $0 { return true }; return false } })
+        env.clock.advance(by: .seconds(25))
+        env.location.emitFix(lat: 47.6, lon: -122.33, at: env.clock.now, stationary: true)
+        #expect(await events.waitForEnd() == .stationary)
+
+        var cfg2 = cfg
+        cfg2.maxRideDuration = .seconds(12)
+        let env2 = Env(config: cfg2); env2.scriptHappyPath()
+        let stream2 = try await env2.reporter.start(TripDescriptor(tripID: "T1"))
+        let events2 = EventCollector(stream2)
+        _ = await events2.wait { $0.contains(.started(rideID: "ride1")) }
+        for _ in 0..<3 {
+            _ = await env2.clock.waitForSleepers(atLeast: 1)
+            env2.clock.advance(by: .seconds(5))
+        }
+        #expect(await events2.waitForEnd() == .maxDuration)
+    }
+
+    @Test func diagnosticsEndOrWarn() async throws {
+        let env = Env(); env.scriptHappyPath()
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.location.emit(LocationSample(fix: nil, diagnostic: .accuracyLimited))
+        #expect(await events.wait { $0.contains(.warning(.accuracyLimited)) })
+        env.location.emit(LocationSample(fix: nil, diagnostic: .authorizationDenied))
+        #expect(await events.waitForEnd() == .authorizationDenied)
+    }
+
+    @Test func startingAgainSupersedes() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON), FakeRideTransport.ok(201, json: Env.startJSON.replacingOccurrences(of: "ride1", with: "ride2")))
+        env.transport.script("POST positions", FakeRideTransport.ok(json: Env.positionsJSON()))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        let s1 = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let e1 = EventCollector(s1)
+        _ = await e1.wait { $0.contains(.started(rideID: "ride1")) }
+        let s2 = try await env.reporter.start(TripDescriptor(tripID: "T2"))
+        let e2 = EventCollector(s2)
+        #expect(await e1.waitForEnd() == .superseded)
+        #expect(await e2.wait { $0.contains(.started(rideID: "ride2")) })
+        #expect(env.location.handles.count == 2)
+        #expect(env.location.handles[0].invalidated)
+        await env.reporter.end()
+    }
+
+    @Test func startFailureLeavesNoActiveRide() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.error(404, message: "unknown trip"))
+        await #expect(throws: RideError.server(status: 404, message: "unknown trip")) {
+            _ = try await env.reporter.start(TripDescriptor(tripID: "NOPE"))
+        }
+        #expect(await env.reporter.isActive == false)
+        #expect(env.location.handles.isEmpty)
+    }
+
+    @Test func tripStatusRegistersWhenNeeded() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("GET status", FakeRideTransport.ok(json: #"{"trip_id":"T1","start_date":"20260902","trusted":false,"rider_reported":true,"riders":1}"#))
+        let s = try await env.reporter.tripStatus(tripID: "T1", startDate: nil)
+        #expect(s.riderReported)
+        #expect(env.transport.requests(matching: "GET status").first?.bearerToken == "tok")
+    }
+}
