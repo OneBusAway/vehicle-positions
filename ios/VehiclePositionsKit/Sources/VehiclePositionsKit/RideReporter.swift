@@ -97,7 +97,15 @@ public actor RideReporter {
         startTask = task
         // Only the newest start owns the slot; an older one must not clear it.
         defer { if startTask == task { startTask = nil } }
-        return try await task.value
+        // The work is unstructured, so the caller's cancellation — a SwiftUI
+        // `.task` going away, say — has to be handed on explicitly. Without
+        // this a cancelled `.task` would leave a ride running and a background
+        // handle held with nobody left to end them.
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func performStart(_ trip: TripDescriptor) async throws -> AsyncStream<RideEvent> {
@@ -124,6 +132,11 @@ public actor RideReporter {
                 response = try await client.startRide(token: token, trip: trip)
             }
 
+            // The caller may have gone away while the server was answering. A
+            // start nobody is waiting on installs nothing: no ride, no location
+            // subscription, no background handle.
+            try Task.checkCancellation()
+
             // Subscribe before the first sample can arrive, so nothing emitted
             // between here and the first loop iteration is lost.
             let updates = locationSource.updates()
@@ -148,6 +161,10 @@ public actor RideReporter {
             continuation.yield(.started(rideID: rideID))
             return stream
         } catch {
+            // Nothing after the ride is installed throws today, but a failure
+            // that ever did would leave it reporting into a stream nobody
+            // holds. It has no owner left: end it.
+            if active != nil { await end(reason: .userRequested) }
             // Nobody will ever read this stream; leave no consumer hanging.
             continuation.finish()
             throw error

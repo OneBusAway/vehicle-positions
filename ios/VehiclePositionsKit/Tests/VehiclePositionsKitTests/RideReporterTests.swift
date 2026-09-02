@@ -326,4 +326,19 @@ import Testing
         #expect(s.riderReported)
         #expect(env.transport.requests(matching: "GET status").first?.bearerToken == "tok")
     }
+
+    @Test func cancellingStartInstallsNothing() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.hold("POST rides") // the ride request stays in flight
+
+        let start = Task { try await env.reporter.start(TripDescriptor(tripID: "T1")) }
+        #expect(await env.transport.waitForRequest(matching: "POST rides"))
+        start.cancel()
+
+        await #expect(throws: CancellationError.self) { _ = try await start.value }
+        #expect(await env.reporter.isActive == false)
+        #expect(env.location.handles.isEmpty, "a cancelled start holds no background activity")
+    }
 }
