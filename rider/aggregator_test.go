@@ -111,6 +111,32 @@ func TestAggregator_ApplyBatch_SortsAndStopsAtEnd(t *testing.T) {
 	assert.Nil(t, f.agg.Remove("r1"))
 }
 
+// offRoutePoint is ~750 m east of T1's line, so it can never match the shape.
+func (f *aggFixture) offRoutePoint(offset time.Duration) Point {
+	return Point{Pos: LatLon{47.6045, -122.3200}, Accuracy: 5, Speed: 1.7, Timestamp: f.base.Add(offset)}
+}
+
+func TestAggregator_ApplyBatch_AppliesOldestFirst(t *testing.T) {
+	f := newAggFixture(t)
+	s := f.addSession("r1", "rider-a", TierNew)
+	// Newest first. Verify refuses a point that is not newer than the previous
+	// one, so without sorting only the first of these would ever be applied.
+	var pts []Point
+	for a := 30.0; a >= 0; a -= 10 {
+		pts = append(pts, f.onSchedulePoint(a, 0))
+	}
+	res, err := f.agg.ApplyBatch("r1", pts, nil, f.onSchedulePoint(30, 2*time.Second).Timestamp)
+	require.NoError(t, err)
+	assert.Equal(t, 4, res.Accepted)
+	assert.Equal(t, 0, res.Ignored)
+	assert.Equal(t, Verified, res.State)
+	for _, ap := range res.Points {
+		assert.Equal(t, Matched, ap.Verdict.Outcome)
+	}
+	require.NotNil(t, s.Latest())
+	assert.InDelta(t, 30, s.Latest().AlongShape, 2, "the newest point is applied last")
+}
+
 func TestAggregator_TrustedRiderPublishes(t *testing.T) {
 	f := newAggFixture(t)
 	f.addSession("r1", "rider-a", TierTrusted)
@@ -209,6 +235,29 @@ func TestAggregator_OutlierExcludedFromEstimate(t *testing.T) {
 	require.Len(t, est, 1)
 	assert.Equal(t, 2, est[0].Riders)
 	assert.InDelta(t, 105, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 3)
+}
+
+func TestAggregator_EstimateUsesLatestMatchedPoint(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierTrusted)
+	f.walk(t, "r1", 0, 100, 10, nil)
+	// Three off-route points: accepted and freshening the ride, but short of the
+	// five that would reject it, so the rider is still verified and publishing.
+	pts := []Point{f.offRoutePoint(65 * time.Second), f.offRoutePoint(70 * time.Second), f.offRoutePoint(75 * time.Second)}
+	now := f.base.Add(80 * time.Second)
+	res, err := f.agg.ApplyBatch("r1", pts, nil, now)
+	require.NoError(t, err)
+	require.Equal(t, Verified, res.State)
+	require.False(t, res.Ended)
+	require.True(t, res.Published)
+
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.InDelta(t, 100, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 3,
+		"the vehicle is where the rider last matched, not where they wandered off to")
+	assert.Equal(t, f.onSchedulePoint(100, 0).Timestamp, est[0].Timestamp,
+		"the estimate is dated by the point that positioned it")
+	assert.Equal(t, 1, est[0].Riders)
 }
 
 func TestAggregator_CoveredAndStaleAndBlocked(t *testing.T) {

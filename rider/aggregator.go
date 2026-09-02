@@ -174,7 +174,10 @@ func (a *Aggregator) ApplyBatch(rideID string, points []Point, lookup func(TripK
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	s, ok := a.sessions[rideID]
-	if !ok || s.Ended() {
+	// The ride may have ended, been removed, or been replaced by a ride on a
+	// different trip while the lock was released for lookup; a trusted position
+	// fetched for the old trip says nothing about the new one.
+	if !ok || s.Ended() || s.Key() != key {
 		return BatchResult{}, ErrUnknownRide
 	}
 
@@ -268,8 +271,10 @@ func (a *Aggregator) PublishableCount(now time.Time, covered func(TripKey) bool)
 
 // TripStatus answers what the riders are saying about one trip: whether their
 // position is being published for it, and how many riders are contributing to
-// it. Only the riders behind the estimate count — a rider whose points have
-// gone stale is no longer saying anything about where the vehicle is.
+// it. riders counts the contributing sessions — live, verified, not blocked and
+// fresh — as they stand before the outlier trim, so it can exceed the Riders of
+// the TripEstimate for the same trip, which counts only the riders left after
+// the trim. A rider whose points have gone stale counts in neither.
 func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey) bool) (riderReported bool, riders int) {
 	g, ok := a.groups(now)[key]
 	if !ok {
@@ -340,7 +345,9 @@ func expiry(s *Session, now time.Time) (EndReason, bool) {
 }
 
 // estimateMember is one rider's contribution to a trip estimate, copied out of
-// the session so the estimate can be computed without holding the lock.
+// the session so the estimate can be computed without holding the lock. It is
+// the rider's latest *matched* point: an off-route or implausible point is not
+// a position anyone should be told the vehicle is at.
 type estimateMember struct {
 	riderID     string
 	along       float64
@@ -353,6 +360,9 @@ type estimateMember struct {
 // verified, not blocked, and whose latest point is fresh enough to position the
 // vehicle with. Every consumer of a group — the estimate and the trip status —
 // works from this one selection, so the two cannot disagree about who counts.
+// Freshness is judged on the latest point of any kind, because a rider still
+// reporting is still there; the position itself comes from the latest matched
+// one.
 type tripGroup struct {
 	trip    *TripInfo
 	members []estimateMember
@@ -368,17 +378,22 @@ func (a *Aggregator) groups(now time.Time) map[TripKey]*tripGroup {
 		if s.Ended() || s.Tier() == TierBlocked || s.State() != Verified || !s.Fresh(now, a.th.PointMaxAge) {
 			continue
 		}
+		// A verified session always has a matched point; the check is what makes
+		// that an invariant of the group rather than an assumption.
+		matched := s.LatestMatched()
+		if matched == nil {
+			continue
+		}
 		g, ok := out[s.Key()]
 		if !ok {
 			g = &tripGroup{trip: s.Trip()}
 			out[s.Key()] = g
 		}
-		latest := s.Latest()
 		g.members = append(g.members, estimateMember{
 			riderID:     s.RiderID(),
-			along:       latest.AlongShape,
-			speed:       latest.Speed,
-			timestamp:   latest.Timestamp,
+			along:       matched.AlongShape,
+			speed:       matched.Speed,
+			timestamp:   matched.Timestamp,
 			publishable: s.Publishable(now, a.th.PointMaxAge),
 		})
 	}
