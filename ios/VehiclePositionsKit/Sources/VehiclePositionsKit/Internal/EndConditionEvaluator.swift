@@ -31,7 +31,10 @@ struct EndConditionEvaluator: Sendable {
             if now.timeIntervalSince(since) >= configuration.stationaryTimeout.timeInterval {
                 return .stationary
             }
-        } else {
+        } else if sample.fix != nil {
+            // Only a real fix is evidence of movement. A diagnostic-only sample
+            // says nothing about whether the device moved, so it must not hand
+            // a parked bus another full stationary timeout.
             stationarySince = nil
         }
 

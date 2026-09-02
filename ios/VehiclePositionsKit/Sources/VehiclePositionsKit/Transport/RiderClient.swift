@@ -54,7 +54,10 @@ public struct RiderClient: Sendable {
     }
 
     public func endRide(token: String, rideID: String, reason: RideEndReason) async throws -> EndRideResponse {
-        try await perform(
+        // Server-only reasons (spec §4.4) are the server's verdict to reach, not
+        // ours to claim: sending one is a bug here, not a 400 to handle at runtime.
+        precondition(reason.isClientReportable, "\(reason.rawValue) is not a reason a client may report")
+        return try await perform(
             RiderRequest(
                 method: "POST",
                 path: "api/v1/rider/rides/\(rideID)/end",
@@ -103,6 +106,12 @@ public struct RiderClient: Sendable {
         let response: RiderResponse
         do {
             response = try await transport.send(request, baseURL: serverURL)
+        } catch is CancellationError {
+            // The ride was torn down. That is not a network failure, and callers
+            // structure their cancellation handling around CancellationError.
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch {
             throw RideError.transport(String(describing: error))
         }

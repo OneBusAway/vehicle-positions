@@ -38,6 +38,15 @@ import Testing
         #expect(e.evaluate(sample(lat: 47.6, stationary: true), now: t0.addingTimeInterval(1300)) == .stationary)
     }
 
+    @Test func diagnosticSamplesDoNotResetStationaryTimer() {
+        var e = EndConditionEvaluator(configuration: config, destination: nil)
+        let t0 = Date(timeIntervalSince1970: 0)
+        #expect(e.evaluate(sample(lat: 47.6, stationary: true), now: t0) == nil)
+        #expect(e.evaluate(LocationSample(fix: nil, diagnostic: .accuracyLimited), now: t0.addingTimeInterval(300)) == nil)
+        #expect(e.evaluate(sample(lat: 47.6, stationary: true), now: t0.addingTimeInterval(601)) == .stationary,
+                "a fixless diagnostic is not evidence of movement")
+    }
+
     @Test func diagnostics() {
         var e = EndConditionEvaluator(configuration: config, destination: nil)
         #expect(e.evaluate(LocationSample(fix: nil, diagnostic: .accuracyLimited), now: Date()) == nil)

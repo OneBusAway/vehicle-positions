@@ -54,6 +54,21 @@ import Testing
         #expect(req.query == ["start_date": "20260902"])
     }
 
+    @Test func cancellationPassesThrough() async throws {
+        let t = FakeRideTransport()
+        t.script("POST positions",
+                 .failure(CancellationError()),
+                 .failure(URLError(.cancelled)))
+        let c = RiderClient(serverURL: base, transport: t)
+        let pos = [PositionUpload(latitude: 1, longitude: 2, accuracy: nil, speed: nil, bearing: nil, timestamp: 3)]
+        await #expect(throws: CancellationError.self, "a cancelled ride is not a transport failure") {
+            try await c.uploadPositions(token: "t", rideID: "r", positions: pos)
+        }
+        await #expect(throws: CancellationError.self, "URLError.cancelled is cancellation, not a network error") {
+            try await c.uploadPositions(token: "t", rideID: "r", positions: pos)
+        }
+    }
+
     @Test func errorMapping() async throws {
         let t = FakeRideTransport()
         t.script("POST positions",

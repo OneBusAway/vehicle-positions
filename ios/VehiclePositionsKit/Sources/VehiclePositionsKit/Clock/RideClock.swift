@@ -100,28 +100,37 @@ public final class ManualRideClock: RideClock, @unchecked Sendable {
         }
     }
 
-    /// Moves `now` forward and wakes every sleeper whose deadline has passed.
+    /// Moves `now` forward and wakes every sleeper whose deadline has passed,
+    /// earliest deadline first — a single `advance` past several deadlines wakes
+    /// sleepers in the order real time would have.
     public func advance(by duration: Duration) {
         let due: [CheckedContinuation<Void, any Error>] = lock.withLock {
             currentTime = currentTime.addingTimeInterval(duration.timeInterval)
-            var woken: [CheckedContinuation<Void, any Error>] = []
+            var woken: [(deadline: Date, id: Int, continuation: CheckedContinuation<Void, any Error>)] = []
             for id in Array(states.keys) {
                 guard case .parked(let deadline, let continuation) = states[id], deadline <= currentTime else { continue }
                 states[id] = nil
-                woken.append(continuation)
+                woken.append((deadline, id, continuation))
             }
-            return woken
+            // Ties break on id, so two sleepers with the same deadline wake in
+            // the order they went to sleep.
+            return woken.sorted { ($0.deadline, $0.id) < ($1.deadline, $1.id) }.map(\.continuation)
         }
         for continuation in due { continuation.resume() }
     }
 
     /// Waits — in real time, not clock time — until at least `n` sleepers are
-    /// parked. Returns false if `timeout` elapses first.
+    /// parked. Returns false if `timeout` elapses or the caller is cancelled.
     public func waitForSleepers(atLeast n: Int, timeout: Duration = .seconds(2)) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout.timeInterval)
         while sleeperCount < n {
             guard Date() < deadline else { return false }
-            try? await Task.sleep(for: .milliseconds(1))
+            do {
+                try await Task.sleep(for: .milliseconds(1))
+            } catch {
+                // Cancelled: stop polling rather than spin out the timeout.
+                return false
+            }
         }
         return true
     }

@@ -24,7 +24,14 @@ final class FakeLocationSource: LocationSource, @unchecked Sendable {
 
     func updates() -> AsyncThrowingStream<LocationSample, any Error> {
         AsyncThrowingStream { continuation in
-            lock.withLock { self.continuation = continuation }
+            // A second call supersedes the first; finish the old stream so a
+            // consumer of it cannot hang waiting for samples that now go elsewhere.
+            let superseded = lock.withLock {
+                let previous = self.continuation
+                self.continuation = continuation
+                return previous
+            }
+            superseded?.finish()
         }
     }
 
