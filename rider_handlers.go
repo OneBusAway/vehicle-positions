@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"mime"
@@ -22,9 +23,8 @@ const (
 	// riderMaxBatchSize is the most positions one report may carry.
 	riderMaxBatchSize = 12
 	// riderMaxBodyBytes caps a rider request body. The largest of them is a
-	// batch of riderMaxBatchSize positions, which is orders of magnitude
-	// smaller than this.
-	riderMaxBodyBytes = 1 << 20
+	// batch of riderMaxBatchSize positions, which is comfortably under this.
+	riderMaxBodyBytes = 1 << 16
 	// riderMaxFieldLen bounds the free-text identifiers a client may send, so
 	// nothing absurd reaches the database.
 	riderMaxFieldLen = 100
@@ -34,6 +34,11 @@ const (
 	riderBatchInterval = 2 * time.Second
 	riderBatchBurst    = 2
 )
+
+// errRideNotActive is returned by finishRide when the ride is no longer one
+// the server can end: the aggregator has let go of it, or the database says it
+// already ended. Either way the client must start a new ride.
+var errRideNotActive = errors.New("ride is not active")
 
 // serviceDatePattern is the only shape a client-supplied start_date may take.
 var serviceDatePattern = regexp.MustCompile(`^[0-9]{8}$`)
@@ -311,20 +316,24 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 
 		// One rider rides one vehicle. The old ride goes through finishRide so
 		// its reputation outcome is applied and its session stops publishing.
+		// A ride that has already gone is nothing to supersede.
 		if oldID, ok := s.agg.ActiveRideForRider(riderID); ok {
-			if old, ok := s.agg.Session(oldID); ok {
-				if _, err := s.finishRide(r.Context(), old, rider.EndSuperseded); err != nil {
-					slog.Error("failed to supersede the rider's previous ride", "ride_id", oldID, "error", err)
-					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-					return
-				}
+			if _, err := s.finishRide(r.Context(), oldID, rider.EndSuperseded); err != nil && !errors.Is(err, errRideNotActive) {
+				slog.Error("failed to supersede the rider's previous ride", "ride_id", oldID, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				return
 			}
 		}
 
 		rd, err := s.store.GetRider(r.Context(), riderID)
 		if err != nil {
-			slog.Warn("start ride: rider not found", "rider_id", riderID, "error", err)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unknown rider"})
+			if errors.Is(err, ErrRiderNotFound) {
+				slog.Warn("start ride: rider not found", "rider_id", riderID)
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unknown rider"})
+				return
+			}
+			slog.Error("failed to load rider", "rider_id", riderID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
@@ -381,42 +390,44 @@ func (s *riderService) handleEndRide() http.HandlerFunc {
 		}
 
 		rideID := r.PathValue("id")
-		owner, live := s.agg.Owner(rideID)
-		if !live {
-			// A well-formed id we no longer hold is a ride that has ended;
-			// anything else never existed.
-			if uuid.Validate(rideID) != nil {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
-				return
-			}
+		snap, ok := s.agg.Snapshot(rideID)
+		if !ok && uuid.Validate(rideID) != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+			return
+		}
+		// A well-formed id we no longer hold, or hold only until its outcome is
+		// written, is a ride that has ended.
+		if !ok || snap.Ended {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
 			return
 		}
 		// Another rider's ride is not theirs to know about.
-		if owner != riderID {
+		if snap.RiderID != riderID {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
 			return
 		}
-		sess, ok := s.agg.Session(rideID)
-		if !ok {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
-			return
-		}
 
-		if _, err := s.finishRide(r.Context(), sess, reason); err != nil {
+		if _, err := s.finishRide(r.Context(), rideID, reason); err != nil {
+			if errors.Is(err, errRideNotActive) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
+				return
+			}
 			slog.Error("failed to end ride", "ride_id", rideID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
-		sum := sess.Summary()
+		// finishRide ends the session at s.now(), so this is the duration it
+		// recorded. A store-assigned start ahead of the clock is reported as
+		// nothing rather than as a negative ride.
+		duration := max(s.now().Sub(snap.StartedAt), 0)
 		writeJSON(w, http.StatusOK, endRideResponse{
 			Status: "ride ended",
 			Summary: rideSummaryJSON{
-				Points:          sum.Counts.Total,
-				Matched:         sum.Counts.Matched,
-				Corroborated:    sum.Counts.Corroborated,
-				DurationSeconds: int(sum.Duration.Seconds()),
+				Points:          snap.Counts.Total,
+				Matched:         snap.Counts.Matched,
+				Corroborated:    snap.Counts.Corroborated,
+				DurationSeconds: int(duration.Seconds()),
 			},
 		})
 	}
@@ -436,52 +447,65 @@ func (s *riderService) handleTripStatus() http.HandlerFunc {
 	}
 }
 
-// finishRide persists what a ride amounted to and retires its session. The
-// session is only ended and unregistered once the store has accepted the
-// outcome: a failed write leaves the ride live, so the caller — or the reaper —
-// can try again rather than losing the ride's points and its reputation
-// effect. A session that has already ended (rejected, or reaped) keeps its own
-// end reason; the first end wins.
-func (s *riderService) finishRide(ctx context.Context, sess *rider.Session, reason rider.EndReason) (*Rider, error) {
-	if sess.Ended() {
-		reason = sess.EndReason()
+// finishRide persists what a ride amounted to and retires its session. It
+// works from a snapshot rather than the session itself: a registered session is
+// only ever read under the aggregator's lock, because points may still be being
+// applied to it. The session is ended and unregistered only once the store has
+// accepted the outcome — a failed write leaves the ride live so the caller, or
+// the reaper, can try again rather than losing the ride's points and its
+// reputation effect. A session that ended itself (rejected, or reaped) keeps
+// its own end reason; the first end wins.
+func (s *riderService) finishRide(ctx context.Context, rideID string, reason rider.EndReason) (*Rider, error) {
+	snap, ok := s.agg.Snapshot(rideID)
+	if !ok {
+		return nil, errRideNotActive
+	}
+	if snap.Ended {
+		reason = snap.EndReason
 	}
 
-	summary := sess.Summary()
+	summary := snap.Summary
 	summary.EndReason = reason
 	outcome := RideOutcome{
 		EndReason:    string(reason),
-		Progress:     progressFrom(sess),
+		Progress:     progressFrom(snap),
 		ScoreDelta:   rider.ScoreDelta(summary),
-		Rejected:     summary.State == rider.Rejected,
-		Corroborated: summary.Corroborated,
+		Rejected:     snap.State == rider.Rejected,
+		Corroborated: snap.Corroborated,
 	}
 
-	updated, err := s.store.FinishRide(ctx, sess.ID(), outcome)
+	updated, err := s.store.FinishRide(ctx, rideID, outcome)
 	if err != nil {
+		// The row has already ended: this session is stale, and retrying it
+		// forever would only keep it registered.
+		if errors.Is(err, ErrRideNotFound) {
+			s.agg.Remove(rideID)
+			return nil, errRideNotActive
+		}
 		return nil, err
 	}
 
-	// Unregister before ending: once the aggregator has let go of the session
-	// nothing else can be applying points to it.
-	s.agg.Remove(sess.ID())
-	sess.End(reason, s.now())
+	// Unregistering first is what makes ending the session safe: once the
+	// aggregator has let go of it, nothing else holds it.
+	sess := s.agg.Remove(rideID)
+	if sess != nil && !snap.Ended {
+		sess.End(reason, s.now())
+	}
 	// A score change lands on the ride the rider has in flight, if the ride
 	// that just ended was not it.
 	s.agg.SetTier(updated.ID, rider.ParseTier(updated.Tier))
 	return updated, nil
 }
 
-// progressFrom is the ride progress a session has accumulated.
-func progressFrom(sess *rider.Session) RideProgress {
-	counts := sess.Counts()
+// progressFrom is the ride progress a snapshot has accumulated.
+func progressFrom(snap rider.RideSnapshot) RideProgress {
 	return RideProgress{
-		State:              sess.State().String(),
-		Corroborated:       sess.Corroborated(),
-		PointsTotal:        counts.Total,
-		PointsMatched:      counts.Matched,
-		PointsCorroborated: counts.Corroborated,
-		PointsContradicted: counts.Contradicted,
+		State:              snap.State.String(),
+		Corroborated:       snap.Corroborated,
+		PointsTotal:        snap.Counts.Total,
+		PointsMatched:      snap.Counts.Matched,
+		PointsCorroborated: snap.Counts.Corroborated,
+		PointsContradicted: snap.Counts.Contradicted,
 	}
 }
 

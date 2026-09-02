@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -322,6 +323,22 @@ func TestRiderRegister(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code, "case %d: %s", i, w.Body.String())
 	}
 
+	// Bodies the decoder must reject outright. The oversized one is checked by
+	// its message too: the body cap, not the app_version length rule, is what
+	// has to stop it.
+	raw := []struct{ name, body, contains string }{
+		{"trailing data", `{"installation_id":"` + uuid.NewString() + `","platform":"ios"}{"more":1}`, "single JSON object"},
+		{"body past the cap", `{"installation_id":"` + uuid.NewString() + `","platform":"ios","app_version":"` + strings.Repeat("x", riderMaxBodyBytes) + `"}`, "too large"},
+	}
+	for _, tc := range raw {
+		req := httptest.NewRequest("POST", "/api/v1/rider/register", strings.NewReader(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		env.mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code, tc.name)
+		assert.Contains(t, w.Body.String(), tc.contains, tc.name)
+	}
+
 	req := httptest.NewRequest("POST", "/api/v1/rider/register", bytes.NewBufferString("{}"))
 	w = httptest.NewRecorder()
 	env.mux.ServeHTTP(w, req)
@@ -422,4 +439,18 @@ func TestFinishRide_StoreFailureKeepsSession(t *testing.T) {
 	w = env.do(t, "POST", "/api/v1/rider/rides/"+resp.RideID+"/end", tok, map[string]any{"reason": "arrived"})
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, 0, env.svc.agg.ActiveCount())
+}
+
+func TestFinishRide_AlreadyEndedInStoreDropsSession(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	resp := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+
+	// The row ended behind the server's back (a restart's EndAllActiveRides,
+	// say). The session is stale, not retryable.
+	env.store.rides[resp.RideID].Status = "ended"
+
+	w := env.do(t, "POST", "/api/v1/rider/rides/"+resp.RideID+"/end", tok, map[string]any{"reason": "arrived"})
+	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	assert.Equal(t, 0, env.svc.agg.ActiveCount(), "the stale session is dropped rather than retried forever")
 }

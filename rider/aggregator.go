@@ -107,14 +107,47 @@ func (a *Aggregator) Owner(rideID string) (string, bool) {
 	return s.RiderID(), true
 }
 
-// Session returns the registered session of a ride, ended or not. Owner
-// answers who may post to a ride; this is for the caller that has to persist
-// what a ride amounted to, which an ended-but-not-yet-removed ride still needs.
-func (a *Aggregator) Session(rideID string) (*Session, bool) {
+// RideSnapshot is everything a caller outside this package needs to know about
+// a live ride, copied out by value. It exists so that no registered session's
+// pointer ever escapes the aggregator: a registered session is read and written
+// only under a.mu, and a snapshot is the way to read one.
+type RideSnapshot struct {
+	ID           string
+	RiderID      string
+	Key          TripKey
+	State        State
+	Corroborated bool
+	Ended        bool
+	EndReason    EndReason
+	StartedAt    time.Time
+	Counts       Counts
+	Summary      RideSummary
+}
+
+// Snapshot copies out the state of a registered ride, whether or not it has
+// ended: an ended ride is still registered until its outcome is persisted, and
+// that is exactly the caller that needs this. Unknown ride ids report false.
+// Taking the snapshot under the lock is what lets a caller decide what a ride
+// amounted to while batches are still being applied to other rides.
+func (a *Aggregator) Snapshot(rideID string) (RideSnapshot, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	s, ok := a.sessions[rideID]
-	return s, ok
+	if !ok {
+		return RideSnapshot{}, false
+	}
+	return RideSnapshot{
+		ID:           s.ID(),
+		RiderID:      s.RiderID(),
+		Key:          s.Key(),
+		State:        s.State(),
+		Corroborated: s.Corroborated(),
+		Ended:        s.Ended(),
+		EndReason:    s.EndReason(),
+		StartedAt:    s.StartedAt(),
+		Counts:       s.Counts(),
+		Summary:      s.Summary(),
+	}, true
 }
 
 // ActiveRideForRider returns the rider's newest live ride, if they have one.
