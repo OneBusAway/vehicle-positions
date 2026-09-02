@@ -222,3 +222,67 @@ WHERE ctid IN (
     ORDER BY expired.received_at
     LIMIT sqlc.arg('batch_size')
 );
+
+-- name: UpsertRider :one
+INSERT INTO riders (id, installation_id, platform, app_id, app_version)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (installation_id) DO UPDATE
+  SET last_seen_at = NOW(), app_version = EXCLUDED.app_version, platform = EXCLUDED.platform, app_id = EXCLUDED.app_id
+RETURNING *, (xmax = 0) AS created;
+
+-- name: GetRider :one
+SELECT * FROM riders WHERE id = $1;
+
+-- name: TouchRider :exec
+UPDATE riders SET last_seen_at = NOW() WHERE id = $1;
+
+-- name: ApplyRideOutcome :one
+UPDATE riders SET
+  score = LEAST(10, GREATEST(-10, score + $2)),
+  rides_total = rides_total + 1,
+  rides_corroborated = rides_corroborated + $3,
+  rides_rejected = rides_rejected + $4,
+  last_seen_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: SetRiderTier :exec
+UPDATE riders SET tier = $2 WHERE id = $1;
+
+-- name: CountRidersByTier :many
+SELECT tier, COUNT(*) AS count FROM riders GROUP BY tier;
+
+-- name: InsertRide :one
+INSERT INTO rides (id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: GetRide :one
+SELECT * FROM rides WHERE id = $1;
+
+-- name: UpdateRideProgress :exec
+UPDATE rides SET state = $2, corroborated = $3, points_total = $4, points_matched = $5,
+  points_corroborated = $6, points_contradicted = $7, updated_at = NOW()
+WHERE id = $1;
+
+-- name: EndRide :execrows
+UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $2, state = $3, corroborated = $4,
+  points_total = $5, points_matched = $6, points_corroborated = $7, points_contradicted = $8, updated_at = NOW()
+WHERE id = $1 AND status = 'active';
+
+-- name: EndAllActiveRides :execrows
+UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $1, updated_at = NOW() WHERE status = 'active';
+
+-- name: ListRides :many
+SELECT * FROM rides WHERE status = $1 ORDER BY started_at DESC LIMIT $2 OFFSET $3;
+
+-- name: InsertRidePoint :exec
+INSERT INTO ride_points (ride_id, latitude, longitude, accuracy, speed, bearing, timestamp, outcome, corroboration,
+  along_shape, distance_to_shape, schedule_deviation_seconds)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+
+-- name: CountRidePointsForRide :one
+SELECT COUNT(*) FROM ride_points WHERE ride_id = $1;
+
+-- name: DeleteRidePointsBefore :execrows
+DELETE FROM ride_points WHERE received_at < $1;

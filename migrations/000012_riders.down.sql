@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS ride_points;
+DROP TABLE IF EXISTS rides;
+DROP TABLE IF EXISTS riders;
