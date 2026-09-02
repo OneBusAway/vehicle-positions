@@ -122,3 +122,9 @@ func (r *Refresher) Start(ctx context.Context, every time.Duration) {
 		}
 	}
 }
+
+// ParseStaticBytes parses an in-memory GTFS static feed. It exists so callers
+// outside this package — tests, mainly — need not import go-gtfs themselves.
+func ParseStaticBytes(b []byte) (*gtfs.Static, error) {
+	return gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
+}

@@ -107,6 +107,16 @@ func (a *Aggregator) Owner(rideID string) (string, bool) {
 	return s.RiderID(), true
 }
 
+// Session returns the registered session of a ride, ended or not. Owner
+// answers who may post to a ride; this is for the caller that has to persist
+// what a ride amounted to, which an ended-but-not-yet-removed ride still needs.
+func (a *Aggregator) Session(rideID string) (*Session, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s, ok := a.sessions[rideID]
+	return s, ok
+}
+
 // ActiveRideForRider returns the rider's newest live ride, if they have one.
 func (a *Aggregator) ActiveRideForRider(riderID string) (string, bool) {
 	a.mu.Lock()
