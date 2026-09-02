@@ -630,6 +630,53 @@ func (s *riderService) Estimates(now time.Time) []rider.TripEstimate {
 	return s.agg.Estimates(now, s.coveredFunc(now))
 }
 
+// RiderStatus is the rider subsystem's account of itself for the admin status
+// endpoint: the schedule it is matching against, the trusted feeds it is
+// checked against, its riders and the rides it is holding. now is the moment
+// the ride counts are judged at, since a session only counts while its points
+// are fresh.
+func (s *riderService) RiderStatus(ctx context.Context, now time.Time) (riderStatusResponse, error) {
+	status := riderStatusResponse{Enabled: true}
+
+	// The index is nil until the first refresh has landed; the rest of the
+	// status is still worth reporting while that is true.
+	if index := s.index(); index != nil {
+		stats := index.Stats()
+		status.GTFS = &riderGTFSStatus{
+			Source:   stats.Source,
+			LoadedAt: adminRiderTime(stats.LoadedAt),
+			Trips:    stats.Trips,
+			Shapes:   stats.Shapes,
+			Timezone: index.Timezone().String(),
+		}
+	}
+
+	if s.trusted != nil && s.trusted.Configured() {
+		status.TrustedFeeds = riderFeedStatuses(s.trusted.Health())
+	}
+
+	byTier, err := s.store.CountRidersByTier(ctx)
+	if err != nil {
+		return riderStatusResponse{}, err
+	}
+	counts := riderTierCounts{
+		Trusted: byTier[string(rider.TierTrusted)],
+		Blocked: byTier[string(rider.TierBlocked)],
+	}
+	// Every tier counts towards the total, including any the store knows about
+	// and this build does not.
+	for _, n := range byTier {
+		counts.Total += n
+	}
+	status.Riders = &counts
+
+	status.Rides = &riderRideCounts{
+		Active:      s.agg.ActiveCount(),
+		Publishable: s.agg.PublishableCount(now, s.coveredFunc(now)),
+	}
+	return status, nil
+}
+
 // coveredFunc reports, for a trip, whether the trusted feed already speaks for
 // it at now. It returns nil when there is no trusted feed to ask, which is what
 // the aggregator expects for "nothing is covered".
