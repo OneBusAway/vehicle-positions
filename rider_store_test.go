@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +74,7 @@ func TestRiderStore_StartRideAndRecordPoints(t *testing.T) {
 
 	rider, err := store.GetRider(context.Background(), r.ID)
 	require.NoError(t, err)
-	assert.True(t, rider.LastSeenAt.After(r.LastSeenAt.Add(-time.Second)))
+	assert.True(t, rider.LastSeenAt.After(r.LastSeenAt), "recording points touches the rider")
 }
 
 func TestRiderStore_FinishRide_UpdatesScoreAndTier(t *testing.T) {
@@ -143,9 +144,11 @@ func TestRiderStore_EndAllActiveRides_AndCascade(t *testing.T) {
 	gb, _ := store.queries.GetRide(context.Background(), b.ID)
 	assert.Equal(t, "server_restart", ga.EndReason)
 	assert.Equal(t, "ended", gb.Status)
-	active, err := store.ListRides(context.Background(), "active", 10, 0)
+	active, err := store.ListRides(context.Background(), "active", 200, 0)
 	require.NoError(t, err)
-	assert.Empty(t, active)
+	for _, ride := range active {
+		assert.NotEqual(t, r.ID, ride.RiderID, "this rider has no active rides left")
+	}
 
 	tiers, err := store.CountRidersByTier(context.Background())
 	require.NoError(t, err)
@@ -157,7 +160,10 @@ func TestRiderStore_EndAllActiveRides_AndCascade(t *testing.T) {
 	_, err = store.pool.Exec(context.Background(), "DELETE FROM riders WHERE id = $1", r.ID)
 	require.NoError(t, err)
 	_, err = store.queries.GetRide(context.Background(), a.ID)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	points, err := store.queries.CountRidePointsForRide(context.Background(), a.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, points, "points go with the ride")
 }
 
 func TestRiderStore_DeleteRidePointsBefore(t *testing.T) {
@@ -166,10 +172,17 @@ func TestRiderStore_DeleteRidePointsBefore(t *testing.T) {
 	ride := startTestRide(t, store, r.ID)
 	require.NoError(t, store.RecordRidePoints(context.Background(), ride.ID, r.ID,
 		[]RidePointRecord{{Latitude: 1, Longitude: 1, Timestamp: 1, Outcome: "matched", Corroboration: "none"}}, RideProgress{State: "pending", PointsTotal: 1}))
-	n, err := store.DeleteRidePointsBefore(context.Background(), time.Now().Add(-time.Hour))
+
+	_, err := store.DeleteRidePointsBefore(context.Background(), time.Now().Add(-time.Hour))
 	require.NoError(t, err)
-	assert.EqualValues(t, 0, n)
-	n, err = store.DeleteRidePointsBefore(context.Background(), time.Now().Add(time.Hour))
+	n, err := store.queries.CountRidePointsForRide(context.Background(), ride.ID)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, n, int64(1))
+	assert.EqualValues(t, 1, n, "a point received just now survives an hour-old cutoff")
+
+	deleted, err := store.DeleteRidePointsBefore(context.Background(), time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, deleted, int64(1))
+	n, err = store.queries.CountRidePointsForRide(context.Background(), ride.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, n, "a cutoff in the future prunes the point")
 }
