@@ -20,9 +20,12 @@ The current implementation focuses on:
 
 From the repository root:
 
-1. Start the stack:
+1. Start the stack. Compose refuses to start without a `JWT_SECRET` of 32+
+   bytes, so export one first (or put it in a `.env` file next to
+   `docker-compose.yml`):
 
    ```bash
+   export JWT_SECRET=$(openssl rand -hex 32)
    make up
    ```
 
