@@ -186,3 +186,30 @@ func TestRiderStore_DeleteRidePointsBefore(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, n, "a cutoff in the future prunes the point")
 }
+
+func TestRiderStore_RecordRidePointsDoesNotResurrectEndedRide(t *testing.T) {
+	store := newTestStore(t)
+	r := registerTestRider(t, store)
+	ride := startTestRide(t, store, r.ID)
+
+	_, err := store.FinishRide(context.Background(), ride.ID, RideOutcome{
+		EndReason: "arrived", ScoreDelta: 1,
+		Progress: RideProgress{State: "verified", Corroborated: true, PointsTotal: 3, PointsMatched: 3, PointsCorroborated: 2},
+	})
+	require.NoError(t, err)
+
+	// A batch that was in flight when the ride ended, arriving late. Its points
+	// may still land — they belong to the ride either way — but the ride itself
+	// is finished, and nothing about it may be rewritten.
+	require.NoError(t, store.RecordRidePoints(context.Background(), ride.ID, r.ID,
+		[]RidePointRecord{{Latitude: 47.6, Longitude: -122.33, Timestamp: 1756800000, Outcome: "matched", Corroboration: "none"}},
+		RideProgress{State: "pending", PointsTotal: 99, PointsMatched: 99}))
+
+	got, err := store.queries.GetRide(context.Background(), ride.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "ended", got.Status)
+	assert.Equal(t, "verified", got.State)
+	assert.True(t, got.Corroborated)
+	assert.EqualValues(t, 3, got.PointsTotal, "the finished ride's counters stand")
+	assert.EqualValues(t, 2, got.PointsCorroborated)
+}

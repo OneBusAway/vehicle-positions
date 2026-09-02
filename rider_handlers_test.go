@@ -454,3 +454,194 @@ func TestFinishRide_AlreadyEndedInStoreDropsSession(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
 	assert.Equal(t, 0, env.svc.agg.ActiveCount(), "the stale session is dropped rather than retried forever")
 }
+
+// walkPoints returns n on-schedule T1 uploads starting `along` metres in,
+// 10 m and 6 s apart, in wire form. It advances env.now past the last point.
+func (e *riderTestEnv) walkPoints(along float64, n int) []map[string]any {
+	trip, _ := e.index.Trip("T1")
+	base := time.Date(2026, 9, 2, 8, 0, 0, 0, e.index.Timezone())
+	var out []map[string]any
+	var last time.Time
+	for i := 0; i < n; i++ {
+		a := along + float64(i*10)
+		ts := base.Add(time.Duration(a/1001*600) * time.Second)
+		p := trip.Shape.PointAt(a)
+		out = append(out, map[string]any{"latitude": p.Lat, "longitude": p.Lon, "accuracy": 5, "speed": 1.7, "bearing": 0, "timestamp": ts.Unix()})
+		last = ts
+	}
+	e.now = last.Add(2 * time.Second)
+	return out
+}
+
+func (e *riderTestEnv) upload(t *testing.T, token, rideID string, pts []map[string]any) (positionsResponse, int) {
+	t.Helper()
+	w := e.do(t, "POST", "/api/v1/rider/rides/"+rideID+"/positions", token, map[string]any{"positions": pts})
+	var resp positionsResponse
+	if w.Code == http.StatusOK {
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	}
+	return resp, w.Code
+}
+
+func TestPositions_VerifiesAndPersists(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+
+	resp, code := env.upload(t, tok, ride.RideID, env.walkPoints(0, 5))
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "verified", resp.State)
+	assert.Equal(t, 5, resp.Accepted)
+	assert.False(t, resp.Published)
+	assert.Equal(t, "unavailable", resp.Corroboration)
+	assert.False(t, resp.Ended)
+	assert.Len(t, env.store.points[ride.RideID], 5)
+	assert.Equal(t, "verified", env.store.rides[ride.RideID].State)
+	assert.Equal(t, 5, env.store.rides[ride.RideID].PointsMatched)
+}
+
+func TestPositions_CorroborationAndPublish(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+	trip, _ := env.index.Trip("T1")
+	pts := env.walkPoints(0, 12)
+	env.trusted.set(rider.TripKey{TripID: "T1", StartDate: "20260902"}, rider.TrustedVehicle{VehicleID: "bus", Pos: trip.Shape.PointAt(60), Timestamp: env.now})
+	resp, code := env.upload(t, tok, ride.RideID, pts)
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "corroborated", resp.Corroboration)
+	assert.True(t, resp.Published)
+	assert.True(t, env.store.rides[ride.RideID].Corroborated)
+	assert.Equal(t, 12, env.store.rides[ride.RideID].PointsCorroborated)
+
+	// Trusted feed covers the trip → not in estimates; drop it → estimate appears.
+	assert.Empty(t, env.svc.Estimates(env.now))
+	env.trusted.clear(rider.TripKey{TripID: "T1", StartDate: "20260902"})
+	est := env.svc.Estimates(env.now)
+	require.Len(t, est, 1)
+	assert.Equal(t, "T1", est[0].Key.TripID)
+}
+
+func TestPositions_RejectionEndsRideAndPenalises(t *testing.T) {
+	env := newRiderTestEnv(t)
+	riderID, tok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+	pts := env.walkPoints(0, 6)
+	for i := range pts {
+		pts[i]["longitude"] = -122.3200 // ~750 m east of the shape
+	}
+	resp, code := env.upload(t, tok, ride.RideID, pts)
+	require.Equal(t, http.StatusOK, code)
+	assert.True(t, resp.Ended)
+	assert.Equal(t, "off_route", resp.EndReason)
+	assert.Equal(t, "rejected", resp.State)
+	assert.Equal(t, 5, resp.Accepted)
+	assert.Equal(t, 1, resp.Ignored)
+	assert.Equal(t, "ended", env.store.rides[ride.RideID].Status)
+	assert.Equal(t, -1, env.store.riders[riderID].Score)
+
+	_, code = env.upload(t, tok, ride.RideID, env.walkPoints(0, 1))
+	assert.Equal(t, http.StatusConflict, code)
+}
+
+func TestPositions_Validation(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	_, otherTok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+
+	_, code := env.upload(t, tok, ride.RideID, nil)
+	assert.Equal(t, http.StatusBadRequest, code, "empty batch")
+	_, code = env.upload(t, tok, ride.RideID, env.walkPoints(0, 13))
+	assert.Equal(t, http.StatusBadRequest, code, "batch too large")
+	_, code = env.upload(t, tok, ride.RideID, []map[string]any{{"latitude": 1, "longitude": 1}})
+	assert.Equal(t, http.StatusBadRequest, code, "missing timestamp")
+	_, code = env.upload(t, tok, ride.RideID, []map[string]any{{"timestamp": env.now.Unix()}})
+	assert.Equal(t, http.StatusBadRequest, code, "missing latitude and longitude")
+	_, code = env.upload(t, otherTok, ride.RideID, env.walkPoints(0, 1))
+	assert.Equal(t, http.StatusNotFound, code, "someone else's ride")
+	_, code = env.upload(t, tok, "not-a-uuid", env.walkPoints(0, 1))
+	assert.Equal(t, http.StatusNotFound, code)
+	_, code = env.upload(t, tok, uuid.NewString(), env.walkPoints(0, 1))
+	assert.Equal(t, http.StatusConflict, code, "unknown ride is treated as ended")
+
+	// Ignored points are not persisted.
+	resp, code := env.upload(t, tok, ride.RideID, []map[string]any{{"latitude": 47.6, "longitude": -122.33, "accuracy": 500, "timestamp": env.now.Unix()}})
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, 1, resp.Ignored)
+	assert.Empty(t, env.store.points[ride.RideID])
+
+	// A reading the device never made is stored as absent, not as a zero.
+	bare := env.walkPoints(0, 1)[0]
+	delete(bare, "accuracy")
+	delete(bare, "speed")
+	delete(bare, "bearing")
+	resp, code = env.upload(t, tok, ride.RideID, []map[string]any{bare})
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, 1, resp.Accepted)
+	require.Len(t, env.store.points[ride.RideID], 1)
+	rec := env.store.points[ride.RideID][0]
+	assert.Equal(t, "matched", rec.Outcome)
+	assert.Equal(t, "unavailable", rec.Corroboration)
+	assert.Nil(t, rec.Accuracy)
+	assert.Nil(t, rec.Speed)
+	assert.Nil(t, rec.Bearing)
+}
+
+func TestPositions_RateLimitedPerRider(t *testing.T) {
+	env := newRiderTestEnv(t)
+	env.svc.batchLimiter = NewKeyedRateLimiter(2*time.Second, 2)
+	_, tok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+	_, c1 := env.upload(t, tok, ride.RideID, env.walkPoints(0, 1))
+	_, c2 := env.upload(t, tok, ride.RideID, env.walkPoints(10, 1))
+	_, c3 := env.upload(t, tok, ride.RideID, env.walkPoints(20, 1))
+	assert.Equal(t, http.StatusOK, c1)
+	assert.Equal(t, http.StatusOK, c2)
+	assert.Equal(t, http.StatusTooManyRequests, c3, "burst of 2 per 2 s")
+}
+
+func TestPositions_BlockedRiderShadowed(t *testing.T) {
+	env := newRiderTestEnv(t)
+	riderID, tok := env.register(t)
+	env.store.riders[riderID].Tier = "blocked"
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+	resp, code := env.upload(t, tok, ride.RideID, env.walkPoints(0, 5))
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "verified", resp.State, "verdicts look normal")
+	assert.False(t, resp.Published)
+	assert.Empty(t, env.store.points[ride.RideID], "nothing persisted for blocked riders")
+}
+
+func TestPositions_StoreFailureReturns500(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+	env.store.failNext = assert.AnError
+	_, code := env.upload(t, tok, ride.RideID, env.walkPoints(0, 3))
+	assert.Equal(t, http.StatusInternalServerError, code)
+	resp, code := env.upload(t, tok, ride.RideID, env.walkPoints(30, 1))
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "verified", resp.State, "in-memory session advanced despite the failed commit")
+	assert.Equal(t, 4, env.store.rides[ride.RideID].PointsTotal, "absolute counters heal the record")
+}
+
+func TestTripStatus(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	w := env.do(t, "GET", "/api/v1/rider/trips/T1/status?start_date=20260902", tok, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	var st tripStatusResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&st))
+	assert.Equal(t, tripStatusResponse{TripID: "T1", StartDate: "20260902"}, st)
+
+	env.trusted.set(rider.TripKey{TripID: "T1", StartDate: "20260902"}, rider.TrustedVehicle{VehicleID: "bus", Timestamp: env.now})
+	w = env.do(t, "GET", "/api/v1/rider/trips/T1/status", tok, nil)
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&st))
+	assert.True(t, st.Trusted)
+	assert.Equal(t, "20260902", st.StartDate, "defaults to the service date")
+
+	assert.Equal(t, http.StatusNotFound, env.do(t, "GET", "/api/v1/rider/trips/NOPE/status", tok, nil).Code)
+	assert.Equal(t, http.StatusBadRequest, env.do(t, "GET", "/api/v1/rider/trips/T1/status?start_date=x", tok, nil).Code)
+	assert.Equal(t, http.StatusUnauthorized, env.do(t, "GET", "/api/v1/rider/trips/T1/status", "", nil).Code)
+}

@@ -263,7 +263,7 @@ SELECT * FROM rides WHERE id = $1;
 -- name: UpdateRideProgress :exec
 UPDATE rides SET state = $2, corroborated = $3, points_total = $4, points_matched = $5,
   points_corroborated = $6, points_contradicted = $7, updated_at = NOW()
-WHERE id = $1;
+WHERE id = $1 AND status = 'active';
 
 -- name: EndRide :execrows
 UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $2, state = $3, corroborated = $4,

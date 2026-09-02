@@ -171,6 +171,42 @@ type endRideResponse struct {
 	Summary rideSummaryJSON `json:"summary"`
 }
 
+// positionUpload is one location report from the device. Accuracy, Speed and
+// Bearing are pointers because a device that has no reading for them must be
+// able to say so rather than claim a zero.
+type positionUpload struct {
+	Latitude  float64  `json:"latitude"`
+	Longitude float64  `json:"longitude"`
+	Accuracy  *float64 `json:"accuracy"`
+	Speed     *float64 `json:"speed"`
+	Bearing   *float64 `json:"bearing"`
+	Timestamp int64    `json:"timestamp"`
+}
+
+// positionsRequest is the body of POST /api/v1/rider/rides/{id}/positions.
+type positionsRequest struct {
+	Positions []positionUpload `json:"positions"`
+}
+
+type positionsResponse struct {
+	State          string `json:"state"`
+	Published      bool   `json:"published"`
+	Corroboration  string `json:"corroboration"`
+	Accepted       int    `json:"accepted"`
+	Ignored        int    `json:"ignored"`
+	OffRouteStreak int    `json:"off_route_streak"`
+	Ended          bool   `json:"ended"`
+	EndReason      string `json:"end_reason"`
+}
+
+type tripStatusResponse struct {
+	TripID        string `json:"trip_id"`
+	StartDate     string `json:"start_date"`
+	Trusted       bool   `json:"trusted"`
+	RiderReported bool   `json:"rider_reported"`
+	Riders        int    `json:"riders"`
+}
+
 // decodeRiderJSON reads one JSON object from the request into dst, rejecting a
 // wrong content type, unknown fields and trailing data. It reports whether
 // decoding succeeded, having already written the error response if it did not.
@@ -433,18 +469,237 @@ func (s *riderService) handleEndRide() http.HandlerFunc {
 	}
 }
 
-// handlePositions is implemented in Task 10.
+// handlePositions verifies a batch of positions against the ride's trip. The
+// batch is judged whatever the rider's reputation says: a blocked rider gets
+// honest verdicts back and simply has nothing recorded or published, so a
+// client cannot tell it is being shadowed and stop reporting.
 func (s *riderService) handlePositions() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented"})
+		riderID, ok := riderIDFromContext(r.Context())
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+		// Reporting is the hot path of the whole API: the limit is checked
+		// before the body is read, and before the ride is even looked up.
+		if !s.batchLimiter.Allow(riderID) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many position reports, slow down"})
+			return
+		}
+
+		rideID := r.PathValue("id")
+		snap, ok := s.agg.Snapshot(rideID)
+		if !ok && uuid.Validate(rideID) != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+			return
+		}
+		// A well-formed id the aggregator no longer holds — or holds only until
+		// its outcome is written — is a ride that has ended. The client must
+		// start a new one; its points have nowhere to go.
+		if !ok || snap.Ended {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
+			return
+		}
+		// Another rider's ride is not theirs to know about, let alone report on.
+		if snap.RiderID != riderID {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ride not found"})
+			return
+		}
+
+		var req positionsRequest
+		if !decodeRiderJSON(w, r, &req) {
+			return
+		}
+		if len(req.Positions) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "positions must contain at least one position"})
+			return
+		}
+		if len(req.Positions) > s.maxBatchSize {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "too many positions in one report"})
+			return
+		}
+		points := make([]rider.Point, 0, len(req.Positions))
+		for _, p := range req.Positions {
+			if msg, ok := p.validate(); !ok {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+				return
+			}
+			points = append(points, p.point())
+		}
+
+		now := s.now()
+		// A trip the agency's own feed can speak for is judged against it; with
+		// no feed the engine has only the schedule and the shape to go on.
+		var lookup func(rider.TripKey) (rider.TrustedVehicle, bool)
+		if s.trusted != nil && s.trusted.Configured() {
+			lookup = func(k rider.TripKey) (rider.TrustedVehicle, bool) { return s.trusted.Lookup(k, now) }
+		}
+		res, err := s.agg.ApplyBatch(rideID, points, lookup, now)
+		if err != nil {
+			// The ride ended, or was superseded onto another trip, while the
+			// batch was in flight.
+			if errors.Is(err, rider.ErrUnknownRide) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
+				return
+			}
+			slog.Error("failed to apply rider positions", "ride_id", rideID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		// Nothing a blocked rider reports is stored: their points are neither
+		// evidence nor a position, so keeping them would only cost storage.
+		if snap.Tier != rider.TierBlocked {
+			progress := progressOf(res.State, res.Corroborated, res.Counts)
+			if err := s.store.RecordRidePoints(r.Context(), rideID, riderID, ridePointRecords(res.Points), progress); err != nil {
+				// The session has already advanced, so this batch cannot be
+				// replayed; the counters are absolute, so the next successful
+				// write heals the record.
+				slog.Error("failed to record ride points", "ride_id", rideID, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				return
+			}
+		}
+
+		// The engine ended the ride itself: it was rejected, or contradicted.
+		// The client still gets its verdicts back; the outcome is ours to file.
+		if res.Ended {
+			if _, err := s.finishRide(r.Context(), rideID, res.EndReason); err != nil && !errors.Is(err, errRideNotActive) {
+				slog.Error("failed to finish a ride the engine ended", "ride_id", rideID, "error", err)
+			}
+		}
+
+		writeJSON(w, http.StatusOK, positionsResponse{
+			State:          res.State.String(),
+			Published:      res.Published,
+			Corroboration:  res.Corroboration.String(),
+			Accepted:       res.Accepted,
+			Ignored:        res.Ignored,
+			OffRouteStreak: res.OffRouteStreak,
+			Ended:          res.Ended,
+			EndReason:      string(res.EndReason),
+		})
 	}
 }
 
-// handleTripStatus is implemented in Task 10.
+// handleTripStatus reports what is known about one trip: whether the agency's
+// own feed covers it, and what its riders add up to.
 func (s *riderService) handleTripStatus() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented"})
+		index := s.index()
+		if index == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "schedule data unavailable"})
+			return
+		}
+
+		now := s.now()
+		startDate := r.URL.Query().Get("start_date")
+		if startDate == "" {
+			startDate = index.ServiceDate(now)
+		} else if !serviceDatePattern.MatchString(startDate) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "start_date must be YYYYMMDD"})
+			return
+		}
+
+		tripID := r.PathValue("trip_id")
+		if _, ok := index.Trip(tripID); !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown trip"})
+			return
+		}
+
+		key := rider.TripKey{TripID: tripID, StartDate: startDate}
+		covered := s.coveredFunc(now)
+		riderReported, riders := s.agg.TripStatus(key, now, covered)
+		writeJSON(w, http.StatusOK, tripStatusResponse{
+			TripID:        tripID,
+			StartDate:     startDate,
+			Trusted:       covered != nil && covered(key),
+			RiderReported: riderReported,
+			Riders:        riders,
+		})
 	}
+}
+
+// Estimates is the rider-derived vehicle position of every trip the riders can
+// vouch for and the agency's own feed does not already cover.
+func (s *riderService) Estimates(now time.Time) []rider.TripEstimate {
+	return s.agg.Estimates(now, s.coveredFunc(now))
+}
+
+// coveredFunc reports, for a trip, whether the trusted feed already speaks for
+// it at now. It returns nil when there is no trusted feed to ask, which is what
+// the aggregator expects for "nothing is covered".
+func (s *riderService) coveredFunc(now time.Time) func(rider.TripKey) bool {
+	if s.trusted == nil || !s.trusted.Configured() {
+		return nil
+	}
+	return func(k rider.TripKey) bool { return s.trusted.Covers(k, now) }
+}
+
+// validate reports whether one uploaded position is usable, and why not. The
+// engine judges everything else; this only rejects what could not have come
+// from a working device.
+func (p positionUpload) validate() (string, bool) {
+	if p.Timestamp == 0 {
+		return "each position needs a timestamp", false
+	}
+	// Null island is what an unset or broken fix reports, so it stands in for
+	// the missing latitude and longitude the wire format cannot express.
+	if p.Latitude < -90 || p.Latitude > 90 || p.Longitude < -180 || p.Longitude > 180 || (p.Latitude == 0 && p.Longitude == 0) {
+		return "each position needs a valid latitude and longitude", false
+	}
+	return "", true
+}
+
+// point is the upload as the engine takes it, with -1 standing in for each
+// optional the device did not report.
+func (p positionUpload) point() rider.Point {
+	return rider.Point{
+		Pos:       rider.LatLon{Lat: p.Latitude, Lon: p.Longitude},
+		Accuracy:  orMissing(p.Accuracy),
+		Speed:     orMissing(p.Speed),
+		Bearing:   orMissing(p.Bearing),
+		Timestamp: time.Unix(p.Timestamp, 0),
+	}
+}
+
+// orMissing is the engine's sentinel for an optional reading the device did not
+// supply.
+func orMissing(v *float64) float64 {
+	if v == nil {
+		return -1
+	}
+	return *v
+}
+
+// reported turns the engine's -1 sentinel back into an absent value, so a
+// reading the device never made is stored as NULL rather than as a number.
+func reported(v float64) *float64 {
+	if v < 0 {
+		return nil
+	}
+	return &v
+}
+
+// ridePointRecords is a batch of verified points as persistence takes them.
+func ridePointRecords(points []rider.AppliedPoint) []RidePointRecord {
+	out := make([]RidePointRecord, 0, len(points))
+	for _, p := range points {
+		out = append(out, RidePointRecord{
+			Latitude:                 p.Pos.Lat,
+			Longitude:                p.Pos.Lon,
+			Accuracy:                 reported(p.Accuracy),
+			Speed:                    reported(p.Speed),
+			Bearing:                  reported(p.Bearing),
+			Timestamp:                p.Timestamp.Unix(),
+			Outcome:                  p.Verdict.Outcome.String(),
+			Corroboration:            p.Verdict.Corroboration.String(),
+			AlongShape:               p.Verdict.AlongShape,
+			DistanceToShape:          p.Verdict.DistanceToShape,
+			ScheduleDeviationSeconds: int(p.Verdict.ScheduleDeviation.Seconds()),
+		})
+	}
+	return out
 }
 
 // finishRide persists what a ride amounted to and retires its session. It
@@ -499,13 +754,20 @@ func (s *riderService) finishRide(ctx context.Context, rideID string, reason rid
 
 // progressFrom is the ride progress a snapshot has accumulated.
 func progressFrom(snap rider.RideSnapshot) RideProgress {
+	return progressOf(snap.State, snap.Corroborated, snap.Counts)
+}
+
+// progressOf is the ride progress a state, corroboration flag and set of counts
+// amount to. The counts are absolute, so writing them heals a record whose
+// earlier write failed.
+func progressOf(state rider.State, corroborated bool, counts rider.Counts) RideProgress {
 	return RideProgress{
-		State:              snap.State.String(),
-		Corroborated:       snap.Corroborated,
-		PointsTotal:        snap.Counts.Total,
-		PointsMatched:      snap.Counts.Matched,
-		PointsCorroborated: snap.Counts.Corroborated,
-		PointsContradicted: snap.Counts.Contradicted,
+		State:              state.String(),
+		Corroborated:       corroborated,
+		PointsTotal:        counts.Total,
+		PointsMatched:      counts.Matched,
+		PointsCorroborated: counts.Corroborated,
+		PointsContradicted: counts.Contradicted,
 	}
 }
 

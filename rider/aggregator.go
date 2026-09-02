@@ -115,6 +115,7 @@ type RideSnapshot struct {
 	ID           string
 	RiderID      string
 	Key          TripKey
+	Tier         Tier
 	State        State
 	Corroborated bool
 	Ended        bool
@@ -140,6 +141,7 @@ func (a *Aggregator) Snapshot(rideID string) (RideSnapshot, bool) {
 		ID:           s.ID(),
 		RiderID:      s.RiderID(),
 		Key:          s.Key(),
+		Tier:         s.Tier(),
 		State:        s.State(),
 		Corroborated: s.Corroborated(),
 		Ended:        s.Ended(),
