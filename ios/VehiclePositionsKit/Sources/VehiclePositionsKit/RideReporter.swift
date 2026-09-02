@@ -39,6 +39,8 @@ public actor RideReporter {
     private var active: ActiveRide?
     private var locationTask: Task<Void, Never>?
     private var uploadTask: Task<Void, Never>?
+    /// The most recent `start`, so the next one can queue behind it.
+    private var startTask: Task<AsyncStream<RideEvent>, any Error>?
 
     public init(
         configuration: RideReporterConfiguration,
@@ -69,6 +71,10 @@ public actor RideReporter {
 
     public var isActive: Bool { active != nil }
 
+    /// Fixes buffered for the next upload. Internal, and only tests read it:
+    /// it is how they synchronise on the location loop having consumed a sample.
+    var pendingFixCount: Int { active?.buffer.count ?? 0 }
+
     // MARK: - Lifecycle
 
     /// Starts reporting `trip`, superseding any ride already running.
@@ -78,6 +84,25 @@ public actor RideReporter {
     /// caller sees `.registered` and `.started` in order however late it begins
     /// iterating. On failure nothing is left running and the error is rethrown.
     public func start(_ trip: TripDescriptor) async throws -> AsyncStream<RideEvent> {
+        // Starts are serialised. Two racing callers would each find no active
+        // ride and the second would overwrite the first, leaving its loops
+        // running, its stream unfinished and its background handle held. Queued
+        // behind the one in flight, this start supersedes a whole ride instead.
+        let predecessor = startTask
+        let task = Task { [weak self] () -> AsyncStream<RideEvent> in
+            _ = try? await predecessor?.value
+            guard let self else { throw CancellationError() }
+            return try await self.performStart(trip)
+        }
+        startTask = task
+        // Only the newest start owns the slot; an older one must not clear it.
+        defer { if startTask == task { startTask = nil } }
+        return try await task.value
+    }
+
+    private func performStart(_ trip: TripDescriptor) async throws -> AsyncStream<RideEvent> {
+        // Superseding now suspends — it flushes what the old ride buffered — so
+        // this must stay behind the serialisation above to remain re-entrant.
         if active != nil { await end(reason: .superseded) }
 
         let (stream, continuation) = AsyncStream<RideEvent>.makeStream()
@@ -140,20 +165,35 @@ public actor RideReporter {
         locationTask = nil
         uploadTask = nil
 
-        var summary: RideSummary?
+        // A ride the server ended itself has nothing left to learn from us;
+        // every other reason — superseded and abandoned rides included — sends
+        // what is still buffered before it goes.
+        var batches: [[PositionUpload]] = []
+        if !reason.isServerInitiated {
+            while ride.buffer.count > 0 {
+                batches.append(ride.buffer.take(max: ride.maxBatchSize).map(Self.upload))
+            }
+        }
         // Reasons only the server may reach are already known to it: reporting
         // one back would be rejected, and the ride is over there either way.
-        if reason.isClientReportable {
-            let batch = ride.buffer.take(max: ride.maxBatchSize).map(Self.upload)
+        let reportsEnd = reason.isClientReportable
+        var summary: RideSummary?
+        if !batches.isEmpty || reportsEnd {
+            let pending = batches
             let client = self.client
             let token = ride.token
             let rideID = ride.rideID
             // Unstructured so this teardown outlives the cancellation of the
-            // loop it may have been called from; both calls are best-effort.
-            summary = await Task {
-                if !batch.isEmpty {
-                    _ = try? await client.uploadPositions(token: token, rideID: rideID, positions: batch)
+            // loop it may have been called from; every call is best-effort.
+            summary = await Task { () -> RideSummary? in
+                for batch in pending {
+                    do {
+                        _ = try await client.uploadPositions(token: token, rideID: rideID, positions: batch)
+                    } catch {
+                        break // A network that just failed will not do better.
+                    }
                 }
+                guard reportsEnd else { return nil }
                 return try? await client.endRide(token: token, rideID: rideID, reason: reason).summary
             }.value
         }
@@ -371,5 +411,19 @@ public actor RideReporter {
 
     private static func measured(_ value: Double) -> Double? {
         value < 0 ? nil : value
+    }
+}
+
+extension RideEndReason {
+    /// Reasons the server reaches on its own. It ended the ride before we knew,
+    /// so there is nothing left worth sending it.
+    var isServerInitiated: Bool {
+        switch self {
+        case .offRoute, .contradicted, .implausible, .offSchedule, .serverRestart, .idle:
+            true
+        case .userRequested, .arrived, .stationary, .maxDuration, .locationUnavailable,
+             .authorizationDenied, .networkFailure, .appTerminated, .superseded:
+            false
+        }
     }
 }

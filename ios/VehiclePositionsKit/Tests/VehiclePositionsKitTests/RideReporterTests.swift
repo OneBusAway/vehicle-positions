@@ -31,6 +31,17 @@ import Testing
                 location.emitFix(lat: startLat + Double(i) * 0.00009, lon: -122.33, at: clock.now.addingTimeInterval(Double(i)))
             }
         }
+        /// Polls (real time) until the reporter has buffered at least `count`
+        /// fixes: the sync point tests need before they move the manual clock,
+        /// since emitting a sample says nothing about it having been consumed.
+        func waitForBuffered(_ count: Int, timeout: Duration = .seconds(5)) async -> Bool {
+            let deadline = ContinuousClock.now + timeout
+            while ContinuousClock.now < deadline {
+                if await reporter.pendingFixCount >= count { return true }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            return await reporter.pendingFixCount >= count
+        }
     }
 
     @Test func registersStartsUploadsAndEnds() async throws {
@@ -43,6 +54,7 @@ import Testing
         #expect(env.location.handles.count == 1)
 
         env.emitFixes(2)
+        #expect(await env.waitForBuffered(2))
         #expect(await env.clock.waitForSleepers(atLeast: 1))
         env.clock.advance(by: .seconds(5))
         #expect(await events.wait { $0.contains { if case .progress(let p) = $0 { return p.state == .verified }; return false } })
@@ -127,7 +139,10 @@ import Testing
         #expect(await events.wait { $0.contains(.warning(.uploadRetrying(attempt: 1))) })
         // backoff 1 s, 2 s, 4 s, 8 s, 16 s, 32→30 s: after 60 s of failure the ride ends.
         for _ in 0..<8 {
-            _ = await env.clock.waitForSleepers(atLeast: 1)
+            // Give the ride a moment to end before winding time on again, so a
+            // finished test does not sit through eight sleeper timeouts.
+            if await events.waitForEnd(timeout: .milliseconds(50)) != nil { break }
+            guard await env.clock.waitForSleepers(atLeast: 1) else { break }
             env.clock.advance(by: .seconds(16))
         }
         #expect(await events.waitForEnd() == .networkFailure)
@@ -154,11 +169,10 @@ import Testing
         let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
         let events = EventCollector(stream)
         _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
-        // A full batch, so the progress event proves the reporter consumed the
-        // stationary run while the clock still read t0 — advancing before it
-        // does would start the stationary timer 25 s late.
-        for _ in 0..<3 { env.location.emitFix(lat: 47.6, lon: -122.33, at: env.clock.now, stationary: true) }
-        #expect(await events.wait { $0.contains { if case .progress = $0 { return true }; return false } })
+        env.location.emitFix(lat: 47.6, lon: -122.33, at: env.clock.now, stationary: true)
+        // Advancing before the reporter has consumed that fix would start the
+        // stationary run 25 s late and the ride would never end.
+        #expect(await env.waitForBuffered(1))
         env.clock.advance(by: .seconds(25))
         env.location.emitFix(lat: 47.6, lon: -122.33, at: env.clock.now, stationary: true)
         #expect(await events.waitForEnd() == .stationary)
@@ -214,6 +228,94 @@ import Testing
         }
         #expect(await env.reporter.isActive == false)
         #expect(env.location.handles.isEmpty)
+    }
+
+    @Test func concurrentStartsSerialise() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON), FakeRideTransport.ok(201, json: Env.startJSON.replacingOccurrences(of: "ride1", with: "ride2")))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        async let first = env.reporter.start(TripDescriptor(tripID: "T1"))
+        async let second = env.reporter.start(TripDescriptor(tripID: "T2"))
+        let (s1, s2) = try await (first, second)
+        let c1 = EventCollector(s1)
+        let c2 = EventCollector(s2)
+        let started: @Sendable ([RideEvent]) -> Bool = { $0.contains { if case .started = $0 { return true }; return false } }
+        #expect(await c1.wait(started))
+        #expect(await c2.wait(started))
+
+        // Whichever start won the race, ride1 is the one that was superseded.
+        let loser = await c1.events.contains(.started(rideID: "ride1")) ? c1 : c2
+        let winner = loser === c1 ? c2 : c1
+        #expect(await loser.waitForEnd() == .superseded)
+        #expect(await winner.events.contains(.started(rideID: "ride2")))
+        #expect(await env.reporter.isActive, "exactly one ride survives")
+        #expect(env.transport.requests(matching: "POST rides").count == 2)
+        #expect(env.location.handles.count == 2)
+        #expect(env.location.handles.filter(\.invalidated).count == 1, "the superseded ride released its handle")
+
+        await env.reporter.end()
+        #expect(await winner.waitForEnd() == .userRequested)
+        let allHandlesInvalidated = env.location.handles.allSatisfy(\.invalidated)
+        #expect(allHandlesInvalidated)
+        #expect(await env.reporter.isActive == false)
+    }
+
+    @Test func supersededRideUploadsWhatItBuffered() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON), FakeRideTransport.ok(201, json: Env.startJSON.replacingOccurrences(of: "ride1", with: "ride2")))
+        env.transport.script("POST positions", FakeRideTransport.ok(json: Env.positionsJSON()))
+        let s1 = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let e1 = EventCollector(s1)
+        _ = await e1.wait { $0.contains(.started(rideID: "ride1")) }
+        env.emitFixes(2)
+        #expect(await env.waitForBuffered(2))
+
+        _ = try await env.reporter.start(TripDescriptor(tripID: "T2"))
+        #expect(await e1.waitForEnd() == .superseded)
+        let calls = env.transport.recorded.map { $0.request.method + " " + $0.request.path }
+        let flushed = try #require(calls.firstIndex(of: "POST api/v1/rider/rides/ride1/positions"))
+        let starts = calls.indices.filter { calls[$0] == "POST api/v1/rider/rides" }
+        #expect(starts.count == 2)
+        #expect(flushed < starts[1], "the old ride's fixes go up before the new ride starts")
+        #expect(env.transport.requests(matching: "POST end").isEmpty, "superseded is not a reason a client may report")
+        await env.reporter.end(reason: .appTerminated)
+    }
+
+    @Test func unauthorizedUploadClearsTokenAndEndsWithServerRestart() async throws {
+        let env = Env()
+        try env.credentials.save(RiderCredentials(installationID: "inst", riderID: "r1", token: "tok"))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST positions", FakeRideTransport.error(401, message: "token expired"))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.emitFixes(3)
+        #expect(await events.waitForEnd() == .serverRestart)
+        #expect(try env.credentials.load()?.token == nil, "an expired token is forgotten")
+        #expect(try env.credentials.load()?.installationID == "inst", "the device keeps its identity")
+        #expect(env.transport.requests(matching: "POST end").isEmpty)
+        #expect(await env.reporter.isActive == false)
+    }
+
+    @Test func fullBatchDoesNotBypassBackoff() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST positions", FakeRideTransport.transportFailure)
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+        env.emitFixes(3) // a full batch uploads at once — and fails
+        #expect(await events.wait { $0.contains(.warning(.uploadRetrying(attempt: 1))) })
+        #expect(env.transport.requests(matching: "POST positions").count == 1)
+
+        env.emitFixes(3, startLat: 47.6200) // the buffer is over the batch size again
+        #expect(await env.waitForBuffered(6))
+        #expect(env.transport.requests(matching: "POST positions").count == 1, "a running backoff is not bypassed by a full batch")
+        await env.reporter.end()
     }
 
     @Test func tripStatusRegistersWhenNeeded() async throws {
