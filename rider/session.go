@@ -285,9 +285,12 @@ func (s *Session) End(reason EndReason, at time.Time) {
 	s.ended, s.endReason, s.endedAt = true, reason, at
 }
 
-// Fresh reports whether the latest accepted point is recent enough to publish.
+// Fresh reports whether the latest matched point is recent enough to publish.
+// It is the matched point, not merely the latest accepted one, that is judged:
+// the position published is the matched one, and a run of off-route points
+// too short to reject the ride must not keep a minutes-old match looking live.
 func (s *Session) Fresh(now time.Time, maxAge time.Duration) bool {
-	return s.latest != nil && now.Sub(s.latest.Timestamp) <= maxAge
+	return s.latestMatched != nil && now.Sub(s.latestMatched.Timestamp) <= maxAge
 }
 
 // Publishable reports whether this ride alone may be published as a vehicle
@@ -303,12 +306,15 @@ func (s *Session) Publishable(now time.Time, maxAge time.Duration) bool {
 // RideSummary is what a finished ride amounts to: the input to scoring.
 type RideSummary struct {
 	State           State
-	EndReason       EndReason
+	EndReason       EndReason // empty until the ride ends
 	Corroborated    bool
 	MatchedDuration time.Duration // last matched timestamp − first matched timestamp
 	Counts          Counts
 	Duration        time.Duration // EndedAt − StartedAt (0 if not ended)
 }
+
+// Ended reports whether the ride this summarises has ended.
+func (r RideSummary) Ended() bool { return r.EndReason != "" }
 
 // Summary describes the ride as it stands. It is meaningful before the end, but
 // only Duration waits for it.

@@ -32,6 +32,13 @@ public actor RideReporter {
         var failingSince: Date?
         var warnedAccuracy = false
         var warnedInUse = false
+        /// The batch an upload is carrying right now. An `end` that cancels
+        /// that upload sends it again rather than losing it.
+        var inFlight: [LocationFix] = []
+        /// Set when the server last answered 429. The batch-full flush stands
+        /// down until a periodic flush succeeds, so a backlog drains at the
+        /// pace the server set instead of tripping its limit on every sample.
+        var throttled = false
         /// Set for the duration of teardown so re-entrant `end` calls return.
         var ending = false
     }
@@ -125,16 +132,8 @@ public actor RideReporter {
 
         let (stream, continuation) = AsyncStream<RideEvent>.makeStream()
         do {
-            var token = try await authorizedToken(into: continuation)
-
-            let response: StartRideResponse
-            do {
-                response = try await client.startRide(token: token, trip: trip)
-            } catch RideError.notAuthorized {
-                // The stored token has expired: one fresh registration, one retry.
-                clearStoredToken()
-                token = try await authorizedToken(into: continuation)
-                response = try await client.startRide(token: token, trip: trip)
+            let (token, response) = try await withAuthorizedToken(into: continuation) { token in
+                try await client.startRide(token: token, trip: trip)
             }
 
             // The caller may have gone away while the server was answering. A
@@ -199,6 +198,13 @@ public actor RideReporter {
         // what is still buffered before it goes.
         var batches: [[PositionUpload]] = []
         if reason.disposition != .silent {
+            // The upload cancelled just above may have been carrying a batch
+            // the server never saw. It goes first; if the server did see it,
+            // it ignores points it already has, so a duplicate costs nothing.
+            if let inFlight = active?.inFlight, !inFlight.isEmpty {
+                active?.buffer.restore(inFlight)
+                active?.inFlight = []
+            }
             // Drained in place, through `active`: see `consume`.
             while (active?.buffer.count ?? 0) > 0, batches.count < Self.endFlushBatchLimit {
                 batches.append((active?.buffer.take(max: maxBatchSize) ?? []).map(Self.upload))
@@ -211,12 +217,20 @@ public actor RideReporter {
         if !batches.isEmpty || reportsEnd {
             let pending = batches
             let client = self.client
+            let clock = self.clock
             // Unstructured so this teardown outlives the cancellation of the
             // loop it may have been called from; every call is best-effort.
             let teardown = Task { () -> RideSummary? in
                 for batch in pending {
                     do {
                         _ = try await client.uploadPositions(token: token, rideID: rideID, positions: batch)
+                    } catch RideError.server(let status, _) where status == 429 {
+                        // Paced, not refused: the periodic flush and this final
+                        // one can exhaust the server's burst. One wait, one
+                        // more try; a second refusal means the budget is
+                        // better spent on the end-ride call.
+                        try? await clock.sleep(for: Self.endThrottleRetryDelay)
+                        guard (try? await client.uploadPositions(token: token, rideID: rideID, positions: batch)) != nil else { break }
                     } catch {
                         break // A network that just failed will not do better.
                     }
@@ -241,40 +255,81 @@ public actor RideReporter {
     private static let endFlushBatchLimit = 2
     /// The whole of `end` — final flush and end-ride call — gets this long.
     private static let endBudget: Duration = .seconds(10)
+    /// How long a final batch the server paced waits before its one retry:
+    /// the server refills one report every two seconds.
+    private static let endThrottleRetryDelay: Duration = .seconds(2)
 
     /// Waits for `teardown`, or for the budget to run out, whichever comes
     /// first. A teardown that loses the race is not cancelled: it keeps trying
     /// in the background, so the server still hears about the ride if the
     /// network recovers, while `end` returns to its caller now.
+    ///
+    /// The race runs in a task of its own on purpose. `end` is often called
+    /// from the location or upload loop, and it has just cancelled both — so
+    /// the task it is running on is cancelled, and anything structured under
+    /// it (a task group, a stream iterator) would return at once. That would
+    /// hand `end` back an empty summary, release the background handle and
+    /// clear the ride while the final flush and the end-ride call were still
+    /// in flight. An unstructured task inherits no cancellation and waits the
+    /// budget out.
+    ///
+    /// Not a task group: a group waits for every child before it returns, and
+    /// the child awaiting `teardown` cannot be cancelled out of that await, so
+    /// a server that never answers would hold `end` for as long as it liked.
     private func withinEndBudget(_ teardown: Task<RideSummary?, Never>) async -> RideSummary? {
-        let (results, continuation) = AsyncStream<RideSummary?>.makeStream()
-        let finish = Task {
-            let summary = await teardown.value
-            continuation.yield(summary)
-            continuation.finish()
+        let clock = self.clock
+        let race = Task { () -> RideSummary? in
+            let (results, continuation) = AsyncStream<RideSummary?>.makeStream()
+            let finish = Task {
+                let summary = await teardown.value
+                continuation.yield(summary)
+                continuation.finish()
+            }
+            let budget = Task {
+                try? await clock.sleep(for: Self.endBudget)
+                continuation.yield(nil)
+                continuation.finish()
+            }
+            defer {
+                // Whoever lost the race has nothing left to report. Cancelling
+                // `finish` does not reach `teardown`, which keeps trying.
+                finish.cancel()
+                budget.cancel()
+            }
+            var iterator = results.makeAsyncIterator()
+            return await iterator.next() ?? nil
         }
-        let budget = Task { [clock] in
-            try? await clock.sleep(for: Self.endBudget)
-            continuation.yield(nil)
-            continuation.finish()
-        }
-        defer {
-            // Whoever lost the race has nothing left to report.
-            finish.cancel()
-            budget.cancel()
-        }
-        var iterator = results.makeAsyncIterator()
-        return await iterator.next() ?? nil
+        return await race.value
     }
 
     /// How the server sees `tripID` right now, registering first if this device
     /// has never registered.
     public func tripStatus(tripID: String, startDate: String?) async throws -> TripStatus {
-        let token = try await authorizedToken(into: nil)
-        return try await client.tripStatus(token: token, tripID: tripID, startDate: startDate)
+        try await withAuthorizedToken(into: nil) { token in
+            try await client.tripStatus(token: token, tripID: tripID, startDate: startDate)
+        }.result
     }
 
     // MARK: - Credentials
+
+    /// Runs `body` with the stored token — and once more with a freshly
+    /// registered one if the server no longer honours it. Every call made
+    /// outside a ride goes through here, so an expired or revoked token is
+    /// recovered from in one place rather than at whichever call site
+    /// happened to think of it.
+    private func withAuthorizedToken<T: Sendable>(
+        into continuation: AsyncStream<RideEvent>.Continuation?,
+        _ body: (String) async throws -> T
+    ) async throws -> (token: String, result: T) {
+        var token = try await authorizedToken(into: continuation)
+        do {
+            return (token, try await body(token))
+        } catch RideError.notAuthorized {
+            clearStoredToken()
+            token = try await authorizedToken(into: continuation)
+            return (token, try await body(token))
+        }
+    }
 
     /// The token to call the API with: the one this device has stored, or the
     /// one a fresh registration issues when it has none. `into` receives the
@@ -347,6 +402,12 @@ public actor RideReporter {
     private func consume(_ sample: LocationSample, rideID: String) async -> Bool {
         guard active?.rideID == rideID, active?.ending == false else { return true }
 
+        // Buffered before the end conditions are judged: the fix that shows
+        // the rider at their stop is the one the server most needs to see,
+        // and `end` sends only what is buffered.
+        if let fix = sample.fix {
+            active?.buffer.append(fix, now: clock.now)
+        }
         if let reason = active?.evaluator.evaluate(sample, now: clock.now) {
             await end(reason: reason)
             return true
@@ -363,12 +424,13 @@ public actor RideReporter {
             break
         }
 
-        if let fix = sample.fix {
-            active?.buffer.append(fix, now: clock.now)
-        }
         // A full batch goes now rather than waiting out the interval — but not
-        // while uploads are failing, which would ride straight over the backoff.
-        let batchIsFull = active.map { $0.buffer.count >= $0.maxBatchSize && $0.failureAttempts == 0 } ?? false
+        // while uploads are failing, which would ride straight over the
+        // backoff, and not while the server is pacing us, which would trip
+        // its limit on every sample of a backlog.
+        let batchIsFull = active.map {
+            $0.buffer.count >= $0.maxBatchSize && $0.failureAttempts == 0 && !$0.throttled
+        } ?? false
         if batchIsFull { await flush() }
         return false
     }
@@ -417,7 +479,11 @@ public actor RideReporter {
         let batch = active?.buffer.take(max: maxBatchSize) ?? []
         guard !batch.isEmpty else { return }
         isUploading = true
-        defer { isUploading = false }
+        active?.inFlight = batch
+        defer {
+            isUploading = false
+            if active?.rideID == rideID { active?.inFlight = [] }
+        }
 
         do {
             let response = try await client.uploadPositions(
@@ -428,6 +494,7 @@ public actor RideReporter {
             guard var current = active, current.rideID == rideID, !current.ending else { return }
             current.failureAttempts = 0
             current.failingSince = nil
+            current.throttled = false
             current.state = response.state
             current.continuation.yield(.progress(RideProgress(
                 state: response.state,
@@ -448,6 +515,8 @@ public actor RideReporter {
         } catch RideError.notAuthorized {
             clearStoredToken()
             await endIfCurrent(rideID: rideID, reason: .serverRestart)
+        } catch RideError.server(let status, _) where status == 429 {
+            throttle(batch, rideID: rideID)
         } catch RideError.server(let status, _) where Self.isPermanentRejection(status) {
             dropBatch(status: status, rideID: rideID)
         } catch RideError.decoding {
@@ -474,9 +543,19 @@ public actor RideReporter {
     }
 
     private func restore(_ batch: [LocationFix], rideID: String) {
-        guard active?.rideID == rideID else { return }
+        // A ride being ended has already reclaimed the in-flight batch itself.
+        guard active?.rideID == rideID, active?.ending == false else { return }
         // Restored in place, through `active`: see `consume`.
         active?.buffer.restore(batch)
+    }
+
+    /// The server is pacing this ride, not failing it: the batch waits for the
+    /// next periodic flush, which is neither a retry nor a warning to the host,
+    /// and the batch-full flush stands down until that one succeeds.
+    private func throttle(_ batch: [LocationFix], rideID: String) {
+        guard active?.rideID == rideID, active?.ending == false else { return }
+        active?.buffer.restore(batch)
+        active?.throttled = true
     }
 
     private func recordUploadFailure(_ batch: [LocationFix], rideID: String) async {

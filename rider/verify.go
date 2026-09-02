@@ -128,7 +128,12 @@ type VerifyInput struct {
 	Timezone  *time.Location
 	StartDate string // YYYYMMDD service date the trip started on
 	Prev      *AcceptedPoint
-	Point     Point
+	// LastAccepted is the timestamp of the latest accepted point of any
+	// outcome, zero before the first. Prev, the latest match, is the geometric
+	// baseline; this is the temporal one, and they differ while a run of
+	// non-matched points is in progress.
+	LastAccepted time.Time
+	Point        Point
 	// Trusted is the agency's own position for the trip, and TrustedAlong is
 	// that position projected onto the trip's shape. They travel together:
 	// the projection is per trip, not per point, so the caller computes it
@@ -224,6 +229,13 @@ func ignoreReason(in VerifyInput) (string, bool) {
 	}
 	if age := in.Now.Sub(in.Point.Timestamp); age > in.Thresholds.PastWindow || age < -in.Thresholds.FutureWindow {
 		return "timestamp outside window", true
+	}
+	// Judged against the latest accepted point of any outcome, not only the
+	// last match: a stale point slipped in behind newer off-route ones would
+	// otherwise be applied, rewinding the session and wiping the streak they
+	// had built.
+	if !in.LastAccepted.IsZero() && !in.Point.Timestamp.After(in.LastAccepted) {
+		return "not newer than previous point", true
 	}
 	if in.Prev != nil && !in.Point.Timestamp.After(in.Prev.Timestamp) {
 		return "not newer than previous point", true

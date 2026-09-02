@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -97,7 +98,9 @@ func envFloatOrDefault(key string, fallback float64) float64 {
 		return fallback
 	}
 	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
+	// NaN and ±Inf parse, but a threshold compared against either is never
+	// exceeded, which silently disables the check it configures.
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
 		slog.Warn("invalid float, using default", "key", key, "value", v, "default", fallback)
 		return fallback
 	}
@@ -159,7 +162,7 @@ type riderRuntime struct {
 // failure here aborts startup, since nothing can be verified without it), end
 // every ride left active by the previous process, then wire the engine, the
 // service and the background tickers. The returned runtime must be Stopped.
-func newRiderRuntime(ctx context.Context, cfg riderConfig, store riderStore, jwtSecret []byte, trustProxy bool) (*riderRuntime, error) {
+func newRiderRuntime(ctx context.Context, cfg riderConfig, store riderStore, jwtSecret []byte, trustProxy bool, tracker *Tracker) (*riderRuntime, error) {
 	// http.DefaultClient carries no timeout of its own, which is what both
 	// callers want: the GTFS download and each trusted-feed request apply
 	// their own, and a static feed is far too large for a short one.
@@ -187,7 +190,7 @@ func newRiderRuntime(ctx context.Context, cfg riderConfig, store riderStore, jwt
 	})
 	trusted := rider.NewTrustedFeed(cfg.TrustedURLs, client, cfg.TrustedMaxAge)
 	agg := rider.NewAggregator(cfg.Thresholds, index.Timezone())
-	svc := newRiderService(store, agg, refresher.Current, trusted, jwtSecret, cfg.JWTTTL, trustProxy)
+	svc := newRiderService(store, agg, refresher.Current, trustedSources{feed: trusted, tracker: tracker}, jwtSecret, cfg.JWTTTL, trustProxy)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	rt := &riderRuntime{cfg: cfg, refresher: refresher, trusted: trusted, svc: svc, cancel: cancel}
@@ -210,22 +213,6 @@ func (rt *riderRuntime) goroutine(fn func()) {
 	}()
 }
 
-// tickUntilDone calls fn on every tick of a `every`-interval ticker until ctx
-// is done. It is the shape every background loop here has; `every` must be
-// positive, which riderConfig guarantees.
-func tickUntilDone(ctx context.Context, every time.Duration, fn func(now time.Time)) {
-	ticker := time.NewTicker(every)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case now := <-ticker.C:
-			fn(now)
-		}
-	}
-}
-
 // reapLoop ends rides that have gone quiet or run too long and files what they
 // amounted to. Reap ends its sessions in place and leaves them registered, so
 // each one is filed through finishRide — the single ride-ending path — which
@@ -233,7 +220,7 @@ func tickUntilDone(ctx context.Context, every time.Duration, fn func(now time.Ti
 // has accepted the outcome. A write that fails leaves the ride registered and
 // ended, so the next tick simply tries again.
 func (rt *riderRuntime) reapLoop(ctx context.Context) {
-	tickUntilDone(ctx, riderReapInterval, func(now time.Time) {
+	rider.TickUntilDone(ctx, riderReapInterval, func(now time.Time) {
 		for _, rideID := range rt.svc.agg.Reap(now) {
 			// Every id Reap returns names an already-ended session, so
 			// finishRide files it under the reason the session ended with;
@@ -248,7 +235,7 @@ func (rt *riderRuntime) reapLoop(ctx context.Context) {
 
 // retentionLoop enforces the ride-point retention window (spec §4.1).
 func (rt *riderRuntime) retentionLoop(ctx context.Context, store RidePointPruner) {
-	tickUntilDone(ctx, riderRetentionInterval, func(now time.Time) {
+	rider.TickUntilDone(ctx, riderRetentionInterval, func(now time.Time) {
 		deleted, err := store.DeleteRidePointsBefore(ctx, now.Add(-rt.cfg.PointRetention))
 		if err != nil {
 			slog.Warn("rider: ride point retention sweep failed", "error", err)
@@ -266,6 +253,44 @@ func (rt *riderRuntime) Stop() {
 	rt.cancel()
 	rt.wg.Wait()
 	rt.svc.Stop()
+}
+
+// trustedSources is the agency's own view of where its trips are, as the rider
+// API sees it: the configured trusted feeds, and behind them this server's own
+// driver Tracker. A trip a driver is reporting through this server is covered
+// exactly as one an external feed reports — the feed must never carry a rider
+// estimate beside it (spec §3), and rider points are corroborated against it —
+// without the operator having to point TRUSTED_GTFS_RT_URLS back at the
+// server itself.
+type trustedSources struct {
+	feed    *rider.TrustedFeed
+	tracker *Tracker // nil when there is no local driver half to consult
+}
+
+func (t trustedSources) Configured() bool           { return t.feed.Configured() }
+func (t trustedSources) Health() []rider.FeedHealth { return t.feed.Health() }
+
+func (t trustedSources) Lookup(key rider.TripKey, now time.Time) (rider.TrustedVehicle, bool) {
+	if v, ok := t.feed.Lookup(key, now); ok {
+		return v, true
+	}
+	if t.tracker == nil {
+		return rider.TrustedVehicle{}, false
+	}
+	v, ok := t.tracker.VehicleOnTrip(key.TripID)
+	if !ok {
+		return rider.TrustedVehicle{}, false
+	}
+	return rider.TrustedVehicle{
+		VehicleID: v.VehicleID,
+		Pos:       rider.LatLon{Lat: v.Latitude, Lon: v.Longitude},
+		Timestamp: time.Unix(v.Timestamp, 0),
+	}, true
+}
+
+func (t trustedSources) Covers(key rider.TripKey, now time.Time) bool {
+	_, ok := t.Lookup(key, now)
+	return ok
 }
 
 // riderOff stands in for the rider service when rider mode is off: it has no

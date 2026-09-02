@@ -76,7 +76,7 @@ unparseable value logs and falls back to its default.
 | `RIDER_MODE_ENABLED` | `false` | Enable rider routes, engine and feed merge. |
 | `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. |
 | `GTFS_STATIC_REFRESH` | `24h` | Re-download and rebuild the index. Failure keeps the old index and logs. |
-| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated VehiclePositions feed URLs. Empty means corroboration is `unavailable`. |
+| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feed URLs. The server's own driver-reported positions are always a trusted source; with no external feed, a trip no driver is reporting has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Poll interval; sends `If-None-Match` / `If-Modified-Since` when the server gave `ETag` / `Last-Modified`. |
 | `TRUSTED_FEED_MAX_AGE` | `5m` | Trusted entities older than this are dropped from the snapshot. |
 | `RIDER_JWT_TTL` | `8760h` | Rider token lifetime. |

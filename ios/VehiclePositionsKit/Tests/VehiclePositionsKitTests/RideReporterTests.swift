@@ -156,6 +156,16 @@ import Testing
         #expect(await events.waitForEnd() == .arrived)
         let endReq = try #require(env.transport.requests(matching: "POST end").first)
         #expect(String(data: endReq.body!, encoding: .utf8)!.contains("arrived"))
+        // An end the location loop triggered still waits for the server's
+        // answer: the summary comes back, and the fix that proved the
+        // arrival was uploaded before the ride was declared over.
+        #expect(await events.wait { $0.contains { if case .ended(.arrived, let summary) = $0 { return summary?.points == 3 }; return false } })
+        let uploaded = env.transport.requests(matching: "POST positions")
+            .compactMap { $0.body }
+            .compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            .flatMap { ($0["positions"] as? [[String: Any]]) ?? [] }
+        #expect(uploaded.count == 3)
+        #expect(uploaded.last?["latitude"] as? Double == 47.6087)
     }
 
     @Test func stationaryAndMaxDurationEndRide() async throws {

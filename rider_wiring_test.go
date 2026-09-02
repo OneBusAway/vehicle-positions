@@ -93,7 +93,7 @@ func TestNewRiderRuntime_LoadsIndexAndEndsStaleRides(t *testing.T) {
 		TrustedMaxAge: 5 * time.Minute, JWTTTL: time.Hour, PointRetention: time.Hour, Thresholds: rider.DefaultThresholds()}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	rt, err := newRiderRuntime(ctx, cfg, store, testSecret, false)
+	rt, err := newRiderRuntime(ctx, cfg, store, testSecret, false, nil)
 	require.NoError(t, err)
 	defer rt.Stop()
 	assert.Equal(t, "ended", store.rides["stale"].Status)
@@ -102,7 +102,7 @@ func TestNewRiderRuntime_LoadsIndexAndEndsStaleRides(t *testing.T) {
 	assert.False(t, rt.trusted.Configured())
 
 	cfg.GTFSSource = "does/not/exist.zip"
-	_, err = newRiderRuntime(ctx, cfg, store, testSecret, false)
+	_, err = newRiderRuntime(ctx, cfg, store, testSecret, false, nil)
 	assert.Error(t, err)
 }
 
@@ -198,4 +198,24 @@ func TestReapedRideIsRetriedWhenTheStoreFails(t *testing.T) {
 func TestMain_GTFSFixtureExists(t *testing.T) {
 	_, err := os.Stat("rider/testdata/fixture.zip")
 	require.NoError(t, err)
+}
+
+func TestTrustedSources_LocalDriverCoversItsTrip(t *testing.T) {
+	tracker := NewTracker(time.Minute)
+	defer tracker.Stop()
+	now := time.Now()
+	tracker.Update(&LocationReport{VehicleID: "bus-1", TripID: "T1", Latitude: 47.6, Longitude: -122.33, Timestamp: now.Unix()})
+
+	feed := rider.NewTrustedFeed(nil, http.DefaultClient, 5*time.Minute)
+	src := trustedSources{feed: feed, tracker: tracker}
+	assert.False(t, src.Configured(), "no external feed is configured")
+
+	v, ok := src.Lookup(rider.TripKey{TripID: "T1", StartDate: "20260902"}, now)
+	require.True(t, ok, "the driver half speaks for T1")
+	assert.Equal(t, "bus-1", v.VehicleID)
+	assert.Equal(t, rider.LatLon{Lat: 47.6, Lon: -122.33}, v.Pos)
+	assert.Equal(t, now.Unix(), v.Timestamp.Unix())
+	assert.True(t, src.Covers(rider.TripKey{TripID: "T1"}, now))
+	assert.False(t, src.Covers(rider.TripKey{TripID: "T2"}, now))
+	assert.False(t, trustedSources{feed: feed}.Covers(rider.TripKey{TripID: "T1"}, now), "nothing to consult without a tracker")
 }

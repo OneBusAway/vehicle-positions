@@ -1498,7 +1498,7 @@ INSERT INTO riders (id, installation_id, platform, app_id, app_version)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (installation_id) DO UPDATE
   SET last_seen_at = NOW(), app_version = EXCLUDED.app_version, platform = EXCLUDED.platform, app_id = EXCLUDED.app_id
-RETURNING id, installation_id, platform, app_id, app_version, attested, score, tier, rides_total, rides_corroborated, rides_rejected, created_at, last_seen_at, (xmax = 0) AS created
+RETURNING riders.id, riders.installation_id, riders.platform, riders.app_id, riders.app_version, riders.attested, riders.score, riders.tier, riders.rides_total, riders.rides_corroborated, riders.rides_rejected, riders.created_at, riders.last_seen_at, (xmax = 0) AS created
 `
 
 type UpsertRiderParams struct {
@@ -1510,20 +1510,8 @@ type UpsertRiderParams struct {
 }
 
 type UpsertRiderRow struct {
-	ID                string
-	InstallationID    string
-	Platform          string
-	AppID             string
-	AppVersion        string
-	Attested          bool
-	Score             int32
-	Tier              string
-	RidesTotal        int32
-	RidesCorroborated int32
-	RidesRejected     int32
-	CreatedAt         pgtype.Timestamptz
-	LastSeenAt        pgtype.Timestamptz
-	Created           bool
+	Rider   Rider
+	Created bool
 }
 
 func (q *Queries) UpsertRider(ctx context.Context, arg UpsertRiderParams) (UpsertRiderRow, error) {
@@ -1536,19 +1524,19 @@ func (q *Queries) UpsertRider(ctx context.Context, arg UpsertRiderParams) (Upser
 	)
 	var i UpsertRiderRow
 	err := row.Scan(
-		&i.ID,
-		&i.InstallationID,
-		&i.Platform,
-		&i.AppID,
-		&i.AppVersion,
-		&i.Attested,
-		&i.Score,
-		&i.Tier,
-		&i.RidesTotal,
-		&i.RidesCorroborated,
-		&i.RidesRejected,
-		&i.CreatedAt,
-		&i.LastSeenAt,
+		&i.Rider.ID,
+		&i.Rider.InstallationID,
+		&i.Rider.Platform,
+		&i.Rider.AppID,
+		&i.Rider.AppVersion,
+		&i.Rider.Attested,
+		&i.Rider.Score,
+		&i.Rider.Tier,
+		&i.Rider.RidesTotal,
+		&i.Rider.RidesCorroborated,
+		&i.Rider.RidesRejected,
+		&i.Rider.CreatedAt,
+		&i.Rider.LastSeenAt,
 		&i.Created,
 	)
 	return i, err

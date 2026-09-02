@@ -242,7 +242,9 @@ func newRiderTestEnv(t *testing.T) *riderTestEnv {
 	env.svc.regLimiter.Stop()
 	env.svc.batchLimiter.Stop()
 	env.svc.regLimiter = newPermissiveRegistrationLimiter()
-	env.svc.batchLimiter = NewKeyedRateLimiter(time.Millisecond, 1_000)
+	env.svc.batchLimiter = NewKeyedRateLimiter(time.Millisecond, 1_000, true)
+	env.svc.rideLimiter.Stop()
+	env.svc.rideLimiter = NewKeyedRateLimiter(time.Millisecond, 1_000, true)
 	t.Cleanup(env.svc.Stop)
 	env.mux = http.NewServeMux()
 	registerRiderRoutes(env.mux, env.svc)
@@ -321,17 +323,22 @@ func TestRiderRegister(t *testing.T) {
 	// Bodies the decoder must reject outright. The oversized one is checked by
 	// its message too: the body cap, not the app_version length rule, is what
 	// has to stop it.
-	raw := []struct{ name, body, contains string }{
-		{"trailing data", `{"installation_id":"` + uuid.NewString() + `","platform":"ios"}{"more":1}`, "single JSON object"},
-		{"body past the cap", `{"installation_id":"` + uuid.NewString() + `","platform":"ios","app_version":"` + strings.Repeat("x", riderMaxBodyBytes) + `"}`, "too large"},
+	raw := []struct {
+		name, body, contains string
+		code                 int
+	}{
+		{"trailing data", `{"installation_id":"` + uuid.NewString() + `","platform":"ios"}{"more":1}`, "single JSON object", http.StatusBadRequest},
+		{"body past the cap", `{"installation_id":"` + uuid.NewString() + `","platform":"ios","app_version":"` + strings.Repeat("x", riderMaxBodyBytes) + `"}`, "too large", http.StatusRequestEntityTooLarge},
+		{"wrong field type", `{"installation_id":42,"platform":"ios"}`, "has invalid type", http.StatusBadRequest},
 	}
 	for _, tc := range raw {
 		req := httptest.NewRequest("POST", "/api/v1/rider/register", strings.NewReader(tc.body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		env.mux.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code, tc.name)
+		assert.Equal(t, tc.code, w.Code, tc.name)
 		assert.Contains(t, w.Body.String(), tc.contains, tc.name)
+		assert.NotContains(t, w.Body.String(), "Go struct", tc.name)
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/rider/register", bytes.NewBufferString("{}"))
@@ -423,17 +430,38 @@ func TestEndRide(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestFinishRide_StoreFailureKeepsSession(t *testing.T) {
+// TestFinishRide_StoreFailureLeavesRideForTheReaper: the session is ended
+// before the outcome is written, so a failed write leaves it ended but
+// registered — over as far as the client and the feed are concerned, and
+// filed, with its own reason, by the reaper's next sweep.
+func TestFinishRide_StoreFailureLeavesRideForTheReaper(t *testing.T) {
 	env := newRiderTestEnv(t)
 	_, tok := env.register(t)
 	resp := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
 	env.store.failNext = assert.AnError
 	w := env.do(t, "POST", "/api/v1/rider/rides/"+resp.RideID+"/end", tok, map[string]any{"reason": "arrived"})
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, 1, env.svc.agg.ActiveCount(), "session stays so reaping can retry")
-	w = env.do(t, "POST", "/api/v1/rider/rides/"+resp.RideID+"/end", tok, map[string]any{"reason": "arrived"})
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, 0, env.svc.agg.ActiveCount())
+
+	snap, ok := env.svc.agg.Snapshot(resp.RideID)
+	require.True(t, ok, "the session stays registered until its outcome is written")
+	assert.True(t, snap.Ended)
+	assert.Equal(t, rider.EndArrived, snap.Summary.EndReason)
+	assert.Equal(t, 0, env.svc.agg.ActiveCount(), "but it is no longer active")
+	assert.Equal(t, "active", env.store.rides[resp.RideID].Status, "the store has not heard yet")
+
+	w = env.do(t, "POST", "/api/v1/rider/rides/"+resp.RideID+"/positions", tok, map[string]any{"positions": []map[string]any{
+		{"latitude": 47.6, "longitude": -122.33, "timestamp": env.now.Unix()},
+	}})
+	assert.Equal(t, http.StatusConflict, w.Code, "nothing more can be folded into an ended ride")
+
+	reaped := env.svc.agg.Reap(env.now)
+	require.Equal(t, []string{resp.RideID}, reaped)
+	_, err := env.svc.finishRide(context.Background(), resp.RideID, rider.EndIdle)
+	require.NoError(t, err)
+	assert.Equal(t, "ended", env.store.rides[resp.RideID].Status)
+	assert.Equal(t, "arrived", env.store.rides[resp.RideID].EndReason, "the session's own reason, not the reaper's")
+	_, ok = env.svc.agg.Snapshot(resp.RideID)
+	assert.False(t, ok, "filed and gone")
 }
 
 func TestFinishRide_AlreadyEndedInStoreDropsSession(t *testing.T) {
@@ -585,7 +613,7 @@ func TestPositions_Validation(t *testing.T) {
 
 func TestPositions_RateLimitedPerRider(t *testing.T) {
 	env := newRiderTestEnv(t)
-	env.svc.batchLimiter = NewKeyedRateLimiter(2*time.Second, 2)
+	env.svc.batchLimiter = NewKeyedRateLimiter(2*time.Second, 2, true)
 	_, tok := env.register(t)
 	ride := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
 	_, c1 := env.upload(t, tok, ride.RideID, env.walkPoints(0, 1))

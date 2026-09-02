@@ -89,7 +89,7 @@ func (f *TrustedFeed) Poll(ctx context.Context) {
 // Start polls immediately and then every `every` until ctx is done.
 func (f *TrustedFeed) Start(ctx context.Context, every time.Duration) {
 	f.Poll(ctx)
-	tickUntilDone(ctx, every, func() { f.Poll(ctx) })
+	TickUntilDone(ctx, every, func(time.Time) { f.Poll(ctx) })
 }
 
 // pollOne fetches a single feed and folds the result into its state.

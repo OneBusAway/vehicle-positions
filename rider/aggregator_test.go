@@ -58,14 +58,14 @@ func TestAggregator_ApplyBatch_VerifiesAndReportsResult(t *testing.T) {
 	f := newAggFixture(t)
 	f.addSession("r1", "rider-a", TierNew)
 	res := f.walk(t, "r1", 0, 60, 10, nil) // 7 points, 6 s apart... all matched
-	assert.Equal(t, Verified, res.State)
+	assert.Equal(t, Verified, res.Summary.State)
 	assert.Equal(t, 7, res.Accepted)
 	assert.Equal(t, 0, res.Ignored)
 	assert.False(t, res.Published, "new rider without corroboration")
 	assert.Equal(t, Unavailable, res.Corroboration)
 	assert.Len(t, res.Points, 7)
 	assert.Equal(t, Matched, res.Points[0].Verdict.Outcome)
-	assert.False(t, res.Ended)
+	assert.False(t, res.Summary.Ended())
 
 	snap, ok := f.agg.Snapshot("r1")
 	assert.True(t, ok)
@@ -99,9 +99,9 @@ func TestAggregator_ApplyBatch_SortsAndStopsAtEnd(t *testing.T) {
 	}
 	res, err := f.agg.ApplyBatch("r1", pts, nil, f.base.Add(70*time.Second))
 	require.NoError(t, err)
-	assert.True(t, res.Ended)
-	assert.Equal(t, EndOffRoute, res.EndReason)
-	assert.Equal(t, Rejected, res.State)
+	assert.True(t, res.Summary.Ended())
+	assert.Equal(t, EndOffRoute, res.Summary.EndReason)
+	assert.Equal(t, Rejected, res.Summary.State)
 	assert.Equal(t, 5, res.Accepted)
 	assert.Equal(t, 2, res.Ignored)
 	snap, ok := f.agg.Snapshot("r1")
@@ -131,7 +131,7 @@ func TestAggregator_ApplyBatch_AppliesOldestFirst(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, res.Accepted)
 	assert.Equal(t, 0, res.Ignored)
-	assert.Equal(t, Verified, res.State)
+	assert.Equal(t, Verified, res.Summary.State)
 	for _, ap := range res.Points {
 		assert.Equal(t, Matched, ap.Verdict.Outcome)
 	}
@@ -249,8 +249,8 @@ func TestAggregator_EstimateUsesLatestMatchedPoint(t *testing.T) {
 	now := f.base.Add(80 * time.Second)
 	res, err := f.agg.ApplyBatch("r1", pts, nil, now)
 	require.NoError(t, err)
-	require.Equal(t, Verified, res.State)
-	require.False(t, res.Ended)
+	require.Equal(t, Verified, res.Summary.State)
+	require.False(t, res.Summary.Ended())
 	require.True(t, res.Published)
 
 	est := f.agg.Estimates(now, noCover)
@@ -312,4 +312,71 @@ func TestAggregator_Reap(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, EndMaxDuration, snap.Summary.EndReason)
 	assert.Equal(t, 0, g.agg.ActiveCount())
+}
+
+// walkOffset is walk with every timestamp shifted, so riders at different
+// points of the shape can report at the same moment.
+func (f *aggFixture) walkOffset(t *testing.T, rideID string, from, to, step float64, offset time.Duration) time.Time {
+	t.Helper()
+	var pts []Point
+	for a := from; a <= to; a += step {
+		pts = append(pts, f.onSchedulePoint(a, offset))
+	}
+	now := pts[len(pts)-1].Timestamp.Add(2 * time.Second)
+	_, err := f.agg.ApplyBatch(rideID, pts, nil, now)
+	require.NoError(t, err)
+	return now
+}
+
+// TestAggregator_TrimmedGroupMustStillBePublishable: a trusted rider makes the
+// group publishable, but the crowd's median puts them outside the trim. What is
+// left — new riders too far apart to agree — must not be published on the
+// trusted rider's credit.
+func TestAggregator_TrimmedGroupMustStillBePublishable(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("trusted", "rider-t", TierTrusted)
+	f.addSession("a", "rider-a", TierNew)
+	f.addSession("b", "rider-b", TierNew)
+	f.addSession("c", "rider-c", TierNew)
+	// Everyone reports around the same moment (about 10 minutes in).
+	f.walkOffset(t, "trusted", 40, 100, 10, 540*time.Second)
+	f.walkOffset(t, "a", 640, 700, 10, 180*time.Second)
+	f.walkOffset(t, "b", 790, 850, 10, 90*time.Second)
+	now := f.walkOffset(t, "c", 940, 1000, 10, 0)
+
+	assert.Empty(t, f.agg.Estimates(now, noCover), "the survivors of the trim are not credible on their own")
+	assert.Equal(t, 0, f.agg.PublishableCount(now, noCover))
+	reported, riders := f.agg.TripStatus(TripKey{"T1", "20260902"}, now, noCover)
+	assert.False(t, reported)
+	assert.Equal(t, 4, riders)
+}
+
+// TestAggregator_StalePointBehindNewerOffRoutePointsIsIgnored: a retried
+// upload carrying an on-route point older than off-route points already
+// applied must not be folded in — it would rewind the session and wipe the
+// streak those points had built.
+func TestAggregator_StalePointBehindNewerOffRoutePointsIsIgnored(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierNew)
+	f.walk(t, "r1", 0, 60, 10, nil) // matched up to along 60
+
+	offRoute := func(along float64) Point {
+		p := f.onSchedulePoint(along, 0)
+		p.Pos.Lon += 0.02 // ~1.5 km east of the shape
+		return p
+	}
+	later := f.onSchedulePoint(90, 0).Timestamp.Add(2 * time.Second)
+	res, err := f.agg.ApplyBatch("r1", []Point{offRoute(80), offRoute(90)}, nil, later)
+	require.NoError(t, err)
+	require.Equal(t, 2, res.OffRouteStreak)
+
+	res, err = f.agg.ApplyBatch("r1", []Point{f.onSchedulePoint(65, 0)}, nil, later)
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.Accepted)
+	assert.Equal(t, 1, res.Ignored)
+	assert.Equal(t, 2, res.OffRouteStreak, "the streak stands")
+
+	res, err = f.agg.ApplyBatch("r1", []Point{offRoute(100)}, nil, later.Add(10*time.Second))
+	require.NoError(t, err)
+	assert.Equal(t, 3, res.OffRouteStreak, "had the stale match been applied, the streak would have restarted at 1")
 }

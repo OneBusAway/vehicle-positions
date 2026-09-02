@@ -18,8 +18,14 @@ type VehicleRateLimiter struct {
 	limiters map[string]*rateLimiterEntry
 	interval time.Duration
 	burst    int
-	stop     chan struct{}
-	once     sync.Once
+	// failClosed refuses new keys once the map is full instead of letting
+	// them through untracked. The driver limiter fails open — vehicle ids come
+	// from authenticated staff, and a full map means a busy fleet — but a key
+	// an anonymous client can mint for itself (a rider id) must not be able
+	// to fill the map and switch the limit off for everyone after it.
+	failClosed bool
+	stop       chan struct{}
+	once       sync.Once
 }
 
 type rateLimiterEntry struct {
@@ -28,18 +34,20 @@ type rateLimiterEntry struct {
 }
 
 func NewVehicleRateLimiter() *VehicleRateLimiter {
-	return NewKeyedRateLimiter(rateInterval, 1)
+	return NewKeyedRateLimiter(rateInterval, 1, false)
 }
 
 // NewKeyedRateLimiter builds a per-key token-bucket limiter allowing one event
-// every interval with the given burst. It is the general form of
-// NewVehicleRateLimiter, which is exactly NewKeyedRateLimiter(rateInterval, 1).
-func NewKeyedRateLimiter(interval time.Duration, burst int) *VehicleRateLimiter {
+// every interval with the given burst, failing closed or open at capacity (see
+// VehicleRateLimiter.failClosed). It is the general form of
+// NewVehicleRateLimiter, which is NewKeyedRateLimiter(rateInterval, 1, false).
+func NewKeyedRateLimiter(interval time.Duration, burst int, failClosed bool) *VehicleRateLimiter {
 	vrl := &VehicleRateLimiter{
-		limiters: make(map[string]*rateLimiterEntry),
-		interval: interval,
-		burst:    burst,
-		stop:     make(chan struct{}),
+		limiters:   make(map[string]*rateLimiterEntry),
+		interval:   interval,
+		burst:      burst,
+		failClosed: failClosed,
+		stop:       make(chan struct{}),
 	}
 	go vrl.cleanup()
 	return vrl
@@ -57,6 +65,10 @@ func (vrl *VehicleRateLimiter) Allow(key string) bool {
 	entry, ok := vrl.limiters[key]
 	if !ok {
 		if len(vrl.limiters) >= maxTrackedRates {
+			if vrl.failClosed {
+				slog.Warn("rate limiter at capacity, failing closed", "capacity", maxTrackedRates, "key", key)
+				return false
+			}
 			slog.Warn("rate limiter at capacity, allowing untracked key", "capacity", maxTrackedRates, "key", key)
 			return true
 		}

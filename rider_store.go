@@ -153,23 +153,9 @@ func (s *Store) RegisterRider(ctx context.Context, installationID, platform, app
 	if err != nil {
 		return nil, false, fmt.Errorf("upsert rider: %w", err)
 	}
-	// UpsertRider returns the rider columns plus the synthetic "created" flag,
-	// so it needs its own (mechanical) mapping.
-	return riderFromRow(db.Rider{
-		ID:                row.ID,
-		InstallationID:    row.InstallationID,
-		Platform:          row.Platform,
-		AppID:             row.AppID,
-		AppVersion:        row.AppVersion,
-		Attested:          row.Attested,
-		Score:             row.Score,
-		Tier:              row.Tier,
-		RidesTotal:        row.RidesTotal,
-		RidesCorroborated: row.RidesCorroborated,
-		RidesRejected:     row.RidesRejected,
-		CreatedAt:         row.CreatedAt,
-		LastSeenAt:        row.LastSeenAt,
-	}), row.Created, nil
+	// UpsertRider embeds the whole rider row beside the synthetic "created"
+	// flag, so a new column reaches here without a second mapping to forget.
+	return riderFromRow(row.Rider), row.Created, nil
 }
 
 // GetRider looks up a rider by id, returning ErrRiderNotFound when absent.

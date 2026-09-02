@@ -226,3 +226,13 @@ func TestDominantOutcome(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) { assert.Equal(t, tc.want, dominantOutcome(tc.streak)) })
 	}
 }
+
+func TestSession_FreshJudgesLatestMatch(t *testing.T) {
+	s := newTestSession(t)
+	s.Apply(verdict(Matched, Unavailable, 10), pointAt(100))
+	s.Apply(verdict(OffRoute, Unavailable, 0), pointAt(180))
+	now := pointAt(200).Timestamp
+	assert.Equal(t, pointAt(180).Timestamp, s.LastAcceptedAt())
+	assert.False(t, s.Fresh(now, 90*time.Second), "the match is 100 s old; an off-route point does not refresh it")
+	assert.True(t, s.Fresh(now, 120*time.Second))
+}

@@ -199,14 +199,18 @@ Two settings make it runnable at any hour:
   schedule-adherence window so `T1` matches whatever the clock says. The
   simulator itself never fakes time — it walks the shape in real time, and
   `-speed` is what controls how fast it gets through it.
-- `STALENESS_THRESHOLD=30s TRUSTED_FEED_MAX_AGE=30s` make the "agency" vehicle
+- `STALENESS_THRESHOLD=30s` makes the "agency" vehicle
   disappear 30 s after its last report instead of five minutes later, so you
   do not have to wait to see the rider take over.
 
 ### 1. Start the server
 
-The trusted feed here is the server's own driver half, so the rider engine has
-something authoritative to check riders against.
+The server's own driver half is always a trusted source — a trip a driver is
+reporting through this server suppresses and corroborates riders on it without
+any `TRUSTED_GTFS_RT_URLS` — so the engine has something authoritative to check
+riders against as soon as a driver reports. `TRUSTED_FEED_MAX_AGE` is what
+bounds an external feed; the local driver half is bounded by
+`STALENESS_THRESHOLD`.
 
 ```bash
 docker compose up -d db
@@ -216,8 +220,7 @@ export JWT_SECRET='change-me-change-me-change-me-32b'
 export ADMIN_BOOTSTRAP_EMAIL=admin@test.com ADMIN_BOOTSTRAP_PASSWORD=password123
 export RIDER_MODE_ENABLED=true GTFS_STATIC_URL=rider/testdata/fixture.zip
 export RIDER_SCHEDULE_EARLY=24h RIDER_SCHEDULE_LATE=24h
-export STALENESS_THRESHOLD=30s TRUSTED_FEED_MAX_AGE=30s TRUSTED_FEED_POLL=2s
-export TRUSTED_GTFS_RT_URLS='http://localhost:18080/gtfs-rt/vehicle-positions?source=driver'
+export STALENESS_THRESHOLD=30s
 go run .
 ```
 
@@ -281,8 +284,8 @@ curl -s 'localhost:18080/gtfs-rt/vehicle-positions?format=json&source=rider' | j
 curl -s 'localhost:18080/gtfs-rt/vehicle-positions?format=json&source=driver' | jq '.entity | length'  # 1
 ```
 
-About 30 s after the driver loop ends, `bus-1` goes stale, the trusted feed
-empties, and the rider's estimate appears instead:
+About 30 s after the driver loop ends, `bus-1` goes stale, the driver half no
+longer covers `T1`, and the rider's estimate appears instead:
 
 ```bash
 curl -s 'localhost:18080/gtfs-rt/vehicle-positions?format=json&source=rider' | jq '.entity[0].vehicle.vehicle'

@@ -23,8 +23,10 @@ services:
       PORT: "8080"
       DATABASE_URL: "postgres://postgres:postgres@db:5432/vehicle_positions?sslmode=disable"
       STALENESS_THRESHOLD: "5m"
-      # Development-only secret. Generate a real one (32+ bytes) before deploying.
-      JWT_SECRET: "change-me-change-me-change-me-32b"
+      # Required, 32+ bytes, from the environment or a .env file next to this
+      # file (e.g. `JWT_SECRET=$(openssl rand -hex 32)`). Compose refuses to
+      # start without it, so no checked-in placeholder can reach a real host.
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET must be set to a 32+ byte secret}"
       # Rider mode is off by default. To turn it on, set this to "true" and
       # point GTFS_STATIC_URL at a GTFS static zip (URL or path); the server
       # exits at startup if it is enabled without one.

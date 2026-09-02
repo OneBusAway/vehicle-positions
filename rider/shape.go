@@ -12,6 +12,13 @@ const (
 	// a loop that share a point, where the closest distance is near zero and a
 	// purely proportional band would admit only the one pass.
 	hintCandidateBand = 30.0
+	// backwardHintWeight is how much further behind the hint a candidate pass
+	// must be, relative to one ahead of it, before it wins. A vehicle on its
+	// trip moves forward along the shape: just past the turnaround of an
+	// out-and-back the two legs are equally near the last match, and the one
+	// ahead is the right one. A short step backwards on the same pass — GPS
+	// jitter, a bus reversing into a bay — still beats a pass far ahead.
+	backwardHintWeight = 2.0
 	// minCosLat floors the cosine of the latitude in OffsetMetres, so a point
 	// at a pole does not divide by zero.
 	minCosLat = 1e-6
@@ -111,11 +118,12 @@ func NewShapeGeom(points []LatLon) *ShapeGeom {
 
 // Project returns the position of p along the shape. Distances are measured in
 // a local equirectangular projection. When hint is nil the globally closest
-// segment wins, found in one pass with nothing allocated — this is the hot
-// path, run for every point of every batch. With a hint the closest local
-// minimum to the hinted distance along the shape wins instead, which keeps
-// loops and out-and-backs from snapping to the wrong pass; that needs every
-// segment's distance at once, so it keeps the two slices.
+// segment wins, found in one pass with nothing allocated. With a hint — the
+// path every point after a ride's first match takes — the local minimum
+// nearest the hinted distance along the shape wins instead, backwards
+// distance counting for more than forwards, which keeps loops and
+// out-and-backs from snapping to the wrong pass; that needs every segment's
+// distance at once, so it keeps the two slices.
 func (s *ShapeGeom) Project(p LatLon, hint *float64) Projection {
 	segments := len(s.Points) - 1
 	px, py := s.local(p)
@@ -147,7 +155,11 @@ func (s *ShapeGeom) Project(p LatLon, hint *float64) Projection {
 		if dists[i] > threshold || !isLocalMin(dists, i) {
 			continue
 		}
-		if delta := math.Abs(alongs[i] - *hint); delta < closest {
+		delta := alongs[i] - *hint
+		if delta < 0 {
+			delta = -delta * backwardHintWeight
+		}
+		if delta < closest {
 			closest = delta
 			chosen = i
 		}

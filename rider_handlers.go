@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"io"
 	"log/slog"
 	"mime"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/rider"
@@ -33,6 +35,16 @@ const (
 	// a retry.
 	riderBatchInterval = 2 * time.Second
 	riderBatchBurst    = 2
+	// riderRideInterval and riderRideBurst rate-limit ride starts and ends per
+	// rider. Each one is a store write and a supersede transaction, and a
+	// token lasts a year: a rider changing their mind a few times in quick
+	// succession fits; a client looping on POST /rides does not.
+	riderRideInterval = 10 * time.Second
+	riderRideBurst    = 3
+	// riderLockStripes is how many mutexes ride starts are spread across by
+	// rider id. One start per rider at a time is what matters; the count only
+	// bounds how often two riders share one.
+	riderLockStripes = 64
 )
 
 // errRideNotActive is returned by finishRide when the ride is no longer one
@@ -59,7 +71,10 @@ type riderStore interface {
 }
 
 // trustedLookup is the agency's own view of where a trip is, as far as the
-// rider API is concerned. *rider.TrustedFeed satisfies it.
+// rider API is concerned: trustedSources in production, which answers from the
+// configured feeds and this server's own driver Tracker. Configured reports
+// only whether remote feeds exist, for the status page; Lookup and Covers are
+// always worth asking.
 type trustedLookup interface {
 	Configured() bool
 	Lookup(key rider.TripKey, now time.Time) (rider.TrustedVehicle, bool)
@@ -76,13 +91,14 @@ type riderService struct {
 	trusted      trustedLookup
 	regLimiter   *RegistrationRateLimiter
 	batchLimiter *VehicleRateLimiter
+	rideLimiter  *VehicleRateLimiter
 	jwtSecret    []byte
 	jwtTTL       time.Duration
 	trustProxy   bool
 	now          func() time.Time
 
-	reportIntervalSeconds int
-	maxBatchSize          int
+	// rideLocks serialise the starts of one rider (see riderLock).
+	rideLocks [riderLockStripes]sync.Mutex
 }
 
 // newRiderService wires the rider API together. It starts both rate limiters,
@@ -90,18 +106,17 @@ type riderService struct {
 func newRiderService(store riderStore, agg *rider.Aggregator, index func() *rider.Index, trusted trustedLookup,
 	jwtSecret []byte, jwtTTL time.Duration, trustProxy bool) *riderService {
 	return &riderService{
-		store:                 store,
-		agg:                   agg,
-		index:                 index,
-		trusted:               trusted,
-		regLimiter:            NewRegistrationRateLimiter(),
-		batchLimiter:          NewKeyedRateLimiter(riderBatchInterval, riderBatchBurst),
-		jwtSecret:             jwtSecret,
-		jwtTTL:                jwtTTL,
-		trustProxy:            trustProxy,
-		now:                   time.Now,
-		reportIntervalSeconds: riderReportIntervalSeconds,
-		maxBatchSize:          riderMaxBatchSize,
+		store:        store,
+		agg:          agg,
+		index:        index,
+		trusted:      trusted,
+		regLimiter:   NewRegistrationRateLimiter(),
+		batchLimiter: NewKeyedRateLimiter(riderBatchInterval, riderBatchBurst, true),
+		rideLimiter:  NewKeyedRateLimiter(riderRideInterval, riderRideBurst, true),
+		jwtSecret:    jwtSecret,
+		jwtTTL:       jwtTTL,
+		trustProxy:   trustProxy,
+		now:          time.Now,
 	}
 }
 
@@ -109,6 +124,17 @@ func newRiderService(store riderStore, agg *rider.Aggregator, index func() *ride
 func (s *riderService) Stop() {
 	s.regLimiter.Stop()
 	s.batchLimiter.Stop()
+	s.rideLimiter.Stop()
+}
+
+// riderLock is the mutex that serialises one rider's ride starts. Two starts
+// from the same rider at once — a retry racing the request it retries — would
+// each see no active ride, each insert one, and leave the first orphaned until
+// the reaper found it. Striping by rider id keeps the lock table fixed-size.
+func (s *riderService) riderLock(riderID string) *sync.Mutex {
+	h := fnv.New32a()
+	h.Write([]byte(riderID))
+	return &s.rideLocks[h.Sum32()%riderLockStripes]
 }
 
 // riderRegisterRequest is the body of POST /api/v1/rider/register.
@@ -219,7 +245,14 @@ func decodeRiderJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		// A body over the cap is a different answer from a malformed one: the
+		// client should shrink the batch, not fix the JSON.
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+			return false
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + sanitizeJSONError(err)})
 		return false
 	}
 	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
@@ -271,8 +304,8 @@ func (s *riderService) handleRegister() http.HandlerFunc {
 		writeJSON(w, status, riderRegisterResponse{
 			RiderID:               rd.ID,
 			Token:                 token,
-			ReportIntervalSeconds: s.reportIntervalSeconds,
-			MaxBatchSize:          s.maxBatchSize,
+			ReportIntervalSeconds: riderReportIntervalSeconds,
+			MaxBatchSize:          riderMaxBatchSize,
 		})
 	}
 }
@@ -306,6 +339,10 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
+		if !s.rideLimiter.Allow(riderID) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many ride changes, slow down"})
+			return
+		}
 
 		var req startRideRequest
 		if !decodeRiderJSON(w, r, &req) {
@@ -315,9 +352,17 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "trip_id is required"})
 			return
 		}
-		if tooLong(req.RouteID) || tooLong(req.VehicleID) || tooLong(req.BoardingStopID) || tooLong(req.DestinationStopID) {
+		if tooLong(req.RouteID) || tooLong(req.BoardingStopID) || tooLong(req.DestinationStopID) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "identifiers must be at most 100 characters"})
 			return
+		}
+		// A vehicle id names the same thing here as everywhere else in the
+		// API, so it is held to the same shape.
+		if req.VehicleID != "" {
+			if err := validateVehicleID(req.VehicleID); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
 		}
 		if req.StartDate != "" && !serviceDatePattern.MatchString(req.StartDate) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "start_date must be YYYYMMDD"})
@@ -347,6 +392,12 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "route_id does not match the trip"})
 			return
 		}
+
+		// One start per rider at a time, from here to the new session's
+		// registration: see riderLock.
+		mu := s.riderLock(riderID)
+		mu.Lock()
+		defer mu.Unlock()
 
 		// One rider rides one vehicle. The old ride goes through finishRide so
 		// its reputation outcome is applied and its session stops publishing.
@@ -404,8 +455,8 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 		writeJSON(w, http.StatusCreated, startRideResponse{
 			RideID:                ride.ID,
 			State:                 ride.State,
-			ReportIntervalSeconds: s.reportIntervalSeconds,
-			MaxBatchSize:          s.maxBatchSize,
+			ReportIntervalSeconds: riderReportIntervalSeconds,
+			MaxBatchSize:          riderMaxBatchSize,
 			Destination:           destinationOf(trip, ride.DestinationStopID),
 		})
 	}
@@ -439,6 +490,10 @@ func (s *riderService) handleEndRide() http.HandlerFunc {
 		riderID, ok := riderIDFromContext(r.Context())
 		if !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+		if !s.rideLimiter.Allow(riderID) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many ride changes, slow down"})
 			return
 		}
 
@@ -516,7 +571,7 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "positions must contain at least one position"})
 			return
 		}
-		if len(req.Positions) > s.maxBatchSize {
+		if len(req.Positions) > riderMaxBatchSize {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "too many positions in one report"})
 			return
 		}
@@ -533,7 +588,7 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 		// A trip the agency's own feed can speak for is judged against it; with
 		// no feed the engine has only the schedule and the shape to go on.
 		var lookup func(rider.TripKey) (rider.TrustedVehicle, bool)
-		if s.trusted != nil && s.trusted.Configured() {
+		if s.trusted != nil {
 			lookup = func(k rider.TripKey) (rider.TrustedVehicle, bool) { return s.trusted.Lookup(k, now) }
 		}
 		res, err := s.agg.ApplyBatch(rideID, points, lookup, now)
@@ -568,13 +623,13 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 		// This happens whether or not the batch could be stored — a ride the
 		// engine has finished with must be filed and its reputation effect
 		// applied, or it lingers in the aggregator until the reaper notices.
-		if res.Ended {
+		if res.Summary.Ended() {
 			// WithoutCancel: the rejection and its reputation penalty are the
 			// server's decision, not the client's request. A phone that hangs
 			// up as the response is written must not defer the write to the
 			// reaper — which would only end the ride as "idle" 15 minutes on.
 			endCtx := context.WithoutCancel(r.Context())
-			if _, err := s.finishRide(endCtx, rideID, res.EndReason); err != nil && !errors.Is(err, errRideNotActive) {
+			if _, err := s.finishRide(endCtx, rideID, res.Summary.EndReason); err != nil && !errors.Is(err, errRideNotActive) {
 				slog.Error("failed to finish a ride the engine ended", "ride_id", rideID, "error", err)
 			}
 		}
@@ -584,14 +639,14 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, positionsResponse{
-			State:          res.State.String(),
+			State:          res.Summary.State.String(),
 			Published:      res.Published,
 			Corroboration:  res.Corroboration.String(),
 			Accepted:       res.Accepted,
 			Ignored:        res.Ignored,
 			OffRouteStreak: res.OffRouteStreak,
-			Ended:          res.Ended,
-			EndReason:      string(res.EndReason),
+			Ended:          res.Summary.Ended(),
+			EndReason:      string(res.Summary.EndReason),
 		})
 	}
 }
@@ -692,7 +747,7 @@ func (s *riderService) RiderStatus(ctx context.Context) (riderStatusResponse, er
 // it at now. It returns nil when there is no trusted feed to ask, which is what
 // the aggregator expects for "nothing is covered".
 func (s *riderService) coveredFunc(now time.Time) func(rider.TripKey) bool {
-	if s.trusted == nil || !s.trusted.Configured() {
+	if s.trusted == nil {
 		return nil
 	}
 	return func(k rider.TripKey) bool { return s.trusted.Covers(k, now) }
@@ -770,21 +825,25 @@ func ridePointRecords(points []rider.AppliedPoint) []RidePointRecord {
 // finishRide persists what a ride amounted to and retires its session. It
 // works from a snapshot rather than the session itself: a registered session is
 // only ever read under the aggregator's lock, because points may still be being
-// applied to it. The session is ended and unregistered only once the store has
-// accepted the outcome — a failed write leaves the ride live so the caller, or
-// the reaper, can try again rather than losing the ride's points and its
-// reputation effect. A session that ended itself (rejected, or reaped) keeps
-// its own end reason; the first end wins.
+// applied to it. The session is ended first and unregistered only once the
+// store has accepted the outcome — a failed write leaves the ride ended but
+// registered, so the reaper files it rather than losing the ride's points and
+// its reputation effect. A session that ended itself (rejected, or reaped)
+// keeps its own end reason; the first end wins.
 func (s *riderService) finishRide(ctx context.Context, rideID string, reason rider.EndReason) (*Rider, error) {
-	snap, ok := s.agg.Snapshot(rideID)
+	// Ended under the aggregator's lock before anything is persisted, the way
+	// the reaper ends rides: from this moment a batch for the ride is answered
+	// "ride ended" rather than folded into a session whose outcome has
+	// already been read, so what is written is the whole ride. The session
+	// stays registered until the store has accepted the outcome — a failed
+	// write leaves it ended and registered, and the reaper files it on its
+	// next sweep — and a session that ended itself keeps its own reason.
+	snap, ok := s.agg.End(rideID, reason, s.now())
 	if !ok {
 		return nil, errRideNotActive
 	}
-	if snap.Ended {
-		reason = snap.Summary.EndReason
-	}
 
-	outcome := rideOutcomeOf(snap.Summary, reason)
+	outcome := rideOutcomeOf(snap.Summary, snap.Summary.EndReason)
 
 	updated, err := s.store.FinishRide(ctx, rideID, outcome)
 	if err != nil {
@@ -797,12 +856,7 @@ func (s *riderService) finishRide(ctx context.Context, rideID string, reason rid
 		return nil, err
 	}
 
-	// Unregistering first is what makes ending the session safe: once the
-	// aggregator has let go of it, nothing else holds it.
-	sess := s.agg.Remove(rideID)
-	if sess != nil && !snap.Ended {
-		sess.End(reason, s.now())
-	}
+	s.agg.Remove(rideID)
 	// A score change lands on the ride the rider has in flight, if the ride
 	// that just ended was not it.
 	s.agg.SetTier(updated.ID, rider.ParseTier(updated.Tier))

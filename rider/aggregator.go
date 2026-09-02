@@ -37,18 +37,16 @@ type AppliedPoint struct {
 }
 
 // BatchResult is what applying a batch of points did to a ride. Everything the
-// ride has amounted to so far — its state, counts and corroboration — is in
-// Summary; the rest describes this batch and the session's standing at the end
-// of it.
+// ride has amounted to so far — its state, whether and why it ended, its counts
+// and corroboration — is in Summary, and only there, so a caller cannot read
+// the state from one place and the end reason from another; the rest describes
+// this batch and the session's standing at the end of it.
 type BatchResult struct {
-	State          State
 	Published      bool          // Session.Publishable at the end of the batch
 	Corroboration  Corroboration // Session.LatestCorroboration
 	Accepted       int           // non-ignored points applied
 	Ignored        int
 	OffRouteStreak int
-	Ended          bool
-	EndReason      EndReason
 	Points         []AppliedPoint // non-ignored points, in application order (for persistence)
 	Summary        RideSummary
 }
@@ -138,6 +136,33 @@ func (a *Aggregator) Snapshot(rideID string) (RideSnapshot, bool) {
 	}, true
 }
 
+// End ends a registered ride in place under the lock and returns what it
+// amounted to. The first end wins: a ride that ended itself — rejected, or
+// reaped — keeps its own reason, and the snapshot reports it. The session
+// stays registered, exactly as after Reap, until the caller has persisted the
+// outcome and Removes it; meanwhile it no longer counts as active, publishes
+// nothing and answers ErrUnknownRide to a batch, so nothing can be folded into
+// a ride between its outcome being read and its being filed. Unknown ride ids
+// report false.
+func (a *Aggregator) End(rideID string, reason EndReason, now time.Time) (RideSnapshot, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s, ok := a.sessions[rideID]
+	if !ok {
+		return RideSnapshot{}, false
+	}
+	s.End(reason, now)
+	return RideSnapshot{
+		ID:        s.ID(),
+		RiderID:   s.RiderID(),
+		Key:       s.Key(),
+		Tier:      s.Tier(),
+		StartedAt: s.StartedAt(),
+		Ended:     true,
+		Summary:   s.Summary(),
+	}, true
+}
+
 // ActiveRideForRider returns the rider's newest live ride, if they have one.
 func (a *Aggregator) ActiveRideForRider(riderID string) (string, bool) {
 	a.mu.Lock()
@@ -213,10 +238,19 @@ func (a *Aggregator) ApplyBatch(rideID string, points []Point, lookup func(TripK
 	}
 
 	// The trusted position is per trip, not per point: projecting it onto the
-	// shape once here spares the projection on every point of the batch.
+	// shape once here spares the projection on every point of the batch. The
+	// rider's last match is the hint, for the same reason it is the hint for
+	// their own points: on a loop or an out-and-back the globally closest
+	// segment may be the other pass, and a rider actually aboard would then
+	// be contradicted point after point.
 	var trustedAlong *float64
 	if trusted != nil && s.Trip() != nil && s.Trip().Shape != nil {
-		along := s.Trip().Shape.Project(trusted.Pos, nil).AlongShape
+		var hint *float64
+		if prev := s.LatestMatched(); prev != nil {
+			prevAlong := prev.AlongShape
+			hint = &prevAlong
+		}
+		along := s.Trip().Shape.Project(trusted.Pos, hint).AlongShape
 		trustedAlong = &along
 	}
 
@@ -234,6 +268,7 @@ func (a *Aggregator) ApplyBatch(rideID string, points []Point, lookup func(TripK
 			// latest accepted point: an off-route or implausible point is
 			// exactly the position the next point must not be judged against.
 			Prev:         s.LatestMatched(),
+			LastAccepted: s.LastAcceptedAt(),
 			Point:        p,
 			Trusted:      trusted,
 			TrustedAlong: trustedAlong,
@@ -256,12 +291,9 @@ func (a *Aggregator) ApplyBatch(rideID string, points []Point, lookup func(TripK
 		res.Points = append(res.Points, AppliedPoint{Point: p, Verdict: v})
 	}
 
-	res.State = s.State()
 	res.Published = s.Publishable(now, a.th.PointMaxAge)
 	res.Corroboration = s.LatestCorroboration()
 	res.OffRouteStreak = s.OffRouteStreak()
-	res.Ended = s.Ended()
-	res.EndReason = s.EndReason()
 	res.Summary = s.Summary()
 	return res, nil
 }
@@ -318,21 +350,11 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 	return out
 }
 
-// PublishableCount is how many trips currently have a rider-derived position.
-// It applies exactly the rules Estimates does — the same groups, the same
-// publishable predicate — but stops short of computing a position for each,
-// which is all a count needs.
+// PublishableCount is how many trips currently have a rider-derived position:
+// the trips Estimates would publish, counted rather than re-derived, so the
+// count can never disagree with the feed.
 func (a *Aggregator) PublishableCount(now time.Time, covered func(TripKey) bool) int {
-	n := 0
-	for key, g := range a.groups(now) {
-		if covered != nil && covered(key) {
-			continue
-		}
-		if g.canEstimate() {
-			n++
-		}
-	}
-	return n
+	return len(a.Estimates(now, covered))
 }
 
 // TripStatus answers what the riders are saying about one trip: whether their
@@ -342,7 +364,7 @@ func (a *Aggregator) PublishableCount(now time.Time, covered func(TripKey) bool)
 // the TripEstimate for the same trip, which counts only the riders left after
 // the trim. A rider whose points have gone stale counts in neither.
 func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey) bool) (riderReported bool, riders int) {
-	g, ok := a.groupFor(key, now)
+	g, ok := a.groups(now)[key]
 	if !ok {
 		return false, 0
 	}
@@ -455,33 +477,9 @@ func (a *Aggregator) groups(now time.Time) map[TripKey]*tripGroup {
 	return out
 }
 
-// groupFor snapshots the contributing rides of one trip. TripStatus asks about
-// a single trip, and building every other trip's group to throw it away is
-// work proportional to the whole registry for an answer about one ride.
-func (a *Aggregator) groupFor(key TripKey, now time.Time) (*tripGroup, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	var g *tripGroup
-	for _, s := range a.sessions {
-		if s.Key() != key {
-			continue
-		}
-		m, ok := a.memberOfLocked(s, now)
-		if !ok {
-			continue
-		}
-		if g == nil {
-			g = &tripGroup{trip: s.Trip()}
-		}
-		g.members = append(g.members, m)
-	}
-	return g, g != nil
-}
-
 // memberOfLocked is one session's contribution to its trip's group, and
 // whether it contributes at all. It is the single definition of "counts
-// towards this trip", shared by groups and groupFor.
+// towards this trip".
 func (a *Aggregator) memberOfLocked(s *Session, now time.Time) (estimateMember, bool) {
 	if s.Ended() || s.Tier() == TierBlocked || s.State() != Verified || !s.Fresh(now, a.th.PointMaxAge) {
 		return estimateMember{}, false
@@ -513,6 +511,12 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
 	// A rider far from the median is on a different vehicle, or lost; drop them
 	// and re-centre on what is left. Once only: the survivors are the estimate.
 	if kept := within(members, median, outlierDistance); len(kept) > 0 && len(kept) < len(members) {
+		// The trim may have dropped the very rider the group was publishable
+		// on — a trusted rider the crowd outvoted — and the survivors must
+		// then be credible on their own, or nothing is.
+		if !(&tripGroup{trip: g.trip, members: kept}).publishable() {
+			return TripEstimate{}, false
+		}
 		members = kept
 		median = medianAlong(members)
 	}

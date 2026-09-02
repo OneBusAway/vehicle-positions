@@ -228,7 +228,7 @@ INSERT INTO riders (id, installation_id, platform, app_id, app_version)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (installation_id) DO UPDATE
   SET last_seen_at = NOW(), app_version = EXCLUDED.app_version, platform = EXCLUDED.platform, app_id = EXCLUDED.app_id
-RETURNING *, (xmax = 0) AS created;
+RETURNING sqlc.embed(riders), (xmax = 0) AS created;
 
 -- name: GetRider :one
 SELECT * FROM riders WHERE id = $1;

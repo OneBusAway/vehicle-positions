@@ -114,24 +114,27 @@ func (r *Refresher) RefreshNow(ctx context.Context) error {
 // Start reloads the index every `every` until ctx is done. It blocks, so
 // callers run it in a goroutine.
 func (r *Refresher) Start(ctx context.Context, every time.Duration) {
-	tickUntilDone(ctx, every, func() {
+	TickUntilDone(ctx, every, func(time.Time) {
 		if err := r.RefreshNow(ctx); err != nil {
 			slog.Warn("rider: GTFS refresh failed, keeping the previous index", "error", err)
 		}
 	})
 }
 
-// tickUntilDone calls fn on every tick of a `every`-interval ticker until ctx
-// is done. It is the shape both background pollers in this package have.
-func tickUntilDone(ctx context.Context, every time.Duration, fn func()) {
+// TickUntilDone calls fn with the tick time on every tick of an
+// `every`-interval ticker until ctx is done. It is the shape every rider
+// background loop has — the GTFS refresher, the trusted-feed poller, the
+// reaper and the retention sweep — so a change to how they tick lands once.
+// `every` must be positive.
+func TickUntilDone(ctx context.Context, every time.Duration, fn func(now time.Time)) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			fn()
+		case now := <-ticker.C:
+			fn(now)
 		}
 	}
 }

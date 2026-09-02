@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -75,10 +76,24 @@ func TestRegistrationRateLimiter(t *testing.T) {
 }
 
 func TestNewKeyedRateLimiter_Burst(t *testing.T) {
-	l := NewKeyedRateLimiter(2*time.Second, 2)
+	l := NewKeyedRateLimiter(2*time.Second, 2, true)
 	defer l.Stop()
 	assert.True(t, l.Allow("k"))
 	assert.True(t, l.Allow("k"))
 	assert.False(t, l.Allow("k"))
 	assert.True(t, l.Allow("other"))
+}
+
+func TestNewKeyedRateLimiter_FailsClosedAtCapacityWhenAsked(t *testing.T) {
+	open := NewKeyedRateLimiter(time.Hour, 1, false)
+	defer open.Stop()
+	closed := NewKeyedRateLimiter(time.Hour, 1, true)
+	defer closed.Stop()
+	for i := 0; i < maxTrackedRates; i++ {
+		key := strconv.Itoa(i)
+		open.Allow(key)
+		closed.Allow(key)
+	}
+	assert.True(t, open.Allow("one-more"), "the driver limiter lets an untracked vehicle through")
+	assert.False(t, closed.Allow("one-more"), "the rider limiter refuses a key it cannot track")
 }

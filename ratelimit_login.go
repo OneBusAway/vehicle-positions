@@ -52,10 +52,10 @@ func (l *LoginRateLimiter) Allow(ip, email string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
-	if !allowInWindow(l.byIP, ip, loginIPLimit, now) {
+	if !allowInWindow(l.byIP, ip, loginIPLimit, now, "login") {
 		return false
 	}
-	return allowInWindow(l.byEmail, email, loginEmailLimit, now)
+	return allowInWindow(l.byEmail, email, loginEmailLimit, now, "login")
 }
 
 // ResetEmail clears the per-email window after a successful authentication,
@@ -70,11 +70,13 @@ func (l *LoginRateLimiter) ResetEmail(email string) {
 	delete(l.byEmail, email)
 }
 
-func allowInWindow(m map[string]*loginWindowEntry, key string, limit int, now time.Time) bool {
+// allowInWindow is the fixed-window admission shared by the login and rider
+// registration limiters; name says which one is speaking when it fails closed.
+func allowInWindow(m map[string]*loginWindowEntry, key string, limit int, now time.Time, name string) bool {
 	e, ok := m[key]
 	if !ok {
 		if len(m) >= maxTrackedLogins {
-			slog.Warn("login rate limiter at capacity, failing closed", "capacity", maxTrackedLogins)
+			slog.Warn("rate limiter at capacity, failing closed", "limiter", name, "capacity", maxTrackedLogins)
 			return false
 		}
 		m[key] = &loginWindowEntry{count: 1, windowStart: now}

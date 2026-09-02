@@ -484,6 +484,12 @@ func (r *riderRun) flush(ctx context.Context) (string, error) {
 		}
 	}
 	if err != nil {
+		// Interrupted mid-upload: that is the operator ending the run, not the
+		// network failing it. The loop sees ctx.Done next and ends the ride as
+		// user_requested, with this batch still buffered for the final flush.
+		if ctx.Err() != nil {
+			return "", nil
+		}
 		return "", err
 	}
 	switch status {

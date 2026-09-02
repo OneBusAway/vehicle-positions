@@ -134,3 +134,25 @@ func TestProject_SharedLoopPoint_HintPicksLastPass(t *testing.T) {
 	assert.Greater(t, offset.AlongShape, s.Length-60, "the band must be wide enough to reach the last pass")
 	assert.InDelta(t, 15, offset.DistanceToShape, 2)
 }
+
+// TestProject_OutAndBack_PrefersForwardPass: the two legs of an out-and-back
+// run 10 m apart, and just past the turnaround the last match is equally near
+// both. A vehicle moves forward along its trip, so the leg ahead wins; a short
+// step backwards on the same leg still beats the far-ahead pass.
+func TestProject_OutAndBack_PrefersForwardPass(t *testing.T) {
+	s := NewShapeGeom([]LatLon{
+		{47.6000, -122.33000},
+		{47.6090, -122.33000}, // north 1 km
+		{47.6090, -122.32987}, // 10 m east
+		{47.6000, -122.32987}, // back south, parallel
+	})
+
+	turnaround := 1001.0
+	p := s.Project(LatLon{47.6081, -122.32987}, &turnaround) // 100 m down the return leg
+	assert.InDelta(t, 1111, p.AlongShape, 15, "the return leg, ahead of the match, not the outbound leg behind it")
+	assert.Less(t, p.DistanceToShape, 1.0)
+
+	halfway := 500.0
+	p = s.Project(LatLon{47.6044, -122.33000}, &halfway) // 11 m behind the match, same leg
+	assert.InDelta(t, 489, p.AlongShape, 15, "a small step back on this leg beats the return leg 1 km ahead")
+}

@@ -82,7 +82,7 @@ func (l *RegistrationRateLimiter) Stop() { l.once.Do(func() { close(l.stop) }) }
 func (l *RegistrationRateLimiter) Allow(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return allowInWindow(l.byIP, ip, l.limit, time.Now())
+	return allowInWindow(l.byIP, ip, l.limit, time.Now(), "rider registration")
 }
 
 func (l *RegistrationRateLimiter) cleanup() {
