@@ -15,6 +15,7 @@ It outlines the system's core components, module structure, data flow, and how t
 5. [Data Flow](#5-data-flow)
 6. [Module Overview](#6-module-overview)
 7. [Extending the System](#7-extending-the-system)
+8. [Rider Mode](#8-rider-mode)
 
 ---
 
@@ -92,7 +93,7 @@ There is no service layer, repository pattern, or middleware chain. Handlers cal
 
 ### 3.3 Database Schema
 
-The schema consists of two tables. Each `location_points` row references a `vehicles` row through `vehicle_id`, giving a one-to-many relationship from vehicles to recorded points. The schema enforces a non-empty vehicle id, latitude and longitude bounds, and a positive epoch `timestamp`. It also defines defaults for `label`, `trip_id`, `created_at`, `updated_at`, and `received_at`, and adds indexes on `location_points.vehicle_id` and `location_points.timestamp` (see `migrations/000001_init_schema.up.sql`).
+The core schema consists of two tables. Each `location_points` row references a `vehicles` row through `vehicle_id`, giving a one-to-many relationship from vehicles to recorded points. The schema enforces a non-empty vehicle id, latitude and longitude bounds, and a positive epoch `timestamp`. It also defines defaults for `label`, `trip_id`, `created_at`, `updated_at`, and `received_at`, and adds indexes on `location_points.vehicle_id` and `location_points.timestamp` (see `migrations/000001_init_schema.up.sql`).
 
 ```mermaid
 erDiagram
@@ -118,6 +119,76 @@ erDiagram
 ```
 
 The ER diagram shows the structural relationship only. Nullability, defaults, and `CHECK` constraints are enforced in the SQL schema rather than encoded directly in the diagram.
+
+Rider mode (§8) adds three more tables in `migrations/000011_riders.up.sql`.
+The migration always runs, so the tables exist whether or not
+`RIDER_MODE_ENABLED` is set; they simply stay empty when it is not. A `rides`
+row belongs to one `riders` row and owns the `ride_points` behind it, both with
+`ON DELETE CASCADE`, so forgetting a rider forgets everything reported under
+that installation.
+
+```mermaid
+erDiagram
+  riders {
+    TEXT id PK
+    TEXT installation_id UK
+    TEXT platform
+    TEXT app_id
+    TEXT app_version
+    BOOLEAN attested
+    INTEGER score
+    TEXT tier
+    INTEGER rides_total
+    INTEGER rides_corroborated
+    INTEGER rides_rejected
+    TIMESTAMPTZ created_at
+    TIMESTAMPTZ last_seen_at
+  }
+  rides {
+    TEXT id PK
+    TEXT rider_id FK
+    TEXT trip_id
+    TEXT start_date
+    TEXT route_id
+    TEXT vehicle_id
+    TEXT boarding_stop_id
+    TEXT destination_stop_id
+    TEXT status
+    TEXT state
+    BOOLEAN corroborated
+    TEXT end_reason
+    INTEGER points_total
+    INTEGER points_matched
+    INTEGER points_corroborated
+    INTEGER points_contradicted
+    TIMESTAMPTZ started_at
+    TIMESTAMPTZ ended_at
+    TIMESTAMPTZ updated_at
+  }
+  ride_points {
+    BIGSERIAL id PK
+    TEXT ride_id FK
+    FLOAT8 latitude
+    FLOAT8 longitude
+    FLOAT8 accuracy
+    FLOAT8 speed
+    FLOAT8 bearing
+    BIGINT timestamp
+    TEXT outcome
+    TEXT corroboration
+    FLOAT8 along_shape
+    FLOAT8 distance_to_shape
+    INTEGER schedule_deviation_seconds
+    TIMESTAMPTZ received_at
+  }
+  riders ||--o{ rides : reports
+  rides ||--o{ ride_points : records
+```
+
+`riders` holds no personal data: an installation id generated on the device, the
+app metadata it reported, and the reputation it has earned. `ride_points` is the
+only place a raw rider fix is stored, and those rows are deleted after
+`RIDER_POINT_RETENTION` (default seven days) by an hourly sweep.
 
 ---
 
@@ -410,6 +481,111 @@ At the time this document was written, `go test ./...` passes locally without a 
 | Rate Limiting | Per-vehicle or per-IP rate limiting on the ingestion endpoint. |
 | CI/CD | Expand the existing GitHub Actions workflow (currently `go vet ./...` and `go test ./...` on every push and pull request to `main`) to add PostgreSQL-backed integration tests and Docker image publishing. |
 | Router | Adopt a third-party router (e.g. Chi) if middleware or path-parameter needs grow. |
+
+---
+
+## 8. Rider Mode
+
+Rider mode is an optional second source of vehicle positions: riders' phones,
+reporting from aboard a scheduled trip, for trips no driver app covers. It is
+off unless `RIDER_MODE_ENABLED=true`, and when off nothing below is
+constructed, no rider route is registered, and the feed is byte-for-byte what
+it was before. The design spec is
+`docs/superpowers/specs/2026-09-02-rider-mode-design.md`.
+
+### 8.1 Components
+
+The verification engine lives in its own package, `rider/`, which imports no
+HTTP handler and no database driver: it is a pure function of a GTFS schedule
+and a stream of points. `package main` owns everything that touches the network
+or the database.
+
+| Piece | Where | Responsibility |
+|---|---|---|
+| `rider.Index` | `rider/index.go` | Immutable snapshot of a GTFS static feed: trips, stop times, shapes, timezone, service-day calendar. |
+| `rider.ShapeGeom` | `rider/shape.go` | Projects a fix onto a route shape (local-minimum aware, so loops behave), and interpolates position and bearing back off it. |
+| `rider.Verify` | `rider/verify.go` | Pure verdict for one point: `Ignored`, `OffRoute`, `Implausible`, `OffSchedule` or `Matched`, plus its corroboration against a trusted feed. |
+| `rider.Session` | `rider/session.go` | One ride's state machine (`Pending → Verified`, or `Rejected`) and its running counts. |
+| `rider.Aggregator` | `rider/aggregator.go` | The registry of live rides. Owns every session, serialises access to them, and turns the live ones into one estimate per trip. |
+| `rider.Refresher` / `rider.TrustedFeed` | `rider/loader.go`, `rider/trusted.go` | Reload the schedule on a timer; poll the agency's own GTFS-RT VehiclePositions feeds conditionally. |
+| `riderService` | `rider_handlers.go` | The HTTP surface: registration, ride lifecycle, position batches, trip status. |
+| `riderRuntime` | `rider_wiring.go` | Configuration, startup and the background tickers. |
+| `Store` rider methods | `rider_store.go` | `riders`, `rides` and `ride_points` persistence, including the reputation update. |
+
+`main.go` grows by one block for all of it: read `riderConfigFromEnv()`, and if
+enabled build a `riderRuntime`, defer its `Stop`, and hand its `*riderService`
+to `newHandler`. A nil service is rider mode being off, and both places that
+consume it — the feed's `estimateSource` and the admin status provider — go
+through helpers (`estimatesOrNil`, `statusOrNil`) that return a true nil
+interface rather than an interface holding a nil pointer.
+
+### 8.2 Startup and background work
+
+Startup, in order: load and index the GTFS feed (a failure here aborts the
+process — nothing can be verified without a schedule); end every ride the
+database still calls `active` with reason `server_restart`, because sessions
+live in memory only and none survived the restart; construct the trusted-feed
+poller and the aggregator; register the routes. Four goroutines then run until
+shutdown, all cancelled and waited for by `riderRuntime.Stop()`:
+
+- the schedule refresher, every `GTFS_STATIC_REFRESH` (a failed reload keeps the previous index);
+- the trusted-feed poller, every `TRUSTED_FEED_POLL` (only when URLs are configured);
+- the reaper, every 30 s, which ends rides idle for 15 minutes or running longer than 3 hours and files what they amounted to;
+- the retention sweep, hourly, deleting `ride_points` older than `RIDER_POINT_RETENTION`.
+
+### 8.3 Data flow
+
+```
+device ──register──▶ riders row + rider JWT
+       ──start ride─▶ rides row + rider.Session in the Aggregator
+       ──positions──▶ Aggregator.ApplyBatch ──▶ rider.Verify per point
+                                            └─▶ Session state + counts
+                                            └─▶ ride_points rows + rides progress
+       ──end────────▶ FinishRide: outcome, score delta, tier ──▶ Aggregator.SetTier
+
+GET /gtfs-rt/vehicle-positions ──▶ Tracker.ActiveVehicles()  (driver entities)
+                               └─▶ Aggregator.Estimates()    (rider entities)
+```
+
+A rider's raw fixes never reach the feed. The published position is the
+along-shape median of the trip's contributing riders, snapped back onto the
+route with `ShapeGeom.PointAt`, so the entity says where the vehicle is on its
+route rather than where any phone was.
+
+### 8.4 Trust states
+
+Two independent judgements decide whether rider data is published.
+
+Per ride, the session state: a ride is `Pending` until three consecutive points
+match the shape and schedule, then `Verified`; five consecutive bad points, or
+three consecutive points contradicted by the agency's own feed, make it
+`Rejected` and end it. Per rider, the reputation tier: each finished ride
+yields a score delta (+1 for a corroborated ride of five minutes or more, −1
+for a rejection, −3 for a contradicted one), the score is clamped to [−10, 10],
+and the tier follows — `Blocked` at ≤ −3, `Trusted` at ≥ 3, `New` in between. A
+blocked rider still receives normal responses, so an abuser learns nothing from
+them, but their points are never persisted or published.
+
+A ride contributes to the feed only while it is `Verified`, not ended, fresh
+(its latest matched point is younger than `RIDER_POINT_MAX_AGE`) and its rider
+is not blocked — and then only if that rider is `Trusted`, or the ride has been
+corroborated by the trusted feed, or a second rider on the same trip
+independently agrees within 100 m.
+
+### 8.5 Feed merge
+
+`handleGetFeed` asks the tracker for driver entities and the aggregator for
+rider entities, and `buildFeed` emits both into one `FeedMessage`. Rider
+entities take the id `rider:<trip_id>:<start_date>` and the vehicle label
+`Rider-reported`; driver vehicle ids cannot contain a colon, so entity ids stay
+unique by construction. The header timestamp is still the newest of now and
+every entity's timestamp.
+
+The trusted feed always wins: any trip the agency's own GTFS-RT feed currently
+reports is skipped by `Aggregator.Estimates`, so rider data only ever appears
+where there was nothing. The `source` query parameter (`driver`, `rider`, or
+the default `all`) lets a consumer take one half, which is also how the merge
+is exercised end to end in the smoke test.
 
 ---
 

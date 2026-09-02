@@ -23,6 +23,14 @@ services:
       PORT: "8080"
       DATABASE_URL: "postgres://postgres:postgres@db:5432/vehicle_positions?sslmode=disable"
       STALENESS_THRESHOLD: "5m"
+      # Development-only secret. Generate a real one (32+ bytes) before deploying.
+      JWT_SECRET: "change-me-change-me-change-me-32b"
+      # Rider mode is off by default. To turn it on, set this to "true" and
+      # point GTFS_STATIC_URL at a GTFS static zip (URL or path); the server
+      # exits at startup if it is enabled without one.
+      RIDER_MODE_ENABLED: "false"
+      # GTFS_STATIC_URL: "https://example.org/gtfs.zip"
+      # TRUSTED_GTFS_RT_URLS: "https://example.org/vehicle-positions.pb"
     depends_on:
       db:
         condition: service_healthy

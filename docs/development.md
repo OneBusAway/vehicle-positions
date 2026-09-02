@@ -182,6 +182,17 @@ docker compose exec db psql -U postgres -d vehicle_positions \
 Deletion is permanent, so use a scratch database for this rather than one holding data
 you care about.
 
+## Rider Mode Smoke Test
+
+Rider mode is off by default. Exercising it end to end means starting the
+server with `RIDER_MODE_ENABLED=true` and a `GTFS_STATIC_URL`, driving riders
+along a trip with the `cmd/ridersim` simulator, and reading the resulting
+entities back out of `/gtfs-rt/vehicle-positions?source=rider`.
+
+_The step-by-step commands land with `cmd/ridersim` itself; see
+[`README.md`](../README.md#rider-mode-crowdsourced-positions) for the
+configuration and API in the meantime._
+
 ## API Sanity Checks
 
 ### Submit one location

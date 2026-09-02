@@ -53,6 +53,76 @@ bucketing and whether the session cookie is marked `Secure`. Leave it unset
 (false) when the server is reachable directly, since trusting those headers
 from an untrusted client would let it spoof its IP.
 
+### Rider mode (crowdsourced positions)
+
+Rider mode lets riders' phones fill the gaps in a feed no driver app covers.
+An anonymous rider app reports its location while its owner is aboard a
+scheduled trip; the server verifies each point against the GTFS schedule and
+shape, and publishes a snapped, route-projected position for trips the agency's
+own feed does not already report. It is **off by default** and adds no
+behaviour to the driver-reported feed when disabled.
+
+Turn it on by setting `RIDER_MODE_ENABLED=true` and pointing `GTFS_STATIC_URL`
+at a GTFS static zip (an `http(s)://` URL or a local file path). Without a
+schedule there is nothing to verify against, so the server exits at startup if
+it is missing. When rider mode is off the rider routes are not registered at
+all (`404`) and `GET /api/v1/admin/rider/status` answers `{"enabled":false}`.
+
+Configuration (spec §4.1). Durations use Go's `time.ParseDuration` syntax; an
+unparseable value logs and falls back to its default.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RIDER_MODE_ENABLED` | `false` | Enable rider routes, engine and feed merge. |
+| `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. |
+| `GTFS_STATIC_REFRESH` | `24h` | Re-download and rebuild the index. Failure keeps the old index and logs. |
+| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated VehiclePositions feed URLs. Empty means corroboration is `unavailable`. |
+| `TRUSTED_FEED_POLL` | `30s` | Poll interval; sends `If-None-Match` / `If-Modified-Since` when the server gave `ETag` / `Last-Modified`. |
+| `TRUSTED_FEED_MAX_AGE` | `5m` | Trusted entities older than this are dropped from the snapshot. |
+| `RIDER_JWT_TTL` | `8760h` | Rider token lifetime. |
+| `RIDER_MAX_SHAPE_DISTANCE` | `60` | Metres from shape (plus reported accuracy) for a point to match. |
+| `RIDER_MAX_SPEED` | `35` | Metres per second; implied along-shape speed above this is implausible. |
+| `RIDER_SCHEDULE_EARLY` / `RIDER_SCHEDULE_LATE` | `15m` / `90m` | Schedule-adherence window. |
+| `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest matched point is older than this stops contributing to the feed. |
+| `RIDER_POINT_RETENTION` | `168h` | `ride_points` rows older than this are deleted hourly. |
+
+Rider mode shares `JWT_SECRET` with the rest of the API, but rider tokens carry
+`role: "rider"` and are accepted only on the rider routes — a rider token is
+rejected (`403`) on the driver and admin APIs, and a driver or admin token is
+rejected on the rider API.
+
+The API (spec §4.4). Every route except registration requires a rider token in
+`Authorization: Bearer …`; bodies are JSON, capped at 64 KiB, and unknown
+fields are rejected.
+
+| Method + path | Purpose |
+|---|---|
+| `POST /api/v1/rider/register` | Issue or re-issue a rider token for an installation id. |
+| `POST /api/v1/rider/rides` | Start a ride on a trip. |
+| `POST /api/v1/rider/rides/{id}/positions` | Upload a batch of positions; returns the verdict summary. |
+| `POST /api/v1/rider/rides/{id}/end` | End a ride with a reason. |
+| `GET /api/v1/rider/trips/{trip_id}/status?start_date=YYYYMMDD` | Whether this trip instance currently has trusted or rider-derived coverage. |
+
+Two admin endpoints report on the subsystem: `GET /api/v1/admin/rider/status`
+(schedule snapshot, trusted-feed health, rider tiers, live ride counts) and
+`GET /api/v1/admin/rider/rides?status=active|ended` (recent rides, newest
+first). Both require an admin token, like every other `/api/v1/admin/*` route.
+
+The published feed carries both halves. `GET /gtfs-rt/vehicle-positions` takes
+a `source` parameter — `driver`, `rider`, or `all` (the default) — so a
+consumer can take the driver-reported entities alone. Rider entities are
+distinguishable by construction: their id is `rider:<trip_id>:<start_date>` and
+their vehicle label is `Rider-reported`. A rider-reported position is always
+snapped to the route shape, never a raw GPS fix, and a trip the trusted feed
+already reports is never published from rider data.
+
+The iOS SDK that talks to this API lives in `ios/VehiclePositionsKit`. For the
+full design — verification rules, ride state machine, reputation tiers and
+aggregation — see
+[`docs/superpowers/specs/2026-09-02-rider-mode-design.md`](docs/superpowers/specs/2026-09-02-rider-mode-design.md),
+and [`ARCHITECTURE.md`](ARCHITECTURE.md#8-rider-mode) for how the pieces fit
+together.
+
 ### Android driver app
 
 The companion driver app lives in [`android/`](android/) (Gradle root —

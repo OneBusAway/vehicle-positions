@@ -774,15 +774,7 @@ func (s *riderService) finishRide(ctx context.Context, rideID string, reason rid
 		reason = snap.EndReason
 	}
 
-	summary := snap.Summary
-	summary.EndReason = reason
-	outcome := RideOutcome{
-		EndReason:    string(reason),
-		Progress:     progressFrom(snap),
-		ScoreDelta:   rider.ScoreDelta(summary),
-		Rejected:     snap.State == rider.Rejected,
-		Corroborated: snap.Corroborated,
-	}
+	outcome := rideOutcomeOf(snap.State, snap.Corroborated, snap.Counts, snap.Summary, reason)
 
 	updated, err := s.store.FinishRide(ctx, rideID, outcome)
 	if err != nil {
@@ -805,6 +797,41 @@ func (s *riderService) finishRide(ctx context.Context, rideID string, reason rid
 	// that just ended was not it.
 	s.agg.SetTier(updated.ID, rider.ParseTier(updated.Tier))
 	return updated, nil
+}
+
+// fileReaped persists a session the aggregator has already ended and let go
+// of. The reaper takes its sessions out of the registry before handing them
+// over, so finishRide — which works from a registered session's snapshot —
+// would find nothing; this is the same outcome built from the loose session.
+// A ride whose row has already ended is not an error: some other path filed it
+// first.
+func (s *riderService) fileReaped(ctx context.Context, sess *rider.Session) error {
+	outcome := rideOutcomeOf(sess.State(), sess.Corroborated(), sess.Counts(), sess.Summary(), sess.EndReason())
+	updated, err := s.store.FinishRide(ctx, sess.ID(), outcome)
+	if err != nil {
+		if errors.Is(err, ErrRideNotFound) {
+			return nil
+		}
+		return err
+	}
+	// A score change lands on the ride the rider has in flight, if any.
+	s.agg.SetTier(updated.ID, rider.ParseTier(updated.Tier))
+	return nil
+}
+
+// rideOutcomeOf is what a finished ride amounts to for the store: the progress
+// it reached, the reputation it earned and why it ended. The end reason
+// overrides the summary's own, so that a caller-supplied reason is the one
+// scored.
+func rideOutcomeOf(state rider.State, corroborated bool, counts rider.Counts, summary rider.RideSummary, reason rider.EndReason) RideOutcome {
+	summary.EndReason = reason
+	return RideOutcome{
+		EndReason:    string(reason),
+		Progress:     progressOf(state, corroborated, counts),
+		ScoreDelta:   rider.ScoreDelta(summary),
+		Rejected:     state == rider.Rejected,
+		Corroborated: corroborated,
+	}
 }
 
 // progressFrom is the ride progress a snapshot has accumulated.
