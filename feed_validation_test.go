@@ -126,7 +126,7 @@ func TestFeedValidation_E001_TimestampsInPOSIXSeconds(t *testing.T) {
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	entityTs := feed.Entity[0].Vehicle.GetTimestamp()
 	assert.Less(t, entityTs, uint64(10_000_000_000), "E001: timestamp should be in seconds, not ms")
@@ -141,7 +141,7 @@ func TestFeedValidation_E012_HeaderTimestampGEEntityTimestamps(t *testing.T) {
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now - 30},
 		{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: now - 10},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	headerTs := feed.Header.GetTimestamp()
 	for _, e := range feed.Entity {
@@ -157,7 +157,7 @@ func TestFeedValidation_E012_FutureEntityTimestamp(t *testing.T) {
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: futureTs},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	headerTs := feed.Header.GetTimestamp()
 	entityTs := feed.Entity[0].Vehicle.GetTimestamp()
@@ -176,7 +176,7 @@ func TestFeedValidation_E012_AllPastEntities(t *testing.T) {
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: pastTs},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	headerTs := feed.Header.GetTimestamp()
 	now := uint64(time.Now().Unix())
@@ -193,7 +193,7 @@ func TestFeedValidation_E026_ValidCoordinates(t *testing.T) {
 		{VehicleID: "nairobi", Latitude: -1.2921, Longitude: 36.8219, Timestamp: now},
 		{VehicleID: "nyc", Latitude: 40.7128, Longitude: -74.0060, Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations)
 }
@@ -206,7 +206,7 @@ func TestFeedValidation_E026_BoundaryCoordinates(t *testing.T) {
 		{VehicleID: "dateline-east", Latitude: 0.001, Longitude: 180, Timestamp: now},
 		{VehicleID: "dateline-west", Latitude: 0.001, Longitude: -180, Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations, "boundary coordinates should be valid")
 }
@@ -216,7 +216,7 @@ func TestFeedValidation_E027_ValidBearing(t *testing.T) {
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(180), Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations)
 }
@@ -229,14 +229,14 @@ func TestFeedValidation_E027_BearingBoundaries(t *testing.T) {
 		{VehicleID: "south", Latitude: 5, Longitude: 6, Bearing: float64ptr(180), Timestamp: now},
 		{VehicleID: "wrap", Latitude: 7, Longitude: 8, Bearing: float64ptr(360), Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations, "all bearings 0-360 should be valid")
 }
 
 func TestFeedValidation_E038_ValidVersion(t *testing.T) {
-	feed := buildFeed(nil)
+	feed := buildFeed(nil, nil)
 	assert.Equal(t, "2.0", feed.Header.GetGtfsRealtimeVersion())
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations)
@@ -247,7 +247,7 @@ func TestFeedValidation_E039_NoIsDeletedInFullDataset(t *testing.T) {
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	for _, e := range feed.Entity {
 		assert.Nil(t, e.IsDeleted, "E039: is_deleted must not be set in FULL_DATASET")
@@ -257,13 +257,13 @@ func TestFeedValidation_E039_NoIsDeletedInFullDataset(t *testing.T) {
 }
 
 func TestFeedValidation_E048_HeaderTimestampPopulated(t *testing.T) {
-	feed := buildFeed(nil)
+	feed := buildFeed(nil, nil)
 	assert.NotNil(t, feed.Header.Timestamp, "E048: header timestamp required for v2.0")
 	assert.NotZero(t, feed.Header.GetTimestamp())
 }
 
 func TestFeedValidation_E049_IncrementalityPopulated(t *testing.T) {
-	feed := buildFeed(nil)
+	feed := buildFeed(nil, nil)
 	assert.NotNil(t, feed.Header.Incrementality, "E049: incrementality required for v2.0")
 	assert.Equal(t, gtfsrt.FeedHeader_FULL_DATASET, feed.Header.GetIncrementality())
 }
@@ -275,7 +275,7 @@ func TestFeedValidation_E050_TimestampsNotFarFuture(t *testing.T) {
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
 		{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: now - 30},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations, "current/past timestamps should not trigger E050")
 }
@@ -284,7 +284,7 @@ func TestFeedValidation_E050_RejectsEntityFarInFuture(t *testing.T) {
 	now := time.Now().Unix()
 	feed := buildFeed([]*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now + 120},
-	})
+	}, nil)
 	violations := validateFeedCompliance(t, feed)
 	require.NotEmpty(t, violations)
 	joined := strings.Join(violations, "|")
@@ -305,7 +305,7 @@ func TestFeedValidation_E052_UniqueVehicleIDs(t *testing.T) {
 		{VehicleID: "bus-2", Latitude: 3, Longitude: 4, Timestamp: now},
 		{VehicleID: "bus-3", Latitude: 5, Longitude: 6, Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations, "unique IDs should not trigger E052")
 }
@@ -314,7 +314,7 @@ func TestFeedValidation_E052_RejectsDuplicateIDs(t *testing.T) {
 	now := time.Now().Unix()
 	feed := buildFeed([]*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
-	})
+	}, nil)
 	// The Tracker dedups by VehicleID upstream (tracker.go), so buildFeed
 	// never emits duplicate IDs in practice — inject a raw entity to exercise E052.
 	dup := &gtfsrt.FeedEntity{
@@ -339,7 +339,7 @@ func TestFeedValidation_W001_TimestampsPopulated(t *testing.T) {
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	for _, e := range feed.Entity {
 		assert.NotZero(t, e.Vehicle.GetTimestamp(), "W001: entity timestamp must be populated")
@@ -353,7 +353,7 @@ func TestFeedValidation_W002_VehicleIDPopulated(t *testing.T) {
 	vehicles := []*VehicleState{
 		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	for _, e := range feed.Entity {
 		assert.NotEmpty(t, e.Vehicle.GetVehicle().GetId(), "W002: vehicle.id must be populated")
@@ -368,7 +368,7 @@ func TestFeedValidation_SpeedNonNegative(t *testing.T) {
 		{VehicleID: "stationary", Latitude: 1, Longitude: 2, Speed: float64ptr(0), Timestamp: now},
 		{VehicleID: "moving", Latitude: 3, Longitude: 4, Speed: float64ptr(15.5), Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations, "zero and positive speeds should be valid")
 }
@@ -376,7 +376,7 @@ func TestFeedValidation_SpeedNonNegative(t *testing.T) {
 // --- Composite tests ---
 
 func TestFeedValidation_EmptyFeedValid(t *testing.T) {
-	feed := buildFeed(nil)
+	feed := buildFeed(nil, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations, "empty feed should be valid: %v", violations)
 
@@ -418,7 +418,7 @@ func TestFeedValidation_FullFeedCompliance(t *testing.T) {
 		},
 	}
 
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	// Run full compliance check
 	violations := validateFeedCompliance(t, feed)
@@ -449,7 +449,7 @@ func TestFeedValidation_ZeroTimestampVehicleSkipped(t *testing.T) {
 		{VehicleID: "zero-ts", Latitude: 3, Longitude: 4, Timestamp: 0},
 		{VehicleID: "negative-ts", Latitude: 5, Longitude: 6, Timestamp: -100},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	// Only the valid vehicle should appear in the feed
 	require.Len(t, feed.Entity, 1)
@@ -465,7 +465,7 @@ func TestFeedValidation_FeedSerializesCleanly(t *testing.T) {
 		{VehicleID: "bus-1", TripID: "trip-1", Latitude: -1.29, Longitude: 36.82,
 			Bearing: float64ptr(180), Speed: float64ptr(8.5), Timestamp: now},
 	}
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	// Verify protobuf round-trip: marshal then unmarshal
 	data, err := proto.Marshal(feed)

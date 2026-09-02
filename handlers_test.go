@@ -53,7 +53,7 @@ func getFeed(handler http.HandlerFunc, query string) *httptest.ResponseRecorder 
 }
 
 func TestBuildFeed_Empty(t *testing.T) {
-	feed := buildFeed(nil)
+	feed := buildFeed(nil, nil)
 
 	require.NotNil(t, feed.Header)
 	assert.Equal(t, "2.0", feed.Header.GetGtfsRealtimeVersion())
@@ -85,7 +85,7 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 		},
 	}
 
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 
 	require.Len(t, feed.Entity, 2)
 
@@ -119,7 +119,7 @@ func TestGetFeed_Protobuf(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
-	handler := handleGetFeed(tracker)
+	handler := handleGetFeed(tracker, nil)
 	w := getFeed(handler, "")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -136,7 +136,7 @@ func TestGetFeed_JSON(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
-	handler := handleGetFeed(tracker)
+	handler := handleGetFeed(tracker, nil)
 	w := getFeed(handler, "format=json")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -151,7 +151,7 @@ func TestGetFeed_JSON(t *testing.T) {
 func TestGetFeed_Empty(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 
-	handler := handleGetFeed(tracker)
+	handler := handleGetFeed(tracker, nil)
 	w := getFeed(handler, "")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -166,7 +166,7 @@ func TestGetFeed_StaleExcluded(t *testing.T) {
 	tracker := NewTracker(1 * time.Millisecond)
 	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
 
-	handler := handleGetFeed(tracker)
+	handler := handleGetFeed(tracker, nil)
 	assert.Eventually(t, func() bool {
 		w := getFeed(handler, "")
 		var feed gtfsrt.FeedMessage
@@ -834,7 +834,7 @@ func TestBuildFeed_PreservesExplicitZeroBearingAndSpeed(t *testing.T) {
 		},
 	}
 
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	require.Len(t, feed.Entity, 1)
 
 	pos := feed.Entity[0].Vehicle.Position
@@ -855,7 +855,7 @@ func TestBuildFeed_OmitsUnsetBearingAndSpeed(t *testing.T) {
 		},
 	}
 
-	feed := buildFeed(vehicles)
+	feed := buildFeed(vehicles, nil)
 	require.Len(t, feed.Entity, 1)
 
 	pos := feed.Entity[0].Vehicle.Position
