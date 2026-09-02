@@ -25,7 +25,7 @@ var riderRideStatuses = map[string]bool{"active": true, "ended": true}
 // admin status endpoint needs it. *riderService implements it; a nil provider
 // is rider mode being off.
 type riderStatusProvider interface {
-	RiderStatus(ctx context.Context, now time.Time) (riderStatusResponse, error)
+	RiderStatus(ctx context.Context) (riderStatusResponse, error)
 }
 
 // riderStatusResponse is GET /api/v1/admin/rider/status. Everything past
@@ -104,7 +104,7 @@ func handleRiderAdminStatus(p riderStatusProvider) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, riderStatusResponse{})
 			return
 		}
-		status, err := p.RiderStatus(r.Context(), time.Now())
+		status, err := p.RiderStatus(r.Context())
 		if err != nil {
 			slog.Error("failed to build rider status", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})

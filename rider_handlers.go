@@ -632,10 +632,11 @@ func (s *riderService) Estimates(now time.Time) []rider.TripEstimate {
 
 // RiderStatus is the rider subsystem's account of itself for the admin status
 // endpoint: the schedule it is matching against, the trusted feeds it is
-// checked against, its riders and the rides it is holding. now is the moment
-// the ride counts are judged at, since a session only counts while its points
-// are fresh.
-func (s *riderService) RiderStatus(ctx context.Context, now time.Time) (riderStatusResponse, error) {
+// checked against, its riders and the rides it is holding. The ride counts are
+// judged at the service's own clock, since a session only counts while its
+// points are fresh.
+func (s *riderService) RiderStatus(ctx context.Context) (riderStatusResponse, error) {
+	now := s.now()
 	status := riderStatusResponse{Enabled: true}
 
 	// The index is nil until the first refresh has landed; the rest of the

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,19 +20,6 @@ func TestRiderAdminStatus_Disabled(t *testing.T) {
 	assert.JSONEq(t, `{"enabled":false}`, w.Body.String())
 }
 
-// fixedNowStatus is the real riderService status behind the handler, judged at
-// the test env's frozen clock rather than at wall-clock now: the handler passes
-// time.Now(), and the ride counts only hold while the uploaded points are
-// fresh, which they are only at the env's time.
-type fixedNowStatus struct {
-	svc *riderService
-	now time.Time
-}
-
-func (f fixedNowStatus) RiderStatus(ctx context.Context, _ time.Time) (riderStatusResponse, error) {
-	return f.svc.RiderStatus(ctx, f.now)
-}
-
 func TestRiderAdminStatus_Enabled(t *testing.T) {
 	env := newRiderTestEnv(t)
 	riderID, tok := env.register(t)
@@ -43,8 +29,7 @@ func TestRiderAdminStatus_Enabled(t *testing.T) {
 	env.trusted.health = []rider.FeedHealth{{URL: "http://feed", LastSuccess: time.Now(), Entities: 3}}
 
 	w := httptest.NewRecorder()
-	provider := fixedNowStatus{svc: env.svc, now: env.now}
-	handleRiderAdminStatus(provider).ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/admin/rider/status", nil))
+	handleRiderAdminStatus(env.svc).ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/admin/rider/status", nil))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var st riderStatusResponse
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&st))
