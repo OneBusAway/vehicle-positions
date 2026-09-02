@@ -109,6 +109,11 @@ public actor RideReporter {
     }
 
     private func performStart(_ trip: TripDescriptor) async throws -> AsyncStream<RideEvent> {
+        // A start that was cancelled before it ran must change nothing: ending
+        // the ride already running would be the one thing worse than doing
+        // nothing at all.
+        try Task.checkCancellation()
+
         // Superseding now suspends — it flushes what the old ride buffered — so
         // this must stay behind the serialisation above to remain re-entrant.
         if active != nil { await end(reason: .superseded) }
@@ -163,8 +168,9 @@ public actor RideReporter {
         } catch {
             // Nothing after the ride is installed throws today, but a failure
             // that ever did would leave it reporting into a stream nobody
-            // holds. It has no owner left: end it.
-            if active != nil { await end(reason: .userRequested) }
+            // holds. It has no owner left: end it — and not as the rider's
+            // doing, since the rider asked for the opposite.
+            if active != nil { await end(reason: .networkFailure) }
             // Nobody will ever read this stream; leave no consumer hanging.
             continuation.finish()
             throw error

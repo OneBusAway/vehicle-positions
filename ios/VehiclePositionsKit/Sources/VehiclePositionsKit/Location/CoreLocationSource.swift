@@ -21,10 +21,13 @@ public final class CoreLocationSource: LocationSource {
         let liveUpdates = CLLocationUpdate.liveUpdates(configuration)
         return AsyncThrowingStream { continuation in
             // Without a session Core Location delivers nothing, and the session
-            // must outlive the first await — so the iteration owns it and
+            // must outlive the first await — so the subscription owns it and
             // termination gives it back.
-            let session = CLServiceSession(authorization: .whenInUse)
-            let task = Task {
+            let subscription = Subscription(session: CLServiceSession(authorization: .whenInUse))
+            // Installed before the task exists: a stream torn down in between
+            // would otherwise hold the session with nothing left to release it.
+            continuation.onTermination = { _ in subscription.cancel() }
+            subscription.begin(Task {
                 do {
                     for try await update in liveUpdates {
                         continuation.yield(LocationSample(update))
@@ -33,16 +36,46 @@ public final class CoreLocationSource: LocationSource {
                 } catch {
                     continuation.finish(throwing: error)
                 }
-            }
-            continuation.onTermination = { _ in
-                task.cancel()
-                session.invalidate()
-            }
+            })
         }
     }
 
     public func beginBackgroundActivity() -> any BackgroundActivityHandle {
         Handle(session: CLBackgroundActivitySession())
+    }
+
+    /// Holds the service session and the iterating task for one subscription,
+    /// so termination releases both whichever order the two arrive in.
+    private final class Subscription: @unchecked Sendable {
+        private let lock = NSLock()
+        private let session: CLServiceSession
+        private var task: Task<Void, Never>?
+        private var cancelled = false
+
+        init(session: CLServiceSession) {
+            self.session = session
+        }
+
+        /// Adopts the iterating task, or cancels it outright if termination
+        /// already came and went.
+        func begin(_ task: Task<Void, Never>) {
+            let tooLate = lock.withLock {
+                if cancelled { return true }
+                self.task = task
+                return false
+            }
+            if tooLate { task.cancel() }
+        }
+
+        func cancel() {
+            let running = lock.withLock {
+                cancelled = true
+                defer { task = nil }
+                return task
+            }
+            running?.cancel()
+            session.invalidate()
+        }
     }
 
     /// Owns the session that keeps location running in the background — and

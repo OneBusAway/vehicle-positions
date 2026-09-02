@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import Security
 import Testing
 @testable import VehiclePositionsKit
 
@@ -28,7 +29,8 @@ struct KeychainCredentialStoreTests {
 }
 
 /// Asks the keychain one harmless question to find out whether this process may
-/// talk to it at all.
+/// talk to it at all. Only the missing entitlement disables the suite: every
+/// other failure is a real one and belongs in the test, not in the gate.
 enum KeychainProbe {
     static let isUsable: Bool = {
         do {
@@ -37,8 +39,10 @@ enum KeychainProbe {
                 account: UUID().uuidString
             ).load()
             return true
-        } catch {
+        } catch KeychainError.status(errSecMissingEntitlement) {
             return false
+        } catch {
+            return true
         }
     }()
 }

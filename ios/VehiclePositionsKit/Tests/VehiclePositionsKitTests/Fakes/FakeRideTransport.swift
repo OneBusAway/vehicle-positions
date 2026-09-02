@@ -14,10 +14,20 @@ final class FakeRideTransport: RideTransport, @unchecked Sendable {
         let key: String
     }
 
+    /// What a held endpoint does to a caller that gets cancelled while it waits.
+    enum HoldPolicy {
+        /// Fail the way a real request would: throw `CancellationError`.
+        case failOnCancellation
+        /// Ignore cancellation and answer only when `release` says so, which is
+        /// how a test gets a response the caller no longer wants.
+        case waitForRelease
+    }
+
     private let lock = NSLock()
     private var _recorded: [Recorded] = []
     private var scripted: [String: [Result<RiderResponse, any Error>]] = [:]
-    private var held: Set<String> = []
+    private var held: [String: HoldPolicy] = [:]
+    private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
 
     var recorded: [Recorded] { lock.withLock { _recorded } }
 
@@ -26,41 +36,75 @@ final class FakeRideTransport: RideTransport, @unchecked Sendable {
         lock.withLock { scripted[key, default: []].append(contentsOf: results) }
     }
 
-    /// Makes every send for `key` record its request and then hang. Only
-    /// cancelling the caller ends the wait — which is how a test gets a request
-    /// to stay in flight while it cancels the task awaiting it.
-    func hold(_ key: String) {
-        lock.withLock { _ = held.insert(key) }
+    /// Makes every send for `key` record its request and then hang, so a test
+    /// can act while the request is in flight.
+    func hold(_ key: String, _ policy: HoldPolicy = .failOnCancellation) {
+        lock.withLock { held[key] = policy }
+    }
+
+    /// Lets a held endpoint answer: waiting sends resume with their scripted
+    /// result and later ones are not held at all.
+    func release(_ key: String) {
+        let waiting: [CheckedContinuation<Void, Never>] = lock.withLock {
+            held[key] = nil
+            return waiters.removeValue(forKey: key) ?? []
+        }
+        for continuation in waiting { continuation.resume() }
     }
 
     func send(_ request: RiderRequest, baseURL: URL) async throws -> RiderResponse {
         let key = Self.key(for: request)
+        lock.withLock { _recorded.append(Recorded(request: request, baseURL: baseURL)) }
+        // Before the script is touched: a send that never answers must not eat
+        // the response the next one is owed.
+        try await waitWhileHeld(key)
         let result: Result<RiderResponse, any Error> = try lock.withLock {
-            _recorded.append(Recorded(request: request, baseURL: baseURL))
             guard var queue = scripted[key], !queue.isEmpty else { throw Unscripted(key: key) }
             // The last scripted result stays put so it repeats when exhausted.
             let next = queue.count > 1 ? queue.removeFirst() : queue[0]
             scripted[key] = queue
             return next
         }
-        // `Task.sleep` throws on cancellation, so a held request answers a
-        // cancelled caller the way a real one would.
-        while lock.withLock({ held.contains(key) }) {
-            try await Task.sleep(for: .milliseconds(5))
-        }
         return try result.get()
+    }
+
+    private func waitWhileHeld(_ key: String) async throws {
+        switch lock.withLock({ held[key] }) {
+        case .none:
+            return
+        case .failOnCancellation:
+            // `Task.sleep` throws on cancellation, so a held request answers a
+            // cancelled caller the way a real one would.
+            while lock.withLock({ held[key] != nil }) {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+        case .waitForRelease:
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                let parked = lock.withLock {
+                    guard held[key] != nil else { return false }
+                    waiters[key, default: []].append(continuation)
+                    return true
+                }
+                if !parked { continuation.resume() }
+            }
+        }
     }
 
     func requests(matching key: String) -> [RiderRequest] {
         recorded.map(\.request).filter { Self.key(for: $0) == key }
     }
 
-    /// Polls (real time) until a request for `key` has been recorded.
+    /// Polls (real time) until a request for `key` has been recorded. A
+    /// cancelled caller gives up rather than spinning out the timeout.
     func waitForRequest(matching key: String, timeout: Duration = .seconds(5)) async -> Bool {
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
             if !requests(matching: key).isEmpty { return true }
-            try? await Task.sleep(for: .milliseconds(5))
+            do {
+                try await Task.sleep(for: .milliseconds(5))
+            } catch {
+                return false
+            }
         }
         return !requests(matching: key).isEmpty
     }

@@ -341,4 +341,45 @@ import Testing
         #expect(await env.reporter.isActive == false)
         #expect(env.location.handles.isEmpty, "a cancelled start holds no background activity")
     }
+
+    @Test func cancellingStartAfterServerAcceptsInstallsNothing() async throws {
+        let env = Env()
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        // This one answers even though the caller is gone, so the reporter has
+        // a started ride in hand at the moment it notices the cancellation.
+        env.transport.hold("POST rides", .waitForRelease)
+
+        let start = Task { try await env.reporter.start(TripDescriptor(tripID: "T1")) }
+        #expect(await env.transport.waitForRequest(matching: "POST rides"))
+        start.cancel()
+        env.transport.release("POST rides")
+
+        await #expect(throws: CancellationError.self) { _ = try await start.value }
+        #expect(await env.reporter.isActive == false)
+        #expect(env.location.handles.isEmpty, "a cancelled start holds no background activity")
+        #expect(env.transport.requests(matching: "POST positions").isEmpty, "nothing was ever reported")
+    }
+
+    @Test func cancelledStartDoesNotSupersedeTheRunningRide() async throws {
+        let env = Env(); env.scriptHappyPath()
+        // The first start stays in flight, so the second queues behind it and
+        // is cancelled before it can run a single line of its own.
+        env.transport.hold("POST rides", .waitForRelease)
+        let first = Task { try await env.reporter.start(TripDescriptor(tripID: "T1")) }
+        #expect(await env.transport.waitForRequest(matching: "POST rides"))
+
+        let second = Task { try await env.reporter.start(TripDescriptor(tripID: "T2")) }
+        second.cancel()
+        env.transport.release("POST rides")
+
+        let events = EventCollector(try await first.value)
+        #expect(await events.wait { $0.contains(.started(rideID: "ride1")) })
+        await #expect(throws: CancellationError.self) { _ = try await second.value }
+        #expect(await env.reporter.isActive, "the running ride survives a cancelled start")
+        #expect(env.transport.requests(matching: "POST rides").count == 1)
+        #expect(env.location.handles.count == 1)
+        await env.reporter.end()
+        #expect(await events.waitForEnd() == .userRequested, "and it was never superseded")
+    }
 }
