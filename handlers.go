@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
+	gtfsrt "github.com/OneBusAway/go-gtfs/proto"
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -171,15 +171,15 @@ func handleGetFeed(tracker *Tracker) http.HandlerFunc {
 	}
 }
 
-func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
+func buildFeed(vehicles []*VehicleState) *gtfsrt.FeedMessage {
 	now := uint64(time.Now().Unix())
 	version := "2.0"
-	inc := gtfs.FeedHeader_FULL_DATASET
+	inc := gtfsrt.FeedHeader_FULL_DATASET
 
 	// E012 (gtfs-realtime-validator): header.timestamp must be >= all entity timestamps.
 	headerTimestamp := now
 
-	var entities []*gtfs.FeedEntity
+	var entities []*gtfsrt.FeedEntity
 	for _, v := range vehicles {
 		if v.Timestamp <= 0 {
 			slog.Warn("buildFeed: skipping vehicle with non-positive timestamp", "vehicle_id", v.VehicleID, "timestamp", v.Timestamp)
@@ -190,7 +190,7 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 			headerTimestamp = ts
 		}
 
-		position := &gtfs.Position{
+		position := &gtfsrt.Position{
 			Latitude:  proto.Float32(float32(v.Latitude)),
 			Longitude: proto.Float32(float32(v.Longitude)),
 		}
@@ -201,10 +201,10 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 			position.Speed = proto.Float32(float32(*v.Speed))
 		}
 
-		entity := &gtfs.FeedEntity{
+		entity := &gtfsrt.FeedEntity{
 			Id: proto.String(v.VehicleID),
-			Vehicle: &gtfs.VehiclePosition{
-				Vehicle: &gtfs.VehicleDescriptor{
+			Vehicle: &gtfsrt.VehiclePosition{
+				Vehicle: &gtfsrt.VehicleDescriptor{
 					Id: proto.String(v.VehicleID),
 				},
 				Position:  position,
@@ -213,15 +213,15 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 		}
 
 		if v.TripID != "" {
-			entity.Vehicle.Trip = &gtfs.TripDescriptor{
+			entity.Vehicle.Trip = &gtfsrt.TripDescriptor{
 				TripId: proto.String(v.TripID),
 			}
 		}
 		entities = append(entities, entity)
 	}
 
-	return &gtfs.FeedMessage{
-		Header: &gtfs.FeedHeader{
+	return &gtfsrt.FeedMessage{
+		Header: &gtfsrt.FeedHeader{
 			GtfsRealtimeVersion: &version,
 			Incrementality:      &inc,
 			Timestamp:           &headerTimestamp,

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
+	gtfsrt "github.com/OneBusAway/go-gtfs/proto"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +57,7 @@ func TestBuildFeed_Empty(t *testing.T) {
 
 	require.NotNil(t, feed.Header)
 	assert.Equal(t, "2.0", feed.Header.GetGtfsRealtimeVersion())
-	assert.Equal(t, gtfs.FeedHeader_FULL_DATASET, feed.Header.GetIncrementality())
+	assert.Equal(t, gtfsrt.FeedHeader_FULL_DATASET, feed.Header.GetIncrementality())
 	assert.NotZero(t, feed.Header.GetTimestamp())
 	assert.Empty(t, feed.Entity)
 }
@@ -89,7 +89,7 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 
 	require.Len(t, feed.Entity, 2)
 
-	var bus1, bus2 *gtfs.FeedEntity
+	var bus1, bus2 *gtfsrt.FeedEntity
 	for _, e := range feed.Entity {
 		switch e.GetId() {
 		case "bus-1":
@@ -125,7 +125,7 @@ func TestGetFeed_Protobuf(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "application/x-protobuf", w.Header().Get("Content-Type"))
 
-	var feed gtfs.FeedMessage
+	var feed gtfsrt.FeedMessage
 	err := proto.Unmarshal(w.Body.Bytes(), &feed)
 	require.NoError(t, err)
 	require.Len(t, feed.Entity, 1)
@@ -142,7 +142,7 @@ func TestGetFeed_JSON(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-	var feed gtfs.FeedMessage
+	var feed gtfsrt.FeedMessage
 	err := protojson.Unmarshal(w.Body.Bytes(), &feed)
 	require.NoError(t, err)
 	require.Len(t, feed.Entity, 1)
@@ -156,7 +156,7 @@ func TestGetFeed_Empty(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var feed gtfs.FeedMessage
+	var feed gtfsrt.FeedMessage
 	err := proto.Unmarshal(w.Body.Bytes(), &feed)
 	require.NoError(t, err)
 	assert.Empty(t, feed.Entity)
@@ -169,7 +169,7 @@ func TestGetFeed_StaleExcluded(t *testing.T) {
 	handler := handleGetFeed(tracker)
 	assert.Eventually(t, func() bool {
 		w := getFeed(handler, "")
-		var feed gtfs.FeedMessage
+		var feed gtfsrt.FeedMessage
 		if err := proto.Unmarshal(w.Body.Bytes(), &feed); err != nil {
 			return false
 		}

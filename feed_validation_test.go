@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
+	gtfsrt "github.com/OneBusAway/go-gtfs/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -17,7 +17,7 @@ import (
 // Returns a slice of rule violation strings. Empty = compliant.
 //
 // Callers typically build a feed via buildFeed() and pass the result here.
-func validateFeedCompliance(t *testing.T, feed *gtfs.FeedMessage) []string {
+func validateFeedCompliance(t *testing.T, feed *gtfsrt.FeedMessage) []string {
 	t.Helper()
 	var violations []string
 
@@ -265,7 +265,7 @@ func TestFeedValidation_E048_HeaderTimestampPopulated(t *testing.T) {
 func TestFeedValidation_E049_IncrementalityPopulated(t *testing.T) {
 	feed := buildFeed(nil)
 	assert.NotNil(t, feed.Header.Incrementality, "E049: incrementality required for v2.0")
-	assert.Equal(t, gtfs.FeedHeader_FULL_DATASET, feed.Header.GetIncrementality())
+	assert.Equal(t, gtfsrt.FeedHeader_FULL_DATASET, feed.Header.GetIncrementality())
 }
 
 func TestFeedValidation_E050_TimestampsNotFarFuture(t *testing.T) {
@@ -317,11 +317,11 @@ func TestFeedValidation_E052_RejectsDuplicateIDs(t *testing.T) {
 	})
 	// The Tracker dedups by VehicleID upstream (tracker.go), so buildFeed
 	// never emits duplicate IDs in practice — inject a raw entity to exercise E052.
-	dup := &gtfs.FeedEntity{
+	dup := &gtfsrt.FeedEntity{
 		Id: proto.String("bus-1"),
-		Vehicle: &gtfs.VehiclePosition{
-			Vehicle:   &gtfs.VehicleDescriptor{Id: proto.String("bus-1")},
-			Position:  &gtfs.Position{Latitude: proto.Float32(1), Longitude: proto.Float32(2)},
+		Vehicle: &gtfsrt.VehiclePosition{
+			Vehicle:   &gtfsrt.VehicleDescriptor{Id: proto.String("bus-1")},
+			Position:  &gtfsrt.Position{Latitude: proto.Float32(1), Longitude: proto.Float32(2)},
 			Timestamp: proto.Uint64(uint64(now)),
 		},
 	}
@@ -427,7 +427,7 @@ func TestFeedValidation_FullFeedCompliance(t *testing.T) {
 	// Verify structure
 	require.Len(t, feed.Entity, 3)
 	assert.Equal(t, "2.0", feed.Header.GetGtfsRealtimeVersion())
-	assert.Equal(t, gtfs.FeedHeader_FULL_DATASET, feed.Header.GetIncrementality())
+	assert.Equal(t, gtfsrt.FeedHeader_FULL_DATASET, feed.Header.GetIncrementality())
 
 	// Verify trip assignment
 	var withTrip, withoutTrip int
@@ -471,7 +471,7 @@ func TestFeedValidation_FeedSerializesCleanly(t *testing.T) {
 	data, err := proto.Marshal(feed)
 	require.NoError(t, err, "feed must serialize to protobuf")
 
-	var decoded gtfs.FeedMessage
+	var decoded gtfsrt.FeedMessage
 	err = proto.Unmarshal(data, &decoded)
 	require.NoError(t, err, "feed must deserialize from protobuf")
 
