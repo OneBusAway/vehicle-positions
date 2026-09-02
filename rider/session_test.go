@@ -181,3 +181,48 @@ func TestStateString(t *testing.T) {
 	assert.Equal(t, "rejected", Rejected.String())
 	assert.Equal(t, "unknown", State(9).String())
 }
+
+func TestSession_LatestMatchedSkipsNonMatchedPoints(t *testing.T) {
+	s := newTestSession(t)
+	assert.Nil(t, s.LatestMatched())
+
+	s.Apply(verdict(Matched, Unavailable, 10), pointAt(5))
+	s.Apply(verdict(OffRoute, Unavailable, 0), pointAt(10))
+	assert.Equal(t, 0.0, s.Latest().AlongShape, "an off-route point is still accepted")
+	assert.Equal(t, 10.0, s.LatestMatched().AlongShape, "but it must not become the baseline")
+
+	s.Apply(verdict(Matched, Contradicted, 20), pointAt(15))
+	assert.Equal(t, 20.0, s.LatestMatched().AlongShape, "contradicted geometry still matched")
+}
+
+func TestSession_EndAfterRejectionKeepsRejectionReason(t *testing.T) {
+	s := newTestSession(t)
+	for i := 1; i <= 3; i++ {
+		s.Apply(verdict(Matched, Contradicted, float64(i)), pointAt(i*5))
+	}
+	require.Equal(t, Rejected, s.State())
+	require.Equal(t, EndContradicted, s.EndReason())
+	rejectedAt := s.EndedAt()
+
+	s.End(EndArrived, pointAt(100).Timestamp)
+	assert.Equal(t, EndContradicted, s.EndReason(), "a late client end cannot overwrite a rejection")
+	assert.Equal(t, rejectedAt, s.EndedAt())
+	assert.Equal(t, Rejected, s.State())
+}
+
+func TestDominantOutcome(t *testing.T) {
+	cases := []struct {
+		name   string
+		streak []Outcome
+		want   Outcome
+	}{
+		{"clear majority", []Outcome{OffRoute, Implausible, OffRoute, OffSchedule, OffRoute}, OffRoute},
+		{"tie goes to the later of the tied", []Outcome{OffRoute, OffRoute, Implausible, Implausible, OffSchedule}, Implausible},
+		{"mirror image", []Outcome{Implausible, Implausible, OffRoute, OffRoute, OffSchedule}, OffRoute},
+		{"the most recent outcome does not win on recency alone", []Outcome{OffRoute, OffRoute, OffRoute, Implausible, OffSchedule}, OffRoute},
+		{"unanimous", []Outcome{OffSchedule, OffSchedule, OffSchedule, OffSchedule, OffSchedule}, OffSchedule},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) { assert.Equal(t, tc.want, dominantOutcome(tc.streak)) })
+	}
+}

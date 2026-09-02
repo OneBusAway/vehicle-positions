@@ -101,11 +101,12 @@ type Session struct {
 	tier      Tier
 	startedAt time.Time
 
-	state        State
-	corroborated bool
-	latest       *AcceptedPoint
-	latestCorrob Corroboration
-	counts       Counts
+	state         State
+	corroborated  bool
+	latest        *AcceptedPoint
+	latestMatched *AcceptedPoint
+	latestCorrob  Corroboration
+	counts        Counts
 
 	matchStreak      int
 	contradictions   int
@@ -137,13 +138,29 @@ func (s *Session) SetTier(t Tier) { s.tier = t }
 
 func (s *Session) State() State                       { return s.state }
 func (s *Session) Corroborated() bool                 { return s.corroborated }
-func (s *Session) Latest() *AcceptedPoint             { return s.latest }
 func (s *Session) LatestCorroboration() Corroboration { return s.latestCorrob }
 func (s *Session) Counts() Counts                     { return s.counts }
-func (s *Session) OffRouteStreak() int                { return len(s.nonMatchedStreak) }
 func (s *Session) Ended() bool                        { return s.ended }
 func (s *Session) EndReason() EndReason               { return s.endReason }
 func (s *Session) EndedAt() time.Time                 { return s.endedAt }
+
+// Latest is the most recent accepted point, whatever its outcome, and nil
+// before the first one. The session keeps using it, so callers must not mutate
+// what it points at.
+func (s *Session) Latest() *AcceptedPoint { return s.latest }
+
+// LatestMatched is the most recent accepted point whose geometry matched the
+// trip — a contradicted point counts, because the geometry still matched — and
+// nil before the first one. This, not Latest, is the baseline Verify should be
+// given as Prev: an off-route or implausible point is exactly the position the
+// next point must not be judged against. Callers must not mutate what it points
+// at.
+func (s *Session) LatestMatched() *AcceptedPoint { return s.latestMatched }
+
+// OffRouteStreak is the length of the current run of non-matched points. It
+// counts implausible and off-schedule points too, not only off-route ones; the
+// name is fixed by the engine's API.
+func (s *Session) OffRouteStreak() int { return len(s.nonMatchedStreak) }
 
 // LastAcceptedAt is the timestamp of the latest accepted point, zero if there
 // is none yet.
@@ -172,6 +189,7 @@ func (s *Session) Apply(v Verdict, p Point) Transition {
 	if v.Outcome != Matched {
 		return s.applyNonMatched(v.Outcome, p.Timestamp)
 	}
+	s.latestMatched = s.latest
 	return s.applyMatched(v.Corroboration, p.Timestamp)
 }
 
@@ -196,6 +214,9 @@ func (s *Session) applyMatched(c Corroboration, at time.Time) Transition {
 		}
 	case Contradicted:
 		s.counts.Contradicted++
+		// Only a Corroborated point clears this streak. Unavailable, unmatched
+		// and non-matched points in between leave it standing, so a feed that
+		// goes quiet mid-disagreement does not absolve the rider.
 		s.contradictions++
 	}
 
