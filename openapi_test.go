@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -32,22 +33,40 @@ const openAPIPath = "openapi.yaml"
 // schema under the same string — see TestOpenAPI_VehicleIDSchemaIsSingleSource.
 const vehicleIDSchemaRef = "#/components/schemas/VehicleID"
 
-// htmlUIRoutes are registered by registerAdminUI in admin_handlers.go, behind
-// the ADMIN_UI_ENABLED flag. They serve HTML pages and static assets rather
-// than the JSON API, so openapi.yaml does not describe them.
+// htmlUIRoutes are the server-rendered admin UI routes — the pages and form
+// posts registered by registerAdminUI in admin_page_handlers.go, plus the
+// static asset mount. They serve HTML and assets rather than the JSON API, so
+// openapi.yaml does not describe them.
 //
 // They are excluded by name rather than by scanning main.go alone, so that
 // adding a server-rendered route fails TestOpenAPI_AllRoutesDocumented until
 // someone decides whether it belongs in the spec.
 var htmlUIRoutes = map[string]struct{}{
-	"GET /static/":         {},
-	"GET /admin/login":     {},
-	"GET /admin/signup":    {},
-	"GET /admin/map":       {},
-	"GET /admin/dashboard": {},
-	"GET /admin/vehicles":  {},
-	"GET /admin/users":     {},
-	"GET /admin/trips":     {},
+	"GET /static/":                                       {},
+	"GET /admin":                                         {},
+	"GET /admin/{$}":                                     {},
+	"GET /admin/login":                                   {},
+	"POST /admin/login":                                  {},
+	"POST /admin/logout":                                 {},
+	"GET /admin/dashboard":                               {},
+	"GET /admin/map":                                     {},
+	"GET /admin/trips":                                   {},
+	"GET /admin/vehicles":                                {},
+	"GET /admin/vehicles/new":                            {},
+	"POST /admin/vehicles":                               {},
+	"GET /admin/vehicles/{id}/edit":                      {},
+	"POST /admin/vehicles/{id}":                          {},
+	"POST /admin/vehicles/{id}/activate":                 {},
+	"POST /admin/vehicles/{id}/deactivate":               {},
+	"GET /admin/users":                                   {},
+	"GET /admin/users/new":                               {},
+	"POST /admin/users":                                  {},
+	"GET /admin/users/{id}/edit":                         {},
+	"POST /admin/users/{id}":                             {},
+	"POST /admin/users/{id}/activate":                    {},
+	"POST /admin/users/{id}/deactivate":                  {},
+	"POST /admin/users/{id}/vehicles":                    {},
+	"POST /admin/users/{id}/vehicles/{vehicleID}/remove": {},
 }
 
 // operationMethods are the path-item fields that describe an operation. Every
@@ -125,27 +144,31 @@ type registeredRoute struct {
 
 func (r registeredRoute) String() string { return r.method + " " + r.path }
 
-// extractRegisteredRoutes parses every non-test Go file in the repo root and
+// extractRegisteredRoutes parses every non-test Go file in this module and
 // returns the routes they register.
 //
 // It walks the AST rather than grepping the source, so a `mux.Handle(` inside a
 // comment or an unrelated string cannot invent a phantom route, and a
 // registration whose pattern is not a literal string is reported loudly instead
-// of slipping past unseen. Reading every file rather than just main.go means
-// routes registered elsewhere — registerAdminUI in admin_handlers.go, today —
-// are visible too.
+// of slipping past unseen. Walking the whole module rather than just main.go
+// means routes registered elsewhere — registerAdminUI in
+// admin_page_handlers.go, today — are visible too, and a future move into a
+// subpackage would not blind the guard.
 func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 	t.Helper()
 
-	files, err := filepath.Glob("*.go")
-	require.NoError(t, err)
-
 	fileSet := token.NewFileSet()
-	routes := make([]registeredRoute, 0, len(files))
+	routes := make([]registeredRoute, 0, len(htmlUIRoutes))
 
-	for _, file := range files {
-		if strings.HasSuffix(file, "_test.go") {
-			continue
+	walkErr := filepath.WalkDir(".", func(file string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return skipNonModuleDir(file, entry)
+		}
+		if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+			return nil
 		}
 
 		parsed, err := parser.ParseFile(fileSet, file, nil, parser.SkipObjectResolution)
@@ -178,10 +201,30 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 			})
 			return true
 		})
-	}
+		return nil
+	})
+	require.NoError(t, walkErr)
 
 	require.NotEmpty(t, routes, "expected mux route registrations in the server source")
 	return routes
+}
+
+// skipNonModuleDir keeps the walk inside this module. It skips hidden
+// directories, testdata, and — the one that matters — any directory carrying
+// its own go.mod: a nested module is a separate build whose routes are not
+// ours to document, and a developer checkout sitting in the tree should not be
+// able to fail this suite.
+func skipNonModuleDir(dir string, entry fs.DirEntry) error {
+	if dir == "." {
+		return nil
+	}
+	if strings.HasPrefix(entry.Name(), ".") || entry.Name() == "testdata" {
+		return filepath.SkipDir
+	}
+	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+		return filepath.SkipDir
+	}
+	return nil
 }
 
 // apiRoutes returns the registered routes openapi.yaml is expected to document,
@@ -350,6 +393,7 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 	const (
 		upsertVehicle = "#/components/schemas/UpsertVehicleRequest/properties"
 		historyLimit  = "#/components/schemas/HistoryLimit"
+		tripListLimit = "#/components/schemas/TripListLimit"
 	)
 
 	constraints := []struct {
@@ -364,6 +408,8 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		{upsertVehicle + "/agency_tag", "maxLength", maxFieldLength, "maxFieldLength"},
 		{historyLimit, "maximum", maxHistoryLimit, "maxHistoryLimit"},
 		{historyLimit, "default", defaultHistoryLimit, "defaultHistoryLimit"},
+		{tripListLimit, "maximum", maxTripListLimit, "maxTripListLimit"},
+		{tripListLimit, "default", defaultTripListLimit, "defaultTripListLimit"},
 	}
 
 	for _, constraint := range constraints {
