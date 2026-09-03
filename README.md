@@ -220,7 +220,7 @@ curl -i -X POST http://localhost:8080/api/v1/locations \
 
 **Data Retention & Privacy**
 
-`location_points` is the highest-volume table in the system: the server stores one row per vehicle per reporting interval, so a 50-vehicle agency reporting every 10 seconds accumulates roughly 13 million rows per year. That data is also a per-driver GPS trace, which most agencies should not keep indefinitely.
+`location_points` is the highest-volume table in the system: the server stores one row per vehicle per reporting interval. Fifty vehicles reporting every 10 seconds is 5 rows a second — about 157.7 million rows a year, or roughly 105 million if vehicles only report across a 16-hour service day. That data is also a per-driver GPS trace, which most agencies should not keep indefinitely.
 
 The server can delete location points once they pass a configured age:
 

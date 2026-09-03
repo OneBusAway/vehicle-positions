@@ -67,19 +67,26 @@ func (f *fakeLocationPruneStore) firstCall(t *testing.T) pruneCall {
 
 // newUnstartedPruner builds a pruner without its background goroutine, so the
 // batch loop in pruneAll can be asserted exactly with no ticker firing extra
-// passes underneath the assertions.
+// passes underneath the assertions. done starts closed because there is no
+// goroutine for Stop to wait on.
 func newUnstartedPruner(store LocationPruneStore, retention time.Duration, batchSize int32) *LocationPruner {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	close(done)
 	return &LocationPruner{
 		store:     store,
 		retention: retention,
 		batchSize: batchSize,
-		stop:      make(chan struct{}),
+		ctx:       ctx,
+		cancel:    cancel,
+		done:      done,
 	}
 }
 
 func TestLocationPruner_PrunesOnTick(t *testing.T) {
 	fake := &fakeLocationPruneStore{}
-	pruner := NewLocationPruner(fake, time.Hour, 5*time.Millisecond, 250)
+	pruner, err := NewLocationPruner(fake, time.Hour, 5*time.Millisecond, 250)
+	require.NoError(t, err)
 	t.Cleanup(pruner.Stop)
 
 	assert.Eventually(t, func() bool {
@@ -93,7 +100,7 @@ func TestLocationPruner_LoopsUntilUnderBatch(t *testing.T) {
 	fake := &fakeLocationPruneStore{deleted: []int64{5, 5, 1}}
 	pruner := newUnstartedPruner(fake, time.Hour, 5)
 
-	pruner.pruneAll(context.Background())
+	pruner.pruneAll(pruner.ctx)
 
 	assert.Equal(t, 3, fake.callCount(), "should keep draining until a batch comes back short")
 }
@@ -102,7 +109,7 @@ func TestLocationPruner_StopsOnError(t *testing.T) {
 	fake := &fakeLocationPruneStore{deleted: []int64{5}, err: errors.New("connection refused")}
 	pruner := newUnstartedPruner(fake, time.Hour, 5)
 
-	pruner.pruneAll(context.Background())
+	pruner.pruneAll(pruner.ctx)
 
 	assert.Equal(t, 1, fake.callCount(), "a store error should end the pass instead of retrying in a tight loop")
 }
@@ -112,14 +119,15 @@ func TestLocationPruner_CutoffUsesRetention(t *testing.T) {
 	pruner := newUnstartedPruner(fake, 24*time.Hour, 100)
 
 	before := time.Now()
-	pruner.pruneAll(context.Background())
+	pruner.pruneAll(pruner.ctx)
 
 	assert.WithinDuration(t, before.Add(-24*time.Hour), fake.firstCall(t).cutoff, time.Minute,
 		"cutoff should be one retention period in the past")
 }
 
 func TestLocationPruner_Stop_Idempotent(t *testing.T) {
-	pruner := NewLocationPruner(&fakeLocationPruneStore{}, time.Hour, time.Minute, 100)
+	pruner, err := NewLocationPruner(&fakeLocationPruneStore{}, time.Hour, time.Minute, 100)
+	require.NoError(t, err)
 
 	assert.NotPanics(t, func() {
 		pruner.Stop()
@@ -129,7 +137,8 @@ func TestLocationPruner_Stop_Idempotent(t *testing.T) {
 
 func TestLocationPruner_Stop_HaltsGoroutine(t *testing.T) {
 	fake := &fakeLocationPruneStore{}
-	pruner := NewLocationPruner(fake, time.Hour, 5*time.Millisecond, 100)
+	pruner, err := NewLocationPruner(fake, time.Hour, 5*time.Millisecond, 100)
+	require.NoError(t, err)
 	t.Cleanup(pruner.Stop)
 
 	require.Eventually(t, func() bool {
@@ -153,37 +162,110 @@ func TestLocationPruner_StopDuringBatchLoop(t *testing.T) {
 	pruner := newUnstartedPruner(fake, time.Hour, 5)
 	fake.onCall = pruner.Stop
 
-	pruner.pruneAll(context.Background())
+	pruner.pruneAll(pruner.ctx)
 
 	assert.Equal(t, 1, fake.callCount(), "Stop should break the batch loop instead of draining the backlog")
 }
 
 func TestNewLocationPruner_RefusesInvalidConfig(t *testing.T) {
-	// Not safe for t.Parallel(); uses global logger
 	tests := []struct {
 		name      string
 		retention time.Duration
 		interval  time.Duration
 		batchSize int32
+		wantErr   string
 	}{
-		{name: "zero retention", retention: 0, interval: 5 * time.Millisecond, batchSize: 100},
-		{name: "negative retention", retention: -time.Hour, interval: 5 * time.Millisecond, batchSize: 100},
-		{name: "zero interval", retention: time.Hour, interval: 0, batchSize: 100},
-		{name: "negative interval", retention: time.Hour, interval: -time.Second, batchSize: 100},
-		{name: "zero batch size", retention: time.Hour, interval: 5 * time.Millisecond, batchSize: 0},
+		{name: "zero retention", retention: 0, interval: time.Minute, batchSize: 100, wantErr: "retention period must be positive"},
+		{name: "negative retention", retention: -time.Hour, interval: time.Minute, batchSize: 100, wantErr: "retention period must be positive"},
+		{name: "zero interval", retention: time.Hour, interval: 0, batchSize: 100, wantErr: "prune interval must be positive"},
+		{name: "negative interval", retention: time.Hour, interval: -time.Second, batchSize: 100, wantErr: "prune interval must be positive"},
+		{name: "zero batch size", retention: time.Hour, interval: time.Minute, batchSize: 0, wantErr: "batch size must be at least 1"},
+		{name: "negative batch size", retention: time.Hour, interval: time.Minute, batchSize: -1, wantErr: "batch size must be at least 1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &fakeLocationPruneStore{}
-			pruner := NewLocationPruner(fake, tt.retention, tt.interval, tt.batchSize)
-			t.Cleanup(pruner.Stop)
+			pruner, err := NewLocationPruner(fake, tt.retention, tt.interval, tt.batchSize)
 
-			// A zero retention would set the cutoff at "now" and delete the
-			// entire table, so the pruner must never run with one.
+			require.Error(t, err, "invalid configuration must be rejected")
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Nil(t, pruner, "no pruner should be handed back to the caller")
+
+			// A non-positive retention would put the cutoff at "now" and delete
+			// the entire table, so nothing may run.
 			assert.Never(t, func() bool {
 				return fake.callCount() > 0
-			}, 50*time.Millisecond, 5*time.Millisecond, "pruner must not run with invalid configuration")
+			}, 50*time.Millisecond, 5*time.Millisecond, "rejected configuration must never prune")
 		})
+	}
+}
+
+// blockingPruneStore blocks inside PruneLocationPoints until its context is
+// cancelled, standing in for a slow or stuck DELETE on the database.
+type blockingPruneStore struct {
+	enterOnce sync.Once
+	entered   chan struct{}
+
+	mu  sync.Mutex
+	err error
+}
+
+func (b *blockingPruneStore) PruneLocationPoints(ctx context.Context, _ time.Time, _ int32) (int64, error) {
+	b.enterOnce.Do(func() { close(b.entered) })
+	<-ctx.Done()
+
+	b.mu.Lock()
+	b.err = ctx.Err()
+	b.mu.Unlock()
+	return 0, ctx.Err()
+}
+
+func (b *blockingPruneStore) observedErr() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.err
+}
+
+func TestLocationPruner_Stop_CancelsInFlightPrune(t *testing.T) {
+	blocking := &blockingPruneStore{entered: make(chan struct{})}
+	pruner, err := NewLocationPruner(blocking, time.Hour, time.Millisecond, 100)
+	require.NoError(t, err)
+
+	select {
+	case <-blocking.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("prune never started")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		pruner.Stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return: the in-flight prune was never cancelled")
+	}
+
+	assert.ErrorIs(t, blocking.observedErr(), context.Canceled,
+		"the running delete should see its context cancelled, not run to completion")
+}
+
+func TestLocationPruner_Stop_WaitsForGoroutineExit(t *testing.T) {
+	fake := &fakeLocationPruneStore{}
+	pruner, err := NewLocationPruner(fake, time.Hour, time.Millisecond, 100)
+	require.NoError(t, err)
+
+	pruner.Stop()
+
+	// done is closed by run's defer, so a returned Stop proves the goroutine is
+	// gone rather than merely signalled.
+	select {
+	case <-pruner.done:
+	default:
+		t.Fatal("Stop returned while the pruner goroutine was still running")
 	}
 }

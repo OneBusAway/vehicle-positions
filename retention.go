@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -10,58 +12,71 @@ import (
 // LocationPruner periodically deletes location points older than the configured
 // retention period, in bounded batches, until the backlog is drained.
 //
-// Shutdown follows the same shape as VehicleRateLimiter: a stop channel closed
-// once by Stop, checked both between ticks and between delete batches so a long
-// backlog does not delay server shutdown.
+// Shutdown follows the same shape as VehicleRateLimiter, with one addition: the
+// worker owns a cancellable context, so Stop aborts a delete already running on
+// the database rather than only stopping the next one.
 type LocationPruner struct {
 	store     LocationPruneStore
 	retention time.Duration
 	interval  time.Duration
 	batchSize int32
 
-	stop chan struct{}
-	once sync.Once
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
+	once   sync.Once
 }
 
 // NewLocationPruner starts the background pruning goroutine.
 //
 // Retention and interval must be positive and batchSize must be at least one.
-// Invalid settings would make the pruner delete every stored location point, so
-// it refuses to start and returns an inert pruner instead.
-func NewLocationPruner(store LocationPruneStore, retention, interval time.Duration, batchSize int32) *LocationPruner {
+// A non-positive retention would put the cutoff at "now" and delete every stored
+// location point, so invalid settings are rejected rather than defaulted.
+func NewLocationPruner(store LocationPruneStore, retention, interval time.Duration, batchSize int32) (*LocationPruner, error) {
+	switch {
+	case retention <= 0:
+		return nil, fmt.Errorf("retention period must be positive, got %s", retention)
+	case interval <= 0:
+		return nil, fmt.Errorf("prune interval must be positive, got %s", interval)
+	case batchSize < 1:
+		return nil, fmt.Errorf("prune batch size must be at least 1, got %d", batchSize)
+	}
+
+	// A background job outlives any single request, so it owns its context
+	// rather than borrowing a request's.
+	ctx, cancel := context.WithCancel(context.Background())
 	p := &LocationPruner{
 		store:     store,
 		retention: retention,
 		interval:  interval,
 		batchSize: batchSize,
-		stop:      make(chan struct{}),
-	}
-
-	if retention <= 0 || interval <= 0 || batchSize < 1 {
-		slog.Error("location pruner not started: invalid configuration",
-			"retention", retention.String(), "interval", interval.String(), "batch_size", batchSize)
-		return p
+		ctx:       ctx,
+		cancel:    cancel,
+		done:      make(chan struct{}),
 	}
 
 	go p.run()
-	return p
+	return p, nil
 }
 
-// Stop shuts down the background pruning goroutine. Safe to call more than once.
+// Stop cancels any prune already in flight and waits for the goroutine to exit.
+// Safe to call more than once.
 func (p *LocationPruner) Stop() {
-	p.once.Do(func() { close(p.stop) })
+	p.once.Do(p.cancel)
+	<-p.done
 }
 
 func (p *LocationPruner) run() {
+	defer close(p.done)
+
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ticker.C:
-			// A background job outlives any single request, so it owns its own
-			// context rather than borrowing a request's.
-			p.pruneAll(context.Background())
-		case <-p.stop:
+			p.pruneAll(p.ctx)
+		case <-p.ctx.Done():
 			return
 		}
 	}
@@ -75,14 +90,17 @@ func (p *LocationPruner) pruneAll(ctx context.Context) {
 
 	var total int64
 	for {
-		select {
-		case <-p.stop:
+		if ctx.Err() != nil {
 			return
-		default:
 		}
 
 		deleted, err := p.store.PruneLocationPoints(ctx, cutoff, p.batchSize)
 		if err != nil {
+			// A delete aborted by shutdown is expected, not a failure worth
+			// alarming on.
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				return
+			}
 			slog.Error("location retention prune failed",
 				"error", err, "cutoff", cutoff, "deleted_so_far", total)
 			return

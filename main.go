@@ -183,21 +183,30 @@ func main() {
 	defer loginLimiter.Stop()
 
 	// Retention is opt-in: a zero period means keep location history forever,
-	// which is the behavior every existing deployment has today.
-	if retentionPeriod := envDurationOrDefault("LOCATION_RETENTION_PERIOD", 0); retentionPeriod > 0 {
+	// which is the behavior every existing deployment has today. Any other value
+	// is a deliberate request to delete data, so a bad one is reported rather
+	// than quietly ignored.
+	if retentionPeriod := envDurationOrDefault("LOCATION_RETENTION_PERIOD", 0); retentionPeriod != 0 {
 		pruneInterval := envDurationOrDefault("LOCATION_PRUNE_INTERVAL", time.Hour)
 		batchSize := envInt32OrDefault("LOCATION_PRUNE_BATCH_SIZE", 10_000)
 
-		if pruneInterval > retentionPeriod {
-			slog.Warn("prune interval is longer than the retention period, so points outlive it by up to one interval",
-				"interval", pruneInterval.String(), "retention", retentionPeriod.String())
+		pruner, err := NewLocationPruner(store, retentionPeriod, pruneInterval, batchSize)
+		if err != nil {
+			// Refusing to start the whole server would take live vehicle
+			// tracking down over an optional feature, so carry on with
+			// retention off — the safe direction, since nothing is deleted.
+			slog.Error("location retention disabled: invalid configuration", "error", err)
+		} else {
+			defer pruner.Stop()
+
+			if pruneInterval > retentionPeriod {
+				slog.Warn("prune interval is longer than the retention period, so points outlive it by up to one interval",
+					"interval", pruneInterval.String(), "retention", retentionPeriod.String())
+			}
+
+			slog.Info("location retention enabled",
+				"retention", retentionPeriod.String(), "interval", pruneInterval.String(), "batch_size", batchSize)
 		}
-
-		pruner := NewLocationPruner(store, retentionPeriod, pruneInterval, batchSize)
-		defer pruner.Stop()
-
-		slog.Info("location retention enabled",
-			"retention", retentionPeriod.String(), "interval", pruneInterval.String(), "batch_size", batchSize)
 	}
 
 	cutoff := time.Now().Add(-maxAge)
