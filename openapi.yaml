@@ -21,10 +21,10 @@ info:
     have to be read against the handlers by hand.
 
     Out of scope: the server-rendered admin UI (`/admin/*`, `/static/*`),
-    which is HTML rather than JSON and is registered only when
-    `ADMIN_UI_ENABLED` is set. Those routes are listed explicitly in
-    `openapi_test.go` so that adding one is a deliberate decision rather
-    than an invisible gap.
+    which serves HTML pages and form posts rather than JSON and is disabled
+    by setting `ADMIN_UI_ENABLED` to a false value (it is on by default).
+    Those routes are listed explicitly in `openapi_test.go` so that adding
+    one is a deliberate decision rather than an invisible gap.
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -84,6 +84,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: |
+            Too many login attempts. The limiter keys on client IP and the
+            submitted email; a successful login clears the email's counter.
           content:
             application/json:
               schema:
@@ -297,6 +305,34 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/admin/vehicles/live:
+    get:
+      tags: [admin]
+      summary: Snapshot of currently reporting vehicles
+      description: |
+        Returns every vehicle the tracker considers active — those that have
+        reported within `STALENESS_THRESHOLD` — joined with the vehicle's
+        label and, where a trip is running, that trip's route and driver.
+        Ordered by `vehicle_id`. Requires the `admin` role.
+
+        This reads the in-memory tracker rather than the locations table, so
+        it reflects live state, not history. Use
+        `GET /api/v1/admin/vehicles/{vehicleID}/locations` for the recorded
+        trail.
+      responses:
+        '200':
+          description: Active vehicles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveVehicles'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/admin/vehicles/{id}:
     parameters:
       - $ref: '#/components/parameters/VehicleIDPath'
@@ -418,6 +454,100 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           description: No vehicle exists with this id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/trips:
+    get:
+      tags: [admin]
+      summary: List trips
+      description: |
+        Returns trips newest-first with the vehicle label and driver name
+        resolved. Requires the `admin` role.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: ['', active, completed]
+          description: Filter by trip status. Omit or pass an empty string for all trips.
+        - in: query
+          name: vehicle_id
+          required: false
+          schema:
+            type: string
+          description: Restrict to one vehicle. Omit for all vehicles.
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Free-text search across the trip's vehicle, driver, and route fields.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            $ref: '#/components/schemas/TripListLimit'
+          description: Maximum number of trips to return.
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of trips to skip.
+      responses:
+        '200':
+          description: Matching trips.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/trips/{id}/locations:
+    parameters:
+      - $ref: '#/components/parameters/TripIDPath'
+    get:
+      tags: [admin]
+      summary: Get a trip with its recorded trail
+      description: |
+        Returns the trip summary together with every location fix recorded
+        against it, oldest first. Requires the `admin` role.
+
+        A non-numeric `id` returns `404` rather than `400` — the handler
+        treats an unparseable id as a trip that does not exist.
+      responses:
+        '200':
+          description: |
+            Trip and its trail. `points` is an empty array for a trip with no
+            recorded fixes; the `trip` object is still returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripTrail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No trip exists with this id, or the id is not a number.
           content:
             application/json:
               schema:
@@ -819,6 +949,15 @@ components:
     # path variable differently: most use {id}, while the assignment-delete and
     # location-history routes use {vehicleID}. OpenAPI requires `name` to match
     # the template variable, so the pair cannot be collapsed.
+    TripIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      description: Trip identifier.
     VehicleIDPathNamed:
       name: vehicleID
       in: path
@@ -1063,6 +1202,199 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    LiveVehicles:
+      type: object
+      required: [count, vehicles]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveVehicleEntry'
+
+    LiveVehicleEntry:
+      type: object
+      description: |
+        A vehicle's current tracker state. `trip_db_id`, `route_id`, and
+        `driver_name` are populated only while a trip is running on the
+        vehicle and are explicitly `null` otherwise — none carry `omitempty`,
+        so the key is always present. Likewise `bearing` and `speed` are
+        `null` when the device did not report them, keeping "unknown"
+        distinct from a real zero.
+      required:
+        - vehicle_id
+        - label
+        - latitude
+        - longitude
+        - bearing
+        - speed
+        - gtfs_trip_id
+        - trip_db_id
+        - route_id
+        - driver_name
+        - reported_at
+        - updated_at
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        label:
+          type: string
+          description: |
+            The vehicle's label, or the vehicle id when the vehicle has no
+            row in the vehicles table.
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        gtfs_trip_id:
+          type: string
+          description: The GTFS trip id from the last location report. Empty when none was sent.
+        trip_db_id:
+          type: [integer, 'null']
+          format: int64
+          description: Database id of the active trip, or null when no trip is running.
+        route_id:
+          type: [string, 'null']
+        driver_name:
+          type: [string, 'null']
+        reported_at:
+          type: integer
+          format: int64
+          description: Device timestamp of the last fix, Unix seconds.
+        updated_at:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC time the tracker last recorded this vehicle.
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultTripListLimit / maxTripListLimit in admin_live_handlers.go.
+    TripListLimit:
+      type: integer
+      minimum: 1
+      maximum: 200
+      default: 50
+
+    TripList:
+      type: object
+      required: [count, has_more, trips]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of trips in `trips`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more trips match the filter than this page returned.
+        trips:
+          type: array
+          items:
+            $ref: '#/components/schemas/TripSummary'
+
+    TripSummary:
+      type: object
+      description: |
+        A trip with its vehicle label and driver name resolved. Distinct from
+        `Trip`, which is what the driver-facing trip endpoints return.
+      required:
+        - id
+        - vehicle_id
+        - vehicle_label
+        - user_id
+        - driver_name
+        - route_id
+        - gtfs_trip_id
+        - start_time
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        vehicle_label:
+          type: string
+        user_id:
+          type: integer
+          format: int64
+        driver_name:
+          type: string
+        route_id:
+          type: string
+        gtfs_trip_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+          description: |
+            Present only on completed trips. The server omits this field while
+            the trip is active (Go `*time.Time` with `omitempty`).
+        status:
+          type: string
+          enum: [active, completed]
+
+    TripTrail:
+      type: object
+      required: [trip, points]
+      properties:
+        trip:
+          $ref: '#/components/schemas/TripSummary'
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TripTrailPoint'
+
+    TripTrailPoint:
+      type: object
+      description: |
+        `bearing`, `speed`, and `accuracy` are required and nullable for the
+        same reason as elsewhere: the Go fields are pointers without
+        `omitempty`, so an absent reading is `null` rather than missing.
+      required:
+        - latitude
+        - longitude
+        - bearing
+        - speed
+        - accuracy
+        - reported_at
+        - received_at
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        accuracy:
+          type: [number, 'null']
+          format: double
+        reported_at:
+          type: integer
+          format: int64
+          description: Device timestamp, Unix seconds.
+        received_at:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC timestamp of when the server stored the fix.
 
     # Named so the drift guard has a stable address to pin against
     # defaultHistoryLimit / maxHistoryLimit in location_history_handlers.go.
