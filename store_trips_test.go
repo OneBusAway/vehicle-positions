@@ -138,6 +138,54 @@ func TestListTripsFiltersAndOrder(t *testing.T) {
 	assert.NotEqual(t, page1[0].ID, page2[0].ID)
 }
 
+// TestListTripsUserIDFilter covers the user_id filter: it must narrow results
+// to one driver, compose with the other filters, and treat 0 as "all drivers"
+// so the zero value cannot silently hide rows.
+func TestListTripsUserIDFilter(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	driver1 := setupTripUser(t, store, "Cara Driver", "cara-trips@test.com", "bus-user-1", "Bus User 1")
+	trip1, err := store.StartTrip(ctx, driver1, "bus-user-1", "route-1", "gtfs-1")
+	require.NoError(t, err)
+	require.NoError(t, store.EndTrip(ctx, trip1.ID, driver1))
+
+	driver2 := setupTripUser(t, store, "Dan Driver", "dan-trips@test.com", "bus-user-2", "Bus User 2")
+	_, err = store.StartTrip(ctx, driver2, "bus-user-2", "route-2", "gtfs-2")
+	require.NoError(t, err)
+
+	byUser, err := store.ListTrips(ctx, TripFilter{UserID: driver1, Limit: 200})
+	require.NoError(t, err)
+	require.NotEmpty(t, byUser)
+	for _, tr := range byUser {
+		assert.Equal(t, driver1, tr.UserID)
+	}
+
+	// Composes with status: driver1's only trip is completed, so filtering
+	// for their active trips must come back empty rather than falling back
+	// to an unfiltered list.
+	activeForUser1, err := store.ListTrips(ctx, TripFilter{UserID: driver1, Status: "active", Limit: 200})
+	require.NoError(t, err)
+	assert.Empty(t, activeForUser1)
+
+	activeForUser2, err := store.ListTrips(ctx, TripFilter{UserID: driver2, Status: "active", Limit: 200})
+	require.NoError(t, err)
+	require.Len(t, activeForUser2, 1)
+	assert.Equal(t, driver2, activeForUser2[0].UserID)
+
+	// A user with no trips at all yields an empty result, not everyone's.
+	absent, err := store.ListTrips(ctx, TripFilter{UserID: driver2 + 100_000, Limit: 200})
+	require.NoError(t, err)
+	assert.Empty(t, absent)
+
+	// Zero means "no driver filter": both drivers' trips come back.
+	all, err := store.ListTrips(ctx, TripFilter{UserID: 0, Limit: 200})
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(all), 2)
+}
+
 func TestGetTripSummary(t *testing.T) {
 	store := newTestStore(t)
 	userID := setupTripTestData(t, store)

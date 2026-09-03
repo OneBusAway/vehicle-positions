@@ -55,6 +55,7 @@ type TripSummary struct {
 type TripFilter struct {
 	Status    string // "", "active", "completed"
 	VehicleID string // "" = all
+	UserID    int64  // 0 = all; users.id is a bigserial, so 0 is never a real driver
 	Q         string // ILIKE substring on driver name, route_id, gtfs_trip_id
 	Limit     int    // callers pass limit+1 to detect hasMore
 	Offset    int
@@ -204,6 +205,9 @@ func (s *Store) ListTrips(ctx context.Context, f TripFilter) ([]TripSummary, err
 	}
 	if f.VehicleID != "" {
 		conds = append(conds, "t.vehicle_id = "+arg(f.VehicleID))
+	}
+	if f.UserID != 0 {
+		conds = append(conds, "t.user_id = "+arg(f.UserID))
 	}
 	if f.Q != "" {
 		// Escape LIKE metacharacters so a search for a literal % or _

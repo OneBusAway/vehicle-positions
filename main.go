@@ -71,6 +71,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/{vehicleID}/locations", authMiddleware(adminMiddleware(handleGetLocationHistory(store, store))))
 	mux.Handle("GET /api/v1/admin/trips", authMiddleware(adminMiddleware(handleListTrips(store))))
+	mux.Handle("GET /api/v1/admin/trips/{id}", authMiddleware(adminMiddleware(handleGetTrip(store))))
 	mux.Handle("GET /api/v1/admin/trips/{id}/locations", authMiddleware(adminMiddleware(handleTripLocations(store))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

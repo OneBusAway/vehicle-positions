@@ -462,3 +462,139 @@ func TestHandleTripLocations_LocationsStoreError(t *testing.T) {
 	handleTripLocations(fake).ServeHTTP(w, req)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+// TestHandleListTrips_UserIDFilterPassthrough verifies user_id is parsed and
+// forwarded to the store as TripFilter.UserID.
+func TestHandleListTrips_UserIDFilterPassthrough(t *testing.T) {
+	fake := &fakeTripLister{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips?user_id=7", nil)
+	w := httptest.NewRecorder()
+	handleListTrips(fake).ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	assert.Equal(t, int64(7), fake.captured.UserID)
+}
+
+// TestHandleListTrips_NoUserIDMeansAllDrivers verifies an absent user_id
+// leaves the filter at 0, which ListTrips treats as "no driver filter".
+func TestHandleListTrips_NoUserIDMeansAllDrivers(t *testing.T) {
+	fake := &fakeTripLister{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips", nil)
+	w := httptest.NewRecorder()
+	handleListTrips(fake).ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	assert.Zero(t, fake.captured.UserID)
+}
+
+// TestHandleListTrips_InvalidUserID verifies a present but unusable user_id is
+// rejected rather than silently collapsing into the 0 "all drivers" sentinel,
+// which would quietly return every trip instead of the caller's filter.
+func TestHandleListTrips_InvalidUserID(t *testing.T) {
+	for _, userID := range []string{"0", "-1", "abc", "1.5", ""} {
+		t.Run("user_id="+userID, func(t *testing.T) {
+			fake := &fakeTripLister{}
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips?user_id="+userID, nil)
+			w := httptest.NewRecorder()
+			handleListTrips(fake).ServeHTTP(w, req)
+
+			if userID == "" {
+				// An empty value is indistinguishable from an absent param.
+				assert.Equal(t, http.StatusOK, w.Code)
+				return
+			}
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Zero(t, fake.captured.UserID, "store must not be filtered on a rejected user_id")
+		})
+	}
+}
+
+// TestHandleGetTrip_HappyPath verifies the trip summary is returned unwrapped,
+// including the vehicle label and driver name joins.
+func TestHandleGetTrip_HappyPath(t *testing.T) {
+	end := time.Unix(1752570000, 0).UTC()
+	trip := &TripSummary{
+		ID: 5, VehicleID: "bus-1", VehicleLabel: "Bus 1",
+		UserID: 7, DriverName: "Asha", RouteID: "route-9",
+		GtfsTripID: "gtfs-3", StartTime: time.Unix(1752566400, 0).UTC(),
+		EndTime: &end, Status: "completed",
+	}
+	fake := &fakeTripTrailStore{trip: trip}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips/5", nil)
+	req.SetPathValue("id", "5")
+	w := httptest.NewRecorder()
+	handleGetTrip(fake).ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var got TripSummary
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&got))
+	assert.Equal(t, int64(5), got.ID)
+	assert.Equal(t, "Bus 1", got.VehicleLabel)
+	assert.Equal(t, "Asha", got.DriverName)
+	assert.Equal(t, int64(7), got.UserID)
+	require.NotNil(t, got.EndTime)
+	assert.Equal(t, end, got.EndTime.UTC())
+}
+
+// TestHandleGetTrip_ActiveTripOmitsEndTime verifies an active trip's null
+// end_time round-trips as an absent field rather than a zero timestamp.
+func TestHandleGetTrip_ActiveTripOmitsEndTime(t *testing.T) {
+	fake := &fakeTripTrailStore{trip: &TripSummary{ID: 5, Status: "active"}}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips/5", nil)
+	req.SetPathValue("id", "5")
+	w := httptest.NewRecorder()
+	handleGetTrip(fake).ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]any
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	assert.NotContains(t, raw, "end_time")
+}
+
+// TestHandleGetTrip_NotFound verifies an unknown id produces a 404.
+func TestHandleGetTrip_NotFound(t *testing.T) {
+	fake := &fakeTripTrailStore{tripErr: ErrTripNotFound}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips/999", nil)
+	req.SetPathValue("id", "999")
+	w := httptest.NewRecorder()
+	handleGetTrip(fake).ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestHandleGetTrip_NonNumericID verifies a non-numeric {id} produces a 404,
+// matching handleTripLocations rather than leaking a parse error.
+func TestHandleGetTrip_NonNumericID(t *testing.T) {
+	fake := &fakeTripTrailStore{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips/not-a-number", nil)
+	req.SetPathValue("id", "not-a-number")
+	w := httptest.NewRecorder()
+	handleGetTrip(fake).ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestHandleGetTrip_NilTripWithoutError verifies the defensive nil guard
+// returns 404 instead of panicking on a (nil, nil) store result.
+func TestHandleGetTrip_NilTripWithoutError(t *testing.T) {
+	fake := &fakeTripTrailStore{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips/5", nil)
+	req.SetPathValue("id", "5")
+	w := httptest.NewRecorder()
+	handleGetTrip(fake).ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestHandleGetTrip_StoreError verifies a store failure produces a 500 and
+// does not leak the underlying error to the client.
+func TestHandleGetTrip_StoreError(t *testing.T) {
+	fake := &fakeTripTrailStore{tripErr: assert.AnError}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/trips/5", nil)
+	req.SetPathValue("id", "5")
+	w := httptest.NewRecorder()
+	handleGetTrip(fake).ServeHTTP(w, req)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var resp map[string]string
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, "internal server error", resp["error"])
+	assert.NotContains(t, resp["error"], assert.AnError.Error())
+}
