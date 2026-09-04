@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,7 +34,7 @@ func TestSetSessionCookieAttributes(t *testing.T) {
 
 func TestRequireAdminPage(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-	h := requireAdminPage(testSecret)(next)
+	h := requireAdminPage(testSecret, newFakeRevocations())(next)
 
 	cases := []struct {
 		name   string
@@ -88,4 +89,49 @@ func TestFlashRoundTrip(t *testing.T) {
 	req3 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req3.AddCookie(&http.Cookie{Name: flashCookieName, Value: "<script>x</script>"})
 	assert.Equal(t, "", takeFlash(httptest.NewRecorder(), req3))
+}
+
+// TestAdminCookiePath_RejectsRevokedToken is the divergence guard from the
+// plan's D2: requireAuth and the admin UI's cookie session validate the same
+// JWT through parseSessionToken, so a token revoked through
+// POST /api/v1/auth/logout must end the browser session too. Without this
+// test the two paths could silently drift apart.
+func TestAdminCookiePath_RejectsRevokedToken(t *testing.T) {
+	cookie := cookieFor(t, "admin")
+	revocations := newFakeRevocations()
+	revocations.revoked[jtiOf(t, cookie.Value)] = struct{}{}
+
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	req.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusSeeOther, w.Code, "a revoked session cookie must not reach an admin page")
+	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	assert.False(t, reached, "the page handler must not run")
+}
+
+// TestAdminCookiePath_CheckerErrorFailsClosed mirrors
+// TestRequireAuth_CheckerErrorFailsClosed for the browser path: an
+// undecidable revocation check sends the visitor to the login page rather
+// than through to the page.
+func TestAdminCookiePath_CheckerErrorFailsClosed(t *testing.T) {
+	revocations := newFakeRevocations()
+	revocations.err = errors.New("database unavailable")
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
 }

@@ -28,8 +28,11 @@ func generateRiderJWT(riderID string, secret []byte, ttl time.Duration) (string,
 // requireRider is middleware that validates the Bearer rider JWT on the rider
 // API. Unlike requireAuth there is no cookie fallback — rider tokens belong to
 // a mobile client, never to a browser session, so a cookie is never accepted.
-func requireRider(secret []byte) func(http.Handler) http.Handler {
-	return requireRoles(secret, false, roleRider)
+// checker is threaded through so the rider path cannot diverge from the staff
+// one if rider tokens ever gain a jti; see checkRevoked for why it is inert
+// for them today.
+func requireRider(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
+	return requireRoles(secret, checker, false, roleRider)
 }
 
 // riderIDFromContext returns the rider id from claims stored by requireRider.
