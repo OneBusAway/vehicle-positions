@@ -76,6 +76,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
+	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store)))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker, riderEstimates))
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))

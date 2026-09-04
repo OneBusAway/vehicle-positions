@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -359,3 +360,63 @@ func requireRoles(secret []byte, checker TokenChecker, allowCookie bool, roles .
 // <select> only ever submits one of these values, since form submissions
 // aren't trustworthy.
 func validUserRole(role string) bool { return slices.Contains(staffRoles, role) }
+
+// handleLogout revokes the caller's own token, ending the session server-side
+// rather than relying on the client to discard it. It must be wrapped in
+// requireAuth, which puts the validated claims on the context.
+//
+// Every user may log themselves out, so this is authenticated but not
+// admin-gated. Because the admin UI's vp_session cookie carries the same JWT,
+// logging out through the API also ends that browser session.
+func handleLogout(revoker TokenRevoker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+		if !ok {
+			slog.Warn("logout: claims missing from context")
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+
+		jti, _ := claims["jti"].(string)
+		if jti == "" {
+			// A pre-revocation token (see checkRevoked) has nothing to record.
+			// Report the same 204 so old and new clients see one contract; the
+			// warning marks a session that outlives its logout.
+			slog.Warn("logout: token has no jti, nothing to revoke", "sub", claims["sub"])
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// sub is a string, not a number (JSON number precision, see
+		// generateJWT), so parse it rather than asserting a float64.
+		sub, err := claims.GetSubject()
+		if err != nil {
+			slog.Warn("logout: unreadable sub claim", "error", err)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+		userID, err := strconv.ParseInt(sub, 10, 64)
+		if err != nil {
+			slog.Warn("logout: sub claim is not a user ID", "sub", sub, "error", err)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+
+		// parseSessionToken requires exp, so a validated token always has one.
+		expiresAt, err := claims.GetExpirationTime()
+		if err != nil || expiresAt == nil {
+			slog.Warn("logout: unreadable exp claim", "sub", sub, "error", err)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+
+		if err := revoker.RevokeToken(r.Context(), jti, userID, expiresAt.Time); err != nil {
+			slog.Error("logout: failed to revoke token", "sub", sub, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		slog.Info("token revoked", "sub", sub)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

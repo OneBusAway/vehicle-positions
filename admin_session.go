@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -35,6 +36,49 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trus
 		SameSite: http.SameSiteLaxMode,
 		Secure:   requestIsSecure(r, trustProxy),
 	})
+}
+
+// revokeSessionCookie revokes the JWT carried by the session cookie, so
+// signing out of the admin UI ends the token itself and not just the browser's
+// copy of it. It is best-effort by design: the caller clears the cookie and
+// redirects regardless, and a cookie that no longer parses has nothing to
+// revoke. Errors are logged rather than returned for the same reason.
+func revokeSessionCookie(r *http.Request, secret []byte, revoker TokenRevoker) {
+	c, err := r.Cookie(sessionCookieName)
+	if err != nil || c.Value == "" {
+		return
+	}
+	claims, err := parseSessionToken(c.Value, secret)
+	if err != nil {
+		slog.Debug("admin logout: session cookie no longer valid, nothing to revoke", "error", err)
+		return
+	}
+	jti, _ := claims["jti"].(string)
+	if jti == "" {
+		// Pre-revocation token; see checkRevoked.
+		slog.Warn("admin logout: session token has no jti, nothing to revoke", "sub", claims["sub"])
+		return
+	}
+	sub, err := claims.GetSubject()
+	if err != nil {
+		slog.Warn("admin logout: unreadable sub claim", "error", err)
+		return
+	}
+	userID, err := strconv.ParseInt(sub, 10, 64)
+	if err != nil {
+		slog.Warn("admin logout: sub claim is not a user ID", "sub", sub, "error", err)
+		return
+	}
+	expiresAt, err := claims.GetExpirationTime()
+	if err != nil || expiresAt == nil {
+		slog.Warn("admin logout: unreadable exp claim", "sub", sub, "error", err)
+		return
+	}
+	if err := revoker.RevokeToken(r.Context(), jti, userID, expiresAt.Time); err != nil {
+		slog.Error("admin logout: failed to revoke session token", "sub", sub, "error", err)
+		return
+	}
+	slog.Info("admin session token revoked", "sub", sub)
 }
 
 func clearSessionCookie(w http.ResponseWriter) {

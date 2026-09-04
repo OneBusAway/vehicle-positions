@@ -79,6 +79,7 @@ type adminUI struct {
 	userManager    userManager
 	assignments    assignmentManager
 	tokenChecker   TokenChecker
+	tokenRevoker   TokenRevoker
 	jwtSecret      []byte
 	loginLimiter   *LoginRateLimiter
 	cfg            adminUIConfig
@@ -109,6 +110,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		userManager:    store,
 		assignments:    store,
 		tokenChecker:   store,
+		tokenRevoker:   store,
 		jwtSecret:      jwtSecret,
 		loginLimiter:   limiter,
 		cfg:            cfg,
@@ -229,7 +231,14 @@ func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email 
 	})
 }
 
+// logout revokes the session's JWT server-side and clears the cookie. The
+// route is deliberately unauthenticated (an expired session must still be
+// able to log out), so a cookie that no longer validates is simply cleared.
+// A revocation failure is logged but still clears the cookie and redirects:
+// leaving the user stuck on an error page would not make the token any less
+// valid.
 func (ui *adminUI) logout(w http.ResponseWriter, r *http.Request) {
+	revokeSessionCookie(r, ui.jwtSecret, ui.tokenRevoker)
 	clearSessionCookie(w)
 	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }

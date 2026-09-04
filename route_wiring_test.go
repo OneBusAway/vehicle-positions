@@ -365,6 +365,38 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 	}
 }
 
+// TestLogoutRoute_Wiring verifies POST /api/v1/auth/logout is authenticated
+// but not admin-gated: any logged-in user must be able to log themselves out,
+// and an unauthenticated caller must not reach the handler.
+func TestLogoutRoute_Wiring(t *testing.T) {
+	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
+
+	tests := []struct {
+		name       string
+		authHeader string
+		wantStatus int
+	}{
+		{"no token", "", http.StatusUnauthorized},
+		{"driver token", "Bearer " + driverToken, http.StatusNoContent},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+			if tc.authHeader != "" {
+				req.Header.Set("Authorization", tc.authHeader)
+			}
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.wantStatus, w.Code)
+		})
+	}
+}
+
 // TestDriverVehiclesRoute_Wiring verifies GET /api/v1/vehicles requires
 // authentication (401 with no token) and accepts any authenticated driver
 // (200 with a driver-role token) — no admin role required, unlike the

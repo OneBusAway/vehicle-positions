@@ -135,3 +135,48 @@ func TestAdminCookiePath_CheckerErrorFailsClosed(t *testing.T) {
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
 }
+
+func TestRevokeSessionCookie(t *testing.T) {
+	cookie := cookieFor(t, "admin")
+
+	t.Run("valid cookie is revoked", func(t *testing.T) {
+		revocations := newFakeRevocations()
+		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
+		req.AddCookie(cookie)
+
+		revokeSessionCookie(req, testSecret, revocations)
+
+		assert.Contains(t, revocations.revoked, jtiOf(t, cookie.Value))
+		assert.Equal(t, int64(9), revocations.lastUserID, "cookieFor issues tokens for user 9")
+	})
+
+	t.Run("no cookie revokes nothing", func(t *testing.T) {
+		revocations := newFakeRevocations()
+		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
+
+		revokeSessionCookie(req, testSecret, revocations)
+
+		assert.Zero(t, revocations.revokeCalls)
+	})
+
+	t.Run("unparseable cookie revokes nothing", func(t *testing.T) {
+		revocations := newFakeRevocations()
+		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "garbage"})
+
+		revokeSessionCookie(req, testSecret, revocations)
+
+		assert.Zero(t, revocations.revokeCalls, "a cookie that no longer validates has no jti to revoke")
+	})
+
+	t.Run("store error still returns", func(t *testing.T) {
+		revocations := newFakeRevocations()
+		revocations.err = errors.New("database unavailable")
+		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
+		req.AddCookie(cookie)
+
+		// Best-effort by design: the caller clears the cookie and redirects
+		// regardless, so this must not panic or block.
+		assert.NotPanics(t, func() { revokeSessionCookie(req, testSecret, revocations) })
+	})
+}
