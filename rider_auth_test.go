@@ -28,7 +28,7 @@ func TestRequireRider(t *testing.T) {
 	adminTok, _ := generateJWT(&User{ID: 2, Email: "a@test.com", Role: "admin"}, testSecret)
 
 	var gotID string
-	h := requireRider(testSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := requireRider(testSecret, newFakeRevocations())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := riderIDFromContext(r.Context())
 		require.True(t, ok)
 		gotID = id

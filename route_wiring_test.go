@@ -126,6 +126,12 @@ func (n *noopStore) ListTripLocations(_ context.Context, _ int64) ([]LocationPoi
 func (n *noopStore) ListActiveTripsByVehicle(_ context.Context) (map[string]ActiveTripInfo, error) {
 	return nil, nil
 }
+func (n *noopStore) RevokeToken(_ context.Context, _ string, _ int64, _ time.Time) error {
+	return nil
+}
+func (n *noopStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
 
 // Rider-mode store methods. Rider routes are not registered on a mux built
 // with a nil rider service, so only the two admin rider endpoints reach these;

@@ -49,14 +49,29 @@ func clearSessionCookie(w http.ResponseWriter) {
 }
 
 // adminClaimsFromCookie validates the session cookie's JWT via the shared
-// parseSessionToken path and additionally requires the admin role.
-func adminClaimsFromCookie(r *http.Request, secret []byte) (jwt.MapClaims, bool) {
+// parseSessionToken path, rejects a revoked token via the shared checkRevoked
+// path, and additionally requires the admin role.
+//
+// This is the browser half of the revocation enforcement in requireAuth: both
+// carry the same JWT, so a token revoked through POST /api/v1/auth/logout must
+// end the admin session too. A checker error is treated as "no session" —
+// fail closed, matching requireAuth.
+func adminClaimsFromCookie(r *http.Request, secret []byte, checker TokenChecker) (jwt.MapClaims, bool) {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil || c.Value == "" {
 		return nil, false
 	}
 	claims, err := parseSessionToken(c.Value, secret)
 	if err != nil {
+		return nil, false
+	}
+	revoked, err := checkRevoked(r.Context(), claims, checker)
+	if err != nil {
+		slog.Error("admin session: revocation check failed", "error", err, "path", r.URL.Path)
+		return nil, false
+	}
+	if revoked {
+		slog.Warn("admin session: rejected revoked token", "sub", claims["sub"], "path", r.URL.Path)
 		return nil, false
 	}
 	if role, _ := claims["role"].(string); role != roleAdmin {
@@ -67,10 +82,10 @@ func adminClaimsFromCookie(r *http.Request, secret []byte) (jwt.MapClaims, bool)
 
 // requireAdminPage guards HTML admin pages: unauthenticated or non-admin
 // visitors are redirected to the login page (303) rather than given JSON.
-func requireAdminPage(secret []byte) func(http.Handler) http.Handler {
+func requireAdminPage(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, ok := adminClaimsFromCookie(r, secret)
+			claims, ok := adminClaimsFromCookie(r, secret, checker)
 			if !ok {
 				http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 				return
