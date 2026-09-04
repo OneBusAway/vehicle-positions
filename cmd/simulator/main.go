@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"sync"
 	"sync/atomic"
@@ -37,6 +39,8 @@ func main() {
 	numVehicles := flag.Int("vehicles", 10, "Number of simulated vehicles")
 	interval := flag.Duration("interval", 10*time.Second, "Time between location reports per vehicle")
 	duration := flag.Duration("duration", 5*time.Minute, "Total simulation duration (0 = run until Ctrl+C)")
+	email := flag.String("email", os.Getenv("ADMIN_BOOTSTRAP_EMAIL"), "Account email for login (default $ADMIN_BOOTSTRAP_EMAIL)")
+	password := flag.String("password", os.Getenv("ADMIN_BOOTSTRAP_PASSWORD"), "Account password for login (default $ADMIN_BOOTSTRAP_PASSWORD)")
 	flag.Parse()
 
 	if *numVehicles <= 0 {
@@ -54,7 +58,20 @@ func main() {
 		defer cancel()
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	if *email == "" || *password == "" {
+		log.Fatal("email and password are required: POST /api/v1/locations is authenticated, " +
+			"so pass -email/-password or set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD")
+	}
+
+	token, err := login(ctx, &http.Client{Timeout: 10 * time.Second}, *baseURL, *email, *password)
+	if err != nil {
+		log.Fatalf("login failed: %v", err)
+	}
+
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: bearerTransport{token: token, base: http.DefaultTransport},
+	}
 	s := &stats{}
 
 	log.Printf("starting simulator: %d vehicles, interval=%s, duration=%s", *numVehicles, *interval, *duration)
@@ -133,6 +150,56 @@ func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleI
 			sendReport(ctx, client, baseURL, vehicleID, &report, s)
 		}
 	}
+}
+
+// bearerTransport attaches the session token to every simulator request.
+// Reports go to POST /api/v1/locations, which sits behind requireAuth, so an
+// unauthenticated run fails with 401 on every single report.
+type bearerTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (t bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+t.token)
+	return t.base.RoundTrip(req)
+}
+
+// login exchanges credentials for a session token via POST /api/v1/auth/login.
+func login(ctx context.Context, client *http.Client, baseURL, email, password string) (string, error) {
+	body, err := json.Marshal(map[string]string{"email": email, "password": password})
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/auth/login", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("POST /api/v1/auth/login returned %d: %s", resp.StatusCode, bytes.TrimSpace(msg))
+	}
+
+	var out struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&out); err != nil {
+		return "", fmt.Errorf("decoding login response: %w", err)
+	}
+	if out.Token == "" {
+		return "", errors.New("login response contained no token")
+	}
+	return out.Token, nil
 }
 
 func sendReport(ctx context.Context, client *http.Client, baseURL, vehicleID string, report *locationReport, s *stats) {

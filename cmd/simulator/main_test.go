@@ -301,3 +301,60 @@ func TestSimulateVehicle(t *testing.T) {
 	assert.Equal(t, int64(0), s.failed.Load())
 	assert.Greater(t, received.Load(), int64(1))
 }
+
+func TestLoginReturnsToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/api/v1/auth/login", r.URL.Path)
+		var body map[string]string
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "sim@example.com", body["email"])
+		assert.Equal(t, "hunter2", body["password"])
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"token":"tok-123"}`))
+	}))
+	defer server.Close()
+
+	token, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
+	require.NoError(t, err)
+	assert.Equal(t, "tok-123", token)
+}
+
+func TestLoginRejectsBadCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"invalid email or password"}`))
+	}))
+	defer server.Close()
+
+	_, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "wrong")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "401")
+}
+
+func TestLoginRejectsEmptyToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	_, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no token")
+}
+
+// The regression this fixes: reports must carry the session token, because
+// POST /api/v1/locations sits behind requireAuth and 401s without it.
+func TestBearerTransportSetsAuthorizationHeader(t *testing.T) {
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	client := &http.Client{Transport: bearerTransport{token: "tok-123", base: http.DefaultTransport}}
+	sendReport(context.Background(), client, server.URL, "sim-vehicle-001", &locationReport{}, &stats{})
+
+	assert.Equal(t, "Bearer tok-123", gotAuth)
+}

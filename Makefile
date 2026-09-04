@@ -26,7 +26,7 @@ help:
 	@echo "  make down      - Stop local docker compose stack"
 	@echo "  make run       - Run server locally (expects DATABASE_URL env var)"
 	@echo "  make smoke     - Post sample location and fetch feed/status"
-	@echo "  make simulate  - Run simulator against local server"
+	@echo "  make simulate  - Run simulator against local server (needs ADMIN_BOOTSTRAP_EMAIL/PASSWORD)"
 	@echo "  make ridersim  - Run rider simulator against local server (rider mode; honours PORT)"
 	@echo "  make generate  - Regenerate sqlc code"
 	@echo "  make fmt       - Format Go code"
