@@ -180,6 +180,32 @@ func (q *Queries) CountUsersByRole(ctx context.Context, role string) (int64, err
 	return count, err
 }
 
+const createAPIKey = `-- name: CreateAPIKey :one
+INSERT INTO api_keys (name, key_hash)
+VALUES ($1, $2)
+RETURNING id, name, key_hash, active, last_used_at, created_at, updated_at
+`
+
+type CreateAPIKeyParams struct {
+	Name    string
+	KeyHash string
+}
+
+func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createAPIKey, arg.Name, arg.KeyHash)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.KeyHash,
+		&i.Active,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, role)
 VALUES ($1, $2, $3, $4)
@@ -237,6 +263,20 @@ type CreateVehicleParams struct {
 
 func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (int64, error) {
 	result, err := q.db.Exec(ctx, createVehicle, arg.ID, arg.Label, arg.AgencyTag)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deactivateAPIKey = `-- name: DeactivateAPIKey :execrows
+UPDATE api_keys
+SET active = false, updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) DeactivateAPIKey(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateAPIKey, id)
 	if err != nil {
 		return 0, err
 	}
@@ -358,6 +398,29 @@ func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (int64, error)
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+WHERE key_hash = $1
+`
+
+// Inactive keys are returned too: the middleware distinguishes a revoked key
+// from an unknown one.
+func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByHash, keyHash)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.KeyHash,
+		&i.Active,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getActiveTripByUser = `-- name: GetActiveTripByUser :one
@@ -735,6 +798,42 @@ func (q *Queries) InsertRide(ctx context.Context, arg InsertRideParams) (Ride, e
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listAPIKeys = `-- name: ListAPIKeys :many
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+ORDER BY created_at DESC
+LIMIT 1000
+`
+
+// safety bound; not pagination
+func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAPIKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.KeyHash,
+			&i.Active,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listActiveTripsByVehicle = `-- name: ListActiveTripsByVehicle :many
@@ -1348,6 +1447,17 @@ func (q *Queries) UnassignUserVehicle(ctx context.Context, arg UnassignUserVehic
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateAPIKeyLastUsed = `-- name: UpdateAPIKeyLastUsed :exec
+UPDATE api_keys
+SET last_used_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, updateAPIKeyLastUsed, id)
+	return err
 }
 
 const updateRideProgress = `-- name: UpdateRideProgress :execrows
