@@ -101,9 +101,16 @@ instead of the seed one, set `ADMIN_BOOTSTRAP_EMAIL` /
 `ADMIN_BOOTSTRAP_PASSWORD` before the server's first boot — it only creates
 an admin when none exist yet, so it's safe to leave set across restarts.
 
+Signing out (the admin UI's sign-out button, or `POST /api/v1/auth/logout`
+for API clients) revokes that session's JWT server-side, so the token is
+rejected from then on rather than merely dropped by the client. Both surfaces
+share one token, so logging out of either ends both.
+
 Deactivating a user blocks new logins immediately, but existing sessions and
-tokens for that user remain valid until they expire (up to 24 hours) — this
-isn't instant revocation.
+tokens for that user remain valid until they expire (up to 24 hours) or are
+logged out — deactivation still isn't instant revocation. That needs a
+per-user cutoff rather than the per-token blocklist logout uses, and is a
+planned follow-up.
 
 If you're changing anything under `web/templates` or `web/styles/input.css`,
 rebuild the compiled Tailwind CSS before checking your changes in the

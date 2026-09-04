@@ -42,9 +42,15 @@ Sign in with an existing admin account. To create the first one:
 - **Local development:** load [`seed_dev.sql`](seed_dev.sql), which seeds
   `admin@test.com` / `password` (alongside a seed driver).
 
-Deactivating a user blocks new logins immediately, but it doesn't revoke
-sessions already issued — any existing session cookie or JWT for that user
-stays valid until it expires (up to 24 hours).
+Signing out of the admin UI revokes that session's token server-side, so the
+cookie is dead even if someone copied its value — the same revocation
+`POST /api/v1/auth/logout` performs for API clients.
+
+Deactivating a user still blocks new logins immediately without revoking
+sessions already issued: an existing session cookie or JWT for that user stays
+valid until it expires (up to 24 hours) or until that session is logged out.
+Forcing a deactivated user's sessions to end is a follow-up — it needs a
+per-user cutoff rather than the per-token blocklist added here.
 
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
@@ -228,6 +234,7 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |Endpoint                        |Method|Purpose                                             |
 |--------------------------------|------|----------------------------------------------------|
 |`POST /api/v1/auth/login`       |POST  |Driver login → returns JWT                          |
+|`POST /api/v1/auth/logout`      |POST  |Revoke the caller's own JWT → 204 No Content        |
 |`POST /api/v1/locations`        |POST  |Single location report from driver app              |
 |`GET /gtfs-rt/vehicle-positions`|GET   |GTFS-RT feed (protobuf or JSON)                     |
 |`GET /api/v1/admin/vehicles`    |GET   |List vehicles                                       |
@@ -318,6 +325,45 @@ Example — keep 90 days of history, sweeping hourly:
 export LOCATION_RETENTION_PERIOD=2160h
 export LOCATION_PRUNE_INTERVAL=1h
 ```
+
+**`POST /api/v1/auth/logout` — token revocation**
+
+JWTs are stateless, so until now the only way to end a session early was to
+rotate `JWT_SECRET`, which logs out every user at once. Logout records the
+token's `jti` claim in a `revoked_tokens` blocklist, and every authenticated
+request checks it, so a single token can be retired for the rest of its
+lifetime.
+
+- Authenticated (`Authorization: Bearer <token>`), but not admin-only — every
+  user can log themselves out.
+- Revokes the caller's own token; there is no way to revoke someone else's.
+- Returns `204 No Content` on success, `401 Unauthorized` without a valid
+  token, and `500 Internal Server Error` if the revocation can't be recorded.
+- The revocation check fails closed: if the database is unreachable,
+  authenticated requests are rejected rather than allowed through.
+- The admin UI's `vp_session` cookie carries the same JWT, so logging out
+  through the API also ends that browser session (and vice versa).
+
+```bash
+# Log in, use the token, then revoke it
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@test.com","password":"password"}' | jq -r .token)
+
+curl -i -X POST http://localhost:8080/api/v1/auth/logout \
+  -H "Authorization: Bearer $TOKEN"          # -> 204 No Content
+
+curl -i http://localhost:8080/api/v1/admin/status \
+  -H "Authorization: Bearer $TOKEN"          # -> 401 {"error":"invalid token"}
+```
+
+Tokens issued before this endpoint existed carry no `jti` and cannot be
+revoked. They are still accepted (so deploying doesn't sign everyone out) and
+logged with a warning; because tokens live 24 hours, that warning stops
+appearing within a day of deploying.
+
+Revocation rows are never deleted — the table grows one row per logout. A
+periodic cleanup job keyed on `expires_at` is a planned follow-up.
 
 **Technology Stack:**
 
@@ -454,6 +500,7 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
 
 - Implement user authentication:
   - `POST /api/v1/auth/login` — email + password → JWT token
+  - `POST /api/v1/auth/logout` — revoke the caller's token server-side
   - JWT middleware for all authenticated endpoints
   - Token refresh flow
 - Implement API key authentication for feed consumers (separate from user auth)
