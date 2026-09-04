@@ -3,7 +3,6 @@ package main
 import (
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -31,7 +30,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trus
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int((24 * time.Hour).Seconds()),
+		MaxAge:   int(tokenLifetime.Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   requestIsSecure(r, trustProxy),

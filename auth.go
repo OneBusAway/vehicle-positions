@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -145,15 +147,37 @@ func handleLogin(fetcher UserFetcher, secret []byte, limiter *LoginRateLimiter, 
 	}
 }
 
-// generateJWT creates a signed JWT valid for 24 hours.
+// tokenLifetime is how long an issued session JWT stays valid.
+const tokenLifetime = 24 * time.Hour
+
+// newJTI returns a random 128-bit token identifier, hex-encoded. It must come
+// from crypto/rand rather than math/rand or a counter: a guessable jti would
+// let an attacker pre-emptively revoke other users' tokens.
+func newJTI() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate jti: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// generateJWT creates a signed JWT valid for tokenLifetime. It is the only
+// path that issues session tokens — both the JSON API login and the admin
+// UI's form login call it — so every token carries a jti.
 func generateJWT(user *User, secret []byte) (string, error) {
 	now := time.Now()
+
+	jti, err := newJTI()
+	if err != nil {
+		return "", err
+	}
 
 	claims := jwt.MapClaims{
 		"sub":   fmt.Sprintf("%d", user.ID),
 		"email": user.Email,
 		"role":  user.Role,
-		"exp":   now.Add(24 * time.Hour).Unix(),
+		"jti":   jti,
+		"exp":   now.Add(tokenLifetime).Unix(),
 		"iat":   now.Unix(),
 		"iss":   "vehicle-positions-api",
 	}
@@ -189,17 +213,22 @@ func requireAdmin() func(http.Handler) http.Handler {
 	}
 }
 
-// parseSessionToken validates an HS256 session JWT (algorithm, issuer) and
-// returns its claims. It is the single validation path shared by the API
-// middleware and the admin UI's cookie session (adminClaimsFromCookie), so
-// changes to token validation cannot silently diverge between the two.
+// parseSessionToken validates an HS256 session JWT (algorithm, issuer,
+// expiry) and returns its claims. It is the single validation path shared by
+// the API middleware and the admin UI's cookie session (adminClaimsFromCookie),
+// so changes to token validation cannot silently diverge between the two.
+//
+// WithExpirationRequired rejects a signed token that carries no exp claim.
+// generateJWT always sets one, so a token without exp is not one this server
+// issued.
 func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
+	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"),
+		jwt.WithExpirationRequired())
 	if err != nil {
 		return nil, err
 	}
