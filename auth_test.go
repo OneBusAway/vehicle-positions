@@ -495,3 +495,78 @@ func TestRequireAuth_RejectsRiderRole(t *testing.T) {
 	assert.False(t, called)
 	assert.Equal(t, "forbidden", decodeError(t, w))
 }
+
+// jtiOf extracts the jti claim from a signed token.
+func jtiOf(t *testing.T, tokenStr string) string {
+	t.Helper()
+	claims, err := parseSessionToken(tokenStr, testSecret)
+	require.NoError(t, err)
+	jti, ok := claims["jti"].(string)
+	require.True(t, ok, "token must carry a string jti")
+	require.NotEmpty(t, jti)
+	return jti
+}
+
+func TestGenerateJWT_IncludesJti(t *testing.T) {
+	tokenStr, err := generateJWT(&User{ID: 7, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	claims, err := parseSessionToken(tokenStr, testSecret)
+	require.NoError(t, err)
+
+	jti, ok := claims["jti"].(string)
+	require.True(t, ok, "jti must be present and a string")
+	assert.NotEmpty(t, jti)
+	assert.Len(t, jti, 32, "128 random bits, hex-encoded")
+}
+
+func TestGenerateJWT_JtiIsUnique(t *testing.T) {
+	user := &User{ID: 7, Email: "driver@test.com", Role: "driver"}
+
+	first, err := generateJWT(user, testSecret)
+	require.NoError(t, err)
+	second, err := generateJWT(user, testSecret)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, jtiOf(t, first), jtiOf(t, second),
+		"each token needs its own identifier, or revoking one revokes them all")
+}
+
+func TestNewJTI_Unique(t *testing.T) {
+	seen := make(map[string]struct{}, 100)
+	for i := 0; i < 100; i++ {
+		jti, err := newJTI()
+		require.NoError(t, err)
+		require.NotEmpty(t, jti)
+		_, dup := seen[jti]
+		require.False(t, dup, "newJTI must not repeat")
+		seen[jti] = struct{}{}
+	}
+	assert.Len(t, seen, 100)
+}
+
+// TestRequireAuth_RejectsTokenWithoutExp pins the tightened parseSessionToken:
+// a signed token with no exp is not one generateJWT issued.
+func TestRequireAuth_RejectsTokenWithoutExp(t *testing.T) {
+	claims := jwt.MapClaims{
+		"sub":   "1",
+		"email": "driver@test.com",
+		"role":  "driver",
+		"jti":   "abc123",
+		"iat":   time.Now().Unix(),
+		"iss":   "vehicle-positions-api",
+	}
+	tokenStr, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(testSecret)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret)(dummyHandler()).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var resp map[string]string
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, "invalid token", resp["error"])
+}
