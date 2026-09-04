@@ -107,7 +107,7 @@ func TestNewRiderRuntime_LoadsIndexAndEndsStaleRides(t *testing.T) {
 }
 
 func TestRiderRoutes_NotRegisteredWhenDisabled(t *testing.T) {
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/rider/register", nil))
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -125,7 +125,7 @@ func TestRiderRoutes_RoleIsolation(t *testing.T) {
 	env := newRiderTestEnv(t)
 	tracker := NewTracker(time.Minute)
 	defer tracker.Stop()
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, env.svc)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, env.svc)
 	_, riderTok := env.register(t)
 	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret)
 	adminTok, _ := generateJWT(&User{ID: 2, Email: "a@test.com", Role: "admin"}, testSecret)
