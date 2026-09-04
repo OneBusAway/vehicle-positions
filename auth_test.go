@@ -742,3 +742,159 @@ func TestRequireAuthCookiePath_RejectsRevokedToken(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Equal(t, "invalid token", errorBody(t, w))
 }
+
+// logoutRequest builds an authenticated logout request whose context carries
+// the claims requireAuth would have put there.
+func logoutRequest(t *testing.T, tokenStr string) *http.Request {
+	t.Helper()
+	claims, err := parseSessionToken(tokenStr, testSecret)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	return req.WithContext(contextWithClaims(req.Context(), claims))
+}
+
+func TestHandleLogout_Returns204(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	handleLogout(newFakeRevocations())(w, logoutRequest(t, token))
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.String(), "204 means no body")
+}
+
+func TestHandleLogout_RevokesCallerToken(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	w := httptest.NewRecorder()
+	handleLogout(revocations)(w, logoutRequest(t, token))
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	assert.Contains(t, revocations.revoked, jtiOf(t, token), "the caller's own jti must be revoked")
+	assert.Equal(t, int64(5), revocations.lastUserID, "user_id comes from the string sub claim")
+	assert.WithinDuration(t, time.Now().Add(tokenLifetime), revocations.lastExpiresAt, time.Minute,
+		"expires_at must be the token's own exp")
+}
+
+// TestHandleLogout_Idempotent covers the handler and store contract: a repeat
+// logout must not error. End to end the second call actually gets a 401,
+// because requireAuth rejects the now-revoked token before the handler runs —
+// the idempotency that matters is the store's ON CONFLICT DO NOTHING.
+func TestHandleLogout_Idempotent(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		handleLogout(revocations)(w, logoutRequest(t, token))
+		assert.Equal(t, http.StatusNoContent, w.Code, "a repeat logout must not error")
+	}
+	assert.Equal(t, 2, revocations.revokeCalls, "both calls reach the store; the store deduplicates")
+}
+
+func TestHandleLogout_MissingClaims(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	w := httptest.NewRecorder()
+	handleLogout(newFakeRevocations())(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "unauthorized", errorBody(t, w))
+}
+
+// TestHandleLogout_TokenWithoutJti covers the compatibility shim's logout
+// side: there is nothing to revoke, but the client still gets a 204 so old
+// and new clients see one contract.
+// Not safe for t.Parallel(); uses global logger.
+func TestHandleLogout_TokenWithoutJti(t *testing.T) {
+	claims := jwt.MapClaims{
+		"sub": "5",
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "vehicle-positions-api",
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req = req.WithContext(contextWithClaims(req.Context(), claims))
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	revocations := newFakeRevocations()
+	w := httptest.NewRecorder()
+	handleLogout(revocations)(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Zero(t, revocations.revokeCalls, "there is no jti to record")
+	assert.Contains(t, logs.String(), "nothing to revoke")
+}
+
+// Not safe for t.Parallel(); uses global logger.
+func TestHandleLogout_StoreError(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	revocations.err = errors.New("database unavailable")
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	w := httptest.NewRecorder()
+	handleLogout(revocations)(w, logoutRequest(t, token))
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "internal server error", errorBody(t, w))
+	assert.Contains(t, logs.String(), "failed to revoke token",
+		"a failed revocation must be logged, not swallowed")
+}
+
+// TestLoginLogoutRevokeFlow walks the whole lifecycle through the real mux:
+// log in, use the token, log out, then find the same token rejected.
+func TestLoginLogoutRevokeFlow(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcryptCost)
+	require.NoError(t, err)
+	users := &mockUserStore{user: &User{
+		ID:           11,
+		Email:        "driver@test.com",
+		PasswordHash: string(hash),
+		Role:         "driver",
+		Active:       true,
+	}}
+	revocations := newFakeRevocations()
+
+	login := handleLogin(users, testSecret, nil, false)
+	w := postLogin(login, "driver@test.com", "password")
+	require.Equal(t, http.StatusOK, w.Code)
+	var loginResp LoginResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&loginResp))
+	require.NotEmpty(t, loginResp.Token)
+
+	authed := requireAuth(testSecret, revocations)
+	protected := authed(dummyHandler())
+
+	call := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.Token)
+		rec := httptest.NewRecorder()
+		protected.ServeHTTP(rec, req)
+		return rec
+	}
+
+	require.Equal(t, http.StatusOK, call().Code, "the fresh token must work")
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+loginResp.Token)
+	logoutRec := httptest.NewRecorder()
+	authed(handleLogout(revocations)).ServeHTTP(logoutRec, logoutReq)
+	require.Equal(t, http.StatusNoContent, logoutRec.Code)
+
+	after := call()
+	assert.Equal(t, http.StatusUnauthorized, after.Code, "the same token must now be rejected")
+	assert.Equal(t, "invalid token", errorBody(t, after))
+}

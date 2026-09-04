@@ -78,6 +78,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
+	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store)))
 	feed := handleGetFeed(tracker, riderEstimates)
 	if feedAuthEnabled {
 		mux.Handle("GET /gtfs-rt/vehicle-positions", requireAPIKey(store, trustProxy)(feed))
