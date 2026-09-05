@@ -314,3 +314,85 @@ func TestStore_UpdateUserPassword_NotFound(t *testing.T) {
 	err := store.UpdateUserPassword(context.Background(), 999999999, "somepassword")
 	assert.ErrorIs(t, err, ErrUserNotFound)
 }
+
+// TestStore_ListUsersPage covers the paged listing: limit is honoured and
+// consecutive pages tile the table exactly, with no user skipped or repeated
+// across the page boundary. The five users seeded here are the newest rows,
+// so they occupy the first five positions of a created_at DESC listing
+// whatever else the table holds.
+func TestStore_ListUsersPage(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	emails := []string{
+		"paged-1@example.com",
+		"paged-2@example.com",
+		"paged-3@example.com",
+		"paged-4@example.com",
+		"paged-5@example.com",
+	}
+	cleanupTestUsers(t, store, emails...)
+	t.Cleanup(func() { cleanupTestUsers(t, store, emails...) })
+
+	seeded := make(map[string]bool, len(emails))
+	for i, email := range emails {
+		_, err := store.CreateUser(ctx, fmt.Sprintf("Paged %d", i+1), email, "securepass", "driver")
+		require.NoError(t, err)
+		seeded[email] = true
+	}
+
+	first, err := store.ListUsersPage(ctx, 3, 0)
+	require.NoError(t, err)
+	require.Len(t, first, 3, "limit must cap the page")
+
+	second, err := store.ListUsersPage(ctx, 3, 3)
+	require.NoError(t, err)
+	require.NotEmpty(t, second)
+
+	seen := make(map[string]int, len(emails))
+	found := 0
+	for _, page := range [][]UserResponse{first, second} {
+		for _, u := range page {
+			if seeded[u.Email] {
+				seen[u.Email]++
+				found++
+			}
+		}
+	}
+	assert.Equal(t, len(emails), found, "all seeded users must land in the first two pages")
+	for _, email := range emails {
+		assert.Equal(t, 1, seen[email], "user %s must appear on exactly one page", email)
+	}
+
+	past, err := store.ListUsersPage(ctx, 3, 1_000_000)
+	require.NoError(t, err)
+	assert.NotNil(t, past, "an offset past the end should be [], not nil")
+	assert.Empty(t, past)
+}
+
+// TestStore_ListUsers_SafetyBound verifies the unpaged listing stops at the
+// query's 1000-row LIMIT rather than marshalling an unbounded table. The
+// rows are seeded with one generate_series insert to keep this fast.
+func TestStore_ListUsers_SafetyBound(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	deleteBoundUsers := func() {
+		_, err := store.pool.Exec(ctx, "DELETE FROM users WHERE email LIKE 'bound-%@example.com'")
+		require.NoError(t, err)
+	}
+	deleteBoundUsers()
+	t.Cleanup(deleteBoundUsers)
+
+	// A syntactically valid bcrypt hash; these rows are never logged in as.
+	const hash = "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi"
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO users (name, email, password_hash, role)
+		 SELECT 'Bound ' || g, 'bound-' || g || '@example.com', $1, 'driver'
+		 FROM generate_series(1, 1001) AS g`, hash)
+	require.NoError(t, err)
+
+	users, err := store.ListUsers(ctx)
+	require.NoError(t, err)
+	assert.Len(t, users, 1000, "ListUsers must stop at its 1000-row safety bound")
+}

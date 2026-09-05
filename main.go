@@ -22,6 +22,7 @@ var files embed.FS
 type appStore interface {
 	UserFetcher
 	UserLister
+	UserPager
 	UserGetter
 	UserCreator
 	UserUpdater
@@ -30,6 +31,7 @@ type appStore interface {
 	UserPasswordUpdater
 	UserRoleCounter
 	VehicleManager
+	VehiclePager
 	VehicleInfoUpdater
 	VehicleActivator
 	VehicleCreator

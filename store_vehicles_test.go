@@ -322,3 +322,95 @@ func TestCountActiveVehiclesAndTrips(t *testing.T) {
 	_, err = store.CountActiveTrips(context.Background())
 	require.NoError(t, err) // exact value covered by trip tests; here just exercises the query
 }
+
+// TestStore_ListVehiclesPage covers the paged listing: limit and offset are
+// honoured, consecutive pages tile the table exactly (the id tiebreaker in
+// the ORDER BY keeps LIMIT/OFFSET from skipping or repeating a row), and an
+// offset past the end is an empty page rather than an error.
+func TestStore_ListVehiclesPage(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	ids := []string{"page-a", "page-b", "page-c", "page-d", "page-e"}
+	for _, id := range ids {
+		_, err := store.UpsertVehicle(ctx, id, "Label "+id, "agency")
+		require.NoError(t, err)
+	}
+
+	first, err := store.ListVehiclesPage(ctx, true, 3, 0)
+	require.NoError(t, err)
+	require.Len(t, first, 3)
+
+	second, err := store.ListVehiclesPage(ctx, true, 3, 3)
+	require.NoError(t, err)
+	require.Len(t, second, 2)
+
+	seen := make(map[string]int, len(ids))
+	for _, page := range [][]VehicleResponse{first, second} {
+		for _, v := range page {
+			seen[v.ID]++
+		}
+	}
+	assert.Len(t, seen, len(ids), "the two pages together must cover every vehicle")
+	for _, id := range ids {
+		assert.Equal(t, 1, seen[id], "vehicle %s must appear on exactly one page", id)
+	}
+
+	past, err := store.ListVehiclesPage(ctx, true, 3, 100)
+	require.NoError(t, err)
+	assert.NotNil(t, past, "an offset past the end should be [], not nil")
+	assert.Empty(t, past)
+}
+
+func TestStore_ListVehiclesPage_Empty(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+
+	vehicles, err := store.ListVehiclesPage(context.Background(), true, 50, 0)
+	require.NoError(t, err)
+	assert.NotNil(t, vehicles, "empty page should be [], not nil")
+	assert.Empty(t, vehicles)
+}
+
+// TestStore_ListVehiclesPage_ExcludesInactive verifies includeInactive=false
+// filters deactivated vehicles out in SQL. The admin list hides them by
+// default, and filtering after the fetch would shrink pages below the page
+// size instead of returning a full page of active vehicles.
+func TestStore_ListVehiclesPage_ExcludesInactive(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	_, err := store.UpsertVehicle(ctx, "page-active", "Active Bus", "agency")
+	require.NoError(t, err)
+	_, err = store.UpsertVehicle(ctx, "page-retired", "Retired Bus", "agency")
+	require.NoError(t, err)
+	require.NoError(t, store.DeactivateVehicle(ctx, "page-retired"))
+
+	activeOnly, err := store.ListVehiclesPage(ctx, false, 50, 0)
+	require.NoError(t, err)
+	require.Len(t, activeOnly, 1)
+	assert.Equal(t, "page-active", activeOnly[0].ID)
+
+	all, err := store.ListVehiclesPage(ctx, true, 50, 0)
+	require.NoError(t, err)
+	assert.Len(t, all, 2, "includeInactive must return deactivated vehicles too")
+}
+
+// TestStore_ListVehicles_SafetyBound verifies the unpaged listing stops at
+// the query's 1000-row LIMIT rather than marshalling an unbounded table.
+// The rows are seeded with one generate_series insert to keep this fast.
+func TestStore_ListVehicles_SafetyBound(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO vehicles (id, label) SELECT 'bound-' || g, 'Bound ' || g FROM generate_series(1, 1001) AS g`)
+	require.NoError(t, err)
+
+	vehicles, err := store.ListVehicles(ctx)
+	require.NoError(t, err)
+	assert.Len(t, vehicles, 1000, "ListVehicles must stop at its 1000-row safety bound")
+}

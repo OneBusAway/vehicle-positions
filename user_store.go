@@ -31,6 +31,13 @@ type UserLister interface {
 	ListUsers(ctx context.Context) ([]UserResponse, error)
 }
 
+// UserPager lists users one page at a time, for the paginated admin user
+// list and the users API endpoint. UserLister.ListUsers stays the call for
+// anything that needs every user in one go.
+type UserPager interface {
+	ListUsersPage(ctx context.Context, limit, offset int32) ([]UserResponse, error)
+}
+
 type UserGetter interface {
 	GetUser(ctx context.Context, id int64) (*UserResponse, error)
 }
@@ -65,6 +72,8 @@ type UserRoleCounter interface {
 	CountActiveUsersByRole(ctx context.Context, role string) (int, error)
 }
 
+// ListUsers returns users newest-first, capped at the query's 1000-row
+// safety bound. Callers that page through the list use ListUsersPage.
 func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 	rows, err := s.queries.ListUsers(ctx)
 	if err != nil {
@@ -85,6 +94,30 @@ func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 	}
 	return users, nil
 }
+
+// ListUsersPage returns one page of users in the same order as ListUsers.
+func (s *Store) ListUsersPage(ctx context.Context, limit, offset int32) ([]UserResponse, error) {
+	rows, err := s.queries.ListUsersPage(ctx, db.ListUsersPageParams{Limit: limit, Offset: offset})
+	if err != nil {
+		return nil, fmt.Errorf("list users page: %w", err)
+	}
+
+	users := make([]UserResponse, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, UserResponse{
+			ID:        row.ID,
+			Name:      row.Name,
+			Email:     row.Email,
+			Role:      row.Role,
+			Active:    row.Active,
+			CreatedAt: row.CreatedAt.Time,
+			UpdatedAt: row.UpdatedAt.Time,
+		})
+	}
+	return users, nil
+}
+
+var _ UserPager = (*Store)(nil)
 
 func (s *Store) GetUser(ctx context.Context, id int64) (*UserResponse, error) {
 	row, err := s.queries.GetUserByID(ctx, id)

@@ -28,6 +28,15 @@ type VehicleManager interface {
 	DeactivateVehicle(ctx context.Context, id string) error
 }
 
+// VehiclePager lists vehicles one page at a time, for the paginated admin
+// vehicle list and the vehicles API endpoint. Callers that need the whole
+// fleet in a single call — the dashboard's label map, the assignment and
+// trip-filter dropdowns, the live map — keep using
+// VehicleManager.ListVehicles, which pagination would silently truncate.
+type VehiclePager interface {
+	ListVehiclesPage(ctx context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error)
+}
+
 // VehicleInfoUpdater updates a vehicle's label/agency tag without touching
 // its active flag (unlike VehicleManager.UpsertVehicle, which reactivates).
 type VehicleInfoUpdater interface {
@@ -46,7 +55,9 @@ type VehicleCreator interface {
 	CreateVehicle(ctx context.Context, id, label, agencyTag string) (created bool, err error)
 }
 
-// ListVehicles returns all vehicles ordered by creation time.
+// ListVehicles returns vehicles ordered by creation time, capped at the
+// query's 1000-row safety bound. Callers that page through the fleet use
+// ListVehiclesPage instead.
 func (s *Store) ListVehicles(ctx context.Context) ([]VehicleResponse, error) {
 	rows, err := s.queries.ListVehicles(ctx)
 	if err != nil {
@@ -59,6 +70,36 @@ func (s *Store) ListVehicles(ctx context.Context) ([]VehicleResponse, error) {
 	}
 	return vehicles, nil
 }
+
+// ListVehiclesPage returns one page of vehicles in the same order as
+// ListVehicles. includeInactive=false filters deactivated vehicles out in
+// SQL rather than after the fetch, so a page of the admin list holds a full
+// page of rows.
+func (s *Store) ListVehiclesPage(ctx context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error) {
+	if !includeInactive {
+		rows, err := s.queries.ListActiveVehiclesPage(ctx, db.ListActiveVehiclesPageParams{Limit: limit, Offset: offset})
+		if err != nil {
+			return nil, fmt.Errorf("list active vehicles page: %w", err)
+		}
+		vehicles := make([]VehicleResponse, 0, len(rows))
+		for _, row := range rows {
+			vehicles = append(vehicles, toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt))
+		}
+		return vehicles, nil
+	}
+
+	rows, err := s.queries.ListVehiclesPage(ctx, db.ListVehiclesPageParams{Limit: limit, Offset: offset})
+	if err != nil {
+		return nil, fmt.Errorf("list vehicles page: %w", err)
+	}
+	vehicles := make([]VehicleResponse, 0, len(rows))
+	for _, row := range rows {
+		vehicles = append(vehicles, toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt))
+	}
+	return vehicles, nil
+}
+
+var _ VehiclePager = (*Store)(nil)
 
 // GetVehicle returns a single vehicle by ID.
 func (s *Store) GetVehicle(ctx context.Context, id string) (*VehicleResponse, error) {
