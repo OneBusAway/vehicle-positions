@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,26 @@ import (
 type mockVehicleStore struct {
 	vehicles map[string]*VehicleResponse
 	err      error
+
+	// Recorded by ListVehiclesPage so paging tests can assert what the
+	// handler asked the store for.
+	gotIncludeInactive bool
+	gotLimit           int32
+	gotOffset          int32
+}
+
+// pageSlice returns the limit/offset window of s, mirroring SQL LIMIT/OFFSET
+// semantics (an offset past the end is an empty page, never nil). Shared by
+// the in-memory paging doubles in this package.
+func pageSlice[T any](s []T, limit, offset int32) []T {
+	if int(offset) >= len(s) {
+		return make([]T, 0)
+	}
+	end := int(offset) + int(limit)
+	if end > len(s) {
+		end = len(s)
+	}
+	return append(make([]T, 0, end-int(offset)), s[int(offset):end]...)
 }
 
 func newMockVehicleStore() *mockVehicleStore {
@@ -35,6 +56,31 @@ func (m *mockVehicleStore) ListVehicles(_ context.Context) ([]VehicleResponse, e
 		result = append(result, *v)
 	}
 	return result, nil
+}
+
+// ListVehiclesPage orders by id so pages are deterministic; the real store
+// orders by created_at DESC with an id tiebreaker. Only the totality of the
+// order matters to the handler.
+func (m *mockVehicleStore) ListVehiclesPage(_ context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error) {
+	m.gotIncludeInactive, m.gotLimit, m.gotOffset = includeInactive, limit, offset
+	if m.err != nil {
+		return nil, m.err
+	}
+	ids := make([]string, 0, len(m.vehicles))
+	for id := range m.vehicles {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	all := make([]VehicleResponse, 0, len(ids))
+	for _, id := range ids {
+		v := m.vehicles[id]
+		if !includeInactive && !v.Active {
+			continue
+		}
+		all = append(all, *v)
+	}
+	return pageSlice(all, limit, offset), nil
 }
 
 func (m *mockVehicleStore) GetVehicle(_ context.Context, id string) (*VehicleResponse, error) {
@@ -126,6 +172,121 @@ func TestHandleListVehicles_ResponseNotNull(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&raw)
 	require.NoError(t, err)
 	assert.Equal(t, "[]", string(raw), "empty vehicle list must be JSON [] not null")
+}
+
+// TestHandleListVehicles_PagingParams covers the limit/offset contract: the
+// defaults applied when the params are absent, the values that reach the
+// store, and every rejection — including the pair at exactly the maximum and
+// one past it. Rejections assert the error message, not just the status, so
+// a case can't pass for the wrong reason.
+func TestHandleListVehicles_PagingParams(t *testing.T) {
+	const limitError = "limit must be between 1 and 200"
+	offsetError := fmt.Sprintf("offset must be between 0 and %d", maxListOffset)
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+		wantError  string
+		wantLimit  int32
+		wantOffset int32
+	}{
+		{name: "absent params use the defaults", query: "", wantStatus: http.StatusOK, wantLimit: defaultListLimit},
+		{name: "explicit limit and offset", query: "?limit=10&offset=20", wantStatus: http.StatusOK, wantLimit: 10, wantOffset: 20},
+		{name: "limit at the maximum", query: "?limit=200", wantStatus: http.StatusOK, wantLimit: maxListLimit},
+		{name: "limit one past the maximum", query: "?limit=201", wantStatus: http.StatusBadRequest, wantError: limitError},
+		{name: "limit zero", query: "?limit=0", wantStatus: http.StatusBadRequest, wantError: limitError},
+		{name: "limit negative", query: "?limit=-1", wantStatus: http.StatusBadRequest, wantError: limitError},
+		{name: "limit non-numeric", query: "?limit=abc", wantStatus: http.StatusBadRequest, wantError: limitError},
+		{name: "offset zero", query: "?offset=0", wantStatus: http.StatusOK, wantLimit: defaultListLimit},
+		{name: "offset negative", query: "?offset=-1", wantStatus: http.StatusBadRequest, wantError: offsetError},
+		{name: "offset non-numeric", query: "?offset=abc", wantStatus: http.StatusBadRequest, wantError: offsetError},
+		{name: "offset at the maximum", query: "?offset=2147483647", wantStatus: http.StatusOK, wantLimit: defaultListLimit, wantOffset: maxListOffset},
+		{name: "offset one past the maximum", query: "?offset=2147483648", wantStatus: http.StatusBadRequest, wantError: offsetError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockVehicleStore()
+			handler := handleListVehicles(store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/vehicles"+tt.query, nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+			if tt.wantStatus != http.StatusOK {
+				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
+				return
+			}
+			assert.Equal(t, tt.wantLimit, store.gotLimit, "limit passed to the store")
+			assert.Equal(t, tt.wantOffset, store.gotOffset, "offset passed to the store")
+		})
+	}
+}
+
+// TestHandleListVehicles_PagesResults verifies limit/offset actually narrow
+// the response rather than only being validated.
+func TestHandleListVehicles_PagesResults(t *testing.T) {
+	store := newMockVehicleStore()
+	now := time.Now()
+	for _, id := range []string{"bus-1", "bus-2", "bus-3"} {
+		store.vehicles[id] = &VehicleResponse{ID: id, Label: id, Active: true, CreatedAt: now, UpdatedAt: now}
+	}
+
+	handler := handleListVehicles(store)
+	req := httptest.NewRequest("GET", "/api/v1/admin/vehicles?limit=2&offset=1", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var vehicles []VehicleResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&vehicles))
+	require.Len(t, vehicles, 2)
+	assert.Equal(t, "bus-2", vehicles[0].ID)
+	assert.Equal(t, "bus-3", vehicles[1].ID)
+}
+
+// TestHandleListVehicles_IncludesInactive pins that the endpoint still lists
+// deactivated vehicles, which it has always done — the admin page's
+// active-only filter must not leak into the API.
+func TestHandleListVehicles_IncludesInactive(t *testing.T) {
+	store := newMockVehicleStore()
+	now := time.Now()
+	store.vehicles["bus-1"] = &VehicleResponse{ID: "bus-1", Label: "Bus 1", Active: true, CreatedAt: now, UpdatedAt: now}
+	store.vehicles["bus-2"] = &VehicleResponse{ID: "bus-2", Label: "Bus 2", Active: false, CreatedAt: now, UpdatedAt: now}
+
+	handler := handleListVehicles(store)
+	req := httptest.NewRequest("GET", "/api/v1/admin/vehicles", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, store.gotIncludeInactive, "the API must ask for deactivated vehicles too")
+	var vehicles []VehicleResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&vehicles))
+	assert.Len(t, vehicles, 2)
+}
+
+// TestHandleListVehicles_StillReturnsBareArray guards the response shape:
+// adding paging deliberately did NOT wrap the body in an object the way the
+// trips and location-history endpoints do, because existing clients and the
+// documented schema index into a bare array. If someone wraps it later, this
+// fails loudly.
+func TestHandleListVehicles_StillReturnsBareArray(t *testing.T) {
+	store := newMockVehicleStore()
+	now := time.Now()
+	store.vehicles["bus-1"] = &VehicleResponse{ID: "bus-1", Label: "Bus 1", Active: true, CreatedAt: now, UpdatedAt: now}
+
+	handler := handleListVehicles(store)
+	req := httptest.NewRequest("GET", "/api/v1/admin/vehicles", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var vehicles []VehicleResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &vehicles), "response must unmarshal into a bare array")
+	require.Len(t, vehicles, 1)
+	assert.Equal(t, "bus-1", vehicles[0].ID)
 }
 
 func TestHandleListVehicles_StoreError(t *testing.T) {

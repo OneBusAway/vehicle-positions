@@ -48,9 +48,18 @@ func (r *upsertVehicleRequest) validate() error {
 	return nil
 }
 
-func handleListVehicles(store VehicleManager) http.HandlerFunc {
+// handleListVehicles returns one page of vehicles, newest first, bounded by
+// the limit/offset query params. Deactivated vehicles are included, as they
+// always have been. The response stays a bare JSON array rather than a
+// paging envelope so existing clients keep working.
+func handleListVehicles(store VehiclePager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		vehicles, err := store.ListVehicles(r.Context())
+		limit, offset, ok := parseListPageParams(w, r)
+		if !ok {
+			return
+		}
+
+		vehicles, err := store.ListVehiclesPage(r.Context(), true, int32(limit), int32(offset))
 		if err != nil {
 			slog.Error("failed to list vehicles", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list vehicles"})

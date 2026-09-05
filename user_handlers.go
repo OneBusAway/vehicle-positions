@@ -24,9 +24,17 @@ type UpdateUserRequest struct {
 	Role  string `json:"role"`
 }
 
-func handleListUsers(store UserLister) http.HandlerFunc {
+// handleListUsers returns one page of users, newest first, bounded by the
+// limit/offset query params. The response stays a bare JSON array rather
+// than a paging envelope so existing clients keep working.
+func handleListUsers(store UserPager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		users, err := store.ListUsers(r.Context())
+		limit, offset, ok := parseListPageParams(w, r)
+		if !ok {
+			return
+		}
+
+		users, err := store.ListUsersPage(r.Context(), int32(limit), int32(offset))
 		if err != nil {
 			slog.Error("failed to list users", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})

@@ -18,13 +18,22 @@ import (
 
 // --- Mock stores ---
 
-type mockUserLister struct {
+type mockUserPager struct {
 	users []UserResponse
 	err   error
+
+	// Recorded by ListUsersPage so paging tests can assert what the handler
+	// asked the store for.
+	gotLimit  int32
+	gotOffset int32
 }
 
-func (m *mockUserLister) ListUsers(ctx context.Context) ([]UserResponse, error) {
-	return m.users, m.err
+func (m *mockUserPager) ListUsersPage(_ context.Context, limit, offset int32) ([]UserResponse, error) {
+	m.gotLimit, m.gotOffset = limit, offset
+	if m.err != nil {
+		return nil, m.err
+	}
+	return pageSlice(m.users, limit, offset), nil
 }
 
 type mockUserGetter struct {
@@ -86,7 +95,7 @@ func newSampleUser() *UserResponse {
 // --- List Users ---
 
 func TestHandleListUsers_Empty(t *testing.T) {
-	handler := handleListUsers(&mockUserLister{users: make([]UserResponse, 0)})
+	handler := handleListUsers(&mockUserPager{users: make([]UserResponse, 0)})
 	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
@@ -105,7 +114,7 @@ func TestHandleListUsers_WithUsers(t *testing.T) {
 		{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin"},
 		{ID: 2, Name: "Bob", Email: "bob@example.com", Role: "driver"},
 	}
-	handler := handleListUsers(&mockUserLister{users: users})
+	handler := handleListUsers(&mockUserPager{users: users})
 	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
@@ -120,11 +129,94 @@ func TestHandleListUsers_WithUsers(t *testing.T) {
 	assert.Equal(t, "Bob", result[1].Name)
 }
 
+// TestHandleListUsers_PagingParams covers the limit/offset contract on the
+// users endpoint: the defaults, the values that reach the store, and the
+// boundary pair at exactly the maximum and one past it. The shared parsing
+// is exercised exhaustively in TestHandleListVehicles_PagingParams; this
+// table pins that this endpoint is wired to the same rules.
+func TestHandleListUsers_PagingParams(t *testing.T) {
+	const limitError = "limit must be between 1 and 200"
+	offsetError := fmt.Sprintf("offset must be between 0 and %d", maxListOffset)
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+		wantError  string
+		wantLimit  int32
+		wantOffset int32
+	}{
+		{name: "absent params use the defaults", query: "", wantStatus: http.StatusOK, wantLimit: defaultListLimit},
+		{name: "explicit limit and offset", query: "?limit=10&offset=20", wantStatus: http.StatusOK, wantLimit: 10, wantOffset: 20},
+		{name: "limit at the maximum", query: "?limit=200", wantStatus: http.StatusOK, wantLimit: maxListLimit},
+		{name: "limit one past the maximum", query: "?limit=201", wantStatus: http.StatusBadRequest, wantError: limitError},
+		{name: "limit zero", query: "?limit=0", wantStatus: http.StatusBadRequest, wantError: limitError},
+		{name: "limit non-numeric", query: "?limit=abc", wantStatus: http.StatusBadRequest, wantError: limitError},
+		{name: "offset negative", query: "?offset=-1", wantStatus: http.StatusBadRequest, wantError: offsetError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &mockUserPager{users: make([]UserResponse, 0)}
+			handler := handleListUsers(store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/users"+tt.query, nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+			if tt.wantStatus != http.StatusOK {
+				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
+				return
+			}
+			assert.Equal(t, tt.wantLimit, store.gotLimit, "limit passed to the store")
+			assert.Equal(t, tt.wantOffset, store.gotOffset, "offset passed to the store")
+		})
+	}
+}
+
+// TestHandleListUsers_PagesResults verifies limit/offset actually narrow the
+// response rather than only being validated.
+func TestHandleListUsers_PagesResults(t *testing.T) {
+	users := []UserResponse{
+		{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin"},
+		{ID: 2, Name: "Bob", Email: "bob@example.com", Role: "driver"},
+		{ID: 3, Name: "Carol", Email: "carol@example.com", Role: "driver"},
+	}
+	handler := handleListUsers(&mockUserPager{users: users})
+	req := httptest.NewRequest("GET", "/api/v1/admin/users?limit=2&offset=1", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var result []UserResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&result))
+	require.Len(t, result, 2)
+	assert.Equal(t, "Bob", result[0].Name)
+	assert.Equal(t, "Carol", result[1].Name)
+}
+
+// TestHandleListUsers_StillReturnsBareArray guards the response shape:
+// paging deliberately did NOT wrap the body in an object, because existing
+// clients and the documented schema index into a bare array.
+func TestHandleListUsers_StillReturnsBareArray(t *testing.T) {
+	users := []UserResponse{{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin"}}
+	handler := handleListUsers(&mockUserPager{users: users})
+	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var result []UserResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result), "response must unmarshal into a bare array")
+	require.Len(t, result, 1)
+	assert.Equal(t, "Alice", result[0].Name)
+}
+
 func TestHandleListUsers_NoPasswordInResponse(t *testing.T) {
 	users := []UserResponse{
 		{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin"},
 	}
-	handler := handleListUsers(&mockUserLister{users: users})
+	handler := handleListUsers(&mockUserPager{users: users})
 	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
@@ -135,7 +227,7 @@ func TestHandleListUsers_NoPasswordInResponse(t *testing.T) {
 }
 
 func TestHandleListUsers_DBError(t *testing.T) {
-	handler := handleListUsers(&mockUserLister{err: fmt.Errorf("database down")})
+	handler := handleListUsers(&mockUserPager{err: fmt.Errorf("database down")})
 	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
