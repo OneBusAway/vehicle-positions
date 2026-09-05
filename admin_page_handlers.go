@@ -72,6 +72,8 @@ type adminUI struct {
 	activeTrips    ActiveTripLister
 	trips          TripLister
 	vehicles       VehicleManager
+	vehiclePager   VehiclePager
+	userPager      UserPager
 	vehicleEditor  vehicleEditor
 	vehicleCreator VehicleCreator
 	userManager    userManager
@@ -99,6 +101,8 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		activeTrips:    store,
 		trips:          store,
 		vehicles:       store,
+		vehiclePager:   store,
+		userPager:      store,
 		vehicleEditor:  store,
 		vehicleCreator: store,
 		userManager:    store,
@@ -386,6 +390,36 @@ func humanizeDuration(d time.Duration) string {
 	}
 }
 
+// adminPageSize is the number of rows shown per page on the admin list
+// pages. Each list is queried with adminPageSize+1 so an extra row past the
+// page boundary reveals whether there's a next page (HasMore), without a
+// separate COUNT query.
+const adminPageSize = 50
+
+// maxAdminPage bounds the ?page= query param so the offset arithmetic can
+// never overflow into a negative OFFSET; values past it fall back to page 1.
+const maxAdminPage = 1_000_000
+
+// adminPageNumber reads the ?page= param for the admin list pages. A
+// missing, non-numeric, or out-of-range value falls back to page 1 rather
+// than erroring, since it's a bookmarkable/shareable URL param that's easy
+// to hand-edit into something invalid.
+func adminPageNumber(q url.Values) int {
+	if raw := q.Get("page"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 1 && n <= maxAdminPage {
+			return n
+		}
+	}
+	return 1
+}
+
+// adminPageOffset converts a page number into the SQL offset for a page of
+// adminPageSize rows. maxAdminPage keeps the result well inside int32, the
+// offset type the paged store queries take.
+func adminPageOffset(page int) int {
+	return (page - 1) * adminPageSize
+}
+
 // vehicleRow is a single row in the vehicle list table: the vehicle's
 // stored fields plus whatever live state we can join in (last-seen from the
 // tracker, current driver from the active-trips map).
@@ -398,24 +432,43 @@ type vehicleRow struct {
 	Driver    string
 }
 
-// vehiclesPage renders the vehicle list: real vehicles from the store,
-// joined with the tracker's live last-seen data and the current driver (if
-// any) from the active-trips map. Inactive vehicles are hidden unless
-// ?include_inactive=1 is set — the store itself always returns everything;
-// filtering happens here so the store's ListVehicles stays a plain listing.
+// vehiclesPageURL builds an /admin/vehicles link preserving the inactive
+// filter with page set to the given page number, for the prev/next
+// pagination links.
+func vehiclesPageURL(includeInactive bool, page int) string {
+	v := url.Values{}
+	if includeInactive {
+		v.Set("include_inactive", "1")
+	}
+	v.Set("page", strconv.Itoa(page))
+	return "/admin/vehicles?" + v.Encode()
+}
+
+// vehiclesPage renders the vehicle list: one page of vehicles from the
+// store, joined with the tracker's live last-seen data and the current
+// driver (if any) from the active-trips map. Rows are ordered newest-first
+// by the store. Inactive vehicles are hidden unless ?include_inactive=1 is
+// set; that filter runs in SQL so a page holds a full page of rows.
 func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	includeInactive := r.URL.Query().Get("include_inactive") == "1"
+	query := r.URL.Query()
+	includeInactive := query.Get("include_inactive") == "1"
+	page := adminPageNumber(query)
 
-	all, err := ui.vehicles.ListVehicles(ctx)
+	vehicles, err := ui.vehiclePager.ListVehiclesPage(ctx, includeInactive, adminPageSize+1, int32(adminPageOffset(page)))
 	if err != nil {
-		slog.Error("vehicles: list vehicles", "error", err)
+		slog.Error("vehicles: list vehicles page", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	hasMore := len(vehicles) > adminPageSize
+	if hasMore {
+		vehicles = vehicles[:adminPageSize]
+	}
 
-	lastSeen := make(map[string]string, len(all))
-	for _, v := range ui.tracker.ActiveVehicles() {
+	reporting := ui.tracker.ActiveVehicles()
+	lastSeen := make(map[string]string, len(reporting))
+	for _, v := range reporting {
 		lastSeen[v.VehicleID] = humanizeAge(v.UpdatedAt)
 	}
 
@@ -426,11 +479,8 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows := make([]vehicleRow, 0, len(all))
-	for _, v := range all {
-		if !v.Active && !includeInactive {
-			continue
-		}
+	rows := make([]vehicleRow, 0, len(vehicles))
+	for _, v := range vehicles {
 		row := vehicleRow{ID: v.ID, Label: v.Label, AgencyTag: v.AgencyTag, Active: v.Active}
 		row.LastSeen = lastSeen[v.ID]
 		if trip, ok := tripsByVehicle[v.ID]; ok {
@@ -438,13 +488,16 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 
 	ui.renderAdmin(w, r, http.StatusOK, "vehicles.html", map[string]interface{}{
 		"Title":           "Vehicles",
 		"Page":            "vehicles",
 		"Vehicles":        rows,
 		"IncludeInactive": includeInactive,
+		"PageNum":         page,
+		"HasMore":         hasMore,
+		"PrevURL":         vehiclesPageURL(includeInactive, page-1),
+		"NextURL":         vehiclesPageURL(includeInactive, page+1),
 	})
 }
 
@@ -612,23 +665,38 @@ type userRow struct {
 	VehicleCount int
 }
 
-// usersPage renders the user list: real users from the store, each joined
-// with its assigned-vehicle count via a per-user ListAssignmentsByUser call.
-// This is an N+1 query pattern, but it's fine at admin scale (dozens of
-// users, not thousands) and keeps the assignment store's query surface
-// simple (no bulk "counts by user" query needed just for this list).
+// usersPageURL builds an /admin/users link with page set to the given page
+// number, for the prev/next pagination links.
+func usersPageURL(page int) string {
+	v := url.Values{}
+	v.Set("page", strconv.Itoa(page))
+	return "/admin/users?" + v.Encode()
+}
+
+// usersPage renders the user list: one page of users from the store, each
+// joined with its assigned-vehicle count via a per-user
+// ListAssignmentsByUser call. This is an N+1 query pattern, but it's fine at
+// admin scale (dozens of users, not thousands) and keeps the assignment
+// store's query surface simple (no bulk "counts by user" query needed just
+// for this list). Paging the list bounds it further: at most adminPageSize
+// lookups per request, whatever the table holds.
 func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	page := adminPageNumber(r.URL.Query())
 
-	all, err := ui.userManager.ListUsers(ctx)
+	users, err := ui.userPager.ListUsersPage(ctx, adminPageSize+1, int32(adminPageOffset(page)))
 	if err != nil {
-		slog.Error("users: list users", "error", err)
+		slog.Error("users: list users page", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	hasMore := len(users) > adminPageSize
+	if hasMore {
+		users = users[:adminPageSize]
+	}
 
-	rows := make([]userRow, 0, len(all))
-	for _, u := range all {
+	rows := make([]userRow, 0, len(users))
+	for _, u := range users {
 		assignments, err := ui.assignments.ListAssignmentsByUser(ctx, u.ID)
 		if err != nil {
 			slog.Error("users: list assignments", "user_id", u.ID, "error", err)
@@ -646,9 +714,13 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ui.renderAdmin(w, r, http.StatusOK, "users.html", map[string]interface{}{
-		"Title": "Users",
-		"Page":  "users",
-		"Users": rows,
+		"Title":   "Users",
+		"Page":    "users",
+		"Users":   rows,
+		"PageNum": page,
+		"HasMore": hasMore,
+		"PrevURL": usersPageURL(page - 1),
+		"NextURL": usersPageURL(page + 1),
 	})
 }
 
@@ -1069,16 +1141,6 @@ func (ui *adminUI) userUnassignVehicle(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/users/"+idStr+"/edit", http.StatusSeeOther)
 }
 
-// tripsPageSize is the number of trips shown per page on the admin trips
-// list. ListTrips is called with Limit: tripsPageSize+1 so an extra row past
-// the page boundary reveals whether there's a next page (HasMore), without a
-// separate COUNT query.
-const tripsPageSize = 50
-
-// maxTripsPage bounds the ?page= query param so the offset arithmetic can
-// never overflow into a negative OFFSET; values past it fall back to page 1.
-const maxTripsPage = 1_000_000
-
 // tripRow is a single row in the trips table: a trip's joined display fields
 // plus pre-formatted start/end times and duration, ready for the template.
 type tripRow struct {
@@ -1133,10 +1195,9 @@ func tripsPageURL(status, vehicleID, q string, page int) string {
 }
 
 // tripsPage renders the trip history list: real trips from the store,
-// filtered by status/vehicle/free-text query, 50 per page. status must be
-// ""/active/completed (else 400); an invalid or missing page falls back to
-// page 1 rather than erroring, since it's a bookmarkable/shareable URL param
-// that's easy to hand-edit into something invalid.
+// filtered by status/vehicle/free-text query, adminPageSize per page.
+// status must be ""/active/completed (else 400); an invalid or missing page
+// falls back to page 1, as on the other admin list pages.
 func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := r.URL.Query()
@@ -1149,22 +1210,14 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 	vehicleID := query.Get("vehicle_id")
 	q := query.Get("q")
 
-	page := 1
-	if raw := query.Get("page"); raw != "" {
-		// The upper bound keeps (page-1)*tripsPageSize from overflowing int
-		// into a negative OFFSET (a Postgres error → 500); an absurd page
-		// number falls back to page 1 like any other invalid value.
-		if n, err := strconv.Atoi(raw); err == nil && n >= 1 && n <= maxTripsPage {
-			page = n
-		}
-	}
+	page := adminPageNumber(query)
 
 	filter := TripFilter{
 		Status:    status,
 		VehicleID: vehicleID,
 		Q:         q,
-		Limit:     tripsPageSize + 1,
-		Offset:    (page - 1) * tripsPageSize,
+		Limit:     adminPageSize + 1,
+		Offset:    adminPageOffset(page),
 	}
 
 	trips, err := ui.trips.ListTrips(ctx, filter)
@@ -1174,9 +1227,9 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hasMore := len(trips) > tripsPageSize
+	hasMore := len(trips) > adminPageSize
 	if hasMore {
-		trips = trips[:tripsPageSize]
+		trips = trips[:adminPageSize]
 	}
 
 	allVehicles, err := ui.vehicles.ListVehicles(ctx)

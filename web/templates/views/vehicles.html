@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
       <div>
         <h3 class="display-font text-lg font-bold text-slate-900">All Vehicles</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{len .Vehicles}} {{if .IncludeInactive}}shown{{else}}active{{end}} in fleet</p>
+        <p class="mt-0.5 text-xs text-slate-400">{{len .Vehicles}} {{if .IncludeInactive}}shown{{else}}active{{end}} on this page</p>
       </div>
       <div class="flex items-center gap-3">
         {{if .IncludeInactive}}
@@ -74,6 +74,7 @@
         </tbody>
       </table>
     </div>
+    {{template "pagination" .}}
   </div>
 </div>
 {{end}}
