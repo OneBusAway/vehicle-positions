@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS revoked_tokens (
     jti        TEXT PRIMARY KEY CHECK (jti != ''),
-    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     revoked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -1258,7 +1258,7 @@ ON CONFLICT (jti) DO NOTHING
 
 type RevokeTokenParams struct {
 	Jti       string
-	UserID    int64
+	UserID    pgtype.Int8
 	ExpiresAt pgtype.Timestamptz
 }
 

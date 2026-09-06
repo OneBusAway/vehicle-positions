@@ -123,7 +123,15 @@ func TestStore_RevokeToken_EmptyJtiRejected(t *testing.T) {
 	assert.Error(t, err, "the CHECK (jti != '') constraint must reject an empty jti")
 }
 
-func TestStore_RevokeToken_CascadesOnUserDelete(t *testing.T) {
+// TestStore_RevokeToken_SurvivesUserDelete is the regression test for the
+// review finding on #98: with ON DELETE CASCADE, hard-deleting a user (which
+// DELETE /api/v1/admin/users/{id} does) dropped their revocation rows, and
+// because nothing in the request path consults the users table, an already
+// revoked token became valid again for the rest of its 24h life — with its
+// original role claim, so a revoked admin token regained every admin route.
+// The row must outlive the account; only the expiry-based cleanup job should
+// ever remove it.
+func TestStore_RevokeToken_SurvivesUserDelete(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	userID := insertRevocationTestUser(t, store)
@@ -136,6 +144,16 @@ func TestStore_RevokeToken_CascadesOnUserDelete(t *testing.T) {
 	_, err = store.pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
 	require.NoError(t, err)
 
-	assert.Equal(t, 0, countRevocationRows(t, store, jti),
-		"ON DELETE CASCADE must remove the deleted user's revocation rows")
+	assert.Equal(t, 1, countRevocationRows(t, store, jti),
+		"deleting the user must not remove the revocation row")
+
+	revoked, err := store.IsTokenRevoked(ctx, jti)
+	require.NoError(t, err)
+	assert.True(t, revoked, "the token must stay revoked after its user is deleted")
+
+	// ON DELETE SET NULL: the row survives with its owner forgotten.
+	var ownerID *int64
+	err = store.pool.QueryRow(ctx, "SELECT user_id FROM revoked_tokens WHERE jti = $1", jti).Scan(&ownerID)
+	require.NoError(t, err)
+	assert.Nil(t, ownerID, "user_id must be NULLed, not carry a dangling id")
 }

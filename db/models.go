@@ -24,7 +24,7 @@ type LocationPoint struct {
 
 type RevokedToken struct {
 	Jti       string
-	UserID    int64
+	UserID    pgtype.Int8
 	ExpiresAt pgtype.Timestamptz
 	RevokedAt pgtype.Timestamptz
 }
