@@ -181,3 +181,14 @@ FROM trips t
 JOIN users u ON u.id = t.user_id
 WHERE t.status = 'active'
 ORDER BY t.vehicle_id, t.start_time DESC;
+
+-- name: DeleteLocationPointsBefore :execrows
+-- Batched retention delete. The ctid subquery bounds each statement so a large
+-- backlog is removed over many small transactions instead of one long lock.
+DELETE FROM location_points
+WHERE ctid IN (
+    SELECT expired.ctid FROM location_points AS expired
+    WHERE expired.received_at < sqlc.arg('cutoff')
+    ORDER BY expired.received_at
+    LIMIT sqlc.arg('batch_size')
+);
