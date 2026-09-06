@@ -132,11 +132,42 @@ func TestRiderStore_ScoreClamps(t *testing.T) {
 	assert.Equal(t, "blocked", last.Tier)
 }
 
-func TestRiderStore_EndAllActiveRides_AndCascade(t *testing.T) {
+// riderLock serialises starts within one process, so this is the guard for a
+// deployment running more than one: the database, not the handler, is what
+// makes "one rider, one active ride" true.
+func TestRiderStore_OneActiveRidePerRider(t *testing.T) {
 	store := newTestStore(t)
 	r := registerTestRider(t, store)
+	first := startTestRide(t, store, r.ID)
+
+	second := &Ride{ID: uuid.NewString(), RiderID: r.ID, TripID: "T2", StartDate: "20260902"}
+	err := store.StartRide(context.Background(), second)
+	require.ErrorIs(t, err, ErrActiveRideExists)
+
+	// Ending the first frees the rider to start another.
+	_, err = store.FinishRide(context.Background(), first.ID, RideOutcome{
+		EndReason: "arrived", Progress: RideProgress{State: "verified"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.StartRide(context.Background(), second))
+
+	// And an ended ride is no bar to the next one: the index covers only
+	// active rows, so a rider's history can grow without limit.
+	_, err = store.FinishRide(context.Background(), second.ID, RideOutcome{
+		EndReason: "arrived", Progress: RideProgress{State: "verified"},
+	})
+	require.NoError(t, err)
+	startTestRide(t, store, r.ID)
+}
+
+func TestRiderStore_EndAllActiveRides_AndCascade(t *testing.T) {
+	store := newTestStore(t)
+	// Two riders, not two rides of one: idx_rides_one_active_per_rider means a
+	// rider cannot hold two active rides, and this is about ending everyone's.
+	r := registerTestRider(t, store)
+	r2 := registerTestRider(t, store)
 	a := startTestRide(t, store, r.ID)
-	b := startTestRide(t, store, r.ID)
+	b := startTestRide(t, store, r2.ID)
 	// Recorded while a is still active; the cascade assertion below needs a
 	// point row to exist in the first place.
 	require.NoError(t, store.RecordRidePoints(context.Background(), a.ID, r.ID,
@@ -156,7 +187,7 @@ func TestRiderStore_EndAllActiveRides_AndCascade(t *testing.T) {
 	active, err := store.ListRides(context.Background(), "active", 200, 0)
 	require.NoError(t, err)
 	for _, ride := range active {
-		assert.NotEqual(t, r.ID, ride.RiderID, "this rider has no active rides left")
+		assert.NotContains(t, []string{r.ID, r2.ID}, ride.RiderID, "these riders have no active rides left")
 	}
 
 	tiers, err := store.CountRidersByTier(context.Background())
@@ -206,10 +237,12 @@ func TestRiderStore_RecordRidePointsDoesNotResurrectEndedRide(t *testing.T) {
 	require.NoError(t, err)
 
 	// A batch that was in flight when the ride ended, arriving late. Neither the
-	// ride's counters nor its point history may be rewritten.
-	require.NoError(t, store.RecordRidePoints(context.Background(), ride.ID, r.ID,
+	// ride's counters nor its point history may be rewritten, and the caller is
+	// told so it can answer 409 rather than reporting the batch as stored.
+	err = store.RecordRidePoints(context.Background(), ride.ID, r.ID,
 		[]RidePointRecord{{Latitude: 47.6, Longitude: -122.33, Timestamp: 1756800000, Outcome: "matched", Corroboration: "none"}},
-		RideProgress{State: "pending", PointsTotal: 99, PointsMatched: 99}))
+		RideProgress{State: "pending", PointsTotal: 99, PointsMatched: 99})
+	require.ErrorIs(t, err, ErrRideNotFound)
 
 	got, err := store.queries.GetRide(context.Background(), ride.ID)
 	require.NoError(t, err)

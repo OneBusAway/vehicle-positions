@@ -444,6 +444,14 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 			DestinationStopID: req.DestinationStopID,
 		}
 		if err := s.store.StartRide(r.Context(), ride); err != nil {
+			// Another instance started a ride for this rider between the
+			// supersede above and this insert; riderLock only covers this one.
+			// The client's own retry will supersede whichever ride won.
+			if errors.Is(err, ErrActiveRideExists) {
+				slog.Warn("concurrent start for one rider", "rider_id", riderID, "trip_id", req.TripID)
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "rider already has an active ride"})
+				return
+			}
 			slog.Error("failed to start ride", "rider_id", riderID, "trip_id", req.TripID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return

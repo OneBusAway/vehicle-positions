@@ -40,6 +40,11 @@ CREATE TABLE rides (
 );
 
 CREATE INDEX idx_rides_rider_status ON rides(rider_id, status);
+-- One rider rides one vehicle. The handler serialises starts per rider, but
+-- only within one process, so the rule needs to hold in the database for a
+-- deployment running more than one: a second instance inserting a concurrent
+-- start gets a unique violation instead of a duplicate active ride.
+CREATE UNIQUE INDEX idx_rides_one_active_per_rider ON rides(rider_id) WHERE status = 'active';
 CREATE INDEX idx_rides_trip ON rides(trip_id, start_date);
 CREATE INDEX idx_rides_started ON rides(started_at DESC);
 

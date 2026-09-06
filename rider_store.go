@@ -10,6 +10,7 @@ import (
 	"github.com/OneBusAway/vehicle-positions/rider"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -20,7 +21,12 @@ var ErrRiderNotFound = errors.New("rider not found")
 // the ride exists but is no longer active.
 var ErrRideNotFound = errors.New("ride not found")
 
-// Rider is the stored representation of an anonymous rider installation.
+// ErrActiveRideExists is returned when starting a ride would give a rider a
+// second active one. Only a start racing another process can reach it: within
+// one process riderLock has already serialised the supersede.
+var ErrActiveRideExists = errors.New("rider already has an active ride")
+
+// Rider is the stored representation of a pseudonymous rider installation.
 type Rider struct {
 	ID                string
 	InstallationID    string
@@ -184,6 +190,13 @@ func (s *Store) StartRide(ctx context.Context, ride *Ride) error {
 		DestinationStopID: ride.DestinationStopID,
 	})
 	if err != nil {
+		// The partial unique index idx_rides_one_active_per_rider catches a
+		// concurrent start from another instance, which riderLock cannot see.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" &&
+			pgErr.ConstraintName == "idx_rides_one_active_per_rider" {
+			return ErrActiveRideExists
+		}
 		return fmt.Errorf("insert ride: %w", err)
 	}
 	*ride = *rideFromRow(row)
