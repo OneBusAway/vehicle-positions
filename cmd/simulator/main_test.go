@@ -358,3 +358,31 @@ func TestBearerTransportSetsAuthorizationHeader(t *testing.T) {
 
 	assert.Equal(t, "Bearer tok-123", gotAuth)
 }
+
+func TestCheckBaseURL(t *testing.T) {
+	allowed := []string{
+		"http://localhost:8080",
+		"http://127.0.0.1:8080",
+		"http://[::1]:8080",
+		"https://example.org",
+		"https://example.org:8443/base",
+	}
+	for _, raw := range allowed {
+		if err := checkBaseURL(raw); err != nil {
+			t.Errorf("checkBaseURL(%q) = %v, want nil", raw, err)
+		}
+	}
+
+	rejected := []string{
+		"http://example.org",       // credentials in cleartext to a remote host
+		"http://192.168.1.10:8080", // private, still not loopback
+		"ftp://example.org",        // not an HTTP scheme
+		"https://",                 // no host
+		"://nonsense",              // unparseable
+	}
+	for _, raw := range rejected {
+		if err := checkBaseURL(raw); err == nil {
+			t.Errorf("checkBaseURL(%q) = nil, want an error", raw)
+		}
+	}
+}

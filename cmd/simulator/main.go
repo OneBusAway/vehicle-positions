@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -34,6 +36,41 @@ type stats struct {
 	totalMS   atomic.Int64
 }
 
+// checkBaseURL rejects a destination that would put the password and the
+// session token on the wire in cleartext. Plain HTTP stays allowed for
+// loopback, which is the default and the only way the simulator is normally
+// run, but anything remote has to be HTTPS.
+func checkBaseURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid -url %q: %w", raw, err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("invalid -url %q: no host", raw)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackHost(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("-url %q sends the login password and the bearer token in cleartext; use https for a remote host", raw)
+	default:
+		return fmt.Errorf("invalid -url %q: scheme must be http or https", raw)
+	}
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
 func main() {
 	baseURL := flag.String("url", "http://localhost:8080", "Server base URL")
 	numVehicles := flag.Int("vehicles", 10, "Number of simulated vehicles")
@@ -56,6 +93,10 @@ func main() {
 	if *duration > 0 {
 		ctx, cancel = context.WithTimeout(ctx, *duration)
 		defer cancel()
+	}
+
+	if err := checkBaseURL(*baseURL); err != nil {
+		log.Fatal(err)
 	}
 
 	if *email == "" || *password == "" {
