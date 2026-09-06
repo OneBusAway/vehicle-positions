@@ -60,7 +60,7 @@ func adminClaimsFromCookie(r *http.Request, secret []byte) (jwt.MapClaims, bool)
 	if err != nil {
 		return nil, false
 	}
-	if role, _ := claims["role"].(string); role != "admin" {
+	if role, _ := claims["role"].(string); role != roleAdmin {
 		return nil, false
 	}
 	return claims, true

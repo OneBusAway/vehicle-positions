@@ -13,7 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
+	gtfsrt "github.com/OneBusAway/go-gtfs/proto"
+	"github.com/OneBusAway/vehicle-positions/rider"
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -139,10 +140,35 @@ func handlePostLocation(store LocationSaver, tracker *Tracker, rl *VehicleRateLi
 	}
 }
 
-func handleGetFeed(tracker *Tracker) http.HandlerFunc {
+// estimateSource supplies the rider-reported trip estimates that the feed
+// merges alongside driver-reported positions. A server with rider mode off
+// supplies riderOff, which has none, so the feed never has to ask.
+type estimateSource interface {
+	Estimates(now time.Time) []rider.TripEstimate
+}
+
+func handleGetFeed(tracker *Tracker, estimates estimateSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		vehicles := tracker.ActiveVehicles()
-		feed := buildFeed(vehicles)
+		var (
+			vehicles []*VehicleState
+			ests     []rider.TripEstimate
+		)
+		// source selects which half of the feed to publish; an unrecognised
+		// value matches neither half and is rejected rather than served empty.
+		source := r.URL.Query().Get("source")
+		wantDriver := source == "" || source == "all" || source == "driver"
+		wantRider := source == "" || source == "all" || source == "rider"
+		if !wantDriver && !wantRider {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source"})
+			return
+		}
+		if wantDriver {
+			vehicles = tracker.ActiveVehicles()
+		}
+		if wantRider {
+			ests = estimates.Estimates(time.Now())
+		}
+		feed := buildFeed(vehicles, ests)
 
 		if r.URL.Query().Get("format") == "json" {
 			data, err := protojson.Marshal(feed)
@@ -171,15 +197,15 @@ func handleGetFeed(tracker *Tracker) http.HandlerFunc {
 	}
 }
 
-func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
+func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt.FeedMessage {
 	now := uint64(time.Now().Unix())
 	version := "2.0"
-	inc := gtfs.FeedHeader_FULL_DATASET
+	inc := gtfsrt.FeedHeader_FULL_DATASET
 
 	// E012 (gtfs-realtime-validator): header.timestamp must be >= all entity timestamps.
 	headerTimestamp := now
 
-	var entities []*gtfs.FeedEntity
+	var entities []*gtfsrt.FeedEntity
 	for _, v := range vehicles {
 		if v.Timestamp <= 0 {
 			slog.Warn("buildFeed: skipping vehicle with non-positive timestamp", "vehicle_id", v.VehicleID, "timestamp", v.Timestamp)
@@ -190,7 +216,7 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 			headerTimestamp = ts
 		}
 
-		position := &gtfs.Position{
+		position := &gtfsrt.Position{
 			Latitude:  proto.Float32(float32(v.Latitude)),
 			Longitude: proto.Float32(float32(v.Longitude)),
 		}
@@ -201,10 +227,10 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 			position.Speed = proto.Float32(float32(*v.Speed))
 		}
 
-		entity := &gtfs.FeedEntity{
+		entity := &gtfsrt.FeedEntity{
 			Id: proto.String(v.VehicleID),
-			Vehicle: &gtfs.VehiclePosition{
-				Vehicle: &gtfs.VehicleDescriptor{
+			Vehicle: &gtfsrt.VehiclePosition{
+				Vehicle: &gtfsrt.VehicleDescriptor{
 					Id: proto.String(v.VehicleID),
 				},
 				Position:  position,
@@ -213,21 +239,86 @@ func buildFeed(vehicles []*VehicleState) *gtfs.FeedMessage {
 		}
 
 		if v.TripID != "" {
-			entity.Vehicle.Trip = &gtfs.TripDescriptor{
+			entity.Vehicle.Trip = &gtfsrt.TripDescriptor{
 				TripId: proto.String(v.TripID),
 			}
 		}
 		entities = append(entities, entity)
 	}
 
-	return &gtfs.FeedMessage{
-		Header: &gtfs.FeedHeader{
+	for _, est := range estimates {
+		ts := est.Timestamp.Unix()
+		if ts <= 0 {
+			slog.Warn("buildFeed: skipping rider estimate with non-positive timestamp",
+				"trip_id", est.Key.TripID, "start_date", est.Key.StartDate, "timestamp", ts)
+			continue
+		}
+		if uint64(ts) > headerTimestamp {
+			headerTimestamp = uint64(ts)
+		}
+		entities = append(entities, riderEntity(est))
+	}
+
+	return &gtfsrt.FeedMessage{
+		Header: &gtfsrt.FeedHeader{
 			GtfsRealtimeVersion: &version,
 			Incrementality:      &inc,
 			Timestamp:           &headerTimestamp,
 		},
 		Entity: entities,
 	}
+}
+
+// riderEntity renders one rider-consensus trip estimate as a FeedEntity. The
+// "rider:" prefixes keep these ids from colliding with driver-reported
+// vehicles, and the label marks the position as rider-reported for consumers.
+// vehicle.id repeats the entity id (trip + start date) rather than the trip id
+// alone: the same trip running on two service dates is two vehicles, and E052
+// requires vehicle.id to be unique across the feed.
+func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
+	position := &gtfsrt.Position{
+		Latitude:  proto.Float32(float32(est.Pos.Lat)),
+		Longitude: proto.Float32(float32(est.Pos.Lon)),
+		Bearing:   proto.Float32(float32(est.Bearing)),
+	}
+	if est.Speed != nil {
+		position.Speed = proto.Float32(float32(*est.Speed))
+	}
+
+	trip := &gtfsrt.TripDescriptor{
+		TripId:    proto.String(est.Key.TripID),
+		StartDate: proto.String(est.Key.StartDate),
+	}
+	if est.RouteID != "" {
+		trip.RouteId = proto.String(est.RouteID)
+	}
+
+	id := riderEntityID(est.Key)
+	vp := &gtfsrt.VehiclePosition{
+		Vehicle: &gtfsrt.VehicleDescriptor{
+			Id:    proto.String(id),
+			Label: proto.String("Rider-reported"),
+		},
+		Trip:      trip,
+		Position:  position,
+		Timestamp: proto.Uint64(uint64(est.Timestamp.Unix())),
+	}
+	if est.StopID != "" {
+		vp.StopId = proto.String(est.StopID)
+		vp.CurrentStopSequence = proto.Uint32(uint32(est.StopSequence))
+		vp.CurrentStatus = gtfsrt.VehiclePosition_IN_TRANSIT_TO.Enum()
+	}
+
+	return &gtfsrt.FeedEntity{
+		Id:      proto.String(id),
+		Vehicle: vp,
+	}
+}
+
+// riderEntityID is the feed id of a rider-reported trip instance, used both as
+// the FeedEntity id and as vehicle.id.
+func riderEntityID(key rider.TripKey) string {
+	return "rider:" + key.TripID + ":" + key.StartDate
 }
 
 type adminStatusResponse struct {

@@ -1,9 +1,13 @@
-.PHONY: help generate fmt vet test up down run smoke simulate css
+.PHONY: help generate fmt vet test up down run smoke simulate ridersim css
 
 # Tailwind CSS CLI version pinned for reproducible admin-UI builds. The Go CI
 # workflow (.github/workflows/ci.yml) downloads the linux-x64 binary of this
 # SAME version to verify web/static/css/admin.css is up to date — bump both
 # together.
+# Port the local server is expected on; `make run` reads PORT from the
+# environment, so the simulator targets default to the same 8080.
+PORT ?= 8080
+
 TAILWIND_VERSION := v4.2.0
 TAILWIND_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/')
 TAILWIND_ARCH := $(shell uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
@@ -23,6 +27,7 @@ help:
 	@echo "  make run       - Run server locally (expects DATABASE_URL env var)"
 	@echo "  make smoke     - Post sample location and fetch feed/status"
 	@echo "  make simulate  - Run simulator against local server"
+	@echo "  make ridersim  - Run rider simulator against local server (rider mode; honours PORT)"
 	@echo "  make generate  - Regenerate sqlc code"
 	@echo "  make fmt       - Format Go code"
 	@echo "  make vet       - Run go vet"
@@ -66,6 +71,9 @@ smoke:
 
 simulate:
 	go run ./cmd/simulator -url http://localhost:8080 -vehicles 5 -interval 3s -duration 30s
+
+ridersim:
+	go run ./cmd/ridersim -url http://localhost:$(PORT) -gtfs rider/testdata/fixture.zip -trip T1 -interval 1s -speed 10 -expect-end arrived
 
 css: $(TAILWIND_BIN)
 	$(TAILWIND_BIN) -i web/styles/input.css -o web/static/css/admin.css --minify

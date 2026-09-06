@@ -22,6 +22,61 @@ type LocationPoint struct {
 	DriverID   string
 }
 
+type Ride struct {
+	ID                 string
+	RiderID            string
+	TripID             string
+	StartDate          string
+	RouteID            string
+	VehicleID          string
+	BoardingStopID     string
+	DestinationStopID  string
+	Status             string
+	State              string
+	Corroborated       bool
+	EndReason          string
+	PointsTotal        int32
+	PointsMatched      int32
+	PointsCorroborated int32
+	PointsContradicted int32
+	StartedAt          pgtype.Timestamptz
+	EndedAt            pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type RidePoint struct {
+	ID                       int64
+	RideID                   string
+	Latitude                 float64
+	Longitude                float64
+	Accuracy                 pgtype.Float8
+	Speed                    pgtype.Float8
+	Bearing                  pgtype.Float8
+	Timestamp                int64
+	Outcome                  string
+	Corroboration            string
+	AlongShape               pgtype.Float8
+	DistanceToShape          pgtype.Float8
+	ScheduleDeviationSeconds pgtype.Int4
+	ReceivedAt               pgtype.Timestamptz
+}
+
+type Rider struct {
+	ID                string
+	InstallationID    string
+	Platform          string
+	AppID             string
+	AppVersion        string
+	Attested          bool
+	Score             int32
+	Tier              string
+	RidesTotal        int32
+	RidesCorroborated int32
+	RidesRejected     int32
+	CreatedAt         pgtype.Timestamptz
+	LastSeenAt        pgtype.Timestamptz
+}
+
 type Trip struct {
 	ID         int64
 	UserID     int64

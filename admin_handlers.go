@@ -6,28 +6,14 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"os"
 	"path"
-	"strconv"
 )
 
 // adminUIEnabled reports whether the admin UI should be served, controlled by
 // the ADMIN_UI_ENABLED environment variable (default true). Any value
 // strconv.ParseBool accepts as false (0, f, F, FALSE, false, ...) turns it
 // off; unset or unparseable values leave it on.
-func adminUIEnabled() bool {
-	v := os.Getenv("ADMIN_UI_ENABLED")
-	if v == "" {
-		return true
-	}
-	enabled, err := strconv.ParseBool(v)
-	if err != nil {
-		slog.Warn("ADMIN_UI_ENABLED is not a valid boolean; leaving the admin UI enabled",
-			"value", v)
-		return true
-	}
-	return enabled
-}
+func adminUIEnabled() bool { return envBoolOrDefault("ADMIN_UI_ENABLED", true) }
 
 type embeddedTemplates struct {
 	public map[string]*template.Template

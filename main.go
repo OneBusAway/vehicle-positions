@@ -52,20 +52,29 @@ type appStore interface {
 	VehicleChecker
 	DriverVehicleLister
 	AdminStatsCounter
+	RiderRegistrar
+	RiderReader
+	RideStarter
+	RidePointRecorder
+	RideFinisher
+	RideLister
+	RiderStatsReader
+	RidePointPruner
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy bool) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy bool, riderSvc *riderService) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret)
 	adminMiddleware := requireAdmin()
+	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
-	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker))
+	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker, riderEstimates))
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/live", authMiddleware(adminMiddleware(handleLiveVehicles(tracker, store, store))))
@@ -99,6 +108,15 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/users/{id}/vehicles", authMiddleware(adminMiddleware(handleListUserVehicles(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/{id}/users", authMiddleware(adminMiddleware(handleListVehicleUsers(store))))
 
+	// Rider mode. The admin endpoints exist whether or not it is enabled — a
+	// disabled server reports {"enabled":false} rather than 404 — while the
+	// rider API itself is registered only when there is a service to serve it.
+	mux.Handle("GET /api/v1/admin/rider/status", authMiddleware(adminMiddleware(handleRiderAdminStatus(riderStatus))))
+	mux.Handle("GET /api/v1/admin/rider/rides", authMiddleware(adminMiddleware(handleRiderAdminRides(store))))
+	if riderSvc != nil {
+		registerRiderRoutes(mux, riderSvc)
+	}
+
 	return mux
 }
 
@@ -108,9 +126,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter *LoginRateLimiter, jwtSecret []byte, startTime time.Time,
-	cfg adminUIConfig) (http.Handler, error) {
+	cfg adminUIConfig, riderSvc *riderService) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy, riderSvc)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
@@ -212,6 +230,22 @@ func main() {
 		}
 	}
 
+	riderCfg, err := riderConfigFromEnv()
+	if err != nil {
+		slog.Error("invalid rider mode configuration", "error", err)
+		os.Exit(1)
+	}
+	var riderSvc *riderService
+	if riderCfg.Enabled {
+		rt, err := newRiderRuntime(ctx, riderCfg, store, jwtSecret, trustProxyHeaders(), tracker)
+		if err != nil {
+			slog.Error("failed to start rider mode", "error", err)
+			os.Exit(1)
+		}
+		defer rt.Stop()
+		riderSvc = rt.svc
+	}
+
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)
 	if err != nil {
@@ -226,7 +260,7 @@ func main() {
 	startTime := time.Now()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge})
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, riderSvc)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)
@@ -263,6 +297,22 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envBoolOrDefault reads a boolean setting. An unset value, and one that does
+// not parse, both fall back — a typo must not flip a flag either way — and the
+// unparseable case is logged so the operator learns their setting was ignored.
+func envBoolOrDefault(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		slog.Warn("invalid boolean, using default", "key", key, "value", v, "default", fallback)
+		return fallback
+	}
+	return b
 }
 
 func envDurationOrDefault(key string, fallback time.Duration) time.Duration {

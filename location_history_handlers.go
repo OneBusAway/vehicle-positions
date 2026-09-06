@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -67,9 +70,9 @@ func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleCheck
 			return
 		}
 
-		limit, err := parseOptionalInt(q.Get("limit"), defaultHistoryLimit)
-		if err != nil || limit < 1 || limit > maxHistoryLimit {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("limit must be between 1 and %d", maxHistoryLimit)})
+		limit, err := parseLimit(q, defaultHistoryLimit, maxHistoryLimit)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -204,4 +207,31 @@ func parseOptionalInt(s string, defaultVal int) (int, error) {
 		return defaultVal, nil
 	}
 	return strconv.Atoi(s)
+}
+
+// parsePage reads the limit/offset pair every paginated list endpoint takes,
+// bounding limit to [1, maxLimit] and offset to non-negative. The returned
+// error is the message the endpoint answers 400 with, so the three lists that
+// share this validation cannot drift apart in what they say.
+func parsePage(q url.Values, defaultLimit, maxLimit int) (limit, offset int, err error) {
+	if limit, err = parseLimit(q, defaultLimit, maxLimit); err != nil {
+		return 0, 0, err
+	}
+	// The stores hand offset to Postgres as an int32; anything larger would
+	// wrap rather than page.
+	offset, err = parseOptionalInt(q.Get("offset"), 0)
+	if err != nil || offset < 0 || offset > math.MaxInt32 {
+		return 0, 0, errors.New("offset must be a non-negative integer")
+	}
+	return limit, offset, nil
+}
+
+// parseLimit is the limit half of parsePage, for an endpoint that takes no
+// offset and so must neither honour nor reject one.
+func parseLimit(q url.Values, defaultLimit, maxLimit int) (int, error) {
+	limit, err := parseOptionalInt(q.Get("limit"), defaultLimit)
+	if err != nil || limit < 1 || limit > maxLimit {
+		return 0, fmt.Errorf("limit must be between 1 and %d", maxLimit)
+	}
+	return limit, nil
 }

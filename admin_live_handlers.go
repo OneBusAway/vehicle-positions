@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -151,15 +150,9 @@ func handleListTrips(store TripLister) http.HandlerFunc {
 			return
 		}
 
-		limit, err := parseOptionalInt(q.Get("limit"), defaultTripListLimit)
-		if err != nil || limit < 1 || limit > maxTripListLimit {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("limit must be between 1 and %d", maxTripListLimit)})
-			return
-		}
-
-		offset, err := parseOptionalInt(q.Get("offset"), 0)
-		if err != nil || offset < 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "offset must be a non-negative integer"})
+		limit, offset, err := parsePage(q, defaultTripListLimit, maxTripListLimit)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,6 +18,21 @@ import (
 type contextKey string
 
 const claimsKey contextKey = "claims"
+
+// The role vocabulary. A JWT's "role" claim, a stored user's role column and
+// every role check in the server all draw on these three names, so a role
+// cannot be spelled one way in one place and another elsewhere.
+const (
+	roleDriver = "driver"
+	roleAdmin  = "admin"
+	roleRider  = "rider"
+)
+
+// staffRoles are the roles a member of staff may hold: the ones the user form
+// offers, and the ones the staff API admits. A rider is deliberately not one
+// of them — a rider token is signed with the same secret and would otherwise
+// validate on staff routes.
+var staffRoles = []string{roleDriver, roleAdmin}
 
 // contextWithClaims stores validated JWT claims on the context. Shared by
 // requireAuth and requireAdminPage so both middlewares wire claims the same
@@ -158,7 +174,7 @@ func requireAdmin() func(http.Handler) http.Handler {
 			}
 
 			role, ok := claims["role"].(string)
-			if !ok || role != "admin" {
+			if !ok || role != roleAdmin {
 				slog.Warn("requireAdmin: access denied",
 					"sub", claims["sub"],
 					"role", claims["role"],
@@ -197,17 +213,26 @@ func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error)
 	return claims, nil
 }
 
-// requireAuth is middleware that validates the Bearer JWT on protected routes.
+// requireAuth is middleware that validates the Bearer JWT on the staff API. A
+// rider token is signed with the same secret and would otherwise validate
+// here, so the role is checked at the door rather than at each handler.
 func requireAuth(secret []byte) func(http.Handler) http.Handler {
+	return requireRoles(secret, true, staffRoles...)
+}
+
+// requireRoles returns middleware that validates the Bearer JWT and admits
+// only the named roles, storing the claims on the request context. When
+// allowCookie is set, a request with no Authorization header at all falls back
+// to the admin UI's browser session cookie (spec §4.2); a present-but-bad
+// header never falls back, and a client that has no browser session — the
+// rider API — never accepts a cookie at all.
+func requireRoles(secret []byte, allowCookie bool, roles ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			var tokenString string
 			switch {
-			case authHeader == "":
-				// Cookie fallback for the admin UI's browser session
-				// (spec §4.2). Applies ONLY when the header is entirely
-				// absent — a present-but-bad header never falls back.
+			case authHeader == "" && allowCookie:
 				c, err := r.Cookie(sessionCookieName)
 				if err != nil || c.Value == "" {
 					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid authorization header"})
@@ -227,8 +252,25 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}
+			if role, _ := claims["role"].(string); !slices.Contains(roles, role) {
+				slog.Warn("role not permitted",
+					"sub", claims["sub"],
+					"role", claims["role"],
+					"allowed", roles,
+					"path", r.URL.Path,
+				)
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+
 			ctx := contextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
+
+// validUserRole reports whether role is one of the roles the user form offers.
+// Anything else (including empty) is rejected server-side even though the
+// <select> only ever submits one of these values, since form submissions
+// aren't trustworthy.
+func validUserRole(role string) bool { return slices.Contains(staffRoles, role) }

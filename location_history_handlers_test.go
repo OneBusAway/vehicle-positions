@@ -5,8 +5,10 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -531,4 +533,19 @@ func TestHandleGetLocationHistory_ToOnly(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code, "past ?to= alone must select the 24h window ending at to, not 400")
 	assert.Equal(t, int64(1000000), lister.capturedTo)
 	assert.Equal(t, int64(1000000-86400), lister.capturedFrom, "from should default to to-86400")
+}
+
+func TestParsePage_OffsetBoundedToInt32(t *testing.T) {
+	_, offset, err := parsePage(url.Values{"offset": {"2147483647"}}, 10, 100)
+	require.NoError(t, err)
+	assert.Equal(t, math.MaxInt32, offset)
+
+	_, _, err = parsePage(url.Values{"offset": {"2147483648"}}, 10, 100)
+	assert.EqualError(t, err, "offset must be a non-negative integer")
+}
+
+func TestParseLimit_IgnoresOffset(t *testing.T) {
+	limit, err := parseLimit(url.Values{"limit": {"5"}, "offset": {"-1"}}, 10, 100)
+	require.NoError(t, err)
+	assert.Equal(t, 5, limit)
 }

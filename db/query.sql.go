@@ -11,6 +11,50 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyRideOutcome = `-- name: ApplyRideOutcome :one
+UPDATE riders SET
+  score = LEAST(10, GREATEST(-10, score + $2)),
+  rides_total = rides_total + 1,
+  rides_corroborated = rides_corroborated + $3,
+  rides_rejected = rides_rejected + $4,
+  last_seen_at = NOW()
+WHERE id = $1
+RETURNING id, installation_id, platform, app_id, app_version, attested, score, tier, rides_total, rides_corroborated, rides_rejected, created_at, last_seen_at
+`
+
+type ApplyRideOutcomeParams struct {
+	ID                string
+	Score             int32
+	RidesCorroborated int32
+	RidesRejected     int32
+}
+
+func (q *Queries) ApplyRideOutcome(ctx context.Context, arg ApplyRideOutcomeParams) (Rider, error) {
+	row := q.db.QueryRow(ctx, applyRideOutcome,
+		arg.ID,
+		arg.Score,
+		arg.RidesCorroborated,
+		arg.RidesRejected,
+	)
+	var i Rider
+	err := row.Scan(
+		&i.ID,
+		&i.InstallationID,
+		&i.Platform,
+		&i.AppID,
+		&i.AppVersion,
+		&i.Attested,
+		&i.Score,
+		&i.Tier,
+		&i.RidesTotal,
+		&i.RidesCorroborated,
+		&i.RidesRejected,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+	)
+	return i, err
+}
+
 const assignUserVehicle = `-- name: AssignUserVehicle :one
 INSERT INTO user_vehicles (user_id, vehicle_id)
 VALUES ($1, $2)
@@ -83,6 +127,46 @@ func (q *Queries) CountActiveVehicles(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countRidePointsForRide = `-- name: CountRidePointsForRide :one
+SELECT COUNT(*) FROM ride_points WHERE ride_id = $1
+`
+
+func (q *Queries) CountRidePointsForRide(ctx context.Context, rideID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countRidePointsForRide, rideID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRidersByTier = `-- name: CountRidersByTier :many
+SELECT tier, COUNT(*) AS count FROM riders GROUP BY tier
+`
+
+type CountRidersByTierRow struct {
+	Tier  string
+	Count int64
+}
+
+func (q *Queries) CountRidersByTier(ctx context.Context) ([]CountRidersByTierRow, error) {
+	rows, err := q.db.Query(ctx, countRidersByTier)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountRidersByTierRow
+	for rows.Next() {
+		var i CountRidersByTierRow
+		if err := rows.Scan(&i.Tier, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const countUsersByRole = `-- name: CountUsersByRole :one
@@ -184,6 +268,18 @@ func (q *Queries) DeleteLocationPointsBefore(ctx context.Context, arg DeleteLoca
 	return result.RowsAffected(), nil
 }
 
+const deleteRidePointsBefore = `-- name: DeleteRidePointsBefore :execrows
+DELETE FROM ride_points WHERE received_at < $1
+`
+
+func (q *Queries) DeleteRidePointsBefore(ctx context.Context, receivedAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRidePointsBefore, receivedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1
 `
@@ -194,6 +290,55 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const endAllActiveRides = `-- name: EndAllActiveRides :execrows
+UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $1, updated_at = NOW() WHERE status = 'active'
+`
+
+func (q *Queries) EndAllActiveRides(ctx context.Context, endReason string) (int64, error) {
+	result, err := q.db.Exec(ctx, endAllActiveRides, endReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const endRide = `-- name: EndRide :one
+UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $2, state = $3, corroborated = $4,
+  points_total = $5, points_matched = $6, points_corroborated = $7, points_contradicted = $8, updated_at = NOW()
+WHERE id = $1 AND status = 'active'
+RETURNING rider_id
+`
+
+type EndRideParams struct {
+	ID                 string
+	EndReason          string
+	State              string
+	Corroborated       bool
+	PointsTotal        int32
+	PointsMatched      int32
+	PointsCorroborated int32
+	PointsContradicted int32
+}
+
+// Returning the rider is what makes ending a ride one round trip: no row came
+// back means the ride was not active, and the id is the one whose reputation
+// the outcome is applied to.
+func (q *Queries) EndRide(ctx context.Context, arg EndRideParams) (string, error) {
+	row := q.db.QueryRow(ctx, endRide,
+		arg.ID,
+		arg.EndReason,
+		arg.State,
+		arg.Corroborated,
+		arg.PointsTotal,
+		arg.PointsMatched,
+		arg.PointsCorroborated,
+		arg.PointsContradicted,
+	)
+	var rider_id string
+	err := row.Scan(&rider_id)
+	return rider_id, err
 }
 
 const endTrip = `-- name: EndTrip :execrows
@@ -351,6 +496,62 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 	return items, nil
 }
 
+const getRide = `-- name: GetRide :one
+SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides WHERE id = $1
+`
+
+func (q *Queries) GetRide(ctx context.Context, id string) (Ride, error) {
+	row := q.db.QueryRow(ctx, getRide, id)
+	var i Ride
+	err := row.Scan(
+		&i.ID,
+		&i.RiderID,
+		&i.TripID,
+		&i.StartDate,
+		&i.RouteID,
+		&i.VehicleID,
+		&i.BoardingStopID,
+		&i.DestinationStopID,
+		&i.Status,
+		&i.State,
+		&i.Corroborated,
+		&i.EndReason,
+		&i.PointsTotal,
+		&i.PointsMatched,
+		&i.PointsCorroborated,
+		&i.PointsContradicted,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRider = `-- name: GetRider :one
+SELECT id, installation_id, platform, app_id, app_version, attested, score, tier, rides_total, rides_corroborated, rides_rejected, created_at, last_seen_at FROM riders WHERE id = $1
+`
+
+func (q *Queries) GetRider(ctx context.Context, id string) (Rider, error) {
+	row := q.db.QueryRow(ctx, getRider, id)
+	var i Rider
+	err := row.Scan(
+		&i.ID,
+		&i.InstallationID,
+		&i.Platform,
+		&i.AppID,
+		&i.AppVersion,
+		&i.Attested,
+		&i.Score,
+		&i.Tier,
+		&i.RidesTotal,
+		&i.RidesCorroborated,
+		&i.RidesRejected,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+	)
+	return i, err
+}
+
 const getTripSummary = `-- name: GetTripSummary :one
 SELECT t.id, t.vehicle_id, v.label AS vehicle_label, t.user_id, u.name AS driver_name,
        t.route_id, t.gtfs_trip_id, t.start_time, t.end_time, t.status
@@ -481,6 +682,59 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 		arg.DriverID,
 	)
 	return err
+}
+
+const insertRide = `-- name: InsertRide :one
+INSERT INTO rides (id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at
+`
+
+type InsertRideParams struct {
+	ID                string
+	RiderID           string
+	TripID            string
+	StartDate         string
+	RouteID           string
+	VehicleID         string
+	BoardingStopID    string
+	DestinationStopID string
+}
+
+func (q *Queries) InsertRide(ctx context.Context, arg InsertRideParams) (Ride, error) {
+	row := q.db.QueryRow(ctx, insertRide,
+		arg.ID,
+		arg.RiderID,
+		arg.TripID,
+		arg.StartDate,
+		arg.RouteID,
+		arg.VehicleID,
+		arg.BoardingStopID,
+		arg.DestinationStopID,
+	)
+	var i Ride
+	err := row.Scan(
+		&i.ID,
+		&i.RiderID,
+		&i.TripID,
+		&i.StartDate,
+		&i.RouteID,
+		&i.VehicleID,
+		&i.BoardingStopID,
+		&i.DestinationStopID,
+		&i.Status,
+		&i.State,
+		&i.Corroborated,
+		&i.EndReason,
+		&i.PointsTotal,
+		&i.PointsMatched,
+		&i.PointsCorroborated,
+		&i.PointsContradicted,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const listActiveTripsByVehicle = `-- name: ListActiveTripsByVehicle :many
@@ -616,6 +870,58 @@ func (q *Queries) ListActiveVehiclesPage(ctx context.Context, arg ListActiveVehi
 			&i.AgencyTag,
 			&i.Active,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRides = `-- name: ListRides :many
+SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3
+`
+
+type ListRidesParams struct {
+	Status string
+	Limit  int32
+	Offset int32
+}
+
+// started_at alone is not a total order, so two rides sharing one can swap
+// between pages and be listed twice or not at all; id breaks the tie.
+func (q *Queries) ListRides(ctx context.Context, arg ListRidesParams) ([]Ride, error) {
+	rows, err := q.db.Query(ctx, listRides, arg.Status, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Ride
+	for rows.Next() {
+		var i Ride
+		if err := rows.Scan(
+			&i.ID,
+			&i.RiderID,
+			&i.TripID,
+			&i.StartDate,
+			&i.RouteID,
+			&i.VehicleID,
+			&i.BoardingStopID,
+			&i.DestinationStopID,
+			&i.Status,
+			&i.State,
+			&i.Corroborated,
+			&i.EndReason,
+			&i.PointsTotal,
+			&i.PointsMatched,
+			&i.PointsCorroborated,
+			&i.PointsContradicted,
+			&i.StartedAt,
+			&i.EndedAt,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -933,6 +1239,20 @@ func (q *Queries) ListVehiclesPage(ctx context.Context, arg ListVehiclesPagePara
 	return items, nil
 }
 
+const setRiderTier = `-- name: SetRiderTier :exec
+UPDATE riders SET tier = $2 WHERE id = $1
+`
+
+type SetRiderTierParams struct {
+	ID   string
+	Tier string
+}
+
+func (q *Queries) SetRiderTier(ctx context.Context, arg SetRiderTierParams) error {
+	_, err := q.db.Exec(ctx, setRiderTier, arg.ID, arg.Tier)
+	return err
+}
+
 const setUserActive = `-- name: SetUserActive :execrows
 UPDATE users SET active = $2 WHERE id = $1
 `
@@ -1003,6 +1323,15 @@ func (q *Queries) StartTrip(ctx context.Context, arg StartTripParams) (Trip, err
 	return i, err
 }
 
+const touchRider = `-- name: TouchRider :exec
+UPDATE riders SET last_seen_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) TouchRider(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, touchRider, id)
+	return err
+}
+
 const unassignUserVehicle = `-- name: UnassignUserVehicle :execrows
 DELETE FROM user_vehicles
 WHERE user_id = $1 AND vehicle_id = $2
@@ -1015,6 +1344,41 @@ type UnassignUserVehicleParams struct {
 
 func (q *Queries) UnassignUserVehicle(ctx context.Context, arg UnassignUserVehicleParams) (int64, error) {
 	result, err := q.db.Exec(ctx, unassignUserVehicle, arg.UserID, arg.VehicleID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateRideProgress = `-- name: UpdateRideProgress :execrows
+UPDATE rides SET state = $2, corroborated = $3, points_total = $4, points_matched = $5,
+  points_corroborated = $6, points_contradicted = $7, updated_at = NOW()
+WHERE id = $1 AND status = 'active'
+`
+
+type UpdateRideProgressParams struct {
+	ID                 string
+	State              string
+	Corroborated       bool
+	PointsTotal        int32
+	PointsMatched      int32
+	PointsCorroborated int32
+	PointsContradicted int32
+}
+
+// Returns the affected-row count so a batch that lands after the ride ended
+// rolls back rather than committing points the InsertRidePoint guard already
+// dropped, leaving the counters describing a ride nobody can add to.
+func (q *Queries) UpdateRideProgress(ctx context.Context, arg UpdateRideProgressParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRideProgress,
+		arg.ID,
+		arg.State,
+		arg.Corroborated,
+		arg.PointsTotal,
+		arg.PointsMatched,
+		arg.PointsCorroborated,
+		arg.PointsContradicted,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -1133,6 +1497,55 @@ func (q *Queries) UpsertAdminVehicle(ctx context.Context, arg UpsertAdminVehicle
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertRider = `-- name: UpsertRider :one
+INSERT INTO riders (id, installation_id, platform, app_id, app_version)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (installation_id) DO UPDATE
+  SET last_seen_at = NOW(), app_version = EXCLUDED.app_version, platform = EXCLUDED.platform, app_id = EXCLUDED.app_id
+RETURNING riders.id, riders.installation_id, riders.platform, riders.app_id, riders.app_version, riders.attested, riders.score, riders.tier, riders.rides_total, riders.rides_corroborated, riders.rides_rejected, riders.created_at, riders.last_seen_at, (xmax = 0) AS created
+`
+
+type UpsertRiderParams struct {
+	ID             string
+	InstallationID string
+	Platform       string
+	AppID          string
+	AppVersion     string
+}
+
+type UpsertRiderRow struct {
+	Rider   Rider
+	Created bool
+}
+
+func (q *Queries) UpsertRider(ctx context.Context, arg UpsertRiderParams) (UpsertRiderRow, error) {
+	row := q.db.QueryRow(ctx, upsertRider,
+		arg.ID,
+		arg.InstallationID,
+		arg.Platform,
+		arg.AppID,
+		arg.AppVersion,
+	)
+	var i UpsertRiderRow
+	err := row.Scan(
+		&i.Rider.ID,
+		&i.Rider.InstallationID,
+		&i.Rider.Platform,
+		&i.Rider.AppID,
+		&i.Rider.AppVersion,
+		&i.Rider.Attested,
+		&i.Rider.Score,
+		&i.Rider.Tier,
+		&i.Rider.RidesTotal,
+		&i.Rider.RidesCorroborated,
+		&i.Rider.RidesRejected,
+		&i.Rider.CreatedAt,
+		&i.Rider.LastSeenAt,
+		&i.Created,
 	)
 	return i, err
 }

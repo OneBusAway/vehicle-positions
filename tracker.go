@@ -127,6 +127,33 @@ func (t *Tracker) ActiveVehicles() []*VehicleState {
 	return active
 }
 
+// VehicleOnTrip returns the freshest vehicle reporting tripID within the
+// staleness threshold, if any. It is how the rider engine learns that the
+// agency's own driver half already speaks for a trip.
+func (t *Tracker) VehicleOnTrip(tripID string) (VehicleState, bool) {
+	if tripID == "" {
+		return VehicleState{}, false
+	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	cutoff := time.Now().Add(-t.maxAge)
+	var found *VehicleState
+	for _, v := range t.vehicles {
+		if v.TripID != tripID || !v.UpdatedAt.After(cutoff) {
+			continue
+		}
+		if found == nil || v.Timestamp > found.Timestamp {
+			found = v
+		}
+	}
+	if found == nil {
+		return VehicleState{}, false
+	}
+	// Update replaces the whole entry rather than mutating it, so the copy's
+	// pointer fields stay valid.
+	return *found, true
+}
+
 // TrackerStatus holds aggregate statistics about tracked vehicles.
 type TrackerStatus struct {
 	ActiveVehicles       int

@@ -12,6 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -83,29 +84,14 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 		return fmt.Errorf("upsert vehicle: %w", err)
 	}
 
-	bearing := pgtype.Float8{}
-	if loc.Bearing != nil {
-		bearing = pgtype.Float8{Float64: *loc.Bearing, Valid: true}
-	}
-
-	speed := pgtype.Float8{}
-	if loc.Speed != nil {
-		speed = pgtype.Float8{Float64: *loc.Speed, Valid: true}
-	}
-
-	accuracy := pgtype.Float8{}
-	if loc.Accuracy != nil {
-		accuracy = pgtype.Float8{Float64: *loc.Accuracy, Valid: true}
-	}
-
 	if err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
 		Latitude:  loc.Latitude,
 		Longitude: loc.Longitude,
-		Bearing:   bearing,
-		Speed:     speed,
-		Accuracy:  accuracy,
+		Bearing:   optionalFloat(loc.Bearing),
+		Speed:     optionalFloat(loc.Speed),
+		Accuracy:  optionalFloat(loc.Accuracy),
 		Timestamp: loc.Timestamp,
 		DriverID:  loc.DriverID,
 	}); err != nil {
@@ -151,6 +137,22 @@ func nullableFloat(v pgtype.Float8) *float64 {
 	}
 	f := v.Float64
 	return &f
+}
+
+// optionalFloat converts a *float64 to a pgtype.Float8 (NULL when nil).
+func optionalFloat(v *float64) pgtype.Float8 {
+	if v == nil {
+		return pgtype.Float8{}
+	}
+	return pgtype.Float8{Float64: *v, Valid: true}
+}
+
+// rollbackTx undoes a transaction that was not committed. An already-committed
+// transaction reports ErrTxClosed, which is the normal path and not an error.
+func rollbackTx(tx pgx.Tx) {
+	if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		slog.Error("failed to rollback transaction", "error", err)
+	}
 }
 
 // Ping checks database connectivity.

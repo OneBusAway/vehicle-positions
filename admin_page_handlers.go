@@ -205,7 +205,7 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	// legitimate repeat logins aren't counted toward the brute-force budget
 	// (mirrors handleLogin in auth.go).
 	ui.loginLimiter.ResetEmail(email)
-	if user.Role != "admin" {
+	if user.Role != roleAdmin {
 		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email)
 		return
 	}
@@ -288,7 +288,7 @@ func (ui *adminUI) dashboardPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	totalDrivers, err := ui.stats.CountActiveUsersByRole(ctx, "driver")
+	totalDrivers, err := ui.stats.CountActiveUsersByRole(ctx, roleDriver)
 	if err != nil {
 		slog.Error("dashboard: count active drivers", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -766,14 +766,6 @@ func (ui *adminUI) renderUserForm(w http.ResponseWriter, r *http.Request, status
 	})
 }
 
-// validUserRole reports whether role is one of the two roles the form
-// offers. Anything else (including empty) is rejected server-side even
-// though the <select> only ever submits one of these two values, since form
-// submissions aren't trustworthy.
-func validUserRole(role string) bool {
-	return role == "driver" || role == "admin"
-}
-
 // validTripStatus reports whether s is a valid trips status filter value,
 // shared by the trips JSON endpoint and the trips admin page.
 func validTripStatus(s string) bool {
@@ -782,7 +774,7 @@ func validTripStatus(s string) bool {
 
 // userNewPage renders the blank create-user form.
 func (ui *adminUI) userNewPage(w http.ResponseWriter, r *http.Request) {
-	ui.renderUserForm(w, r, http.StatusOK, userFormData{Role: "driver"})
+	ui.renderUserForm(w, r, http.StatusOK, userFormData{Role: roleDriver})
 }
 
 // userCreate validates and saves a new user. A 422 re-renders the form with
@@ -973,8 +965,8 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	if current.Role == "admin" && current.Active && role != "admin" {
-		admins, err := ui.stats.CountActiveUsersByRole(r.Context(), "admin")
+	if current.Role == roleAdmin && current.Active && role != roleAdmin {
+		admins, err := ui.stats.CountActiveUsersByRole(r.Context(), roleAdmin)
 		if err != nil {
 			slog.Error("user update: count active admins", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -1048,8 +1040,8 @@ func (ui *adminUI) setUserActive(w http.ResponseWriter, r *http.Request, active 
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-		if target.Role == "admin" && target.Active {
-			admins, err := ui.stats.CountActiveUsersByRole(r.Context(), "admin")
+		if target.Role == roleAdmin && target.Active {
+			admins, err := ui.stats.CountActiveUsersByRole(r.Context(), roleAdmin)
 			if err != nil {
 				slog.Error("user set active: count active admins", "error", err)
 				http.Error(w, "internal server error", http.StatusInternalServerError)

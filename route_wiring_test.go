@@ -127,6 +127,37 @@ func (n *noopStore) ListActiveTripsByVehicle(_ context.Context) (map[string]Acti
 	return nil, nil
 }
 
+// Rider-mode store methods. Rider routes are not registered on a mux built
+// with a nil rider service, so only the two admin rider endpoints reach these;
+// the rest exist to satisfy appStore.
+func (n *noopStore) RegisterRider(_ context.Context, _, _, _, _ string) (*Rider, bool, error) {
+	return nil, false, nil
+}
+func (n *noopStore) GetRider(_ context.Context, _ string) (*Rider, error) {
+	return nil, ErrRiderNotFound
+}
+func (n *noopStore) StartRide(_ context.Context, _ *Ride) error {
+	return nil
+}
+func (n *noopStore) RecordRidePoints(_ context.Context, _, _ string, _ []RidePointRecord, _ RideProgress) error {
+	return nil
+}
+func (n *noopStore) FinishRide(_ context.Context, _ string, _ RideOutcome) (*Rider, error) {
+	return nil, ErrRideNotFound
+}
+func (n *noopStore) EndAllActiveRides(_ context.Context, _ string) (int64, error) {
+	return 0, nil
+}
+func (n *noopStore) ListRides(_ context.Context, _ string, _, _ int) ([]Ride, error) {
+	return nil, nil
+}
+func (n *noopStore) CountRidersByTier(_ context.Context) (map[string]int, error) {
+	return nil, nil
+}
+func (n *noopStore) DeleteRidePointsBefore(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+
 // TestAdminRoutes_DriverTokenRejected verifies that every /api/v1/admin/* route
 // is wrapped with adminMiddleware. A valid driver-role JWT must receive 403 on
 // all admin routes — not 200, 401, or 404 — proving the middleware is wired.
@@ -137,7 +168,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 
 	// nil tracker and rateLimiter are safe: adminMiddleware rejects driver
 	// tokens before any handler body runs, so neither is dereferenced.
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
 
 	tests := []struct {
 		method string
@@ -162,6 +193,8 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 		{"DELETE", "/api/v1/admin/users/1/vehicles/bus-1"},
 		{"GET", "/api/v1/admin/users/1/vehicles"},
 		{"GET", "/api/v1/admin/vehicles/bus-1/users"},
+		{"GET", "/api/v1/admin/rider/status"},
+		{"GET", "/api/v1/admin/rider/rides"},
 	}
 
 	for _, tc := range tests {
@@ -191,7 +224,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, nil)
 
 	// Same routes as the driver-rejection table — every admin route must
 	// let a valid admin token through both middleware layers.
@@ -218,6 +251,8 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 		{"DELETE", "/api/v1/admin/users/1/vehicles/bus-1"},
 		{"GET", "/api/v1/admin/users/1/vehicles"},
 		{"GET", "/api/v1/admin/vehicles/bus-1/users"},
+		{"GET", "/api/v1/admin/rider/status"},
+		{"GET", "/api/v1/admin/rider/rides"},
 	}
 
 	for _, tc := range tests {
@@ -248,7 +283,7 @@ func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/vehicles/live", nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -332,7 +367,7 @@ func TestDriverVehiclesRoute_Wiring(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
 
 	tests := []struct {
 		name       string

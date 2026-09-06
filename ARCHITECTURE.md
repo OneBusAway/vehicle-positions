@@ -15,6 +15,7 @@ It outlines the system's core components, module structure, data flow, and how t
 5. [Data Flow](#5-data-flow)
 6. [Module Overview](#6-module-overview)
 7. [Extending the System](#7-extending-the-system)
+8. [Rider Mode](#8-rider-mode)
 
 ---
 
@@ -78,7 +79,7 @@ There is no service layer, repository pattern, or middleware chain. Handlers cal
 | Query Layer | sqlc-generated typed query package (`db/`) |
 | Migrations | `github.com/golang-migrate/migrate/v4` with embedded SQL migration files |
 | Feed Format | GTFS-Realtime 2.0 protobuf, with optional JSON serialization for debugging |
-| GTFS-Realtime Bindings | `github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs` v1.0.0 |
+| GTFS-Realtime Bindings | `github.com/OneBusAway/go-gtfs/proto` v1.1.1 (the same generated bindings, re-exported by the GTFS library the rider engine already uses; MobilityData's `gtfs-realtime-bindings` registers the same protobuf file names, so linking both panics the protobuf registry at init) |
 | Containerization | Multi-stage Docker build (`golang:1.24-alpine` -> `alpine:3.21`) plus Docker Compose with `postgres:17-alpine` |
 
 ### 3.2 System Actors
@@ -92,7 +93,7 @@ There is no service layer, repository pattern, or middleware chain. Handlers cal
 
 ### 3.3 Database Schema
 
-The schema consists of two tables. Each `location_points` row references a `vehicles` row through `vehicle_id`, giving a one-to-many relationship from vehicles to recorded points. The schema enforces a non-empty vehicle id, latitude and longitude bounds, and a positive epoch `timestamp`. It also defines defaults for `label`, `trip_id`, `created_at`, `updated_at`, and `received_at`, and adds indexes on `location_points.vehicle_id` and `location_points.timestamp` (see `migrations/000001_init_schema.up.sql`).
+The core schema consists of two tables. Each `location_points` row references a `vehicles` row through `vehicle_id`, giving a one-to-many relationship from vehicles to recorded points. The schema enforces a non-empty vehicle id, latitude and longitude bounds, and a positive epoch `timestamp`. It also defines defaults for `label`, `trip_id`, `created_at`, `updated_at`, and `received_at`, and adds indexes on `location_points.vehicle_id` and `location_points.timestamp` (see `migrations/000001_init_schema.up.sql`).
 
 ```mermaid
 erDiagram
@@ -118,6 +119,84 @@ erDiagram
 ```
 
 The ER diagram shows the structural relationship only. Nullability, defaults, and `CHECK` constraints are enforced in the SQL schema rather than encoded directly in the diagram.
+
+Rider mode (§8) adds three more tables in `migrations/000011_riders.up.sql`.
+The migration always runs, so the tables exist whether or not
+`RIDER_MODE_ENABLED` is set; they simply stay empty when it is not. A `rides`
+row belongs to one `riders` row and owns the `ride_points` behind it, both with
+`ON DELETE CASCADE`, so forgetting a rider forgets everything reported under
+that installation.
+
+```mermaid
+erDiagram
+  riders {
+    TEXT id PK
+    TEXT installation_id UK
+    TEXT platform
+    TEXT app_id
+    TEXT app_version
+    BOOLEAN attested
+    INTEGER score
+    TEXT tier
+    INTEGER rides_total
+    INTEGER rides_corroborated
+    INTEGER rides_rejected
+    TIMESTAMPTZ created_at
+    TIMESTAMPTZ last_seen_at
+  }
+  rides {
+    TEXT id PK
+    TEXT rider_id FK
+    TEXT trip_id
+    TEXT start_date
+    TEXT route_id
+    TEXT vehicle_id
+    TEXT boarding_stop_id
+    TEXT destination_stop_id
+    TEXT status
+    TEXT state
+    BOOLEAN corroborated
+    TEXT end_reason
+    INTEGER points_total
+    INTEGER points_matched
+    INTEGER points_corroborated
+    INTEGER points_contradicted
+    TIMESTAMPTZ started_at
+    TIMESTAMPTZ ended_at
+    TIMESTAMPTZ updated_at
+  }
+  ride_points {
+    BIGSERIAL id PK
+    TEXT ride_id FK
+    FLOAT8 latitude
+    FLOAT8 longitude
+    FLOAT8 accuracy
+    FLOAT8 speed
+    FLOAT8 bearing
+    BIGINT timestamp
+    TEXT outcome
+    TEXT corroboration
+    FLOAT8 along_shape
+    FLOAT8 distance_to_shape
+    INTEGER schedule_deviation_seconds
+    TIMESTAMPTZ received_at
+  }
+  riders ||--o{ rides : reports
+  rides ||--o{ ride_points : records
+```
+
+`riders` holds no directly identifying data — no name, account or contact — but
+it is pseudonymous rather than anonymous: the installation id generated on the
+device is stable for as long as the app keeps its keychain item, and every
+`rides` row is linked to it. So the rows are a per-device travel history, and
+should be treated as personal data even though no field names a person.
+
+Only `ride_points`, where the raw rider fixes live, expires: those rows are
+deleted after `RIDER_POINT_RETENTION` (default seven days) by an hourly sweep.
+`riders` and `rides` are kept indefinitely — `rides` keeps the trip, route and
+boarding stop of every ride that device has reported. Both are readable through
+the admin API, so an operator holding admin credentials can read any device's
+ride history; deleting a rider's data means deleting those rows directly.
 
 ---
 
@@ -265,7 +344,15 @@ sequenceDiagram
 | `GET` | `/api/v1/admin/status` | `200` JSON | Return server uptime, active vehicle count, total tracked vehicle count, and last update time. |
 | `GET` | `/health` | `200` JSON | Liveness probe returning `{"status":"ok"}`. |
 
-> **Note:** The current implementation exposes all endpoints without authentication or authorization. Authentication and API access control (e.g., API keys or JWT) are planned for future iterations but are not part of the current codebase.
+Authentication is per endpoint, not global:
+
+| Surface | Requirement |
+|---------|-------------|
+| `/health`, `/ready`, `GET /gtfs-rt/vehicle-positions` | None. The feed is public by design. |
+| `POST /api/v1/auth/login` | None, but rate limited per client. |
+| `POST /api/v1/locations`, `/api/v1/trips/*`, `GET /api/v1/vehicles` | A driver's JWT (`authMiddleware`). |
+| `/api/v1/admin/*` — including `/api/v1/admin/rider/status` | A JWT whose user is an admin (`authMiddleware` + `adminMiddleware`). |
+| `/api/v1/rider/*` | A rider JWT, issued by `POST /api/v1/rider/register`; see §8. |
 
 ### 6.2 Location Report Payload
 
@@ -314,7 +401,9 @@ sequenceDiagram
 
 The feed is generated on every request entirely from the in-memory Tracker — the database is **not** read during feed generation. This keeps feed latency low and independent of database load.
 
-`buildFeed()` uses `github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs` types together with `google.golang.org/protobuf/proto` and `protojson` to construct a `FeedMessage` with:
+`buildFeed()` uses `github.com/OneBusAway/go-gtfs/proto` types together with `google.golang.org/protobuf/proto` and `protojson` to construct a `FeedMessage` with:
+
+(Those are the same generated GTFS-RT bindings as MobilityData's `gtfs-realtime-bindings`; only one of the two may be linked into the binary, because both register the same protobuf file names and the second registration panics at init. The rider engine already depends on `go-gtfs` for static GTFS, so that copy is the one the server uses.)
 
 - **Header:** GTFS-Realtime version `2.0`, incrementality `FULL_DATASET`, current Unix timestamp.
 - One `FeedEntity` per active vehicle (`id = vehicle_id`).
@@ -410,6 +499,126 @@ At the time this document was written, `go test ./...` passes locally without a 
 | Rate Limiting | Per-vehicle or per-IP rate limiting on the ingestion endpoint. |
 | CI/CD | Expand the existing GitHub Actions workflow (currently `go vet ./...` and `go test ./...` on every push and pull request to `main`) to add PostgreSQL-backed integration tests and Docker image publishing. |
 | Router | Adopt a third-party router (e.g. Chi) if middleware or path-parameter needs grow. |
+
+---
+
+## 8. Rider Mode
+
+Rider mode is an optional second source of vehicle positions: riders' phones,
+reporting from aboard a scheduled trip, for trips no driver app covers. It is
+off unless `RIDER_MODE_ENABLED=true`, and when off nothing below is
+constructed, no rider route is registered, and the feed carries exactly the
+driver entities it always did — `handlers.go` takes the same path it took
+before rider mode existed. The tests assert that on the decoded feed rather
+than on its bytes: protobuf does not promise a stable encoding across library
+versions, and this tree has since moved to a different binding. The design
+spec is
+`docs/superpowers/specs/2026-09-02-rider-mode-design.md`.
+
+### 8.1 Components
+
+The verification engine lives in its own package, `rider/`, which imports no
+HTTP handler and no database driver: it is a pure function of a GTFS schedule
+and a stream of points. `package main` owns everything that touches the network
+or the database.
+
+| Piece | Where | Responsibility |
+|---|---|---|
+| `rider.Index` | `rider/index.go` | Immutable snapshot of a GTFS static feed: trips, stop times, shapes, timezone, service-day calendar. |
+| `rider.ShapeGeom` | `rider/shape.go` | Projects a fix onto a route shape (local-minimum aware, so loops behave), and interpolates position and bearing back off it. |
+| `rider.Verify` | `rider/verify.go` | Pure verdict for one point: `Ignored`, `OffRoute`, `Implausible`, `OffSchedule` or `Matched`, plus its corroboration against a trusted feed. |
+| `rider.Session` | `rider/session.go` | One ride's state machine (`Pending → Verified`, or `Rejected`) and its running counts. |
+| `rider.Aggregator` | `rider/aggregator.go` | The registry of live rides. Owns every session, serialises access to them, and turns the live ones into one estimate per trip. |
+| `rider.Refresher` / `rider.TrustedFeed` | `rider/loader.go`, `rider/trusted.go` | Reload the schedule on a timer; poll the agency's own GTFS-RT VehiclePositions feeds conditionally. |
+| `riderService` | `rider_handlers.go` | The HTTP surface: registration, ride lifecycle, position batches, trip status. |
+| `riderRuntime` | `rider_wiring.go` | Configuration, startup and the background tickers. |
+| `Store` rider methods | `rider_store.go` | `riders`, `rides` and `ride_points` persistence, including the reputation update. |
+
+`main.go` grows by one block for all of it: read `riderConfigFromEnv()`, and if
+enabled build a `riderRuntime`, defer its `Stop`, and hand its `*riderService`
+to `newHandler`. A nil service is rider mode being off, and both places that
+consume it — the feed's `estimateSource` and the admin status provider — go
+through helpers (`estimatesOrNil`, `statusOrNil`) that return a true nil
+interface rather than an interface holding a nil pointer.
+
+### 8.2 Startup and background work
+
+Startup, in order: load and index the GTFS feed (a failure here aborts the
+process — nothing can be verified without a schedule); end every ride the
+database still calls `active` with reason `server_restart`, because sessions
+live in memory only and none survived the restart; construct the trusted-feed
+poller and the aggregator; register the routes. Four goroutines then run until
+shutdown, all cancelled and waited for by `riderRuntime.Stop()`:
+
+- the schedule refresher, every `GTFS_STATIC_REFRESH` (a failed reload keeps the previous index);
+- the trusted-feed poller, every `TRUSTED_FEED_POLL` (only when URLs are configured);
+- the reaper, every 30 s, which ends rides idle for 15 minutes or running longer than 3 hours and files what they amounted to;
+- the retention sweep, hourly, deleting `ride_points` older than `RIDER_POINT_RETENTION`.
+
+### 8.3 Data flow
+
+```text
+device ──register──▶ riders row + rider JWT
+       ──start ride─▶ rides row + rider.Session in the Aggregator
+       ──positions──▶ Aggregator.ApplyBatch ──▶ rider.Verify per point
+                                            └─▶ Session state + counts
+                                            └─▶ ride_points rows + rides progress
+       ──end────────▶ FinishRide: outcome, score delta, tier ──▶ Aggregator.SetTier
+
+GET /gtfs-rt/vehicle-positions ──▶ Tracker.ActiveVehicles()  (driver entities)
+                               └─▶ Aggregator.Estimates()    (rider entities)
+```
+
+A rider's raw fixes never reach the feed. The published position is the
+along-shape median of the trip's contributing riders' latest matched points,
+snapped back onto the route with `ShapeGeom.PointAt`, so the entity says where
+the vehicle is on its route rather than where any phone was.
+
+`GET /api/v1/admin/rider/status` reports both ends of that pipeline:
+`rides.active` counts live sessions, one per ride, while `rides.publishable`
+counts the estimates the feed would carry right now — one per *trip*, so three
+riders on one bus are one publishable trip, not three.
+
+### 8.4 Trust states
+
+Two independent judgements decide whether rider data is published.
+
+Per ride, the session state: a ride is `Pending` until three consecutive points
+match the shape and schedule, then `Verified`; five consecutive bad points, or
+three consecutive points contradicted by the agency's own feed, make it
+`Rejected` and end it. Per rider, the reputation tier: each finished ride
+yields a score delta (+1 for a corroborated ride of five minutes or more, −1
+for a rejection, −3 for a contradicted one), the score is clamped to [−10, 10],
+and the tier follows — `Blocked` at ≤ −3, `Trusted` at ≥ 3, `New` in between. A
+blocked rider still receives normal responses, so an abuser learns nothing from
+them, but their points are never persisted or published.
+
+A ride contributes to the feed only while it is `Verified`, not ended, fresh
+(its latest *accepted* point — of whatever outcome — is younger than
+`RIDER_POINT_MAX_AGE`, so a rider whose phone is still reporting is judged on
+that, not on the last point that happened to match) and its rider is not
+blocked — and then only if that rider is `Trusted`, or the ride has been
+corroborated by the trusted feed, or a second rider on the same trip
+independently agrees within 100 m.
+
+### 8.5 Feed merge
+
+`handleGetFeed` asks the tracker for driver entities and the aggregator for
+rider entities, and `buildFeed` emits both into one `FeedMessage`. Rider
+entities take the id `rider:<trip_id>:<start_date>` — repeated as `vehicle.id`,
+so the same trip on two service dates is two vehicles (E052) — and the vehicle
+label `Rider-reported`; driver vehicle ids cannot contain a colon, so entity and
+vehicle ids stay unique across both halves by construction. The position
+published for a ride comes from its latest *matched* point, snapped to the
+shape: an off-route or implausible fix keeps the ride fresh but never moves the
+published estimate. The header timestamp is still the newest of now and
+every entity's timestamp.
+
+The trusted feed always wins: any trip the agency's own GTFS-RT feed currently
+reports is skipped by `Aggregator.Estimates`, so rider data only ever appears
+where there was nothing. The `source` query parameter (`driver`, `rider`, or
+the default `all`) lets a consumer take one half, which is also how the merge
+is exercised end to end in the smoke test.
 
 ---
 
