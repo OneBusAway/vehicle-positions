@@ -163,9 +163,22 @@ func handleListTrips(store TripLister) http.HandlerFunc {
 			return
 		}
 
+		// Absent user_id means "all drivers". A present one must be a real
+		// users.id, so 0 and negatives are rejected rather than silently
+		// collapsing into the no-filter sentinel.
+		var userID int64
+		if raw := q.Get("user_id"); raw != "" {
+			userID, err = strconv.ParseInt(raw, 10, 64)
+			if err != nil || userID < 1 {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id must be a positive integer"})
+				return
+			}
+		}
+
 		filter := TripFilter{
 			Status:    status,
 			VehicleID: q.Get("vehicle_id"),
+			UserID:    userID,
 			Q:         q.Get("q"),
 			// Fetch one extra row to detect whether results were truncated at limit.
 			Limit:  limit + 1,
@@ -192,6 +205,40 @@ func handleListTrips(store TripLister) http.HandlerFunc {
 			HasMore: hasMore,
 			Trips:   trips,
 		})
+	}
+}
+
+// handleGetTrip returns a single trip's summary for the admin trip detail
+// view. It is the trail-free counterpart to handleTripLocations, so callers
+// that only need trip metadata do not pay for up to 10k location points. A
+// non-numeric or unknown {id} both produce 404, since neither identifies a
+// real trip.
+func handleGetTrip(store TripSummaryGetter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+			return
+		}
+
+		trip, err := store.GetTripSummary(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, ErrTripNotFound) {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+				return
+			}
+			slog.Error("failed to get trip summary", "trip_id", id, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+		if trip == nil {
+			// Defensive: a well-behaved store returns ErrTripNotFound rather
+			// than (nil, nil), but guard against it to avoid a nil dereference.
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, trip)
 	}
 }
 
