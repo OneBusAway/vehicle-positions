@@ -196,6 +196,24 @@ func (ix *Index) ServiceDate(now time.Time) string {
 	return local.Format(serviceDateLayout)
 }
 
+// ServiceDateFor is ServiceDate narrowed to one trip. The 03:00 cutoff assumes
+// a trip running after midnight belongs to the previous service day, which is
+// right for one whose stop times run past 24:00 and wrong for one genuinely
+// scheduled at, say, 00:30 on a calendar the previous day does not include. So
+// when the trip does not run on the derived date, the calendar day is offered
+// instead; when neither runs it, the derived date is returned and the caller
+// refuses the start as it would have anyway.
+func (ix *Index) ServiceDateFor(trip *TripInfo, now time.Time) string {
+	date := ix.ServiceDate(now)
+	if ix.ActiveOn(trip, date) {
+		return date
+	}
+	if calendarDay := now.In(ix.tz).Format(serviceDateLayout); ix.ActiveOn(trip, calendarDay) {
+		return calendarDay
+	}
+	return date
+}
+
 // ServiceDayStart returns the instant a "YYYYMMDD" service day starts: noon
 // local time minus twelve hours, which is midnight except on DST boundaries.
 func ServiceDayStart(serviceDate string, loc *time.Location) (time.Time, error) {

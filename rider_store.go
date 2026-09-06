@@ -89,7 +89,7 @@ type RidePointRecord struct {
 	Corroboration            string
 	AlongShape               float64
 	DistanceToShape          float64
-	ScheduleDeviationSeconds int
+	ScheduleDeviationSeconds *int
 }
 
 // RideOutcome is what finishing a ride does to the ride and to its rider.
@@ -232,7 +232,7 @@ func (s *Store) RecordRidePoints(ctx context.Context, rideID, riderID string, po
 				Corroboration:            p.Corroboration,
 				AlongShape:               pgtype.Float8{Float64: p.AlongShape, Valid: true},
 				DistanceToShape:          pgtype.Float8{Float64: p.DistanceToShape, Valid: true},
-				ScheduleDeviationSeconds: pgtype.Int4{Int32: int32(p.ScheduleDeviationSeconds), Valid: true},
+				ScheduleDeviationSeconds: optionalInt4(p.ScheduleDeviationSeconds),
 			})
 		}
 		results := qtx.InsertRidePoint(ctx, params)
@@ -435,6 +435,14 @@ func rideFromRow(row db.Ride) *Ride {
 		ride.EndedAt = &endedAt
 	}
 	return ride
+}
+
+// optionalInt4 converts an *int to a pgtype.Int4 (NULL when nil).
+func optionalInt4(v *int) pgtype.Int4 {
+	if v == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*v), Valid: true}
 }
 
 // boolCount turns a "did this happen" flag into the 0 or 1 a counter column

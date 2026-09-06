@@ -177,6 +177,14 @@ func newRiderRuntime(ctx context.Context, cfg riderConfig, store riderStore, jwt
 
 	// Sessions live in memory only, so no ride survives a restart. Ending them
 	// here is what lets a session trust its own history (spec §4.6).
+	//
+	// This sweep is deployment-wide, not per-instance: rides have no column
+	// naming the process that owns them. Running more than one instance —
+	// which idx_rides_one_active_per_rider is there to make safe — therefore
+	// means each start ends every ride in flight on its siblings. Those riders
+	// get "ride ended" on their next batch and start again. Give the rides
+	// table an owner column before running a second instance if that is not
+	// acceptable.
 	ended, err := store.EndAllActiveRides(ctx, "server_restart")
 	if err != nil {
 		return nil, err

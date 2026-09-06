@@ -366,6 +366,52 @@ import Testing
         #expect(env.transport.requests(matching: "POST positions").count == 3)
     }
 
+    @Test func aFailedBatchIsReclaimedOnlyOnceWhenTheRideEnds() async throws {
+        var cfg = RideReporterConfiguration(serverURL: URL(string: "https://vp.example.org")!, appID: "a", appVersion: "1")
+        cfg.uploadFailureTimeout = .seconds(5)
+        let env = Env(config: cfg)
+        env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
+        env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        // Two mid-ride uploads fail, which is exactly what the five-second
+        // failure budget below allows; the teardown's uploads then succeed.
+        env.transport.script("POST positions",
+                             FakeRideTransport.transportFailure,
+                             FakeRideTransport.transportFailure,
+                             FakeRideTransport.ok(json: Env.positionsJSON()))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
+        let stream = try await env.reporter.start(TripDescriptor(tripID: "T1"))
+        let events = EventCollector(stream)
+        _ = await events.wait { $0.contains(.started(rideID: "ride1")) }
+
+        env.emitFixes(3) // a full batch goes at once, and fails
+        #expect(await events.wait { $0.contains(.warning(.uploadRetrying(attempt: 1))) })
+        // Three newer fixes queue behind it: the ride is in backoff, so a full
+        // buffer no longer flushes on its own.
+        for i in 0..<3 {
+            env.location.emitFix(lat: 47.6100 + Double(i) * 0.00009, lon: -122.33,
+                                 at: env.clock.now.addingTimeInterval(Double(10 + i)))
+        }
+        #expect(await env.waitForBuffered(6))
+
+        // Waking past the failure budget: the retry fails and ends the ride.
+        #expect(await env.clock.waitForSleepers(atLeast: 1))
+        env.clock.advance(by: .seconds(5))
+        #expect(await events.waitForEnd() == .networkFailure)
+
+        // The failure handler puts the batch back and the teardown reclaims
+        // whatever is still in flight. Doing both would fill the final flush's
+        // two batches with the same three fixes and never send the newest ones.
+        let bodies = env.transport.requests(matching: "POST positions").compactMap(\.body)
+        var timestamps: Set<Int> = []
+        for body in bodies.suffix(2) {
+            let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            for position in (json["positions"] as? [[String: Any]]) ?? [] {
+                timestamps.insert(position["timestamp"] as? Int ?? -1)
+            }
+        }
+        #expect(timestamps.count == 6)
+    }
+
     @Test func stationaryTimeoutEndsRideWithNoFurtherSample() async throws {
         var cfg = RideReporterConfiguration(serverURL: URL(string: "https://vp.example.org")!, appID: "a", appVersion: "1")
         cfg.stationaryTimeout = .seconds(20)

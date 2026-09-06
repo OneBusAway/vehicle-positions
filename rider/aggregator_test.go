@@ -403,3 +403,29 @@ func TestAggregator_SupersededSessionDoesNotShiftEstimate(t *testing.T) {
 	// r1 as a third member would drag the median back onto 100.
 	assert.InDelta(t, 140, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 3)
 }
+
+// Two riders far enough apart that the median lands between them leaves the
+// outlier trim with nobody, and the midpoint is a place neither rider is.
+func TestAggregator_Estimates_SplitGroupPublishesNothing(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierTrusted)
+	f.addSession("r2", "rider-b", TierNew)
+
+	// Both riders report at the same wall-clock moment, 440 m apart along the
+	// shape: rider-b is running early, which the schedule window allows.
+	apply := func(rideID string, from, to float64, offset time.Duration) {
+		t.Helper()
+		var pts []Point
+		for a := from; a <= to; a += 10 {
+			pts = append(pts, f.onSchedulePoint(a, offset))
+		}
+		res, err := f.agg.ApplyBatch(rideID, pts, nil, f.base.Add(40*time.Second))
+		require.NoError(t, err)
+		require.Equal(t, Verified, res.Summary.State)
+	}
+	apply("r1", 0, 60, 0)
+	apply("r2", 440, 500, -270*time.Second)
+
+	assert.Empty(t, f.agg.Estimates(f.base.Add(40*time.Second), noCover),
+		"a group with no surviving members has no position to publish")
+}

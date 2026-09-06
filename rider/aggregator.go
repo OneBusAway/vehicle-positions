@@ -448,9 +448,9 @@ type estimateMember struct {
 // verified, not blocked, and whose latest point is fresh enough to position the
 // vehicle with. Every consumer of a group — the estimate and the trip status —
 // works from this one selection, so the two cannot disagree about who counts.
-// Freshness is judged on the latest point of any kind, because a rider still
-// reporting is still there; the position itself comes from the latest matched
-// one.
+// Freshness is judged on the latest *matched* point, which is also the point
+// the position comes from (Session.Fresh): a run of off-route points too short
+// to reject the ride must not keep a minutes-old match looking live.
 type tripGroup struct {
 	trip    *TripInfo
 	members []estimateMember
@@ -518,11 +518,16 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
 	median := medianAlong(members)
 	// A rider far from the median is on a different vehicle, or lost; drop them
 	// and re-centre on what is left. Once only: the survivors are the estimate.
-	if kept := within(members, median, outlierDistance); len(kept) > 0 && len(kept) < len(members) {
-		// The trim may have dropped the very rider the group was publishable
-		// on — a trusted rider the crowd outvoted — and the survivors must
-		// then be credible on their own, or nothing is.
-		if !(&tripGroup{trip: g.trip, members: kept}).publishable() {
+	if kept := within(members, median, outlierDistance); len(kept) < len(members) {
+		// An even-sized group split further apart than twice the allowance
+		// averages to a median no rider is near, and the trim then keeps
+		// nobody. There is no consensus position to publish: the midpoint
+		// between two riders on different vehicles is where neither is.
+		//
+		// The trim may also have dropped the very rider the group was
+		// publishable on — a trusted rider the crowd outvoted — and the
+		// survivors must then be credible on their own, or nothing is.
+		if len(kept) == 0 || !(&tripGroup{trip: g.trip, members: kept}).publishable() {
 			return TripEstimate{}, false
 		}
 		members = kept

@@ -374,15 +374,17 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "schedule data unavailable"})
 			return
 		}
-		startDate := req.StartDate
-		if startDate == "" {
-			startDate = index.ServiceDate(s.now())
-		}
-
 		trip, ok := index.Trip(req.TripID)
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown trip"})
 			return
+		}
+		// A client that names no service date gets the one this trip actually
+		// runs on, which for an after-midnight departure is not always the one
+		// the 03:00 cutoff derives; a client that names one is held to it.
+		startDate := req.StartDate
+		if startDate == "" {
+			startDate = index.ServiceDateFor(trip, s.now())
 		}
 		if !index.ActiveOn(trip, startDate) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "trip not active on start_date"})
@@ -651,6 +653,16 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 			// the same race the aggregator reports as ErrUnknownRide, caught
 			// one layer down — so the client hears the same thing either way.
 			if errors.Is(storeErr, ErrRideNotFound) {
+				// The database has the last word: the row is already ended, so
+				// the session must go too. Left registered it would keep
+				// publishing a position for a ride nothing can be added to
+				// until the reaper noticed, minutes later. finishRide is the
+				// one path that retires it, and it answers errRideNotActive
+				// once the store confirms the row has ended.
+				endCtx := context.WithoutCancel(r.Context())
+				if _, err := s.finishRide(endCtx, rideID, rider.EndIdle); err != nil && !errors.Is(err, errRideNotActive) {
+					slog.Error("failed to retire a ride the store had already ended", "ride_id", rideID, "error", err)
+				}
 				writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
 				return
 			}
@@ -820,6 +832,19 @@ func reported(v float64) *float64 {
 	return &v
 }
 
+// scheduleDeviationSeconds is how far off schedule a point was, or nil for a
+// verdict that never reached the schedule check. An off-route or implausible
+// point is judged and returned before the schedule is consulted, so its zero
+// deviation is "not measured", not "exactly on time", and storing it as a
+// number would make every rejected point look punctual.
+func scheduleDeviationSeconds(v rider.Verdict) *int {
+	if v.Outcome != rider.Matched && v.Outcome != rider.OffSchedule {
+		return nil
+	}
+	seconds := int(v.ScheduleDeviation.Seconds())
+	return &seconds
+}
+
 // ridePointRecords is a batch of verified points as persistence takes them.
 func ridePointRecords(points []rider.AppliedPoint) []RidePointRecord {
 	out := make([]RidePointRecord, 0, len(points))
@@ -835,7 +860,7 @@ func ridePointRecords(points []rider.AppliedPoint) []RidePointRecord {
 			Corroboration:            p.Verdict.Corroboration.String(),
 			AlongShape:               p.Verdict.AlongShape,
 			DistanceToShape:          p.Verdict.DistanceToShape,
-			ScheduleDeviationSeconds: int(p.Verdict.ScheduleDeviation.Seconds()),
+			ScheduleDeviationSeconds: scheduleDeviationSeconds(p.Verdict),
 		})
 	}
 	return out

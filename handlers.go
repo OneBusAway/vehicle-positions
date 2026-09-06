@@ -293,9 +293,10 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 		trip.RouteId = proto.String(est.RouteID)
 	}
 
+	id := riderEntityID(est.Key)
 	vp := &gtfsrt.VehiclePosition{
 		Vehicle: &gtfsrt.VehicleDescriptor{
-			Id:    proto.String(riderEntityID(est.Key)),
+			Id:    proto.String(id),
 			Label: proto.String("Rider-reported"),
 		},
 		Trip:      trip,
@@ -309,7 +310,7 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 	}
 
 	return &gtfsrt.FeedEntity{
-		Id:      proto.String(riderEntityID(est.Key)),
+		Id:      proto.String(id),
 		Vehicle: vp,
 	}
 }

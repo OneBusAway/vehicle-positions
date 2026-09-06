@@ -57,9 +57,10 @@ func TestRiderStore_StartRideAndRecordPoints(t *testing.T) {
 	assert.Equal(t, "pending", ride.State)
 
 	acc := 5.0
+	deviation := 30
 	pts := []RidePointRecord{
 		{Latitude: 47.6, Longitude: -122.33, Accuracy: &acc, Timestamp: 1756800000, Outcome: "matched", Corroboration: "unavailable", AlongShape: 10, DistanceToShape: 1},
-		{Latitude: 47.601, Longitude: -122.33, Timestamp: 1756800005, Outcome: "matched", Corroboration: "none", AlongShape: 20, DistanceToShape: 2, ScheduleDeviationSeconds: 30},
+		{Latitude: 47.601, Longitude: -122.33, Timestamp: 1756800005, Outcome: "matched", Corroboration: "none", AlongShape: 20, DistanceToShape: 2, ScheduleDeviationSeconds: &deviation},
 	}
 	prog := RideProgress{State: "verified", Corroborated: false, PointsTotal: 2, PointsMatched: 2}
 	require.NoError(t, store.RecordRidePoints(context.Background(), ride.ID, r.ID, pts, prog))

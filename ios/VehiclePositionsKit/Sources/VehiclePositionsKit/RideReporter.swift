@@ -44,10 +44,13 @@ public actor RideReporter {
     }
 
     private var active: ActiveRide?
-    /// True while ``flush()`` is waiting on the server. The upload loop and a
-    /// full buffer can both ask for a flush, and two in flight would upload two
-    /// batches the server then has to order for itself.
-    private var isUploading = false
+    /// The ride ``flush()`` is currently waiting on the server for, if any. The
+    /// upload loop and a full buffer can both ask for a flush, and two in flight
+    /// would upload two batches the server then has to order for itself. Keyed
+    /// by ride rather than a bare flag: a superseded ride's upload can still be
+    /// unwinding when the ride replacing it starts, and it must not stand in the
+    /// way of the new ride's first flushes.
+    private var uploadingRideID: String?
     private var locationTask: Task<Void, Never>?
     private var uploadTask: Task<Void, Never>?
     /// The most recent `start`, so the next one can queue behind it.
@@ -174,7 +177,11 @@ public actor RideReporter {
             // that ever did would leave it reporting into a stream nobody
             // holds. It has no owner left: end it — and not as the rider's
             // doing, since the rider asked for the opposite.
-            if active != nil {
+            // The ride was installed: end it. The two cases are told apart by
+            // the id, not by `active` being set — a teardown still in flight
+            // leaves the *previous* ride in the slot, and reading that as "the
+            // new one is installed" would leak the ride the server just made.
+            if let accepted, active?.rideID == accepted.rideID {
                 await end(reason: .networkFailure)
             } else if let accepted {
                 // The server made a ride and nothing here took ownership of it
@@ -495,17 +502,18 @@ public actor RideReporter {
 
     /// Sends one batch, if there is one, and folds the answer back into the ride.
     private func flush() async {
-        guard !isUploading, active?.ending == false,
+        guard active?.ending == false,
               let rideID = active?.rideID, let token = active?.token,
-              let maxBatchSize = active?.maxBatchSize
+              let maxBatchSize = active?.maxBatchSize,
+              uploadingRideID != rideID
         else { return }
         // Taken in place, through `active`: see `consume`.
         let batch = active?.buffer.take(max: maxBatchSize) ?? []
         guard !batch.isEmpty else { return }
-        isUploading = true
+        uploadingRideID = rideID
         active?.inFlight = batch
         defer {
-            isUploading = false
+            if uploadingRideID == rideID { uploadingRideID = nil }
             if active?.rideID == rideID { active?.inFlight = [] }
         }
 
@@ -586,6 +594,12 @@ public actor RideReporter {
         guard active?.rideID == rideID, active?.ending == false else { return }
         // Restored in place, through `active`: see `consume`.
         active?.buffer.restore(batch, now: clock.now)
+        // This path can end the ride below, and `end` reclaims whatever is
+        // still marked in flight. `flush`'s `defer` has not run yet, so the
+        // batch just restored is still marked — and would be restored a second
+        // time, filling the final flush with two copies of itself while the
+        // freshest fixes behind them never go.
+        active?.inFlight = []
         let attempt = (active?.failureAttempts ?? 0) + 1
         let since = active?.failingSince ?? clock.now
         active?.failureAttempts = attempt
