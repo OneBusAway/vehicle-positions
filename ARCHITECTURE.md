@@ -507,8 +507,12 @@ At the time this document was written, `go test ./...` passes locally without a 
 Rider mode is an optional second source of vehicle positions: riders' phones,
 reporting from aboard a scheduled trip, for trips no driver app covers. It is
 off unless `RIDER_MODE_ENABLED=true`, and when off nothing below is
-constructed, no rider route is registered, and the feed is byte-for-byte what
-it was before. The design spec is
+constructed, no rider route is registered, and the feed carries exactly the
+driver entities it always did — `handlers.go` takes the same path it took
+before rider mode existed. The tests assert that on the decoded feed rather
+than on its bytes: protobuf does not promise a stable encoding across library
+versions, and this tree has since moved to a different binding. The design
+spec is
 `docs/superpowers/specs/2026-09-02-rider-mode-design.md`.
 
 ### 8.1 Components
