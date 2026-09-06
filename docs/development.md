@@ -62,6 +62,7 @@ You can run Postgres in Docker and run the Go server directly:
    ```bash
    export PORT=8080
    export DATABASE_URL='postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable'
+   export JWT_SECRET=$(openssl rand -hex 32)   # required; the server exits without 32+ bytes
    export STALENESS_THRESHOLD=5m
    ```
 
@@ -215,12 +216,18 @@ riders against as soon as a driver reports. `TRUSTED_FEED_MAX_AGE` is what
 bounds an external feed; the local driver half is bounded by
 `STALENESS_THRESHOLD`.
 
+The credentials below are generated per run rather than written down, because
+the server listens on every interface: it has no loopback-only mode, so anyone
+who can reach port 18080 can reach this admin account. Run the smoke test on a
+machine that is not on an untrusted network. Step 2 needs the generated
+password, so echo it once and copy it into that terminal.
+
 ```bash
 docker compose up -d db
 export PORT=18080
 export DATABASE_URL='postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable'
-export JWT_SECRET='change-me-change-me-change-me-32b'
-export ADMIN_BOOTSTRAP_EMAIL=admin@test.com ADMIN_BOOTSTRAP_PASSWORD=password123
+export JWT_SECRET=$(openssl rand -hex 32)
+export ADMIN_BOOTSTRAP_EMAIL=admin@test.com ADMIN_BOOTSTRAP_PASSWORD=$(openssl rand -hex 16)
 export RIDER_MODE_ENABLED=true GTFS_STATIC_URL=rider/testdata/fixture.zip
 export RIDER_SCHEDULE_EARLY=24h RIDER_SCHEDULE_LATE=24h
 export STALENESS_THRESHOLD=30s
@@ -230,12 +237,14 @@ go run .
 ### 2. Drive a trusted vehicle down T1
 
 In a second terminal. `/api/v1/locations` needs a bearer token; the
-bootstrapped admin's works.
+bootstrapped admin's works. Set `ADMIN_PASSWORD` to the value the first
+terminal generated (`echo $ADMIN_BOOTSTRAP_PASSWORD` there).
 
 ```bash
+export ADMIN_PASSWORD=...   # from the first terminal
 TOKEN=$(curl -s -X POST localhost:18080/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@test.com","password":"password123"}' | jq -r .token)
+  -d "$(jq -nc --arg p "$ADMIN_PASSWORD" '{email:"admin@test.com",password:$p}')" | jq -r .token)
 
 # bus-1 sits 300 m along T1's shape and reports every 3 s for a minute
 ( for i in $(seq 1 20); do

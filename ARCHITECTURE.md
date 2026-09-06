@@ -185,10 +185,18 @@ erDiagram
   rides ||--o{ ride_points : records
 ```
 
-`riders` holds no personal data: an installation id generated on the device, the
-app metadata it reported, and the reputation it has earned. `ride_points` is the
-only place a raw rider fix is stored, and those rows are deleted after
-`RIDER_POINT_RETENTION` (default seven days) by an hourly sweep.
+`riders` holds no directly identifying data — no name, account or contact — but
+it is pseudonymous rather than anonymous: the installation id generated on the
+device is stable for as long as the app keeps its keychain item, and every
+`rides` row is linked to it. So the rows are a per-device travel history, and
+should be treated as personal data even though no field names a person.
+
+Only `ride_points`, where the raw rider fixes live, expires: those rows are
+deleted after `RIDER_POINT_RETENTION` (default seven days) by an hourly sweep.
+`riders` and `rides` are kept indefinitely — `rides` keeps the trip, route and
+boarding stop of every ride that device has reported. Both are readable through
+the admin API, so an operator holding admin credentials can read any device's
+ride history; deleting a rider's data means deleting those rows directly.
 
 ---
 
@@ -336,7 +344,15 @@ sequenceDiagram
 | `GET` | `/api/v1/admin/status` | `200` JSON | Return server uptime, active vehicle count, total tracked vehicle count, and last update time. |
 | `GET` | `/health` | `200` JSON | Liveness probe returning `{"status":"ok"}`. |
 
-> **Note:** The current implementation exposes all endpoints without authentication or authorization. Authentication and API access control (e.g., API keys or JWT) are planned for future iterations but are not part of the current codebase.
+Authentication is per endpoint, not global:
+
+| Surface | Requirement |
+|---------|-------------|
+| `/health`, `/ready`, `GET /gtfs-rt/vehicle-positions` | None. The feed is public by design. |
+| `POST /api/v1/auth/login` | None, but rate limited per client. |
+| `POST /api/v1/locations`, `/api/v1/trips/*`, `GET /api/v1/vehicles` | A driver's JWT (`authMiddleware`). |
+| `/api/v1/admin/*` — including `/api/v1/admin/rider/status` | A JWT whose user is an admin (`authMiddleware` + `adminMiddleware`). |
+| `/api/v1/rider/*` | A rider JWT, issued by `POST /api/v1/rider/register`; see §8. |
 
 ### 6.2 Location Report Payload
 
@@ -537,7 +553,7 @@ shutdown, all cancelled and waited for by `riderRuntime.Stop()`:
 
 ### 8.3 Data flow
 
-```
+```text
 device ──register──▶ riders row + rider JWT
        ──start ride─▶ rides row + rider.Session in the Aggregator
        ──positions──▶ Aggregator.ApplyBatch ──▶ rider.Verify per point
