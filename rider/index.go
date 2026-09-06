@@ -18,12 +18,22 @@ const (
 	// to the previous service day, so after-midnight trips keep yesterday's
 	// service date.
 	serviceDayCutoffHour = 3
-	// shapeDistMetresLo and shapeDistMetresHi bound the ratio of a trip's last
-	// shape_dist_traveled to its shape length for which the values are taken to
-	// be metres. Outside the band the values are rescaled onto the shape.
-	shapeDistMetresLo = 0.8
-	shapeDistMetresHi = 1.2
+	// shapeDistMaxFraction is the furthest along its shape a trip's last stop
+	// may sit for a unit to be believable. Slightly over 1 because rounding in
+	// the feed can put the final stop a hair past the end of the shape.
+	shapeDistMaxFraction = 1.05
 )
+
+// shapeDistUnits are the units feeds actually publish shape_dist_traveled in,
+// as metres per unit. Recovering the unit means choosing from this list, never
+// inventing a multiplier: GTFS only says the values increase along the shape,
+// so any other factor would be reading meaning into an arbitrary ratio.
+var shapeDistUnits = []float64{
+	1,        // metres
+	0.3048,   // feet
+	1000,     // kilometres
+	1609.344, // miles
+}
 
 // StopTimeInfo is one scheduled stop of a trip, positioned along its shape.
 type StopTimeInfo struct {
@@ -357,11 +367,26 @@ func shapeDistScale(stopTimes []gtfs.ScheduledStopTime, shapeLength float64) (fl
 	if shapeLength <= 0 {
 		return 1, true
 	}
+	// The last stop's distance over the shape length gives the unit only if the
+	// stop is also the end of the shape, and GTFS does not require that: a trip
+	// whose last stop sits at 500 m of a 1000 m shape is not a feed publishing
+	// half-metres. So test each real unit against the ratio and keep the one
+	// putting the last stop furthest along without running off the end — the
+	// unit that explains the values with the least left over.
 	ratio := last / shapeLength
-	if ratio < shapeDistMetresLo || ratio > shapeDistMetresHi {
-		return 1 / ratio, true
+	best, bestFraction := 0.0, 0.0
+	for _, unit := range shapeDistUnits {
+		fraction := ratio * unit
+		if fraction > bestFraction && fraction <= shapeDistMaxFraction {
+			best, bestFraction = unit, fraction
+		}
 	}
-	return 1, true
+	if best == 0 {
+		// No unit places the last stop on the shape at all, so the column says
+		// nothing this index can use. Projecting the stops is the better answer.
+		return 0, false
+	}
+	return best, true
 }
 
 // stopPos returns the coordinates of a stop, if it has any.

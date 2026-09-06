@@ -479,9 +479,14 @@ func (r *riderRun) flush(ctx context.Context) (string, error) {
 	// retried.
 	if handled := err == nil && slices.Contains([]int{http.StatusOK, http.StatusTooManyRequests, http.StatusConflict}, status); !handled {
 		log.Printf("%s: batch failed (%s), retrying in %s", r.tag, failure(status, err), batchRetryDelay)
-		if sleep(ctx, batchRetryDelay) {
-			status, body, err = r.cfg.api.post(ctx, path, r.token, req)
+		if !sleep(ctx, batchRetryDelay) {
+			// Interrupted before the retry could run. That is the operator
+			// ending the run, exactly as below, so the first attempt's status
+			// must not be re-read as this batch's answer and fail the ride:
+			// leave it buffered and let the loop end the ride as user_requested.
+			return "", nil
 		}
+		status, body, err = r.cfg.api.post(ctx, path, r.token, req)
 	}
 	if err != nil {
 		// Interrupted mid-upload: that is the operator ending the run, not the

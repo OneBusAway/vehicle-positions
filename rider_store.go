@@ -237,7 +237,11 @@ func (s *Store) RecordRidePoints(ctx context.Context, rideID, riderID string, po
 		}
 	}
 
-	if err := qtx.UpdateRideProgress(ctx, db.UpdateRideProgressParams{
+	// No row updated means the ride ended between this batch arriving and the
+	// transaction reaching here. InsertRidePoint's EXISTS guard already dropped
+	// the points, so committing would only bump last_seen_at for a ride nobody
+	// can add to; rolling back and reporting it lets the caller answer 409.
+	updated, err := qtx.UpdateRideProgress(ctx, db.UpdateRideProgressParams{
 		ID:                 rideID,
 		State:              progress.State,
 		Corroborated:       progress.Corroborated,
@@ -245,8 +249,12 @@ func (s *Store) RecordRidePoints(ctx context.Context, rideID, riderID string, po
 		PointsMatched:      int32(progress.PointsMatched),
 		PointsCorroborated: int32(progress.PointsCorroborated),
 		PointsContradicted: int32(progress.PointsContradicted),
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("update ride progress: %w", err)
+	}
+	if updated == 0 {
+		return ErrRideNotFound
 	}
 
 	if err := qtx.TouchRider(ctx, riderID); err != nil {

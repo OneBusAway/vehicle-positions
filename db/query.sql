@@ -260,7 +260,10 @@ RETURNING *;
 -- name: GetRide :one
 SELECT * FROM rides WHERE id = $1;
 
--- name: UpdateRideProgress :exec
+-- Returns the affected-row count so a batch that lands after the ride ended
+-- rolls back rather than committing points the InsertRidePoint guard already
+-- dropped, leaving the counters describing a ride nobody can add to.
+-- name: UpdateRideProgress :execrows
 UPDATE rides SET state = $2, corroborated = $3, points_total = $4, points_matched = $5,
   points_corroborated = $6, points_contradicted = $7, updated_at = NOW()
 WHERE id = $1 AND status = 'active';
@@ -277,8 +280,10 @@ RETURNING rider_id;
 -- name: EndAllActiveRides :execrows
 UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $1, updated_at = NOW() WHERE status = 'active';
 
+-- started_at alone is not a total order, so two rides sharing one can swap
+-- between pages and be listed twice or not at all; id breaks the tie.
 -- name: ListRides :many
-SELECT * FROM rides WHERE status = $1 ORDER BY started_at DESC LIMIT $2 OFFSET $3;
+SELECT * FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3;
 
 -- Points are appended in one pgx batch per request. The EXISTS guard keeps a
 -- late batch from appending points to a ride that has already ended, matching

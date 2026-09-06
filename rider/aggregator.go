@@ -484,6 +484,14 @@ func (a *Aggregator) memberOfLocked(s *Session, now time.Time) (estimateMember, 
 	if s.Ended() || s.Tier() == TierBlocked || s.State() != Verified || !s.Fresh(now, a.th.PointMaxAge) {
 		return estimateMember{}, false
 	}
+	// Add leaves a rider's earlier ride registered so its points can still be
+	// reaped, so "registered and live" is not the same as "this rider's ride".
+	// One rider must contribute one along value: two would let a single phone
+	// weight the median twice and survive outlier trimming as a pair, which
+	// distinctRiders hides from the count but not from the estimate.
+	if a.byRider[s.RiderID()] != s.ID() {
+		return estimateMember{}, false
+	}
 	// A verified session always has a matched point; the check is what makes
 	// that an invariant of the group rather than an assumption.
 	matched := s.LatestMatched()

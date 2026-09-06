@@ -380,3 +380,26 @@ func TestAggregator_StalePointBehindNewerOffRoutePointsIsIgnored(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, res.OffRouteStreak, "had the stale match been applied, the streak would have restarted at 1")
 }
+
+// A rider's superseded ride stays registered so its points can still be reaped,
+// but it must not contribute a second along value to its trip's estimate: two
+// entries from one phone weight the median twice and survive outlier trimming
+// as a pair, which distinctRiders hides from the rider count but not from the
+// published position.
+func TestAggregator_SupersededSessionDoesNotShiftEstimate(t *testing.T) {
+	f := newAggFixture(t)
+	f.addSession("r1", "rider-a", TierNew) // superseded below
+	f.addSession("r2", "rider-b", TierNew)
+	f.addSession("r3", "rider-a", TierNew) // rider-a's newest ride
+	f.walk(t, "r1", 0, 100, 10, nil)
+	f.walk(t, "r3", 0, 100, 10, nil)
+	f.walk(t, "r2", 100, 180, 10, nil)
+
+	now := f.base.Add(125 * time.Second)
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.Equal(t, 2, est[0].Riders)
+	// rider-a at 100 and rider-b at 180 median to 140. Counting the superseded
+	// r1 as a third member would drag the median back onto 100.
+	assert.InDelta(t, 140, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 3)
+}

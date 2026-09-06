@@ -615,7 +615,11 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 			// replayed; the counters are absolute, so the next successful write
 			// heals the record.
 			if storeErr = s.store.RecordRidePoints(r.Context(), rideID, riderID, ridePointRecords(res.Points), progress); storeErr != nil {
-				slog.Error("failed to record ride points", "ride_id", rideID, "error", storeErr)
+				if errors.Is(storeErr, ErrRideNotFound) {
+					slog.Info("ride ended while its batch was in flight", "ride_id", rideID)
+				} else {
+					slog.Error("failed to record ride points", "ride_id", rideID, "error", storeErr)
+				}
 			}
 		}
 
@@ -635,6 +639,13 @@ func (s *riderService) handlePositions() http.HandlerFunc {
 		}
 
 		if storeErr != nil {
+			// The store refused the batch because the ride ended under it —
+			// the same race the aggregator reports as ErrUnknownRide, caught
+			// one layer down — so the client hears the same thing either way.
+			if errors.Is(storeErr, ErrRideNotFound) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "ride ended"})
+				return
+			}
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}

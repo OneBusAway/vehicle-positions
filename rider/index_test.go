@@ -4,9 +4,12 @@ import (
 	"testing"
 	"time"
 
+	gtfs "github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func ptr[T any](v T) *T { return &v }
 
 func TestBuildIndex_TripsAndShapes(t *testing.T) {
 	ix := fixtureIndex(t)
@@ -131,4 +134,51 @@ func TestScheduledOffsetAt(t *testing.T) {
 func TestBuildIndex_ErrorsWithoutTimezone(t *testing.T) {
 	_, err := BuildIndex(fixtureStatic(t, "Not/AZone"), "x", time.Now())
 	assert.Error(t, err)
+}
+
+// shapeDistScale recovers the unit of shape_dist_traveled from its last value.
+// The case that matters is a feed already in metres whose last stop falls short
+// of the end of the shape: GTFS permits that, and reading the shortfall as a
+// unit conversion would move every scheduled stop.
+func TestShapeDistScale_RecoversUnit(t *testing.T) {
+	stopsEndingAt := func(last float64) []gtfs.ScheduledStopTime {
+		return []gtfs.ScheduledStopTime{
+			{ShapeDistanceTraveled: ptr(0.0)},
+			{ShapeDistanceTraveled: ptr(last / 2)},
+			{ShapeDistanceTraveled: ptr(last)},
+		}
+	}
+	const shape = 10000.0 // metres
+
+	for _, tc := range []struct {
+		name  string
+		last  float64
+		scale float64
+		ok    bool
+	}{
+		{"metres to the end of the shape", 9800, 1, true},
+		{"metres, last stop halfway along", 5000, 1, true},
+		{"metres, last stop at a twentieth", 500, 1, true},
+		{"kilometres", 9.8, 1000, true},
+		{"feet", 9800 / 0.3048, 0.3048, true},
+		{"miles", 9800 / 1609.344, 1609.344, true},
+		{"past the end of the shape in every unit", 40000, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scale, ok := shapeDistScale(stopsEndingAt(tc.last), shape)
+			assert.Equal(t, tc.ok, ok)
+			if tc.ok {
+				assert.InDelta(t, tc.scale, scale, 1e-9)
+			}
+		})
+	}
+}
+
+func TestShapeDistScale_RequiresEveryStopTime(t *testing.T) {
+	stops := []gtfs.ScheduledStopTime{{ShapeDistanceTraveled: ptr(0.0)}, {}}
+	_, ok := shapeDistScale(stops, 1000)
+	assert.False(t, ok, "a missing value makes the whole column unusable")
+
+	_, ok = shapeDistScale([]gtfs.ScheduledStopTime{{ShapeDistanceTraveled: ptr(0.0)}}, 1000)
+	assert.False(t, ok, "all-zero values say nothing about the unit")
 }

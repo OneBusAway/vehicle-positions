@@ -883,7 +883,7 @@ func (q *Queries) ListActiveVehiclesPage(ctx context.Context, arg ListActiveVehi
 }
 
 const listRides = `-- name: ListRides :many
-SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides WHERE status = $1 ORDER BY started_at DESC LIMIT $2 OFFSET $3
+SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3
 `
 
 type ListRidesParams struct {
@@ -892,6 +892,8 @@ type ListRidesParams struct {
 	Offset int32
 }
 
+// started_at alone is not a total order, so two rides sharing one can swap
+// between pages and be listed twice or not at all; id breaks the tie.
 func (q *Queries) ListRides(ctx context.Context, arg ListRidesParams) ([]Ride, error) {
 	rows, err := q.db.Query(ctx, listRides, arg.Status, arg.Limit, arg.Offset)
 	if err != nil {
@@ -1348,7 +1350,7 @@ func (q *Queries) UnassignUserVehicle(ctx context.Context, arg UnassignUserVehic
 	return result.RowsAffected(), nil
 }
 
-const updateRideProgress = `-- name: UpdateRideProgress :exec
+const updateRideProgress = `-- name: UpdateRideProgress :execrows
 UPDATE rides SET state = $2, corroborated = $3, points_total = $4, points_matched = $5,
   points_corroborated = $6, points_contradicted = $7, updated_at = NOW()
 WHERE id = $1 AND status = 'active'
@@ -1364,8 +1366,11 @@ type UpdateRideProgressParams struct {
 	PointsContradicted int32
 }
 
-func (q *Queries) UpdateRideProgress(ctx context.Context, arg UpdateRideProgressParams) error {
-	_, err := q.db.Exec(ctx, updateRideProgress,
+// Returns the affected-row count so a batch that lands after the ride ended
+// rolls back rather than committing points the InsertRidePoint guard already
+// dropped, leaving the counters describing a ride nobody can add to.
+func (q *Queries) UpdateRideProgress(ctx context.Context, arg UpdateRideProgressParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRideProgress,
 		arg.ID,
 		arg.State,
 		arg.Corroborated,
@@ -1374,7 +1379,10 @@ func (q *Queries) UpdateRideProgress(ctx context.Context, arg UpdateRideProgress
 		arg.PointsCorroborated,
 		arg.PointsContradicted,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateUser = `-- name: UpdateUser :one

@@ -147,7 +147,7 @@ func (f *TrustedFeed) fetch(ctx context.Context, url, etag, lastModified string)
 	if err != nil {
 		return fetchResult{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusNotModified:
