@@ -151,7 +151,7 @@ make simulate
 Custom example:
 
 ```bash
-go run ./cmd/simulator -url http://localhost:8080 -vehicles 20 -interval 2s -duration 2m
+go run ./cmd/simulator -url http://localhost:8080 -vehicles 1 -interval 6s -duration 2m
 ```
 
 ## Watching Retention Prune Locally
