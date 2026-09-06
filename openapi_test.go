@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -67,6 +69,28 @@ var htmlUIRoutes = map[string]struct{}{
 	"POST /admin/users/{id}/deactivate":                  {},
 	"POST /admin/users/{id}/vehicles":                    {},
 	"POST /admin/users/{id}/vehicles/{vehicleID}/remove": {},
+}
+
+// schemaStructs pairs a response schema with the Go struct whose JSON encoding
+// it describes. TestOpenAPI_SchemaPropertiesMatchStructs holds each pair to its
+// struct's tags — the check that would have caught `User.active` when #92 added
+// the field and this spec did not follow.
+//
+// Only response schemas belong here. Request schemas describe what a client may
+// send, which is not always the same shape the server decodes into.
+var schemaStructs = map[string]string{
+	"User":                 "UserResponse",
+	"Vehicle":              "VehicleResponse",
+	"Trip":                 "TripResponse",
+	"TripSummary":          "TripSummary",
+	"Assignment":           "AssignmentResponse",
+	"LiveVehicles":         "liveVehiclesResponse",
+	"LiveVehicleEntry":     "liveVehicleEntry",
+	"TripList":             "tripListResponse",
+	"TripTrail":            "tripTrailResponse",
+	"TripTrailPoint":       "tripTrailPoint",
+	"LocationHistory":      "locationHistoryResponse",
+	"LocationHistoryEntry": "locationEntry",
 }
 
 // operationMethods are the path-item fields that describe an operation. Every
@@ -154,26 +178,37 @@ func (r registeredRoute) String() string { return r.method + " " + r.path }
 // means routes registered elsewhere — registerAdminUI in
 // admin_page_handlers.go, today — are visible too, and a future move into a
 // subpackage would not blind the guard.
-func extractRegisteredRoutes(t *testing.T) []registeredRoute {
+// walkModuleSources parses every non-test Go file in this module and hands each
+// syntax tree to visit, along with the FileSet for position reporting.
+func walkModuleSources(t *testing.T, visit func(fileSet *token.FileSet, file *ast.File)) {
 	t.Helper()
 
 	fileSet := token.NewFileSet()
-	routes := make([]registeredRoute, 0, len(htmlUIRoutes))
-
-	walkErr := filepath.WalkDir(".", func(file string, entry fs.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			return skipNonModuleDir(file, entry)
+			return skipNonModuleDir(path, entry)
 		}
-		if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 
-		parsed, err := parser.ParseFile(fileSet, file, nil, parser.SkipObjectResolution)
-		require.NoErrorf(t, err, "parsing %s", file)
+		parsed, err := parser.ParseFile(fileSet, path, nil, parser.SkipObjectResolution)
+		require.NoErrorf(t, err, "parsing %s", path)
+		visit(fileSet, parsed)
+		return nil
+	})
+	require.NoError(t, walkErr)
+}
 
+func extractRegisteredRoutes(t *testing.T) []registeredRoute {
+	t.Helper()
+
+	routes := make([]registeredRoute, 0, len(htmlUIRoutes))
+
+	walkModuleSources(t, func(fileSet *token.FileSet, parsed *ast.File) {
 		ast.Inspect(parsed, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
 			if !ok || len(call.Args) != 2 {
@@ -201,9 +236,7 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 			})
 			return true
 		})
-		return nil
 	})
-	require.NoError(t, walkErr)
 
 	require.NotEmpty(t, routes, "expected mux route registrations in the server source")
 	return routes
@@ -394,6 +427,8 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		upsertVehicle = "#/components/schemas/UpsertVehicleRequest/properties"
 		historyLimit  = "#/components/schemas/HistoryLimit"
 		tripListLimit = "#/components/schemas/TripListLimit"
+		listLimit     = "#/components/schemas/ListLimit"
+		listOffset    = "#/components/schemas/ListOffset"
 	)
 
 	constraints := []struct {
@@ -410,6 +445,9 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		{historyLimit, "default", defaultHistoryLimit, "defaultHistoryLimit"},
 		{tripListLimit, "maximum", maxTripListLimit, "maxTripListLimit"},
 		{tripListLimit, "default", defaultTripListLimit, "defaultTripListLimit"},
+		{listLimit, "maximum", maxListLimit, "maxListLimit"},
+		{listLimit, "default", defaultListLimit, "defaultListLimit"},
+		{listOffset, "maximum", maxListOffset, "maxListOffset"},
 	}
 
 	for _, constraint := range constraints {
@@ -479,5 +517,136 @@ func TestOpenAPI_HTMLUIExclusionsAreCurrent(t *testing.T) {
 	for route := range htmlUIRoutes {
 		assert.Containsf(t, registered, route,
 			"htmlUIRoutes withholds %q from the spec, but no Go source registers it any more", route)
+	}
+}
+
+// structJSONField is one marshalled field of a Go struct.
+type structJSONField struct {
+	name      string
+	omitEmpty bool
+}
+
+// structJSONFields returns, for every named struct in the module, the JSON
+// fields it marshals to. Fields tagged `json:"-"` are skipped, and an untagged
+// exported field marshals under its Go name.
+func structJSONFields(t *testing.T) map[string][]structJSONField {
+	t.Helper()
+
+	structs := make(map[string][]structJSONField)
+	walkModuleSources(t, func(_ *token.FileSet, parsed *ast.File) {
+		ast.Inspect(parsed, func(node ast.Node) bool {
+			spec, ok := node.(*ast.TypeSpec)
+			if !ok {
+				return true
+			}
+			definition, ok := spec.Type.(*ast.StructType)
+			if !ok {
+				return true
+			}
+
+			fields := make([]structJSONField, 0, len(definition.Fields.List))
+			for _, field := range definition.Fields.List {
+				if len(field.Names) == 0 {
+					continue // Embedded field; none of the mapped structs use one.
+				}
+				name, omitEmpty, marshalled := jsonTag(field)
+				if !marshalled {
+					continue
+				}
+				fields = append(fields, structJSONField{name: name, omitEmpty: omitEmpty})
+			}
+			structs[spec.Name.Name] = fields
+			return true
+		})
+	})
+
+	return structs
+}
+
+// jsonTag reads a struct field's encoding/json tag. It reports the wire name,
+// whether the field is omitted when empty, and whether it is marshalled at all.
+func jsonTag(field *ast.Field) (name string, omitEmpty, marshalled bool) {
+	name = field.Names[0].Name
+	if field.Tag == nil {
+		return name, false, field.Names[0].IsExported()
+	}
+
+	value, err := strconv.Unquote(field.Tag.Value)
+	if err != nil {
+		return name, false, field.Names[0].IsExported()
+	}
+	tag, ok := reflect.StructTag(value).Lookup("json")
+	if !ok {
+		return name, false, field.Names[0].IsExported()
+	}
+
+	parts := strings.Split(tag, ",")
+	if parts[0] == "-" && len(parts) == 1 {
+		return "", false, false
+	}
+	if parts[0] != "" {
+		name = parts[0]
+	}
+	return name, slices.Contains(parts[1:], "omitempty"), true
+}
+
+// TestOpenAPI_SchemaPropertiesMatchStructs holds every response schema to the
+// Go struct it describes: the property set must match the struct's JSON tags
+// exactly, and a field marshalled unconditionally must be listed in `required`.
+//
+// This is the guard the earlier rounds lacked. Routes and constraints were
+// pinned to Go, but schema bodies were not, so `User.active` could be added in
+// #92 and go undocumented without anything failing.
+func TestOpenAPI_SchemaPropertiesMatchStructs(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPISpec(t)
+	mappings := spec.mappings()
+	structs := structJSONFields(t)
+
+	for schemaName, structName := range schemaStructs {
+		t.Run(schemaName, func(t *testing.T) {
+			schema, ok := mappings["#/components/schemas/"+schemaName]
+			require.Truef(t, ok, "schema %s must exist", schemaName)
+
+			fields, ok := structs[structName]
+			require.Truef(t, ok, "Go struct %s must exist", structName)
+			require.NotEmptyf(t, fields, "Go struct %s must marshal at least one field", structName)
+
+			properties, ok := schema["properties"].(map[string]any)
+			require.Truef(t, ok, "%s must declare properties", schemaName)
+
+			required := make(map[string]struct{})
+			if listed, ok := schema["required"].([]any); ok {
+				for _, name := range listed {
+					required[name.(string)] = struct{}{}
+				}
+			}
+
+			documented := make([]string, 0, len(properties))
+			for name := range properties {
+				documented = append(documented, name)
+			}
+			marshalled := make([]string, 0, len(fields))
+			for _, field := range fields {
+				marshalled = append(marshalled, field.name)
+			}
+			slices.Sort(documented)
+			slices.Sort(marshalled)
+			assert.Equalf(t, marshalled, documented,
+				"%s properties must match the JSON fields %s marshals", schemaName, structName)
+
+			for _, field := range fields {
+				_, isRequired := required[field.name]
+				if field.omitEmpty {
+					assert.Falsef(t, isRequired,
+						"%s.%s is omitempty in %s, so it must not be listed as required",
+						schemaName, field.name, structName)
+					continue
+				}
+				assert.Truef(t, isRequired,
+					"%s.%s is always marshalled by %s, so it must be listed as required",
+					schemaName, field.name, structName)
+			}
+		})
 	}
 }
