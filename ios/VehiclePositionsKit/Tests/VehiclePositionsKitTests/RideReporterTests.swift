@@ -446,6 +446,7 @@ import Testing
         let env = Env()
         env.transport.script("POST register", FakeRideTransport.ok(201, json: Env.registerJSON))
         env.transport.script("POST rides", FakeRideTransport.ok(201, json: Env.startJSON))
+        env.transport.script("POST end", FakeRideTransport.ok(json: Env.endJSON))
         // This one answers even though the caller is gone, so the reporter has
         // a started ride in hand at the moment it notices the cancellation.
         env.transport.hold("POST rides", .waitForRelease)
@@ -459,6 +460,11 @@ import Testing
         #expect(await env.reporter.isActive == false)
         #expect(env.location.handles.isEmpty, "a cancelled start holds no background activity")
         #expect(env.transport.requests(matching: "POST positions").isEmpty, "nothing was ever reported")
+        // The server made ride1 before the cancellation was noticed. Nothing
+        // here owns it, so it has to be closed rather than left for the reaper.
+        #expect(await env.transport.waitForRequest(matching: "POST end"))
+        let endReq = try #require(env.transport.requests(matching: "POST end").first)
+        #expect(endReq.path.contains("ride1"))
     }
 
     @Test func cancelledStartDoesNotSupersedeTheRunningRide() async throws {

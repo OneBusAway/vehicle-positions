@@ -48,11 +48,21 @@ public final class KeychainCredentialStore: CredentialStore {
         }
     }
 
-    /// Delete then add: `SecItemUpdate` would need the item to exist already,
-    /// and the accessibility attribute is set once, on the item we write.
+    /// Updates the item in place when it exists, and only adds when it does
+    /// not. Deleting first would be simpler, but a failing `SecItemAdd` would
+    /// then have thrown the stored `installationID` away — and that identity
+    /// is what the server knows this device by, so losing it re-registers the
+    /// device as a stranger. The accessibility attribute belongs to the item,
+    /// so it is set on the add and left alone by the update.
     public func save(_ credentials: RiderCredentials) throws {
         let data = try JSONEncoder().encode(credentials)
-        try clear()
+
+        let updated = SecItemUpdate(
+            itemQuery as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
+        if updated == errSecSuccess { return }
+        guard updated == errSecItemNotFound else { throw KeychainError.status(updated) }
 
         var attributes = itemQuery
         attributes[kSecValueData as String] = data

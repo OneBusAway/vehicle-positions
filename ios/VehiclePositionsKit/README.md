@@ -56,6 +56,12 @@ repository (or a mirror of this subdirectory) — not provided yet.
 - **Call `start` from the foreground.** A background activity session started
   while the app is not in the foreground is rejected by Core Location, so begin
   the ride from a user action on screen.
+- **Use an `https://` server URL.** Every request carries a bearer token, a
+  stable installation id, or the rider's precise position, so the transport
+  refuses to send one over plain HTTP and refuses to follow a redirect off the
+  server it was addressed to. Against a local development server, pass
+  `URLSessionRideTransport.insecureForDevelopment()` explicitly — never in a
+  build a rider will run.
 - **Recreate the reporter when the server URL changes.** A reporter is bound to
   one `serverURL` — the region the rider has selected — for its lifetime. On a
   region change, end any ride and build a new reporter.

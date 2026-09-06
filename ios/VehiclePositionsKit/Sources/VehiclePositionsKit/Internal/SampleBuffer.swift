@@ -35,7 +35,16 @@ struct SampleBuffer: Sendable {
     }
 
     /// Puts fixes back at the front after a failed upload, preserving order.
-    mutating func restore(_ restored: [LocationFix]) {
+    /// A batch can spend longer in flight than `retention` allows, so the
+    /// returning fixes are pruned like appended ones: without this, a retry
+    /// could upload positions the buffer would never have kept.
+    mutating func restore(_ restored: [LocationFix], now: Date) {
         fixes.insert(contentsOf: restored, at: 0)
+        let cutoff = now.addingTimeInterval(-retention.timeInterval)
+        guard let firstKept = fixes.firstIndex(where: { $0.timestamp >= cutoff }) else {
+            fixes.removeAll(keepingCapacity: true)
+            return
+        }
+        if firstKept > 0 { fixes.removeFirst(firstKept) }
     }
 }

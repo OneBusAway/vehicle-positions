@@ -131,10 +131,15 @@ public actor RideReporter {
         if active != nil { await end(reason: .superseded) }
 
         let (stream, continuation) = AsyncStream<RideEvent>.makeStream()
+        // The ride the server created, if it got that far. Installing it can
+        // still be abandoned below, and an abandoned ride is only ours to close
+        // while we remember its id.
+        var accepted: (rideID: String, token: String)?
         do {
             let (token, response) = try await withAuthorizedToken(into: continuation) { token in
                 try await client.startRide(token: token, trip: trip)
             }
+            accepted = (response.rideID, token)
 
             // The caller may have gone away while the server was answering. A
             // start nobody is waiting on installs nothing: no ride, no location
@@ -169,10 +174,29 @@ public actor RideReporter {
             // that ever did would leave it reporting into a stream nobody
             // holds. It has no owner left: end it — and not as the rider's
             // doing, since the rider asked for the opposite.
-            if active != nil { await end(reason: .networkFailure) }
+            if active != nil {
+                await end(reason: .networkFailure)
+            } else if let accepted {
+                // The server made a ride and nothing here took ownership of it
+                // — a cancellation between the two. Left alone it stays active
+                // until the reaper ends it as idle a quarter of an hour later,
+                // blocking this rider's next start behind a supersede.
+                await closeOrphanedRide(rideID: accepted.rideID, token: accepted.token)
+            }
             // Nobody will ever read this stream; leave no consumer hanging.
             continuation.finish()
             throw error
+        }
+    }
+
+    /// Best-effort end for a ride the server accepted but this reporter never
+    /// installed. Detached because the task that created the ride is already
+    /// cancelled, and a cancelled task cannot make the request that cleans up
+    /// after it. Nothing waits on the result: the reaper is the backstop.
+    private func closeOrphanedRide(rideID: String, token: String) async {
+        let client = self.client
+        Task.detached {
+            _ = try? await client.endRide(token: token, rideID: rideID, reason: .appTerminated)
         }
     }
 
@@ -202,7 +226,7 @@ public actor RideReporter {
             // the server never saw. It goes first; if the server did see it,
             // it ignores points it already has, so a duplicate costs nothing.
             if let inFlight = active?.inFlight, !inFlight.isEmpty {
-                active?.buffer.restore(inFlight)
+                active?.buffer.restore(inFlight, now: clock.now)
                 active?.inFlight = []
             }
             // Drained in place, through `active`: see `consume`.
@@ -546,7 +570,7 @@ public actor RideReporter {
         // A ride being ended has already reclaimed the in-flight batch itself.
         guard active?.rideID == rideID, active?.ending == false else { return }
         // Restored in place, through `active`: see `consume`.
-        active?.buffer.restore(batch)
+        active?.buffer.restore(batch, now: clock.now)
     }
 
     /// The server is pacing this ride, not failing it: the batch waits for the
@@ -554,14 +578,14 @@ public actor RideReporter {
     /// and the batch-full flush stands down until that one succeeds.
     private func throttle(_ batch: [LocationFix], rideID: String) {
         guard active?.rideID == rideID, active?.ending == false else { return }
-        active?.buffer.restore(batch)
+        active?.buffer.restore(batch, now: clock.now)
         active?.throttled = true
     }
 
     private func recordUploadFailure(_ batch: [LocationFix], rideID: String) async {
         guard active?.rideID == rideID, active?.ending == false else { return }
         // Restored in place, through `active`: see `consume`.
-        active?.buffer.restore(batch)
+        active?.buffer.restore(batch, now: clock.now)
         let attempt = (active?.failureAttempts ?? 0) + 1
         let since = active?.failingSince ?? clock.now
         active?.failureAttempts = attempt
