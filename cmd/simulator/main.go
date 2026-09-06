@@ -40,6 +40,28 @@ type stats struct {
 // session token on the wire in cleartext. Plain HTTP stays allowed for
 // loopback, which is the default and the only way the simulator is normally
 // run, but anything remote has to be HTTPS.
+// perDriverReportInterval mirrors rateInterval in ratelimit.go: the server
+// allows one location report per driver per this long, keyed on the JWT sub.
+const perDriverReportInterval = 5 * time.Second
+
+// reportBudgetWarning explains the shortfall when the requested rate exceeds
+// what one login is allowed, which is every run with more than one vehicle
+// because all of them authenticate as the same user.
+func reportBudgetWarning(vehicles int, interval time.Duration) string {
+	if vehicles <= 0 || interval <= 0 {
+		return ""
+	}
+	needed := time.Duration(vehicles) * perDriverReportInterval
+	if interval >= needed {
+		return ""
+	}
+	return fmt.Sprintf(
+		"%d vehicles every %s is %s per report, but the server allows one per %s per driver "+
+			"and every vehicle here logs in as the same user, so most reports will come back 429. "+
+			"Use -vehicles 1, or -interval %s, until the simulator can hold one account per vehicle.",
+		vehicles, interval, interval/time.Duration(vehicles), perDriverReportInterval, needed)
+}
+
 func checkBaseURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -97,6 +119,10 @@ func main() {
 
 	if err := checkBaseURL(*baseURL); err != nil {
 		log.Fatal(err)
+	}
+
+	if warning := reportBudgetWarning(*numVehicles, *interval); warning != "" {
+		log.Printf("warning: %s", warning)
 	}
 
 	if *email == "" || *password == "" {

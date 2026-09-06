@@ -386,3 +386,29 @@ func TestCheckBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestReportBudgetWarning(t *testing.T) {
+	// The old `make simulate` defaults: 5 vehicles every 3s against a budget of
+	// one report per 5s for the single shared login.
+	if got := reportBudgetWarning(5, 3*time.Second); got == "" {
+		t.Error("reportBudgetWarning(5, 3s) = \"\", want a warning")
+	}
+	// The new defaults, and anything else that fits the budget, stay quiet.
+	for _, tc := range []struct {
+		vehicles int
+		interval time.Duration
+	}{
+		{1, 6 * time.Second},
+		{1, 5 * time.Second},
+		{2, 10 * time.Second},
+		{4, time.Minute},
+	} {
+		if got := reportBudgetWarning(tc.vehicles, tc.interval); got != "" {
+			t.Errorf("reportBudgetWarning(%d, %s) = %q, want \"\"", tc.vehicles, tc.interval, got)
+		}
+	}
+	// Nonsense input must not warn rather than dividing by zero.
+	if got := reportBudgetWarning(0, 0); got != "" {
+		t.Errorf("reportBudgetWarning(0, 0) = %q, want \"\"", got)
+	}
+}
