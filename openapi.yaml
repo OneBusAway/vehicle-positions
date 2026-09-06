@@ -256,17 +256,23 @@ paths:
   /api/v1/admin/vehicles:
     get:
       tags: [admin]
-      summary: List all vehicles
-      description: Requires the `admin` role.
+      summary: List vehicles
+      description: |
+        Returns one page of active vehicles. Requires the `admin` role.
+      parameters:
+        - $ref: '#/components/parameters/ListLimitQuery'
+        - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
         '200':
-          description: Vehicles.
+          description: Vehicles. A bare array — there is no paging envelope.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -486,11 +492,24 @@ paths:
             type: string
           description: Restrict to one vehicle. Omit for all vehicles.
         - in: query
+          name: user_id
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: |
+            Restrict to one driver. Omit for all drivers; a present value must
+            be a positive integer.
+        - in: query
           name: q
           required: false
           schema:
             type: string
-          description: Free-text search across the trip's vehicle, driver, and route fields.
+          description: |
+            Case-insensitive substring search over driver name, route id, and
+            GTFS trip id. It does not search vehicle fields — use `vehicle_id`
+            for that.
         - in: query
           name: limit
           required: false
@@ -518,6 +537,39 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/trips/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TripIDPath'
+    get:
+      tags: [admin]
+      summary: Get a trip by id
+      description: |
+        Returns one trip with its vehicle label and driver name resolved.
+        Requires the `admin` role.
+
+        As with the trail endpoint, a non-numeric `id` returns `404` rather
+        than `400` — an unparseable id is treated as a trip that does not
+        exist.
+      responses:
+        '200':
+          description: Trip.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No trip exists with this id, or the id is not a number.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -558,17 +610,23 @@ paths:
   /api/v1/admin/users:
     get:
       tags: [admin]
-      summary: List all users
-      description: Requires the `admin` role.
+      summary: List users
+      description: |
+        Returns one page of users. Requires the `admin` role.
+      parameters:
+        - $ref: '#/components/parameters/ListLimitQuery'
+        - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
         '200':
-          description: Users.
+          description: Users. A bare array — there is no paging envelope.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -949,6 +1007,20 @@ components:
     # path variable differently: most use {id}, while the assignment-delete and
     # location-history routes use {vehicleID}. OpenAPI requires `name` to match
     # the template variable, so the pair cannot be collapsed.
+    ListLimitQuery:
+      name: limit
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ListLimit'
+      description: Maximum number of rows to return.
+    ListOffsetQuery:
+      name: offset
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ListOffset'
+      description: Number of rows to skip.
     TripIDPath:
       name: id
       in: path
@@ -1183,7 +1255,7 @@ components:
 
     User:
       type: object
-      required: [id, name, email, role, created_at, updated_at]
+      required: [id, name, email, role, active, created_at, updated_at]
       properties:
         id:
           type: integer
@@ -1196,6 +1268,11 @@ components:
         role:
           type: string
           enum: [driver, admin]
+        active:
+          type: boolean
+          description: |
+            False once the account has been deactivated. Deactivated users
+            keep their rows so historical trips still resolve a driver.
         created_at:
           type: string
           format: date-time
@@ -1276,6 +1353,23 @@ components:
           type: string
           format: date-time
           description: RFC 3339 UTC time the tracker last recorded this vehicle.
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultListLimit / maxListLimit in handlers.go.
+    ListLimit:
+      type: integer
+      minimum: 1
+      maximum: 200
+      default: 50
+
+    # maxListOffset is math.MaxInt32: the paged queries take an int32 offset,
+    # and a larger value would wrap negative and surface as a 500 rather than
+    # a 400.
+    ListOffset:
+      type: integer
+      minimum: 0
+      maximum: 2147483647
+      default: 0
 
     # Named so the drift guard has a stable address to pin against
     # defaultTripListLimit / maxTripListLimit in admin_live_handlers.go.
