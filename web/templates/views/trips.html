@@ -72,21 +72,7 @@
         </tbody>
       </table>
     </div>
-    {{if or (gt .PageNum 1) .HasMore}}
-    <div class="flex items-center justify-between border-t border-slate-200/60 px-5 py-4 text-xs font-semibold text-slate-500">
-      <div>
-        {{if gt .PageNum 1}}
-        <a href="{{.PrevURL}}" class="text-sky-600 hover:text-sky-800">&larr; Previous</a>
-        {{end}}
-      </div>
-      <div>Page {{.PageNum}}</div>
-      <div>
-        {{if .HasMore}}
-        <a href="{{.NextURL}}" class="text-sky-600 hover:text-sky-800">Next &rarr;</a>
-        {{end}}
-      </div>
-    </div>
-    {{end}}
+    {{template "pagination" .}}
   </div>
 </div>
 {{end}}

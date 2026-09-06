@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
       <div>
         <h3 class="display-font text-lg font-bold text-slate-900">All Users</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{len .Users}} accounts</p>
+        <p class="mt-0.5 text-xs text-slate-400">{{len .Users}} accounts on this page</p>
       </div>
       <a href="/admin/users/new" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">New user</a>
     </div>
@@ -69,6 +69,7 @@
         </tbody>
       </table>
     </div>
+    {{template "pagination" .}}
   </div>
 </div>
 {{end}}

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -365,6 +367,27 @@ func (f *fakeVehicleStore) ListVehicles(_ context.Context) ([]VehicleResponse, e
 	return out, nil
 }
 
+// ListVehiclesPage orders by id so pages are deterministic; the real store
+// orders by created_at DESC with an id tiebreaker. Only the totality of the
+// order matters to the page handler.
+func (f *fakeVehicleStore) ListVehiclesPage(_ context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error) {
+	ids := make([]string, 0, len(f.vehicles))
+	for id := range f.vehicles {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	all := make([]VehicleResponse, 0, len(ids))
+	for _, id := range ids {
+		v := f.vehicles[id]
+		if !includeInactive && !v.Active {
+			continue
+		}
+		all = append(all, *v)
+	}
+	return pageSlice(all, limit, offset), nil
+}
+
 func (f *fakeVehicleStore) GetVehicle(_ context.Context, id string) (*VehicleResponse, error) {
 	v, ok := f.vehicles[id]
 	if !ok {
@@ -423,6 +446,7 @@ func (f *fakeVehicleStore) CreateVehicle(_ context.Context, id, label, agencyTag
 // same fake, mirroring how newAdminUI wires them all from a single appStore.
 func wireFakeVehicleStore(ui *adminUI, f *fakeVehicleStore) {
 	ui.vehicles = f
+	ui.vehiclePager = f
 	ui.vehicleEditor = f
 	ui.vehicleCreator = f
 }
@@ -479,6 +503,100 @@ func TestVehiclesPageInactiveFilter(t *testing.T) {
 		assert.Contains(t, body, "Active Bus")
 		assert.Contains(t, body, "Retired Bus")
 	})
+}
+
+// getAdminPage issues an authenticated GET against a mux serving the admin
+// UI and returns the rendered body, failing the test on a non-200.
+func getAdminPage(t *testing.T, mux *http.ServeMux, path string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	return w.Body.String()
+}
+
+// seedVehicles builds n active vehicles with zero-padded ids so a label like
+// "Bus 050" can't be a substring of another row's label.
+func seedVehicles(n int) []VehicleResponse {
+	vehicles := make([]VehicleResponse, 0, n)
+	for i := 1; i <= n; i++ {
+		vehicles = append(vehicles, VehicleResponse{
+			ID:     fmt.Sprintf("bus-%03d", i),
+			Label:  fmt.Sprintf("Bus %03d", i),
+			Active: true,
+		})
+	}
+	return vehicles
+}
+
+// TestVehiclesPagePaginates verifies the list shows at most one page of
+// vehicles, that ?page=2 shows the next slice with no row repeated or
+// skipped, and that prev/next links appear only where there's a page to go
+// to.
+func TestVehiclesPagePaginates(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(seedVehicles(adminPageSize+5)...))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	first := getAdminPage(t, mux, "/admin/vehicles")
+	assert.Equal(t, adminPageSize, strings.Count(first, "/edit\""), "page 1 must hold exactly one page of rows")
+	assert.Contains(t, first, "Bus 001")
+	assert.Contains(t, first, fmt.Sprintf("Bus %03d", adminPageSize))
+	assert.NotContains(t, first, fmt.Sprintf("Bus %03d", adminPageSize+1), "the next page's first row must not leak onto page 1")
+	assert.Contains(t, first, `href="/admin/vehicles?page=2"`)
+	assert.NotContains(t, first, "Previous", "page 1 has no previous page")
+
+	second := getAdminPage(t, mux, "/admin/vehicles?page=2")
+	assert.Equal(t, 5, strings.Count(second, "/edit\""), "the last page holds the remaining rows")
+	assert.Contains(t, second, fmt.Sprintf("Bus %03d", adminPageSize+1))
+	assert.NotContains(t, second, fmt.Sprintf("Bus %03d", adminPageSize), "page 1's last row must not repeat on page 2")
+	assert.Contains(t, second, `href="/admin/vehicles?page=1"`)
+	assert.NotContains(t, second, "Next", "the last page has no next page")
+}
+
+// TestVehiclesPageInvalidPageFallsBack verifies a hand-edited ?page= renders
+// page 1 rather than erroring — it's a bookmarkable, shareable URL param.
+func TestVehiclesPageInvalidPageFallsBack(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(seedVehicles(adminPageSize+5)...))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	for _, page := range []string{"abc", "0", "-3", "1000001", ""} {
+		t.Run("page="+page, func(t *testing.T) {
+			body := getAdminPage(t, mux, "/admin/vehicles?page="+page)
+			assert.Contains(t, body, "Bus 001", "an invalid page must render page 1")
+			assert.Contains(t, body, "Page 1")
+		})
+	}
+}
+
+// TestVehiclesPageInactiveFilterSurvivesPaging verifies the include_inactive
+// filter is carried through the prev/next links, and that the filter itself
+// still applies on a later page.
+func TestVehiclesPageInactiveFilterSurvivesPaging(t *testing.T) {
+	vehicles := seedVehicles(adminPageSize + 5)
+	vehicles = append(vehicles, VehicleResponse{ID: "bus-900", Label: "Retired Bus", Active: false})
+
+	ui := newTestAdminUI(t)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(vehicles...))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	first := getAdminPage(t, mux, "/admin/vehicles?include_inactive=1")
+	assert.Contains(t, first, `href="/admin/vehicles?include_inactive=1&amp;page=2"`,
+		"the next link must preserve the filter")
+
+	second := getAdminPage(t, mux, "/admin/vehicles?include_inactive=1&page=2")
+	assert.Contains(t, second, "Retired Bus", "include_inactive still applies on page 2")
+	assert.Contains(t, second, `href="/admin/vehicles?include_inactive=1&amp;page=1"`,
+		"the previous link must preserve the filter")
+
+	filtered := getAdminPage(t, mux, "/admin/vehicles?page=2")
+	assert.NotContains(t, filtered, "Retired Bus", "the default view still hides deactivated vehicles")
 }
 
 // TestVehicleCreate covers the create form's happy path, validation-error
@@ -662,6 +780,22 @@ func (f *fakeUserStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 	return out, nil
 }
 
+// ListUsersPage orders by id so pages are deterministic; the real store
+// orders by created_at DESC with an id tiebreaker.
+func (f *fakeUserStore) ListUsersPage(_ context.Context, limit, offset int32) ([]UserResponse, error) {
+	ids := make([]int64, 0, len(f.users))
+	for id := range f.users {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	all := make([]UserResponse, 0, len(ids))
+	for _, id := range ids {
+		all = append(all, *f.users[id])
+	}
+	return pageSlice(all, limit, offset), nil
+}
+
 func (f *fakeUserStore) GetUser(_ context.Context, id int64) (*UserResponse, error) {
 	u, ok := f.users[id]
 	if !ok {
@@ -727,6 +861,11 @@ func (f *fakeUserStore) UpdateUserPassword(_ context.Context, id int64, password
 type fakeAssignmentStore struct {
 	byUser         map[int64]map[string]bool
 	missingVehicle map[string]bool
+
+	// listCalls counts ListAssignmentsByUser calls, so the users page's
+	// per-user lookup can be asserted to run once per row on the page
+	// rather than once per row in the table.
+	listCalls int
 }
 
 func newFakeAssignmentStore() *fakeAssignmentStore {
@@ -760,6 +899,7 @@ func (f *fakeAssignmentStore) DeleteAssignment(_ context.Context, userID int64, 
 }
 
 func (f *fakeAssignmentStore) ListAssignmentsByUser(_ context.Context, userID int64) ([]AssignmentResponse, error) {
+	f.listCalls++
 	out := make([]AssignmentResponse, 0)
 	for vID := range f.byUser[userID] {
 		out = append(out, AssignmentResponse{UserID: userID, VehicleID: vID})
@@ -772,7 +912,83 @@ func (f *fakeAssignmentStore) ListAssignmentsByUser(_ context.Context, userID in
 // single appStore.
 func wireFakeUserStore(ui *adminUI, u *fakeUserStore, a *fakeAssignmentStore) {
 	ui.userManager = u
+	ui.userPager = u
 	ui.assignments = a
+}
+
+// seedUsers builds n active drivers with zero-padded names so a name like
+// "Driver 050" can't be a substring of another row's name.
+func seedUsers(n int) []UserResponse {
+	users := make([]UserResponse, 0, n)
+	for i := 1; i <= n; i++ {
+		users = append(users, UserResponse{
+			ID:     int64(i),
+			Name:   fmt.Sprintf("Driver %03d", i),
+			Email:  fmt.Sprintf("driver-%03d@test.com", i),
+			Role:   "driver",
+			Active: true,
+		})
+	}
+	return users
+}
+
+// TestUsersPagePaginates verifies the list shows at most one page of users,
+// that ?page=2 shows the next slice with no row repeated or skipped, and
+// that prev/next links appear only where there's a page to go to.
+func TestUsersPagePaginates(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeUserStore(ui, newFakeUserStore(seedUsers(adminPageSize+5)...), newFakeAssignmentStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	first := getAdminPage(t, mux, "/admin/users")
+	assert.Equal(t, adminPageSize, strings.Count(first, "/edit\""), "page 1 must hold exactly one page of rows")
+	assert.Contains(t, first, "Driver 001")
+	assert.Contains(t, first, fmt.Sprintf("Driver %03d", adminPageSize))
+	assert.NotContains(t, first, fmt.Sprintf("Driver %03d", adminPageSize+1), "the next page's first row must not leak onto page 1")
+	assert.Contains(t, first, `href="/admin/users?page=2"`)
+	assert.NotContains(t, first, "Previous", "page 1 has no previous page")
+
+	second := getAdminPage(t, mux, "/admin/users?page=2")
+	assert.Equal(t, 5, strings.Count(second, "/edit\""), "the last page holds the remaining rows")
+	assert.Contains(t, second, fmt.Sprintf("Driver %03d", adminPageSize+1))
+	assert.NotContains(t, second, fmt.Sprintf("Driver %03d", adminPageSize), "page 1's last row must not repeat on page 2")
+	assert.Contains(t, second, `href="/admin/users?page=1"`)
+	assert.NotContains(t, second, "Next", "the last page has no next page")
+}
+
+// TestUsersPageInvalidPageFallsBack verifies a hand-edited ?page= renders
+// page 1 rather than erroring, matching the other admin list pages.
+func TestUsersPageInvalidPageFallsBack(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeUserStore(ui, newFakeUserStore(seedUsers(adminPageSize+5)...), newFakeAssignmentStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	for _, page := range []string{"abc", "0", "-3", "1000001", ""} {
+		t.Run("page="+page, func(t *testing.T) {
+			body := getAdminPage(t, mux, "/admin/users?page="+page)
+			assert.Contains(t, body, "Driver 001", "an invalid page must render page 1")
+			assert.Contains(t, body, "Page 1")
+		})
+	}
+}
+
+// TestUsersPage_AssignmentQueriesBoundedByPageSize pins the side effect of
+// paging this list: the per-user assignment lookup (a deliberate N+1, see
+// usersPage) now runs once per row on the page, not once per row in the
+// table, so it can't grow with the user count.
+func TestUsersPage_AssignmentQueriesBoundedByPageSize(t *testing.T) {
+	ui := newTestAdminUI(t)
+	assignments := newFakeAssignmentStore()
+	wireFakeUserStore(ui, newFakeUserStore(seedUsers(adminPageSize*3)...), assignments)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	body := getAdminPage(t, mux, "/admin/users")
+	require.Contains(t, body, "Driver 001", "the page must have rendered rows for the count to mean anything")
+	assert.Equal(t, adminPageSize, assignments.listCalls,
+		"the assignment lookup must run once per row on the page, not once per user in the table")
 }
 
 // TestUsersPageListsRealData verifies the list page renders each user's

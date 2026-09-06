@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"mime"
 	"net/http"
 	"regexp"
@@ -271,6 +272,41 @@ func handleAdminStatus(tracker *Tracker, startTime time.Time) http.HandlerFunc {
 			LastUpdate:           ts.LastUpdate,
 		})
 	}
+}
+
+const (
+	// defaultListLimit and maxListLimit bound the limit query param on the
+	// admin vehicle and user list endpoints, mirroring
+	// defaultTripListLimit/maxTripListLimit (admin_live_handlers.go) so every
+	// admin list endpoint bounds a page the same way.
+	defaultListLimit = 50
+	maxListLimit     = 200
+
+	// maxListOffset is the largest offset those endpoints accept: the paged
+	// queries take an int32 offset, and a larger value would wrap negative
+	// and be rejected by Postgres as a 500 instead of a 400.
+	maxListOffset = math.MaxInt32
+)
+
+// parseListPageParams reads the limit/offset paging params shared by the
+// admin list endpoints. It writes the 400 response itself and reports
+// ok=false, so callers return without repeating the error handling.
+func parseListPageParams(w http.ResponseWriter, r *http.Request) (limit, offset int, ok bool) {
+	q := r.URL.Query()
+
+	limit, err := parseOptionalInt(q.Get("limit"), defaultListLimit)
+	if err != nil || limit < 1 || limit > maxListLimit {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("limit must be between 1 and %d", maxListLimit)})
+		return 0, 0, false
+	}
+
+	offset, err = parseOptionalInt(q.Get("offset"), 0)
+	if err != nil || offset < 0 || offset > maxListOffset {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("offset must be between 0 and %d", maxListOffset)})
+		return 0, 0, false
+	}
+
+	return limit, offset, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
