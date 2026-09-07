@@ -32,6 +32,9 @@ of location history), user CRUD, vehicle assignments, and trip history. It's
 built into the same binary and enabled by default; set
 `ADMIN_UI_ENABLED=false` to disable it entirely (the route returns 404).
 
+Day-to-day instructions for operators — onboarding drivers, managing vehicles,
+watching the feed — are in [`docs/operator-manual.md`](docs/operator-manual.md).
+
 **Note for operators upgrading from an earlier version:** the admin UI used to
 not exist, so there's nothing to opt into — this is a new default-on surface.
 If you don't want it exposed, set `ADMIN_UI_ENABLED=false` before deploying.
