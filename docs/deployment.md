@@ -115,8 +115,11 @@ disabled. Turn it on only if you intend to accept positions from riders' phones.
 | `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest accepted point is older than this stops contributing to the feed. |
 | `RIDER_POINT_RETENTION` | `168h` | `ride_points` rows older than this are deleted hourly. |
 
-Every rider-mode value above must be positive; a zero or negative one is
-rejected with a warning and the default is used. The README's
+Every rider-mode value above except `RIDER_SCHEDULE_EARLY` and
+`RIDER_SCHEDULE_LATE` must be positive: a zero or negative one is rejected with
+a warning and the default is used instead. The two schedule windows are taken as
+given, so setting either to `0s` narrows the adherence window rather than
+falling back. The README's
 [Rider mode](../README.md#rider-mode-crowdsourced-positions) section documents
 the API and the verification model.
 
@@ -139,6 +142,11 @@ The `Dockerfile` is multi-stage (`golang:1.25-alpine` builds a static binary,
 `alpine:3.21` runs it), exposes port 8080, and has `vehicle-positions` as its
 entrypoint. Tagging with the commit SHA rather than `latest` is what makes a
 rollback possible: you can always start the previous tag again.
+
+The repository's development `docker-compose.yml` builds this same image through
+its `build: .` line, which is why the production file below refers to a tag you
+built yourself instead: an explicit tag is what lets you roll back to the
+previous build, and it keeps the image pinned when you edit the compose file.
 
 ### 4.2 The environment file
 
@@ -383,16 +391,25 @@ Take a compressed custom-format dump; it restores selectively and compresses
 well.
 
 ```bash
+# pg_dump runs as the postgres user, so the directory must be writable by it.
 sudo mkdir -p /var/backups/vehicle-positions
+sudo chown postgres:postgres /var/backups/vehicle-positions
+sudo chmod 0700 /var/backups/vehicle-positions
+
 sudo -u postgres pg_dump -Fc vehicle_positions \
   -f /var/backups/vehicle-positions/vehicle_positions-$(date +%F).dump
 ```
 
-For the Docker Compose deployment, run it inside the database container:
+For the Docker Compose deployment, run `pg_dump` inside the database container
+and pipe the result out. The dump goes to stdout here, and the `>` of a plain
+redirect would be opened by your own shell before `sudo` ever runs — so write
+the file through `sudo tee` (or back it up somewhere your user can already
+write):
 
 ```bash
+sudo mkdir -p /var/backups/vehicle-positions
 docker compose exec -T db pg_dump -U vehicle_positions -Fc vehicle_positions \
-  > /var/backups/vehicle-positions/vehicle_positions-$(date +%F).dump
+  | sudo tee /var/backups/vehicle-positions/vehicle_positions-$(date +%F).dump >/dev/null
 ```
 
 Automate it with a systemd timer. Two files:
@@ -424,7 +441,7 @@ WantedBy=timers.target
 ```
 
 ```bash
-sudo chown postgres:postgres /var/backups/vehicle-positions
+# The unit runs as postgres, into the directory you chowned above.
 sudo systemctl daemon-reload
 sudo systemctl enable --now vehicle-positions-backup.timer
 sudo systemctl start vehicle-positions-backup.service   # prove it works now
@@ -615,8 +632,19 @@ docker compose logs -f server                      # option A
 Every request logs `{"msg":"request","method":...,"path":...,"status":...,"duration_ms":...}`.
 Startup logs `starting server` with the port, `seeded tracker` with the count of
 vehicles restored from the database, and `location retention enabled` when
-retention is on. Because the format is JSON, `journalctl -u vehicle-positions -o cat | jq
-'select(.level=="ERROR")'` is a usable triage command.
+retention is on. Because the format is JSON, this is a usable triage command:
+
+```bash
+sudo journalctl -u vehicle-positions -o cat \
+  | jq 'select(.level=="ERROR" or .level=="WARN")'
+```
+
+Watch both levels, not just `ERROR`. Several failures that matter are logged at
+`WARN`: `readiness check failed` (the database did not answer),
+`failed to seed tracker from database` (the feed started empty after a restart),
+`rider: GTFS refresh failed, keeping the previous index` and
+`rider: trusted feed poll failed, keeping the previous vehicles` (rider mode is
+running on stale data). `location retention prune failed` is logged at `ERROR`.
 
 ### What to alert on
 
@@ -626,8 +654,10 @@ retention is on. Because the format is JSON, `journalctl -u vehicle-positions -o
   the failure that no process-level check catches: the server is healthy, the
   feed is just empty because no phone is reporting.
 - `last_update` older than your `STALENESS_THRESHOLD` during service hours.
-- Log lines at `ERROR`, particularly `location retention prune failed` and
-  `readiness check failed`.
+- Log lines at `ERROR` or `WARN` — `location retention prune failed` is an
+  `ERROR`, while `readiness check failed` is a `WARN`. If you would rather not
+  alert on log levels at all, key the database alert off the `/ready` probe
+  above; it covers the same failure and is easier to reason about.
 - Certificate expiry, if you are not relying on certbot's own renewal timer.
 
 ## 10. Upgrading
