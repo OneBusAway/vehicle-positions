@@ -361,9 +361,9 @@ Authentication is per endpoint, not global:
 ```json
 {
   "vehicle_id":  "bus-42",
-  "trip_id":     "route-5",
-  "route_id": "5",
-  "start_date": "20260715",
+  "trip_id":     "t_5_0830",
+  "route_id":    "5",
+  "start_date":  "20260715",
   "latitude":    -1.2921,
   "longitude":   36.8219,
   "bearing":     90.0,

@@ -201,7 +201,7 @@ The server produces a standard `FeedMessage` containing `VehiclePosition` entiti
 ```protobuf
 vehicle {
   trip {
-    trip_id: "route_5_0830"
+    trip_id: "t_5_0830"
     route_id: "5"
     start_time: "08:30:00"
     start_date: "20260715"
@@ -245,7 +245,7 @@ Each location report is a single point sent directly from the Android app as it 
 ```json
 {
   "vehicle_id": "vehicle-042",
-  "trip_id": "route_5_0830",
+  "trip_id": "t_5_0830",
   "route_id": "5",
   "start_date": "20260715",
   "latitude": -1.2921,
