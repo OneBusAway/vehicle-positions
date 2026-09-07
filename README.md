@@ -44,7 +44,10 @@ Sign in with an existing admin account. To create the first one:
 
 Deactivating a user blocks new logins immediately, but it doesn't revoke
 sessions already issued — any existing session cookie or JWT for that user
-stays valid until it expires (up to 24 hours).
+stays valid until it expires (up to 24 hours). Changing a user's password
+(from the admin UI's edit form, or by sending `password` in `PUT
+/api/v1/admin/users/{id}`) has the same limit: tokens already issued stay
+valid until they expire.
 
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /

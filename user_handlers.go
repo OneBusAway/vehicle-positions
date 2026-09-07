@@ -22,6 +22,9 @@ type UpdateUserRequest struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 	Role  string `json:"role"`
+	// Password, when non-empty, replaces the user's password. Blank keeps
+	// the current one — the same contract as the admin UI's edit form.
+	Password string `json:"password"`
 }
 
 // handleListUsers returns one page of users, newest first, bounded by the
@@ -171,6 +174,12 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver' or 'admin'"})
 			return
 		}
+		if req.Password != "" {
+			if err := validatePassword(req.Password); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+		}
 
 		user, err := store.UpdateUser(r.Context(), id, req.Name, req.Email, req.Role)
 		if err != nil {
@@ -186,6 +195,19 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
+
+		if req.Password != "" {
+			if err := store.UpdateUserPassword(r.Context(), id, req.Password); err != nil {
+				if errors.Is(err, ErrUserNotFound) {
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+					return
+				}
+				slog.Error("failed to update user password", "id", id, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				return
+			}
+		}
+
 		writeJSON(w, http.StatusOK, user)
 	}
 }

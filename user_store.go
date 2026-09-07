@@ -48,6 +48,7 @@ type UserCreator interface {
 
 type UserUpdater interface {
 	UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error)
+	UpdateUserPassword(ctx context.Context, id int64, password string) error
 }
 
 type UserDeleter interface {
@@ -170,7 +171,6 @@ func (s *Store) CreateUser(ctx context.Context, name, email, password, role stri
 }
 
 // UpdateUser updates a user's name, email, and role.
-// TODO: password changes are not supported via this endpoint; add a separate PATCH /password endpoint.
 func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
 	row, err := s.queries.UpdateUser(ctx, db.UpdateUserParams{
 		Name:  name,
