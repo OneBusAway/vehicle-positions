@@ -91,6 +91,22 @@ var schemaStructs = map[string]string{
 	"TripTrailPoint":       "tripTrailPoint",
 	"LocationHistory":      "locationHistoryResponse",
 	"LocationHistoryEntry": "locationEntry",
+
+	// Rider mode (#94).
+	"RiderRegisterResponse": "riderRegisterResponse",
+	"StartRideResponse":     "startRideResponse",
+	"RideDestination":       "rideDestination",
+	"PositionsResponse":     "positionsResponse",
+	"EndRideResponse":       "endRideResponse",
+	"RideSummary":           "rideSummaryJSON",
+	"TripCoverage":          "tripStatusResponse",
+	"RiderStatus":           "riderStatusResponse",
+	"RiderGTFSStatus":       "riderGTFSStatus",
+	"RiderFeedStatus":       "riderFeedStatus",
+	"RiderTierCounts":       "riderTierCounts",
+	"RiderRideCounts":       "riderRideCounts",
+	"AdminRides":            "adminRidesResponse",
+	"AdminRide":             "adminRideEntry",
 }
 
 // operationMethods are the path-item fields that describe an operation. Every
@@ -164,6 +180,7 @@ type registeredRoute struct {
 	source       string
 	auth         bool
 	admin        bool
+	rider        bool
 }
 
 func (r registeredRoute) String() string { return r.method + " " + r.path }
@@ -209,6 +226,7 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 	routes := make([]registeredRoute, 0, len(htmlUIRoutes))
 
 	walkModuleSources(t, func(fileSet *token.FileSet, parsed *ast.File) {
+		aliases := middlewareAliases(parsed)
 		ast.Inspect(parsed, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
 			if !ok || len(call.Args) != 2 {
@@ -231,8 +249,9 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 				method: method,
 				path:   path,
 				source: source,
-				auth:   wrappedBy(call.Args[1], "authMiddleware"),
-				admin:  wrappedBy(call.Args[1], "adminMiddleware"),
+				auth:   wrappedBy(call.Args[1], aliases, "requireAuth"),
+				admin:  wrappedBy(call.Args[1], aliases, "requireAdmin"),
+				rider:  wrappedBy(call.Args[1], aliases, "requireRider"),
 			})
 			return true
 		})
@@ -289,17 +308,62 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 	return value, true
 }
 
+// middlewareConstructors are the functions that build an auth middleware. A
+// route is classified by which of these produced the wrapper around its
+// handler, not by what the local variable happens to be called.
+var middlewareConstructors = map[string]struct{}{
+	"requireAuth": {}, "requireAdmin": {}, "requireRider": {},
+}
+
+// middlewareAliases maps each local variable holding an auth middleware to the
+// constructor that produced it — `authMiddleware := requireAuth(secret)` in
+// newMux, `auth := requireRider(s.jwtSecret)` in registerRiderRoutes.
+//
+// Resolving the alias rather than matching the variable name is what lets the
+// guard see that the rider routes are authenticated: they spell their wrapper
+// `auth`, and a name-based check would read them as public.
+func middlewareAliases(file *ast.File) map[string]string {
+	aliases := make(map[string]string)
+	ast.Inspect(file, func(node ast.Node) bool {
+		assign, ok := node.(*ast.AssignStmt)
+		if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+			return true
+		}
+		name, ok := assign.Lhs[0].(*ast.Ident)
+		if !ok {
+			return true
+		}
+		call, ok := assign.Rhs[0].(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		constructor, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if _, isMiddleware := middlewareConstructors[constructor.Name]; isMiddleware {
+			aliases[name.Name] = constructor.Name
+		}
+		return true
+	})
+	return aliases
+}
+
 // wrappedBy reports whether the handler argument of a mux registration is
-// wrapped in a call to the named middleware at any depth — newMux composes them
-// as authMiddleware(adminMiddleware(handler)).
-func wrappedBy(handler ast.Expr, middleware string) bool {
+// wrapped, at any depth, in a middleware built by the named constructor —
+// newMux composes them as authMiddleware(adminMiddleware(handler)).
+func wrappedBy(handler ast.Expr, aliases map[string]string, constructor string) bool {
 	wrapped := false
 	ast.Inspect(handler, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		if name, ok := call.Fun.(*ast.Ident); ok && name.Name == middleware {
+		name, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if name.Name == constructor || aliases[name.Name] == constructor {
 			wrapped = true
 			return false
 		}
@@ -311,6 +375,25 @@ func wrappedBy(handler ast.Expr, middleware string) bool {
 func isEmptyList(value any) bool {
 	list, ok := value.([]any)
 	return ok && len(list) == 0
+}
+
+// declaresScheme reports whether an operation's security block requires the
+// named scheme.
+func declaresScheme(value any, scheme string) bool {
+	requirements, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, requirement := range requirements {
+		entry, ok := requirement.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, named := entry[scheme]; named {
+			return true
+		}
+	}
+	return false
 }
 
 // TestOpenAPI_AllRoutesDocumented is the primary drift guard: every route the
@@ -369,18 +452,33 @@ func TestOpenAPI_AuthRequirementsMatchCode(t *testing.T) {
 		}
 
 		security, overridden := operation["security"]
-		if !route.auth {
-			assert.Truef(t, overridden && isEmptyList(security),
-				"%s registers %s without authMiddleware, so the spec must opt out with `security: []`",
-				route.source, route)
-			continue
-		}
 
-		assert.Falsef(t, overridden,
-			"%s wraps %s in authMiddleware, so the spec must inherit the global bearerAuth requirement rather than override security",
-			route.source, route)
-		assert.Containsf(t, operation["responses"], "401",
-			"%s wraps %s in authMiddleware, so the spec must document a 401 response", route.source, route)
+		switch {
+		case route.rider:
+			// The rider API carries its own token: requireRider accepts a JWT
+			// with the rider role, not the driver/admin one the global scheme
+			// describes, so these operations must name riderAuth explicitly.
+			assert.Truef(t, overridden && declaresScheme(security, "riderAuth"),
+				"%s wraps %s in requireRider, so the spec must declare `security: [{riderAuth: []}]`",
+				route.source, route)
+			assert.Containsf(t, operation["responses"], "401",
+				"%s wraps %s in requireRider, so the spec must document a 401 response", route.source, route)
+			assert.Containsf(t, operation["responses"], "403",
+				"%s wraps %s in requireRider, which rejects a non-rider role, so the spec must document a 403 response",
+				route.source, route)
+
+		case route.auth:
+			assert.Falsef(t, overridden,
+				"%s wraps %s in requireAuth, so the spec must inherit the global bearerAuth requirement rather than override security",
+				route.source, route)
+			assert.Containsf(t, operation["responses"], "401",
+				"%s wraps %s in requireAuth, so the spec must document a 401 response", route.source, route)
+
+		default:
+			assert.Truef(t, overridden && isEmptyList(security),
+				"%s registers %s behind no auth middleware, so the spec must opt out with `security: []`",
+				route.source, route)
+		}
 	}
 }
 
@@ -429,6 +527,9 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		tripListLimit = "#/components/schemas/TripListLimit"
 		listLimit     = "#/components/schemas/ListLimit"
 		listOffset    = "#/components/schemas/ListOffset"
+		riderLimit    = "#/components/schemas/RiderRideListLimit"
+		riderBatch    = "#/components/schemas/PositionsRequest/properties/positions"
+		riderRegister = "#/components/schemas/RiderRegisterResponse/properties"
 	)
 
 	constraints := []struct {
@@ -448,6 +549,9 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		{listLimit, "maximum", maxListLimit, "maxListLimit"},
 		{listLimit, "default", defaultListLimit, "defaultListLimit"},
 		{listOffset, "maximum", maxListOffset, "maxListOffset"},
+		{riderLimit, "maximum", maxRiderRideListLimit, "maxRiderRideListLimit"},
+		{riderLimit, "default", defaultRiderRideListLimit, "defaultRiderRideListLimit"},
+		{riderBatch, "maxItems", riderMaxBatchSize, "riderMaxBatchSize"},
 	}
 
 	for _, constraint := range constraints {
