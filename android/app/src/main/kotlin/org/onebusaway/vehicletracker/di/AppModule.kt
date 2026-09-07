@@ -22,6 +22,7 @@ import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
+import java.time.ZoneId
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -139,6 +140,9 @@ object AppModule {
     @Provides
     @EpochSecondsClock
     fun provideClock(): () -> Long = { System.currentTimeMillis() / 1000 }
+
+    @Provides
+    fun provideZoneId(): ZoneId = ZoneId.systemDefault()
 
     @Provides
     @Singleton

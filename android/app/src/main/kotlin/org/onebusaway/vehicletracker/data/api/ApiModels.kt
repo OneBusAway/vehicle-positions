@@ -26,7 +26,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class LocationReportDto(
     @SerialName("vehicle_id") val vehicleId: String,
-    @SerialName("trip_id") val tripId: String,
+    /** GTFS trip_id; null (omitted on the wire) when the driver only knows the route. */
+    @SerialName("trip_id") val tripId: String? = null,
+    @SerialName("route_id") val routeId: String,
+    @SerialName("start_date") val startDate: String,
     val latitude: Double,
     val longitude: Double,
     val bearing: Double? = null,

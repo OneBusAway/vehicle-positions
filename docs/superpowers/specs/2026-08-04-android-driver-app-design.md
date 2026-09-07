@@ -25,7 +25,7 @@ The vehicle-positions Go server (this repo) ingests driver location reports and 
 
 `GET /api/v1/vehicles` — authenticated (non-admin) — returns the calling driver's assigned, **active** vehicles. Implementation mirrors `handleListUserVehicles` but derives the user ID from JWT claims instead of a path parameter. Reuses the existing assignment store. Includes route-wiring and handler tests in the existing Go test style.
 
-*Server-side note (no app change):* when the app falls back to sending the route ID as `trip_id`, the server publishes it verbatim into GTFS-RT `TripDescriptor.trip_id` and never sets `route_id` (handlers.go:215-216) — semantically off for GTFS-RT consumers. Flagged for a separate server issue; out of scope here.
+*Server-side note (resolved 2026-09-06):* the location report now carries `route_id` and `start_date`, and the app sends `trip_id` only when the driver entered a GTFS trip id. The feed's `TripDescriptor` therefore always identifies the route, and never carries a route id in `trip_id`.
 
 ## Project Layout
 
