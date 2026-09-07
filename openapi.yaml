@@ -48,6 +48,8 @@ tags:
     description: Driver trip lifecycle.
   - name: vehicles
     description: Driver-facing vehicle access.
+  - name: rider
+    description: Crowd-sourced positioning from rider devices.
 
 # All endpoints require a bearer JWT unless they explicitly opt out with `security: []`.
 security:
@@ -166,6 +168,266 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/rider/register:
+    post:
+      tags: [rider]
+      summary: Register a rider device
+      description: |
+        Exchanges a device installation for a rider token. This is the only
+        rider endpoint open to an unauthenticated caller.
+
+        Registration is idempotent per installation: a known `installation_id`
+        answers `200`, a new one `201`. The response carries the cadence the
+        server wants, so clients take their batch size and interval from here
+        rather than hard-coding them.
+
+        Bodies are capped at 64 KiB and rate-limited per client.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiderRegisterRequest'
+      responses:
+        '200':
+          description: Existing installation; the token is reissued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiderRegisterResponse'
+        '201':
+          description: New installation registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiderRegisterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Too many registrations from this client.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/rider/rides:
+    post:
+      tags: [rider]
+      summary: Start a ride
+      description: |
+        Declares that the rider has boarded a trip, so their positions can be
+        matched against its shape.
+
+        `422` means the request was well-formed but the trip could not be
+        matched against the loaded schedule; `503` means no schedule is
+        loaded at all.
+      security:
+        - riderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartRideRequest'
+      responses:
+        '201':
+          description: Ride started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartRideResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such trip in the loaded schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: This rider already has a ride in progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          description: The trip could not be matched against the schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rides are being started too quickly for this rider.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ScheduleUnavailable'
+
+  /api/v1/rider/rides/{id}/positions:
+    parameters:
+      - $ref: '#/components/parameters/RideIDPath'
+    post:
+      tags: [rider]
+      summary: Upload a batch of positions
+      description: |
+        Submits a batch of fixes for a ride. The response reports what was
+        accepted, whether the ride is now publishable, and whether the server
+        ended it — a rider who has drifted off the route for long enough is
+        ended server-side, reported through `ended` and `end_reason` rather
+        than an error status.
+
+        Batches are capped at 12 positions and 64 KiB, and rate-limited to
+        the advertised reporting interval.
+      security:
+        - riderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PositionsRequest'
+      responses:
+        '200':
+          description: Batch processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The ride is not in a state that accepts positions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Batches are arriving faster than the reporting interval allows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/rider/rides/{id}/end:
+    parameters:
+      - $ref: '#/components/parameters/RideIDPath'
+    post:
+      tags: [rider]
+      summary: End a ride
+      description: Closes a ride and reports what it contributed.
+      security:
+        - riderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndRideRequest'
+      responses:
+        '200':
+          description: Ride ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndRideResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The ride has already ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Too many requests from this rider.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/rider/trips/{trip_id}/status:
+    parameters:
+      - $ref: '#/components/parameters/TripGTFSIDPath'
+    get:
+      tags: [rider]
+      summary: Whether a trip is already covered
+      description: |
+        Tells a client whether a trip already has a trusted AVL feed or other
+        riders reporting, so it can decide not to spend battery duplicating
+        coverage.
+      security:
+        - riderAuth: []
+      parameters:
+        - in: query
+          name: start_date
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]{8}$'
+          description: |
+            GTFS service date as `YYYYMMDD`. Defaults to the service date the
+            loaded schedule considers current.
+      responses:
+        '200':
+          description: Coverage for this trip.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripCoverage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such trip in the loaded schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ScheduleUnavailable'
+
   /gtfs-rt/vehicle-positions:
     get:
       tags: [feed]
@@ -235,6 +497,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+
+  /api/v1/admin/rider/status:
+    get:
+      tags: [admin]
+      summary: Rider subsystem health
+      description: |
+        Reports the rider engine's state: the schedule snapshot it is matching
+        against, the trusted feeds it corroborates with, and current rider and
+        ride counts. Requires the `admin` role.
+
+        Rider mode being off is a fact about the server, not an error — a
+        disabled server answers `200` with `enabled: false` and omits the
+        detail sections rather than returning `404`.
+      responses:
+        '200':
+          description: Rider subsystem status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiderStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/rider/rides:
+    get:
+      tags: [admin]
+      summary: List rider rides
+      description: |
+        Lists rides newest-first, filtered by status. Requires the `admin`
+        role. Like the other admin lists, one row beyond `limit` is read to
+        set `has_more`.
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [active, ended]
+            default: active
+          description: Which rides to return. Defaults to `active`.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            $ref: '#/components/schemas/RiderRideListLimit'
+          description: Maximum number of rides to return.
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of rides to skip.
+      responses:
+        '200':
+          description: Matching rides.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRides'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/admin/status:
     get:
@@ -977,6 +1312,16 @@ components:
         JWT bearer token issued by `POST /api/v1/auth/login`. Signed HS256,
         24-hour TTL, `iss: vehicle-positions-api`.
 
+    riderAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by `POST /api/v1/rider/register`, carrying the `rider`
+        role. It is not interchangeable with the driver/admin token from
+        `POST /api/v1/auth/login`: `requireRider` accepts only the rider
+        role, and the rest of the API rejects it.
+
   parameters:
     VehicleIDPath:
       name: id
@@ -1021,6 +1366,20 @@ components:
       schema:
         $ref: '#/components/schemas/ListOffset'
       description: Number of rows to skip.
+    RideIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Ride identifier returned by `POST /api/v1/rider/rides`.
+    TripGTFSIDPath:
+      name: trip_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: GTFS trip identifier from the loaded schedule.
     TripIDPath:
       name: id
       in: path
@@ -1071,6 +1430,13 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     UnsupportedMediaType:
       description: Content-Type must be `application/json`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ScheduleUnavailable:
+      description: |
+        No GTFS schedule is loaded, so the rider engine cannot match trips.
       content:
         application/json:
           schema:
@@ -1353,6 +1719,375 @@ components:
           type: string
           format: date-time
           description: RFC 3339 UTC time the tracker last recorded this vehicle.
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultRiderRideListLimit / maxRiderRideListLimit in
+    # rider_admin_handlers.go.
+    RiderRideListLimit:
+      type: integer
+      minimum: 1
+      maximum: 200
+      default: 50
+
+    RiderRegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [installation_id, platform, app_id, app_version, attestation]
+      properties:
+        installation_id:
+          type: string
+          maxLength: 100
+          description: Stable per-install identifier. Re-registering with the same value reissues the token.
+        platform:
+          type: string
+          maxLength: 100
+        app_id:
+          type: string
+          maxLength: 100
+        app_version:
+          type: string
+          maxLength: 100
+        attestation:
+          type: ['object', 'null']
+          description: |
+            Opaque platform attestation, passed through to the configured
+            verifier. Null when the client has none to offer.
+
+    RiderRegisterResponse:
+      type: object
+      required: [rider_id, token, report_interval_seconds, max_batch_size]
+      properties:
+        rider_id:
+          type: string
+        token:
+          type: string
+          description: Rider JWT for the `riderAuth` scheme.
+        report_interval_seconds:
+          type: integer
+          description: How often the server wants position batches.
+        max_batch_size:
+          type: integer
+          description: Largest batch the positions endpoint will accept.
+
+    StartRideRequest:
+      type: object
+      additionalProperties: false
+      required: [trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id]
+      properties:
+        trip_id:
+          type: string
+          maxLength: 100
+        start_date:
+          type: string
+          pattern: '^[0-9]{8}$'
+          description: GTFS service date as `YYYYMMDD`.
+        route_id:
+          type: string
+          maxLength: 100
+        vehicle_id:
+          type: string
+          maxLength: 100
+          description: |
+            Free text as the rider's app knows it. Unlike the driver API this
+            is not held to `VehicleID` — it is a hint, not a key.
+        boarding_stop_id:
+          type: string
+          maxLength: 100
+        destination_stop_id:
+          type: string
+          maxLength: 100
+
+    StartRideResponse:
+      type: object
+      required: [ride_id, state, report_interval_seconds, max_batch_size]
+      properties:
+        ride_id:
+          type: string
+        state:
+          type: string
+          description: The ride's initial matching state.
+        report_interval_seconds:
+          type: integer
+        max_batch_size:
+          type: integer
+        destination:
+          $ref: '#/components/schemas/RideDestination'
+
+    RideDestination:
+      type: object
+      description: |
+        Where the rider said they are getting off, resolved to a position.
+        Omitted when the destination stop could not be placed.
+      required: [stop_id, latitude, longitude]
+      properties:
+        stop_id:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+
+    PositionsRequest:
+      type: object
+      additionalProperties: false
+      required: [positions]
+      properties:
+        positions:
+          type: array
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/PositionUpload'
+
+    PositionUpload:
+      type: object
+      additionalProperties: false
+      description: |
+        One fix from the device. `accuracy`, `speed`, and `bearing` are
+        required and nullable: a device with no reading must be able to say so
+        rather than claim a zero.
+      required: [latitude, longitude, accuracy, speed, bearing, timestamp]
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        accuracy:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix seconds.
+
+    PositionsResponse:
+      type: object
+      required:
+        - state
+        - published
+        - corroboration
+        - accepted
+        - ignored
+        - off_route_streak
+        - ended
+        - end_reason
+      properties:
+        state:
+          type: string
+          description: The ride's matching state after this batch.
+        published:
+          type: boolean
+          description: Whether the ride is now contributing to the public feed.
+        corroboration:
+          type: string
+        accepted:
+          type: integer
+        ignored:
+          type: integer
+          description: Fixes discarded as off-route, stale, or duplicated.
+        off_route_streak:
+          type: integer
+        ended:
+          type: boolean
+          description: |
+            True when the server ended the ride itself, typically after a long
+            off-route streak. The batch still returns 200.
+        end_reason:
+          type: string
+          description: Empty unless `ended` is true.
+
+    EndRideRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 100
+
+    EndRideResponse:
+      type: object
+      required: [status, summary]
+      properties:
+        status:
+          type: string
+        summary:
+          $ref: '#/components/schemas/RideSummary'
+
+    RideSummary:
+      type: object
+      required: [points, matched, corroborated, duration_seconds]
+      properties:
+        points:
+          type: integer
+        matched:
+          type: integer
+        corroborated:
+          type: integer
+        duration_seconds:
+          type: integer
+
+    TripCoverage:
+      type: object
+      required: [trip_id, start_date, trusted, rider_reported, riders]
+      properties:
+        trip_id:
+          type: string
+        start_date:
+          type: string
+          pattern: '^[0-9]{8}$'
+        trusted:
+          type: boolean
+          description: A trusted AVL feed already covers this trip.
+        rider_reported:
+          type: boolean
+          description: At least one rider is currently positioning this trip.
+        riders:
+          type: integer
+          description: How many riders are reporting it.
+
+    RiderStatus:
+      type: object
+      description: |
+        The detail sections are omitted when rider mode is off, so a disabled
+        server answers `{"enabled": false}`.
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        gtfs:
+          $ref: '#/components/schemas/RiderGTFSStatus'
+        trusted_feeds:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiderFeedStatus'
+        riders:
+          $ref: '#/components/schemas/RiderTierCounts'
+        rides:
+          $ref: '#/components/schemas/RiderRideCounts'
+
+    RiderGTFSStatus:
+      type: object
+      required: [source, loaded_at, trips, shapes, timezone]
+      properties:
+        source:
+          type: string
+        loaded_at:
+          type: string
+          format: date-time
+        trips:
+          type: integer
+        shapes:
+          type: integer
+        timezone:
+          type: string
+
+    RiderFeedStatus:
+      type: object
+      required: [url, last_success, last_error, entities]
+      properties:
+        url:
+          type: string
+        last_success:
+          type: string
+          description: RFC 3339 UTC, or an empty string if the feed has never succeeded.
+        last_error:
+          type: string
+        entities:
+          type: integer
+
+    RiderTierCounts:
+      type: object
+      required: [total, trusted, blocked]
+      properties:
+        total:
+          type: integer
+        trusted:
+          type: integer
+        blocked:
+          type: integer
+
+    RiderRideCounts:
+      type: object
+      required: [active, publishable]
+      properties:
+        active:
+          type: integer
+        publishable:
+          type: integer
+
+    AdminRides:
+      type: object
+      required: [count, has_more, rides]
+      properties:
+        count:
+          type: integer
+        has_more:
+          type: boolean
+        rides:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRide'
+
+    AdminRide:
+      type: object
+      required:
+        - id
+        - rider_id
+        - trip_id
+        - start_date
+        - route_id
+        - state
+        - corroborated
+        - status
+        - end_reason
+        - points_total
+        - points_matched
+        - points_corroborated
+        - started_at
+        - ended_at
+      properties:
+        id:
+          type: string
+        rider_id:
+          type: string
+        trip_id:
+          type: string
+        start_date:
+          type: string
+        route_id:
+          type: string
+        state:
+          type: string
+        corroborated:
+          type: boolean
+        status:
+          type: string
+          enum: [active, ended]
+        end_reason:
+          type: string
+        points_total:
+          type: integer
+        points_matched:
+          type: integer
+        points_corroborated:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null while the ride is still active.
 
     # Named so the drift guard has a stable address to pin against
     # defaultListLimit / maxListLimit in handlers.go.
