@@ -337,6 +337,12 @@ its own. Turning it on is a breaking change for feed consumers: every consumer
 that doesn't send a key starts getting `401`. Issue keys first, then flip the
 flag.
 
+`FEED_AUTH_ENABLED` accepts only what Go's `strconv.ParseBool` accepts —
+`true`/`false`, `1`/`0`, `t`/`f`, and their capitalizations. Anything else
+(`yes`, `on`, a typo) stops the server at startup instead of falling back to a
+default, so a misspelled flag can't leave the feed public while you believe it
+is locked.
+
 Keys are managed through the admin API, which needs an admin JWT:
 
 ```bash

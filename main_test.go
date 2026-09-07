@@ -103,3 +103,52 @@ func TestEnvInt32OrDefault(t *testing.T) {
 		})
 	}
 }
+
+// TestEnvBool covers the strict parse behind FEED_AUTH_ENABLED: a value that
+// isn't a boolean must be reported, not silently defaulted, so main can refuse
+// to start rather than leave the feed public on a typo.
+func TestEnvBool(t *testing.T) {
+	const key = "TEST_FEED_AUTH_ENABLED"
+
+	tests := []struct {
+		name     string
+		value    string
+		set      bool
+		fallback bool
+		want     bool
+		wantErr  bool
+	}{
+		{name: "unset falls back to false", fallback: false, want: false},
+		{name: "unset falls back to true", fallback: true, want: true},
+		{name: "empty falls back", value: "", set: true, fallback: true, want: true},
+		{name: "true", value: "true", set: true, want: true},
+		{name: "false", value: "false", set: true, fallback: true, want: false},
+		{name: "1", value: "1", set: true, want: true},
+		{name: "0", value: "0", set: true, fallback: true, want: false},
+		{name: "TRUE", value: "TRUE", set: true, want: true},
+		{name: "yes is not a boolean", value: "yes", set: true, wantErr: true},
+		{name: "on is not a boolean", value: "on", set: true, wantErr: true},
+		{name: "garbage", value: "maybe", set: true, fallback: true, wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.set {
+				t.Setenv(key, tc.value)
+			}
+
+			got, err := envBool(key, tc.fallback)
+
+			if tc.wantErr {
+				require.Error(t, err, "a non-boolean value must be reported, not defaulted")
+				assert.Contains(t, err.Error(), key, "the error must name the variable")
+				assert.Contains(t, err.Error(), tc.value, "the error must show the rejected value")
+				assert.False(t, got, "a rejected value must not report the fallback as if it parsed")
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

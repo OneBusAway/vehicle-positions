@@ -183,6 +183,21 @@ func main() {
 	}
 	jwtSecret := []byte(jwtSecretStr)
 
+	// Feed auth is opt-in: enabling it rejects every existing consumer that
+	// does not yet send a key, so an upgrade must not turn it on silently.
+	// A value that isn't a boolean is fatal rather than defaulted: ParseBool
+	// rejects "yes" and "on", and falling back to false would leave the feed
+	// public while the operator believes it is locked. Checked before the
+	// database is touched so a typo fails immediately.
+	feedAuthEnabled, err := envBool("FEED_AUTH_ENABLED", false)
+	if err != nil {
+		slog.Error("refusing to start: cannot tell whether the GTFS-RT feed should be public", "error", err)
+		os.Exit(1)
+	}
+	if feedAuthEnabled {
+		slog.Info("GTFS-RT feed authentication enabled; consumers must send an X-API-Key header")
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -271,13 +286,6 @@ func main() {
 
 	startTime := time.Now()
 
-	// Feed auth is opt-in: enabling it rejects every existing consumer that
-	// does not yet send a key, so an upgrade must not turn it on silently.
-	feedAuthEnabled := envBoolOrDefault("FEED_AUTH_ENABLED", false)
-	if feedAuthEnabled {
-		slog.Info("GTFS-RT feed authentication enabled; consumers must send an X-API-Key header")
-	}
-
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, startTime,
 		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc)
 	if err != nil {
@@ -359,6 +367,22 @@ func envInt32OrDefault(key string, fallback int32) int32 {
 		return int32(n)
 	}
 	return fallback
+}
+
+// envBool reads a boolean from the environment, returning fallback when the
+// variable is unset. Unlike the envOrDefault helpers above it reports a bad
+// value instead of warning and defaulting, so a caller gating a security
+// control can refuse to start rather than guess which way the operator meant.
+func envBool(key string, fallback bool) (bool, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false, got %q", key, v)
+	}
+	return b, nil
 }
 
 type statusRecorder struct {

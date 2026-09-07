@@ -65,6 +65,7 @@ You can run Postgres in Docker and run the Go server directly:
    export JWT_SECRET=$(openssl rand -hex 32)   # required; the server exits without 32+ bytes
    export STALENESS_THRESHOLD=5m
    export FEED_AUTH_ENABLED=false   # true requires an X-API-Key on the GTFS-RT feed
+                                    # only true/false/1/0 parse; anything else exits at startup
    ```
 
    Location retention is optional and off unless you set it:
