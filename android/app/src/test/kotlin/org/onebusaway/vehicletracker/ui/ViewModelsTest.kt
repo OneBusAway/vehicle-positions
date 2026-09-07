@@ -20,6 +20,7 @@ import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginViewModel
 import org.onebusaway.vehicletracker.ui.trip.TripSetupViewModel
+import java.time.ZoneOffset
 
 class ViewModelsTest {
     private val dispatcher = StandardTestDispatcher()
@@ -90,7 +91,7 @@ class ViewModelsTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"not assigned"}"""))
         val store = FakeTripStateStore()
-        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, clock = { 0L }, zone = ZoneOffset.UTC)
         val vm = TripSetupViewModel(repo, store, FakeServiceController())
         vm.onRouteIdChange("5")
         vm.onStartTrip("bus-1") { }
@@ -103,7 +104,7 @@ class ViewModelsTest {
         val store = FakeTripStateStore()
         store.addRecentRoute("12"); store.addRecentRoute("5")
         val server = MockWebServer().apply { start() }
-        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, clock = { 0L }, zone = ZoneOffset.UTC)
         val vm = TripSetupViewModel(repo, store, FakeServiceController())
         vm.uiState.test {
             var state = awaitItem()
