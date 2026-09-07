@@ -23,18 +23,19 @@ class TripRepository @Inject constructor(
     // an uncaught exception during construction.
     suspend fun start(vehicleId: String, routeId: String, gtfsTripId: String): Result<ActiveTrip> = try {
         val cleanedTripId = gtfsTripId.trim()
-        val trip = apiProvider.get().startTrip(StartTripRequest(vehicleId, routeId, cleanedTripId))
+        val cleanedRouteId = routeId.trim()
+        val trip = apiProvider.get().startTrip(StartTripRequest(vehicleId, cleanedRouteId, cleanedTripId))
         val startedAt = clock()
         val activeTrip = ActiveTrip(
             tripDbId = trip.id,
             gtfsTripId = cleanedTripId,
             vehicleId = vehicleId,
-            routeId = routeId,
+            routeId = cleanedRouteId,
             startDate = serviceDate(startedAt, zone),
             startedAtEpochSec = startedAt,
         )
         tripStateStore.saveActiveTrip(activeTrip)
-        recordLocally("recent route") { tripStateStore.addRecentRoute(routeId) }
+        recordLocally("recent route") { tripStateStore.addRecentRoute(cleanedRouteId) }
         // Recorded here rather than when the driver taps a vehicle: a tap they back out of
         // is not a use, and recents full of abandoned taps make the picker worse.
         recordLocally("recent vehicle") { vehiclePrefsStore.recordUse(vehicleId) }
