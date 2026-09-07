@@ -9,6 +9,8 @@ import (
 type VehicleState struct {
 	VehicleID string
 	TripID    string
+	RouteID   string
+	StartDate string
 	Latitude  float64
 	Longitude float64
 	Bearing   *float64
@@ -90,6 +92,8 @@ func (t *Tracker) Update(loc *LocationReport) {
 	t.vehicles[loc.VehicleID] = &VehicleState{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
+		RouteID:   loc.RouteID,
+		StartDate: loc.StartDate,
 		Latitude:  loc.Latitude,
 		Longitude: loc.Longitude,
 		Bearing:   bearing,
