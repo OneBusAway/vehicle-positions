@@ -138,7 +138,7 @@ func main() {
 			"so pass -email/-password or set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD")
 	}
 
-	bootstrap := &http.Client{Timeout: 10 * time.Second}
+	bootstrap := &http.Client{Timeout: 10 * time.Second, CheckRedirect: sameOriginOnly(*baseURL)}
 	adminToken, err := login(ctx, bootstrap, *baseURL, *email, *password)
 	if err != nil {
 		log.Fatalf("login failed: %v", err)
@@ -162,8 +162,9 @@ func main() {
 	clients := make([]*http.Client, len(tokens))
 	for i, t := range tokens {
 		clients[i] = &http.Client{
-			Timeout:   10 * time.Second,
-			Transport: bearerTransport{token: t, base: http.DefaultTransport},
+			Timeout:       10 * time.Second,
+			Transport:     bearerTransport{token: t, base: http.DefaultTransport},
+			CheckRedirect: sameOriginOnly(*baseURL),
 		}
 	}
 
@@ -371,6 +372,43 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 		return false
 	case <-t.C:
 		return true
+	}
+}
+
+// canonicalOrigin is scheme://host:port with the scheme's default port made
+// explicit, so http://h and http://h:80 compare equal.
+func canonicalOrigin(u *url.URL) string {
+	host, port := u.Hostname(), u.Port()
+	if port == "" {
+		switch u.Scheme {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		}
+	}
+	return u.Scheme + "://" + net.JoinHostPort(host, port)
+}
+
+// sameOriginOnly refuses a redirect that leaves the origin checkBaseURL
+// validated. http.Client normally strips Authorization when a redirect crosses
+// origins, but bearerTransport sets the header inside RoundTrip, which runs
+// again for every hop and puts it back. Without this a redirect could hand a
+// driver's token, or the admin password on the login hop, to another host.
+func sameOriginOnly(base string) func(*http.Request, []*http.Request) error {
+	u, err := url.Parse(base)
+	if err != nil {
+		return func(*http.Request, []*http.Request) error { return err }
+	}
+	want := canonicalOrigin(u)
+	return func(req *http.Request, via []*http.Request) error {
+		if got := canonicalOrigin(req.URL); got != want {
+			return fmt.Errorf("refusing redirect to %s: it would send credentials to an origin other than %s", got, want)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
 	}
 }
 

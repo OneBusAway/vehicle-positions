@@ -164,9 +164,10 @@ run ends; delete them from the admin UI if they pile up.
 
 Two consequences worth knowing:
 
-- Startup makes one login per vehicle, and the server allows ten logins per IP
-  per minute. Past ten vehicles the simulator waits out the limiter rather than
-  failing, so a large run takes a minute or two to get going.
+- Startup makes one login per vehicle plus the simulator's own admin login, and
+  the server allows ten logins per IP per minute. Ten vehicles is therefore
+  eleven logins and already meets the limiter. The simulator waits it out rather
+  than failing, so runs of that size take a minute or two to get going.
 - `-interval` now has to be 5 s or slower, but it no longer has to grow with
   `-vehicles`. The simulator warns at startup if the interval is too fast.
 

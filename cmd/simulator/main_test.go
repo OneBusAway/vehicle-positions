@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -476,4 +477,65 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 		}
 		pw[p] = true
 	}
+}
+
+// TestSameOriginOnlyBlocksCredentialLeaks pins why the policy exists:
+// bearerTransport re-adds Authorization on every hop, so a redirect that
+// leaves the validated origin would hand the token to another host.
+func TestSameOriginOnlyBlocksCredentialLeaks(t *testing.T) {
+	check := sameOriginOnly("http://localhost:8080")
+	for _, tc := range []struct {
+		to    string
+		allow bool
+	}{
+		{"http://localhost:8080/api/v1/auth/login", true},
+		{"http://localhost:80800/x", false},
+		{"http://evil.example/x", false},
+		{"https://localhost:8080/x", false}, // scheme change
+		{"http://localhost:9090/x", false},  // port change
+		{"http://127.0.0.1:8080/x", false},  // different host, same machine
+	} {
+		u, err := url.Parse(tc.to)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", tc.to, err)
+		}
+		err = check(&http.Request{URL: u}, nil)
+		if tc.allow && err != nil {
+			t.Errorf("redirect to %s blocked: %v", tc.to, err)
+		}
+		if !tc.allow && err == nil {
+			t.Errorf("redirect to %s allowed; it would leak credentials", tc.to)
+		}
+	}
+	// Default ports are implicit but equal.
+	if err := sameOriginOnly("http://example.com")(
+		&http.Request{URL: mustParse(t, "http://example.com:80/x")}, nil); err != nil {
+		t.Errorf("http://example.com:80 should equal http://example.com: %v", err)
+	}
+	// A live client must actually refuse the hop, not just the policy in isolation.
+	var hit int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit++
+		http.Redirect(w, r, "http://evil.example/stolen", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	c := &http.Client{
+		Transport:     bearerTransport{token: "secret", base: http.DefaultTransport},
+		CheckRedirect: sameOriginOnly(srv.URL),
+	}
+	if _, err := c.Get(srv.URL); err == nil {
+		t.Error("client followed a cross-origin redirect while carrying a bearer token")
+	}
+	if hit != 1 {
+		t.Errorf("origin served %d requests, want 1", hit)
+	}
+}
+
+func mustParse(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", raw, err)
+	}
+	return u
 }
