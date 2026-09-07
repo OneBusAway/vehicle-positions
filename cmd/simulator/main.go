@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -44,22 +47,27 @@ type stats struct {
 // allows one location report per driver per this long, keyed on the JWT sub.
 const perDriverReportInterval = 5 * time.Second
 
-// reportBudgetWarning explains the shortfall when the requested rate exceeds
-// what one login is allowed, which is every run with more than one vehicle
-// because all of them authenticate as the same user.
+// provisionStagger spaces the driver logins out and provisionBackoff is how
+// long a refused one waits: the server allows ten logins per IP per minute, so
+// a refusal has to sit out most of that window.
+const (
+	provisionStagger  = 250 * time.Millisecond
+	provisionBackoff  = 12 * time.Second
+	provisionAttempts = 10
+)
+
+// reportBudgetWarning explains the shortfall when a single vehicle reports
+// faster than the server's per-driver allowance. Each vehicle authenticates as
+// its own driver, so the budget is per vehicle and does not shrink as more are
+// added.
 func reportBudgetWarning(vehicles int, interval time.Duration) string {
-	if vehicles <= 0 || interval <= 0 {
-		return ""
-	}
-	needed := time.Duration(vehicles) * perDriverReportInterval
-	if interval >= needed {
+	if vehicles <= 0 || interval <= 0 || interval >= perDriverReportInterval {
 		return ""
 	}
 	return fmt.Sprintf(
-		"%d vehicles every %s is %s per report, but the server allows one per %s per driver "+
-			"and every vehicle here logs in as the same user, so most reports will come back 429. "+
-			"Use -vehicles 1, or -interval %s, until the simulator can hold one account per vehicle.",
-		vehicles, interval, interval/time.Duration(vehicles), perDriverReportInterval, needed)
+		"-interval %s is faster than the one report per %s the server allows each driver, "+
+			"so most reports will come back 429. Use -interval %s or slower.",
+		interval, perDriverReportInterval, perDriverReportInterval)
 }
 
 func checkBaseURL(raw string) error {
@@ -130,15 +138,35 @@ func main() {
 			"so pass -email/-password or set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD")
 	}
 
-	token, err := login(ctx, &http.Client{Timeout: 10 * time.Second}, *baseURL, *email, *password)
+	bootstrap := &http.Client{Timeout: 10 * time.Second}
+	adminToken, err := login(ctx, bootstrap, *baseURL, *email, *password)
 	if err != nil {
 		log.Fatalf("login failed: %v", err)
 	}
 
-	client := &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: bearerTransport{token: token, base: http.DefaultTransport},
+	runID, err := randomSecret()
+	if err != nil {
+		log.Fatal(err)
 	}
+	runID = runID[:8]
+
+	log.Printf("provisioning %d driver accounts", *numVehicles)
+	tokens, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles)
+	if err != nil {
+		log.Fatalf("provisioning drivers: %v", err)
+	}
+
+	// One client per vehicle, each carrying its own driver's token. The tokens
+	// are good for 24h and are never refreshed, so a -duration 0 run left going
+	// for longer than that will start seeing 401s.
+	clients := make([]*http.Client, len(tokens))
+	for i, t := range tokens {
+		clients[i] = &http.Client{
+			Timeout:   10 * time.Second,
+			Transport: bearerTransport{token: t, base: http.DefaultTransport},
+		}
+	}
+
 	s := &stats{}
 
 	log.Printf("starting simulator: %d vehicles, interval=%s, duration=%s", *numVehicles, *interval, *duration)
@@ -150,7 +178,7 @@ func main() {
 		route := routes[i%len(routes)]
 		go func() {
 			defer wg.Done()
-			simulateVehicle(ctx, client, *baseURL, vehicleID, route, *interval, s)
+			simulateVehicle(ctx, clients[i], *baseURL, vehicleID, route, *interval, s)
 		}()
 	}
 	wg.Wait()
@@ -231,6 +259,119 @@ func (t bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+t.token)
 	return t.base.RoundTrip(req)
+}
+
+// createUserRequest is the POST /api/v1/admin/users body.
+type createUserRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+}
+
+// provisionDrivers creates one driver account per vehicle and logs each in, so
+// every vehicle reports under its own JWT sub. The server rate-limits location
+// reports per driver, so a shared login would put every vehicle in one bucket
+// and turn most reports into 429s.
+//
+// runID keeps the accounts of concurrent or repeated runs from colliding.
+func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]string, error) {
+	tokens := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		email := fmt.Sprintf("sim-driver-%03d-%s@simulator.invalid", i+1, runID)
+		password, err := randomSecret()
+		if err != nil {
+			return nil, err
+		}
+		if err := createDriver(ctx, client, baseURL, adminToken, email, password, i+1); err != nil {
+			return nil, err
+		}
+		token, err := loginWithRetry(ctx, client, baseURL, email, password)
+		if err != nil {
+			return nil, fmt.Errorf("driver %d: %w", i+1, err)
+		}
+		tokens = append(tokens, token)
+		if i < n-1 && !sleepCtx(ctx, provisionStagger) {
+			return nil, ctx.Err()
+		}
+	}
+	return tokens, nil
+}
+
+func createDriver(ctx context.Context, client *http.Client, baseURL, adminToken, email, password string, n int) error {
+	body, err := json.Marshal(createUserRequest{
+		Name:     fmt.Sprintf("Simulated Driver %03d", n),
+		Email:    email,
+		Password: password,
+		Role:     "driver",
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/admin/users", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("creating driver %d: %w", n, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("POST /api/v1/admin/users for driver %d returned %d: %s. "+
+			"The account this simulator logs in with must have the admin role",
+			n, resp.StatusCode, bytes.TrimSpace(msg))
+	}
+	return nil
+}
+
+// loginWithRetry backs off past a 429 from the per-IP login limiter, which one
+// login per vehicle will reach on a run with more than ten of them.
+func loginWithRetry(ctx context.Context, client *http.Client, baseURL, email, password string) (string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= provisionAttempts; attempt++ {
+		token, err := login(ctx, client, baseURL, email, password)
+		if err == nil {
+			return token, nil
+		}
+		lastErr = err
+		if !strings.Contains(err.Error(), "429") {
+			return "", err
+		}
+		if attempt == provisionAttempts {
+			break
+		}
+		log.Printf("login refused (429), waiting %s (attempt %d/%d)", provisionBackoff, attempt, provisionAttempts)
+		if !sleepCtx(ctx, provisionBackoff) {
+			return "", ctx.Err()
+		}
+	}
+	return "", lastErr
+}
+
+// randomSecret returns a password for an account that only this run uses.
+func randomSecret() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating a driver password: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// sleepCtx reports whether it slept the whole duration rather than being cancelled.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
 }
 
 // login exchanges credentials for a session token via POST /api/v1/auth/login.

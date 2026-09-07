@@ -148,10 +148,32 @@ Use the built-in simulator to generate multiple moving vehicles:
 make simulate
 ```
 
+`POST /api/v1/locations` is authenticated, so the simulator needs an account to
+sign in with. It reads `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD` by
+default, or takes `-email`/`-password`, and it exits rather than starting
+without them. The account has to have the admin role.
+
+That login is only the start. The server allows one location report per driver
+per 5 seconds, keyed on the JWT subject, so vehicles sharing a login would share
+one budget and most of their reports would come back `429`. Instead the
+simulator signs in as the admin, creates one `driver` account per vehicle
+through `POST /api/v1/admin/users`, and logs each one in, so every vehicle
+reports under its own identity and gets its own allowance. The accounts are
+named `sim-driver-NNN-<run id>@simulator.invalid` and are left behind when the
+run ends; delete them from the admin UI if they pile up.
+
+Two consequences worth knowing:
+
+- Startup makes one login per vehicle, and the server allows ten logins per IP
+  per minute. Past ten vehicles the simulator waits out the limiter rather than
+  failing, so a large run takes a minute or two to get going.
+- `-interval` now has to be 5 s or slower, but it no longer has to grow with
+  `-vehicles`. The simulator warns at startup if the interval is too fast.
+
 Custom example:
 
 ```bash
-go run ./cmd/simulator -url http://localhost:8080 -vehicles 1 -interval 6s -duration 2m
+go run ./cmd/simulator -url http://localhost:8080 -vehicles 5 -interval 6s -duration 2m
 ```
 
 ## Watching Retention Prune Locally

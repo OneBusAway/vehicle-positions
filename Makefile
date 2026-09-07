@@ -70,7 +70,7 @@ smoke:
 	@echo
 
 simulate:
-	go run ./cmd/simulator -url http://localhost:8080 -vehicles 1 -interval 6s -duration 30s
+	go run ./cmd/simulator -url http://localhost:8080 -vehicles 5 -interval 6s -duration 30s
 
 ridersim:
 	go run ./cmd/ridersim -url http://localhost:$(PORT) -gtfs rider/testdata/fixture.zip -trip T1 -interval 1s -speed 10 -expect-end arrived

@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -388,27 +389,91 @@ func TestCheckBaseURL(t *testing.T) {
 }
 
 func TestReportBudgetWarning(t *testing.T) {
-	// The old `make simulate` defaults: 5 vehicles every 3s against a budget of
-	// one report per 5s for the single shared login.
-	if got := reportBudgetWarning(5, 3*time.Second); got == "" {
-		t.Error("reportBudgetWarning(5, 3s) = \"\", want a warning")
-	}
-	// The new defaults, and anything else that fits the budget, stay quiet.
-	for _, tc := range []struct {
-		vehicles int
-		interval time.Duration
-	}{
-		{1, 6 * time.Second},
-		{1, 5 * time.Second},
-		{2, 10 * time.Second},
-		{4, time.Minute},
-	} {
-		if got := reportBudgetWarning(tc.vehicles, tc.interval); got != "" {
-			t.Errorf("reportBudgetWarning(%d, %s) = %q, want \"\"", tc.vehicles, tc.interval, got)
+	// Each vehicle logs in as its own driver, so the budget is one report per
+	// perDriverReportInterval per vehicle and the vehicle count does not enter
+	// into it. Only an interval faster than that allowance warns.
+	for _, vehicles := range []int{1, 2, 5, 20} {
+		if got := reportBudgetWarning(vehicles, 3*time.Second); got == "" {
+			t.Errorf("reportBudgetWarning(%d, 3s) = \"\", want a warning", vehicles)
 		}
+		for _, interval := range []time.Duration{5 * time.Second, 6 * time.Second, time.Minute} {
+			if got := reportBudgetWarning(vehicles, interval); got != "" {
+				t.Errorf("reportBudgetWarning(%d, %s) = %q, want \"\"", vehicles, interval, got)
+			}
+		}
+	}
+	// Adding vehicles used to shrink the per-vehicle budget. It must not now.
+	if got := reportBudgetWarning(50, perDriverReportInterval); got != "" {
+		t.Errorf("reportBudgetWarning(50, %s) = %q, want \"\"", perDriverReportInterval, got)
 	}
 	// Nonsense input must not warn rather than dividing by zero.
 	if got := reportBudgetWarning(0, 0); got != "" {
 		t.Errorf("reportBudgetWarning(0, 0) = %q, want \"\"", got)
+	}
+}
+
+// TestProvisionDriversGivesEachVehicleItsOwnIdentity pins the reason this
+// exists: the server rate-limits location reports per driver, so N vehicles
+// need N distinct accounts and N distinct tokens.
+func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
+	var mu sync.Mutex
+	created := map[string]string{} // email -> password
+	roles := map[string]string{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decoding %s: %v", r.URL.Path, err)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/api/v1/admin/users":
+			if got := r.Header.Get("Authorization"); got != "Bearer admin-token" {
+				t.Errorf("create user Authorization = %q, want the admin token", got)
+			}
+			created[body["email"]] = body["password"]
+			roles[body["email"]] = body["role"]
+			w.WriteHeader(http.StatusCreated)
+		case "/api/v1/auth/login":
+			if created[body["email"]] != body["password"] {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]string{"token": "token-for-" + body["email"]})
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	tokens, err := provisionDrivers(t.Context(), srv.Client(), srv.URL, "admin-token", "runid123", 3)
+	if err != nil {
+		t.Fatalf("provisionDrivers: %v", err)
+	}
+	if len(tokens) != 3 {
+		t.Fatalf("got %d tokens, want 3", len(tokens))
+	}
+	seen := map[string]bool{}
+	for _, tk := range tokens {
+		if seen[tk] {
+			t.Errorf("token %q reused; every vehicle needs its own rate-limit bucket", tk)
+		}
+		seen[tk] = true
+	}
+	if len(created) != 3 {
+		t.Errorf("created %d accounts, want 3", len(created))
+	}
+	for email, role := range roles {
+		if role != "driver" {
+			t.Errorf("account %s has role %q, want driver", email, role)
+		}
+	}
+	pw := map[string]bool{}
+	for _, p := range created {
+		if pw[p] {
+			t.Error("two accounts share a password")
+		}
+		pw[p] = true
 	}
 }
