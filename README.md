@@ -201,7 +201,7 @@ The server produces a standard `FeedMessage` containing `VehiclePosition` entiti
 ```protobuf
 vehicle {
   trip {
-    trip_id: "route_5_0830"
+    trip_id: "t_5_0830"
     route_id: "5"
     start_time: "08:30:00"
     start_date: "20260715"
@@ -245,7 +245,9 @@ Each location report is a single point sent directly from the Android app as it 
 ```json
 {
   "vehicle_id": "vehicle-042",
-  "trip_id": "route_5_0830",
+  "trip_id": "t_5_0830",
+  "route_id": "5",
+  "start_date": "20260715",
   "latitude": -1.2921,
   "longitude": 36.8219,
   "bearing": 180.0,
@@ -257,6 +259,8 @@ Each location report is a single point sent directly from the Android app as it 
 
 The server updates its in-memory state with the latest position and persists the point to the database. Points older than a configurable staleness threshold (default 5 minutes) are excluded from the GTFS-RT feed.
 
+> `trip_id`, `route_id` and `start_date` are all optional. `trip_id` is the GTFS `trip_id` and must be left empty when the driver only knows the route — never send a route id in `trip_id`. `route_id` is the GTFS `route_id`; when `trip_id` is empty it is the only thing a consumer can match on. `start_date` is the service date, `YYYYMMDD`, and is accepted only alongside `trip_id` or `route_id`. The feed's `TripDescriptor` carries exactly the fields that were sent, and is omitted entirely when both `trip_id` and `route_id` are empty.
+
 **`POST /api/v1/locations` validation and error contract**
 
 The ingest endpoint performs strict request validation before writing data:
@@ -265,6 +269,7 @@ The ingest endpoint performs strict request validation before writing data:
 - The request body must contain exactly one JSON object.
 - Unknown JSON fields are rejected.
 - Standard payload validation still applies (`vehicle_id`, coordinates, timestamp).
+- `trip_id` and `route_id` are capped at 100 characters; `start_date` must be a real `YYYYMMDD` date.
 
 Response codes:
 
@@ -278,7 +283,7 @@ Examples:
 # Valid request
 curl -i -X POST http://localhost:8080/api/v1/locations \
   -H "Content-Type: application/json" \
-  -d '{"vehicle_id":"bus-1","trip_id":"route-5","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
+  -d '{"vehicle_id":"bus-1","route_id":"5","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
 
 # Invalid content type -> 415
 curl -i -X POST http://localhost:8080/api/v1/locations \

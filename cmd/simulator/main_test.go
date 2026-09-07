@@ -151,6 +151,7 @@ func TestInterpolate(t *testing.T) {
 func TestLocationReportJSONRoundTrip(t *testing.T) {
 	report := locationReport{
 		VehicleID: "sim-vehicle-001",
+		RouteID:   "sim-route-1",
 		Latitude:  -1.2864,
 		Longitude: 36.8172,
 		Bearing:   327.5,
@@ -166,7 +167,7 @@ func TestLocationReportJSONRoundTrip(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &raw))
 
-	expectedFields := []string{"vehicle_id", "latitude", "longitude", "bearing", "speed", "accuracy", "timestamp"}
+	expectedFields := []string{"vehicle_id", "route_id", "latitude", "longitude", "bearing", "speed", "accuracy", "timestamp"}
 	for _, field := range expectedFields {
 		assert.Contains(t, raw, field, "missing JSON field %q", field)
 	}
@@ -176,6 +177,8 @@ func TestLocationReportJSONRoundTrip(t *testing.T) {
 	var decoded locationReport
 	require.NoError(t, json.Unmarshal(data, &decoded))
 	assert.Equal(t, report, decoded)
+	assert.Equal(t, "sim-route-1", decoded.RouteID)
+	assert.Contains(t, string(data), `"route_id":"sim-route-1"`)
 }
 
 func TestRouteWraparound(t *testing.T) {
@@ -293,7 +296,7 @@ func TestSimulateVehicle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
 	defer cancel()
 
-	simulateVehicle(ctx, server.Client(), server.URL, "test-sim", route, 100*time.Millisecond, s)
+	simulateVehicle(ctx, server.Client(), server.URL, "test-sim", route, "sim-route-1", 100*time.Millisecond, s)
 
 	assert.Eventually(t, func() bool {
 		return s.succeeded.Load() >= 2

@@ -22,8 +22,16 @@ import (
 
 // LocationReport is the JSON payload for incoming location data.
 type LocationReport struct {
-	VehicleID string   `json:"vehicle_id"`
-	TripID    string   `json:"trip_id"`
+	VehicleID string `json:"vehicle_id"`
+	// TripID is the GTFS trip_id when the driver knows it. Empty when the
+	// driver only knows the route; it must never carry a route id.
+	TripID string `json:"trip_id"`
+	// RouteID is the GTFS route_id. Optional, but the only thing a consumer
+	// can match on when TripID is empty.
+	RouteID string `json:"route_id"`
+	// StartDate is the trip's service date, YYYYMMDD in the agency's local
+	// time. Optional; meaningful only alongside TripID or RouteID.
+	StartDate string   `json:"start_date"`
 	Latitude  float64  `json:"latitude"`
 	Longitude float64  `json:"longitude"`
 	Bearing   *float64 `json:"bearing,omitempty"`
@@ -35,6 +43,10 @@ type LocationReport struct {
 }
 
 const maxVehicleIDLength = 50
+
+// maxTripFieldLength matches the trips endpoint's cap on route_id and
+// gtfs_trip_id (trip_handlers.go).
+const maxTripFieldLength = 100
 
 var vehicleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
@@ -71,6 +83,23 @@ func (r *LocationReport) validate() error {
 	}
 	if r.Speed != nil && *r.Speed < 0 {
 		return fmt.Errorf("speed must be non-negative")
+	}
+	if len(r.TripID) > maxTripFieldLength {
+		return fmt.Errorf("trip_id must be at most %d characters", maxTripFieldLength)
+	}
+	if len(r.RouteID) > maxTripFieldLength {
+		return fmt.Errorf("route_id must be at most %d characters", maxTripFieldLength)
+	}
+	if r.StartDate != "" {
+		if !serviceDatePattern.MatchString(r.StartDate) {
+			return fmt.Errorf("start_date must be YYYYMMDD")
+		}
+		if _, err := time.Parse("20060102", r.StartDate); err != nil {
+			return fmt.Errorf("start_date must be a valid YYYYMMDD date")
+		}
+		if r.TripID == "" && r.RouteID == "" {
+			return fmt.Errorf("start_date requires trip_id or route_id")
+		}
 	}
 	return nil
 }
@@ -238,10 +267,18 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 			},
 		}
 
-		if v.TripID != "" {
-			entity.Vehicle.Trip = &gtfsrt.TripDescriptor{
-				TripId: proto.String(v.TripID),
+		if v.TripID != "" || v.RouteID != "" {
+			trip := &gtfsrt.TripDescriptor{}
+			if v.TripID != "" {
+				trip.TripId = proto.String(v.TripID)
 			}
+			if v.RouteID != "" {
+				trip.RouteId = proto.String(v.RouteID)
+			}
+			if v.StartDate != "" {
+				trip.StartDate = proto.String(v.StartDate)
+			}
+			entity.Vehicle.Trip = trip
 		}
 		entities = append(entities, entity)
 	}

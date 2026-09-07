@@ -367,7 +367,8 @@ curl -X POST http://localhost:8080/api/v1/locations \
   -H 'Content-Type: application/json' \
   -d '{
     "vehicle_id": "demo-vehicle-42",
-    "trip_id": "route-5-0830",
+    "trip_id": "t_5_0830",
+    "route_id": "5",
     "latitude": -1.2921,
     "longitude": 36.8219,
     "bearing": 180,
