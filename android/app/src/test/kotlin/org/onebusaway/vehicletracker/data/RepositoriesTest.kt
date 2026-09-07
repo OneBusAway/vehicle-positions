@@ -4,6 +4,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
@@ -79,12 +82,15 @@ class RepositoriesTest {
         val store = FakeTripStateStore()
         val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, clock = { 500L }, zone = ZoneOffset.UTC)
 
-        repo.start("bus-1", "5", "  ")
+        repo.start("bus-1", " 5 ", "  ")
 
         val trip = store.activeTrip.first()!!
         assertEquals("", trip.gtfsTripId)
         assertEquals("5", trip.routeId)
         assertEquals("19700101", trip.startDate)
+        val sentBody = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("5", sentBody["route_id"]!!.jsonPrimitive.content)
+        assertEquals(listOf("5"), store.recentRoutes.first())
         server.shutdown()
     }
 

@@ -19,18 +19,19 @@ class TripRepository @Inject constructor(
     // an uncaught exception during construction.
     suspend fun start(vehicleId: String, routeId: String, gtfsTripId: String): Result<ActiveTrip> = try {
         val cleanedTripId = gtfsTripId.trim()
-        val trip = apiProvider.get().startTrip(StartTripRequest(vehicleId, routeId, cleanedTripId))
+        val cleanedRouteId = routeId.trim()
+        val trip = apiProvider.get().startTrip(StartTripRequest(vehicleId, cleanedRouteId, cleanedTripId))
         val startedAt = clock()
         val activeTrip = ActiveTrip(
             tripDbId = trip.id,
             gtfsTripId = cleanedTripId,
             vehicleId = vehicleId,
-            routeId = routeId,
+            routeId = cleanedRouteId,
             startDate = serviceDate(startedAt, zone),
             startedAtEpochSec = startedAt,
         )
         tripStateStore.saveActiveTrip(activeTrip)
-        tripStateStore.addRecentRoute(routeId)
+        tripStateStore.addRecentRoute(cleanedRouteId)
         Result.success(activeTrip)
     } catch (e: CancellationException) {
         throw e
