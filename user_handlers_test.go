@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -57,10 +58,25 @@ func (m *mockUserCreator) CreateUser(ctx context.Context, name, email, password,
 type mockUserUpdater struct {
 	user *UserResponse
 	err  error
+
+	passwordUpdates map[int64]string
+	updateUserCalls int
 }
 
 func (m *mockUserUpdater) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
+	m.updateUserCalls++
 	return m.user, m.err
+}
+
+func (m *mockUserUpdater) UpdateUserPassword(_ context.Context, id int64, password string) error {
+	if m.err != nil {
+		return m.err
+	}
+	if m.passwordUpdates == nil {
+		m.passwordUpdates = map[int64]string{}
+	}
+	m.passwordUpdates[id] = password
+	return nil
 }
 
 type mockUserDeleter struct {
@@ -79,6 +95,20 @@ func decodeErrorResponse(t *testing.T, w *httptest.ResponseRecorder) string {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	return resp["error"]
+}
+
+// putUser builds and runs a PUT /api/v1/admin/users/{id} request against
+// handleUpdateUser(store), returning the recorder for assertions.
+func putUser(t *testing.T, store UserUpdater, id int64, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	handler := handleUpdateUser(store)
+	idStr := strconv.FormatInt(id, 10)
+	req := httptest.NewRequest("PUT", "/api/v1/admin/users/"+idStr, bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", idStr)
+	w := httptest.NewRecorder()
+	handler(w, req)
+	return w
 }
 
 func newSampleUser() *UserResponse {
@@ -651,7 +681,7 @@ func TestHandleUpdateUser_TrailingJSONRejected(t *testing.T) {
 
 func TestHandleUpdateUser_UnknownFieldRejected(t *testing.T) {
 	handler := handleUpdateUser(&mockUserUpdater{})
-	body := `{"name":"Alice","email":"a@b.com","role":"driver","password":"sneaky"}`
+	body := `{"name":"Alice","email":"a@b.com","role":"driver","sneaky":"field"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "1")
@@ -686,6 +716,30 @@ func TestHandleUpdateUser_BodyTooLarge(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, decodeErrorResponse(t, w), "invalid JSON")
+}
+
+func TestHandleUpdateUser_PasswordOptional(t *testing.T) {
+	t.Run("blank password leaves the hash alone", func(t *testing.T) {
+		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver"}`)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.Empty(t, store.passwordUpdates)
+	})
+	t.Run("new password is applied after the profile update", func(t *testing.T) {
+		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","password":"newlongpassword"}`)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.Equal(t, "newlongpassword", store.passwordUpdates[1])
+		assert.NotContains(t, rr.Body.String(), "newlongpassword")
+	})
+	t.Run("short password is rejected before any write", func(t *testing.T) {
+		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","password":"short"}`)
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.Contains(t, rr.Body.String(), "password must be at least 8 characters")
+		assert.Empty(t, store.passwordUpdates)
+		assert.Zero(t, store.updateUserCalls, "profile must not be updated when the password is rejected")
+	})
 }
 
 // --- Delete User ---

@@ -21,6 +21,9 @@ Quick-start instructions for running the server locally with Docker Compose,
 plus API sanity checks and troubleshooting, live in
 [`docs/development.md`](docs/development.md).
 
+For production — Postgres, reverse proxy and TLS, systemd, backups, monitoring
+and APK distribution — see [`docs/deployment.md`](docs/deployment.md).
+
 ### Admin web UI
 
 The server also ships a server-rendered admin web UI at `/admin` — sign in,
@@ -28,6 +31,9 @@ dashboard, live fleet map with per-trip trails, vehicle CRUD (with CSV export
 of location history), user CRUD, vehicle assignments, and trip history. It's
 built into the same binary and enabled by default; set
 `ADMIN_UI_ENABLED=false` to disable it entirely (the route returns 404).
+
+Day-to-day instructions for operators — onboarding drivers, managing vehicles,
+watching the feed — are in [`docs/operator-manual.md`](docs/operator-manual.md).
 
 **Note for operators upgrading from an earlier version:** the admin UI used to
 not exist, so there's nothing to opt into — this is a new default-on surface.
@@ -44,7 +50,10 @@ Sign in with an existing admin account. To create the first one:
 
 Deactivating a user blocks new logins immediately, but it doesn't revoke
 sessions already issued — any existing session cookie or JWT for that user
-stays valid until it expires (up to 24 hours).
+stays valid until it expires (up to 24 hours). Changing a user's password
+(from the admin UI's edit form, or by sending `password` in `PUT
+/api/v1/admin/users/{id}`) has the same limit: tokens already issued stay
+valid until they expire.
 
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
@@ -76,7 +85,7 @@ unparseable value logs and falls back to its default.
 | `RIDER_MODE_ENABLED` | `false` | Enable rider routes, engine and feed merge. |
 | `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. |
 | `GTFS_STATIC_REFRESH` | `24h` | Re-download and rebuild the index. Failure keeps the old index and logs. |
-| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feed URLs. The server's own driver-reported positions are always a trusted source; with no external feed, a trip no driver is reporting has corroboration `unavailable`. |
+| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feed URLs. The server's own driver-reported positions are always a trusted source when the driver entered the GTFS trip id (matching is by trip id, so a route-only driver report doesn't count); with no external feed, a trip no driver is reporting that way has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Poll interval; sends `If-None-Match` / `If-Modified-Since` when the server gave `ETag` / `Last-Modified`. |
 | `TRUSTED_FEED_MAX_AGE` | `5m` | Trusted entities older than this are dropped from the snapshot. |
 | `RIDER_JWT_TTL` | `8760h` | Rider token lifetime. |
@@ -117,7 +126,9 @@ distinguishable by construction: their id — and their `vehicle.id`, so that tw
 service dates of one trip are two vehicles — is `rider:<trip_id>:<start_date>`,
 and their vehicle label is `Rider-reported`. A rider-reported position is always
 snapped to the route shape, never a raw GPS fix, and a trip the trusted feed
-already reports is never published from rider data.
+already reports is never published from rider data — for the server's own
+driver reports, that requires the driver to have entered the GTFS trip id, not
+just a route.
 
 The iOS SDK that talks to this API lives in `ios/VehiclePositionsKit`. For the
 full design — verification rules, ride state machine, reputation tiers and
