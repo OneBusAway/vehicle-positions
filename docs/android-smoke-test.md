@@ -195,7 +195,12 @@ Run these in order against a single trip; check 5 ends it.
    Setup (auto-select). With more than one, pick `bus-1` from the vehicle
    list.
 3. Enter a route ID (e.g. `5`) and tap **Start Trip**.
-4. Work through the permission sequence as it appears: fine+coarse location
+4. Fetch `http://localhost:8080/gtfs-rt/vehicle-positions?format=json`. The
+   vehicle's entity must show `"trip": {"routeId": "5", "startDate": "<today,
+   YYYYMMDD>"}` and **no** `tripId` — the app never sends the route id as a
+   trip id. Start a second trip with a GTFS trip id filled in and confirm
+   `tripId` appears alongside `routeId`.
+5. Work through the permission sequence as it appears: fine+coarse location
    (grant precise), background location explanation → OS settings redirect
    (choose "Allow all the time"), notifications (allow), battery-optimization
    exemption (continue or not-now — either is fine).
