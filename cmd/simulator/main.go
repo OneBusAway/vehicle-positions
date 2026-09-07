@@ -3,13 +3,20 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -32,11 +39,75 @@ type stats struct {
 	totalMS   atomic.Int64
 }
 
+// checkBaseURL rejects a destination that would put the password and the
+// session token on the wire in cleartext. Plain HTTP stays allowed for
+// loopback, which is the default and the only way the simulator is normally
+// run, but anything remote has to be HTTPS.
+// perDriverReportInterval mirrors rateInterval in ratelimit.go: the server
+// allows one location report per driver per this long, keyed on the JWT sub.
+const perDriverReportInterval = 5 * time.Second
+
+// provisionStagger spaces the driver logins out and provisionBackoff is how
+// long a refused one waits: the server allows ten logins per IP per minute, so
+// a refusal has to sit out most of that window.
+const (
+	provisionStagger  = 250 * time.Millisecond
+	provisionBackoff  = 12 * time.Second
+	provisionAttempts = 10
+)
+
+// reportBudgetWarning explains the shortfall when a single vehicle reports
+// faster than the server's per-driver allowance. Each vehicle authenticates as
+// its own driver, so the budget is per vehicle and does not shrink as more are
+// added.
+func reportBudgetWarning(vehicles int, interval time.Duration) string {
+	if vehicles <= 0 || interval <= 0 || interval >= perDriverReportInterval {
+		return ""
+	}
+	return fmt.Sprintf(
+		"-interval %s is faster than the one report per %s the server allows each driver, "+
+			"so most reports will come back 429. Use -interval %s or slower.",
+		interval, perDriverReportInterval, perDriverReportInterval)
+}
+
+func checkBaseURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid -url %q: %w", raw, err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("invalid -url %q: no host", raw)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackHost(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("-url %q sends the login password and the bearer token in cleartext; use https for a remote host", raw)
+	default:
+		return fmt.Errorf("invalid -url %q: scheme must be http or https", raw)
+	}
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
 func main() {
 	baseURL := flag.String("url", "http://localhost:8080", "Server base URL")
 	numVehicles := flag.Int("vehicles", 10, "Number of simulated vehicles")
 	interval := flag.Duration("interval", 10*time.Second, "Time between location reports per vehicle")
 	duration := flag.Duration("duration", 5*time.Minute, "Total simulation duration (0 = run until Ctrl+C)")
+	email := flag.String("email", os.Getenv("ADMIN_BOOTSTRAP_EMAIL"), "Account email for login (default $ADMIN_BOOTSTRAP_EMAIL)")
+	password := flag.String("password", os.Getenv("ADMIN_BOOTSTRAP_PASSWORD"), "Account password for login (default $ADMIN_BOOTSTRAP_PASSWORD)")
 	flag.Parse()
 
 	if *numVehicles <= 0 {
@@ -54,7 +125,49 @@ func main() {
 		defer cancel()
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	if err := checkBaseURL(*baseURL); err != nil {
+		log.Fatal(err)
+	}
+
+	if warning := reportBudgetWarning(*numVehicles, *interval); warning != "" {
+		log.Printf("warning: %s", warning)
+	}
+
+	if *email == "" || *password == "" {
+		log.Fatal("email and password are required: POST /api/v1/locations is authenticated, " +
+			"so pass -email/-password or set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD")
+	}
+
+	bootstrap := &http.Client{Timeout: 10 * time.Second, CheckRedirect: sameOriginOnly(*baseURL)}
+	adminToken, err := login(ctx, bootstrap, *baseURL, *email, *password)
+	if err != nil {
+		log.Fatalf("login failed: %v", err)
+	}
+
+	runID, err := randomSecret()
+	if err != nil {
+		log.Fatal(err)
+	}
+	runID = runID[:8]
+
+	log.Printf("provisioning %d driver accounts", *numVehicles)
+	tokens, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles)
+	if err != nil {
+		log.Fatalf("provisioning drivers: %v", err)
+	}
+
+	// One client per vehicle, each carrying its own driver's token. The tokens
+	// are good for 24h and are never refreshed, so a -duration 0 run left going
+	// for longer than that will start seeing 401s.
+	clients := make([]*http.Client, len(tokens))
+	for i, t := range tokens {
+		clients[i] = &http.Client{
+			Timeout:       10 * time.Second,
+			Transport:     bearerTransport{token: t, base: http.DefaultTransport},
+			CheckRedirect: sameOriginOnly(*baseURL),
+		}
+	}
+
 	s := &stats{}
 
 	log.Printf("starting simulator: %d vehicles, interval=%s, duration=%s", *numVehicles, *interval, *duration)
@@ -66,7 +179,7 @@ func main() {
 		route := routes[i%len(routes)]
 		go func() {
 			defer wg.Done()
-			simulateVehicle(ctx, client, *baseURL, vehicleID, route, *interval, s)
+			simulateVehicle(ctx, clients[i], *baseURL, vehicleID, route, *interval, s)
 		}()
 	}
 	wg.Wait()
@@ -133,6 +246,206 @@ func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleI
 			sendReport(ctx, client, baseURL, vehicleID, &report, s)
 		}
 	}
+}
+
+// bearerTransport attaches the session token to every simulator request.
+// Reports go to POST /api/v1/locations, which sits behind requireAuth, so an
+// unauthenticated run fails with 401 on every single report.
+type bearerTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (t bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+t.token)
+	return t.base.RoundTrip(req)
+}
+
+// createUserRequest is the POST /api/v1/admin/users body.
+type createUserRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+}
+
+// provisionDrivers creates one driver account per vehicle and logs each in, so
+// every vehicle reports under its own JWT sub. The server rate-limits location
+// reports per driver, so a shared login would put every vehicle in one bucket
+// and turn most reports into 429s.
+//
+// runID keeps the accounts of concurrent or repeated runs from colliding.
+func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]string, error) {
+	tokens := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		email := fmt.Sprintf("sim-driver-%03d-%s@simulator.invalid", i+1, runID)
+		password, err := randomSecret()
+		if err != nil {
+			return nil, err
+		}
+		if err := createDriver(ctx, client, baseURL, adminToken, email, password, i+1); err != nil {
+			return nil, err
+		}
+		token, err := loginWithRetry(ctx, client, baseURL, email, password)
+		if err != nil {
+			return nil, fmt.Errorf("driver %d: %w", i+1, err)
+		}
+		tokens = append(tokens, token)
+		if i < n-1 && !sleepCtx(ctx, provisionStagger) {
+			return nil, ctx.Err()
+		}
+	}
+	return tokens, nil
+}
+
+func createDriver(ctx context.Context, client *http.Client, baseURL, adminToken, email, password string, n int) error {
+	body, err := json.Marshal(createUserRequest{
+		Name:     fmt.Sprintf("Simulated Driver %03d", n),
+		Email:    email,
+		Password: password,
+		Role:     "driver",
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/admin/users", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("creating driver %d: %w", n, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("POST /api/v1/admin/users for driver %d returned %d: %s. "+
+			"The account this simulator logs in with must have the admin role",
+			n, resp.StatusCode, bytes.TrimSpace(msg))
+	}
+	return nil
+}
+
+// loginWithRetry backs off past a 429 from the per-IP login limiter, which one
+// login per vehicle will reach on a run with more than ten of them.
+func loginWithRetry(ctx context.Context, client *http.Client, baseURL, email, password string) (string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= provisionAttempts; attempt++ {
+		token, err := login(ctx, client, baseURL, email, password)
+		if err == nil {
+			return token, nil
+		}
+		lastErr = err
+		if !strings.Contains(err.Error(), "429") {
+			return "", err
+		}
+		if attempt == provisionAttempts {
+			break
+		}
+		log.Printf("login refused (429), waiting %s (attempt %d/%d)", provisionBackoff, attempt, provisionAttempts)
+		if !sleepCtx(ctx, provisionBackoff) {
+			return "", ctx.Err()
+		}
+	}
+	return "", lastErr
+}
+
+// randomSecret returns a password for an account that only this run uses.
+func randomSecret() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating a driver password: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// sleepCtx reports whether it slept the whole duration rather than being cancelled.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// canonicalOrigin is scheme://host:port with the scheme's default port made
+// explicit, so http://h and http://h:80 compare equal.
+func canonicalOrigin(u *url.URL) string {
+	host, port := u.Hostname(), u.Port()
+	if port == "" {
+		switch u.Scheme {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		}
+	}
+	return u.Scheme + "://" + net.JoinHostPort(host, port)
+}
+
+// sameOriginOnly refuses a redirect that leaves the origin checkBaseURL
+// validated. http.Client normally strips Authorization when a redirect crosses
+// origins, but bearerTransport sets the header inside RoundTrip, which runs
+// again for every hop and puts it back. Without this a redirect could hand a
+// driver's token, or the admin password on the login hop, to another host.
+func sameOriginOnly(base string) func(*http.Request, []*http.Request) error {
+	u, err := url.Parse(base)
+	if err != nil {
+		return func(*http.Request, []*http.Request) error { return err }
+	}
+	want := canonicalOrigin(u)
+	return func(req *http.Request, via []*http.Request) error {
+		if got := canonicalOrigin(req.URL); got != want {
+			return fmt.Errorf("refusing redirect to %s: it would send credentials to an origin other than %s", got, want)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+}
+
+// login exchanges credentials for a session token via POST /api/v1/auth/login.
+func login(ctx context.Context, client *http.Client, baseURL, email, password string) (string, error) {
+	body, err := json.Marshal(map[string]string{"email": email, "password": password})
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/auth/login", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("POST /api/v1/auth/login returned %d: %s", resp.StatusCode, bytes.TrimSpace(msg))
+	}
+
+	var out struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&out); err != nil {
+		return "", fmt.Errorf("decoding login response: %w", err)
+	}
+	if out.Token == "" {
+		return "", errors.New("login response contained no token")
+	}
+	return out.Token, nil
 }
 
 func sendReport(ctx context.Context, client *http.Client, baseURL, vehicleID string, report *locationReport, s *stats) {
