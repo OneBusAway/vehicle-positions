@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,32 +71,44 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 	vehicles := []*VehicleState{
 		{
 			VehicleID: "bus-1",
-			TripID:    "route-5",
+			TripID:    "trip-0830",
+			RouteID:   "5",
+			StartDate: "20260906",
 			Latitude:  -1.29,
 			Longitude: 36.82,
 			Bearing:   float64ptr(180),
 			Speed:     float64ptr(8.5),
 			Timestamp: bus1Ts,
 		},
+		// bus-2 unchanged: no trip fields at all.
 		{
 			VehicleID: "bus-2",
 			Latitude:  -1.30,
 			Longitude: 36.83,
 			Timestamp: bus2Ts,
 		},
+		{
+			VehicleID: "bus-3",
+			RouteID:   "7",
+			Latitude:  -1.31,
+			Longitude: 36.84,
+			Timestamp: bus2Ts,
+		},
 	}
 
 	feed := buildFeed(vehicles, nil)
 
-	require.Len(t, feed.Entity, 2)
+	require.Len(t, feed.Entity, 3)
 
-	var bus1, bus2 *gtfsrt.FeedEntity
+	var bus1, bus2, bus3 *gtfsrt.FeedEntity
 	for _, e := range feed.Entity {
 		switch e.GetId() {
 		case "bus-1":
 			bus1 = e
 		case "bus-2":
 			bus2 = e
+		case "bus-3":
+			bus3 = e
 		}
 	}
 
@@ -105,14 +118,60 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 	assert.Equal(t, float32(180), bus1.Vehicle.Position.GetBearing())
 	assert.Equal(t, float32(8.5), bus1.Vehicle.Position.GetSpeed())
 	assert.Equal(t, uint64(bus1Ts), bus1.Vehicle.GetTimestamp())
-	assert.Equal(t, "route-5", bus1.Vehicle.Trip.GetTripId())
+	require.NotNil(t, bus1.Vehicle.Trip)
+	assert.Equal(t, "trip-0830", bus1.Vehicle.Trip.GetTripId())
+	assert.Equal(t, "5", bus1.Vehicle.Trip.GetRouteId())
+	assert.Equal(t, "20260906", bus1.Vehicle.Trip.GetStartDate())
 
 	require.NotNil(t, bus2)
 	assert.Nil(t, bus2.Vehicle.Trip, "bus-2 has no trip, Trip should be nil")
 
+	require.NotNil(t, bus3)
+	require.NotNil(t, bus3.Vehicle.Trip, "a route-only report still gets a TripDescriptor")
+	assert.Nil(t, bus3.Vehicle.Trip.TripId, "route-only report must not invent a trip_id")
+	assert.Equal(t, "7", bus3.Vehicle.Trip.GetRouteId())
+	assert.Nil(t, bus3.Vehicle.Trip.StartDate)
+
 	// E012: header timestamp must be >= max entity timestamp.
 	assert.GreaterOrEqual(t, feed.Header.GetTimestamp(), uint64(bus2Ts),
 		"header timestamp must be >= max entity timestamp (E012)")
+}
+
+func TestBuildFeed_TripDescriptorFields(t *testing.T) {
+	now := time.Now().Unix()
+	cases := []struct {
+		name      string
+		state     *VehicleState
+		wantTrip  bool
+		wantTrip_ string
+		wantRoute string
+		wantDate  string
+	}{
+		{"trip only", &VehicleState{VehicleID: "a", TripID: "T1", Latitude: 1, Longitude: 1, Timestamp: now}, true, "T1", "", ""},
+		{"route only", &VehicleState{VehicleID: "b", RouteID: "R1", Latitude: 1, Longitude: 1, Timestamp: now}, true, "", "R1", ""},
+		{"route and date", &VehicleState{VehicleID: "c", RouteID: "R1", StartDate: "20260906", Latitude: 1, Longitude: 1, Timestamp: now}, true, "", "R1", "20260906"},
+		{"all three", &VehicleState{VehicleID: "d", TripID: "T1", RouteID: "R1", StartDate: "20260906", Latitude: 1, Longitude: 1, Timestamp: now}, true, "T1", "R1", "20260906"},
+		{"nothing", &VehicleState{VehicleID: "e", Latitude: 1, Longitude: 1, Timestamp: now}, false, "", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			feed := buildFeed([]*VehicleState{tc.state}, nil)
+			require.Len(t, feed.Entity, 1)
+			trip := feed.Entity[0].Vehicle.Trip
+			if !tc.wantTrip {
+				assert.Nil(t, trip)
+				return
+			}
+			require.NotNil(t, trip)
+			assert.Equal(t, tc.wantTrip_, trip.GetTripId())
+			assert.Equal(t, tc.wantRoute, trip.GetRouteId())
+			assert.Equal(t, tc.wantDate, trip.GetStartDate())
+			// Absent fields must be absent, not empty strings.
+			assert.Equal(t, tc.wantTrip_ == "", trip.TripId == nil)
+			assert.Equal(t, tc.wantRoute == "", trip.RouteId == nil)
+			assert.Equal(t, tc.wantDate == "", trip.StartDate == nil)
+		})
+	}
 }
 
 func TestGetFeed_Protobuf(t *testing.T) {
@@ -179,116 +238,199 @@ func TestGetFeed_StaleExcluded(t *testing.T) {
 
 func TestHandlePostLocation_Validation(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
-	// Use a nil store — validation happens before DB call
-	// We need a real Store for the handler signature, but validation errors
-	// are returned before SaveLocation is called, so it won't be used.
+	defer tracker.Stop()
+	// Every row but the last fails validate() before the store or claims are
+	// ever touched, so a real store and driver claims are harmless for those
+	// rows and required for the one row that reaches 201.
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker, NewVehicleRateLimiter())
 
 	tests := []struct {
-		name string
-		loc  LocationReport
-		want string
+		name       string
+		loc        LocationReport
+		wantStatus int
+		want       string
 	}{
 		{
-			name: "missing vehicle_id",
-			loc:  LocationReport{Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
-			want: "vehicle_id is required",
+			name:       "missing vehicle_id",
+			loc:        LocationReport{Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "vehicle_id is required",
 		},
 		{
-			name: "latitude too high",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 91, Longitude: 2, Timestamp: time.Now().Unix()},
-			want: "latitude must be between -90 and 90",
+			name:       "latitude too high",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 91, Longitude: 2, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "latitude must be between -90 and 90",
 		},
 		{
-			name: "latitude too low",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: -91, Longitude: 2, Timestamp: time.Now().Unix()},
-			want: "latitude must be between -90 and 90",
+			name:       "latitude too low",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: -91, Longitude: 2, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "latitude must be between -90 and 90",
 		},
 		{
-			name: "longitude too high",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 181, Timestamp: time.Now().Unix()},
-			want: "longitude must be between -180 and 180",
+			name:       "longitude too high",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 181, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "longitude must be between -180 and 180",
 		},
 		{
-			name: "reject null coordinates (0,0)",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 0, Longitude: 0, Timestamp: time.Now().Unix()},
-			want: "latitude and longitude cannot both be zero (likely GPS error)",
+			name:       "reject null coordinates (0,0)",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 0, Longitude: 0, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "latitude and longitude cannot both be zero (likely GPS error)",
 		},
 		{
-			name: "zero timestamp",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 0},
-			want: "timestamp must be positive",
+			name:       "zero timestamp",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 0},
+			wantStatus: http.StatusBadRequest,
+			want:       "timestamp must be positive",
 		},
 		{
-			name: "vehicle_id too long",
-			loc:  LocationReport{VehicleID: "abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
-			want: "vehicle_id must be at most 50 characters",
+			name:       "vehicle_id too long",
+			loc:        LocationReport{VehicleID: "abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "vehicle_id must be at most 50 characters",
 		},
 		{
-			name: "vehicle_id with spaces",
-			loc:  LocationReport{VehicleID: "bus 1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
-			want: "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores",
+			name:       "vehicle_id with spaces",
+			loc:        LocationReport{VehicleID: "bus 1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores",
 		},
 		{
-			name: "vehicle_id with special characters",
-			loc:  LocationReport{VehicleID: "bus@1!", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
-			want: "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores",
+			name:       "vehicle_id with special characters",
+			loc:        LocationReport{VehicleID: "bus@1!", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores",
 		},
 		{
-			name: "timestamp too far in past",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100},
-			want: "timestamp must be within 5 minutes of server time",
+			name:       "timestamp too far in past",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: 100},
+			wantStatus: http.StatusBadRequest,
+			want:       "timestamp must be within 5 minutes of server time",
 		},
 		{
-			name: "timestamp too far in future",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix() + 600},
-			want: "timestamp must be within 5 minutes of server time",
+			name:       "timestamp too far in future",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix() + 600},
+			wantStatus: http.StatusBadRequest,
+			want:       "timestamp must be within 5 minutes of server time",
 		},
 		{
-			name: "bearing negative",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(-1), Timestamp: time.Now().Unix()},
-			want: "bearing must be between 0 and 360 (inclusive)",
+			name:       "bearing negative",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(-1), Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "bearing must be between 0 and 360 (inclusive)",
 		},
 		{
-			name: "bearing too high",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(361), Timestamp: time.Now().Unix()},
-			want: "bearing must be between 0 and 360 (inclusive)",
+			name:       "bearing too high",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(361), Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "bearing must be between 0 and 360 (inclusive)",
 		},
 		{
-			name: "speed negative",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Speed: float64ptr(-5), Timestamp: time.Now().Unix()},
-			want: "speed must be non-negative",
+			name:       "speed negative",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Speed: float64ptr(-5), Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "speed must be non-negative",
 		},
 		{
-			name: "bearing just below zero",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(-0.001), Timestamp: time.Now().Unix()},
-			want: "bearing must be between 0 and 360 (inclusive)",
+			name:       "bearing just below zero",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(-0.001), Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "bearing must be between 0 and 360 (inclusive)",
 		},
 		{
-			name: "bearing just above 360",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(360.001), Timestamp: time.Now().Unix()},
-			want: "bearing must be between 0 and 360 (inclusive)",
+			name:       "bearing just above 360",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Bearing: float64ptr(360.001), Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "bearing must be between 0 and 360 (inclusive)",
 		},
 		{
-			name: "speed just below zero",
-			loc:  LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Speed: float64ptr(-0.001), Timestamp: time.Now().Unix()},
-			want: "speed must be non-negative",
+			name:       "speed just below zero",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Speed: float64ptr(-0.001), Timestamp: time.Now().Unix()},
+			wantStatus: http.StatusBadRequest,
+			want:       "speed must be non-negative",
+		},
+		{
+			name:       "route_id too long",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), RouteID: strings.Repeat("r", 101)},
+			wantStatus: http.StatusBadRequest,
+			want:       "route_id must be at most 100 characters",
+		},
+		{
+			name:       "trip_id too long",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), TripID: strings.Repeat("t", 101)},
+			wantStatus: http.StatusBadRequest,
+			want:       "trip_id must be at most 100 characters",
+		},
+		{
+			name:       "start_date wrong shape",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), RouteID: "5", StartDate: "2026-09-06"},
+			wantStatus: http.StatusBadRequest,
+			want:       "start_date must be YYYYMMDD",
+		},
+		{
+			name:       "start_date not a date",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), RouteID: "5", StartDate: "20261399"},
+			wantStatus: http.StatusBadRequest,
+			want:       "start_date must be a valid YYYYMMDD date",
+		},
+		{
+			name:       "start_date without trip or route",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), StartDate: "20260906"},
+			wantStatus: http.StatusBadRequest,
+			want:       "start_date requires trip_id or route_id",
+		},
+		{
+			name:       "route_id and start_date accepted",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), RouteID: "5", StartDate: "20260906"},
+			wantStatus: http.StatusCreated,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create handler with nil store — validation happens first
-			handler := handlePostLocation(nil, tracker, NewVehicleRateLimiter())
-			w := postLocation(handler, tc.loc)
+			w := postLocationWithClaims(handler, tc.loc, jwt.MapClaims{"sub": "driver-1"})
 
-			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Equal(t, tc.wantStatus, w.Code, w.Body.String())
 
+			if tc.want == "" {
+				return
+			}
 			var resp map[string]string
 			err := json.NewDecoder(w.Body).Decode(&resp)
 			require.NoError(t, err)
 			assert.Contains(t, resp["error"], tc.want)
 		})
 	}
+}
+
+func TestHandlePostLocation_TripFieldsReachTracker(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker, NewVehicleRateLimiter())
+
+	loc := LocationReport{
+		VehicleID: "bus-1",
+		TripID:    "trip-0830",
+		RouteID:   "5",
+		StartDate: "20260906",
+		Latitude:  -1.29,
+		Longitude: 36.82,
+		Timestamp: time.Now().Unix(),
+	}
+	w := postLocationWithClaims(handler, loc, jwt.MapClaims{"sub": "driver-1"})
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+	assert.Equal(t, "trip-0830", active[0].TripID)
+	assert.Equal(t, "5", active[0].RouteID)
+	assert.Equal(t, "20260906", active[0].StartDate)
 }
 
 func TestHandleAdminStatus_Empty(t *testing.T) {
