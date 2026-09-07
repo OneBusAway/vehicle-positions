@@ -60,6 +60,8 @@ type appStore interface {
 	RideLister
 	RiderStatsReader
 	RidePointPruner
+	TokenRevoker
+	TokenChecker
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
@@ -69,11 +71,12 @@ type appStore interface {
 func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy bool, riderSvc *riderService) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	authMiddleware := requireAuth(jwtSecret)
+	authMiddleware := requireAuth(jwtSecret, store)
 	adminMiddleware := requireAdmin()
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
+	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store)))
 	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker, riderEstimates))
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
@@ -114,7 +117,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/rider/status", authMiddleware(adminMiddleware(handleRiderAdminStatus(riderStatus))))
 	mux.Handle("GET /api/v1/admin/rider/rides", authMiddleware(adminMiddleware(handleRiderAdminRides(store))))
 	if riderSvc != nil {
-		registerRiderRoutes(mux, riderSvc)
+		registerRiderRoutes(mux, riderSvc, store)
 	}
 
 	return mux

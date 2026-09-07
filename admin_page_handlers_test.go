@@ -151,6 +151,40 @@ func TestAdminLogout(t *testing.T) {
 	assert.Equal(t, -1, w.Result().Cookies()[0].MaxAge)
 }
 
+// TestAdminLogoutRevokesSession verifies the admin UI's sign-out ends the
+// token server-side, not just the browser's copy of it: after logging out,
+// the same cookie value must no longer open an admin page.
+func TestAdminLogoutRevokesSession(t *testing.T) {
+	ui := newTestAdminUI(t)
+	revocations := newFakeRevocations()
+	ui.tokenChecker = revocations
+	ui.tokenRevoker = revocations
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	cookie := cookieFor(t, "admin")
+
+	before := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	before.AddCookie(cookie)
+	beforeRec := httptest.NewRecorder()
+	mux.ServeHTTP(beforeRec, before)
+	require.Equal(t, http.StatusOK, beforeRec.Code, "the session must work before logout")
+
+	logout := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
+	logout.AddCookie(cookie)
+	logoutRec := httptest.NewRecorder()
+	mux.ServeHTTP(logoutRec, logout)
+	require.Equal(t, http.StatusSeeOther, logoutRec.Code)
+	assert.Contains(t, revocations.revoked, jtiOf(t, cookie.Value), "sign-out must revoke the session token")
+
+	after := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	after.AddCookie(cookie)
+	afterRec := httptest.NewRecorder()
+	mux.ServeHTTP(afterRec, after)
+	assert.Equal(t, http.StatusSeeOther, afterRec.Code, "a replayed cookie must no longer work")
+	assert.Equal(t, "/admin/login", afterRec.Header().Get("Location"))
+}
+
 func TestAdminPagesRedirectWithoutSession(t *testing.T) {
 	ui := newTestAdminUI(t)
 	mux := http.NewServeMux()

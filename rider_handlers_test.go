@@ -247,7 +247,7 @@ func newRiderTestEnv(t *testing.T) *riderTestEnv {
 	env.svc.rideLimiter = NewKeyedRateLimiter(time.Millisecond, 1_000, true)
 	t.Cleanup(env.svc.Stop)
 	env.mux = http.NewServeMux()
-	registerRiderRoutes(env.mux, env.svc)
+	registerRiderRoutes(env.mux, env.svc, newFakeRevocations())
 	return env
 }
 

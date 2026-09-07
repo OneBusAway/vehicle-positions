@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,15 +148,38 @@ func handleLogin(fetcher UserFetcher, secret []byte, limiter *LoginRateLimiter, 
 	}
 }
 
-// generateJWT creates a signed JWT valid for 24 hours.
+// tokenLifetime is how long an issued session JWT stays valid. It also bounds
+// how long a revocation row has to be honoured (see revoked_tokens.expires_at).
+const tokenLifetime = 24 * time.Hour
+
+// newJTI returns a random 128-bit token identifier, hex-encoded. It must come
+// from crypto/rand rather than math/rand or a counter: a guessable jti would
+// let an attacker pre-emptively revoke other users' tokens.
+func newJTI() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate jti: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// generateJWT creates a signed JWT valid for tokenLifetime. It is the only
+// path that issues session tokens — both the JSON API login and the admin
+// UI's form login call it — so every token carries a jti and can be revoked.
 func generateJWT(user *User, secret []byte) (string, error) {
 	now := time.Now()
+
+	jti, err := newJTI()
+	if err != nil {
+		return "", err
+	}
 
 	claims := jwt.MapClaims{
 		"sub":   fmt.Sprintf("%d", user.ID),
 		"email": user.Email,
 		"role":  user.Role,
-		"exp":   now.Add(24 * time.Hour).Unix(),
+		"jti":   jti,
+		"exp":   now.Add(tokenLifetime).Unix(),
 		"iat":   now.Unix(),
 		"iss":   "vehicle-positions-api",
 	}
@@ -189,17 +215,26 @@ func requireAdmin() func(http.Handler) http.Handler {
 	}
 }
 
-// parseSessionToken validates an HS256 session JWT (algorithm, issuer) and
-// returns its claims. It is the single validation path shared by the API
-// middleware and the admin UI's cookie session (adminClaimsFromCookie), so
-// changes to token validation cannot silently diverge between the two.
+// parseSessionToken validates an HS256 session JWT (algorithm, issuer,
+// expiry) and returns its claims. It is the single validation path shared by
+// the API middleware and the admin UI's cookie session (adminClaimsFromCookie),
+// so changes to token validation cannot silently diverge between the two.
+//
+// It deliberately performs no I/O: revocation is a separate step (checkRevoked)
+// that both callers invoke, so a database dependency never has to be threaded
+// through JWT parsing.
+//
+// WithExpirationRequired rejects a signed token that carries no exp claim.
+// generateJWT always sets one, and a revocation row needs the expiry to record
+// expires_at, so a token without exp is not one this server issued.
 func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"))
+	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithIssuer("vehicle-positions-api"),
+		jwt.WithExpirationRequired())
 	if err != nil {
 		return nil, err
 	}
@@ -213,11 +248,44 @@ func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error)
 	return claims, nil
 }
 
+// checkRevoked reports whether the token behind claims has been logged out.
+// It is the second half of validation, kept out of parseSessionToken so that
+// function stays pure; both token paths (the API's Authorization header and
+// the admin UI's vp_session cookie) must call it, and
+// TestAdminCookiePath_RejectsRevokedToken pins that they do.
+func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecker) (bool, error) {
+	jti, _ := claims["jti"].(string)
+	if jti == "" {
+		// Intentional backwards compatibility: tokens issued before jti
+		// existed carry no identifier to revoke, so they are accepted rather
+		// than logging every existing session out on deploy. They are also
+		// permanently unrevokable, which is why this is a warning — every
+		// token issued from here on has a jti and tokens live tokenLifetime,
+		// so this should stop appearing within a day of deploying.
+		// TODO: drop this shim and reject tokens without a jti once all
+		// pre-revocation tokens have expired (tokenLifetime after deploy).
+		// generateRiderJWT issues no jti, so a rider token reaching here is
+		// the normal case rather than a leftover — warning per request would
+		// bury the staff signal under the rider API's upload volume. Rider
+		// sessions are consequently not revocable; there is no rider logout
+		// to revoke through today.
+		// TODO: give rider tokens a jti and drop this exemption when the
+		// rider API grows a sign-out.
+		if role, _ := claims["role"].(string); role != roleRider {
+			slog.Warn("accepted token without jti; it cannot be revoked", "sub", claims["sub"])
+		}
+		return false, nil
+	}
+	return checker.IsTokenRevoked(ctx, jti)
+}
+
 // requireAuth is middleware that validates the Bearer JWT on the staff API. A
 // rider token is signed with the same secret and would otherwise validate
 // here, so the role is checked at the door rather than at each handler.
-func requireAuth(secret []byte) func(http.Handler) http.Handler {
-	return requireRoles(secret, true, staffRoles...)
+// checker is consulted for every validated token so a logged-out one is
+// rejected for the rest of its lifetime.
+func requireAuth(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
+	return requireRoles(secret, checker, true, staffRoles...)
 }
 
 // requireRoles returns middleware that validates the Bearer JWT and admits
@@ -226,7 +294,7 @@ func requireAuth(secret []byte) func(http.Handler) http.Handler {
 // to the admin UI's browser session cookie (spec §4.2); a present-but-bad
 // header never falls back, and a client that has no browser session — the
 // rider API — never accepts a cookie at all.
-func requireRoles(secret []byte, allowCookie bool, roles ...string) func(http.Handler) http.Handler {
+func requireRoles(secret []byte, checker TokenChecker, allowCookie bool, roles ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -262,6 +330,24 @@ func requireRoles(secret []byte, allowCookie bool, roles ...string) func(http.Ha
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 				return
 			}
+			revoked, err := checkRevoked(r.Context(), claims, checker)
+			if err != nil {
+				// Fail closed. A rate limiter that can't decide should let
+				// the request through — the cost of being wrong is a few
+				// unthrottled requests. An auth check that can't decide must
+				// not, because the cost of being wrong is an accepted
+				// logged-out token.
+				slog.Error("revocation check failed", "error", err, "path", r.URL.Path)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				return
+			}
+			if revoked {
+				// Same 401 body as a malformed token: the client learns the
+				// token is unusable, not that it was specifically revoked.
+				slog.Warn("rejected revoked token", "sub", claims["sub"], "path", r.URL.Path)
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+				return
+			}
 
 			ctx := contextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -274,3 +360,63 @@ func requireRoles(secret []byte, allowCookie bool, roles ...string) func(http.Ha
 // <select> only ever submits one of these values, since form submissions
 // aren't trustworthy.
 func validUserRole(role string) bool { return slices.Contains(staffRoles, role) }
+
+// handleLogout revokes the caller's own token, ending the session server-side
+// rather than relying on the client to discard it. It must be wrapped in
+// requireAuth, which puts the validated claims on the context.
+//
+// Every user may log themselves out, so this is authenticated but not
+// admin-gated. Because the admin UI's vp_session cookie carries the same JWT,
+// logging out through the API also ends that browser session.
+func handleLogout(revoker TokenRevoker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+		if !ok {
+			slog.Warn("logout: claims missing from context")
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+
+		jti, _ := claims["jti"].(string)
+		if jti == "" {
+			// A pre-revocation token (see checkRevoked) has nothing to record.
+			// Report the same 204 so old and new clients see one contract; the
+			// warning marks a session that outlives its logout.
+			slog.Warn("logout: token has no jti, nothing to revoke", "sub", claims["sub"])
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// sub is a string, not a number (JSON number precision, see
+		// generateJWT), so parse it rather than asserting a float64.
+		sub, err := claims.GetSubject()
+		if err != nil {
+			slog.Warn("logout: unreadable sub claim", "error", err)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+		userID, err := strconv.ParseInt(sub, 10, 64)
+		if err != nil {
+			slog.Warn("logout: sub claim is not a user ID", "sub", sub, "error", err)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+
+		// parseSessionToken requires exp, so a validated token always has one.
+		expiresAt, err := claims.GetExpirationTime()
+		if err != nil || expiresAt == nil {
+			slog.Warn("logout: unreadable exp claim", "sub", sub, "error", err)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+
+		if err := revoker.RevokeToken(r.Context(), jti, userID, expiresAt.Time); err != nil {
+			slog.Error("logout: failed to revoke token", "sub", sub, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		slog.Info("token revoked", "sub", sub)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

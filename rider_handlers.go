@@ -955,8 +955,8 @@ func tooLong(v string) bool { return len(v) > riderMaxFieldLen }
 
 // registerRiderRoutes mounts the rider API. Registration is the only route
 // open to an unauthenticated caller.
-func registerRiderRoutes(mux *http.ServeMux, s *riderService) {
-	auth := requireRider(s.jwtSecret)
+func registerRiderRoutes(mux *http.ServeMux, s *riderService, checker TokenChecker) {
+	auth := requireRider(s.jwtSecret, checker)
 	mux.Handle("POST /api/v1/rider/register", s.handleRegister())
 	mux.Handle("POST /api/v1/rider/rides", auth(s.handleStartRide()))
 	mux.Handle("POST /api/v1/rider/rides/{id}/positions", auth(s.handlePositions()))

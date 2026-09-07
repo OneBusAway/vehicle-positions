@@ -126,6 +126,12 @@ func (n *noopStore) ListTripLocations(_ context.Context, _ int64) ([]LocationPoi
 func (n *noopStore) ListActiveTripsByVehicle(_ context.Context) (map[string]ActiveTripInfo, error) {
 	return nil, nil
 }
+func (n *noopStore) RevokeToken(_ context.Context, _ string, _ int64, _ time.Time) error {
+	return nil
+}
+func (n *noopStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
 
 // Rider-mode store methods. Rider routes are not registered on a mux built
 // with a nil rider service, so only the two admin rider endpoints reach these;
@@ -355,6 +361,38 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 			h.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusSeeOther, w.Code, "driver session on %s %s must redirect, not reach the handler", tc.method, tc.path)
 			assert.Equal(t, "/admin/login", w.Header().Get("Location"), "%s %s", tc.method, tc.path)
+		})
+	}
+}
+
+// TestLogoutRoute_Wiring verifies POST /api/v1/auth/logout is authenticated
+// but not admin-gated: any logged-in user must be able to log themselves out,
+// and an unauthenticated caller must not reach the handler.
+func TestLogoutRoute_Wiring(t *testing.T) {
+	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
+
+	tests := []struct {
+		name       string
+		authHeader string
+		wantStatus int
+	}{
+		{"no token", "", http.StatusUnauthorized},
+		{"driver token", "Bearer " + driverToken, http.StatusNoContent},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+			if tc.authHeader != "" {
+				req.Header.Set("Authorization", tc.authHeader)
+			}
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.wantStatus, w.Code)
 		})
 	}
 }

@@ -78,6 +78,8 @@ type adminUI struct {
 	vehicleCreator VehicleCreator
 	userManager    userManager
 	assignments    assignmentManager
+	tokenChecker   TokenChecker
+	tokenRevoker   TokenRevoker
 	jwtSecret      []byte
 	loginLimiter   *LoginRateLimiter
 	cfg            adminUIConfig
@@ -107,6 +109,8 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		vehicleCreator: store,
 		userManager:    store,
 		assignments:    store,
+		tokenChecker:   store,
+		tokenRevoker:   store,
 		jwtSecret:      jwtSecret,
 		loginLimiter:   limiter,
 		cfg:            cfg,
@@ -117,7 +121,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 // static assets — that's the caller's responsibility (main's handler
 // construction), keeping this function focused on admin routes only.
 func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
-	protect := requireAdminPage(ui.jwtSecret)
+	protect := requireAdminPage(ui.jwtSecret, ui.tokenChecker)
 
 	mux.HandleFunc("GET /admin/login", ui.loginPage)
 	mux.HandleFunc("POST /admin/login", ui.loginSubmit)
@@ -146,7 +150,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 }
 
 func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
-	if _, ok := adminClaimsFromCookie(r, ui.jwtSecret); ok {
+	if _, ok := adminClaimsFromCookie(r, ui.jwtSecret, ui.tokenChecker); ok {
 		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 		return
 	}
@@ -154,7 +158,7 @@ func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ui *adminUI) loginPage(w http.ResponseWriter, r *http.Request) {
-	if _, ok := adminClaimsFromCookie(r, ui.jwtSecret); ok {
+	if _, ok := adminClaimsFromCookie(r, ui.jwtSecret, ui.tokenChecker); ok {
 		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 		return
 	}
@@ -227,7 +231,14 @@ func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email 
 	})
 }
 
+// logout revokes the session's JWT server-side and clears the cookie. The
+// route is deliberately unauthenticated (an expired session must still be
+// able to log out), so a cookie that no longer validates is simply cleared.
+// A revocation failure is logged but still clears the cookie and redirects:
+// leaving the user stuck on an error page would not make the token any less
+// valid.
 func (ui *adminUI) logout(w http.ResponseWriter, r *http.Request) {
+	revokeSessionCookie(r, ui.jwtSecret, ui.tokenRevoker)
 	clearSessionCookie(w)
 	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }

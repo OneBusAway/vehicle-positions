@@ -299,3 +299,12 @@ SELECT COUNT(*) FROM ride_points WHERE ride_id = $1;
 
 -- name: DeleteRidePointsBefore :execrows
 DELETE FROM ride_points WHERE received_at < $1;
+
+-- name: RevokeToken :exec
+-- Idempotent: logging out twice must not error.
+INSERT INTO revoked_tokens (jti, user_id, expires_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (jti) DO NOTHING;
+
+-- name: IsTokenRevoked :one
+SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1);
