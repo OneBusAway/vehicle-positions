@@ -151,7 +151,7 @@ previous build, and it keeps the image pinned when you edit the compose file.
 ### 4.2 The environment file
 
 ```bash
-mkdir -p /srv/vehicle-positions
+sudo mkdir -p /srv/vehicle-positions
 cd /srv/vehicle-positions
 umask 077
 cat > .env <<EOF
@@ -249,7 +249,7 @@ git clone https://github.com/OneBusAway/vehicle-positions.git
 cd vehicle-positions
 CGO_ENABLED=0 go build -o vehicle-positions .
 sudo install -o root -g root -m 0755 vehicle-positions /usr/local/bin/vehicle-positions
-/usr/local/bin/vehicle-positions --help 2>/dev/null; echo "installed"
+ls -l /usr/local/bin/vehicle-positions
 ```
 
 The binary embeds the migrations, HTML templates and CSS, so this single file is
@@ -742,6 +742,14 @@ same GTFS static feed OBA is using.
 The driver app lives in [`android/`](../android/) and takes the server URL on
 its **login screen**, stored per device. One APK therefore works for every
 agency and every server — there is nothing to rebuild per deployment.
+
+**Version skew:** this app sends `route_id` and `start_date` on every location
+report, so it requires a server built from this repository at or after the
+commit that added those fields to `POST /api/v1/locations`. Against an older
+server, every location report is rejected with `400` as an unknown field: the
+app logs the failure and drops the report, but the driver still sees the
+green "connected" banner, since the app has no way to tell a rejected report
+from a slow one. Upgrade the server before distributing this APK.
 
 ### 12.1 Build a release APK
 

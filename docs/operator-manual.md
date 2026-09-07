@@ -467,8 +467,11 @@ vehicles are labelled **Rider-reported** and their ids look like
 `rider:<trip id>:<date>`, so they are never confused with your own buses. They
 never appear on the **Live Map**, which shows driver-reported vehicles only.
 A trip your own drivers are already reporting is never published from rider
-data. If your OneBusAway instance should receive agency positions only, your IT
-contact can point it at the feed address with `?source=driver` on the end.
+data — but only when the driver picked the specific scheduled trip, not just a
+route. If a driver only entered a route, the server has no scheduled trip to
+match against, so rider coverage for that trip is not suppressed. If your
+OneBusAway instance should receive agency positions only, your IT contact can
+point it at the feed address with `?source=driver` on the end.
 
 ---
 
