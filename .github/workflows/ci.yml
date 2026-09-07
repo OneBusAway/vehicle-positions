@@ -25,6 +25,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Build Docker image
+        run: docker build -t vehicle-positions:ci .
+
       - name: Verify committed Tailwind CSS is current
         if: runner.os == 'Linux'
         run: |
