@@ -299,3 +299,32 @@ SELECT COUNT(*) FROM ride_points WHERE ride_id = $1;
 
 -- name: DeleteRidePointsBefore :execrows
 DELETE FROM ride_points WHERE received_at < $1;
+
+-- name: GetAPIKeyByHash :one
+-- Inactive keys are returned too: the middleware distinguishes a revoked key
+-- from an unknown one.
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+WHERE key_hash = $1;
+
+-- name: UpdateAPIKeyLastUsed :exec
+UPDATE api_keys
+SET last_used_at = NOW()
+WHERE id = $1;
+
+-- name: CreateAPIKey :one
+INSERT INTO api_keys (name, key_hash)
+VALUES ($1, $2)
+RETURNING id, name, key_hash, active, last_used_at, created_at, updated_at;
+
+-- name: ListAPIKeys :many
+-- safety bound; not pagination
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+ORDER BY created_at DESC
+LIMIT 1000;
+
+-- name: DeactivateAPIKey :execrows
+UPDATE api_keys
+SET active = false, updated_at = NOW()
+WHERE id = $1;
