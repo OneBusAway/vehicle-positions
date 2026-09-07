@@ -21,6 +21,9 @@ Quick-start instructions for running the server locally with Docker Compose,
 plus API sanity checks and troubleshooting, live in
 [`docs/development.md`](docs/development.md).
 
+For production — Postgres, reverse proxy and TLS, systemd, backups, monitoring
+and APK distribution — see [`docs/deployment.md`](docs/deployment.md).
+
 ### Admin web UI
 
 The server also ships a server-rendered admin web UI at `/admin` — sign in,
