@@ -90,7 +90,7 @@ Below them is a thin strip with two more:
 
 | Field | What it means |
 |---|---|
-| **Feed last updated** | How long ago *any* vehicle last reported — "just now", "7 min ago", "2 h ago", or **never** if nothing has ever reported. |
+| **Feed last updated** | How long ago *any* vehicle the server is still tracking last reported — "just now", "3 min ago". It is **never** whenever the server is tracking no vehicles at all, which in practice means nothing has reported for roughly the last 5 to 10 minutes: the server forgets a vehicle once it passes the staleness threshold. **never** is also what you see after a restart if nothing has reported in the last few minutes. Treat it as "recently" or "not recently", not as a long-term record. |
 | **Staleness threshold** | How long a vehicle may go without reporting before it drops out of the feed and out of **Active Now**. Default 5 min; changing it is a server setting (`STALENESS_THRESHOLD`), not a UI control. |
 
 The **Recent Activity** table lists the ten most recently reporting vehicles
@@ -397,9 +397,10 @@ https://your-server/gtfs-rt/vehicle-positions?format=json
 ```
 
 The browser shows a readable list instead of the machine format. Each vehicle
-appears once, with its position, its `vehicleId`, and the `routeId` and
-`startDate` its driver entered (plus `tripId` if the driver typed a GTFS trip
-id). An empty list means no vehicle has reported inside the staleness window.
+appears once under an `id` — the **Vehicle ID** you gave it on the vehicle form
+— with its position, and with the `routeId` and `startDate` its driver entered
+(plus `tripId` if the driver typed a GTFS trip id). An empty list means no
+vehicle has reported inside the staleness window.
 
 ---
 
@@ -411,8 +412,10 @@ id). An empty list means no vehicle has reported inside the staleness window.
    expect to be available and **Drivers** matches your roster.
 2. Check **Trips** filtered to **Active**. It should be empty. Anything left
    over is yesterday's trip that was never ended — see section 12.
-3. As the first buses pull out, confirm **Active Now** and **Active Trips**
-   start climbing and **Feed last updated** says "just now".
+3. Before the first bus reports, **Feed last updated** will read **never** and
+   **Active Now** will be 0. That is normal, not a fault.
+4. As the first buses pull out, confirm **Active Now** and **Active Trips**
+   start climbing and **Feed last updated** changes to "just now".
 
 **During service**
 
@@ -513,7 +516,7 @@ points are.
 | Driver sees **You already have an active trip.** | An earlier trip was never ended — usually **End Locally** after a network problem, or the app was reinstalled. | Have the driver reopen the app; it returns to the tracking screen for the old trip, where **End Trip** ends it. Confirm on **Trips** → **Active** that it is gone. If the app no longer knows about the trip, ask your IT contact — there is no button in the admin UI to end another person's trip. |
 | Driver sees **No vehicles are assigned to you.** | No active vehicle is assigned to that account. | Check the vehicle is not deactivated (**Vehicles** → **Show deactivated**), then assign it (section 6). |
 | One vehicle missing from the feed and the map, others fine | That phone has stopped reporting for longer than the staleness threshold: no signal, app closed, trip never started, phone battery dead, or Android killed the app in the background. | Ask the driver what the status banner says. **No connection** is a coverage problem and clears itself. If the app is not on the tracking screen at all, the trip was never started or was ended. If it keeps dying when the screen locks, the background-location permission is not **"Allow all the time"** — redo step 6 of section 7. |
-| Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Dashboard**: if **Feed last updated** says **never** or a long time, and **Active Trips** is 0, it is the phones — start with two or three drivers. If **Active Trips** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |
+| Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Dashboard**: if **Feed last updated** says **never** (nothing has reported for several minutes) and **Active Trips** is 0, it is the phones — start with two or three drivers. If **Active Trips** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |
 | Driver phone shows **Session expired – log in again** | The 24-hour sign-in expired. | Have the driver tap **Log in** on that screen and sign in again. If you have since deactivated the account, sign-in is refused — which is the intended outcome. |
 | A driver or admin cannot sign in and insists the password is right | The account is deactivated. Deactivation is deliberately indistinguishable from a wrong password on the sign-in screen. | **Users** → find the row → if **Status** reads **Deactivated**, click **Activate** and confirm **Reactivate this user?** |
 | Someone you deactivated is still reporting, or their phone still works | Deactivation blocks new sign-ins; it does not end a session already in progress, and that session can last up to 24 hours. | Confirm the row shows **Deactivated** on **Users** — that is enough to stop them signing in again. If they must be cut off this minute, tell your IT contact; only a server-side change ends live sessions. |
