@@ -17,7 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const configDocPath = "docs/configuration.md"
+// configDocGlobs are the files a variable may be documented in. The guard
+// deliberately does not name one canonical file: the reference has lived in
+// docs/ and in the README at different times, and #102 adds a second one, so
+// pinning a path would make this test fail for a reason that has nothing to do
+// with whether the variable is documented.
+var configDocGlobs = []string{"README.md", "docs/*.md"}
 
 // configDocVariablePattern matches the first cell of a reference table row: a
 // single backticked SHOUTY_NAME and nothing else. Requiring the whole cell to
@@ -35,7 +40,7 @@ func TestConfigDoc_AllVariablesDocumented(t *testing.T) {
 
 	for _, name := range sortedNames(inSource) {
 		assert.Contains(t, documented, name,
-			"%s is read by the server but has no row in %s", name, configDocPath)
+			"%s is read by the server but has no reference-table row in %s", name, configDocGlobs)
 	}
 }
 
@@ -45,7 +50,7 @@ func TestConfigDoc_NoStaleVariables(t *testing.T) {
 
 	for _, name := range sortedNames(documented) {
 		assert.Contains(t, inSource, name,
-			"%s has a row in %s but is not read anywhere in the module", name, configDocPath)
+			"%s has a reference-table row in %s but is not read anywhere in the module", name, documented[name])
 	}
 }
 
@@ -57,7 +62,7 @@ func TestConfigDoc_ParsesVariables(t *testing.T) {
 	require.NotEmpty(t, inSource, "the AST walk found no environment variables; the extractor is broken")
 
 	documented := documentedVariables(t)
-	require.NotEmpty(t, documented, "no variables parsed out of %s; the table format may have changed", configDocPath)
+	require.NotEmpty(t, documented, "no variables parsed out of %s; the table format may have changed", configDocGlobs)
 }
 
 // TestConfigDoc_ExcludesTestOnlyVariables pins the walk's exclusion of _test.go
@@ -80,7 +85,7 @@ func TestConfigDoc_ExcludesTestOnlyVariables(t *testing.T) {
 	documented := documentedVariables(t)
 	for _, name := range sortedNames(testOnly) {
 		assert.NotContains(t, documented, name,
-			"%s is read only by tests and should not be in %s", name, configDocPath)
+			"%s is read only by tests and should not be in the operator reference", name)
 	}
 }
 
@@ -241,31 +246,62 @@ func isEnvRead(call *ast.CallExpr, readers map[string]struct{}) bool {
 	return false
 }
 
-// documentedVariables returns the variables named in the reference's tables.
-func documentedVariables(t *testing.T) map[string]struct{} {
+// documentedVariables returns every variable named in a reference table across
+// the operator-facing docs, mapped to the file it was found in so a failure can
+// name the file to edit.
+func documentedVariables(t *testing.T) map[string]string {
 	t.Helper()
 
-	raw, err := os.ReadFile(configDocPath)
-	require.NoError(t, err)
+	documented := make(map[string]string)
+	for _, path := range configDocFiles(t) {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
 
-	documented := make(map[string]struct{})
-	for _, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "|") {
-			continue
+		for _, line := range strings.Split(string(raw), "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "|") {
+				continue
+			}
+			cells := strings.Split(strings.Trim(line, "|"), "|")
+			match := configDocVariablePattern.FindStringSubmatch(strings.TrimSpace(cells[0]))
+			if match == nil {
+				continue
+			}
+			if _, seen := documented[match[1]]; !seen {
+				documented[match[1]] = path
+			}
 		}
-		cells := strings.Split(strings.Trim(line, "|"), "|")
-		match := configDocVariablePattern.FindStringSubmatch(strings.TrimSpace(cells[0]))
-		if match == nil {
-			continue
-		}
-		documented[match[1]] = struct{}{}
 	}
 	return documented
 }
 
-// sortedNames keeps failure output stable across runs.
-func sortedNames(set map[string]struct{}) []string {
+// configDocFiles expands configDocGlobs, skipping docs/superpowers — those are
+// design specs and implementation plans, not operator documentation, and a
+// variable named in a table there is not documented for the person deploying
+// this.
+func configDocFiles(t *testing.T) []string {
+	t.Helper()
+
+	var paths []string
+	for _, glob := range configDocGlobs {
+		matches, err := filepath.Glob(glob)
+		require.NoError(t, err)
+		for _, path := range matches {
+			if strings.HasPrefix(filepath.ToSlash(path), "docs/superpowers/") {
+				continue
+			}
+			paths = append(paths, path)
+		}
+	}
+	require.NotEmpty(t, paths, "no documentation files matched %s", configDocGlobs)
+	sort.Strings(paths)
+	return paths
+}
+
+// sortedNames keeps failure output stable across runs. It is generic over the
+// map's value type so it serves both the presence sets and the
+// variable-to-file map.
+func sortedNames[V any](set map[string]V) []string {
 	names := make([]string, 0, len(set))
 	for name := range set {
 		names = append(names, name)
