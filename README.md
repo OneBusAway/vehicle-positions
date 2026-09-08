@@ -19,7 +19,9 @@
 
 Quick-start instructions for running the server locally with Docker Compose,
 plus API sanity checks and troubleshooting, live in
-[`docs/development.md`](docs/development.md).
+[`docs/development.md`](docs/development.md). Every environment variable the
+server reads, with its default and what a bad value does, is in
+[`docs/configuration.md`](docs/configuration.md).
 
 ### Admin web UI
 
@@ -85,6 +87,9 @@ unparseable value logs and falls back to its default.
 | `RIDER_SCHEDULE_EARLY` / `RIDER_SCHEDULE_LATE` | `15m` / `90m` | Schedule-adherence window. |
 | `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest accepted point (of any outcome) is older than this stops contributing to the feed. The position published for it is always its latest *matched* point. |
 | `RIDER_POINT_RETENTION` | `168h` | `ride_points` rows older than this are deleted hourly. |
+
+These settings also appear, alongside every other variable the server reads, in
+[`docs/configuration.md`](docs/configuration.md).
 
 Rider mode shares `JWT_SECRET` with the rest of the API, but rider tokens carry
 `role: "rider"` and are accepted only on the rider routes — a rider token is
@@ -302,6 +307,9 @@ The server can delete location points once they pass a configured age:
 |`LOCATION_RETENTION_PERIOD`|`0`    |How long to keep location points. `0` disables pruning|
 |`LOCATION_PRUNE_INTERVAL`  |`1h`   |How often the pruner runs                             |
 |`LOCATION_PRUNE_BATCH_SIZE`|`10000`|Maximum rows deleted per statement                    |
+
+These settings also appear, alongside every other variable the server reads, in
+[`docs/configuration.md`](docs/configuration.md).
 
 Notes for operators:
 
