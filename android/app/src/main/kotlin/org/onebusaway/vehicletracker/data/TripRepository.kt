@@ -10,6 +10,7 @@ import javax.inject.Inject
 class TripRepository @Inject constructor(
     private val apiProvider: TrackerApiProvider,
     private val tripStateStore: TripStateStore,
+    private val vehiclePrefsStore: VehiclePrefsStore,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) {
     // apiProvider.get() is called here (not injected as a resolved TrackerApi) so that a missing
@@ -26,6 +27,9 @@ class TripRepository @Inject constructor(
         )
         tripStateStore.saveActiveTrip(activeTrip)
         tripStateStore.addRecentRoute(routeId)
+        // Recorded here rather than when the driver taps a vehicle: a tap they back out of
+        // is not a use, and recents full of abandoned taps make the picker worse.
+        vehiclePrefsStore.recordUse(vehicleId)
         Result.success(activeTrip)
     } catch (e: CancellationException) {
         throw e

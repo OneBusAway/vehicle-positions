@@ -24,6 +24,20 @@ class FakeTripStateStore : TripStateStore {
     }
 }
 
+class FakeVehiclePrefsStore : VehiclePrefsStore {
+    val favoritesState = MutableStateFlow<Set<String>>(emptySet())
+    val recentsState = MutableStateFlow<List<String>>(emptyList())
+    override val favorites = favoritesState
+    override val recents = recentsState
+    override suspend fun toggleFavorite(vehicleId: String) {
+        val current = favoritesState.value
+        favoritesState.value = if (vehicleId in current) current - vehicleId else current + vehicleId
+    }
+    override suspend fun recordUse(vehicleId: String) {
+        recentsState.value = (listOf(vehicleId) + recentsState.value.filter { it != vehicleId }).take(5)
+    }
+}
+
 class FakeServiceController : ServiceController {
     var startCount = 0
     var stopCount = 0
