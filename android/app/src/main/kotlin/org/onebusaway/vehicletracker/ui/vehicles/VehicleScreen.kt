@@ -12,9 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -27,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -143,7 +141,7 @@ private fun VehicleRow(
             modifier = Modifier.heightIn(min = 48.dp),
         ) {
             Icon(
-                imageVector = if (favorite) Icons.Filled.Star else Icons.Outlined.Star,
+                painter = painterResource(if (favorite) R.drawable.ic_star_filled else R.drawable.ic_star_outline),
                 // The control is icon-only, so the description is what TalkBack announces —
                 // it names the vehicle and the action the tap performs, not the icon.
                 contentDescription = stringResource(
