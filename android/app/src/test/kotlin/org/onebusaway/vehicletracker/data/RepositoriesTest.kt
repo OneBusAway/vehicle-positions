@@ -1,18 +1,21 @@
 package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ApiHolder
+import java.io.IOException
 
 class RepositoriesTest {
     private fun apiFor(server: MockWebServer) =
@@ -125,6 +128,28 @@ class RepositoriesTest {
         assertTrue(repo.start("bus-1", "5", "").isFailure)
 
         assertEquals(emptyList<String>(), prefs.recents.first())
+        server.shutdown()
+    }
+
+    @Test fun `trip start still succeeds when the local prefs write fails`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody(
+            """{"id":10,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"","start_time":"2026-08-04T08:30:00Z","status":"active"}"""))
+        val tripState = FakeTripStateStore()
+        // The trip is already running on the server once recordUse is reached, so a disk error
+        // there must not be reported to the driver as a failed start — their retry would 409.
+        val failingPrefs = object : VehiclePrefsStore {
+            override val favorites = MutableStateFlow(emptySet<String>())
+            override val recents = MutableStateFlow(emptyList<String>())
+            override suspend fun toggleFavorite(vehicleId: String) = Unit
+            override suspend fun recordUse(vehicleId: String): Unit = throw IOException("disk full")
+        }
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, tripState, failingPrefs, clock = { 500L })
+
+        val result = repo.start("bus-1", "5", "")
+
+        assertTrue(result.isSuccess)
+        assertNotNull(tripState.activeTrip.first())
         server.shutdown()
     }
 

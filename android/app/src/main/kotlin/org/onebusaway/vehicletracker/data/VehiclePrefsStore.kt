@@ -21,7 +21,8 @@ interface VehiclePrefsStore {
     suspend fun recordUse(vehicleId: String)
 }
 
-val Context.vehiclePrefsDataStore: DataStore<Preferences> by preferencesDataStore(name = "vehicle_prefs")
+/** Internal, not private, only because [org.onebusaway.vehicletracker.di.AppModule] provides the store. */
+internal val Context.vehiclePrefsDataStore: DataStore<Preferences> by preferencesDataStore(name = "vehicle_prefs")
 
 /** Matches the recent-route cap in [DataStoreTripStateStore.addRecentRoute]. */
 private const val MAX_RECENT_VEHICLES = 5
