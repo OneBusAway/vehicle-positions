@@ -98,6 +98,25 @@ import Testing
         await #expect(throws: APIError.status(302, message: "")) {
             try await client().myVehicles()
         }
+        // Only the original request was made: the redirected request to
+        // elsewhere.example.org was never sent, proving RedirectRefuser (and
+        // its wiring into TrackerClient's session) actually refused it rather
+        // than this test merely showing a bare 3xx surfaces as a status.
+        #expect(StubURLProtocol.count == 1)
+        #expect(StubURLProtocol.last?.url.host == "positions.example.org")
+    }
+
+    @Test func redirectRefuserAnswersNil() async {
+        let refuser = RedirectRefuser()
+        let task = URLSession.shared.dataTask(with: base)
+        let response = HTTPURLResponse(url: base, statusCode: 302, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let newRequest = URLRequest(url: URL(string: "https://elsewhere.example.org")!)
+        let result = await withCheckedContinuation { (continuation: CheckedContinuation<URLRequest?, Never>) in
+            refuser.urlSession(URLSession.shared, task: task, willPerformHTTPRedirection: response, newRequest: newRequest) { req in
+                continuation.resume(returning: req)
+            }
+        }
+        #expect(result == nil)
     }
 
     @Test func undecodableBodyIsADecodingError() async throws {
