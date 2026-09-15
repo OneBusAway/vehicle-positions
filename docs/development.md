@@ -433,6 +433,16 @@ Add `-H 'X-API-Key: local-dev-feed-key'` when running with
 curl http://localhost:8080/api/v1/admin/status
 ```
 
+### Browse the GTFS catalog
+
+With `GTFS_STATIC_URL=rider/testdata/fixture.zip` and a driver token in `$TOKEN`:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/gtfs/routes | jq
+curl -s -H "Authorization: Bearer $TOKEN" 'http://localhost:8080/api/v1/gtfs/routes/R1/trips' | jq
+curl -s -H "Authorization: Bearer $TOKEN" 'http://localhost:8080/api/v1/gtfs/trips/T1' | jq '.stops[0], .thresholds'
+```
+
 ## Troubleshooting
 
 - `connection refused` when posting locations:
