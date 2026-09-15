@@ -158,23 +158,11 @@ type riderRuntime struct {
 	wg        sync.WaitGroup
 }
 
-// newRiderRuntime brings rider mode up (spec §4.1): load the schedule (a
-// failure here aborts startup, since nothing can be verified without it), end
-// every ride left active by the previous process, then wire the engine, the
-// service and the background tickers. The returned runtime must be Stopped.
-func newRiderRuntime(ctx context.Context, cfg riderConfig, store riderStore, jwtSecret []byte, trustProxy bool, tracker *Tracker) (*riderRuntime, error) {
-	// http.DefaultClient carries no timeout of its own, which is what both
-	// callers want: the GTFS download and each trusted-feed request apply
-	// their own, and a static feed is far too large for a short one.
-	client := http.DefaultClient
-
-	index, err := rider.LoadIndex(ctx, cfg.GTFSSource, client, time.Now())
-	if err != nil {
-		return nil, err
-	}
-	slog.Info("rider: loaded GTFS", "source", cfg.GTFSSource, "trips", index.Stats().Trips,
-		"shapes", index.Stats().Shapes, "timezone", index.Timezone().String())
-
+// newRiderRuntime brings rider mode up (spec §4.1) on a schedule the GTFS
+// runtime already loaded: end every ride left active by the previous
+// process, then wire the engine, the service and the background tickers.
+// The returned runtime must be Stopped.
+func newRiderRuntime(ctx context.Context, cfg riderConfig, refresher *rider.Refresher, store riderStore, jwtSecret []byte, trustProxy bool, tracker *Tracker) (*riderRuntime, error) {
 	// Sessions live in memory only, so no ride survives a restart. Ending them
 	// here is what lets a session trust its own history (spec §4.6).
 	//
@@ -193,17 +181,13 @@ func newRiderRuntime(ctx context.Context, cfg riderConfig, store riderStore, jwt
 		slog.Info("rider: ended rides left active by the previous process", "count", ended)
 	}
 
-	refresher := rider.NewRefresher(index, func(ctx context.Context) (*rider.Index, error) {
-		return rider.LoadIndex(ctx, cfg.GTFSSource, client, time.Now())
-	})
-	trusted := rider.NewTrustedFeed(cfg.TrustedURLs, client, cfg.TrustedMaxAge)
-	agg := rider.NewAggregator(cfg.Thresholds, index.Timezone())
+	trusted := rider.NewTrustedFeed(cfg.TrustedURLs, http.DefaultClient, cfg.TrustedMaxAge)
+	agg := rider.NewAggregator(cfg.Thresholds, refresher.Current().Timezone())
 	svc := newRiderService(store, agg, refresher.Current, trustedSources{feed: trusted, tracker: tracker}, jwtSecret, cfg.JWTTTL, trustProxy)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	rt := &riderRuntime{cfg: cfg, refresher: refresher, trusted: trusted, svc: svc, cancel: cancel}
 
-	rt.goroutine(func() { refresher.Start(runCtx, cfg.GTFSRefresh) })
 	if trusted.Configured() {
 		rt.goroutine(func() { trusted.Start(runCtx, cfg.TrustedPoll) })
 	}

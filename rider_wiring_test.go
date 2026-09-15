@@ -84,26 +84,26 @@ func TestRiderConfigFromEnv_RejectsNonPositiveValues(t *testing.T) {
 	assert.Equal(t, defaultRiderJWTTTL, cfg.JWTTTL)
 }
 
-func TestNewRiderRuntime_LoadsIndexAndEndsStaleRides(t *testing.T) {
+func TestNewRiderRuntime_EndsStaleRidesAndSharesTheIndex(t *testing.T) {
 	store := newFakeRiderStore()
 	r, _, _ := store.RegisterRider(context.Background(), "inst", "ios", "x", "1")
 	require.NoError(t, store.StartRide(context.Background(), &Ride{ID: "stale", RiderID: r.ID, TripID: "T1", StartDate: "20260902"}))
 
-	cfg := riderConfig{Enabled: true, GTFSSource: "rider/testdata/fixture.zip", GTFSRefresh: time.Hour, TrustedPoll: time.Hour,
-		TrustedMaxAge: 5 * time.Minute, JWTTTL: time.Hour, PointRetention: time.Hour, Thresholds: rider.DefaultThresholds()}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	rt, err := newRiderRuntime(ctx, cfg, store, testSecret, false, nil)
+	gt, err := newGTFSRuntime(ctx, "rider/testdata/fixture.zip", time.Hour)
+	require.NoError(t, err)
+	defer gt.Stop()
+
+	cfg := riderConfig{Enabled: true, GTFSSource: "rider/testdata/fixture.zip", GTFSRefresh: time.Hour, TrustedPoll: time.Hour,
+		TrustedMaxAge: 5 * time.Minute, JWTTTL: time.Hour, PointRetention: time.Hour, Thresholds: rider.DefaultThresholds()}
+	rt, err := newRiderRuntime(ctx, cfg, gt.Refresher(), store, testSecret, false, nil)
 	require.NoError(t, err)
 	defer rt.Stop()
 	assert.Equal(t, "ended", store.rides["stale"].Status)
 	assert.Equal(t, "server_restart", store.rides["stale"].EndReason)
-	assert.Equal(t, 3, rt.refresher.Current().Stats().Trips)
+	assert.Same(t, gt.Index(), rt.refresher.Current(), "rider mode serves the shared index")
 	assert.False(t, rt.trusted.Configured())
-
-	cfg.GTFSSource = "does/not/exist.zip"
-	_, err = newRiderRuntime(ctx, cfg, store, testSecret, false, nil)
-	assert.Error(t, err)
 }
 
 func TestRiderRoutes_NotRegisteredWhenDisabled(t *testing.T) {

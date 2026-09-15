@@ -262,9 +262,20 @@ func main() {
 		slog.Error("invalid rider mode configuration", "error", err)
 		os.Exit(1)
 	}
+	// The schedule loads whenever there is one to load: the driver catalog
+	// serves it on its own, and rider mode verifies against it when enabled.
+	var gtfs *gtfsRuntime
+	if riderCfg.GTFSSource != "" {
+		gtfs, err = newGTFSRuntime(ctx, riderCfg.GTFSSource, riderCfg.GTFSRefresh)
+		if err != nil {
+			slog.Error("failed to load GTFS", "source", riderCfg.GTFSSource, "error", err)
+			os.Exit(1)
+		}
+		defer gtfs.Stop()
+	}
 	var riderSvc *riderService
 	if riderCfg.Enabled {
-		rt, err := newRiderRuntime(ctx, riderCfg, store, jwtSecret, trustProxyHeaders(), tracker)
+		rt, err := newRiderRuntime(ctx, riderCfg, gtfs.Refresher(), store, jwtSecret, trustProxyHeaders(), tracker)
 		if err != nil {
 			slog.Error("failed to start rider mode", "error", err)
 			os.Exit(1)
