@@ -39,10 +39,6 @@ type stats struct {
 	totalMS   atomic.Int64
 }
 
-// checkBaseURL rejects a destination that would put the password and the
-// session token on the wire in cleartext. Plain HTTP stays allowed for
-// loopback, which is the default and the only way the simulator is normally
-// run, but anything remote has to be HTTPS.
 // perDriverReportInterval mirrors rateInterval in ratelimit.go: the server
 // allows one location report per driver per this long, keyed on the JWT sub.
 const perDriverReportInterval = 5 * time.Second
@@ -70,6 +66,10 @@ func reportBudgetWarning(vehicles int, interval time.Duration) string {
 		interval, perDriverReportInterval, perDriverReportInterval)
 }
 
+// checkBaseURL rejects a destination that would put the password and the
+// session token on the wire in cleartext. Plain HTTP stays allowed for
+// loopback, which is the default and the only way the simulator is normally
+// run, but anything remote has to be HTTPS.
 func checkBaseURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
