@@ -375,8 +375,9 @@ command.
    started, screenshot again. Expect the route line, the vehicle, a
    next-stop maneuver card ("Stop ST2 · 8:05 · 2 min late", shortening to
    "Stop ST2 · 2 min late" and then "Stop ST2" as space allows), an
-   estimates bar coloured by adherence (green on time, orange/red for a
-   large deviation per `CarPlayTemplates.timeRemainingColor`), "End" and
+   estimates bar coloured by adherence (green on time, orange late, red
+   early, default (uncoloured) off route or off schedule, per
+   `CarPlayTemplates.timeRemainingColor`), "End" and
    "Details" bar buttons, and three map buttons.
 3. **Off route.** Drive GPS away from the shape until `isOnRoute` flips.
    Expect the dimmed route line, a grey vehicle marker, the snapped dot on

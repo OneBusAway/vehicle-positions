@@ -74,6 +74,11 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         mapView.pointOfInterestFilter = .excludingAll
         mapView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(mapView)
+        // The glyphs are bitmaps: light/dark has to redraw them, it cannot
+        // re-resolve the colours inside an image that is already drawn.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: RouteMapViewController, _) in
+            controller.refreshGlyphs()
+        }
         NSLayoutConstraint.activate([
             mapView.topAnchor.constraint(equalTo: view.topAnchor),
             mapView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -203,9 +208,38 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
     private func refreshVehicleView() {
         guard let view = mapView.view(for: vehicle) else { return }
-        view.image = MapGlyphs.vehicle(fill: vehicle.isOnRoute ? routeColor : .systemGray)
+        let fill = (vehicle.isOnRoute ? routeColor : .systemGray).resolvedColor(with: mapView.traitCollection)
+        view.image = MapGlyphs.vehicle(fill: fill)
         let relative = vehicle.course - mapView.camera.heading
         view.transform = CGAffineTransform(rotationAngle: relative * .pi / 180)
+    }
+
+    /// Redraws every annotation image against the current traits. The glyphs
+    /// bake `UIColor.label` and `.systemBackground` in as they are drawn, so a
+    /// light/dark change — the car's own day/night switch included — leaves
+    /// stale colours on screen until they are drawn again.
+    func refreshGlyphs() {
+        for stop in stops {
+            guard let view = mapView.view(for: stop) else { continue }
+            view.image = stopGlyph(for: stop)
+            view.centerOffset = stopCentreOffset(for: view)
+        }
+        refreshVehicleView()
+        if let view = mapView.view(for: snapped) {
+            view.image = MapGlyphs.dot(traits: mapView.traitCollection)
+        }
+    }
+
+    private func stopGlyph(for stop: StopAnnotation) -> UIImage {
+        MapGlyphs.stop(diameter: stop.isNext ? 18 : 10, fill: routeColor,
+                       label: stop.isNext ? stop.stop.name : nil, traits: mapView.traitCollection)
+    }
+
+    /// A labelled stop is drawn as a dot with its name beside it; shifting the
+    /// view by half the extra width keeps the dot over the stop itself.
+    private func stopCentreOffset(for view: MKAnnotationView) -> CGPoint {
+        guard let stop = view.annotation as? StopAnnotation, stop.isNext, let image = view.image else { return .zero }
+        return CGPoint(x: (image.size.width - 18) / 2, y: 0)
     }
 
     // MARK: MKMapViewDelegate
@@ -235,8 +269,8 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         case let stop as StopAnnotation:
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "stop") ?? MKAnnotationView(annotation: stop, reuseIdentifier: "stop")
             view.annotation = stop
-            view.image = MapGlyphs.stop(diameter: stop.isNext ? 18 : 10, fill: routeColor, label: stop.isNext ? stop.stop.name : nil)
-            view.centerOffset = CGPoint(x: stop.isNext ? (view.image!.size.width - 18) / 2 : 0, y: 0)
+            view.image = stopGlyph(for: stop)
+            view.centerOffset = stopCentreOffset(for: view)
             view.displayPriority = stop.isNext ? .required : .defaultLow
             view.zPriority = stop.isNext ? .max : .defaultUnselected
             return view
@@ -250,7 +284,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         case is SnappedAnnotation:
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "snapped") ?? MKAnnotationView(annotation: annotation, reuseIdentifier: "snapped")
             view.annotation = annotation
-            view.image = MapGlyphs.dot()
+            view.image = MapGlyphs.dot(traits: mapView.traitCollection)
             view.displayPriority = .required
             return view
         default:

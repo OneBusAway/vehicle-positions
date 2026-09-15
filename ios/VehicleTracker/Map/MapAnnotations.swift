@@ -44,7 +44,10 @@ extension UIColor {
 
 /// Images for the annotation views, drawn once per size and colour.
 enum MapGlyphs {
-    static func stop(diameter: CGFloat, fill: UIColor, label: String?) -> UIImage {
+    /// `traits` resolves the dynamic colours: an image is drawn once and kept,
+    /// so `UIColor.label` has to be pinned to the trait collection the view
+    /// will show it in rather than to whatever is current while drawing.
+    static func stop(diameter: CGFloat, fill: UIColor, label: String?, traits: UITraitCollection) -> UIImage {
         let font = UIFont.systemFont(ofSize: 13, weight: .semibold)
         let textSize = label.map { ($0 as NSString).size(withAttributes: [.font: font]) } ?? .zero
         let size = CGSize(width: diameter + (label == nil ? 0 : textSize.width + 8), height: max(diameter, textSize.height))
@@ -57,8 +60,10 @@ enum MapGlyphs {
             ring.lineWidth = 2
             ring.stroke()
             if let label {
-                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.label,
-                                                            .strokeColor: UIColor.systemBackground, .strokeWidth: -3]
+                let attrs: [NSAttributedString.Key: Any] = [.font: font,
+                                                            .foregroundColor: UIColor.label.resolvedColor(with: traits),
+                                                            .strokeColor: UIColor.systemBackground.resolvedColor(with: traits),
+                                                            .strokeWidth: -3]
                 (label as NSString).draw(at: CGPoint(x: diameter + 6, y: (size.height - textSize.height) / 2), withAttributes: attrs)
             }
         }
@@ -81,11 +86,11 @@ enum MapGlyphs {
         }
     }
 
-    static func dot() -> UIImage {
+    static func dot(traits: UITraitCollection) -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10)).image { _ in
-            UIColor.systemBackground.setFill()
+            UIColor.systemBackground.resolvedColor(with: traits).setFill()
             UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 10, height: 10)).fill()
-            UIColor.label.setFill()
+            UIColor.label.resolvedColor(with: traits).setFill()
             UIBezierPath(ovalIn: CGRect(x: 2, y: 2, width: 6, height: 6)).fill()
         }
     }

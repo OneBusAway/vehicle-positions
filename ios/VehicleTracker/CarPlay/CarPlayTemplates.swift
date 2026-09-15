@@ -138,23 +138,35 @@ enum CarPlayTemplates {
 
     // MARK: Starting a trip from the car
 
-    /// A list template capped at the vehicle's item limit; when the cap cuts
-    /// anything off, the last row says so.
-    static func list(title: String, sections: [(header: String?, items: [CPListItem])], maxItems: Int) -> CPListTemplate {
+    /// A list template capped at the vehicle's item *and* section limits;
+    /// when the item cap cuts anything off, the last row says so.
+    static func list(title: String, sections: [(header: String?, items: [CPListItem])], maxItems: Int, maxSections: Int) -> CPListTemplate {
         let cap = max(maxItems, 1)
+        let sectionCap = max(maxSections, 1)
         let total = sections.reduce(0) { $0 + $1.items.count }
         let truncated = total > cap
-        var remaining = truncated ? cap - 1 : cap // room for the "see more" row
+        // The "see more" row costs a row. With room for one row only, spend it
+        // on something the driver can actually tap.
+        let notice = truncated && cap > 1
+        var remaining = notice ? cap - 1 : cap
         var built: [CPListSection] = []
         for section in sections where remaining > 0 && !section.items.isEmpty {
             let items = Array(section.items.prefix(remaining))
             remaining -= items.count
             built.append(CPListSection(items: items, header: section.header, sectionIndexTitle: nil))
         }
-        if truncated {
+        if notice {
             let more = CPListItem(text: String(localized: "Use iPhone to see more"), detailText: nil)
             more.isEnabled = false
             built.append(CPListSection(items: [more]))
+        }
+        if built.count > sectionCap {
+            // The car will not show more sections than that, and dropping the
+            // overflow would hide rows the driver needs: fold it into the last
+            // section that does get shown, under that section's own header.
+            let kept = built.prefix(sectionCap - 1)
+            let overflow = built.dropFirst(sectionCap - 1)
+            built = Array(kept) + [CPListSection(items: overflow.flatMap(\.items), header: overflow.first?.header, sectionIndexTitle: nil)]
         }
         return CPListTemplate(title: title, sections: built)
     }

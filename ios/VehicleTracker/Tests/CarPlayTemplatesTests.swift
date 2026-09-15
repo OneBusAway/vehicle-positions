@@ -162,12 +162,66 @@ import Testing
 
     @Test func listTruncatesToTheCap() {
         let items = (0..<12).map { CPListItem(text: "Route \($0)", detailText: nil) }
-        let list = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: items)], maxItems: 10)
+        let list = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: items)], maxItems: 10, maxSections: 4)
         #expect(list.itemCount == 10)
         let last = list.sections.last?.items.last as? CPListItem
         #expect(last?.text == "Use iPhone to see more")
         #expect(last?.isEnabled == false)
-        let short = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: Array(items.prefix(3)))], maxItems: 10)
+        let short = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: Array(items.prefix(3)))], maxItems: 10, maxSections: 4)
         #expect(short.itemCount == 3)
+    }
+
+    @Test func listRespectsTheSectionCap() {
+        let sections = (0..<4).map { s in
+            (header: "S\(s)" as String?, items: (0..<2).map { CPListItem(text: "S\(s)-\($0)", detailText: nil) })
+        }
+        let list = CarPlayTemplates.list(title: "Routes", sections: sections, maxItems: 100, maxSections: 2)
+        #expect(list.sections.count == 2)
+        #expect(list.itemCount == 8)
+        #expect(list.sections[0].header == "S0")
+        #expect(list.sections[0].items.count == 2)
+        // The overflow joins the last section CarPlay will show, under its own
+        // header, rather than being dropped.
+        #expect(list.sections[1].header == "S1")
+        #expect(list.sections[1].items.compactMap { ($0 as? CPListItem)?.text } == ["S1-0", "S1-1", "S2-0", "S2-1", "S3-0", "S3-1"])
+        let under = CarPlayTemplates.list(title: "Routes", sections: sections, maxItems: 100, maxSections: 8)
+        #expect(under.sections.count == 4)
+    }
+
+    @Test func listWithACapOfOneShowsOneRealItem() {
+        let items = (0..<12).map { CPListItem(text: "Route \($0)", detailText: nil) }
+        let list = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: items)], maxItems: 1, maxSections: 4)
+        #expect(list.itemCount == 1)
+        let only = list.sections.first?.items.first as? CPListItem
+        // The one row the car allows is a route, not a notice nobody can tap.
+        #expect(only?.text == "Route 0")
+        #expect(only?.isEnabled == true)
+    }
+
+    @Test func listItemHandlersInvokeOnSelect() {
+        var pickedVehicle: Vehicle?
+        let vehicles = CarPlayTemplates.vehicleItems([Vehicle(id: "bus-1", label: "Bus 1"), Vehicle(id: "bus-2", label: "Bus 2")]) { pickedVehicle = $0 }
+        vehicles[1].handler?(vehicles[1]) {}
+        #expect(pickedVehicle?.id == "bus-2")
+
+        var pickedRoute: RouteInfo?
+        let routes = [RouteInfo(id: "R1", shortName: "1", longName: "Straight", color: "", textColor: "", type: 3),
+                      RouteInfo(id: "R2", shortName: "2", longName: "Loop", color: "", textColor: "", type: 3)]
+        let sections = CarPlayTemplates.routeSections(routes, recentIDs: ["R2"]) { pickedRoute = $0 }
+        let recent = sections[0].items[0]
+        recent.handler?(recent) {}
+        #expect(pickedRoute?.id == "R2")
+        let all = sections[1].items[0]
+        all.handler?(all) {}
+        #expect(pickedRoute?.id == "R1")
+
+        var pickedTrip: TripSummary?
+        let page = RouteTripsPage(routeID: "R1", serviceDate: "20260902", timezone: "America/Los_Angeles", trips: [
+            TripSummary(id: "a", headsign: "North", directionID: 0, startsAt: TripFixtures.at(7, 0), endsAt: TripFixtures.at(7, 30), firstStop: "A", lastStop: "B"),
+            TripSummary(id: "b", headsign: "North", directionID: 0, startsAt: TripFixtures.at(8, 0), endsAt: TripFixtures.at(8, 30), firstStop: "A", lastStop: "B"),
+        ])
+        let trips = CarPlayTemplates.tripItems(page, now: TripFixtures.at(8, 10)) { pickedTrip = $0 }
+        trips[1].handler?(trips[1]) {}
+        #expect(pickedTrip?.id == "b")
     }
 }
