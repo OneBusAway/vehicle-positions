@@ -16,8 +16,13 @@ nonisolated final class FileActiveTripStore: ActiveTripStoring, Sendable {
         url = base.appending(path: "active-trip.json")
     }
 
+    /// `URL.path()` keeps percent-encoding by default, and the Application
+    /// Support directory has a space in its name — so the encoded path never
+    /// names a file that exists. Every path check here goes through this.
+    private var filePath: String { url.path(percentEncoded: false) }
+
     func load() throws -> ActiveTrip? {
-        guard FileManager.default.fileExists(atPath: url.path()) else { return nil }
+        guard FileManager.default.fileExists(atPath: filePath) else { return nil }
         do {
             return try JSONCoding.decoder.decode(ActiveTrip.self, from: Data(contentsOf: url))
         } catch {
@@ -34,7 +39,7 @@ nonisolated final class FileActiveTripStore: ActiveTripStoring, Sendable {
     }
 
     func clear() throws {
-        if FileManager.default.fileExists(atPath: url.path()) {
+        if FileManager.default.fileExists(atPath: filePath) {
             try FileManager.default.removeItem(at: url)
         }
     }

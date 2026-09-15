@@ -8,6 +8,7 @@ struct VehicleTrackerApp: App {
         WindowGroup {
             RootView()
                 .environment(container.session)
+                .task { DebugAutoStart.runIfRequested(session: container.session) }
         }
     }
 }

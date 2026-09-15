@@ -4,47 +4,139 @@ struct TrackingView: View {
     @Environment(TripSession.self) private var session
     @State private var confirmEnd = false
     @State private var endError: String?
+    @State private var reloginPassword = ""
+    @State private var reloginError: String?
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text(session.reporting.label)
-                .font(.title2.bold())
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .background(session.reporting.isProblem ? Color.red : Color.green)
-                .foregroundStyle(.white)
+        VStack(spacing: 0) {
+            statusBanner
             if let active = session.activeTrip {
-                HStack {
-                    RouteBadge(shortName: active.trip.route.shortName, color: active.trip.route.color, textColor: active.trip.route.textColor)
-                    Text(active.trip.headsign).font(.title2)
-                }
-            }
-            if let a = session.latest {
-                Text(a.statusLabel).font(.largeTitle.bold()).foregroundStyle(a.color)
-                Text("Next: \(a.nextStop.name)")
-            } else {
-                Text("Waiting for GPS…").foregroundStyle(.secondary)
-            }
-            Spacer()
-            if canResume {
-                Button("Resume") { session.resume() }.buttonStyle(.borderedProminent)
-            } else {
-                Button("End Trip") { confirmEnd = true }.buttonStyle(.borderedProminent).tint(.red)
+                header(active)
+                adherencePanel(active)
+                RouteMapView(trip: active.trip, adherence: session.latest)
+                    .frame(maxHeight: .infinity)
+                footer(active)
             }
         }
-        .padding()
-        .confirmationDialog("End this trip?", isPresented: $confirmEnd) {
+        .confirmationDialog("End this trip?", isPresented: $confirmEnd, titleVisibility: .visible) {
             Button("End Trip", role: .destructive) { end() }
         }
-        .alert("Could not end the trip", isPresented: Binding(
-            get: { endError != nil },
-            set: { if !$0 { endError = nil } }
-        )) {
+        .alert("Could not end the trip", isPresented: Binding(get: { endError != nil }, set: { if !$0 { endError = nil } })) {
             Button("Retry") { end() }
             Button("End locally anyway", role: .destructive) { session.endLocally() }
-            Button("Cancel", role: .cancel) { endError = nil }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text(endError ?? "")
         }
+        .sheet(isPresented: Binding(get: { session.reporting == .authExpired }, set: { _ in })) {
+            reloginSheet
+        }
+    }
+
+    private var statusBanner: some View {
+        Text(session.reporting.label)
+            .font(.title2.bold())
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(session.reporting.isProblem ? Color.red : Color.green)
+            .foregroundStyle(.white)
+    }
+
+    private func header(_ active: ActiveTrip) -> some View {
+        HStack(spacing: 12) {
+            RouteBadge(shortName: active.trip.route.shortName, color: active.trip.route.color, textColor: active.trip.route.textColor)
+            VStack(alignment: .leading) {
+                Text(active.trip.headsign).font(.title3.bold()).lineLimit(1)
+                Text(active.vehicle.label.isEmpty ? active.vehicle.id : active.vehicle.label).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding()
+    }
+
+    private func adherencePanel(_ active: ActiveTrip) -> some View {
+        VStack(spacing: 4) {
+            if let a = session.latest {
+                Text(a.statusLabel)
+                    .font(.system(size: 34, weight: .heavy))
+                    .foregroundStyle(a.color)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                HStack {
+                    Text("Next: \(a.nextStop.name)").bold()
+                    Spacer()
+                    Text("\(Formatters.clock(a.nextStop.arrivalAt, timezone: active.trip.timezone)) · \(Formatters.distance(a.distanceToNextStop))")
+                }
+                .font(.body)
+            } else if case .paused = session.phase {
+                Text("Paused").font(.system(size: 34, weight: .heavy)).foregroundStyle(.secondary)
+                Text("Tap Resume to keep reporting.")
+            } else {
+                Text("Waiting for GPS…").font(.system(size: 34, weight: .heavy)).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+
+    private func footer(_ active: ActiveTrip) -> some View {
+        VStack(spacing: 12) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                HStack {
+                    if case .connected(let sent) = session.reporting {
+                        Text("\(sent) sent")
+                    } else {
+                        Text(session.reporting.label)
+                    }
+                    Spacer()
+                    Text(Formatters.elapsed(context.date.timeIntervalSince(active.startedAt)))
+                        .monospacedDigit()
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+            if canResume {
+                Button {
+                    session.resume()
+                } label: {
+                    Text("Resume").bold().frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Button {
+                    confirmEnd = true
+                } label: {
+                    Text("End Trip").bold().frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .disabled({ if case .ending = session.phase { true } else { false } }())
+            }
+        }
+        .padding()
+    }
+
+    private var reloginSheet: some View {
+        NavigationStack {
+            Form {
+                Text("Your sign-in expired. The trip keeps running; sign in again to keep reporting.")
+                SecureField("Password", text: $reloginPassword)
+                if let reloginError { Text(reloginError).foregroundStyle(.red) }
+                Button("Sign In") {
+                    Task {
+                        do {
+                            try await session.reauthenticate(password: reloginPassword)
+                            reloginPassword = ""
+                            reloginError = nil
+                        } catch {
+                            reloginError = error.localizedDescription
+                        }
+                    }
+                }
+                .disabled(reloginPassword.isEmpty)
+            }
+            .navigationTitle("Sign in again")
+        }
+        .interactiveDismissDisabled()
     }
 
     /// Paused (a relaunch found a stored trip) or the location stream itself
