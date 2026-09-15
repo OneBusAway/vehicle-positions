@@ -77,13 +77,30 @@ schedule there is nothing to verify against, so the server exits at startup if
 it is missing. When rider mode is off the rider routes are not registered at
 all (`404`) and `GET /api/v1/admin/rider/status` answers `{"enabled":false}`.
 
+`GTFS_STATIC_URL` on its own, without rider mode, also loads the schedule and
+turns on the **driver GTFS catalog**: three read-only endpoints the driver apps
+use to pick a trip and draw its route. A schedule that cannot be loaded at
+startup makes the server exit `1`, whether or not rider mode is enabled, so an
+operator upgrading with a stale or unreachable `GTFS_STATIC_URL` must fix or
+remove it. They take a driver or admin bearer token (the admin UI's session
+cookie also works, as on every `requireAuth` route) and are not registered
+(`404`) when no schedule is configured. Only routes with at least one trip
+that has a shape appear in the catalog, because the index skips shapeless
+trips — a route missing from the picker means its trips have no `shape_id`.
+
+| Method + path | Purpose |
+|---|---|
+| `GET /api/v1/gtfs/routes` | Routes with at least one trip, in display order. |
+| `GET /api/v1/gtfs/routes/{route_id}/trips?date=YYYYMMDD` | The route's trips active on a service date (default: today's), with absolute start and end times. |
+| `GET /api/v1/gtfs/trips/{trip_id}?date=YYYYMMDD` | One trip's shape, stops with absolute times, and the adherence thresholds the server applies. |
+
 Configuration (spec §4.1). Durations use Go's `time.ParseDuration` syntax; an
 unparseable value logs and falls back to its default.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `RIDER_MODE_ENABLED` | `false` | Enable rider routes, engine and feed merge. |
-| `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. |
+| `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. Required when rider mode is enabled; on its own it enables the driver GTFS catalog. |
 | `GTFS_STATIC_REFRESH` | `24h` | Re-download and rebuild the index. Failure keeps the old index and logs. |
 | `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feed URLs. The server's own driver-reported positions are always a trusted source when the driver entered the GTFS trip id (matching is by trip id, so a route-only driver report doesn't count); with no external feed, a trip no driver is reporting that way has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Poll interval; sends `If-None-Match` / `If-Modified-Since` when the server gave `ETag` / `Last-Modified`. |
@@ -159,6 +176,20 @@ and the app's behavior under network loss and task removal — see
 design (screens, data flow, permissions, error handling), see
 [`docs/superpowers/specs/2026-08-04-android-driver-app-design.md`](docs/superpowers/specs/2026-08-04-android-driver-app-design.md).
 
+### iOS driver app (with CarPlay)
+
+The iOS counterpart lives in [`ios/VehicleTracker`](ios/VehicleTracker) (XcodeGen
+project; `xcodegen generate` builds the `.xcodeproj`). Drivers sign in, pick a
+vehicle and a GTFS run from the server's catalog, and report positions while
+the trip runs; the car screen shows the route, the next stop and the schedule
+deviation through a CarPlay navigation scene. Adherence is computed on the
+phone from the trip geometry the server serves, with the server's own
+thresholds. Setup and tests: [`docs/development.md`](docs/development.md#ios-driver-app);
+end-to-end walkthrough: [`docs/ios-smoke-test.md`](docs/ios-smoke-test.md);
+design: [`docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md`](docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md).
+Running in a real car needs Apple's CarPlay navigation entitlement; the
+simulator needs only the entitlements file.
+
 -----
 
 ## 1. Problem Statement
@@ -183,7 +214,7 @@ This project fills that gap by creating a lightweight, open-source vehicle track
 
 - Offline data queuing and sync (v2 — see Future Work; v1 requires an active network connection to report locations)
 - Arrival predictions / trip updates (this project produces Vehicle Positions only; arrival estimation is a separate, significantly more complex problem that can build on this data later)
-- iOS driver app (the target user base — transit drivers in developing countries — overwhelmingly uses Android)
+- iOS driver app for the GSoC deliverable (the target user base overwhelmingly uses Android). An iOS driver app with CarPlay was added later by the project owner; see docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md
 - Rider-facing features (riders consume the GTFS-RT feed through existing apps like OneBusAway; this project focuses on the data production side)
 - Replacing existing AVL systems for agencies that already have them
 - Building a general-purpose fleet management platform (the scope is deliberately narrow: location tracking → GTFS-RT feed)

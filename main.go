@@ -68,7 +68,7 @@ type appStore interface {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret)
@@ -129,6 +129,12 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 		registerRiderRoutes(mux, riderSvc)
 	}
 
+	// The GTFS catalog exists whenever a schedule is loaded, rider mode or
+	// not; without one its routes are not registered (404).
+	if catalog != nil {
+		registerGTFSRoutes(mux, authMiddleware, catalog)
+	}
+
 	return mux
 }
 
@@ -138,9 +144,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter *LoginRateLimiter, jwtSecret []byte, startTime time.Time,
-	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
@@ -262,15 +268,30 @@ func main() {
 		slog.Error("invalid rider mode configuration", "error", err)
 		os.Exit(1)
 	}
+	// The schedule loads whenever there is one to load: the driver catalog
+	// serves it on its own, and rider mode verifies against it when enabled.
+	var schedule *gtfsRuntime
+	if riderCfg.GTFSSource != "" {
+		schedule, err = newGTFSRuntime(ctx, riderCfg.GTFSSource, riderCfg.GTFSRefresh)
+		if err != nil {
+			slog.Error("failed to load GTFS", "source", riderCfg.GTFSSource, "error", err)
+			os.Exit(1)
+		}
+		defer schedule.Stop()
+	}
 	var riderSvc *riderService
 	if riderCfg.Enabled {
-		rt, err := newRiderRuntime(ctx, riderCfg, store, jwtSecret, trustProxyHeaders(), tracker)
+		rt, err := newRiderRuntime(ctx, riderCfg, schedule.Index, store, jwtSecret, trustProxyHeaders(), tracker)
 		if err != nil {
 			slog.Error("failed to start rider mode", "error", err)
 			os.Exit(1)
 		}
 		defer rt.Stop()
 		riderSvc = rt.svc
+	}
+	var catalog *gtfsCatalog
+	if schedule != nil {
+		catalog = newGTFSCatalog(schedule.Index, riderCfg.Thresholds)
 	}
 
 	cutoff := time.Now().Add(-maxAge)
@@ -287,7 +308,7 @@ func main() {
 	startTime := time.Now()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)

@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // noopStore satisfies appStore with no-op method bodies.
@@ -183,7 +185,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 
 	// nil tracker and rateLimiter are safe: adminMiddleware rejects driver
 	// tokens before any handler body runs, so neither is dereferenced.
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		method string
@@ -242,7 +244,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	// Same routes as the driver-rejection table — every admin route must
 	// let a valid admin token through both middleware layers.
@@ -304,7 +306,7 @@ func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/vehicles/live", nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -388,7 +390,7 @@ func TestDriverVehiclesRoute_Wiring(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		name       string
@@ -454,7 +456,7 @@ func TestFeedRoute_Wiring(t *testing.T) {
 			tracker := NewTracker(5 * time.Minute)
 			defer tracker.Stop()
 
-			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, time.Time{}, nil, false, tc.feedAuthEnabled, nil)
+			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, time.Time{}, nil, false, tc.feedAuthEnabled, nil, nil)
 
 			req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
 			if tc.apiKey != "" {
@@ -468,5 +470,44 @@ func TestFeedRoute_Wiring(t *testing.T) {
 				assert.Contains(t, decodeError(t, w), "API key")
 			}
 		})
+	}
+}
+
+func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
+	without := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	rec := httptest.NewRecorder()
+	without.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/gtfs/routes", nil))
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	ix, err := rider.LoadIndex(context.Background(), "rider/testdata/fixture.zip", nil, time.Now())
+	require.NoError(t, err)
+	catalog := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
+	// T1 is weekday-only in the fixture calendar (2026 only): pin the clock so
+	// this test never depends on the day of the week it happens to run on, or
+	// on the year still being 2026.
+	catalog.now = func() time.Time { return catalogNow }
+	with := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, catalog)
+
+	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret)
+	riderTok, _ := generateRiderJWT("rider-1", testSecret, time.Hour)
+	cases := []struct {
+		name  string
+		token string
+		want  int
+	}{
+		{"driver", driverTok, http.StatusOK},
+		{"rider token is refused", riderTok, http.StatusForbidden},
+		{"no token", "", http.StatusUnauthorized},
+	}
+	for _, path := range []string{"/api/v1/gtfs/routes", "/api/v1/gtfs/routes/R1/trips?date=20260902", "/api/v1/gtfs/trips/T1?date=20260902"} {
+		for _, tc := range cases {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			if tc.token != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			rec := httptest.NewRecorder()
+			with.ServeHTTP(rec, req)
+			assert.Equal(t, tc.want, rec.Code, "%s %s", tc.name, path)
+		}
 	}
 }

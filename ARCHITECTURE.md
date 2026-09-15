@@ -16,6 +16,7 @@ It outlines the system's core components, module structure, data flow, and how t
 6. [Module Overview](#6-module-overview)
 7. [Extending the System](#7-extending-the-system)
 8. [Rider Mode](#8-rider-mode)
+9. [iOS Driver App and CarPlay](#9-ios-driver-app-and-carplay)
 
 ---
 
@@ -628,6 +629,35 @@ reports is skipped by `Aggregator.Estimates`, so rider data only ever appears
 where there was nothing. The `source` query parameter (`driver`, `rider`, or
 the default `all`) lets a consumer take one half, which is also how the merge
 is exercised end to end in the smoke test.
+
+### 8.6 GTFS catalog for drivers
+
+The schedule index (`rider.Index`) is loaded by `gtfs_wiring.go` whenever
+`GTFS_STATIC_URL` is set, independently of rider mode, and refreshed on
+`GTFS_STATIC_REFRESH`. Rider mode borrows the refresher. `gtfs_handlers.go`
+serves the index to drivers as `GET /api/v1/gtfs/routes`,
+`GET /api/v1/gtfs/routes/{route_id}/trips` and `GET /api/v1/gtfs/trips/{trip_id}`
+behind `requireAuth`. Absolute stop times are `rider.ServiceDayStart(date, tz)`
+plus the `stop_times.txt` offsets, so after-midnight trips land on the next
+calendar day. The trip payload carries the server's `RIDER_MAX_SHAPE_DISTANCE`
+and schedule window so a client computing adherence locally applies the same
+numbers.
+
+---
+
+## 9. iOS driver app and CarPlay
+
+`ios/VehicleTracker` is a SwiftUI app whose state lives in one `TripSession`
+(`Engine/TripSession.swift`): sign-in, the active trip, the Core Location
+stream (from the rider SDK's `CoreLocationSource`), adherence, and a throttled
+`LocationReporter` that honours the server's one-report-per-5-s limit. The
+engine (`ShapeGeometry`, `ScheduleInterpolator`, `AdherenceEvaluator`) is a
+port of `rider/shape.go` and `rider.ScheduledOffsetAt`, judged with the
+thresholds `GET /api/v1/gtfs/trips/{id}` returns. `Map/RouteMapViewController`
+draws the trip for both the phone and the CarPlay window; `CarPlay/` holds the
+scene delegate, a controller that observes `TripSession`, and pure template
+builders. The CarPlay scene is a navigation app (`CPMapTemplate` root,
+`CPNavigationSession` whose maneuvers are the stops).
 
 ---
 

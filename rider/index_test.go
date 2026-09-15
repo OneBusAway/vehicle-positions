@@ -182,3 +182,89 @@ func TestShapeDistScale_RequiresEveryStopTime(t *testing.T) {
 	_, ok = shapeDistScale([]gtfs.ScheduledStopTime{{ShapeDistanceTraveled: ptr(0.0)}}, 1000)
 	assert.False(t, ok, "all-zero values say nothing about the unit")
 }
+
+func TestBuildIndex_Routes(t *testing.T) {
+	ix := fixtureIndex(t)
+	routes := ix.Routes()
+	require.Len(t, routes, 2)
+	assert.Equal(t, "R2", routes[0].ID, "route_sort_order 1 lists before 2")
+	assert.Equal(t, RouteInfo{ID: "R1", ShortName: "1", LongName: "Straight", Color: "0077C0", TextColor: "FFFFFF", Type: 3, SortOrder: ptr(int32(2))}, routes[1])
+	assert.Equal(t, 2, ix.Stats().Routes)
+
+	r, ok := ix.Route("R2")
+	require.True(t, ok)
+	assert.Equal(t, "Loop", r.LongName)
+	assert.Equal(t, ptr(int32(1)), r.SortOrder, "R2's route_sort_order is 1, not absent")
+	_, ok = ix.Route("R9")
+	assert.False(t, ok)
+}
+
+func TestRoutes_NaturalOrderWithoutSortOrder(t *testing.T) {
+	ix := fixtureIndexEdited(t, "routes.txt", "route_id,agency_id,route_short_name,route_long_name,route_type\n"+
+		"R1,A,10,Ten,3\n"+
+		"R2,A,7,Seven,3\n")
+	var ids []string
+	for _, r := range ix.Routes() {
+		ids = append(ids, r.ID)
+	}
+	assert.Equal(t, []string{"R2", "R1"}, ids, "7 sorts before 10")
+}
+
+func TestRoutes_ExcludesRoutesWithoutIndexedTrips(t *testing.T) {
+	ix := fixtureIndexEdited(t, "routes.txt", "route_id,agency_id,route_short_name,route_long_name,route_type\n"+
+		"R1,A,1,Straight,3\n"+
+		"R2,A,2,Loop,3\n"+
+		"R3,A,3,Ghost,3\n")
+	assert.Len(t, ix.Routes(), 2)
+	_, ok := ix.Route("R3")
+	assert.False(t, ok)
+}
+
+func TestBuildIndex_HeadsignDirectionAndStopNames(t *testing.T) {
+	ix := fixtureIndex(t)
+	t1, _ := ix.Trip("T1")
+	assert.Equal(t, "North", t1.Headsign)
+	assert.Equal(t, 0, t1.DirectionID)
+	assert.Equal(t, "Stop ST2", t1.StopTimes[1].StopName)
+	t2, _ := ix.Trip("T2")
+	assert.Equal(t, -1, t2.DirectionID, "absent direction_id")
+	t3, _ := ix.Trip("T3")
+	assert.Equal(t, 1, t3.DirectionID)
+}
+
+func TestTripsOnRoute(t *testing.T) {
+	ix := fixtureIndex(t)
+	weekday := ix.TripsOnRoute("R1", "20260902") // Wednesday
+	require.Len(t, weekday, 1)
+	assert.Equal(t, "T1", weekday[0].ID)
+	sat := ix.TripsOnRoute("R1", "20260905")
+	require.Len(t, sat, 1)
+	assert.Equal(t, "T2", sat[0].ID)
+	assert.Empty(t, ix.TripsOnRoute("R9", "20260902"))
+	assert.Empty(t, ix.TripsOnRoute("R1", "garbage"))
+}
+
+func TestTripsOnRoute_SortedByFirstDeparture(t *testing.T) {
+	// T2 moved to weekday service and scheduled before T1, with an id that
+	// sorts after it: departure order must win over id order.
+	ix := fixtureIndexEditedFiles(t, map[string]string{
+		"trips.txt": "route_id,service_id,trip_id,shape_id,trip_headsign,direction_id\n" +
+			"R1,WEEKDAY,T1,S1,North,0\n" +
+			"R1,WEEKDAY,T2,S1,North,\n" +
+			"R2,WEEKDAY,T3,S2,Loop,1\n",
+		"stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n" +
+			stopTimeRow("T1", "08:00:00", "ST1", 1, "0") +
+			stopTimeRow("T1", "08:10:00", "ST3", 3, "1001") +
+			stopTimeRow("T2", "07:00:00", "ST1", 1, "0") +
+			stopTimeRow("T2", "07:10:00", "ST3", 3, "1001") +
+			stopTimeRow("T3", "25:00:00", "LP1", 1, "") +
+			stopTimeRow("T3", "25:20:00", "LP1", 4, ""),
+	})
+	trips := ix.TripsOnRoute("R1", "20260902")
+	require.Len(t, trips, 2)
+	assert.Equal(t, "T2", trips[0].ID)
+	assert.Equal(t, "T1", trips[1].ID)
+	// TripsOnRoute hands out a fresh slice: mutating it must not touch the index.
+	trips[0] = nil
+	assert.Equal(t, "T2", ix.TripsOnRoute("R1", "20260902")[0].ID)
+}

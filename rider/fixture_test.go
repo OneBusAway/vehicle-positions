@@ -59,15 +59,23 @@ func zipFixtureFiles(t *testing.T, files []fixtureFile) []byte {
 // test needs do not have to live in it.
 func fixtureIndexEdited(t *testing.T, name, body string) *Index {
 	t.Helper()
+	return fixtureIndexEditedFiles(t, map[string]string{name: body})
+}
+
+// fixtureIndexEditedFiles is fixtureIndexEdited for more than one member.
+func fixtureIndexEditedFiles(t *testing.T, edits map[string]string) *Index {
+	t.Helper()
 	files := fixtureFiles(fixtureTimezone, 1)
-	replaced := false
-	for i := range files {
-		if files[i].name == name {
-			files[i].body = body
-			replaced = true
+	for name, body := range edits {
+		replaced := false
+		for i := range files {
+			if files[i].name == name {
+				files[i].body = body
+				replaced = true
+			}
 		}
+		require.True(t, replaced, "no fixture member named %q", name)
 	}
-	require.True(t, replaced, "no fixture member named %q", name)
 	static, err := gtfs.ParseStatic(zipFixtureFiles(t, files), gtfs.ParseStaticOptions{})
 	require.NoError(t, err)
 	ix, err := BuildIndex(static, "fixture", fixtureLoadedAt)
@@ -110,7 +118,8 @@ type fixtureFile struct{ name, body string }
 // The feed has two routes: R1 runs the straight north line of straightShape()
 // as shape S1 (with shape_dist_traveled), R2 runs loopShape() as shape S2
 // (without shape_dist_traveled, so stops must be projected). T4 deliberately
-// has no shape and must be excluded from the index.
+// has no shape and must be excluded from the index. R2 has route_sort_order 1
+// and R1 has 2, so R2 lists first; T2 has no direction_id.
 func fixtureFiles(timezone string, distScale float64) []fixtureFile {
 	dist := func(metres float64) string {
 		return strconv.FormatFloat(metres*distScale, 'f', 6, 64)
@@ -120,9 +129,9 @@ func fixtureFiles(timezone string, distScale float64) []fixtureFile {
 		{"agency.txt", "agency_id,agency_name,agency_url,agency_timezone\n" +
 			"A,Test,http://example.com," + timezone + "\n"},
 
-		{"routes.txt", "route_id,agency_id,route_short_name,route_long_name,route_type\n" +
-			"R1,A,1,Straight,3\n" +
-			"R2,A,2,Loop,3\n"},
+		{"routes.txt", "route_id,agency_id,route_short_name,route_long_name,route_type,route_sort_order,route_color,route_text_color\n" +
+			"R1,A,1,Straight,3,2,0077C0,FFFFFF\n" +
+			"R2,A,2,Loop,3,1,,\n"},
 
 		{"calendar.txt", "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n" +
 			"WEEKDAY,1,1,1,1,1,0,0,20260101,20261231\n" +
@@ -146,11 +155,11 @@ func fixtureFiles(timezone string, distScale float64) []fixtureFile {
 			stopRow("LP2", 47.6045, -122.3234) +
 			stopRow("LP3", 47.6000, -122.3234)},
 
-		{"trips.txt", "route_id,service_id,trip_id,shape_id\n" +
-			"R1,WEEKDAY,T1,S1\n" +
-			"R1,SAT,T2,S1\n" +
-			"R2,WEEKDAY,T3,S2\n" +
-			"R1,WEEKDAY,T4,\n"},
+		{"trips.txt", "route_id,service_id,trip_id,shape_id,trip_headsign,direction_id\n" +
+			"R1,WEEKDAY,T1,S1,North,0\n" +
+			"R1,SAT,T2,S1,North,\n" +
+			"R2,WEEKDAY,T3,S2,Loop,1\n" +
+			"R1,WEEKDAY,T4,,North,0\n"},
 
 		{"stop_times.txt", "trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n" +
 			stopTimeRow("T1", "08:00:00", "ST1", 1, dist(0)) +

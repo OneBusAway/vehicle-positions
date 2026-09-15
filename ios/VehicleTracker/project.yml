@@ -1,0 +1,91 @@
+name: VehicleTracker
+
+options:
+  bundleIdPrefix: org.onebusaway
+  minimumXcodeGenVersion: 2.45.4
+  defaultSourceDirectoryType: syncedFolder
+  generateEmptyDirectories: true
+  groupSortPosition: top
+  deploymentTarget:
+    iOS: "26.4"
+
+settings:
+  base:
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+packages:
+  VehiclePositionsKit:
+    path: ../VehiclePositionsKit
+
+targets:
+  VehicleTracker:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Engine
+      - path: Model
+      - path: UI
+      - path: Map
+      - path: CarPlay
+      - path: Resources
+    dependencies:
+      - package: VehiclePositionsKit
+    entitlements:
+      path: VehicleTracker.entitlements
+      properties:
+        com.apple.developer.carplay-maps: true
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: OBA Vehicle Tracker
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSLocationWhenInUseUsageDescription: Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is.
+        UIBackgroundModes: [location]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneClassName: CPTemplateApplicationScene
+                UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.onebusaway.vehicletracker
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+
+  VehicleTrackerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: VehicleTracker
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  VehicleTracker:
+    build:
+      targets:
+        VehicleTracker: all
+        VehicleTrackerTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [VehicleTrackerTests]
