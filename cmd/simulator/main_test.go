@@ -527,7 +527,9 @@ func TestSameOriginOnlyBlocksCredentialLeaks(t *testing.T) {
 		Transport:     bearerTransport{token: "secret", base: http.DefaultTransport},
 		CheckRedirect: sameOriginOnly(srv.URL),
 	}
-	if _, err := c.Get(srv.URL); err == nil {
+	resp, err := c.Get(srv.URL)
+	if err == nil {
+		resp.Body.Close()
 		t.Error("client followed a cross-origin redirect while carrying a bearer token")
 	}
 	if hit != 1 {
