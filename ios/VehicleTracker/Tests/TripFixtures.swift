@@ -4,7 +4,7 @@ import VehiclePositionsKit
 
 /// The server fixture's trip T1: a straight 1 km run north with stops at 0,
 /// 500 and 1001 m scheduled 08:00, 08:05, 08:10 Pacific on 2026-09-02.
-enum TripFixtures {
+nonisolated enum TripFixtures {
     static let pacific = TimeZone(identifier: "America/Los_Angeles")!
 
     static func at(_ hour: Int, _ minute: Int, _ second: Int = 0, day: Int = 2) -> Date {
