@@ -225,18 +225,21 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 
 **API Design:**
 
-|Endpoint                        |Method|Purpose                                             |
-|--------------------------------|------|----------------------------------------------------|
-|`POST /api/v1/auth/login`       |POST  |Driver login → returns JWT                          |
-|`POST /api/v1/locations`        |POST  |Single location report from driver app              |
-|`GET /gtfs-rt/vehicle-positions`|GET   |GTFS-RT feed (protobuf or JSON)                     |
-|`GET /api/v1/admin/vehicles`    |GET   |List vehicles                                       |
-|`POST /api/v1/admin/vehicles`   |POST  |Create/update vehicle                               |
-|`GET /api/v1/admin/users`       |GET   |List users                                          |
-|`POST /api/v1/admin/users`      |POST  |Create/update user                                  |
-|`POST /api/v1/trips/start`      |POST  |Driver starts a trip (assigns vehicle to route/trip)|
-|`POST /api/v1/trips/end`        |POST  |Driver ends a trip                                  |
-|`GET /api/v1/admin/status`      |GET   |System health, active vehicles, feed stats          |
+|Endpoint                            |Method|Purpose                                             |
+|------------------------------------|------|----------------------------------------------------|
+|`POST /api/v1/auth/login`           |POST  |Driver login → returns JWT                          |
+|`POST /api/v1/locations`            |POST  |Single location report from driver app              |
+|`GET /gtfs-rt/vehicle-positions`    |GET   |GTFS-RT feed (protobuf or JSON) — see Feed API Keys |
+|`GET /api/v1/admin/vehicles`        |GET   |List vehicles                                       |
+|`POST /api/v1/admin/vehicles`       |POST  |Create/update vehicle                               |
+|`GET /api/v1/admin/users`           |GET   |List users                                          |
+|`POST /api/v1/admin/users`          |POST  |Create/update user                                  |
+|`GET /api/v1/admin/api-keys`        |GET   |List feed API keys                                  |
+|`POST /api/v1/admin/api-keys`       |POST  |Create a feed API key (raw key shown once)          |
+|`DELETE /api/v1/admin/api-keys/{id}`|DELETE|Revoke a feed API key                               |
+|`POST /api/v1/trips/start`          |POST  |Driver starts a trip (assigns vehicle to route/trip)|
+|`POST /api/v1/trips/end`            |POST  |Driver ends a trip                                  |
+|`GET /api/v1/admin/status`          |GET   |System health, active vehicles, feed stats          |
 
 **Location Report Payload:**
 
@@ -318,6 +321,71 @@ Example — keep 90 days of history, sweeping hourly:
 export LOCATION_RETENTION_PERIOD=2160h
 export LOCATION_PRUNE_INTERVAL=1h
 ```
+
+**Feed API Keys**
+
+`GET /gtfs-rt/vehicle-positions` is the only data endpoint the server can serve
+without authentication. An agency that doesn't want its live fleet positions on
+the open internet can require an API key on it:
+
+|Variable           |Default|Purpose                                          |
+|-------------------|-------|-------------------------------------------------|
+|`FEED_AUTH_ENABLED`|`false`|Require an `X-API-Key` header on the GTFS-RT feed|
+
+**Upgrade note.** Feed auth is off by default, so upgrading changes nothing on
+its own. Turning it on is a breaking change for feed consumers: every consumer
+that doesn't send a key starts getting `401`. Issue keys first, then flip the
+flag.
+
+`FEED_AUTH_ENABLED` accepts only what Go's `strconv.ParseBool` accepts —
+`true`/`false`, `1`/`0`, `t`/`f`, and their capitalizations. Anything else
+(`yes`, `on`, a typo) stops the server at startup instead of falling back to a
+default, so a misspelled flag can't leave the feed public while you believe it
+is locked.
+
+Keys are managed through the admin API, which needs an admin JWT:
+
+```bash
+# Create a key. The raw key is in this response and nowhere else — only its
+# SHA-256 hash is stored, so it can never be recovered or re-displayed.
+curl -X POST http://localhost:8080/api/v1/admin/api-keys \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"transit-app"}'
+# 201 {"id":1,"name":"transit-app","active":true,"last_used_at":null,...,"key":"<raw key>"}
+
+# List keys — metadata only, hashes are never returned
+curl http://localhost:8080/api/v1/admin/api-keys \
+  -H "Authorization: Bearer $ADMIN_JWT"
+
+# Revoke a key -> 204, or 404 if no key has that id
+curl -X DELETE http://localhost:8080/api/v1/admin/api-keys/1 \
+  -H "Authorization: Bearer $ADMIN_JWT"
+
+# Read the feed with a key
+curl -H "X-API-Key: <raw key>" \
+  'http://localhost:8080/gtfs-rt/vehicle-positions?format=json'
+```
+
+With `FEED_AUTH_ENABLED=true` the feed returns `401` and a JSON error body for a
+missing (`missing API key`), unknown (`invalid API key`), or revoked
+(`inactive API key`) key.
+
+Notes for operators:
+
+- **Revoking deactivates, it doesn't delete.** `DELETE` clears the key's active
+  flag and keeps the row, so `last_used_at` survives — which is exactly what you
+  want to look at when you're revoking a key.
+- Keys are 32 random bytes from `crypto/rand`, hex-encoded, and stored only as a
+  SHA-256 hash. bcrypt is deliberately not used: its work factor protects
+  low-entropy passwords and would add latency to the busiest endpoint in the
+  system for no gain against a 256-bit random value.
+- `last_used_at` is best-effort. If that write fails the request is still
+  served and the failure is logged, so an audit column can't take the feed down.
+- For local development, [`seed_dev.sql`](seed_dev.sql) seeds the key
+  `local-dev-feed-key`. It is public in this repository — never use it anywhere
+  but a local machine.
+- Per-key rate limiting isn't implemented yet; the feed is unthrottled.
 
 **Technology Stack:**
 

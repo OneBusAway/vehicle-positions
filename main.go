@@ -60,13 +60,15 @@ type appStore interface {
 	RideLister
 	RiderStatsReader
 	RidePointPruner
+	APIKeyStore
+	APIKeyManager
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy bool, riderSvc *riderService) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret)
@@ -74,7 +76,12 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
-	mux.HandleFunc("GET /gtfs-rt/vehicle-positions", handleGetFeed(tracker, riderEstimates))
+	feed := handleGetFeed(tracker, riderEstimates)
+	if feedAuthEnabled {
+		mux.Handle("GET /gtfs-rt/vehicle-positions", requireAPIKey(store, trustProxy)(feed))
+	} else {
+		mux.Handle("GET /gtfs-rt/vehicle-positions", feed)
+	}
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/live", authMiddleware(adminMiddleware(handleLiveVehicles(tracker, store, store))))
@@ -108,6 +115,11 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/users/{id}/vehicles", authMiddleware(adminMiddleware(handleListUserVehicles(store))))
 	mux.Handle("GET /api/v1/admin/vehicles/{id}/users", authMiddleware(adminMiddleware(handleListVehicleUsers(store))))
 
+	// Admin feed API keys
+	mux.Handle("GET /api/v1/admin/api-keys", authMiddleware(adminMiddleware(handleListAPIKeys(store))))
+	mux.Handle("POST /api/v1/admin/api-keys", authMiddleware(adminMiddleware(handleCreateAPIKey(store))))
+	mux.Handle("DELETE /api/v1/admin/api-keys/{id}", authMiddleware(adminMiddleware(handleDeactivateAPIKey(store))))
+
 	// Rider mode. The admin endpoints exist whether or not it is enabled — a
 	// disabled server reports {"enabled":false} rather than 404 — while the
 	// rider API itself is registered only when there is a service to serve it.
@@ -126,9 +138,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter *LoginRateLimiter, jwtSecret []byte, startTime time.Time,
-	cfg adminUIConfig, riderSvc *riderService) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy, riderSvc)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
@@ -170,6 +182,21 @@ func main() {
 		os.Exit(1)
 	}
 	jwtSecret := []byte(jwtSecretStr)
+
+	// Feed auth is opt-in: enabling it rejects every existing consumer that
+	// does not yet send a key, so an upgrade must not turn it on silently.
+	// A value that isn't a boolean is fatal rather than defaulted: ParseBool
+	// rejects "yes" and "on", and falling back to false would leave the feed
+	// public while the operator believes it is locked. Checked before the
+	// database is touched so a typo fails immediately.
+	feedAuthEnabled, err := envBool("FEED_AUTH_ENABLED", false)
+	if err != nil {
+		slog.Error("refusing to start: cannot tell whether the GTFS-RT feed should be public", "error", err)
+		os.Exit(1)
+	}
+	if feedAuthEnabled {
+		slog.Info("GTFS-RT feed authentication enabled; consumers must send an X-API-Key header")
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -260,7 +287,7 @@ func main() {
 	startTime := time.Now()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, riderSvc)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)
@@ -340,6 +367,22 @@ func envInt32OrDefault(key string, fallback int32) int32 {
 		return int32(n)
 	}
 	return fallback
+}
+
+// envBool reads a boolean from the environment, returning fallback when the
+// variable is unset. Unlike the envOrDefault helpers above it reports a bad
+// value instead of warning and defaulting, so a caller gating a security
+// control can refuse to start rather than guess which way the operator meant.
+func envBool(key string, fallback bool) (bool, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false, got %q", key, v)
+	}
+	return b, nil
 }
 
 type statusRecorder struct {
