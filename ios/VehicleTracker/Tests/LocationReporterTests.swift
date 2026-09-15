@@ -1,0 +1,95 @@
+import Foundation
+import Testing
+import VehiclePositionsKit
+@testable import VehicleTracker
+
+@Suite struct LocationReporterTests {
+    let api = FakeTrackerAPI()
+    let clock = ManualClock(start: TripFixtures.at(8, 0))
+
+    func reporter() -> LocationReporter { LocationReporter(api: api, now: { clock.now }) }
+
+    func fix(bearing: Double = 90, speed: Double = 8, accuracy: Double = 5) -> LocationFix {
+        LocationFix(latitude: 47.6, longitude: -122.33, horizontalAccuracy: accuracy, speed: speed, course: bearing, timestamp: clock.now)
+    }
+
+    @Test func sendsTheFixAsAReport() async {
+        let r = reporter()
+        #expect(await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"))
+        #expect(api.posted.count == 1)
+        let p = api.posted[0]
+        #expect(p.vehicleID == "bus-1")
+        #expect(p.tripID == "T1")
+        #expect(p.bearing == 90)
+        #expect(p.speed == 8)
+        #expect(p.accuracy == 5)
+        #expect(p.timestamp == Int64(TripFixtures.at(8, 0).timeIntervalSince1970))
+        #expect(r.fixesSent == 1)
+        #expect(r.problem == .none)
+    }
+
+    @Test func dropsUnknownBearingSpeedAndAccuracy() async {
+        let r = reporter()
+        _ = await r.report(fix(bearing: -1, speed: -1, accuracy: -1), vehicleID: "bus-1", gtfsTripID: "T1")
+        let p = api.posted[0]
+        #expect(p.bearing == nil)
+        #expect(p.speed == 0, "an unknown speed is sent as 0, the server's floor")
+        #expect(p.accuracy == nil)
+    }
+
+    @Test func throttlesToOneReportPerFiveSeconds() async {
+        let r = reporter()
+        #expect(await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"))
+        clock.advance(2)
+        #expect(!(await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")))
+        clock.advance(3)
+        #expect(await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"))
+        #expect(api.posted.count == 2)
+    }
+
+    @Test func mapsServerErrors() async {
+        let r = reporter()
+        api.postError = APIError.status(401, message: "invalid token")
+        _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        #expect(r.problem == .authExpired)
+
+        clock.advance(5)
+        api.postError = APIError.status(429, message: "rate limit exceeded")
+        _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        #expect(r.problem == .authExpired, "429 is dropped silently and leaves the status alone")
+
+        clock.advance(5)
+        api.postError = APIError.transport("offline")
+        _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        #expect(r.problem == .noNetwork)
+
+        clock.advance(5)
+        api.postError = nil
+        _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        #expect(r.problem == .none)
+        #expect(r.fixesSent == 1)
+    }
+
+    @Test func threeTimestampRejectsMeanClockSkew() async {
+        let r = reporter()
+        api.postError = APIError.status(400, message: "timestamp must be within 5 minutes of server time")
+        for _ in 0..<2 {
+            _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+            clock.advance(5)
+        }
+        #expect(r.problem == .none)
+        _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        #expect(r.problem == .clockSkew)
+        clock.advance(5)
+        api.postError = nil
+        _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        #expect(r.problem == .none)
+    }
+}
+
+/// A clock the test moves by hand.
+@MainActor final class ManualClock {
+    private(set) var now: Date
+    init(start: Date) { now = start }
+    func advance(_ seconds: TimeInterval) { now = now.addingTimeInterval(seconds) }
+}
