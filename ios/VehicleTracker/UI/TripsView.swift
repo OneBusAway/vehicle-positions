@@ -56,6 +56,7 @@ struct TripsView: View {
                         proxy.scrollTo(h.id, anchor: .center)
                     }
                 } catch {
+                    guard !session.handleIfUnauthorized(error) else { return }
                     self.error = error.localizedDescription
                 }
             }
@@ -69,10 +70,13 @@ struct TripsView: View {
             defer { starting = false }
             do {
                 try await session.start(vehicle: vehicle, tripID: trip.id)
-            } catch APIError.status(let code, let message) {
-                error = message.isEmpty ? "Server error \(code)" : message
             } catch {
-                self.error = error.localizedDescription
+                guard !session.handleIfUnauthorized(error) else { return }
+                if case APIError.status(let code, let message) = error {
+                    self.error = message.isEmpty ? "Server error \(code)" : message
+                } else {
+                    self.error = error.localizedDescription
+                }
             }
         }
     }

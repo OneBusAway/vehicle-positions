@@ -39,9 +39,8 @@ struct VehiclesView: View {
             if session.vehicles.count == 1, path.isEmpty {
                 path = [.routes(session.vehicles[0])]
             }
-        } catch APIError.status(401, _) {
-            session.signOut()
         } catch {
+            guard !session.handleIfUnauthorized(error) else { return }
             self.error = error.localizedDescription
             loaded = true
         }

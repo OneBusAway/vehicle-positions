@@ -28,7 +28,12 @@ struct RoutesView: View {
         .searchable(text: $search, prompt: "Route number or name")
         .navigationTitle(vehicle.label.isEmpty ? vehicle.id : vehicle.label)
         .task {
-            do { routes = try await session.routes() } catch { self.error = error.localizedDescription }
+            do {
+                routes = try await session.routes()
+            } catch {
+                guard !session.handleIfUnauthorized(error) else { return }
+                self.error = error.localizedDescription
+            }
         }
     }
 

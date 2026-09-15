@@ -74,6 +74,21 @@ extension TripSession.ReportingStatus {
     }
 }
 
+extension TripSession {
+    /// An expired token looks like any other server error to the caller; the
+    /// picker screens all want the same response — sign out and let
+    /// `RootView` fall back to `LoginView` — instead of surfacing a raw
+    /// "Server error 401" alongside the form.
+    @discardableResult
+    func handleIfUnauthorized(_ error: any Error) -> Bool {
+        if case APIError.status(401, _) = error {
+            signOut()
+            return true
+        }
+        return false
+    }
+}
+
 extension Color {
     /// A GTFS route colour: six hex digits, with or without a leading '#'.
     init?(hex: String) {
