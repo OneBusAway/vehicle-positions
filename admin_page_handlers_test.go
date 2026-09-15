@@ -1850,3 +1850,29 @@ func TestUsersPage_RejectsInvalidFilters(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePassword(t *testing.T) {
+	cases := []struct {
+		name     string
+		password string
+		wantErr  string
+	}{
+		{"one short of the minimum", strings.Repeat("a", 7), "password must be at least 8 characters"},
+		{"exactly the minimum", strings.Repeat("a", 8), ""},
+		{"exactly bcrypt's limit", strings.Repeat("a", 72), ""},
+		{"one byte over bcrypt's limit", strings.Repeat("a", 73), "password must be at most 72 bytes"},
+		// The limit is bytes, not characters: 37 two-byte characters are 74 bytes.
+		{"multi-byte characters over the byte limit", strings.Repeat("é", 37), "password must be at most 72 bytes"},
+		{"multi-byte characters under the byte limit", strings.Repeat("é", 36), ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validatePassword(tc.password)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tc.wantErr)
+		})
+	}
+}
