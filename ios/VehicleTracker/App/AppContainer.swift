@@ -6,6 +6,10 @@ import VehiclePositionsKit
 /// takes effect on the next report.
 @MainActor
 final class AppContainer {
+    /// The one container the app and the CarPlay scene share, so the car and
+    /// the phone drive the same `TripSession`.
+    static let shared = AppContainer()
+
     let settings: AppSettings
     let session: TripSession
 

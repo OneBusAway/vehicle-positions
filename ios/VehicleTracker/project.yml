@@ -42,9 +42,14 @@ targets:
       - path: Map
         excludes:
           - .gitkeep
+      - path: CarPlay
       - path: Resources
     dependencies:
       - package: VehiclePositionsKit
+    entitlements:
+      path: VehicleTracker.entitlements
+      properties:
+        com.apple.developer.carplay-maps: true
     info:
       path: Info.plist
       properties:
@@ -57,6 +62,13 @@ targets:
         UIBackgroundModes: [location]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneClassName: CPTemplateApplicationScene
+                UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.onebusaway.vehicletracker

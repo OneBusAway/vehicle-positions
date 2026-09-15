@@ -23,6 +23,15 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// loads.
     var allowsDirectInteraction = false
 
+    /// With no trip drawn, show and follow the phone's own position (the
+    /// CarPlay idle screen). Cleared by `setTrip`.
+    var showsPhoneLocation = false {
+        didSet {
+            mapView.showsUserLocation = showsPhoneLocation
+            mapView.setUserTrackingMode(showsPhoneLocation ? .follow : .none, animated: true)
+        }
+    }
+
     var followsVehicle = true {
         didSet { if followsVehicle { follow(animated: true) } }
     }
@@ -69,6 +78,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// Replaces the drawn trip. Nil clears the map.
     func setTrip(_ trip: TripGeometry?) {
         guard trip?.id != self.trip?.id else { return }
+        if trip != nil { showsPhoneLocation = false }
         self.trip = trip
         if let polyline { mapView.removeOverlay(polyline) }
         mapView.removeAnnotations(stops)

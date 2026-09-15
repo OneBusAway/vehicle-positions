@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct VehicleTrackerApp: App {
-    @State private var container = AppContainer()
+    private let container = AppContainer.shared
 
     var body: some Scene {
         WindowGroup {
