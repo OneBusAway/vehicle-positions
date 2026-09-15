@@ -327,7 +327,87 @@ after the last report.
 
 ## CarPlay
 
-Added by the CarPlay phase.
+**Not yet run on this machine.** The steps and expected results below are
+written from
+[`docs/superpowers/plans/2026-09-14-carplay.md`](superpowers/plans/2026-09-14-carplay.md)
+(Task 1 Step 5, Task 2 Step 5, Task 3 Step 4) — this session's Mac screen was
+locked while writing this doc, so Simulator attached no external display and
+the CarPlay window never opened. Every check in this section is **to
+verify**, not confirmed behaviour.
+
+Before trying, confirm the Simulator.app that is actually running belongs to
+the same Xcode as `$DEVELOPER_DIR` — a previous run on this machine had
+Xcode 26's Simulator open while `DEVELOPER_DIR` pointed at Xcode 27. A
+mismatch there is a plausible reason the CarPlay window fails to appear, so
+rule it out before suspecting the app.
+
+### Enable and open the CarPlay display (to verify)
+
+```bash
+defaults write com.apple.iphonesimulator CarPlayExtraOptions -bool YES
+xcrun simctl boot "$UDID" 2>/dev/null; open -a Simulator
+```
+
+Build, install, grant location, and launch as in step 4 above (the debug
+auto-start arguments work here too). Then open the CarPlay display from the
+Simulator menu: **I/O > External Displays > CarPlay**. From a script:
+
+```bash
+osascript -e 'tell application "System Events" to tell process "Simulator" to click menu item "CarPlay" of menu 1 of menu item "External Displays" of menu 1 of menu bar item "I/O" of menu bar 1'
+sleep 3
+xcrun simctl io "$UDID" enumerate | grep -i -A3 display
+xcrun simctl io "$UDID" screenshot --display=external /tmp/vt-carplay-idle.png
+```
+
+If `osascript` is refused, System Events needs Accessibility permission
+granted to whatever runs it (Terminal, or this tool's shell); failing that,
+open the CarPlay window by hand once per Simulator session and take
+screenshots with the same `simctl io ... screenshot --display=external`
+command.
+
+### Three states to check (to verify)
+
+1. **Idle / signed out.** `/tmp/vt-carplay-idle.png` should show the map
+   with a "Sign in on iPhone" bar button — or, after a debug auto-start
+   sign-in with no `-autoVehicle`/`-autoTrip`, "OBA Vehicle Tracker" and a
+   "Start trip" bar button — and no crash.
+2. **Active trip.** With GPS playback running (step 5 above) and a trip
+   started, screenshot again. Expect the route line, the vehicle, a
+   next-stop maneuver card ("Stop ST2 · 8:05 · 2 min late", shortening to
+   "Stop ST2 · 2 min late" and then "Stop ST2" as space allows), an
+   estimates bar coloured by adherence (green on time, orange/red for a
+   large deviation per `CarPlayTemplates.timeRemainingColor`), "End" and
+   "Details" bar buttons, and three map buttons.
+3. **Off route.** Drive GPS away from the shape until `isOnRoute` flips.
+   Expect the dimmed route line, a grey vehicle marker, the snapped dot on
+   the shape, and an "Off route" navigation alert with a distance-off
+   subtitle (e.g. "75 m ...") and an "OK" button; the alert never times out
+   on its own and dismissing it silences further alerts until the next
+   off-route episode.
+
+### Starting a trip from the car (to verify)
+
+With the server running and the app signed in but idle (`-autoServer …
+-autoEmail … -autoPassword …`, no `-autoVehicle`/`-autoTrip`), open the
+CarPlay window and click **Start trip** in it — `osascript ... click at {x,
+y}` on the Simulator process, with coordinates read from a screenshot.
+Screenshot the resulting vehicle/route/run picker:
+`/tmp/vt-carplay-routes.png`. If clicking cannot be scripted, say so; the
+picker's contents are covered by `CarPlayTemplatesTests` instead.
+
+### Real car and background caveats
+
+- A real car needs Apple's CarPlay navigation entitlement
+  (`com.apple.developer.carplay-maps`) provisioned for the app and a real
+  signing identity; the simulator only needs the entitlements file, with
+  automatic signing.
+- Core Location requires a new background activity session to be created
+  while the app is in the foreground — the phone screen qualifies, but
+  whether an active CarPlay scene alone counts is not documented by Apple
+  and is only settled by actually running the CarPlay start (spec §5.3). If
+  Core Location reports `insufficientlyInUse`, the reporting status shows
+  "Open the app on iPhone" and the session stays active rather than failing
+  outright.
 
 ## Cleanup
 

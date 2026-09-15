@@ -1,0 +1,40 @@
+name: iOS CI
+
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  pull_request:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+
+jobs:
+  ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Create a simulator on the newest iOS runtime
+        run: |
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c '
+          import json, sys
+          rts = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]]
+          rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          print(rts[-1]["identifier"])')
+          UDID=$(xcrun simctl create ci-iphone "iPhone 17 Pro" "$RUNTIME" 2>/dev/null || xcrun simctl create ci-iphone "iPhone 16 Pro" "$RUNTIME")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+      - name: Rider SDK tests
+        working-directory: ios/VehiclePositionsKit
+        run: xcodebuild test -scheme VehiclePositionsKit -destination "id=$UDID" | tail -40
+      - name: Driver app tests
+        working-directory: ios/VehicleTracker
+        run: |
+          xcodegen generate
+          xcodebuild test -project VehicleTracker.xcodeproj -scheme VehicleTracker -destination "id=$UDID" | tail -60

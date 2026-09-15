@@ -176,6 +176,20 @@ and the app's behavior under network loss and task removal — see
 design (screens, data flow, permissions, error handling), see
 [`docs/superpowers/specs/2026-08-04-android-driver-app-design.md`](docs/superpowers/specs/2026-08-04-android-driver-app-design.md).
 
+### iOS driver app (with CarPlay)
+
+The iOS counterpart lives in [`ios/VehicleTracker`](ios/VehicleTracker) (XcodeGen
+project; `xcodegen generate` builds the `.xcodeproj`). Drivers sign in, pick a
+vehicle and a GTFS run from the server's catalog, and report positions while
+the trip runs; the car screen shows the route, the next stop and the schedule
+deviation through a CarPlay navigation scene. Adherence is computed on the
+phone from the trip geometry the server serves, with the server's own
+thresholds. Setup and tests: [`docs/development.md`](docs/development.md#ios-driver-app);
+end-to-end walkthrough: [`docs/ios-smoke-test.md`](docs/ios-smoke-test.md);
+design: [`docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md`](docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md).
+Running in a real car needs Apple's CarPlay navigation entitlement; the
+simulator needs only the entitlements file.
+
 -----
 
 ## 1. Problem Statement

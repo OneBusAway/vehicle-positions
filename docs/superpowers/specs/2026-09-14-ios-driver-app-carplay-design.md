@@ -1,7 +1,7 @@
 # iOS Driver App with CarPlay — Design Spec
 
 **Date:** 2026-09-14
-**Status:** Draft for review (revised after a documentation review against Apple's CarPlay, Core Location and XcodeGen docs, 2026-09-14)
+**Status:** Implemented 2026-09-15 (plans: 2026-09-14-gtfs-catalog-server.md, 2026-09-14-ios-driver-app.md, 2026-09-14-carplay.md)
 **Scope:** An iOS driver app for the `vehicle-positions` server, delivered in this repo under `ios/VehicleTracker`, whose in-cab surface is a CarPlay navigation scene showing a live map of the driver's assigned trip, their position on it, and how well they are keeping to the route and the schedule. Three phases: (A) a GTFS catalog API on the server, (B) the iOS app proper, (C) the CarPlay scene.
 
 ---

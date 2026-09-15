@@ -16,6 +16,7 @@ It outlines the system's core components, module structure, data flow, and how t
 6. [Module Overview](#6-module-overview)
 7. [Extending the System](#7-extending-the-system)
 8. [Rider Mode](#8-rider-mode)
+9. [iOS Driver App and CarPlay](#9-ios-driver-app-and-carplay)
 
 ---
 
@@ -641,6 +642,22 @@ plus the `stop_times.txt` offsets, so after-midnight trips land on the next
 calendar day. The trip payload carries the server's `RIDER_MAX_SHAPE_DISTANCE`
 and schedule window so a client computing adherence locally applies the same
 numbers.
+
+---
+
+## 9. iOS driver app and CarPlay
+
+`ios/VehicleTracker` is a SwiftUI app whose state lives in one `TripSession`
+(`Engine/TripSession.swift`): sign-in, the active trip, the Core Location
+stream (from the rider SDK's `CoreLocationSource`), adherence, and a throttled
+`LocationReporter` that honours the server's one-report-per-5-s limit. The
+engine (`ShapeGeometry`, `ScheduleInterpolator`, `AdherenceEvaluator`) is a
+port of `rider/shape.go` and `rider.ScheduledOffsetAt`, judged with the
+thresholds `GET /api/v1/gtfs/trips/{id}` returns. `Map/RouteMapViewController`
+draws the trip for both the phone and the CarPlay window; `CarPlay/` holds the
+scene delegate, a controller that observes `TripSession`, and pure template
+builders. The CarPlay scene is a navigation app (`CPMapTemplate` root,
+`CPNavigationSession` whose maneuvers are the stops).
 
 ---
 
