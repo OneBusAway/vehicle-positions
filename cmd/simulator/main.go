@@ -126,11 +126,6 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	if *duration > 0 {
-		ctx, cancel = context.WithTimeout(ctx, *duration)
-		defer cancel()
-	}
-
 	if err := checkBaseURL(*baseURL); err != nil {
 		log.Fatal(err)
 	}
@@ -172,6 +167,11 @@ func main() {
 			Transport:     bearerTransport{token: t, base: http.DefaultTransport},
 			CheckRedirect: sameOriginOnly(*baseURL),
 		}
+	}
+
+	if *duration > 0 {
+		ctx, cancel = context.WithTimeout(ctx, *duration)
+		defer cancel()
 	}
 
 	s := &stats{}
