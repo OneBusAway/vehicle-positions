@@ -513,10 +513,14 @@ func TestSameOriginOnlyBlocksCredentialLeaks(t *testing.T) {
 		t.Errorf("http://example.com:80 should equal http://example.com: %v", err)
 	}
 	// A live client must actually refuse the hop, not just the policy in isolation.
-	var hit int
+	var hit, stolen int
+	evil := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		stolen++
+	}))
+	defer evil.Close()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hit++
-		http.Redirect(w, r, "http://evil.example/stolen", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, evil.URL+"/stolen", http.StatusTemporaryRedirect)
 	}))
 	defer srv.Close()
 	c := &http.Client{
@@ -528,6 +532,9 @@ func TestSameOriginOnlyBlocksCredentialLeaks(t *testing.T) {
 	}
 	if hit != 1 {
 		t.Errorf("origin served %d requests, want 1", hit)
+	}
+	if stolen != 0 {
+		t.Errorf("cross-origin server received %d requests, want 0", stolen)
 	}
 }
 
