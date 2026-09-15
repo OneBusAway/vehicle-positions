@@ -103,6 +103,16 @@ import VehiclePositionsKit
         #expect(s.phase == .idle)
     }
 
+    @Test func startWhileNotIdleThrowsBusy() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        await #expect(throws: TripSessionError.busy) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(api.starts.count == 1)
+    }
+
     @Test func resumeWithAnUnusableStoredTripClearsIt() throws {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")

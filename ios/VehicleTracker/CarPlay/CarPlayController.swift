@@ -31,6 +31,10 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private var details: CPInformationTemplate?
     private var isPanning = false
     private var lastPanTranslation = CGPoint.zero
+    /// Set for the span of a `session.start` call, so a second tap on the
+    /// alert's Start button — or on an earlier list, still on screen behind
+    /// it — cannot fire a second start while the first is in flight.
+    private var startInFlight = false
 
     /// The car screen's controls are rebuilt only when what they say changes;
     /// reassigning them on every fix makes CarPlay redraw the bar.
@@ -357,13 +361,20 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             do {
                 try await session.loadVehicles()
             } catch {
+                if session.handleIfUnauthorized(error) {
+                    interface.popToRootTemplate(animated: true, completion: nil)
+                    return
+                }
                 presentError(String(localized: "Could not load your vehicles"))
                 return
             }
             if session.vehicles.count == 1 {
                 pickRoute(for: session.vehicles[0])
             } else {
-                let items = CarPlayTemplates.vehicleItems(session.vehicles) { [weak self] vehicle in self?.pickRoute(for: vehicle) }
+                let items = CarPlayTemplates.vehicleItems(session.vehicles) { [weak self] vehicle in
+                    guard let self, !startInFlight else { return }
+                    pickRoute(for: vehicle)
+                }
                 interface.pushTemplate(CarPlayTemplates.list(title: String(localized: "Your vehicle"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount), animated: true, completion: nil)
             }
         }
@@ -375,10 +386,15 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             do {
                 let routes = try await session.routes()
                 let sections = CarPlayTemplates.routeSections(routes, recentIDs: session.settings.recentRouteIDs) { [weak self] route in
-                    self?.pickTrip(vehicle: vehicle, route: route)
+                    guard let self, !startInFlight else { return }
+                    pickTrip(vehicle: vehicle, route: route)
                 }
                 interface.pushTemplate(CarPlayTemplates.list(title: vehicle.label.isEmpty ? vehicle.id : vehicle.label, sections: sections, maxItems: CPListTemplate.maximumItemCount), animated: true, completion: nil)
             } catch {
+                if session.handleIfUnauthorized(error) {
+                    interface.popToRootTemplate(animated: true, completion: nil)
+                    return
+                }
                 presentError(String(localized: "Could not load routes"))
             }
         }
@@ -390,12 +406,17 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             do {
                 let page = try await session.trips(routeID: route.id)
                 let items = CarPlayTemplates.tripItems(page, now: Date()) { [weak self] trip in
-                    self?.confirmStart(vehicle: vehicle, route: route, trip: trip, timezone: page.timezone)
+                    guard let self, !startInFlight else { return }
+                    confirmStart(vehicle: vehicle, route: route, trip: trip, timezone: page.timezone)
                 }
                 let list = CarPlayTemplates.list(title: String(localized: "Route \(route.shortName)"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount)
                 list.emptyViewTitleVariants = [String(localized: "No runs today")]
                 interface.pushTemplate(list, animated: true, completion: nil)
             } catch {
+                if session.handleIfUnauthorized(error) {
+                    interface.popToRootTemplate(animated: true, completion: nil)
+                    return
+                }
                 presentError(String(localized: "Could not load runs"))
             }
         }
@@ -404,16 +425,25 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private func confirmStart(vehicle: Vehicle, route: RouteInfo, trip: TripSummary, timezone: String) {
         let start = CPAlertAction(title: String(localized: "Start"), style: .default) { [weak self] _ in
             guard let self else { return }
+            guard !startInFlight, case .idle = session.phase else { return }
             interface.dismissTemplate(animated: true, completion: nil)
+            startInFlight = true
             Task { [weak self] in
                 guard let self else { return }
+                defer { startInFlight = false }
                 do {
                     try await session.start(vehicle: vehicle, tripID: trip.id)
                     interface.popToRootTemplate(animated: true, completion: nil)
-                } catch APIError.status(_, let message) where !message.isEmpty {
-                    presentError(message)
                 } catch {
-                    presentError(String(localized: "Could not start the trip"))
+                    if session.handleIfUnauthorized(error) {
+                        interface.popToRootTemplate(animated: true, completion: nil)
+                        return
+                    }
+                    if case APIError.status(_, let message) = error, !message.isEmpty {
+                        presentError(message)
+                    } else {
+                        presentError(String(localized: "Could not start the trip"))
+                    }
                 }
             }
         }

@@ -11,11 +11,14 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     /// The fetched trip has no usable shape or no stops: nothing to judge
     /// adherence against, so it is refused before anything is started.
     case unusableTrip
+    /// `start()` was called while a trip was already starting or running.
+    case busy
 
     var errorDescription: String? {
         switch self {
         case .notSignedIn: "Sign in first."
         case .unusableTrip: "This run has no shape or stops to follow."
+        case .busy: "A trip is already starting or running."
         }
     }
 }
@@ -187,7 +190,7 @@ final class TripSession {
     // MARK: Trip lifecycle
 
     func start(vehicle: Vehicle, tripID: String) async throws {
-        guard case .idle = phase else { return }
+        guard case .idle = phase else { throw TripSessionError.busy }
         let api = try requireAPI()
         phase = .starting
         do {
