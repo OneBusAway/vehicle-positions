@@ -2,10 +2,12 @@ import SwiftUI
 
 @main
 struct VehicleTrackerApp: App {
+    @State private var container = AppContainer()
+
     var body: some Scene {
         WindowGroup {
-            Text("OBA Vehicle Tracker")
-                .font(.largeTitle)
+            RootView()
+                .environment(container.session)
         }
     }
 }
