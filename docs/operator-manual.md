@@ -67,7 +67,8 @@ address in any one minute, and then makes you pause.
 **Changing your own password.** There is no separate profile page. Go to
 **Users**, click **Edit** on your own row, type a new password into **New
 password (leave blank to keep current)**, and click **Save changes**. Passwords
-must be at least 8 characters.
+must be at least 8 characters and no more than 72 bytes — in practice 72
+letters, or fewer if you use accented letters or other non-English characters.
 
 Once signed in, the left sidebar takes you to **Live Map**, **Dashboard**,
 **Vehicles**, **Users** and **Trips**. **Sign out** is at the top right of every
@@ -187,7 +188,8 @@ There are exactly two roles:
 
 1. Click **New user**.
 2. Fill in **Name**, **Email** and **Password**. The password must be at least
-   8 characters, or you get **password must be at least 8 characters**.
+   8 characters, or you get **password must be at least 8 characters**. The
+   maximum is 72 bytes (**password must be at most 72 bytes**).
 3. Choose **Role** — **Driver** or **Admin**. New accounts default to
    **Driver**.
 4. Click **Create user**. A duplicate address gives **email already exists**.
@@ -401,6 +403,12 @@ appears once under an `id` — the **Vehicle ID** you gave it on the vehicle for
 — with its position, and with the `routeId` and `startDate` its driver entered
 (plus `tripId` if the driver typed a GTFS trip id). An empty list means no
 vehicle has reported inside the staleness window.
+
+If your server administrator has turned on feed authentication, opening either
+address in a browser shows `missing API key` instead — a browser cannot send the
+key the feed now requires. That is expected, and it does not mean the feed is
+down. Ask your administrator for a key and check the feed with
+`curl -H "X-API-Key: <your key>" "https://your-server/gtfs-rt/vehicle-positions?format=json"`.
 
 ---
 

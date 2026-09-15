@@ -51,7 +51,9 @@ Rules that apply to the whole table:
   There is no "days" unit.
 - An unset or empty variable takes the default. A value that cannot be parsed
   is **ignored**, logged as a warning, and the default is used instead — so
-  check the logs after a change rather than assuming it took effect.
+  check the logs after a change rather than assuming it took effect. The one
+  exception is `FEED_AUTH_ENABLED` (see [Feed access](#feed-access)), where an
+  unparseable value stops the server at startup.
 - Booleans accept anything Go's `strconv.ParseBool` accepts: `true`, `false`,
   `1`, `0`, `t`, `f`, `TRUE`, `FALSE`.
 
@@ -73,7 +75,7 @@ Rules that apply to the whole table:
 |---|---|---|
 | `ADMIN_UI_ENABLED` | `true` | Serves the browser admin UI at `/admin`. Set to `false` to run the JSON API only; the `/admin` routes then return 404. **This is on by default**, so decide before you expose the host. |
 | `ADMIN_BOOTSTRAP_EMAIL` | unset | Email of the first admin account. Takes effect only when `ADMIN_BOOTSTRAP_PASSWORD` is also set. |
-| `ADMIN_BOOTSTRAP_PASSWORD` | unset | Password for that account, 8 characters minimum. The account is created only when the `users` table holds zero admins, so the pair is a no-op on every later boot. On that first boot, a password shorter than 8 characters aborts startup rather than creating a weak account. |
+| `ADMIN_BOOTSTRAP_PASSWORD` | unset | Password for that account: at least 8 characters and at most 72 bytes (bcrypt's limit; fewer than 72 characters if it contains non-ASCII letters). The account is created only when the `users` table holds zero admins, so the pair is a no-op on every later boot. On that first boot, a password outside those limits aborts startup rather than creating a weak account. |
 | `TRUST_PROXY_HEADERS` | `false` | Read the client IP from the last `X-Forwarded-For` hop and the scheme from `X-Forwarded-Proto`. Set to `true` **only** behind a reverse proxy you control (section 7). |
 
 See the README's [Admin web UI](../README.md#admin-web-ui) section for the
@@ -81,6 +83,20 @@ sign-in behaviour, including the one limitation worth knowing up front:
 deactivating a user or changing their password blocks new logins immediately
 but does not revoke tokens already issued — those stay valid for up to 24
 hours.
+
+### Feed access
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `FEED_AUTH_ENABLED` | `false` | Require an `X-API-Key` header on `GET /gtfs-rt/vehicle-positions`. Accepts only what `strconv.ParseBool` accepts; anything else (`yes`, `on`, a typo) stops the server at startup instead of defaulting, so a misspelled value can't leave the feed public while you believe it is locked. |
+
+Turning this on is a breaking change for every feed consumer: anything that
+doesn't send a valid key starts getting `401` with `missing API key`,
+`invalid API key` or `inactive API key`. Create a key for each consumer first
+with `POST /api/v1/admin/api-keys` (admin token required; the raw key appears in
+that response and nowhere else), hand the keys out, and only then set the flag.
+The README's **Feed API Keys** section has the full create, list and revoke
+walkthrough.
 
 ### Location retention (driver data)
 
@@ -714,6 +730,12 @@ Point your OneBusAway instance's vehicle-positions realtime source at that URL.
 OneBusAway consumes GTFS-RT Vehicle Positions natively — no changes to OBA are
 required, and any other GTFS-RT-compliant consumer works the same way (see the
 README's [How This Connects to OneBusAway](../README.md#8-how-this-connects-to-onebusaway)).
+
+If you set `FEED_AUTH_ENABLED=true`, every consumer must send its key in an
+`X-API-Key` header, OneBusAway included. Configure that header on the consumer
+before you turn the flag on; a consumer that cannot send custom request headers
+cannot read an authenticated feed, so leave feed auth off for it. To check by
+hand, add `-H "X-API-Key: $KEY"` to the `curl` commands below.
 
 Two query parameters help when you are checking the feed by hand:
 
