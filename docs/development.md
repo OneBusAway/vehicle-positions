@@ -2,6 +2,8 @@
 
 This guide is for contributors who want to run, verify, and iterate on the current Go server in this repository.
 
+The environment variables below are the ones a development run needs. For the complete list — every variable the server reads, its default, and what happens when it is set wrong — see [configuration.md](configuration.md).
+
 ## Scope
 
 The current implementation focuses on:
