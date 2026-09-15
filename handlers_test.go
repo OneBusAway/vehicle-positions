@@ -140,12 +140,12 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 func TestBuildFeed_TripDescriptorFields(t *testing.T) {
 	now := time.Now().Unix()
 	cases := []struct {
-		name      string
-		state     *VehicleState
-		wantTrip  bool
-		wantTrip_ string
-		wantRoute string
-		wantDate  string
+		name           string
+		state          *VehicleState
+		wantDescriptor bool
+		wantTripID     string
+		wantRoute      string
+		wantDate       string
 	}{
 		{"trip only", &VehicleState{VehicleID: "a", TripID: "T1", Latitude: 1, Longitude: 1, Timestamp: now}, true, "T1", "", ""},
 		{"route only", &VehicleState{VehicleID: "b", RouteID: "R1", Latitude: 1, Longitude: 1, Timestamp: now}, true, "", "R1", ""},
@@ -158,16 +158,16 @@ func TestBuildFeed_TripDescriptorFields(t *testing.T) {
 			feed := buildFeed([]*VehicleState{tc.state}, nil)
 			require.Len(t, feed.Entity, 1)
 			trip := feed.Entity[0].Vehicle.Trip
-			if !tc.wantTrip {
+			if !tc.wantDescriptor {
 				assert.Nil(t, trip)
 				return
 			}
 			require.NotNil(t, trip)
-			assert.Equal(t, tc.wantTrip_, trip.GetTripId())
+			assert.Equal(t, tc.wantTripID, trip.GetTripId())
 			assert.Equal(t, tc.wantRoute, trip.GetRouteId())
 			assert.Equal(t, tc.wantDate, trip.GetStartDate())
 			// Absent fields must be absent, not empty strings.
-			assert.Equal(t, tc.wantTrip_ == "", trip.TripId == nil)
+			assert.Equal(t, tc.wantTripID == "", trip.TripId == nil)
 			assert.Equal(t, tc.wantRoute == "", trip.RouteId == nil)
 			assert.Equal(t, tc.wantDate == "", trip.StartDate == nil)
 		})
@@ -431,6 +431,52 @@ func TestHandlePostLocation_TripFieldsReachTracker(t *testing.T) {
 	assert.Equal(t, "trip-0830", active[0].TripID)
 	assert.Equal(t, "5", active[0].RouteID)
 	assert.Equal(t, "20260906", active[0].StartDate)
+}
+
+func TestHandlePostLocation_TrimsTripFields(t *testing.T) {
+	newHandler := func(t *testing.T) (http.HandlerFunc, *Tracker) {
+		tracker := NewTracker(5 * time.Minute)
+		t.Cleanup(tracker.Stop)
+		return handlePostLocation(&mockStore{}, tracker, NewVehicleRateLimiter()), tracker
+	}
+	claims := jwt.MapClaims{"sub": "driver-1"}
+
+	t.Run("surrounding whitespace is trimmed before the tracker sees it", func(t *testing.T) {
+		handler, tracker := newHandler(t)
+		w := postLocationWithClaims(handler, LocationReport{
+			VehicleID: "bus-1", TripID: "  trip-0830 ", RouteID: " 5\t", StartDate: "20260906",
+			Latitude: -1.29, Longitude: 36.82, Timestamp: time.Now().Unix(),
+		}, claims)
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+		active := tracker.ActiveVehicles()
+		require.Len(t, active, 1)
+		assert.Equal(t, "trip-0830", active[0].TripID)
+		assert.Equal(t, "5", active[0].RouteID)
+	})
+
+	t.Run("whitespace-only ids publish no TripDescriptor", func(t *testing.T) {
+		handler, tracker := newHandler(t)
+		w := postLocationWithClaims(handler, LocationReport{
+			VehicleID: "bus-1", TripID: " ", RouteID: "   ",
+			Latitude: -1.29, Longitude: 36.82, Timestamp: time.Now().Unix(),
+		}, claims)
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+		feed := buildFeed(tracker.ActiveVehicles(), nil)
+		require.Len(t, feed.Entity, 1)
+		assert.Nil(t, feed.Entity[0].Vehicle.Trip)
+	})
+
+	t.Run("start_date with whitespace-only ids is rejected", func(t *testing.T) {
+		handler, _ := newHandler(t)
+		w := postLocationWithClaims(handler, LocationReport{
+			VehicleID: "bus-1", RouteID: "  ", StartDate: "20260906",
+			Latitude: -1.29, Longitude: 36.82, Timestamp: time.Now().Unix(),
+		}, claims)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "start_date requires trip_id or route_id")
+	})
 }
 
 func TestHandleAdminStatus_Empty(t *testing.T) {

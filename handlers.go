@@ -134,6 +134,13 @@ func handlePostLocation(store LocationSaver, tracker *Tracker, rl *VehicleRateLi
 			return
 		}
 
+		// Drivers type these ids. A stray space publishes an id no GTFS
+		// consumer can match, and a whitespace-only one would publish an
+		// empty-looking TripDescriptor and satisfy start_date's "requires
+		// trip_id or route_id" check without either.
+		loc.TripID = strings.TrimSpace(loc.TripID)
+		loc.RouteID = strings.TrimSpace(loc.RouteID)
+
 		if err := loc.validate(); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
