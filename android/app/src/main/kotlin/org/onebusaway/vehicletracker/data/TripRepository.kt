@@ -6,6 +6,7 @@ import org.onebusaway.vehicletracker.data.api.EndTripRequest
 import org.onebusaway.vehicletracker.data.api.StartTripRequest
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
+import java.time.ZoneId
 import javax.inject.Inject
 
 private const val TAG = "TripRepository"
@@ -15,21 +16,26 @@ class TripRepository @Inject constructor(
     private val tripStateStore: TripStateStore,
     private val vehiclePrefsStore: VehiclePrefsStore,
     @param:EpochSecondsClock private val clock: () -> Long,
+    private val zone: ZoneId,
 ) {
     // apiProvider.get() is called here (not injected as a resolved TrackerApi) so that a missing
     // server URL (e.g. cold start racing session restore) surfaces as Result.failure instead of
     // an uncaught exception during construction.
     suspend fun start(vehicleId: String, routeId: String, gtfsTripId: String): Result<ActiveTrip> = try {
-        val trip = apiProvider.get().startTrip(StartTripRequest(vehicleId, routeId, gtfsTripId))
+        val cleanedTripId = gtfsTripId.trim()
+        val cleanedRouteId = routeId.trim()
+        val trip = apiProvider.get().startTrip(StartTripRequest(vehicleId, cleanedRouteId, cleanedTripId))
+        val startedAt = clock()
         val activeTrip = ActiveTrip(
             tripDbId = trip.id,
-            locationTripId = gtfsTripId.ifBlank { routeId },
+            gtfsTripId = cleanedTripId,
             vehicleId = vehicleId,
-            routeId = routeId,
-            startedAtEpochSec = clock(),
+            routeId = cleanedRouteId,
+            startDate = serviceDate(startedAt, zone),
+            startedAtEpochSec = startedAt,
         )
         tripStateStore.saveActiveTrip(activeTrip)
-        recordLocally("recent route") { tripStateStore.addRecentRoute(routeId) }
+        recordLocally("recent route") { tripStateStore.addRecentRoute(cleanedRouteId) }
         // Recorded here rather than when the driver taps a vehicle: a tap they back out of
         // is not a use, and recents full of abandoned taps make the picker worse.
         recordLocally("recent vehicle") { vehiclePrefsStore.recordUse(vehicleId) }

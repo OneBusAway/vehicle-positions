@@ -3,6 +3,7 @@ package org.onebusaway.vehicletracker.data.api
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -60,16 +61,28 @@ class TrackerApiTest {
         token = "jwt"
         server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
         api.postLocation(LocationReportDto(
-            vehicleId = "bus-1", tripId = "route-5",
+            vehicleId = "bus-1", tripId = "trip-0830", routeId = "5", startDate = "20260804",
             latitude = -1.2921, longitude = 36.8219,
             bearing = null, speed = 8.5, accuracy = null, timestamp = 1752566400,
         ))
         val recorded = server.takeRequest()
         assertEquals("application/json", recorded.getHeader("Content-Type")?.substringBefore(";"))
         val sent = Json.parseToJsonElement(recorded.body.readUtf8()).jsonObject
-        assertEquals(setOf("vehicle_id", "trip_id", "latitude", "longitude", "speed", "timestamp"), sent.keys)
+        assertEquals(setOf("vehicle_id", "trip_id", "route_id", "start_date", "latitude", "longitude", "speed", "timestamp"), sent.keys)
         assertFalse(sent.containsKey("bearing"))
-        assertTrue(sent.containsKey("speed"))
+    }
+
+    @Test fun `location report without a gtfs trip id omits trip_id entirely`() = runTest {
+        token = "jwt"
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        api.postLocation(LocationReportDto(
+            vehicleId = "bus-1", tripId = null, routeId = "5", startDate = "20260804",
+            latitude = -1.2921, longitude = 36.8219, timestamp = 1752566400,
+        ))
+        val sent = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertFalse(sent.containsKey("trip_id"))
+        assertEquals("5", sent["route_id"]!!.jsonPrimitive.content)
+        assertEquals("20260804", sent["start_date"]!!.jsonPrimitive.content)
     }
 
     @Test fun `start trip sends snake_case fields and parses numeric trip id`() = runTest {

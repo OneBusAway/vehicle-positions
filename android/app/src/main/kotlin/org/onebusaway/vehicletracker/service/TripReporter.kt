@@ -39,7 +39,9 @@ class TripReporter @Inject constructor(
     suspend fun report(trip: ActiveTrip, fix: LocationFix) {
         val dto = LocationReportDto(
             vehicleId = trip.vehicleId,
-            tripId = trip.locationTripId,
+            tripId = trip.gtfsTripId.ifBlank { null },
+            routeId = trip.routeId,
+            startDate = trip.startDate,
             latitude = fix.latitude,
             longitude = fix.longitude,
             bearing = fix.bearing?.takeIf { it in 0.0..360.0 },

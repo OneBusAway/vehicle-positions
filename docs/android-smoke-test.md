@@ -183,9 +183,10 @@ adb emu geo fix -122.1060 37.4269
 (Equivalently, use the emulator's Extended Controls → Location panel to load
 a route or set points interactively.)
 
-## The 5 checks
+## The 6 checks
 
-Run these in order against a single trip; check 5 ends it.
+Run checks 1-5 in order against a single trip; check 5 ends it. Check 6 starts
+a second, separate trip to verify GTFS trip id reporting.
 
 ### Check 1 — Login → vehicle → route → permissions → tracking starts
 
@@ -218,7 +219,9 @@ service notification appears in the status bar.
 **Expected outcome:** the feed's `entity[].vehicle.position.latitude` /
 `.longitude` match the fix you injected (within GPS precision), and the
 `timestamp` advances on repeated calls as new fixes are sent. The app's
-"fixes sent" counter should also be climbing.
+"fixes sent" counter should also be climbing. The vehicle's entity must also
+show `"trip": {"routeId": "5", "startDate": "<today, YYYYMMDD>"}` and **no**
+`tripId` — the app never sends the route id as a trip id.
 
 ### Check 3 — Network loss flips the status red, recovery flips it back green
 
@@ -287,6 +290,23 @@ curl -s 'http://localhost:8080/gtfs-rt/vehicle-positions?format=json'
 
 The vehicle's entity should disappear from `entity[]` once its last report
 ages past the threshold (around 5 minutes with the default configuration).
+
+### Check 6 — Starting a trip with a GTFS trip id reports `tripId` too
+
+1. From the vehicle-selection screen (reached after Check 5's **End Trip**),
+   select `bus-1` again, enter route ID `5` **and** a GTFS trip id (e.g.
+   `t_5_0830`), then tap **Start Trip**.
+2. Feed the emulator a GPS fix (see "GPS playback" above) and wait ~10
+   seconds.
+3. Query the feed:
+
+   ```bash
+   curl -s 'http://localhost:8080/gtfs-rt/vehicle-positions?format=json'
+   ```
+
+**Expected outcome:** the vehicle's entity shows `"trip": {"tripId":
+"t_5_0830", "routeId": "5", "startDate": "<today, YYYYMMDD>"}` — with a GTFS
+trip id entered, the app sends both `tripId` and `routeId`.
 
 ## Cleanup
 
