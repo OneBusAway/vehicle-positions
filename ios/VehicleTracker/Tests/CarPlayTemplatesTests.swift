@@ -109,4 +109,44 @@ import Testing
         #expect(alert.duration == 0)
         #expect(alert.primaryAction.title == "OK")
     }
+
+    @Test func vehicleItems() {
+        let items = CarPlayTemplates.vehicleItems([Vehicle(id: "bus-1", label: "Bus 1"), Vehicle(id: "bus-2", label: "")], onSelect: { _ in })
+        #expect(items.map(\.text) == ["Bus 1", "bus-2"])
+    }
+
+    @Test func routeSectionsPutRecentFirst() {
+        let routes = [RouteInfo(id: "R1", shortName: "1", longName: "Straight", color: "", textColor: "", type: 3),
+                      RouteInfo(id: "R2", shortName: "2", longName: "Loop", color: "", textColor: "", type: 3)]
+        let sections = CarPlayTemplates.routeSections(routes, recentIDs: ["R2", "R9"], onSelect: { _ in })
+        #expect(sections.map(\.header) == ["Recent", "All routes"])
+        #expect(sections[0].items.map(\.text) == ["2"])
+        #expect(sections[0].items[0].detailText == "Loop")
+        #expect(sections[1].items.map(\.text) == ["1", "2"])
+        let none = CarPlayTemplates.routeSections(routes, recentIDs: [], onSelect: { _ in })
+        #expect(none.map(\.header) == ["All routes"])
+    }
+
+    @Test func tripItemsMarkTheCurrentRun() {
+        let page = RouteTripsPage(routeID: "R1", serviceDate: "20260902", timezone: "America/Los_Angeles", trips: [
+            TripSummary(id: "a", headsign: "North", directionID: 0, startsAt: TripFixtures.at(7, 0), endsAt: TripFixtures.at(7, 30), firstStop: "A", lastStop: "B"),
+            TripSummary(id: "b", headsign: "North", directionID: 0, startsAt: TripFixtures.at(8, 0), endsAt: TripFixtures.at(8, 30), firstStop: "A", lastStop: "B"),
+        ])
+        let items = CarPlayTemplates.tripItems(page, now: TripFixtures.at(8, 10), onSelect: { _ in })
+        #expect(items[0].text?.hasPrefix("7:00") == true)
+        #expect(items[0].text?.hasSuffix("→ North") == true)
+        #expect(items[0].detailText == "A → B")
+        #expect(items[1].detailText == "Now · A → B")
+    }
+
+    @Test func listTruncatesToTheCap() {
+        let items = (0..<12).map { CPListItem(text: "Route \($0)", detailText: nil) }
+        let list = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: items)], maxItems: 10)
+        #expect(list.itemCount == 10)
+        let last = list.sections.last?.items.last as? CPListItem
+        #expect(last?.text == "Use iPhone to see more")
+        #expect(last?.isEnabled == false)
+        let short = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: Array(items.prefix(3)))], maxItems: 10)
+        #expect(short.itemCount == 3)
+    }
 }

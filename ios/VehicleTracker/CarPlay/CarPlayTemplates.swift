@@ -127,4 +127,72 @@ enum CarPlayTemplates {
             button("minus.magnifyingglass", onZoomOut),
         ]
     }
+
+    // MARK: Starting a trip from the car
+
+    /// A list template capped at the vehicle's item limit; when the cap cuts
+    /// anything off, the last row says so.
+    static func list(title: String, sections: [(header: String?, items: [CPListItem])], maxItems: Int) -> CPListTemplate {
+        let cap = max(maxItems, 1)
+        let total = sections.reduce(0) { $0 + $1.items.count }
+        let truncated = total > cap
+        var remaining = truncated ? cap - 1 : cap // room for the "see more" row
+        var built: [CPListSection] = []
+        for section in sections where remaining > 0 && !section.items.isEmpty {
+            let items = Array(section.items.prefix(remaining))
+            remaining -= items.count
+            built.append(CPListSection(items: items, header: section.header, sectionIndexTitle: nil))
+        }
+        if truncated {
+            let more = CPListItem(text: String(localized: "Use iPhone to see more"), detailText: nil)
+            more.isEnabled = false
+            built.append(CPListSection(items: [more]))
+        }
+        return CPListTemplate(title: title, sections: built)
+    }
+
+    static func vehicleItems(_ vehicles: [Vehicle], onSelect: @escaping (Vehicle) -> Void) -> [CPListItem] {
+        vehicles.map { vehicle in
+            let item = CPListItem(text: vehicle.label.isEmpty ? vehicle.id : vehicle.label, detailText: nil)
+            item.handler = { _, done in
+                onSelect(vehicle)
+                done()
+            }
+            return item
+        }
+    }
+
+    static func routeSections(_ routes: [RouteInfo], recentIDs: [String], onSelect: @escaping (RouteInfo) -> Void) -> [(header: String?, items: [CPListItem])] {
+        func item(_ route: RouteInfo) -> CPListItem {
+            let item = CPListItem(text: route.shortName.isEmpty ? route.longName : route.shortName, detailText: route.longName)
+            item.handler = { _, done in
+                onSelect(route)
+                done()
+            }
+            return item
+        }
+        let recent = recentIDs.compactMap { id in routes.first { $0.id == id } }
+        var sections: [(header: String?, items: [CPListItem])] = []
+        if !recent.isEmpty {
+            sections.append((String(localized: "Recent"), recent.map(item)))
+        }
+        sections.append((String(localized: "All routes"), routes.map(item)))
+        return sections
+    }
+
+    static func tripItems(_ page: RouteTripsPage, now: Date, onSelect: @escaping (TripSummary) -> Void) -> [CPListItem] {
+        let highlighted = TripRun.highlighted(in: page.trips, now: now)
+        return page.trips.map { trip in
+            var detail = "\(trip.firstStop) → \(trip.lastStop)"
+            if trip.id == highlighted?.id {
+                detail = (trip.startsAt <= now ? String(localized: "Now") : String(localized: "Next")) + " · " + detail
+            }
+            let item = CPListItem(text: "\(Formatters.clock(trip.startsAt, timezone: page.timezone)) → \(trip.headsign)", detailText: detail)
+            item.handler = { _, done in
+                onSelect(trip)
+                done()
+            }
+            return item
+        }
+    }
 }

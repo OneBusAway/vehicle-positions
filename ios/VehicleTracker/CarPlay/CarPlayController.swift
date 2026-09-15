@@ -253,11 +253,86 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         // The driver dismissed it: stay quiet until the next off-route episode.
     }
 
-    /// Until the in-car picker exists, point at the phone.
+    /// Vehicle → route → run, on list templates (spec §6.4). Sign-in stays on
+    /// the phone; everything after it happens here.
     private func startFlow() {
-        let info = CPInformationTemplate(title: String(localized: "Start trip"), layout: .leading,
-                                         items: [CPInformationItem(title: String(localized: "Pick a trip on iPhone"), detail: nil)], actions: [])
-        interface.pushTemplate(info, animated: true, completion: nil)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await session.loadVehicles()
+            } catch {
+                presentError(String(localized: "Could not load your vehicles"))
+                return
+            }
+            if session.vehicles.count == 1 {
+                pickRoute(for: session.vehicles[0])
+            } else {
+                let items = CarPlayTemplates.vehicleItems(session.vehicles) { [weak self] vehicle in self?.pickRoute(for: vehicle) }
+                interface.pushTemplate(CarPlayTemplates.list(title: String(localized: "Your vehicle"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount), animated: true, completion: nil)
+            }
+        }
+    }
+
+    private func pickRoute(for vehicle: Vehicle) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let routes = try await session.routes()
+                let sections = CarPlayTemplates.routeSections(routes, recentIDs: session.settings.recentRouteIDs) { [weak self] route in
+                    self?.pickTrip(vehicle: vehicle, route: route)
+                }
+                interface.pushTemplate(CarPlayTemplates.list(title: vehicle.label.isEmpty ? vehicle.id : vehicle.label, sections: sections, maxItems: CPListTemplate.maximumItemCount), animated: true, completion: nil)
+            } catch {
+                presentError(String(localized: "Could not load routes"))
+            }
+        }
+    }
+
+    private func pickTrip(vehicle: Vehicle, route: RouteInfo) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let page = try await session.trips(routeID: route.id)
+                let items = CarPlayTemplates.tripItems(page, now: Date()) { [weak self] trip in
+                    self?.confirmStart(vehicle: vehicle, route: route, trip: trip, timezone: page.timezone)
+                }
+                let list = CarPlayTemplates.list(title: String(localized: "Route \(route.shortName)"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount)
+                list.emptyViewTitleVariants = [String(localized: "No runs today")]
+                interface.pushTemplate(list, animated: true, completion: nil)
+            } catch {
+                presentError(String(localized: "Could not load runs"))
+            }
+        }
+    }
+
+    private func confirmStart(vehicle: Vehicle, route: RouteInfo, trip: TripSummary, timezone: String) {
+        let start = CPAlertAction(title: String(localized: "Start"), style: .default) { [weak self] _ in
+            guard let self else { return }
+            interface.dismissTemplate(animated: true, completion: nil)
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await session.start(vehicle: vehicle, tripID: trip.id)
+                    interface.popToRootTemplate(animated: true, completion: nil)
+                } catch APIError.status(_, let message) where !message.isEmpty {
+                    presentError(message)
+                } catch {
+                    presentError(String(localized: "Could not start the trip"))
+                }
+            }
+        }
+        let cancel = CPAlertAction(title: String(localized: "Cancel"), style: .cancel) { [weak self] _ in
+            self?.interface.dismissTemplate(animated: true, completion: nil)
+        }
+        let title = "\(Formatters.clock(trip.startsAt, timezone: timezone)) → \(trip.headsign)"
+        interface.presentTemplate(CPAlertTemplate(titleVariants: [String(localized: "Start \(title)?"), String(localized: "Start this run?")], actions: [start, cancel]), animated: true, completion: nil)
+    }
+
+    private func presentError(_ message: String) {
+        let ok = CPAlertAction(title: String(localized: "OK"), style: .cancel) { [weak self] _ in
+            self?.interface.dismissTemplate(animated: true, completion: nil)
+        }
+        interface.presentTemplate(CPAlertTemplate(titleVariants: [message], actions: [ok]), animated: true, completion: nil)
     }
 
     // MARK: End
