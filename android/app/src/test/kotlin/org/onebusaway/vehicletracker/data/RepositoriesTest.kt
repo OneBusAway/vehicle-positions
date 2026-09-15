@@ -1,18 +1,21 @@
 package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ApiHolder
+import java.io.IOException
 
 class RepositoriesTest {
     private fun apiFor(server: MockWebServer) =
@@ -55,7 +58,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setResponseCode(201).setBody(
             """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"trip-0830","start_time":"2026-08-04T08:30:00Z","status":"active"}"""))
         val store = FakeTripStateStore()
-        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, clock = { 500L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, FakeVehiclePrefsStore(), clock = { 500L })
 
         val result = repo.start("bus-1", "5", "trip-0830")
 
@@ -72,7 +75,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setResponseCode(201).setBody(
             """{"id":8,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"","start_time":"2026-08-04T08:30:00Z","status":"active"}"""))
         val store = FakeTripStateStore()
-        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, clock = { 500L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, FakeVehiclePrefsStore(), clock = { 500L })
 
         repo.start("bus-1", "5", "")
 
@@ -84,7 +87,7 @@ class RepositoriesTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"driver is not assigned to this vehicle"}"""))
         server.enqueue(MockResponse().setResponseCode(409).setBody("""{"error":"driver already has an active trip"}"""))
-        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, FakeTripStateStore(), clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, FakeTripStateStore(), FakeVehiclePrefsStore(), clock = { 0L })
 
         assertTrue(repo.start("bus-1", "5", "").exceptionOrNull() is ApiError.NotAssigned)
         assertTrue(repo.start("bus-1", "5", "").exceptionOrNull() is ApiError.TripAlreadyActive)
@@ -96,10 +99,57 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody("""{"status":"trip ended"}"""))
         val store = FakeTripStateStore()
         store.saveActiveTrip(ActiveTrip(7L, "trip-0830", "bus-1", "5", 100L))
-        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, FakeVehiclePrefsStore(), clock = { 0L })
 
         assertTrue(repo.end(7L).isSuccess)
         assertNull(store.activeTrip.first())
+        server.shutdown()
+    }
+
+    @Test fun `trip start records the vehicle as recently used`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody(
+            """{"id":9,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"","start_time":"2026-08-04T08:30:00Z","status":"active"}"""))
+        val prefs = FakeVehiclePrefsStore()
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, FakeTripStateStore(), prefs, clock = { 500L })
+
+        assertTrue(repo.start("bus-1", "5", "").isSuccess)
+
+        assertEquals(listOf("bus-1"), prefs.recents.first())
+        server.shutdown()
+    }
+
+    @Test fun `a trip start that fails records nothing as recently used`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"driver is not assigned to this vehicle"}"""))
+        val prefs = FakeVehiclePrefsStore()
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, FakeTripStateStore(), prefs, clock = { 0L })
+
+        assertTrue(repo.start("bus-1", "5", "").isFailure)
+
+        assertEquals(emptyList<String>(), prefs.recents.first())
+        server.shutdown()
+    }
+
+    @Test fun `trip start still succeeds when the local prefs write fails`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody(
+            """{"id":10,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"","start_time":"2026-08-04T08:30:00Z","status":"active"}"""))
+        val tripState = FakeTripStateStore()
+        // The trip is already running on the server once recordUse is reached, so a disk error
+        // there must not be reported to the driver as a failed start — their retry would 409.
+        val failingPrefs = object : VehiclePrefsStore {
+            override val favorites = MutableStateFlow(emptySet<String>())
+            override val recents = MutableStateFlow(emptyList<String>())
+            override suspend fun toggleFavorite(vehicleId: String) = Unit
+            override suspend fun recordUse(vehicleId: String): Unit = throw IOException("disk full")
+        }
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, tripState, failingPrefs, clock = { 500L })
+
+        val result = repo.start("bus-1", "5", "")
+
+        assertTrue(result.isSuccess)
+        assertNotNull(tripState.activeTrip.first())
         server.shutdown()
     }
 
@@ -136,7 +186,7 @@ class RepositoriesTest {
 
     @Test fun `trip repository returns failure instead of throwing when session has no server url`() = runTest {
         val holder = ApiHolder(FakeSessionStore(), CoroutineScope(Job().apply { cancel() }))
-        val repo = TripRepository(TrackerApiProvider(holder::api), FakeTripStateStore(), clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider(holder::api), FakeTripStateStore(), FakeVehiclePrefsStore(), clock = { 0L })
 
         val result = repo.start("bus-1", "5", "trip-1")
 

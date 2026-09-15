@@ -15,8 +15,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.data.DataStoreSessionStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
+import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.VehiclePrefsStore
+import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
@@ -115,6 +118,11 @@ object AppModule {
     @Singleton
     fun provideTripStateStore(@ApplicationContext context: Context): TripStateStore =
         DataStoreTripStateStore(context)
+
+    @Provides
+    @Singleton
+    fun provideVehiclePrefsStore(@ApplicationContext context: Context): VehiclePrefsStore =
+        DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore)
 
     @Provides
     @Singleton

@@ -16,6 +16,10 @@
     <string name="vehicles_empty">No vehicles are assigned to you.</string>
     <string name="vehicles_error_message">Could not load your vehicles.</string>
     <string name="vehicles_retry_button">Retry</string>
+    <string name="vehicles_search_label">Search vehicles</string>
+    <string name="vehicles_search_no_matches">No vehicles match your search.</string>
+    <string name="vehicles_favorite_description">Add %1$s to favorites</string>
+    <string name="vehicles_unfavorite_description">Remove %1$s from favorites</string>
 
     <!-- Trip setup screen -->
     <string name="trip_setup_title">Start a Trip</string>
