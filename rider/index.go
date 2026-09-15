@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"time"
 
 	gtfs "github.com/OneBusAway/go-gtfs"
@@ -38,6 +39,7 @@ var shapeDistUnits = []float64{
 // StopTimeInfo is one scheduled stop of a trip, positioned along its shape.
 type StopTimeInfo struct {
 	StopID     string
+	StopName   string
 	Sequence   int
 	AlongShape float64       // metres from the start of the shape
 	Arrival    time.Duration // since service-day midnight (may exceed 24h)
@@ -47,30 +49,48 @@ type StopTimeInfo struct {
 
 // TripInfo is one scheduled trip with its shape geometry and stop times.
 type TripInfo struct {
+	ID          string
+	RouteID     string
+	ServiceID   string
+	Headsign    string
+	DirectionID int // 0 or 1 as in trips.txt; -1 when the feed gives none
+	Shape       *ShapeGeom
+	StopTimes   []StopTimeInfo // sorted by Sequence
+}
+
+// RouteInfo is one GTFS route as the driver catalog lists it. Only routes
+// with at least one indexed trip are kept.
+type RouteInfo struct {
 	ID        string
-	RouteID   string
-	ServiceID string
-	Shape     *ShapeGeom
-	StopTimes []StopTimeInfo // sorted by Sequence
+	ShortName string
+	LongName  string
+	Color     string // hex without '#', as in routes.txt; may be empty
+	TextColor string
+	Type      int    // GTFS route_type
+	SortOrder *int32 // route_sort_order, nil when the feed gives none
 }
 
 // IndexStats summarises a loaded index.
 type IndexStats struct {
+	Routes   int
 	Trips    int
 	Shapes   int
 	LoadedAt time.Time
 	Source   string
 }
 
-// Index is an immutable snapshot of the schedule data the rider engine needs.
-// It is safe for concurrent use; nothing in it is mutated after BuildIndex
-// returns.
+// Index is an immutable snapshot of the schedule data the rider engine and
+// the driver catalog need. It is safe for concurrent use; nothing in it is
+// mutated after BuildIndex returns.
 type Index struct {
-	trips    map[string]*TripInfo
-	tripIDs  []string
-	services map[string]serviceCalendar
-	tz       *time.Location
-	stats    IndexStats
+	trips        map[string]*TripInfo
+	tripIDs      []string
+	routes       map[string]RouteInfo
+	routeList    []RouteInfo            // Routes() order
+	tripsByRoute map[string][]*TripInfo // first-departure order
+	services     map[string]serviceCalendar
+	tz           *time.Location
+	stats        IndexStats
 }
 
 // serviceCalendar is the calendar of one GTFS service, with dates reduced to
@@ -92,9 +112,11 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 	}
 
 	ix := &Index{
-		trips:    make(map[string]*TripInfo, len(static.Trips)),
-		services: make(map[string]serviceCalendar, len(static.Services)),
-		tz:       tz,
+		trips:        make(map[string]*TripInfo, len(static.Trips)),
+		routes:       make(map[string]RouteInfo),
+		tripsByRoute: make(map[string][]*TripInfo),
+		services:     make(map[string]serviceCalendar, len(static.Services)),
+		tz:           tz,
 	}
 	for i := range static.Services {
 		svc := &static.Services[i]
@@ -118,12 +140,15 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 			continue
 		}
 		info := &TripInfo{
-			ID:        trip.ID,
-			Shape:     shape,
-			StopTimes: stopTimesAlong(trip.StopTimes, shape),
+			ID:          trip.ID,
+			Headsign:    trip.Headsign,
+			DirectionID: directionID(trip.DirectionId),
+			Shape:       shape,
+			StopTimes:   stopTimesAlong(trip.StopTimes, shape),
 		}
 		if trip.Route != nil {
 			info.RouteID = trip.Route.Id
+			ix.tripsByRoute[info.RouteID] = append(ix.tripsByRoute[info.RouteID], info)
 		}
 		if trip.Service != nil {
 			info.ServiceID = trip.Service.Id
@@ -133,7 +158,30 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 	}
 	slices.Sort(ix.tripIDs)
 
+	for _, trips := range ix.tripsByRoute {
+		slices.SortStableFunc(trips, func(a, b *TripInfo) int {
+			if c := cmp.Compare(a.StopTimes[0].Departure, b.StopTimes[0].Departure); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.ID, b.ID)
+		})
+	}
+	for i := range static.Routes {
+		r := &static.Routes[i]
+		if _, used := ix.tripsByRoute[r.Id]; !used {
+			continue
+		}
+		info := RouteInfo{
+			ID: r.Id, ShortName: r.ShortName, LongName: r.LongName,
+			Color: r.Color, TextColor: r.TextColor, Type: int(r.Type), SortOrder: r.SortOrder,
+		}
+		ix.routes[r.Id] = info
+		ix.routeList = append(ix.routeList, info)
+	}
+	slices.SortStableFunc(ix.routeList, compareRoutes)
+
 	ix.stats = IndexStats{
+		Routes:   len(ix.routeList),
 		Trips:    len(ix.trips),
 		Shapes:   len(shapes),
 		LoadedAt: loadedAt,
@@ -154,6 +202,29 @@ func (ix *Index) Trip(id string) (*TripInfo, bool) {
 
 // TripIDs returns the IDs of every indexed trip, sorted.
 func (ix *Index) TripIDs() []string { return slices.Clone(ix.tripIDs) }
+
+// Routes returns every route with an indexed trip, in display order:
+// route_sort_order ascending with unsorted routes last, then short name in
+// natural order ("7" before "10"), then long name.
+func (ix *Index) Routes() []RouteInfo { return slices.Clone(ix.routeList) }
+
+// Route returns the route with the given ID, if it has an indexed trip.
+func (ix *Index) Route(id string) (RouteInfo, bool) {
+	r, ok := ix.routes[id]
+	return r, ok
+}
+
+// TripsOnRoute returns the route's trips active on the "YYYYMMDD" service
+// date, ordered by first departure. The slice is the caller's to keep.
+func (ix *Index) TripsOnRoute(routeID, serviceDate string) []*TripInfo {
+	var out []*TripInfo
+	for _, trip := range ix.tripsByRoute[routeID] {
+		if ix.ActiveOn(trip, serviceDate) {
+			out = append(out, trip)
+		}
+	}
+	return out
+}
 
 // Timezone returns the agency timezone of the feed.
 func (ix *Index) Timezone() *time.Location { return ix.tz }
@@ -352,6 +423,7 @@ func stopTimesAlong(stopTimes []gtfs.ScheduledStopTime, shape *ShapeGeom) []Stop
 
 		out = append(out, StopTimeInfo{
 			StopID:     stopID(st.Stop),
+			StopName:   stopName(st.Stop),
 			Sequence:   st.StopSequence,
 			AlongShape: along,
 			Arrival:    st.ArrivalTime,
@@ -420,4 +492,80 @@ func stopID(stop *gtfs.Stop) string {
 		return ""
 	}
 	return stop.Id
+}
+
+// stopName returns the display name of a stop, if it has any.
+func stopName(stop *gtfs.Stop) string {
+	if stop == nil {
+		return ""
+	}
+	return stop.Name
+}
+
+// directionID maps the parser's tri-state direction onto trips.txt's 0/1,
+// with -1 standing for a direction the feed did not give.
+func directionID(d gtfs.DirectionID) int {
+	switch d {
+	case gtfs.DirectionID_False:
+		return 0
+	case gtfs.DirectionID_True:
+		return 1
+	default:
+		return -1
+	}
+}
+
+// compareRoutes orders routes for display: route_sort_order first (routes
+// without one after every route with one), then short name in natural
+// order, then long name.
+func compareRoutes(a, b RouteInfo) int {
+	switch {
+	case a.SortOrder != nil && b.SortOrder != nil:
+		if c := cmp.Compare(*a.SortOrder, *b.SortOrder); c != 0 {
+			return c
+		}
+	case a.SortOrder != nil:
+		return -1
+	case b.SortOrder != nil:
+		return 1
+	}
+	if c := compareNatural(a.ShortName, b.ShortName); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.LongName, b.LongName)
+}
+
+// compareNatural compares two names so that a leading number sorts
+// numerically: "7" < "10" < "10A" < "A".
+func compareNatural(a, b string) int {
+	an, arest, aok := leadingNumber(a)
+	bn, brest, bok := leadingNumber(b)
+	switch {
+	case aok && bok:
+		if c := cmp.Compare(an, bn); c != 0 {
+			return c
+		}
+		return cmp.Compare(arest, brest)
+	case aok:
+		return -1
+	case bok:
+		return 1
+	}
+	return cmp.Compare(a, b)
+}
+
+// leadingNumber splits a leading run of ASCII digits off s.
+func leadingNumber(s string) (n int, rest string, ok bool) {
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return 0, s, false
+	}
+	n, err := strconv.Atoi(s[:i])
+	if err != nil {
+		return 0, s, false
+	}
+	return n, s[i:], true
 }
