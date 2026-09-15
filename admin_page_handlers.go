@@ -669,15 +669,26 @@ func (ui *adminUI) setVehicleActive(w http.ResponseWriter, r *http.Request, acti
 	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
 }
 
-// minPasswordLength is the minimum length required for a user password. It is
-// enforced everywhere passwords are set — the users API, the admin UI forms,
-// and the bootstrap admin path — via validatePassword.
-const minPasswordLength = 8
+// minPasswordLength is the minimum length required for a user password, and
+// maxPasswordBytes is bcrypt's input limit: bcrypt.GenerateFromPassword
+// rejects anything longer. Both are enforced everywhere passwords are set —
+// the users API, the admin UI forms, and the bootstrap admin path — via
+// validatePassword. The maximum has to be checked here, before any write:
+// handleUpdateUser saves the profile before it hashes the new password, so a
+// password bcrypt rejects later would leave the profile changed and the
+// password not.
+const (
+	minPasswordLength = 8
+	maxPasswordBytes  = 72
+)
 
-// validatePassword enforces the shared minimum-password-length policy.
+// validatePassword enforces the shared password-length policy.
 func validatePassword(password string) error {
 	if len(password) < minPasswordLength {
 		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
+	}
+	if len(password) > maxPasswordBytes {
+		return fmt.Errorf("password must be at most %d bytes", maxPasswordBytes)
 	}
 	return nil
 }
