@@ -8,7 +8,7 @@ struct RoutesView: View {
     @State private var error: String?
 
     private var recent: [RouteInfo] {
-        session.settings.recentRouteIDs.compactMap { id in routes.first { $0.id == id } }
+        routes.matching(ids: session.settings.recentRouteIDs)
     }
 
     private var filtered: [RouteInfo] {

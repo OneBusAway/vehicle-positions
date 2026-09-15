@@ -23,6 +23,15 @@ nonisolated struct RouteInfo: Sendable, Codable, Equatable, Identifiable, Hashab
     }
 }
 
+extension Array where Element == RouteInfo {
+    /// The routes named by `ids`, in the order given, skipping any the
+    /// catalog no longer has. Recently driven routes are remembered as bare
+    /// ids, so both pickers have to resolve them against what is on offer.
+    nonisolated func matching(ids: [String]) -> [RouteInfo] {
+        ids.compactMap { id in first { $0.id == id } }
+    }
+}
+
 /// One run of a route on a service date (`GET /api/v1/gtfs/routes/{id}/trips`).
 nonisolated struct TripSummary: Sendable, Codable, Equatable, Identifiable, Hashable {
     var id: String

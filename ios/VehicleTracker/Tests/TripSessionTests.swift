@@ -27,6 +27,18 @@ import VehiclePositionsKit
         return trip
     }
 
+    /// What a relaunch finds: a fresh token, a known server and this driver's
+    /// own trip in the store, which the session takes up as `.paused`.
+    func pausedSession(tripID id: Int64 = 7, trip: TripGeometry = TripFixtures.t1) throws -> (session: TripSession, active: ActiveTrip) {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set("https://positions.example.org", forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        let active = ActiveTrip(serverTripID: id, vehicle: bus, trip: trip,
+                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
+        try store.save(active)
+        return (session(), active)
+    }
+
     @Test func startsSignedOutWithoutAToken() {
         #expect(session().phase == .signedOut)
     }
@@ -114,14 +126,7 @@ import VehiclePositionsKit
     }
 
     @Test func resumeWithAnUnusableStoredTripClearsIt() throws {
-        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
-        defaults.set("https://positions.example.org", forKey: "serverURL")
-        defaults.set("d@test.com", forKey: "email")
-        let stuck = ActiveTrip(serverTripID: 7, vehicle: bus, trip: unusableTrip,
-                               startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
-        try store.save(stuck)
-
-        let s = session()
+        let (s, stuck) = try pausedSession(trip: unusableTrip)
         #expect(s.phase == .paused(stuck))
 
         s.resume()
@@ -138,7 +143,8 @@ import VehiclePositionsKit
         locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
         #expect(await eventually { s.latest != nil })
         #expect(s.latest?.status == .onTime)
-        #expect(await eventually { s.reporting == .connected(fixesSent: 1) })
+        #expect(await eventually { s.fixesSent == 1 })
+        #expect(s.reporting == .connected)
         #expect(api.posted.count == 1)
         #expect(api.posted[0].tripID == "T1")
         #expect(api.posted[0].vehicleID == "bus-1")
@@ -154,7 +160,8 @@ import VehiclePositionsKit
         clock.advance(4)
         locations.emitFix(lat: 47.6055, lon: -122.3300, at: TripFixtures.at(8, 5, 6))
         #expect(await eventually { api.posted.count == 2 })
-        #expect(s.reporting == .connected(fixesSent: 2))
+        #expect(s.reporting == .connected)
+        #expect(s.fixesSent == 2)
     }
 
     @Test func reportingStatusReflectsProblems() async throws {
@@ -181,10 +188,11 @@ import VehiclePositionsKit
         api.postError = nil
         try await s.reauthenticate(password: "pw")
         #expect(api.logins.count == 2)
-        #expect(s.reporting == .connected(fixesSent: 0), "reauthenticating clears the auth problem at once, before the next fix")
+        #expect(s.reporting == .connected, "reauthenticating clears the auth problem at once, before the next fix")
         clock.advance(5)
         locations.emitFix(lat: 47.6047, lon: -122.3300, at: TripFixtures.at(8, 5, 10))
-        #expect(await eventually { s.reporting == .connected(fixesSent: 1) })
+        #expect(await eventually { s.fixesSent == 1 })
+        #expect(s.reporting == .connected)
     }
 
     @Test func endStopsEverything() async throws {
@@ -203,7 +211,7 @@ import VehiclePositionsKit
         #expect(s.latest == nil)
         #expect(try store.load() == nil)
         #expect(locations.handles[0].invalidated)
-        #expect(s.reporting == .connected(fixesSent: 0))
+        #expect(s.reporting == .connected)
     }
 
     @Test func endFailureKeepsTheTripUntilEndedLocally() async throws {
@@ -230,7 +238,7 @@ import VehiclePositionsKit
         let firstEnd = Task { try await s.end() }
         // Wait for the first call to move the phase to `.ending` before a
         // second one is attempted, so its early-return guard is exercised.
-        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+        #expect(await eventually { s.phase.isEnding },
                 "expected .ending while the request is in flight")
         try await s.end()
         try await firstEnd.value
@@ -247,7 +255,7 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
 
         let ending = Task { try await s.end() }
-        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+        #expect(await eventually { s.phase.isEnding },
                 "expected .ending while the request is in flight")
         s.endLocally()
 
@@ -265,7 +273,7 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
 
         let ending = Task { try await s.end() }
-        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+        #expect(await eventually { s.phase.isEnding },
                 "expected .ending while the request is in flight")
         s.endLocally()
         api.startedID = 43
@@ -291,7 +299,7 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
 
         let ending = Task { try await s.end() }
-        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+        #expect(await eventually { s.phase.isEnding },
                 "expected .ending while the request is in flight")
         locations.finish(throwing: APIError.transport("dropped"))
 
@@ -316,21 +324,14 @@ import VehiclePositionsKit
         #expect(locations.handles[0].invalidated, "the superseded background session is released, not leaked")
         #expect(!locations.handles[1].invalidated)
         #expect(api.starts.count == 1, "resuming after a lost stream makes no server call")
-        #expect(await eventually { s.reporting == .connected(fixesSent: 0) })
+        #expect(await eventually { s.reporting == .connected })
 
         locations.emitFix(lat: 47.6050, lon: -122.3300, at: TripFixtures.at(8, 5, 5))
         #expect(await eventually { api.posted.count == 1 })
     }
 
     @Test func relaunchWithAStoredTripIsPausedAndResumes() async throws {
-        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
-        defaults.set("https://positions.example.org", forKey: "serverURL")
-        defaults.set("d@test.com", forKey: "email")
-        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
-                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
-        try store.save(active)
-
-        let s = session()
+        let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))
         #expect(locations.handles.isEmpty)
 
@@ -370,7 +371,8 @@ import VehiclePositionsKit
 
         clock.advance(10)
         locations.emitFix(lat: 47.6065, lon: -122.3300, at: TripFixtures.at(8, 5, 20))
-        #expect(await eventually { s.reporting == .connected(fixesSent: 2) })
+        #expect(await eventually { s.fixesSent == 2 })
+        #expect(s.reporting == .connected)
         #expect(s.latest?.fix.latitude == 47.6065)
     }
 
@@ -398,14 +400,7 @@ import VehiclePositionsKit
     /// takes the API away while leaving the stored trip behind, so a resume
     /// afterwards has to say signed out rather than pretend to track.
     @Test func resumeWithoutAnAPIGoesToSignedOut() async throws {
-        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
-        defaults.set("https://positions.example.org", forKey: "serverURL")
-        defaults.set("d@test.com", forKey: "email")
-        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
-                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
-        try store.save(active)
-
-        let s = session()
+        let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))
         s.signOut()
         #expect(s.phase == .signedOut)
@@ -424,14 +419,7 @@ import VehiclePositionsKit
     }
 
     @Test func signOutFromPausedKeepsTheStoredTripForNextSignIn() async throws {
-        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
-        defaults.set("https://positions.example.org", forKey: "serverURL")
-        defaults.set("d@test.com", forKey: "email")
-        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
-                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
-        try store.save(active)
-
-        let s = session()
+        let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))
 
         s.signOut()

@@ -79,14 +79,15 @@ enum CarPlayTemplates {
         return CPTravelEstimates(distanceRemaining: Measurement(value: distance, unit: UnitLength.meters), timeRemaining: time)
     }
 
-    static func detailItems(active: ActiveTrip, adherence: Adherence?, reporting: TripSession.ReportingStatus) -> [CPInformationItem] {
+    static func detailItems(active: ActiveTrip, adherence: Adherence?,
+                            reporting: TripSession.ReportingStatus, fixesSent: Int) -> [CPInformationItem] {
         let tz = active.trip.timezone
         let route = active.trip.route
         let schedule = adherence.map(\.statusLabel) ?? String(localized: "Waiting for GPS")
         let next = adherence.map { "\($0.nextStop.name) · \(Formatters.clock($0.nextStop.arrivalAt, timezone: tz)) · \(Formatters.distance($0.distanceToNextStop))" }
             ?? String(localized: "—")
         let reportingText: String = {
-            if case .connected(let sent) = reporting { return String(localized: "Connected · \(sent) sent") }
+            if case .connected = reporting { return String(localized: "Connected · \(fixesSent) sent") }
             return reporting.label
         }()
         let gps: String = {
@@ -111,8 +112,10 @@ enum CarPlayTemplates {
         String(localized: "\(Formatters.distance(adherence.projection.distanceToShape)) from the route")
     }
 
-    static func offRouteAlert(adherence: Adherence, onOK: @escaping () -> Void) -> CPNavigationAlert {
-        let ok = CPAlertAction(title: String(localized: "OK"), style: .default) { _ in onOK() }
+    static func offRouteAlert(adherence: Adherence) -> CPNavigationAlert {
+        // Dismissing the banner is all the OK button has to do; the controller
+        // hears about that through `didDismiss`.
+        let ok = CPAlertAction(title: String(localized: "OK"), style: .default) { _ in }
         return CPNavigationAlert(
             titleVariants: [offRouteTitle],
             subtitleVariants: [offRouteSubtitle(adherence: adherence)],
@@ -191,7 +194,7 @@ enum CarPlayTemplates {
             }
             return item
         }
-        let recent = recentIDs.compactMap { id in routes.first { $0.id == id } }
+        let recent = routes.matching(ids: recentIDs)
         var sections: [(header: String?, items: [CPListItem])] = []
         if !recent.isEmpty {
             sections.append((String(localized: "Recent"), recent.map(item)))

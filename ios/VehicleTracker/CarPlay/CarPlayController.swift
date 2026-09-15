@@ -26,16 +26,20 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// chronological order.
     private var upcomingSequences: [Int] = []
     private var addedSequences: Set<Int> = []
-    private var offRouteAlerted = false
-    private var offRouteSubtitle: String?
-    /// The banner we presented, so a dismissal of somebody else's banner is
-    /// not mistaken for the driver dismissing ours.
-    private var offRouteAlert: CPNavigationAlert?
+    /// The banner we presented and the subtitle it is showing: the alert so a
+    /// dismissal of somebody else's banner is not mistaken for the driver
+    /// dismissing ours, the subtitle so a standing banner is only rewritten
+    /// when the distance on it has actually changed. Nil means none of ours
+    /// is up.
+    private var offRouteBanner: (alert: CPNavigationAlert, subtitle: String)?
     /// Whether this off-route stretch has already had its banner. The driver
     /// dismissing one must not bring it straight back on the next fix: the
     /// vehicle has to be back on route before another may be presented.
     private var offRouteEpisodeSeen = false
     private var details: CPInformationTemplate?
+    /// The six detail strings the information template is showing, so its
+    /// items are only rebuilt when one of them changes.
+    private var lastDetailItems: [String]?
     private var isPanning = false
     private var lastPanTranslation = CGPoint.zero
     /// Set for the span of a `session.start` call, so a second tap on the
@@ -46,11 +50,10 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// to check it: pushing a template onto a dead interface controller is at
     /// best wasted work, and the templates would outlive the scene.
     private var connected = true
-    /// Set when the car's built-in navigation cancelled our session: guidance
-    /// stays off until the driver asks for it back, or the trip changes.
-    private var guidanceSuspended = false
-    /// The trip guidance was suspended for; a different trip starts fresh.
-    private var suspendedTripID: String?
+    /// The trip the car's built-in navigation cancelled our session for, or
+    /// nil when guidance is ours to run. Guidance stays off until the driver
+    /// asks for it back, or the trip changes: a different trip starts fresh.
+    private var guidanceSuspendedForTripID: String?
 
     /// The car screen's controls are rebuilt only when what they say changes;
     /// reassigning them on every fix makes CarPlay redraw the bar.
@@ -62,8 +65,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// guidance away: tapping it hands the car screen back to us.
     private lazy var guidanceBarButton = CPBarButton(title: String(localized: "Guidance")) { [weak self] _ in
         guard let self else { return }
-        guidanceSuspended = false
-        suspendedTripID = nil
+        resumeGuidance()
         render()
     }
     private lazy var donePanningBarButton = CPBarButton(title: String(localized: "Done")) { [weak self] _ in
@@ -145,8 +147,8 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         map.setTrip(nil)
         map.update(nil)
         // Its setter re-arms user tracking, which fights the driver's own
-        // panning; only a genuine change is worth that.
-        if !map.showsPhoneLocation { map.showsPhoneLocation = true }
+        // panning; the setter itself ignores anything but a genuine change.
+        map.showsPhoneLocation = true
         let buttons = CarPlayTemplates.idleBarButtons(phase: session.phase) { [weak self] in self?.startFlow() }
         mapTemplate.leadingNavigationBarButtons = buttons.leading
         mapTemplate.trailingNavigationBarButtons = buttons.trailing
@@ -171,15 +173,16 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         map.update(session.latest)
         // A different run is a fresh start: whatever the car's navigation took
         // over for is over with the trip it was suspended on.
-        if guidanceSuspended, suspendedTripID != active.trip.id { resumeGuidance() }
-        if !guidanceSuspended, navigationTripID != active.trip.id {
-            startGuidance(active)
+        let suspended = guidanceSuspendedForTripID == active.trip.id
+        if !suspended {
+            resumeGuidance()
+            if navigationTripID != active.trip.id { startGuidance(active) }
         }
         updateGuidance(active, session.latest)
         updateOffRouteAlert(session.latest)
 
-        let ending: Bool = { if case .ending = session.phase { return true } else { return false } }()
-        let chrome = (isPanning: isPanning, ending: ending, guidanceSuspended: guidanceSuspended)
+        let ending = session.phase.isEnding
+        let chrome = (isPanning: isPanning, ending: ending, guidanceSuspended: suspended)
         if lastActiveChrome.map({ $0 == chrome }) != true {
             lastActiveChrome = chrome
             endBarButton.isEnabled = !ending
@@ -190,7 +193,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                 mapTemplate.trailingNavigationBarButtons = [donePanningBarButton]
                 mapTemplate.mapButtons = []
             } else {
-                mapTemplate.trailingNavigationBarButtons = [guidanceSuspended ? guidanceBarButton : detailsBarButton]
+                mapTemplate.trailingNavigationBarButtons = [suspended ? guidanceBarButton : detailsBarButton]
                 mapTemplate.mapButtons = activeMapButtons
             }
         }
@@ -199,8 +202,16 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             if !interface.templates.contains(where: { $0 === details }) {
                 // The driver popped it with the car's own back control.
                 self.details = nil
+                lastDetailItems = nil
             } else if interface.topTemplate === details {
-                details.items = CarPlayTemplates.detailItems(active: active, adherence: session.latest, reporting: session.reporting)
+                let items = detailItems(active)
+                // Every fix rebuilds the same six strings; only a changed one
+                // is worth making CarPlay redraw the template.
+                let strings = items.map { $0.detail ?? "" }
+                if strings != lastDetailItems {
+                    lastDetailItems = strings
+                    details.items = items
+                }
             }
         }
     }
@@ -229,10 +240,8 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         addedSequences = []
         lastActiveChrome = nil
         offRouteEpisodeSeen = false
-        if offRouteAlerted {
-            offRouteAlerted = false
-            offRouteSubtitle = nil
-            offRouteAlert = nil
+        if offRouteBanner != nil {
+            offRouteBanner = nil
             mapTemplate.dismissNavigationAlert(animated: false) { _ in }
         }
     }
@@ -248,8 +257,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     }
 
     private func resumeGuidance() {
-        guidanceSuspended = false
-        suspendedTripID = nil
+        guidanceSuspendedForTripID = nil
     }
 
     private func dismissDetails() {
@@ -257,6 +265,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             interface.popTemplate(animated: true, completion: nil)
         }
         details = nil
+        lastDetailItems = nil
     }
 
     // MARK: Guidance
@@ -325,10 +334,8 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private func updateOffRouteAlert(_ adherence: Adherence?) {
         guard let adherence else { return }
         guard !adherence.isOnRoute else {
-            if offRouteAlerted {
-                offRouteAlerted = false
-                offRouteSubtitle = nil
-                offRouteAlert = nil
+            if offRouteBanner != nil {
+                offRouteBanner = nil
                 mapTemplate.dismissNavigationAlert(animated: true) { _ in }
             }
             // Back on route: the next stretch off it earns a fresh banner.
@@ -336,11 +343,11 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             return
         }
         let subtitle = CarPlayTemplates.offRouteSubtitle(adherence: adherence)
-        if offRouteAlerted {
+        if let banner = offRouteBanner {
             // Still off route: keep the distance on the standing banner honest
             // rather than presenting a second one.
-            if let alert = mapTemplate.currentNavigationAlert, subtitle != offRouteSubtitle {
-                offRouteSubtitle = subtitle
+            if let alert = mapTemplate.currentNavigationAlert, subtitle != banner.subtitle {
+                offRouteBanner = (banner.alert, subtitle)
                 alert.updateTitleVariants([CarPlayTemplates.offRouteTitle], subtitleVariants: [subtitle])
             }
             return
@@ -349,21 +356,25 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         guard !offRouteEpisodeSeen else { return }
         // Something else may own the banner; never stack ours on top of it.
         guard mapTemplate.currentNavigationAlert == nil else { return }
-        let alert = CarPlayTemplates.offRouteAlert(adherence: adherence, onOK: {})
-        offRouteAlerted = true
+        let alert = CarPlayTemplates.offRouteAlert(adherence: adherence)
+        offRouteBanner = (alert, subtitle)
         offRouteEpisodeSeen = true
-        offRouteSubtitle = subtitle
-        offRouteAlert = alert
         mapTemplate.present(navigationAlert: alert, animated: true)
+    }
+
+    private func detailItems(_ active: ActiveTrip) -> [CPInformationItem] {
+        CarPlayTemplates.detailItems(active: active, adherence: session.latest,
+                                     reporting: session.reporting, fixesSent: session.fixesSent)
     }
 
     private func showDetails() {
         guard let active = session.activeTrip else { return }
         if let details, interface.topTemplate === details { return }
+        let items = detailItems(active)
         let template = CPInformationTemplate(title: String(localized: "Trip"), layout: .leading,
-                                             items: CarPlayTemplates.detailItems(active: active, adherence: session.latest, reporting: session.reporting),
-                                             actions: [])
+                                             items: items, actions: [])
         details = template
+        lastDetailItems = items.map { $0.detail ?? "" }
         interface.pushTemplate(template, animated: true, completion: nil)
     }
 
@@ -377,8 +388,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         // would fight the car for the screen, over and over. The trailing bar
         // button becomes "Guidance", so the driver can ask for it back.
         tearDownGuidance(reason: .cancelled)
-        guidanceSuspended = true
-        suspendedTripID = session.activeTrip?.trip.id
+        guidanceSuspendedForTripID = session.activeTrip?.trip.id
         render()
     }
 
@@ -421,29 +431,48 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         // driver. `offRouteEpisodeSeen` deliberately stays set: the banner is
         // gone, but it is not offered again until the vehicle has been back
         // on route and left it once more.
-        guard navigationAlert === offRouteAlert else { return }
-        offRouteAlerted = false
-        offRouteSubtitle = nil
-        offRouteAlert = nil
+        guard navigationAlert === offRouteBanner?.alert else { return }
+        offRouteBanner = nil
     }
 
-    /// Vehicle → route → run, on list templates (spec §6.4). Sign-in stays on
-    /// the phone; everything after it happens here.
-    private func startFlow() {
+    /// Runs `work`, then hands what it produced to `then` on the car screen.
+    /// Every flow that fetches something wants the same guards around that:
+    /// nothing may touch the interface controller once the car has gone,
+    /// an expired sign-in pops to the root, and anything else is an alert.
+    /// `serverMessage` shows what the server said in place of
+    /// `failureMessage` when it said anything — which starting a trip wants
+    /// and the pickers do not.
+    private func load<T: Sendable>(_ failureMessage: String, serverMessage: Bool = false,
+                                   _ work: @escaping @MainActor () async throws -> T,
+                                   then: @escaping @MainActor (T) -> Void) {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await session.loadVehicles()
+                let value = try await work()
                 guard connected else { return }
+                then(value)
             } catch {
                 guard connected else { return }
                 if session.handleIfUnauthorized(error) {
                     interface.popToRootTemplate(animated: true, completion: nil)
                     return
                 }
-                presentError(String(localized: "Could not load your vehicles"))
-                return
+                if serverMessage, case APIError.status(_, let message) = error, !message.isEmpty {
+                    presentError(message)
+                } else {
+                    presentError(failureMessage)
+                }
             }
+        }
+    }
+
+    /// Vehicle → route → run, on list templates (spec §6.4). Sign-in stays on
+    /// the phone; everything after it happens here.
+    private func startFlow() {
+        load(String(localized: "Could not load your vehicles")) {
+            try await self.session.loadVehicles()
+        } then: { [weak self] _ in
+            guard let self else { return }
             if session.vehicles.count == 1 {
                 pickRoute(for: session.vehicles[0])
             } else {
@@ -457,48 +486,30 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     }
 
     private func pickRoute(for vehicle: Vehicle) {
-        Task { [weak self] in
+        load(String(localized: "Could not load routes")) {
+            try await self.session.routes()
+        } then: { [weak self] routes in
             guard let self else { return }
-            do {
-                let routes = try await session.routes()
-                guard connected else { return }
-                let sections = CarPlayTemplates.routeSections(routes, recentIDs: session.settings.recentRouteIDs) { [weak self] route in
-                    guard let self, !startInFlight else { return }
-                    pickTrip(vehicle: vehicle, route: route)
-                }
-                interface.pushTemplate(CarPlayTemplates.list(title: vehicle.label.isEmpty ? vehicle.id : vehicle.label, sections: sections, maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
-            } catch {
-                guard connected else { return }
-                if session.handleIfUnauthorized(error) {
-                    interface.popToRootTemplate(animated: true, completion: nil)
-                    return
-                }
-                presentError(String(localized: "Could not load routes"))
+            let sections = CarPlayTemplates.routeSections(routes, recentIDs: session.settings.recentRouteIDs) { [weak self] route in
+                guard let self, !startInFlight else { return }
+                pickTrip(vehicle: vehicle, route: route)
             }
+            interface.pushTemplate(CarPlayTemplates.list(title: vehicle.label.isEmpty ? vehicle.id : vehicle.label, sections: sections, maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
         }
     }
 
     private func pickTrip(vehicle: Vehicle, route: RouteInfo) {
-        Task { [weak self] in
+        load(String(localized: "Could not load runs")) {
+            try await self.session.trips(routeID: route.id)
+        } then: { [weak self] page in
             guard let self else { return }
-            do {
-                let page = try await session.trips(routeID: route.id)
-                guard connected else { return }
-                let items = CarPlayTemplates.tripItems(page, now: Date()) { [weak self] trip in
-                    guard let self, !startInFlight else { return }
-                    confirmStart(vehicle: vehicle, route: route, trip: trip, timezone: page.timezone)
-                }
-                let list = CarPlayTemplates.list(title: String(localized: "Route \(route.shortName)"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount)
-                list.emptyViewTitleVariants = [String(localized: "No runs today")]
-                interface.pushTemplate(list, animated: true, completion: nil)
-            } catch {
-                guard connected else { return }
-                if session.handleIfUnauthorized(error) {
-                    interface.popToRootTemplate(animated: true, completion: nil)
-                    return
-                }
-                presentError(String(localized: "Could not load runs"))
+            let items = CarPlayTemplates.tripItems(page, now: Date()) { [weak self] trip in
+                guard let self, !startInFlight else { return }
+                confirmStart(vehicle: vehicle, route: route, trip: trip, timezone: page.timezone)
             }
+            let list = CarPlayTemplates.list(title: String(localized: "Route \(route.shortName)"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount)
+            list.emptyViewTitleVariants = [String(localized: "No runs today")]
+            interface.pushTemplate(list, animated: true, completion: nil)
         }
     }
 
@@ -517,25 +528,11 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             }
             interface.dismissTemplate(animated: true, completion: nil)
             startInFlight = true
-            Task { [weak self] in
-                guard let self else { return }
-                defer { startInFlight = false }
-                do {
-                    try await session.start(vehicle: vehicle, tripID: trip.id)
-                    guard connected else { return }
-                    interface.popToRootTemplate(animated: true, completion: nil)
-                } catch {
-                    guard connected else { return }
-                    if session.handleIfUnauthorized(error) {
-                        interface.popToRootTemplate(animated: true, completion: nil)
-                        return
-                    }
-                    if case APIError.status(_, let message) = error, !message.isEmpty {
-                        presentError(message)
-                    } else {
-                        presentError(String(localized: "Could not start the trip"))
-                    }
-                }
+            load(String(localized: "Could not start the trip"), serverMessage: true) {
+                defer { self.startInFlight = false }
+                try await self.session.start(vehicle: vehicle, tripID: trip.id)
+            } then: { [weak self] _ in
+                self?.interface.popToRootTemplate(animated: true, completion: nil)
             }
         }
         let cancel = CPAlertAction(title: String(localized: "Cancel"), style: .cancel) { [weak self] _ in

@@ -97,12 +97,12 @@ func TestNewRiderRuntime_EndsStaleRidesAndSharesTheIndex(t *testing.T) {
 
 	cfg := riderConfig{Enabled: true, GTFSSource: "rider/testdata/fixture.zip", GTFSRefresh: time.Hour, TrustedPoll: time.Hour,
 		TrustedMaxAge: 5 * time.Minute, JWTTTL: time.Hour, PointRetention: time.Hour, Thresholds: rider.DefaultThresholds()}
-	rt, err := newRiderRuntime(ctx, cfg, gt.Refresher(), store, testSecret, false, nil)
+	rt, err := newRiderRuntime(ctx, cfg, gt.Index, store, testSecret, false, nil)
 	require.NoError(t, err)
 	defer rt.Stop()
 	assert.Equal(t, "ended", store.rides["stale"].Status)
 	assert.Equal(t, "server_restart", store.rides["stale"].EndReason)
-	assert.Same(t, gt.Index(), rt.refresher.Current(), "rider mode serves the shared index")
+	assert.Same(t, gt.Index(), rt.svc.index(), "rider mode serves the shared index")
 	assert.False(t, rt.trusted.Configured())
 }
 

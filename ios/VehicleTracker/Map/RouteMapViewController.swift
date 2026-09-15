@@ -19,21 +19,25 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     let mapView = MKMapView()
 
     /// Whether the map takes touches itself (the phone) or is driven only by
-    /// its host (CarPlay, where the template owns input). Set before the view
-    /// loads.
-    var allowsDirectInteraction = false
+    /// its host (CarPlay, where the template owns input).
+    private let allowsDirectInteraction: Bool
 
     /// With no trip drawn, show and follow the phone's own position (the
-    /// CarPlay idle screen). Cleared by `setTrip`.
+    /// CarPlay idle screen). Cleared by `setTrip`. Re-arming user tracking
+    /// fights the driver's own panning, so only a genuine change acts.
     var showsPhoneLocation = false {
         didSet {
+            guard showsPhoneLocation != oldValue else { return }
             mapView.showsUserLocation = showsPhoneLocation
             mapView.setUserTrackingMode(showsPhoneLocation ? .follow : .none, animated: true)
         }
     }
 
     var followsVehicle = true {
-        didSet { if followsVehicle { follow(animated: true) } }
+        didSet {
+            guard followsVehicle != oldValue else { return }
+            if followsVehicle { follow(animated: true) }
+        }
     }
 
     private var trip: TripGeometry?
@@ -61,6 +65,21 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     private let snapped = SnappedAnnotation()
     private var vehiclePlaced = false
     private var snappedPlaced = false
+    /// What the vehicle image was last drawn for, and the image itself: it is
+    /// only worth redrawing when one of these changes, not on every fix and
+    /// every camera nudge.
+    private var vehicleGlyphKey: (onRoute: Bool, traitStyle: UIUserInterfaceStyle)?
+    private var vehicleGlyph: UIImage?
+
+    init(allowsDirectInteraction: Bool = false) {
+        self.allowsDirectInteraction = allowsDirectInteraction
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    /// Never loaded from a storyboard: both hosts make one in code.
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -103,6 +122,8 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         shape = nil
         lastAdherence = nil
         lastCourse = 0
+        // The next trip's route colour is the vehicle's fill.
+        vehicleGlyphKey = nil
         if vehiclePlaced { mapView.removeAnnotation(vehicle); vehiclePlaced = false }
         if snappedPlaced { mapView.removeAnnotation(snapped); snappedPlaced = false }
 
@@ -129,6 +150,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         // nothing to do with the vehicle; re-animating the camera each time
         // makes the map stutter. Only a genuinely new fix moves anything.
         guard adherence != lastAdherence else { return }
+        let previous = lastAdherence
         lastAdherence = adherence
         guard let adherence else {
             if vehiclePlaced { mapView.removeAnnotation(vehicle); vehiclePlaced = false }
@@ -150,11 +172,15 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
             if !snappedPlaced { mapView.addAnnotation(snapped); snappedPlaced = true }
         }
 
-        let alpha: CGFloat = adherence.isOnRoute ? 1 : 0.35
-        polylineRenderer?.strokeColor = routeColor.withAlphaComponent(alpha)
-        polylineRenderer?.setNeedsDisplay()
-        casingRenderer?.strokeColor = casingColor.withAlphaComponent(alpha)
-        casingRenderer?.setNeedsDisplay()
+        // The line is only ever drawn two ways, so it is only restyled when it
+        // crosses between them — or on the first fix, which decides which.
+        if previous?.isOnRoute != adherence.isOnRoute {
+            let alpha: CGFloat = adherence.isOnRoute ? 1 : 0.35
+            polylineRenderer?.strokeColor = routeColor.withAlphaComponent(alpha)
+            polylineRenderer?.setNeedsDisplay()
+            casingRenderer?.strokeColor = casingColor.withAlphaComponent(alpha)
+            casingRenderer?.setNeedsDisplay()
+        }
 
         for stop in stops where stop.isNext != (stop.stop.id == adherence.nextStop.id && stop.stop.sequence == adherence.nextStop.sequence) {
             stop.isNext.toggle()
@@ -189,7 +215,9 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
     func recentre() {
         followDistance = Self.defaultFollowDistance
-        followsVehicle = true
+        // The setter only acts on a change, and recentring while already
+        // following still has to undo the driver's zoom.
+        if followsVehicle { follow(animated: true) } else { followsVehicle = true }
     }
 
     private func follow(animated: Bool) {
@@ -208,8 +236,20 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
     private func refreshVehicleView() {
         guard let view = mapView.view(for: vehicle) else { return }
-        let fill = (vehicle.isOnRoute ? routeColor : .systemGray).resolvedColor(with: mapView.traitCollection)
-        view.image = MapGlyphs.vehicle(fill: fill)
+        let key = (onRoute: vehicle.isOnRoute, traitStyle: mapView.traitCollection.userInterfaceStyle)
+        if vehicleGlyph == nil || vehicleGlyphKey.map({ $0 == key }) != true {
+            let fill = (vehicle.isOnRoute ? routeColor : .systemGray).resolvedColor(with: mapView.traitCollection)
+            vehicleGlyph = MapGlyphs.vehicle(fill: fill)
+            vehicleGlyphKey = key
+        }
+        view.image = vehicleGlyph
+        updateVehicleTransform()
+    }
+
+    /// Points the vehicle along its course relative to the camera. The image
+    /// says nothing about heading, so a camera move only has to turn it.
+    private func updateVehicleTransform() {
+        guard let view = mapView.view(for: vehicle) else { return }
         let relative = vehicle.course - mapView.camera.heading
         view.transform = CGAffineTransform(rotationAngle: relative * .pi / 180)
     }
@@ -219,6 +259,9 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// light/dark change — the car's own day/night switch included — leaves
     /// stale colours on screen until they are drawn again.
     func refreshGlyphs() {
+        // Traits the map view has not taken up yet would let the cached
+        // vehicle image stand; this is the one call that must always redraw.
+        vehicleGlyphKey = nil
         for stop in stops {
             guard let view = mapView.view(for: stop) else { continue }
             view.image = stopGlyph(for: stop)
@@ -293,6 +336,6 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     }
 
     func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-        refreshVehicleView()
+        updateVehicleTransform()
     }
 }

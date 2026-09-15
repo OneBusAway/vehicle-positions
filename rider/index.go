@@ -217,9 +217,14 @@ func (ix *Index) Route(id string) (RouteInfo, bool) {
 // TripsOnRoute returns the route's trips active on the "YYYYMMDD" service
 // date, ordered by first departure. The slice is the caller's to keep.
 func (ix *Index) TripsOnRoute(routeID, serviceDate string) []*TripInfo {
+	day, err := time.ParseInLocation(serviceDateLayout, serviceDate, ix.tz)
+	if err != nil {
+		return nil
+	}
+	key := dateKey(day)
 	var out []*TripInfo
 	for _, trip := range ix.tripsByRoute[routeID] {
-		if ix.ActiveOn(trip, serviceDate) {
+		if ix.activeOn(trip, day, key) {
 			out = append(out, trip)
 		}
 	}
@@ -235,19 +240,24 @@ func (ix *Index) Stats() IndexStats { return ix.stats }
 // ActiveOn reports whether the trip runs on the given "YYYYMMDD" service date.
 // Calendar exceptions override the weekly pattern.
 func (ix *Index) ActiveOn(trip *TripInfo, serviceDate string) bool {
-	if trip == nil {
-		return false
-	}
 	day, err := time.ParseInLocation(serviceDateLayout, serviceDate, ix.tz)
 	if err != nil {
+		return false
+	}
+	return ix.activeOn(trip, day, dateKey(day))
+}
+
+// activeOn is ActiveOn with the service date already parsed into the day it
+// names and its calendar key. TripsOnRoute asks about one date for every trip
+// on the route, and parsing it once is the whole difference.
+func (ix *Index) activeOn(trip *TripInfo, day time.Time, key int) bool {
+	if trip == nil {
 		return false
 	}
 	svc, ok := ix.services[trip.ServiceID]
 	if !ok {
 		return false
 	}
-
-	key := dateKey(day)
 	if svc.removed[key] {
 		return false
 	}

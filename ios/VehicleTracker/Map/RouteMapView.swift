@@ -7,9 +7,7 @@ struct RouteMapView: UIViewControllerRepresentable {
     var adherence: Adherence?
 
     func makeUIViewController(context: Context) -> RouteMapViewController {
-        let controller = RouteMapViewController()
-        controller.allowsDirectInteraction = true
-        return controller
+        RouteMapViewController(allowsDirectInteraction: true)
     }
 
     func updateUIViewController(_ controller: RouteMapViewController, context: Context) {

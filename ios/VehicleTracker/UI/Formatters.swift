@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 /// Text the driver reads at a glance. Every string here is short on purpose.
 enum Formatters {
@@ -113,11 +114,11 @@ extension TripSession {
 
 extension Color {
     /// A GTFS route colour: six hex digits, with or without a leading '#'.
+    /// One parser, in `UIColor`, so the badge and the map cannot disagree
+    /// about what a feed's colour means.
     init?(hex: String) {
-        var s = hex.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("#") { s.removeFirst() }
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
-        self.init(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+        guard let ui = UIColor(hex: hex) else { return nil }
+        self.init(uiColor: ui)
     }
 }
 

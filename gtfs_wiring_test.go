@@ -17,7 +17,7 @@ func TestNewGTFSRuntime_LoadsIndex(t *testing.T) {
 	defer rt.Stop()
 	assert.Equal(t, 3, rt.Index().Stats().Trips)
 	assert.Equal(t, 2, rt.Index().Stats().Routes)
-	assert.Same(t, rt.Index(), rt.Refresher().Current())
+	assert.Same(t, rt.refresher.Current(), rt.Index())
 }
 
 func TestNewGTFSRuntime_FailsWhenTheFeedIsMissing(t *testing.T) {

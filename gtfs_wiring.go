@@ -57,10 +57,6 @@ func newGTFSRuntime(ctx context.Context, source string, refresh time.Duration) (
 // Index returns the schedule in force right now.
 func (rt *gtfsRuntime) Index() *rider.Index { return rt.refresher.Current() }
 
-// Refresher hands the schedule to a consumer that must always read the
-// current index rather than hold one.
-func (rt *gtfsRuntime) Refresher() *rider.Refresher { return rt.refresher }
-
 // Stop ends the refresh loop and waits for it. It must be called exactly once.
 func (rt *gtfsRuntime) Stop() {
 	rt.cancel()

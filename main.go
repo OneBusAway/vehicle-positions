@@ -281,7 +281,7 @@ func main() {
 	}
 	var riderSvc *riderService
 	if riderCfg.Enabled {
-		rt, err := newRiderRuntime(ctx, riderCfg, schedule.Refresher(), store, jwtSecret, trustProxyHeaders(), tracker)
+		rt, err := newRiderRuntime(ctx, riderCfg, schedule.Index, store, jwtSecret, trustProxyHeaders(), tracker)
 		if err != nil {
 			slog.Error("failed to start rider mode", "error", err)
 			os.Exit(1)

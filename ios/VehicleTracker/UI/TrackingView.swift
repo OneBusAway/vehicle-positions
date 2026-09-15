@@ -137,7 +137,7 @@ struct TrackingView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(.red)
-        .disabled({ if case .ending = session.phase { true } else { false } }())
+        .disabled(session.phase.isEnding)
     }
 
     private var reloginSheet: some View {

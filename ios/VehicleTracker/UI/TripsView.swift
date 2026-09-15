@@ -6,7 +6,13 @@ struct TripsView: View {
     let route: RouteInfo
     @State private var page: RouteTripsPage?
     @State private var error: String?
-    @State private var starting = false
+
+    /// A start is in flight — this list's own, or one from the car, which
+    /// must disable this list just the same.
+    private var starting: Bool {
+        if case .starting = session.phase { return true }
+        return false
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -64,10 +70,8 @@ struct TripsView: View {
     }
 
     private func start(_ trip: TripSummary) {
-        starting = true
         error = nil
         Task {
-            defer { starting = false }
             do {
                 try await session.start(vehicle: vehicle, tripID: trip.id)
             } catch {

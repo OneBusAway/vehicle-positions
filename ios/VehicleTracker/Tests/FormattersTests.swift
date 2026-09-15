@@ -45,14 +45,14 @@ import Testing
                                 trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 0),
                                 driverEmail: "d@test.com")
 
-        #expect(TrackingBanner.text(phase: .paused(active), reporting: .connected(fixesSent: 0)) == "Paused — not reporting")
-        #expect(TrackingBanner.color(phase: .paused(active), reporting: .connected(fixesSent: 0)) == .orange)
+        #expect(TrackingBanner.text(phase: .paused(active), reporting: .connected) == "Paused — not reporting")
+        #expect(TrackingBanner.color(phase: .paused(active), reporting: .connected) == .orange)
 
-        #expect(TrackingBanner.text(phase: .ending(active), reporting: .connected(fixesSent: 9)) == "Ending…")
-        #expect(TrackingBanner.color(phase: .ending(active), reporting: .connected(fixesSent: 9)) == .gray)
+        #expect(TrackingBanner.text(phase: .ending(active), reporting: .connected) == "Ending…")
+        #expect(TrackingBanner.color(phase: .ending(active), reporting: .connected) == .gray)
 
-        #expect(TrackingBanner.text(phase: .active(active), reporting: .connected(fixesSent: 9)) == "Reporting")
-        #expect(TrackingBanner.color(phase: .active(active), reporting: .connected(fixesSent: 9)) == .green)
+        #expect(TrackingBanner.text(phase: .active(active), reporting: .connected) == "Reporting")
+        #expect(TrackingBanner.color(phase: .active(active), reporting: .connected) == .green)
 
         #expect(TrackingBanner.text(phase: .active(active), reporting: .noNetwork) == "No connection")
         #expect(TrackingBanner.color(phase: .active(active), reporting: .noNetwork) == .red)

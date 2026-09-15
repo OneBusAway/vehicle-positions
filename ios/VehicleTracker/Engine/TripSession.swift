@@ -35,10 +35,20 @@ final class TripSession {
         case active(ActiveTrip)
         case paused(ActiveTrip)
         case ending(ActiveTrip)
+
+        /// The trip is being ended: both screens spend the End button on the
+        /// first tap and say so until the server answers.
+        var isEnding: Bool {
+            if case .ending = self { return true }
+            return false
+        }
     }
 
     enum ReportingStatus: Equatable {
-        case connected(fixesSent: Int)
+        /// Reporting normally. How many fixes have been accepted is
+        /// `fixesSent`, which outlives a problem rather than being replaced
+        /// by it, so it is not carried here.
+        case connected
         case noNetwork
         case noGPS
         case authExpired
@@ -54,7 +64,7 @@ final class TripSession {
 
     private(set) var phase: Phase
     private(set) var latest: Adherence?
-    private(set) var reporting: ReportingStatus = .connected(fixesSent: 0)
+    private(set) var reporting: ReportingStatus = .connected
     /// Fixes accepted by the server on this trip. The banner carries the
     /// status, so the footer's counter must survive a problem rather than be
     /// replaced by it.
@@ -405,7 +415,7 @@ final class TripSession {
             reporting = .noGPS
         } else {
             switch reporter?.problem ?? .none {
-            case .none: reporting = .connected(fixesSent: reporter?.fixesSent ?? 0)
+            case .none: reporting = .connected
             case .noNetwork: reporting = .noNetwork
             case .authExpired: reporting = .authExpired
             case .clockSkew: reporting = .clockSkew

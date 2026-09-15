@@ -108,7 +108,7 @@ import Testing
 
     @Test func detailItems() {
         let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5), accuracy: 7), previous: nil)
-        let items = CarPlayTemplates.detailItems(active: active, adherence: a, reporting: .connected(fixesSent: 214))
+        let items = CarPlayTemplates.detailItems(active: active, adherence: a, reporting: .connected, fixesSent: 214)
         #expect(items.count == 6)
         #expect(items.map(\.title) == ["Route", "Trip", "Schedule", "Next stop", "Reporting", "GPS"])
         #expect(items[0].detail == "1 · Straight")
@@ -117,14 +117,14 @@ import Testing
         #expect(items[3].detail?.hasPrefix("Stop ST3 · 8:10") == true)
         #expect(items[4].detail == "Connected · 214 sent")
         #expect(items[5].detail == "±7 m")
-        let waiting = CarPlayTemplates.detailItems(active: active, adherence: nil, reporting: .noGPS)
+        let waiting = CarPlayTemplates.detailItems(active: active, adherence: nil, reporting: .noGPS, fixesSent: 0)
         #expect(waiting[2].detail == "Waiting for GPS")
         #expect(waiting[4].detail == "No GPS")
     }
 
     @Test func offRouteAlertNeverTimesOut() {
         let off = evaluator.evaluate(TripFixtures.fix(lat: 47.60225, lon: -122.3290, at: TripFixtures.at(8, 2, 30)), previous: nil)
-        let alert = CarPlayTemplates.offRouteAlert(adherence: off, onOK: {})
+        let alert = CarPlayTemplates.offRouteAlert(adherence: off)
         #expect(alert.titleVariants == ["Off route"])
         #expect(alert.subtitleVariants.first?.hasPrefix("75 m") == true)
         #expect(alert.duration == 0)
