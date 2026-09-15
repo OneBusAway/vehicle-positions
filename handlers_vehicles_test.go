@@ -22,11 +22,9 @@ type mockVehicleStore struct {
 	vehicles map[string]*VehicleResponse
 	err      error
 
-	// Recorded by ListVehiclesPage so paging tests can assert what the
-	// handler asked the store for.
-	gotIncludeInactive bool
-	gotLimit           int32
-	gotOffset          int32
+	// Recorded by ListVehiclesPage so paging and filter tests can assert
+	// what the handler asked the store for.
+	gotFilter VehicleFilter
 }
 
 // pageSlice returns the limit/offset window of s, mirroring SQL LIMIT/OFFSET
@@ -60,9 +58,10 @@ func (m *mockVehicleStore) ListVehicles(_ context.Context) ([]VehicleResponse, e
 
 // ListVehiclesPage orders by id so pages are deterministic; the real store
 // orders by created_at DESC with an id tiebreaker. Only the totality of the
-// order matters to the handler.
-func (m *mockVehicleStore) ListVehiclesPage(_ context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error) {
-	m.gotIncludeInactive, m.gotLimit, m.gotOffset = includeInactive, limit, offset
+// order matters to the handler. Q and AgencyTag are recorded rather than
+// applied — matching them is the store's job, tested against Postgres.
+func (m *mockVehicleStore) ListVehiclesPage(_ context.Context, filter VehicleFilter) ([]VehicleResponse, error) {
+	m.gotFilter = filter
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -75,12 +74,12 @@ func (m *mockVehicleStore) ListVehiclesPage(_ context.Context, includeInactive b
 	all := make([]VehicleResponse, 0, len(ids))
 	for _, id := range ids {
 		v := m.vehicles[id]
-		if !includeInactive && !v.Active {
+		if !filter.IncludeInactive && !v.Active {
 			continue
 		}
 		all = append(all, *v)
 	}
-	return pageSlice(all, limit, offset), nil
+	return pageSlice(all, filter.Limit, filter.Offset), nil
 }
 
 func (m *mockVehicleStore) GetVehicle(_ context.Context, id string) (*VehicleResponse, error) {
@@ -218,8 +217,8 @@ func TestHandleListVehicles_PagingParams(t *testing.T) {
 				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
 				return
 			}
-			assert.Equal(t, tt.wantLimit, store.gotLimit, "limit passed to the store")
-			assert.Equal(t, tt.wantOffset, store.gotOffset, "offset passed to the store")
+			assert.Equal(t, tt.wantLimit, store.gotFilter.Limit, "limit passed to the store")
+			assert.Equal(t, tt.wantOffset, store.gotFilter.Offset, "offset passed to the store")
 		})
 	}
 }
@@ -261,7 +260,7 @@ func TestHandleListVehicles_IncludesInactive(t *testing.T) {
 	handler(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.True(t, store.gotIncludeInactive, "the API must ask for deactivated vehicles too")
+	assert.True(t, store.gotFilter.IncludeInactive, "the API must ask for deactivated vehicles too")
 	var vehicles []VehicleResponse
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&vehicles))
 	assert.Len(t, vehicles, 2)
@@ -698,4 +697,58 @@ func TestHandleDeactivateVehicle_InvalidID(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.Contains(t, resp["error"], "alphanumeric characters")
+}
+
+// TestHandleListVehicles_FilterParams is the validation table for the search
+// and agency filters. Every case asserts the filter the handler handed the
+// store, or the exact error message, so a case can't pass for the wrong
+// reason. The 255/256 pair is the boundary guard on q's length cap.
+func TestHandleListVehicles_FilterParams(t *testing.T) {
+	qError := fmt.Sprintf("q must be at most %d characters", maxFieldLength)
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+		wantError  string
+		wantQ      string
+		wantAgency string
+	}{
+		{name: "no filters", query: "", wantStatus: http.StatusOK},
+		{name: "search term", query: "?q=bus-10", wantStatus: http.StatusOK, wantQ: "bus-10"},
+		{name: "agency tag", query: "?agency_tag=nairobi", wantStatus: http.StatusOK, wantAgency: "nairobi"},
+		{name: "both filters", query: "?q=bus&agency_tag=nairobi", wantStatus: http.StatusOK, wantQ: "bus", wantAgency: "nairobi"},
+		{name: "empty q does not filter", query: "?q=", wantStatus: http.StatusOK},
+		{name: "wildcards reach the store verbatim", query: "?q=%25", wantStatus: http.StatusOK, wantQ: "%"},
+		{
+			name:       "q at the maximum length",
+			query:      "?q=" + strings.Repeat("a", maxFieldLength),
+			wantStatus: http.StatusOK,
+			wantQ:      strings.Repeat("a", maxFieldLength),
+		},
+		{
+			name:       "q one past the maximum length",
+			query:      "?q=" + strings.Repeat("a", maxFieldLength+1),
+			wantStatus: http.StatusBadRequest,
+			wantError:  qError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockVehicleStore()
+			handler := handleListVehicles(store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/vehicles"+tt.query, nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+			if tt.wantStatus != http.StatusOK {
+				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
+				return
+			}
+			assert.Equal(t, tt.wantQ, store.gotFilter.Q, "q passed to the store")
+			assert.Equal(t, tt.wantAgency, store.gotFilter.AgencyTag, "agency_tag passed to the store")
+		})
+	}
 }

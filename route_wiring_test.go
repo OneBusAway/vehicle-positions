@@ -24,7 +24,7 @@ func (n *noopStore) GetUserByEmail(_ context.Context, _ string) (*User, error) {
 func (n *noopStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
 }
-func (n *noopStore) ListUsersPage(_ context.Context, _, _ int32) ([]UserResponse, error) {
+func (n *noopStore) ListUsersPage(_ context.Context, _ UserFilter) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
 }
 func (n *noopStore) GetUser(_ context.Context, _ int64) (*UserResponse, error) {
@@ -42,7 +42,7 @@ func (n *noopStore) DeleteUser(_ context.Context, _ int64) error {
 func (n *noopStore) ListVehicles(_ context.Context) ([]VehicleResponse, error) {
 	return make([]VehicleResponse, 0), nil
 }
-func (n *noopStore) ListVehiclesPage(_ context.Context, _ bool, _, _ int32) ([]VehicleResponse, error) {
+func (n *noopStore) ListVehiclesPage(_ context.Context, _ VehicleFilter) ([]VehicleResponse, error) {
 	return make([]VehicleResponse, 0), nil
 }
 func (n *noopStore) GetVehicle(_ context.Context, _ string) (*VehicleResponse, error) {

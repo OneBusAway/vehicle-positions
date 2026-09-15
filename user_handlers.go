@@ -25,8 +25,10 @@ type UpdateUserRequest struct {
 }
 
 // handleListUsers returns one page of users, newest first, bounded by the
-// limit/offset query params. The response stays a bare JSON array rather
-// than a paging envelope so existing clients keep working.
+// limit/offset query params and narrowed by the optional q and role filters.
+// Deactivated users are included, as they always have been. The response
+// stays a bare JSON array rather than a paging envelope so existing clients
+// keep working.
 func handleListUsers(store UserPager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit, offset, ok := parseListPageParams(w, r)
@@ -34,7 +36,24 @@ func handleListUsers(store UserPager) http.HandlerFunc {
 			return
 		}
 
-		users, err := store.ListUsersPage(r.Context(), int32(limit), int32(offset))
+		query := r.URL.Query()
+		q := query.Get("q")
+		if err := validateListQuery(q); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		role := query.Get("role")
+		if !validUserRoleFilter(role) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `role must be "", "driver", or "admin"`})
+			return
+		}
+
+		users, err := store.ListUsersPage(r.Context(), UserFilter{
+			Role:   role,
+			Q:      q,
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
 		if err != nil {
 			slog.Error("failed to list users", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})

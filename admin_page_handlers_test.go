@@ -348,6 +348,10 @@ func (erroringAdminStats) CountActiveTrips(_ context.Context) (int, error) {
 // database.
 type fakeVehicleStore struct {
 	vehicles map[string]*VehicleResponse
+
+	// Recorded by ListVehiclesPage so the page tests can assert which filter
+	// the handler built from the query string.
+	gotFilter VehicleFilter
 }
 
 func newFakeVehicleStore(vehicles ...VehicleResponse) *fakeVehicleStore {
@@ -369,8 +373,11 @@ func (f *fakeVehicleStore) ListVehicles(_ context.Context) ([]VehicleResponse, e
 
 // ListVehiclesPage orders by id so pages are deterministic; the real store
 // orders by created_at DESC with an id tiebreaker. Only the totality of the
-// order matters to the page handler.
-func (f *fakeVehicleStore) ListVehiclesPage(_ context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error) {
+// order matters to the page handler. Q and AgencyTag are recorded rather
+// than applied — matching them is the store's job, tested against Postgres.
+func (f *fakeVehicleStore) ListVehiclesPage(_ context.Context, filter VehicleFilter) ([]VehicleResponse, error) {
+	f.gotFilter = filter
+
 	ids := make([]string, 0, len(f.vehicles))
 	for id := range f.vehicles {
 		ids = append(ids, id)
@@ -380,12 +387,12 @@ func (f *fakeVehicleStore) ListVehiclesPage(_ context.Context, includeInactive b
 	all := make([]VehicleResponse, 0, len(ids))
 	for _, id := range ids {
 		v := f.vehicles[id]
-		if !includeInactive && !v.Active {
+		if !filter.IncludeInactive && !v.Active {
 			continue
 		}
 		all = append(all, *v)
 	}
-	return pageSlice(all, limit, offset), nil
+	return pageSlice(all, filter.Limit, filter.Offset), nil
 }
 
 func (f *fakeVehicleStore) GetVehicle(_ context.Context, id string) (*VehicleResponse, error) {
@@ -509,12 +516,20 @@ func TestVehiclesPageInactiveFilter(t *testing.T) {
 // UI and returns the rendered body, failing the test on a non-200.
 func getAdminPage(t *testing.T, mux *http.ServeMux, path string) string {
 	t.Helper()
+	w := requestAdminPage(t, mux, path)
+	require.Equal(t, http.StatusOK, w.Code)
+	return w.Body.String()
+}
+
+// requestAdminPage is getAdminPage without the 200 requirement, for the
+// tests that assert a rejected request's status and message.
+func requestAdminPage(t *testing.T, mux *http.ServeMux, path string) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.AddCookie(cookieFor(t, "admin"))
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	return w.Body.String()
+	return w
 }
 
 // seedVehicles builds n active vehicles with zero-padded ids so a label like
@@ -757,6 +772,10 @@ type fakeUserStore struct {
 	users           map[int64]*UserResponse
 	nextID          int64
 	passwordUpdates map[int64]string
+
+	// Recorded by ListUsersPage so the page tests can assert which filter
+	// the handler built from the query string.
+	gotFilter UserFilter
 }
 
 func newFakeUserStore(users ...UserResponse) *fakeUserStore {
@@ -781,8 +800,12 @@ func (f *fakeUserStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 }
 
 // ListUsersPage orders by id so pages are deterministic; the real store
-// orders by created_at DESC with an id tiebreaker.
-func (f *fakeUserStore) ListUsersPage(_ context.Context, limit, offset int32) ([]UserResponse, error) {
+// orders by created_at DESC with an id tiebreaker. Role, Q and ActiveOnly
+// are recorded rather than applied — matching them is the store's job,
+// tested against Postgres.
+func (f *fakeUserStore) ListUsersPage(_ context.Context, filter UserFilter) ([]UserResponse, error) {
+	f.gotFilter = filter
+
 	ids := make([]int64, 0, len(f.users))
 	for id := range f.users {
 		ids = append(ids, id)
@@ -793,7 +816,7 @@ func (f *fakeUserStore) ListUsersPage(_ context.Context, limit, offset int32) ([
 	for _, id := range ids {
 		all = append(all, *f.users[id])
 	}
-	return pageSlice(all, limit, offset), nil
+	return pageSlice(all, filter.Limit, filter.Offset), nil
 }
 
 func (f *fakeUserStore) GetUser(_ context.Context, id int64) (*UserResponse, error) {
@@ -1607,4 +1630,223 @@ func TestTripsPageVehicleSelectActiveOnly(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, "Active Bus")
 	assert.NotContains(t, body, "Retired Bus")
+}
+
+// TestVehiclesPageURL_PreservesFilters pins that every vehicle filter is
+// threaded into the prev/next links. Without this, page 2 of a search
+// silently drops the filter and shows unfiltered rows, and no other test
+// notices.
+func TestVehiclesPageURL_PreservesFilters(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter VehicleFilter
+		page   int
+		want   string
+	}{
+		{
+			name: "no filters",
+			page: 2,
+			want: "/admin/vehicles?page=2",
+		},
+		{
+			name:   "search term",
+			filter: VehicleFilter{Q: "bus-10"},
+			page:   3,
+			want:   "/admin/vehicles?page=3&q=bus-10",
+		},
+		{
+			name:   "agency tag",
+			filter: VehicleFilter{AgencyTag: "nairobi"},
+			page:   2,
+			want:   "/admin/vehicles?agency_tag=nairobi&page=2",
+		},
+		{
+			name:   "every filter at once",
+			filter: VehicleFilter{IncludeInactive: true, AgencyTag: "nairobi", Q: "bus 10"},
+			page:   4,
+			want:   "/admin/vehicles?agency_tag=nairobi&include_inactive=1&page=4&q=bus+10",
+		},
+		{
+			name:   "paging fields are not query params",
+			filter: VehicleFilter{Q: "bus", Limit: 25, Offset: 50},
+			page:   2,
+			want:   "/admin/vehicles?page=2&q=bus",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, vehiclesPageURL(tt.filter, tt.page))
+		})
+	}
+}
+
+// TestUsersPageURL_PreservesFilters pins that every user filter is threaded
+// into the prev/next links, for the same reason as the vehicle case above.
+func TestUsersPageURL_PreservesFilters(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter UserFilter
+		page   int
+		want   string
+	}{
+		{
+			name: "no filters",
+			page: 2,
+			want: "/admin/users?page=2",
+		},
+		{
+			name:   "search term",
+			filter: UserFilter{Q: "amina"},
+			page:   3,
+			want:   "/admin/users?page=3&q=amina",
+		},
+		{
+			name:   "role",
+			filter: UserFilter{Role: roleDriver},
+			page:   2,
+			want:   "/admin/users?page=2&role=driver",
+		},
+		{
+			name:   "every filter at once",
+			filter: UserFilter{Role: roleAdmin, Q: "carol n", ActiveOnly: true},
+			page:   4,
+			want:   "/admin/users?active=1&page=4&q=carol+n&role=admin",
+		},
+		{
+			name:   "paging fields are not query params",
+			filter: UserFilter{Q: "amina", Limit: 25, Offset: 50},
+			page:   2,
+			want:   "/admin/users?page=2&q=amina",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, usersPageURL(tt.filter, tt.page))
+		})
+	}
+}
+
+// TestVehiclesPage_Page2KeepsFilter renders page 2 of a filtered list and
+// asserts the store was asked for the same filter, with only the offset
+// moved on. The page-URL test above pins the links; this pins that a request
+// arriving on those links still filters.
+func TestVehiclesPage_Page2KeepsFilter(t *testing.T) {
+	ui := newTestAdminUI(t)
+	store := newFakeVehicleStore(seedVehicles(adminPageSize + 5)...)
+	wireFakeVehicleStore(ui, store)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	body := getAdminPage(t, mux, "/admin/vehicles?q=bus&agency_tag=nairobi&include_inactive=1&page=2")
+
+	assert.Equal(t, "bus", store.gotFilter.Q, "q must survive to page 2")
+	assert.Equal(t, "nairobi", store.gotFilter.AgencyTag, "agency_tag must survive to page 2")
+	assert.True(t, store.gotFilter.IncludeInactive, "include_inactive must survive to page 2")
+	assert.Equal(t, int32(adminPageOffset(2)), store.gotFilter.Offset, "only the offset should move")
+	assert.Contains(t, body, `href="/admin/vehicles?agency_tag=nairobi&amp;include_inactive=1&amp;page=1&amp;q=bus"`,
+		"the previous link must carry every filter back")
+}
+
+// TestUsersPage_Page2KeepsFilter is the user-list counterpart to
+// TestVehiclesPage_Page2KeepsFilter.
+func TestUsersPage_Page2KeepsFilter(t *testing.T) {
+	ui := newTestAdminUI(t)
+	store := newFakeUserStore(seedUsers(adminPageSize + 5)...)
+	wireFakeUserStore(ui, store, newFakeAssignmentStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	body := getAdminPage(t, mux, "/admin/users?q=driver&role=driver&active=1&page=2")
+
+	assert.Equal(t, "driver", store.gotFilter.Q, "q must survive to page 2")
+	assert.Equal(t, roleDriver, store.gotFilter.Role, "role must survive to page 2")
+	assert.True(t, store.gotFilter.ActiveOnly, "active must survive to page 2")
+	assert.Equal(t, int32(adminPageOffset(2)), store.gotFilter.Offset, "only the offset should move")
+	assert.Contains(t, body, `href="/admin/users?active=1&amp;page=1&amp;q=driver&amp;role=driver"`,
+		"the previous link must carry every filter back")
+}
+
+// TestVehiclesPage_FilterFormPrefills verifies the filter form renders the
+// current values, so an operator refining a search doesn't have to retype it,
+// and that the show/hide-deactivated toggle keeps the search in progress.
+func TestVehiclesPage_FilterFormPrefills(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(seedVehicles(3)...))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	body := getAdminPage(t, mux, "/admin/vehicles?q=bus+10&agency_tag=nairobi")
+
+	assert.Contains(t, body, `name="q" placeholder="Search id or label" value="bus 10"`)
+	assert.Contains(t, body, `name="agency_tag" placeholder="Agency tag" value="nairobi"`)
+	// html/template escapes the "+" that url.Values uses for the space.
+	assert.Contains(t, body, `href="/admin/vehicles?agency_tag=nairobi&amp;include_inactive=1&amp;page=1&amp;q=bus&#43;10"`,
+		"the show-deactivated toggle must keep the search in progress")
+}
+
+// TestUsersPage_FilterFormPrefills is the user-list counterpart to
+// TestVehiclesPage_FilterFormPrefills, including the role select's
+// selected option.
+func TestUsersPage_FilterFormPrefills(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeUserStore(ui, newFakeUserStore(seedUsers(3)...), newFakeAssignmentStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	body := getAdminPage(t, mux, "/admin/users?q=amina&role=admin")
+
+	assert.Contains(t, body, `name="q" placeholder="Search name or email" value="amina"`)
+	assert.Contains(t, body, `<option value="admin" selected>Admin</option>`,
+		"the role select must show the active filter")
+	assert.Contains(t, body, `href="/admin/users?active=1&amp;page=1&amp;q=amina&amp;role=admin"`,
+		"the hide-deactivated toggle must keep the search in progress")
+}
+
+// TestVehiclesPage_RejectsOverlongQuery verifies the page enforces the same
+// length cap on q as the JSON endpoint, rather than passing an unbounded
+// search string through to Postgres.
+func TestVehiclesPage_RejectsOverlongQuery(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(seedVehicles(3)...))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	w := requestAdminPage(t, mux, "/admin/vehicles?q="+strings.Repeat("a", maxFieldLength+1))
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), fmt.Sprintf("q must be at most %d characters", maxFieldLength))
+}
+
+// TestUsersPage_RejectsInvalidFilters verifies the user list rejects a role
+// it could never store and an over-long search string, rather than silently
+// ignoring either.
+func TestUsersPage_RejectsInvalidFilters(t *testing.T) {
+	ui := newTestAdminUI(t)
+	wireFakeUserStore(ui, newFakeUserStore(seedUsers(3)...), newFakeAssignmentStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{name: "unknown role", query: "?role=superuser", want: "role must be driver or admin"},
+		{
+			name:  "q one past the maximum length",
+			query: "?q=" + strings.Repeat("a", maxFieldLength+1),
+			want:  fmt.Sprintf("q must be at most %d characters", maxFieldLength),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := requestAdminPage(t, mux, "/admin/users"+tt.query)
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), tt.want)
+		})
+	}
 }

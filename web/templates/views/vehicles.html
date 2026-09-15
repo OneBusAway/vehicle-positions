@@ -1,17 +1,20 @@
 {{define "content"}}
 <div class="p-4 lg:p-5">
   <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
       <div>
         <h3 class="display-font text-lg font-bold text-slate-900">All Vehicles</h3>
         <p class="mt-0.5 text-xs text-slate-400">{{len .Vehicles}} {{if .IncludeInactive}}shown{{else}}active{{end}} on this page</p>
       </div>
-      <div class="flex items-center gap-3">
-        {{if .IncludeInactive}}
-        <a href="/admin/vehicles" class="text-xs font-semibold text-sky-600 hover:text-sky-800">Hide deactivated</a>
-        {{else}}
-        <a href="/admin/vehicles?include_inactive=1" class="text-xs font-semibold text-sky-600 hover:text-sky-800">Show deactivated</a>
-        {{end}}
+      <div class="flex flex-wrap items-center gap-3">
+        {{/* No page param: a new search starts over at page 1. include_inactive rides along so the search survives the toggle. */}}
+        <form method="get" action="/admin/vehicles" class="flex flex-wrap items-center gap-2">
+          {{if .IncludeInactive}}<input type="hidden" name="include_inactive" value="1">{{end}}
+          <input type="text" name="q" placeholder="Search id or label" value="{{.Q}}" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          <input type="text" name="agency_tag" placeholder="Agency tag" value="{{.AgencyTag}}" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
+          <button type="submit" class="rounded-2xl border border-slate-200 bg-white/75 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Apply</button>
+        </form>
+        <a href="{{.ToggleInactiveURL}}" class="text-xs font-semibold text-sky-600 hover:text-sky-800">{{if .IncludeInactive}}Hide deactivated{{else}}Show deactivated{{end}}</a>
         <a href="/admin/vehicles/new" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">New vehicle</a>
       </div>
     </div>

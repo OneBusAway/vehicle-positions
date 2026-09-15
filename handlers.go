@@ -400,6 +400,17 @@ func parseListPageParams(w http.ResponseWriter, r *http.Request) (limit, offset 
 	return limit, offset, true
 }
 
+// validateListQuery checks the free-text search param shared by the admin
+// list endpoints. An unbounded search string is a cheap way to make Postgres
+// do expensive substring work on an admin endpoint, so q is capped at the
+// same maxFieldLength the write paths already enforce.
+func validateListQuery(q string) error {
+	if len(q) > maxFieldLength {
+		return fmt.Errorf("q must be at most %d characters", maxFieldLength)
+	}
+	return nil
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

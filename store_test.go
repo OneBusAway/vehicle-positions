@@ -414,3 +414,29 @@ func TestStore_SaveLocation_ExplicitZeroOptionalFieldsPreserved(t *testing.T) {
 	require.NotNil(t, locs[0].Accuracy)
 	assert.Equal(t, 0.0, *locs[0].Accuracy)
 }
+
+// TestLikeSubstringPattern pins the escaping the free-text list filters rely
+// on: LIKE metacharacters must survive as literals, or a search for "bus_1"
+// silently matches "bus-1" and a search for "%" matches everything. The
+// mixed case guards the replacement order — the backslash rule has to run
+// before the escapes it would otherwise double.
+func TestLikeSubstringPattern(t *testing.T) {
+	tests := []struct {
+		name string
+		q    string
+		want string
+	}{
+		{"plain text", "bus", `%bus%`},
+		{"underscore is literal", "bus_1", `%bus\_1%`},
+		{"percent is literal", "50%", `%50\%%`},
+		{"backslash is escaped", `a\b`, `%a\\b%`},
+		{"mixed metacharacters", `a\_b`, `%a\\\_b%`},
+		{"empty", "", `%%`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, likeSubstringPattern(tt.q))
+		})
+	}
+}

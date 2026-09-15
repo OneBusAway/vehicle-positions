@@ -23,12 +23,6 @@ FROM users
 ORDER BY created_at DESC, id DESC
 LIMIT 1000;
 
--- name: ListUsersPage :many
-SELECT id, name, email, role, active, created_at, updated_at
-FROM users
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2;
-
 -- name: GetUserByID :one
 SELECT id, name, email, role, active, created_at, updated_at
 FROM users
@@ -69,22 +63,6 @@ SELECT id, label, agency_tag, active, created_at, updated_at
 FROM vehicles
 ORDER BY created_at DESC, id DESC
 LIMIT 1000;
-
--- name: ListVehiclesPage :many
-SELECT id, label, agency_tag, active, created_at, updated_at
-FROM vehicles
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2;
-
--- name: ListActiveVehiclesPage :many
--- The admin vehicle list hides deactivated vehicles unless
--- ?include_inactive=1. Filtering here rather than after the fetch keeps
--- every page a full page.
-SELECT id, label, agency_tag, active, created_at, updated_at
-FROM vehicles
-WHERE active
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2;
 
 -- name: GetVehicleByID :one
 SELECT id, label, agency_tag, active, created_at, updated_at

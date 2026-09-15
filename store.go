@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
@@ -128,6 +129,16 @@ func (s *Store) GetRecentLocations(ctx context.Context, cutoff time.Time) ([]*Lo
 	}
 
 	return locations, nil
+}
+
+// likeSubstringPattern builds the ILIKE pattern that matches q as a literal
+// substring. LIKE metacharacters are escaped so a search for a literal % or _
+// (both legal in vehicle ids and GTFS ids) matches the literal text instead
+// of acting as a wildcard — without it, searching "bus_1" would also match
+// "bus-1", and searching "%" would return every row. Backslash is Postgres's
+// default LIKE escape character.
+func likeSubstringPattern(q string) string {
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q) + "%"
 }
 
 // nullableFloat converts a pgtype.Float8 to a *float64 (nil when NULL).

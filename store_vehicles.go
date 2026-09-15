@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
@@ -34,7 +35,18 @@ type VehicleManager interface {
 // trip-filter dropdowns, the live map — keep using
 // VehicleManager.ListVehicles, which pagination would silently truncate.
 type VehiclePager interface {
-	ListVehiclesPage(ctx context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error)
+	ListVehiclesPage(ctx context.Context, f VehicleFilter) ([]VehicleResponse, error)
+}
+
+// VehicleFilter narrows the vehicle list. Zero values mean "no filter", so a
+// zero-value filter lists the active fleet exactly as the unfiltered page
+// always has.
+type VehicleFilter struct {
+	IncludeInactive bool   // false hides deactivated vehicles
+	AgencyTag       string // "" = all agencies
+	Q               string // ILIKE substring on id and label
+	Limit           int32  // callers pass limit+1 to detect hasMore
+	Offset          int32
 }
 
 // VehicleInfoUpdater updates a vehicle's label/agency tag without touching
@@ -72,29 +84,53 @@ func (s *Store) ListVehicles(ctx context.Context) ([]VehicleResponse, error) {
 }
 
 // ListVehiclesPage returns one page of vehicles in the same order as
-// ListVehicles. includeInactive=false filters deactivated vehicles out in
-// SQL rather than after the fetch, so a page of the admin list holds a full
-// page of rows.
-func (s *Store) ListVehiclesPage(ctx context.Context, includeInactive bool, limit, offset int32) ([]VehicleResponse, error) {
-	if !includeInactive {
-		rows, err := s.queries.ListActiveVehiclesPage(ctx, db.ListActiveVehiclesPageParams{Limit: limit, Offset: offset})
-		if err != nil {
-			return nil, fmt.Errorf("list active vehicles page: %w", err)
-		}
-		vehicles := make([]VehicleResponse, 0, len(rows))
-		for _, row := range rows {
-			vehicles = append(vehicles, toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt))
-		}
-		return vehicles, nil
+// ListVehicles, narrowed by f. Every filter runs in SQL rather than after
+// the fetch, so a page of the admin list holds a full page of rows.
+//
+// Dynamic WHERE clauses make this a hand-written query rather than sqlc, the
+// same trade ListTrips documents: three optional filters would be eight sqlc
+// variants. Every value goes through arg(), so only $N placeholders ever
+// reach the SQL string.
+func (s *Store) ListVehiclesPage(ctx context.Context, f VehicleFilter) ([]VehicleResponse, error) {
+	query := `
+		SELECT id, label, agency_tag, active, created_at, updated_at
+		FROM vehicles`
+	var conds []string
+	var args []any
+	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
+	if !f.IncludeInactive {
+		conds = append(conds, "active")
 	}
+	if f.AgencyTag != "" {
+		conds = append(conds, "agency_tag = "+arg(f.AgencyTag))
+	}
+	if f.Q != "" {
+		p := arg(likeSubstringPattern(f.Q))
+		conds = append(conds, fmt.Sprintf("(id ILIKE %s OR label ILIKE %s)", p, p))
+	}
+	if len(conds) > 0 {
+		query += " WHERE " + strings.Join(conds, " AND ")
+	}
+	query += " ORDER BY created_at DESC, id DESC LIMIT " + arg(f.Limit) + " OFFSET " + arg(f.Offset)
 
-	rows, err := s.queries.ListVehiclesPage(ctx, db.ListVehiclesPageParams{Limit: limit, Offset: offset})
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list vehicles page: %w", err)
 	}
-	vehicles := make([]VehicleResponse, 0, len(rows))
-	for _, row := range rows {
-		vehicles = append(vehicles, toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt))
+	defer rows.Close()
+
+	vehicles := make([]VehicleResponse, 0)
+	for rows.Next() {
+		var id, label, agencyTag string
+		var active bool
+		var createdAt, updatedAt pgtype.Timestamptz
+		if err := rows.Scan(&id, &label, &agencyTag, &active, &createdAt, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan vehicle: %w", err)
+		}
+		vehicles = append(vehicles, toVehicleResponse(id, label, agencyTag, active, createdAt, updatedAt))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list vehicles page: %w", err)
 	}
 	return vehicles, nil
 }

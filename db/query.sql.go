@@ -830,58 +830,6 @@ func (q *Queries) ListActiveVehiclesByUser(ctx context.Context, userID int64) ([
 	return items, nil
 }
 
-const listActiveVehiclesPage = `-- name: ListActiveVehiclesPage :many
-SELECT id, label, agency_tag, active, created_at, updated_at
-FROM vehicles
-WHERE active
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListActiveVehiclesPageParams struct {
-	Limit  int32
-	Offset int32
-}
-
-type ListActiveVehiclesPageRow struct {
-	ID        string
-	Label     string
-	AgencyTag string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-// The admin vehicle list hides deactivated vehicles unless
-// ?include_inactive=1. Filtering here rather than after the fetch keeps
-// every page a full page.
-func (q *Queries) ListActiveVehiclesPage(ctx context.Context, arg ListActiveVehiclesPageParams) ([]ListActiveVehiclesPageRow, error) {
-	rows, err := q.db.Query(ctx, listActiveVehiclesPage, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListActiveVehiclesPageRow
-	for rows.Next() {
-		var i ListActiveVehiclesPageRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Label,
-			&i.AgencyTag,
-			&i.Active,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRides = `-- name: ListRides :many
 SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3
 `
@@ -1066,56 +1014,6 @@ func (q *Queries) ListUsersByVehicle(ctx context.Context, vehicleID string) ([]U
 	return items, nil
 }
 
-const listUsersPage = `-- name: ListUsersPage :many
-SELECT id, name, email, role, active, created_at, updated_at
-FROM users
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListUsersPageParams struct {
-	Limit  int32
-	Offset int32
-}
-
-type ListUsersPageRow struct {
-	ID        int64
-	Name      string
-	Email     string
-	Role      string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) ListUsersPage(ctx context.Context, arg ListUsersPageParams) ([]ListUsersPageRow, error) {
-	rows, err := q.db.Query(ctx, listUsersPage, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUsersPageRow
-	for rows.Next() {
-		var i ListUsersPageRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Email,
-			&i.Role,
-			&i.Active,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listVehicles = `-- name: ListVehicles :many
 SELECT id, label, agency_tag, active, created_at, updated_at
 FROM vehicles
@@ -1181,54 +1079,6 @@ func (q *Queries) ListVehiclesByUser(ctx context.Context, userID int64) ([]UserV
 	for rows.Next() {
 		var i UserVehicle
 		if err := rows.Scan(&i.UserID, &i.VehicleID, &i.CreatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listVehiclesPage = `-- name: ListVehiclesPage :many
-SELECT id, label, agency_tag, active, created_at, updated_at
-FROM vehicles
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListVehiclesPageParams struct {
-	Limit  int32
-	Offset int32
-}
-
-type ListVehiclesPageRow struct {
-	ID        string
-	Label     string
-	AgencyTag string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) ListVehiclesPage(ctx context.Context, arg ListVehiclesPageParams) ([]ListVehiclesPageRow, error) {
-	rows, err := q.db.Query(ctx, listVehiclesPage, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListVehiclesPageRow
-	for rows.Next() {
-		var i ListVehiclesPageRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Label,
-			&i.AgencyTag,
-			&i.Active,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

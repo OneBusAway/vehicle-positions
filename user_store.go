@@ -10,6 +10,7 @@ import (
 	"github.com/OneBusAway/vehicle-positions/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -35,7 +36,18 @@ type UserLister interface {
 // list and the users API endpoint. UserLister.ListUsers stays the call for
 // anything that needs every user in one go.
 type UserPager interface {
-	ListUsersPage(ctx context.Context, limit, offset int32) ([]UserResponse, error)
+	ListUsersPage(ctx context.Context, f UserFilter) ([]UserResponse, error)
+}
+
+// UserFilter narrows the user list. Zero values mean "no filter", so a
+// zero-value filter lists every user — active and deactivated alike — as the
+// unfiltered list always has.
+type UserFilter struct {
+	Role       string // "" = all roles
+	Q          string // ILIKE substring on name and email
+	ActiveOnly bool   // false = both active and deactivated users
+	Limit      int32  // callers pass limit+1 to detect hasMore
+	Offset     int32
 }
 
 type UserGetter interface {
@@ -95,24 +107,54 @@ func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 	return users, nil
 }
 
-// ListUsersPage returns one page of users in the same order as ListUsers.
-func (s *Store) ListUsersPage(ctx context.Context, limit, offset int32) ([]UserResponse, error) {
-	rows, err := s.queries.ListUsersPage(ctx, db.ListUsersPageParams{Limit: limit, Offset: offset})
+// ListUsersPage returns one page of users in the same order as ListUsers,
+// narrowed by f. Filtering runs in SQL rather than after the fetch, so a
+// page of the admin list holds a full page of rows.
+//
+// Dynamic WHERE clauses make this a hand-written query rather than sqlc, the
+// same trade ListTrips documents. Every value goes through arg(), so only $N
+// placeholders ever reach the SQL string.
+func (s *Store) ListUsersPage(ctx context.Context, f UserFilter) ([]UserResponse, error) {
+	query := `
+		SELECT id, name, email, role, active, created_at, updated_at
+		FROM users`
+	var conds []string
+	var args []any
+	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
+	if f.Role != "" {
+		conds = append(conds, "role = "+arg(f.Role))
+	}
+	if f.ActiveOnly {
+		conds = append(conds, "active")
+	}
+	if f.Q != "" {
+		p := arg(likeSubstringPattern(f.Q))
+		conds = append(conds, fmt.Sprintf("(name ILIKE %s OR email ILIKE %s)", p, p))
+	}
+	if len(conds) > 0 {
+		query += " WHERE " + strings.Join(conds, " AND ")
+	}
+	query += " ORDER BY created_at DESC, id DESC LIMIT " + arg(f.Limit) + " OFFSET " + arg(f.Offset)
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list users page: %w", err)
 	}
+	defer rows.Close()
 
-	users := make([]UserResponse, 0, len(rows))
-	for _, row := range rows {
-		users = append(users, UserResponse{
-			ID:        row.ID,
-			Name:      row.Name,
-			Email:     row.Email,
-			Role:      row.Role,
-			Active:    row.Active,
-			CreatedAt: row.CreatedAt.Time,
-			UpdatedAt: row.UpdatedAt.Time,
-		})
+	users := make([]UserResponse, 0)
+	for rows.Next() {
+		var u UserResponse
+		var createdAt, updatedAt pgtype.Timestamptz
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active, &createdAt, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+		u.CreatedAt = createdAt.Time
+		u.UpdatedAt = updatedAt.Time
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list users page: %w", err)
 	}
 	return users, nil
 }

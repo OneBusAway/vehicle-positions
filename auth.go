@@ -274,3 +274,9 @@ func requireRoles(secret []byte, allowCookie bool, roles ...string) func(http.Ha
 // <select> only ever submits one of these values, since form submissions
 // aren't trustworthy.
 func validUserRole(role string) bool { return slices.Contains(staffRoles, role) }
+
+// validUserRoleFilter reports whether role is a usable role *filter* value:
+// either empty, meaning "all roles", or a role a user may actually hold. It
+// mirrors validTripStatus and is shared by the users JSON endpoint and the
+// users admin page.
+func validUserRoleFilter(role string) bool { return role == "" || validUserRole(role) }

@@ -22,18 +22,19 @@ type mockUserPager struct {
 	users []UserResponse
 	err   error
 
-	// Recorded by ListUsersPage so paging tests can assert what the handler
-	// asked the store for.
-	gotLimit  int32
-	gotOffset int32
+	// Recorded by ListUsersPage so paging and filter tests can assert what
+	// the handler asked the store for.
+	gotFilter UserFilter
 }
 
-func (m *mockUserPager) ListUsersPage(_ context.Context, limit, offset int32) ([]UserResponse, error) {
-	m.gotLimit, m.gotOffset = limit, offset
+// Role, Q and ActiveOnly are recorded rather than applied — matching them is
+// the store's job, tested against Postgres.
+func (m *mockUserPager) ListUsersPage(_ context.Context, filter UserFilter) ([]UserResponse, error) {
+	m.gotFilter = filter
 	if m.err != nil {
 		return nil, m.err
 	}
-	return pageSlice(m.users, limit, offset), nil
+	return pageSlice(m.users, filter.Limit, filter.Offset), nil
 }
 
 type mockUserGetter struct {
@@ -168,8 +169,8 @@ func TestHandleListUsers_PagingParams(t *testing.T) {
 				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
 				return
 			}
-			assert.Equal(t, tt.wantLimit, store.gotLimit, "limit passed to the store")
-			assert.Equal(t, tt.wantOffset, store.gotOffset, "offset passed to the store")
+			assert.Equal(t, tt.wantLimit, store.gotFilter.Limit, "limit passed to the store")
+			assert.Equal(t, tt.wantOffset, store.gotFilter.Offset, "offset passed to the store")
 		})
 	}
 }
@@ -732,4 +733,83 @@ func TestHandleDeleteUser_DBError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "internal server error", decodeErrorResponse(t, w))
+}
+
+// TestHandleListUsers_FilterParams is the validation table for the search and
+// role filters. Every case asserts the filter the handler handed the store,
+// or the exact error message, so a case can't pass for the wrong reason. The
+// 255/256 pair is the boundary guard on q's length cap.
+func TestHandleListUsers_FilterParams(t *testing.T) {
+	qError := fmt.Sprintf("q must be at most %d characters", maxFieldLength)
+	const roleError = `role must be "", "driver", or "admin"`
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+		wantError  string
+		wantQ      string
+		wantRole   string
+	}{
+		{name: "no filters", query: "", wantStatus: http.StatusOK},
+		{name: "search term", query: "?q=amina", wantStatus: http.StatusOK, wantQ: "amina"},
+		{name: "empty q does not filter", query: "?q=", wantStatus: http.StatusOK},
+		{name: "role driver", query: "?role=driver", wantStatus: http.StatusOK, wantRole: "driver"},
+		{name: "role admin", query: "?role=admin", wantStatus: http.StatusOK, wantRole: "admin"},
+		{name: "empty role means all roles", query: "?role=", wantStatus: http.StatusOK},
+		{name: "unknown role", query: "?role=superuser", wantStatus: http.StatusBadRequest, wantError: roleError},
+		{name: "role is case-sensitive", query: "?role=Driver", wantStatus: http.StatusBadRequest, wantError: roleError},
+		{name: "both filters", query: "?q=amina&role=driver", wantStatus: http.StatusOK, wantQ: "amina", wantRole: "driver"},
+		{
+			name:       "q at the maximum length",
+			query:      "?q=" + strings.Repeat("a", maxFieldLength),
+			wantStatus: http.StatusOK,
+			wantQ:      strings.Repeat("a", maxFieldLength),
+		},
+		{
+			name:       "q one past the maximum length",
+			query:      "?q=" + strings.Repeat("a", maxFieldLength+1),
+			wantStatus: http.StatusBadRequest,
+			wantError:  qError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &mockUserPager{}
+			handler := handleListUsers(store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/users"+tt.query, nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+			if tt.wantStatus != http.StatusOK {
+				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
+				return
+			}
+			assert.Equal(t, tt.wantQ, store.gotFilter.Q, "q passed to the store")
+			assert.Equal(t, tt.wantRole, store.gotFilter.Role, "role passed to the store")
+		})
+	}
+}
+
+// TestHandleListUsers_IncludesInactive pins that the endpoint still lists
+// deactivated users, which it has always done — the admin page's active-only
+// filter must not leak into the API.
+func TestHandleListUsers_IncludesInactive(t *testing.T) {
+	store := &mockUserPager{users: []UserResponse{
+		{ID: 1, Name: "Active", Email: "active@example.com", Role: "driver", Active: true},
+		{ID: 2, Name: "Retired", Email: "retired@example.com", Role: "driver", Active: false},
+	}}
+
+	handler := handleListUsers(store)
+	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, store.gotFilter.ActiveOnly, "the API must not narrow to active users only")
+	var users []UserResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&users))
+	assert.Len(t, users, 2)
 }

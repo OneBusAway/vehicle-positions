@@ -432,13 +432,20 @@ type vehicleRow struct {
 	Driver    string
 }
 
-// vehiclesPageURL builds an /admin/vehicles link preserving the inactive
-// filter with page set to the given page number, for the prev/next
-// pagination links.
-func vehiclesPageURL(includeInactive bool, page int) string {
+// vehiclesPageURL builds an /admin/vehicles link preserving the current
+// filter values with page set to the given page number, for the prev/next
+// pagination links and the show/hide-deactivated toggle. Every filter has to
+// be threaded through, or page 2 of a search silently shows unfiltered rows.
+func vehiclesPageURL(f VehicleFilter, page int) string {
 	v := url.Values{}
-	if includeInactive {
+	if f.IncludeInactive {
 		v.Set("include_inactive", "1")
+	}
+	if f.AgencyTag != "" {
+		v.Set("agency_tag", f.AgencyTag)
+	}
+	if f.Q != "" {
+		v.Set("q", f.Q)
 	}
 	v.Set("page", strconv.Itoa(page))
 	return "/admin/vehicles?" + v.Encode()
@@ -452,10 +459,23 @@ func vehiclesPageURL(includeInactive bool, page int) string {
 func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := r.URL.Query()
-	includeInactive := query.Get("include_inactive") == "1"
+
+	q := query.Get("q")
+	if err := validateListQuery(q); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	page := adminPageNumber(query)
 
-	vehicles, err := ui.vehiclePager.ListVehiclesPage(ctx, includeInactive, adminPageSize+1, int32(adminPageOffset(page)))
+	filter := VehicleFilter{
+		IncludeInactive: query.Get("include_inactive") == "1",
+		AgencyTag:       query.Get("agency_tag"),
+		Q:               q,
+		Limit:           adminPageSize + 1,
+		Offset:          int32(adminPageOffset(page)),
+	}
+
+	vehicles, err := ui.vehiclePager.ListVehiclesPage(ctx, filter)
 	if err != nil {
 		slog.Error("vehicles: list vehicles page", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -489,15 +509,23 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
+	// The show/hide-deactivated link flips only that one filter, so a search
+	// in progress survives the toggle.
+	toggled := filter
+	toggled.IncludeInactive = !filter.IncludeInactive
+
 	ui.renderAdmin(w, r, http.StatusOK, "vehicles.html", map[string]interface{}{
-		"Title":           "Vehicles",
-		"Page":            "vehicles",
-		"Vehicles":        rows,
-		"IncludeInactive": includeInactive,
-		"PageNum":         page,
-		"HasMore":         hasMore,
-		"PrevURL":         vehiclesPageURL(includeInactive, page-1),
-		"NextURL":         vehiclesPageURL(includeInactive, page+1),
+		"Title":             "Vehicles",
+		"Page":              "vehicles",
+		"Vehicles":          rows,
+		"IncludeInactive":   filter.IncludeInactive,
+		"AgencyTag":         filter.AgencyTag,
+		"Q":                 filter.Q,
+		"PageNum":           page,
+		"HasMore":           hasMore,
+		"PrevURL":           vehiclesPageURL(filter, page-1),
+		"NextURL":           vehiclesPageURL(filter, page+1),
+		"ToggleInactiveURL": vehiclesPageURL(toggled, 1),
 	})
 }
 
@@ -665,10 +693,21 @@ type userRow struct {
 	VehicleCount int
 }
 
-// usersPageURL builds an /admin/users link with page set to the given page
-// number, for the prev/next pagination links.
-func usersPageURL(page int) string {
+// usersPageURL builds an /admin/users link preserving the current filter
+// values with page set to the given page number, for the prev/next
+// pagination links and the active-only toggle. Every filter has to be
+// threaded through, or page 2 of a search silently shows unfiltered rows.
+func usersPageURL(f UserFilter, page int) string {
 	v := url.Values{}
+	if f.Role != "" {
+		v.Set("role", f.Role)
+	}
+	if f.Q != "" {
+		v.Set("q", f.Q)
+	}
+	if f.ActiveOnly {
+		v.Set("active", "1")
+	}
 	v.Set("page", strconv.Itoa(page))
 	return "/admin/users?" + v.Encode()
 }
@@ -682,9 +721,29 @@ func usersPageURL(page int) string {
 // lookups per request, whatever the table holds.
 func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	page := adminPageNumber(r.URL.Query())
+	query := r.URL.Query()
 
-	users, err := ui.userPager.ListUsersPage(ctx, adminPageSize+1, int32(adminPageOffset(page)))
+	q := query.Get("q")
+	if err := validateListQuery(q); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	role := query.Get("role")
+	if !validUserRoleFilter(role) {
+		http.Error(w, "role must be driver or admin", http.StatusBadRequest)
+		return
+	}
+	page := adminPageNumber(query)
+
+	filter := UserFilter{
+		Role:       role,
+		Q:          q,
+		ActiveOnly: query.Get("active") == "1",
+		Limit:      adminPageSize + 1,
+		Offset:     int32(adminPageOffset(page)),
+	}
+
+	users, err := ui.userPager.ListUsersPage(ctx, filter)
 	if err != nil {
 		slog.Error("users: list users page", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -713,14 +772,23 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// The active-only link flips only that one filter, so a search in
+	// progress survives the toggle.
+	toggled := filter
+	toggled.ActiveOnly = !filter.ActiveOnly
+
 	ui.renderAdmin(w, r, http.StatusOK, "users.html", map[string]interface{}{
-		"Title":   "Users",
-		"Page":    "users",
-		"Users":   rows,
-		"PageNum": page,
-		"HasMore": hasMore,
-		"PrevURL": usersPageURL(page - 1),
-		"NextURL": usersPageURL(page + 1),
+		"Title":           "Users",
+		"Page":            "users",
+		"Users":           rows,
+		"Role":            filter.Role,
+		"Q":               filter.Q,
+		"ActiveOnly":      filter.ActiveOnly,
+		"PageNum":         page,
+		"HasMore":         hasMore,
+		"PrevURL":         usersPageURL(filter, page-1),
+		"NextURL":         usersPageURL(filter, page+1),
+		"ToggleActiveURL": usersPageURL(toggled, 1),
 	})
 }
 
