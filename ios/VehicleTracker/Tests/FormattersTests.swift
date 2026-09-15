@@ -42,7 +42,8 @@ import Testing
     /// would read green "Reporting" if the banner went by the status alone.
     @Test func bannerReadsThePhaseBeforeTheStatus() {
         let active = ActiveTrip(serverTripID: 1, vehicle: Vehicle(id: "bus-1", label: "Bus 1"),
-                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 0))
+                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 0),
+                                driverEmail: "d@test.com")
 
         #expect(TrackingBanner.text(phase: .paused(active), reporting: .connected(fixesSent: 0)) == "Paused — not reporting")
         #expect(TrackingBanner.color(phase: .paused(active), reporting: .connected(fixesSent: 0)) == .orange)

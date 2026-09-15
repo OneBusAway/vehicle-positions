@@ -20,8 +20,8 @@ writing this doc.
 - Docker + Docker Compose (Postgres)
 - Go toolchain (the server runs from source with `go run .`)
 - `curl` and `python3`
-- Xcode 26+ with an iOS simulator, **or** a physical iPhone. This app is
-  iPhone-only and targets iOS 26.4.
+- Xcode 27 with an iOS simulator on the iOS 26.4 runtime or newer, **or** a
+  physical iPhone. This app is iPhone-only and targets iOS 26.4.
 - If the `.xcodeproj` is missing, generate it: `cd ios/VehicleTracker &&
   xcodegen generate`.
 
@@ -34,8 +34,17 @@ Two environment notes for the commands below:
 
   ```bash
   export DEVELOPER_DIR=/Applications/Xcode-27.0.0-release.candidate.app/Contents/Developer
-  export UDID=$(xcrun simctl list devices available | grep -m1 iPhone | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+  # The newest available iPhone simulator on iOS 26.4 or later — anything
+  # older cannot run this app. Picking the first iPhone in the list is not
+  # enough: `simctl` also lists devices on older runtimes.
+  export UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; p="com.apple.CoreSimulator.SimRuntime.iOS-"; v=lambda r:[int(n) for n in r[len(p):].split("-")]; c=sorted((v(r), d["udid"]) for r,ds in json.load(sys.stdin)["devices"].items() if r.startswith(p) and v(r)>=[26,4] for d in ds if d.get("isAvailable") and "iPhone" in d["name"]); print(c[-1][1] if c else "")')
+  test -n "$UDID" || echo "no iOS 26.4+ iPhone simulator; see docs/development.md"
   ```
+
+  `docs/development.md` creates a `VehicleTracker iPhone` device on the iOS 27
+  runtime; if you made one, `UDID=$(xcrun simctl list devices available |
+  sed -n 's/.*VehicleTracker iPhone (\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)`
+  names it directly.
 
 - **Ports.** The obvious defaults are often already taken on a development
   Mac: Postgres.app (or any other local Postgres) owns `127.0.0.1:5432`, so

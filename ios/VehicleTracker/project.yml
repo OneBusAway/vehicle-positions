@@ -31,17 +31,9 @@ targets:
     sources:
       - path: App
       - path: Engine
-        excludes:
-          - .gitkeep
       - path: Model
-        excludes:
-          - .gitkeep
       - path: UI
-        excludes:
-          - .gitkeep
       - path: Map
-        excludes:
-          - .gitkeep
       - path: CarPlay
       - path: Resources
     dependencies:

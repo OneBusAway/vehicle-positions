@@ -46,9 +46,16 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// north on every such fix spins the map; the last known heading is a far
     /// better guess, so it is kept.
     private var lastCourse = 0.0
+    /// How much darker than the route colour the casing under the line is
+    /// drawn (spec §6.3).
+    static let casingDarkening: CGFloat = 0.35
     private var routeColor = UIColor.systemBlue
     private var polyline: MKPolyline?
     private var polylineRenderer: MKPolylineRenderer?
+    /// The same shape, drawn wider and darker underneath, so a bright route
+    /// colour still reads as a line over pale streets.
+    private var casing: MKPolyline?
+    private var casingRenderer: MKPolylineRenderer?
     private var stops: [StopAnnotation] = []
     private let vehicle = VehicleAnnotation()
     private let snapped = SnappedAnnotation()
@@ -80,10 +87,13 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         guard trip?.id != self.trip?.id else { return }
         if trip != nil { showsPhoneLocation = false }
         self.trip = trip
+        if let casing { mapView.removeOverlay(casing) }
         if let polyline { mapView.removeOverlay(polyline) }
         mapView.removeAnnotations(stops)
         polyline = nil
         polylineRenderer = nil
+        casing = nil
+        casingRenderer = nil
         stops = []
         shape = nil
         lastAdherence = nil
@@ -95,8 +105,13 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         self.shape = shape
         routeColor = UIColor(hex: trip.route.color) ?? .systemBlue
         let coords = shape.points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        let under = MKPolyline(coordinates: coords, count: coords.count)
+        casing = under
         let line = MKPolyline(coordinates: coords, count: coords.count)
         polyline = line
+        // Casing first: overlays draw in the order they are added, so the
+        // 6 pt line sits centred on the 10 pt one underneath it.
+        mapView.addOverlay(under, level: .aboveRoads)
         mapView.addOverlay(line, level: .aboveRoads)
         stops = trip.stops.map(StopAnnotation.init(stop:))
         mapView.addAnnotations(stops)
@@ -130,8 +145,11 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
             if !snappedPlaced { mapView.addAnnotation(snapped); snappedPlaced = true }
         }
 
-        polylineRenderer?.strokeColor = routeColor.withAlphaComponent(adherence.isOnRoute ? 1 : 0.35)
+        let alpha: CGFloat = adherence.isOnRoute ? 1 : 0.35
+        polylineRenderer?.strokeColor = routeColor.withAlphaComponent(alpha)
         polylineRenderer?.setNeedsDisplay()
+        casingRenderer?.strokeColor = casingColor.withAlphaComponent(alpha)
+        casingRenderer?.setNeedsDisplay()
 
         for stop in stops where stop.isNext != (stop.stop.id == adherence.nextStop.id && stop.stop.sequence == adherence.nextStop.sequence) {
             stop.isNext.toggle()
@@ -195,13 +213,22 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
         guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
         let renderer = MKPolylineRenderer(polyline: line)
-        renderer.strokeColor = routeColor.withAlphaComponent(lastAdherence?.isOnRoute == false ? 0.35 : 1)
-        renderer.lineWidth = 6
+        let alpha: CGFloat = lastAdherence?.isOnRoute == false ? 0.35 : 1
+        if line === casing {
+            renderer.strokeColor = casingColor.withAlphaComponent(alpha)
+            renderer.lineWidth = 10
+            casingRenderer = renderer
+        } else {
+            renderer.strokeColor = routeColor.withAlphaComponent(alpha)
+            renderer.lineWidth = 6
+            polylineRenderer = renderer
+        }
         renderer.lineCap = .round
         renderer.lineJoin = .round
-        polylineRenderer = renderer
         return renderer
     }
+
+    private var casingColor: UIColor { routeColor.darkened(by: Self.casingDarkening) }
 
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
         switch annotation {

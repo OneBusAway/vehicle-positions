@@ -7,4 +7,8 @@ nonisolated struct ActiveTrip: Sendable, Codable, Equatable {
     var vehicle: Vehicle
     var trip: TripGeometry
     var startedAt: Date
+    /// The driver who started it. Phones are handed on between shifts, so a
+    /// relaunch only takes up a trip the driver now signed in started; see
+    /// `TripSession.adoptStoredTrip`.
+    var driverEmail: String
 }

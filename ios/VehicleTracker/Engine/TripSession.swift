@@ -5,12 +5,19 @@ import VehiclePositionsKit
 
 /// Errors this session raises itself, as opposed to ones the server sent
 /// (``APIError``).
-nonisolated enum TripSessionError: Error, Equatable {
+nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     /// A call that needs the server was made while signed out.
     case notSignedIn
     /// The fetched trip has no usable shape or no stops: nothing to judge
     /// adherence against, so it is refused before anything is started.
     case unusableTrip
+
+    var errorDescription: String? {
+        switch self {
+        case .notSignedIn: "Sign in first."
+        case .unusableTrip: "This run has no shape or stops to follow."
+        }
+    }
 }
 
 /// The one source of truth for the driver's trip (spec §5.3): sign-in state,
@@ -63,6 +70,9 @@ final class TripSession {
     private var reporter: LocationReporter?
     private var evaluator: AdherenceEvaluator?
     private var streamTask: Task<Void, Never>?
+    /// Bumped by every `beginTracking`, so a superseded stream task that
+    /// notices its cancellation afterwards cannot report the new stream lost.
+    private var streamGeneration = 0
     private var backgroundHandle: (any BackgroundActivityHandle)?
     private var gpsAvailable = true
     private var needsForeground = false
@@ -91,13 +101,24 @@ final class TripSession {
         if let token = try? tokens.load(), token.isFresh(now: now()),
            let url = settings.serverURL, let api = try? makeAPI(url, tokens) {
             self.api = api
-            if let active = try? store.load() {
-                phase = .paused(active)
-            } else {
-                phase = .idle
-            }
+            phase = .idle
+            adoptStoredTrip()
         } else {
             phase = .signedOut
+        }
+    }
+
+    /// Takes up the stored trip as `.paused`, but only if this driver is the
+    /// one who started it: phones are shared between shifts, and reporting
+    /// another driver's run under this account would put the wrong bus on the
+    /// map. A record belonging to anyone else is dropped.
+    private func adoptStoredTrip() {
+        guard let active = try? store.load() else { return }
+        if active.driverEmail.caseInsensitiveCompare(settings.email) == .orderedSame {
+            phase = .paused(active)
+        } else {
+            log.notice("dropping a stored trip started by another driver")
+            try? store.clear()
         }
     }
 
@@ -118,7 +139,8 @@ final class TripSession {
         settings.email = email
         self.api = api
         if case .signedOut = phase {
-            phase = (try? store.load()).map(Phase.paused) ?? .idle
+            phase = .idle
+            adoptStoredTrip()
         }
     }
 
@@ -177,7 +199,8 @@ final class TripSession {
                 throw TripSessionError.unusableTrip
             }
             let serverID = try await api.startTrip(vehicleID: vehicle.id, routeID: trip.routeID, gtfsTripID: trip.id)
-            let active = ActiveTrip(serverTripID: serverID, vehicle: vehicle, trip: trip, startedAt: now())
+            let active = ActiveTrip(serverTripID: serverID, vehicle: vehicle, trip: trip,
+                                    startedAt: now(), driverEmail: settings.email)
             do {
                 try store.save(active)
             } catch {
@@ -189,7 +212,7 @@ final class TripSession {
             }
             settings.rememberRoute(trip.routeID)
             settings.lastVehicleID = vehicle.id
-            beginTracking(active, evaluator: evaluator)
+            try beginTracking(active, evaluator: evaluator)
         } catch {
             phase = .idle
             throw error
@@ -211,12 +234,25 @@ final class TripSession {
                 phase = .idle
                 return
             }
-            beginTracking(active, evaluator: evaluator)
+            resume(active, evaluator: evaluator)
         case .active(let active) where streamEnded:
             guard let evaluator = AdherenceEvaluator(trip: active.trip) else { return }
-            beginTracking(active, evaluator: evaluator)
+            resume(active, evaluator: evaluator)
         default:
             return
+        }
+    }
+
+    /// Resumes tracking, or — if the account has gone in the meantime — says
+    /// so: without a server there is nothing to report to, and signed out is
+    /// the truthful state to show rather than a trip that silently sends
+    /// nothing.
+    private func resume(_ active: ActiveTrip, evaluator: AdherenceEvaluator) {
+        do {
+            try beginTracking(active, evaluator: evaluator)
+        } catch {
+            log.error("cannot resume without a signed-in account: \(String(describing: error))")
+            phase = .signedOut
         }
     }
 
@@ -260,10 +296,14 @@ final class TripSession {
 
     // MARK: Tracking
 
-    private func beginTracking(_ active: ActiveTrip, evaluator: AdherenceEvaluator) {
-        guard let api else { return }
+    private func beginTracking(_ active: ActiveTrip, evaluator: AdherenceEvaluator) throws {
+        guard let api else { throw TripSessionError.notSignedIn }
         self.evaluator = evaluator
-        reporter = LocationReporter(api: api, now: now)
+        reporter = LocationReporter(api: api, now: now) { [weak self] in
+            // A send finishes long after the fix that started it was handed
+            // over, so its outcome has to be published when it lands.
+            self?.refreshReporting()
+        }
         gpsAvailable = true
         needsForeground = false
         streamEnded = false
@@ -271,16 +311,21 @@ final class TripSession {
         // Core Location keeps it alive until it is invalidated.
         backgroundHandle?.invalidate()
         backgroundHandle = locations.beginBackgroundActivity()
+        // A second subscription must not run alongside the first: the old one
+        // would keep feeding this session fixes it has already moved past.
+        streamTask?.cancel()
+        streamGeneration += 1
+        let generation = streamGeneration
         let stream = locations.updates()
         streamTask = Task { [weak self] in
             do {
                 for try await sample in stream {
                     guard let self else { return }
-                    await self.handle(sample, active: active)
+                    self.handle(sample, active: active)
                 }
-                self?.markStreamEnded(active)
+                self?.markStreamEnded(active, generation: generation)
             } catch {
-                self?.markStreamEnded(active)
+                self?.markStreamEnded(active, generation: generation)
             }
         }
         phase = .active(active)
@@ -307,20 +352,30 @@ final class TripSession {
         refreshReporting()
     }
 
-    private func handle(_ sample: LocationSample, active: ActiveTrip) async {
+    private func handle(_ sample: LocationSample, active: ActiveTrip) {
+        // A sample whose fix is too coarse to place the bus on a street is no
+        // position at all (spec §8): the map holds the last good one and the
+        // driver is told the GPS is unusable, rather than being shown — and
+        // riders being sent — a guess that could be a block out.
+        var dropsFix = false
         switch sample.diagnostic {
         case .authorizationDenied, .locationUnavailable:
             gpsAvailable = false
         case .insufficientlyInUse:
             needsForeground = true
-        case .accuracyLimited, nil:
+        case .accuracyLimited:
+            gpsAvailable = false
+            dropsFix = true
+        case nil:
             break
         }
-        if let fix = sample.fix, let evaluator, let reporter {
+        if !dropsFix, let fix = sample.fix, let evaluator, let reporter {
             gpsAvailable = true
             needsForeground = false
             latest = evaluator.evaluate(fix, previous: latest)
-            _ = await reporter.report(fix, vehicleID: active.vehicle.id, gtfsTripID: active.trip.id)
+            // Not awaited: the send runs on its own so the fixes behind it
+            // keep reaching the map (spec §8).
+            reporter.report(fix, vehicleID: active.vehicle.id, gtfsTripID: active.trip.id)
         }
         refreshReporting()
     }
@@ -328,9 +383,10 @@ final class TripSession {
     /// The stream ended (thrown or finished) while this trip was still the
     /// one in hand. The phase does not matter: a stream that dies during
     /// `.ending` must still show as lost if that end then fails and the phase
-    /// is restored. Only a trip that is already gone is ignored.
-    private func markStreamEnded(_ active: ActiveTrip) {
-        guard activeTrip == active else { return }
+    /// is restored. A trip that is already gone, or a stream a later
+    /// `beginTracking` has already replaced, is ignored.
+    private func markStreamEnded(_ active: ActiveTrip, generation: Int) {
+        guard generation == streamGeneration, activeTrip == active else { return }
         streamEnded = true
         needsForeground = false
         refreshReporting()

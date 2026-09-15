@@ -13,7 +13,18 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         guard ServerURLPolicy.isAllowed(baseURL) else { throw APIError.insecureURL }
         self.baseURL = baseURL
         self.token = token
+        // A driver on a dead cell keeps moving; the default 60 s means a
+        // stuck request outlives a dozen fixes. Copied so a configuration the
+        // caller still holds (the tests' stub) is not mutated underneath it.
+        let configuration = configuration.copy() as! URLSessionConfiguration
+        configuration.timeoutIntervalForRequest = 10
         session = URLSession(configuration: configuration, delegate: RedirectRefuser(), delegateQueue: nil)
+    }
+
+    deinit {
+        // A URLSession with a delegate retains it, and itself, until it is
+        // invalidated: a client dropped on sign-out would otherwise leak.
+        session.finishTasksAndInvalidate()
     }
 
     func login(email: String, password: String) async throws -> String {

@@ -23,6 +23,14 @@ import Testing
         #expect(trip.directionID == nil)
     }
 
+    /// The feed is not guaranteed to hand back well-formed pairs, and a
+    /// three-element "point" must not shift every later coordinate.
+    @Test func malformedShapePairsAreDropped() {
+        var trip = TripFixtures.t1
+        trip.shape = ShapePayload(lengthM: 1001, points: [[1, 2], [3], [4, 5, 6], [7, 8]])
+        #expect(trip.shapePoints == [GeoPoint(1, 2), GeoPoint(7, 8)])
+    }
+
     @Test func roundTripsThroughTheEncoder() throws {
         let data = try JSONCoding.encoder.encode(TripFixtures.t1)
         let back = try JSONCoding.decoder.decode(TripGeometry.self, from: data)

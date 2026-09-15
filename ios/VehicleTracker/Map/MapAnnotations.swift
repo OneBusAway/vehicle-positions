@@ -32,6 +32,14 @@ extension UIColor {
         guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
         self.init(red: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255, blue: CGFloat(v & 0xFF) / 255, alpha: 1)
     }
+
+    /// The same colour with its brightness cut by `fraction`, for the casing
+    /// drawn under the route line so the line reads against pale map tiles.
+    func darkened(by fraction: CGFloat) -> UIColor {
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        guard getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else { return self }
+        return UIColor(hue: hue, saturation: saturation, brightness: brightness * (1 - fraction), alpha: alpha)
+    }
 }
 
 /// Images for the annotation views, drawn once per size and colour.

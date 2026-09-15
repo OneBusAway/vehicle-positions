@@ -16,7 +16,8 @@ import Testing
         #expect(try store.load() == nil)
 
         let active = ActiveTrip(serverTripID: 7, vehicle: Vehicle(id: "bus-1", label: "Bus 1"),
-                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 1))
+                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 1),
+                                driverEmail: "d@test.com")
         try store.save(active)
         #expect(try store.load() == active)
 

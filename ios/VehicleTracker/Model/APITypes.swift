@@ -118,12 +118,31 @@ nonisolated struct ErrorBody: Sendable, Decodable {
     var error: String
 }
 
-/// Why a request failed.
-nonisolated enum APIError: Error, Equatable {
+/// Why a request failed. The descriptions are what the driver reads: the
+/// screens show `error.localizedDescription` as it comes, so every case has to
+/// stand on its own without the enum's name.
+nonisolated enum APIError: Error, Equatable, LocalizedError {
     /// The base URL fails ``ServerURLPolicy``.
     case insecureURL
     /// A non-2xx response, with the server's `error` message when it sent one.
     case status(Int, message: String)
     case transport(String)
     case decoding(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .insecureURL:
+            ServerURLPolicy.explanation
+        case .status(let code, let message):
+            // The server writes these for the driver ("driver already has an
+            // active trip"); only fall back to the code when it sent nothing.
+            message.isEmpty ? "Server error \(code)" : message
+        case .transport(let message):
+            "Could not reach the server: \(message)"
+        case .decoding:
+            // The underlying decoding error names Swift types, which tells a
+            // driver nothing.
+            "The server's reply could not be read."
+        }
+    }
 }

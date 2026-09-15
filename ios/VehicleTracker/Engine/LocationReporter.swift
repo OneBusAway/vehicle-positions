@@ -24,20 +24,37 @@ final class LocationReporter {
 
     private let api: any TrackerAPI
     private let now: () -> Date
+    /// Called after every send outcome, so the session can republish its
+    /// reporting status without having waited for the POST.
+    private let onChange: @MainActor () -> Void
     private var lastSentAt: Date?
     private var consecutiveTimestampRejects = 0
+    /// True from the moment a send is handed to its task until that task has
+    /// recorded its outcome. Only one report is ever in flight.
+    private var isSending = false
+    private var sendTask: Task<Void, Never>?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "reporter")
 
-    init(api: any TrackerAPI, now: @escaping () -> Date) {
+    init(api: any TrackerAPI, now: @escaping () -> Date, onChange: @escaping @MainActor () -> Void = {}) {
         self.api = api
         self.now = now
+        self.onChange = onChange
     }
 
-    /// Sends the fix unless one went out less than five seconds ago. Returns
-    /// whether a send was attempted; the outcome is in `problem`.
-    func report(_ fix: LocationFix, vehicleID: String, gtfsTripID: String) async -> Bool {
+    /// Hands the fix to a send that runs on its own, so a slow POST never
+    /// holds up the fixes behind it (spec §8). Returns whether a send was
+    /// started: `false` when one went out less than five seconds ago, or when
+    /// one is still in flight. The outcome lands in `problem` and `fixesSent`
+    /// later, and `onChange` fires when it does.
+    @discardableResult
+    func report(_ fix: LocationFix, vehicleID: String, gtfsTripID: String) -> Bool {
         let at = now()
         if let last = lastSentAt, at.timeIntervalSince(last) < Self.minimumInterval {
+            return false
+        }
+        // A send still in flight means the network, not the throttle, is the
+        // limit; queueing behind it would only pile up stale positions.
+        if isSending {
             return false
         }
         lastSentAt = at
@@ -50,6 +67,18 @@ final class LocationReporter {
             accuracy: fix.horizontalAccuracy >= 0 ? fix.horizontalAccuracy : nil,
             timestamp: Int64(fix.timestamp.timeIntervalSince1970)
         )
+        isSending = true
+        sendTask = Task { [weak self] in
+            await self?.send(report)
+        }
+        return true
+    }
+
+    private func send(_ report: LocationReport) async {
+        defer {
+            isSending = false
+            onChange()
+        }
         do {
             try await api.postLocation(report)
             fixesSent += 1
@@ -78,7 +107,12 @@ final class LocationReporter {
             log.warning("dropping location report after transport failure: \(String(describing: error))")
             problem = .noNetwork
         }
-        return true
+    }
+
+    /// Awaits the send currently in flight, if any. For tests: nothing in the
+    /// app waits on a report.
+    func waitForInFlightSend() async {
+        await sendTask?.value
     }
 
     /// Clears an auth problem the instant the driver signs in again, rather

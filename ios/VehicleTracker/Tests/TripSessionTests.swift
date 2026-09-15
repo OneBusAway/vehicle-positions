@@ -106,7 +106,9 @@ import VehiclePositionsKit
     @Test func resumeWithAnUnusableStoredTripClearsIt() throws {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")
-        let stuck = ActiveTrip(serverTripID: 7, vehicle: bus, trip: unusableTrip, startedAt: clock.now.addingTimeInterval(-600))
+        defaults.set("d@test.com", forKey: "email")
+        let stuck = ActiveTrip(serverTripID: 7, vehicle: bus, trip: unusableTrip,
+                               startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
         try store.save(stuck)
 
         let s = session()
@@ -133,8 +135,10 @@ import VehiclePositionsKit
 
         clock.advance(2)
         locations.emitFix(lat: 47.6050, lon: -122.3300, at: TripFixtures.at(8, 5, 2))
+        // The second fix has been handled once the map shows it; one more
+        // turn is all a send it had started would need to record itself.
         #expect(await eventually { s.latest?.fix.latitude == 47.6050 })
-        try? await Task.sleep(for: .milliseconds(100))
+        await Task.yield()
         #expect(api.posted.count == 1, "a fix 2 s later updates the map but is not sent")
 
         clock.advance(4)
@@ -214,9 +218,10 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
 
         let firstEnd = Task { try await s.end() }
-        // Give the first call time to move the phase to `.ending` before a
+        // Wait for the first call to move the phase to `.ending` before a
         // second one is attempted, so its early-return guard is exercised.
-        try? await Task.sleep(for: .milliseconds(10))
+        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+                "expected .ending while the request is in flight")
         try await s.end()
         try await firstEnd.value
 
@@ -310,7 +315,9 @@ import VehiclePositionsKit
     @Test func relaunchWithAStoredTripIsPausedAndResumes() async throws {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")
-        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1, startedAt: clock.now.addingTimeInterval(-600))
+        defaults.set("d@test.com", forKey: "email")
+        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
+                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
         try store.save(active)
 
         let s = session()
@@ -330,6 +337,74 @@ import VehiclePositionsKit
         #expect(api.ends == [7])
     }
 
+    /// Spec §8: a fix the phone cannot trust is no position at all. It must
+    /// not move the map and must not be reported, and the driver has to be
+    /// told rather than left looking at a stale bus that reads as live.
+    @Test func accuracyLimitedFreezesAdherenceAndShowsNoGPS() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        #expect(await eventually { api.posted.count == 1 })
+        let good = s.latest
+
+        clock.advance(10)
+        locations.emit(LocationSample(
+            fix: TripFixtures.fix(lat: 47.6060, lon: -122.3300, at: TripFixtures.at(8, 5, 10), accuracy: 400),
+            diagnostic: .accuracyLimited))
+        #expect(await eventually { s.reporting == .noGPS })
+        #expect(s.latest == good, "the map holds the last fix it could trust")
+        await Task.yield()
+        #expect(api.posted.count == 1, "an accuracy-limited fix is not reported")
+
+        clock.advance(10)
+        locations.emitFix(lat: 47.6065, lon: -122.3300, at: TripFixtures.at(8, 5, 20))
+        #expect(await eventually { s.reporting == .connected(fixesSent: 2) })
+        #expect(s.latest?.fix.latitude == 47.6065)
+    }
+
+    /// Phones are shared between shifts: a trip left in the store by the
+    /// previous driver must never be taken up under the next one's account.
+    @Test func aStoredTripForAnotherDriverIsDropped() async throws {
+        let theirs = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
+                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "first@test.com")
+        try store.save(theirs)
+
+        let s = session()
+        #expect(s.phase == .signedOut)
+        try await s.signIn(serverURL: server, email: "second@test.com", password: "pw")
+        #expect(s.phase == .idle, "signing in as someone else does not adopt their trip")
+        #expect(try store.load() == nil, "and the record is dropped, not left to be adopted later")
+
+        // A relaunch reads the same store and must make the same judgement.
+        try store.save(theirs)
+        let relaunched = session()
+        #expect(relaunched.phase == .idle)
+        #expect(try store.load() == nil)
+    }
+
+    /// `resume()` needs a server to report to. Signing out from `.paused`
+    /// takes the API away while leaving the stored trip behind, so a resume
+    /// afterwards has to say signed out rather than pretend to track.
+    @Test func resumeWithoutAnAPIGoesToSignedOut() async throws {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set("https://positions.example.org", forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
+                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
+        try store.save(active)
+
+        let s = session()
+        #expect(s.phase == .paused(active))
+        s.signOut()
+        #expect(s.phase == .signedOut)
+
+        s.resume()
+        #expect(s.phase == .signedOut)
+        #expect(locations.handles.isEmpty, "nothing was subscribed to")
+    }
+
     @Test func signOutClearsTheToken() async throws {
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
@@ -341,7 +416,9 @@ import VehiclePositionsKit
     @Test func signOutFromPausedKeepsTheStoredTripForNextSignIn() async throws {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")
-        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1, startedAt: clock.now.addingTimeInterval(-600))
+        defaults.set("d@test.com", forKey: "email")
+        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
+                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
         try store.save(active)
 
         let s = session()
