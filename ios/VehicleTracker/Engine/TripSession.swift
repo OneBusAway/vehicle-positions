@@ -45,6 +45,10 @@ final class TripSession {
     private(set) var phase: Phase
     private(set) var latest: Adherence?
     private(set) var reporting: ReportingStatus = .connected(fixesSent: 0)
+    /// Fixes accepted by the server on this trip. The banner carries the
+    /// status, so the footer's counter must survive a problem rather than be
+    /// replaced by it.
+    private(set) var fixesSent = 0
     private(set) var vehicles: [Vehicle] = []
     let settings: AppSettings
 
@@ -241,6 +245,10 @@ final class TripSession {
             }
             throw error
         }
+        // `endLocally()` may have torn this trip down while the request was in
+        // flight, and a new one could even have been started since; only the
+        // phase this call set is ours to end.
+        guard phase == .ending(active) else { return }
         stopTracking()
     }
 
@@ -259,6 +267,9 @@ final class TripSession {
         gpsAvailable = true
         needsForeground = false
         streamEnded = false
+        // Resuming a trip whose stream died leaves the previous session open;
+        // Core Location keeps it alive until it is invalidated.
+        backgroundHandle?.invalidate()
         backgroundHandle = locations.beginBackgroundActivity()
         let stream = locations.updates()
         streamTask = Task { [weak self] in
@@ -315,16 +326,18 @@ final class TripSession {
     }
 
     /// The stream ended (thrown or finished) while this trip was still the
-    /// active one; if something else has since moved the phase on, there is
-    /// nothing to flag.
+    /// one in hand. The phase does not matter: a stream that dies during
+    /// `.ending` must still show as lost if that end then fails and the phase
+    /// is restored. Only a trip that is already gone is ignored.
     private func markStreamEnded(_ active: ActiveTrip) {
-        guard case .active(let current) = phase, current == active else { return }
+        guard activeTrip == active else { return }
         streamEnded = true
         needsForeground = false
         refreshReporting()
     }
 
     private func refreshReporting() {
+        if let reporter { fixesSent = reporter.fixesSent }
         if streamEnded {
             reporting = .locationLost
         } else if needsForeground {

@@ -232,13 +232,57 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
 
         let ending = Task { try await s.end() }
-        try? await Task.sleep(for: .milliseconds(10))
-        if case .ending = s.phase {} else { Issue.record("expected .ending while the request is in flight") }
+        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+                "expected .ending while the request is in flight")
         s.endLocally()
 
         await #expect(throws: APIError.transport("offline")) { try await ending.value }
         #expect(s.phase == .idle, "endLocally wins: the failed end's restore is skipped because the phase already moved on")
         #expect(try store.load() == nil)
+    }
+
+    /// A successful `end()` must tear down the trip it was given, not
+    /// whatever happens to be running by the time the server answers.
+    @Test func aSucceedingEndDoesNotTearDownATripStartedSince() async throws {
+        api.endDelay = .milliseconds(50)
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        let ending = Task { try await s.end() }
+        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+                "expected .ending while the request is in flight")
+        s.endLocally()
+        api.startedID = 43
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        try await ending.value
+        if case .active(let current) = s.phase {
+            #expect(current.serverTripID == 43, "the newer trip is left running")
+        } else {
+            Issue.record("the trip started while the end was in flight must still be active")
+        }
+        #expect(try store.load()?.serverTripID == 43, "the newer trip's record survives the older end")
+        #expect(api.ends == [42], "only the trip the call was given was ended on the server")
+    }
+
+    /// A stream that dies while the trip is being ended, whose end then fails,
+    /// must still read as lost once the phase is restored.
+    @Test func aStreamLostDuringAFailingEndIsStillReported() async throws {
+        api.endError = APIError.transport("offline")
+        api.endDelay = .milliseconds(50)
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        let ending = Task { try await s.end() }
+        #expect(await eventually { if case .ending = s.phase { true } else { false } },
+                "expected .ending while the request is in flight")
+        locations.finish(throwing: APIError.transport("dropped"))
+
+        await #expect(throws: APIError.transport("offline")) { try await ending.value }
+        if case .active = s.phase {} else { Issue.record("a failed end restores the active trip") }
+        #expect(await eventually { s.reporting == .locationLost })
     }
 
     @Test func streamFailureIsReportedAndResumable() async throws {
@@ -254,6 +298,8 @@ import VehiclePositionsKit
 
         s.resume()
         #expect(locations.handles.count == 2, "resuming after a lost stream re-subscribes without ending the trip")
+        #expect(locations.handles[0].invalidated, "the superseded background session is released, not leaked")
+        #expect(!locations.handles[1].invalidated)
         #expect(api.starts.count == 1, "resuming after a lost stream makes no server call")
         #expect(await eventually { s.reporting == .connected(fixesSent: 0) })
 

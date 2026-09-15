@@ -74,6 +74,28 @@ extension TripSession.ReportingStatus {
     }
 }
 
+/// The banner across the top of the tracking screen. It reads the phase as
+/// well as the reporting status, because a trip a relaunch found is not
+/// reporting anything yet — and `reporting` starts out `.connected`, which
+/// would otherwise paint a paused trip green.
+enum TrackingBanner {
+    static func text(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> String {
+        switch phase {
+        case .paused: String(localized: "Paused — not reporting")
+        case .ending: String(localized: "Ending…")
+        default: reporting.label
+        }
+    }
+
+    static func color(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> Color {
+        switch phase {
+        case .paused: .orange
+        case .ending: .gray
+        default: reporting.isProblem ? .red : .green
+        }
+    }
+}
+
 extension TripSession {
     /// An expired token looks like any other server error to the caller; the
     /// picker screens all want the same response — sign out and let

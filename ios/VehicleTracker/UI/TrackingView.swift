@@ -4,6 +4,7 @@ struct TrackingView: View {
     @Environment(TripSession.self) private var session
     @State private var confirmEnd = false
     @State private var endError: String?
+    @State private var showingRelogin = false
     @State private var reloginPassword = ""
     @State private var reloginError: String?
 
@@ -18,6 +19,11 @@ struct TrackingView: View {
                 footer(active)
             }
         }
+        // The sheet is driven by its own state rather than straight off
+        // `reporting`, so "Later" can dismiss it while the status stands.
+        .onChange(of: session.reporting == .authExpired, initial: true) { _, expired in
+            if expired { showingRelogin = true }
+        }
         .confirmationDialog("End this trip?", isPresented: $confirmEnd, titleVisibility: .visible) {
             Button("End Trip", role: .destructive) { end() }
         }
@@ -28,17 +34,31 @@ struct TrackingView: View {
         } message: {
             Text(endError ?? "")
         }
-        .sheet(isPresented: Binding(get: { session.reporting == .authExpired }, set: { _ in })) {
+        .sheet(isPresented: $showingRelogin) {
             reloginSheet
         }
     }
 
-    private var statusBanner: some View {
-        Text(session.reporting.label)
+    // MARK: Banner
+
+    private var bannerLabel: some View {
+        Text(TrackingBanner.text(phase: session.phase, reporting: session.reporting))
             .font(.title2.bold())
             .frame(maxWidth: .infinity, minHeight: 56)
-            .background(session.reporting.isProblem ? Color.red : Color.green)
+            .background(TrackingBanner.color(phase: session.phase, reporting: session.reporting))
             .foregroundStyle(.white)
+    }
+
+    /// While the sign-in is expired the banner is the way back to the sheet,
+    /// so dismissing it with "Later" is not a one-way door.
+    @ViewBuilder private var statusBanner: some View {
+        if session.reporting == .authExpired {
+            Button { showingRelogin = true } label: { bannerLabel }
+                .buttonStyle(.plain)
+                .accessibilityHint("Sign in again")
+        } else {
+            bannerLabel
+        }
     }
 
     private func header(_ active: ActiveTrip) -> some View {
@@ -82,11 +102,9 @@ struct TrackingView: View {
         VStack(spacing: 12) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 HStack {
-                    if case .connected(let sent) = session.reporting {
-                        Text("\(sent) sent")
-                    } else {
-                        Text(session.reporting.label)
-                    }
+                    // The banner carries the status; the counter is the one
+                    // number the driver checks, so it never goes away.
+                    Text("\(session.fixesSent) sent")
                     Spacer()
                     Text(Formatters.elapsed(context.date.timeIntervalSince(active.startedAt)))
                         .monospacedDigit()
@@ -94,6 +112,8 @@ struct TrackingView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             }
+            // A paused or stalled trip still has to be endable: Resume leads,
+            // End Trip stays reachable underneath it.
             if canResume {
                 Button {
                     session.resume()
@@ -101,18 +121,23 @@ struct TrackingView: View {
                     Text("Resume").bold().frame(maxWidth: .infinity, minHeight: 64)
                 }
                 .buttonStyle(.borderedProminent)
+                endTripButton
             } else {
-                Button {
-                    confirmEnd = true
-                } label: {
-                    Text("End Trip").bold().frame(maxWidth: .infinity, minHeight: 64)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .disabled({ if case .ending = session.phase { true } else { false } }())
+                endTripButton
             }
         }
         .padding()
+    }
+
+    private var endTripButton: some View {
+        Button {
+            confirmEnd = true
+        } label: {
+            Text("End Trip").bold().frame(maxWidth: .infinity, minHeight: 64)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.red)
+        .disabled({ if case .ending = session.phase { true } else { false } }())
     }
 
     private var reloginSheet: some View {
@@ -127,6 +152,7 @@ struct TrackingView: View {
                             try await session.reauthenticate(password: reloginPassword)
                             reloginPassword = ""
                             reloginError = nil
+                            showingRelogin = false
                         } catch {
                             reloginError = error.localizedDescription
                         }
@@ -135,8 +161,18 @@ struct TrackingView: View {
                 .disabled(reloginPassword.isEmpty)
             }
             .navigationTitle("Sign in again")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    // Nothing is lost by putting this off: the trip keeps
+                    // running locally and the banner keeps saying signed out.
+                    Button("Later") {
+                        reloginPassword = ""
+                        reloginError = nil
+                        showingRelogin = false
+                    }
+                }
+            }
         }
-        .interactiveDismissDisabled()
     }
 
     /// Paused (a relaunch found a stored trip) or the location stream itself

@@ -8,8 +8,10 @@ import UIKit
 /// `recentre` and `followsVehicle`.
 @MainActor
 final class RouteMapViewController: UIViewController, MKMapViewDelegate {
-    /// Camera distance while following, metres.
-    static let followDistance: CLLocationDistance = 1200
+    /// Camera distance while following, metres, before the host zooms.
+    static let defaultFollowDistance: CLLocationDistance = 1200
+    /// The range `zoom(by:)` may set the follow distance to.
+    static let followDistanceRange: ClosedRange<CLLocationDistance> = 200...50_000
     /// How far ahead of the vehicle the camera centres, so the road ahead
     /// fills the screen and the vehicle sits low.
     static let lookAheadMetres = 300.0
@@ -27,7 +29,14 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
     private var trip: TripGeometry?
     private var shape: ShapeGeometry?
-    private var adherence: Adherence?
+    private var lastAdherence: Adherence?
+    /// The camera distance `follow()` uses; `zoom(by:)` changes it so a zoom
+    /// survives the next fix instead of being undone by it.
+    private var followDistance = RouteMapViewController.defaultFollowDistance
+    /// Core Location reports -1 for an unknown course. Steering the camera to
+    /// north on every such fix spins the map; the last known heading is a far
+    /// better guess, so it is kept.
+    private var lastCourse = 0.0
     private var routeColor = UIColor.systemBlue
     private var polyline: MKPolyline?
     private var polylineRenderer: MKPolylineRenderer?
@@ -67,7 +76,10 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         polylineRenderer = nil
         stops = []
         shape = nil
-        adherence = nil
+        lastAdherence = nil
+        lastCourse = 0
+        if vehiclePlaced { mapView.removeAnnotation(vehicle); vehiclePlaced = false }
+        if snappedPlaced { mapView.removeAnnotation(snapped); snappedPlaced = false }
 
         guard let trip, let shape = ShapeGeometry(points: trip.shapePoints) else { return }
         self.shape = shape
@@ -83,14 +95,19 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
     /// Moves the vehicle, re-styles the shape and stops, and follows.
     func update(_ adherence: Adherence?) {
-        self.adherence = adherence
+        // SwiftUI re-runs `updateUIViewController` for reasons that have
+        // nothing to do with the vehicle; re-animating the camera each time
+        // makes the map stutter. Only a genuinely new fix moves anything.
+        guard adherence != lastAdherence else { return }
+        lastAdherence = adherence
         guard let adherence else {
             if vehiclePlaced { mapView.removeAnnotation(vehicle); vehiclePlaced = false }
             if snappedPlaced { mapView.removeAnnotation(snapped); snappedPlaced = false }
             return
         }
         vehicle.coordinate = CLLocationCoordinate2D(latitude: adherence.fix.latitude, longitude: adherence.fix.longitude)
-        vehicle.course = adherence.fix.course
+        if (0...360).contains(adherence.fix.course) { lastCourse = adherence.fix.course }
+        vehicle.course = lastCourse
         vehicle.isOnRoute = adherence.isOnRoute
         if !vehiclePlaced { mapView.addAnnotation(vehicle); vehiclePlaced = true }
         refreshVehicleView()
@@ -125,18 +142,26 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     }
 
     func zoom(by factor: Double) {
-        let camera = mapView.camera.copy() as! MKMapCamera
-        camera.centerCoordinateDistance = max(200, min(50_000, camera.centerCoordinateDistance / factor))
-        mapView.setCamera(camera, animated: true)
+        guard factor > 0 else { return }
+        followDistance = min(Self.followDistanceRange.upperBound,
+                             max(Self.followDistanceRange.lowerBound, followDistance / factor))
+        if followsVehicle, lastAdherence != nil {
+            follow(animated: true)
+        } else {
+            let camera = mapView.camera.copy() as! MKMapCamera
+            camera.centerCoordinateDistance = followDistance
+            mapView.setCamera(camera, animated: true)
+        }
     }
 
     func recentre() {
+        followDistance = Self.defaultFollowDistance
         followsVehicle = true
     }
 
     private func follow(animated: Bool) {
-        guard let adherence else { return }
-        let course = adherence.fix.course >= 0 ? adherence.fix.course : 0
+        guard let adherence = lastAdherence else { return }
+        let course = lastCourse
         let here = GeoPoint(adherence.fix.latitude, adherence.fix.longitude)
         let rad = Geo.rad(course)
         let ahead = GeoPoint(
@@ -144,14 +169,14 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
             here.lon + Self.lookAheadMetres * sin(rad) / (Geo.metresPerDegree * max(cos(Geo.rad(here.lat)), 1e-6))
         )
         let camera = MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: ahead.lat, longitude: ahead.lon),
-                                 fromDistance: Self.followDistance, pitch: 0, heading: course)
+                                 fromDistance: followDistance, pitch: 0, heading: course)
         mapView.setCamera(camera, animated: animated)
     }
 
     private func refreshVehicleView() {
         guard let view = mapView.view(for: vehicle) else { return }
         view.image = MapGlyphs.vehicle(fill: vehicle.isOnRoute ? routeColor : .systemGray)
-        let relative = (vehicle.course >= 0 ? vehicle.course : 0) - mapView.camera.heading
+        let relative = vehicle.course - mapView.camera.heading
         view.transform = CGAffineTransform(rotationAngle: relative * .pi / 180)
     }
 
@@ -160,7 +185,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
         guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
         let renderer = MKPolylineRenderer(polyline: line)
-        renderer.strokeColor = routeColor.withAlphaComponent(adherence?.isOnRoute == false ? 0.35 : 1)
+        renderer.strokeColor = routeColor.withAlphaComponent(lastAdherence?.isOnRoute == false ? 0.35 : 1)
         renderer.lineWidth = 6
         renderer.lineCap = .round
         renderer.lineJoin = .round

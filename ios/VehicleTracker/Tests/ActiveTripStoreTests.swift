@@ -22,5 +22,8 @@ import Testing
 
         try store.clear()
         #expect(try store.load() == nil)
+        // `clear()` used the same encoded path, so it silently left the file
+        // behind: check the disk, not just the reader.
+        #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "active-trip.json").path(percentEncoded: false)))
     }
 }

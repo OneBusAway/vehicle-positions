@@ -37,4 +37,23 @@ import Testing
         #expect(Color(hex: "") == nil)
         #expect(Color(hex: "zzz") == nil)
     }
+
+    /// `reporting` starts out `.connected`, so a trip a relaunch found paused
+    /// would read green "Reporting" if the banner went by the status alone.
+    @Test func bannerReadsThePhaseBeforeTheStatus() {
+        let active = ActiveTrip(serverTripID: 1, vehicle: Vehicle(id: "bus-1", label: "Bus 1"),
+                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 0))
+
+        #expect(TrackingBanner.text(phase: .paused(active), reporting: .connected(fixesSent: 0)) == "Paused — not reporting")
+        #expect(TrackingBanner.color(phase: .paused(active), reporting: .connected(fixesSent: 0)) == .orange)
+
+        #expect(TrackingBanner.text(phase: .ending(active), reporting: .connected(fixesSent: 9)) == "Ending…")
+        #expect(TrackingBanner.color(phase: .ending(active), reporting: .connected(fixesSent: 9)) == .gray)
+
+        #expect(TrackingBanner.text(phase: .active(active), reporting: .connected(fixesSent: 9)) == "Reporting")
+        #expect(TrackingBanner.color(phase: .active(active), reporting: .connected(fixesSent: 9)) == .green)
+
+        #expect(TrackingBanner.text(phase: .active(active), reporting: .noNetwork) == "No connection")
+        #expect(TrackingBanner.color(phase: .active(active), reporting: .noNetwork) == .red)
+    }
 }

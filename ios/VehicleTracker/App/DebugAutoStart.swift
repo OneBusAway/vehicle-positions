@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Signs in and starts a trip from launch arguments, so the simulator smoke
 /// tests (phone and CarPlay) can reach the tracking screen without taps.
@@ -8,6 +9,8 @@ import Foundation
 ///       -autoServer http://localhost:8080 -autoEmail driver@test.com \
 ///       -autoPassword password -autoVehicle bus-1 -autoTrip T1
 enum DebugAutoStart {
+    private static let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "debug")
+
     @MainActor
     static func runIfRequested(session: TripSession) {
         #if DEBUG
@@ -27,7 +30,7 @@ enum DebugAutoStart {
                 let vehicle = session.vehicles.first { $0.id == vehicleID } ?? Vehicle(id: vehicleID, label: vehicleID)
                 try await session.start(vehicle: vehicle, tripID: tripID)
             } catch {
-                print("DebugAutoStart failed: \(error)")
+                log.error("auto-start failed: \(String(describing: error))")
             }
         }
         #endif

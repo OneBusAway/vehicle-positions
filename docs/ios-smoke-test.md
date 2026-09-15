@@ -37,31 +37,28 @@ Two environment notes for the commands below:
   export UDID=$(xcrun simctl list devices available | grep -m1 iPhone | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
   ```
 
-- **Postgres.app:** if you run Postgres.app (or any other local Postgres) it
-  already owns `127.0.0.1:5432` and `docker compose up -d db` will fail to
-  publish its port. Check first:
+- **Ports.** The obvious defaults are often already taken on a development
+  Mac: Postgres.app (or any other local Postgres) owns `127.0.0.1:5432`, so
+  `docker compose up -d db` fails to publish its port, and some other
+  container may hold `8080`. Check both before you start:
 
   ```bash
   lsof -nP -iTCP:5432 -sTCP:LISTEN
+  lsof -nP -iTCP:8080 -sTCP:LISTEN
   ```
 
-  If something holds it, publish the container on another host port (used for
-  the reference run) and point `DATABASE_URL` at that port:
+  Step 1 below therefore runs Postgres on host port **5433** and the server on
+  **8081** — that is the combination the reference run used, and it works
+  whether or not 5432/8080 are free. If they are free on your machine you can
+  use `docker compose up -d db` with `…@127.0.0.1:5432/…` and `PORT=8080`
+  instead; every later command goes through `$BASE`, so only step 1 changes.
 
-  ```bash
-  docker run -d --name vt-smoke-db -p 5433:5432 \
-    -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-    -e POSTGRES_DB=vehicle_positions postgres:17-alpine
-  ```
-
-  The alternative is the container's own address:
+  A third option is to skip the published port and dial the container's own
+  address:
   `DBIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(docker compose ps -q db))`
-  — but with OrbStack that address is not always routable from the host, so
-  the extra published port is the reliable option.
-
-The same applies to the server's own port: the reference run used `8081`
-because another container already held `8080`. Substitute your port
-everywhere below (`$BASE`).
+  — but under OrbStack that address was **not** routable from the host
+  (`dial tcp 192.168.215.2:5432: connect: no route to host`), so the extra
+  published port is the reliable choice.
 
 ### 1. Start the server with the GTFS fixture
 
@@ -75,7 +72,9 @@ From the repo root (see [`docs/development.md`](development.md#local-server-run-
 for the full "Local Server Run" recipe):
 
 ```bash
-docker compose up -d db          # or the `docker run` above if 5432 is taken
+docker run -d --name vt-smoke-db -p 5433:5432 \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=vehicle_positions postgres:17-alpine
 
 export JWT_SECRET=$(openssl rand -hex 32)   # the server exits below 32 bytes
 export PORT=8081
@@ -158,9 +157,9 @@ Grant location **before** launching, so the When-In-Use prompt never appears:
 xcrun simctl privacy "$UDID" grant location org.onebusaway.vehicletracker
 ```
 
-Then launch. Either drive the UI by hand (sign in at `http://localhost:8081`
-with `driver@example.com` / `driverpass123`, pick `bus-1`, route `1 Straight`,
-run `T1`) —
+Then launch. Either drive the UI by hand (sign in at `$BASE` —
+`http://localhost:8081` for the ports above — with `driver@example.com` /
+`driverpass123`, pick `bus-1`, route `1 Straight`, run `T1`) —
 
 ```bash
 xcrun simctl launch "$UDID" org.onebusaway.vehicletracker
@@ -172,7 +171,7 @@ trip without a single tap. It is compiled into DEBUG builds only
 
 ```bash
 xcrun simctl launch "$UDID" org.onebusaway.vehicletracker \
-  -autoServer http://localhost:8081 \
+  -autoServer "$BASE" \
   -autoEmail driver@example.com \
   -autoPassword driverpass123 \
   -autoVehicle bus-1 \
@@ -212,7 +211,7 @@ same three waypoints for **Debug → Simulate Location → Add GPX File to
 Project…**. It lives outside `Resources/`, which XcodeGen treats as a resource
 folder — a GPX left in there would be copied into the app bundle.
 
-## The 5 checks
+## The checks
 
 Run these in order against a single trip; check 5 ends it.
 
@@ -237,7 +236,7 @@ fix — a red **No GPS** banner over "Waiting for GPS…".
    ```
 
 **Expected outcome:** the banner turns green **Reporting**; the "n sent"
-counter climbs; the map follows the vehicle (camera heading north, marker low
+counter in the footer climbs (it stays visible whatever the banner says); the map follows the vehicle (camera heading north, marker low
 on the screen, look-ahead centring) and the **next stop** is drawn larger and
 labelled, advancing from `Stop ST2` to `Stop ST3` as the vehicle passes ST2;
 and the adherence line shows the deviation against the schedule, with the next
@@ -265,11 +264,12 @@ In the feed, exactly one entity, with `vehicle.id` `bus-1`, `trip.trip_id`
 2. Watch the Tracking screen for ~15 s.
 3. Start the server again with the same environment and wait ~15 s.
 
-**Expected outcome:** the banner turns red **No connection** (and the footer
-reads the same) within about a reporting interval, and returns to green
-**Reporting** once the server is back. Fixes captured while offline are
-dropped, not queued (v1 behaviour) — the counter resumes climbing from where
-it left off rather than catching up.
+**Expected outcome:** the banner turns red **No connection** within about a
+reporting interval, and returns to green **Reporting** once the server is
+back. The footer keeps showing the "n sent" counter throughout — the banner
+alone carries the status. Fixes captured while offline are dropped, not queued
+(v1 behaviour), so the counter resumes climbing from where it left off rather
+than catching up.
 
 ### Check 4 — Relaunching rehydrates the trip as Paused
 
@@ -277,11 +277,25 @@ it left off rather than catching up.
    org.onebusaway.vehicletracker`) and launch it again with no arguments.
 
 **Expected outcome:** the app opens straight back on the Tracking screen for
-the same trip, showing **Paused** / "Tap Resume to keep reporting." with a blue
-**Resume** button, and the map redrawn. Tapping Resume restarts location
-delivery without touching the server. (iOS only permits a (re)start of the
-location session from the foreground, which is why a relaunch pauses rather
-than resuming by itself.)
+the same trip, with an **orange "Paused — not reporting"** banner (the banner
+reads the phase, not just the send status, so a rehydrated trip is never
+painted green), **Paused** / "Tap Resume to keep reporting." in the middle, the
+map redrawn, and **both** a blue **Resume** button and a red **End Trip**
+button beneath it — a paused trip must still be endable. Tapping Resume
+restarts location delivery without touching the server, and the banner goes
+back to green. (iOS only permits a (re)start of the location session from the
+foreground, which is why a relaunch pauses rather than resuming by itself.)
+
+The same pair of buttons appears when the location stream dies mid-trip and
+the banner reads "Location stopped — tap Resume".
+
+### Check 4b — An expired sign-in can be put off
+
+Only reachable with a token older than 24 h, so it is usually checked by hand
+rather than in a timed run: when `reporting` becomes "Signed out — sign in
+again" the re-login sheet appears over the tracking screen. **Later** dismisses
+it without re-authenticating — the trip keeps running and the banner keeps
+saying signed out — and **tapping the banner** brings the sheet back.
 
 ### Check 5 — Ending the trip drops the vehicle from the feed
 
@@ -311,5 +325,5 @@ Added by the CarPlay phase.
 ```bash
 xcrun simctl location "$UDID" clear
 kill %1                      # the go run started in step 1
-docker rm -f vt-smoke-db     # or `docker compose down`
+docker rm -f vt-smoke-db     # or `docker compose down`, if you used compose
 ```
