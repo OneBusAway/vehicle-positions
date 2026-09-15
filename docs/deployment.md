@@ -36,9 +36,10 @@ few seconds of feed continuity.
 | Build tooling | Either Docker (option A) **or** Go 1.25 or newer (option B, `go.mod` declares `go 1.25.0`). There is no published container image — agencies build from this repository. |
 | Ports | 80 and 443 open to the internet. Port 8080 (the app) and 5432 (PostgreSQL) must **not** be reachable from the internet. |
 
-The GTFS-RT feed endpoint is unauthenticated: anyone who can reach the server
-can read the current positions of your fleet. That is normally what you want (a
-public realtime feed), but it means the reverse proxy is the only thing between
+By default the GTFS-RT feed endpoint is unauthenticated: anyone who can reach the
+server can read the current positions of your fleet. That is normally what you
+want (a public realtime feed); if it isn't, [Feed access](#feed-access) explains
+how to require an API key. Either way, the reverse proxy is the only thing between
 the world and everything else the binary serves, so do not skip section 7.
 
 ## 3. Configuration reference
@@ -120,7 +121,7 @@ disabled. Turn it on only if you intend to accept positions from riders' phones.
 | `RIDER_MODE_ENABLED` | `false` | Enable the rider routes, verification engine and feed merge. |
 | `GTFS_STATIC_URL` | — (required when rider mode is on) | GTFS static zip, as an `http(s)://` URL or a local file path. The server exits 1 if rider mode is enabled without one. |
 | `GTFS_STATIC_REFRESH` | `24h` | How often the schedule is re-downloaded. A failed refresh keeps the previous index and logs. |
-| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feeds used to corroborate riders. This server's own driver-reported positions are always trusted, so this is optional. |
+| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feeds used to corroborate riders. This server's own driver-reported positions count as a trusted source only when the driver entered the GTFS trip id (matching is by trip id, so a route-only driver report doesn't corroborate); with no external feed, a trip no driver is reporting that way has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Poll interval for those feeds. |
 | `TRUSTED_FEED_MAX_AGE` | `5m` | Trusted entities older than this are dropped. |
 | `RIDER_JWT_TTL` | `8760h` | Lifetime of an anonymous rider token (one year). |
@@ -168,6 +169,7 @@ previous build, and it keeps the image pinned when you edit the compose file.
 
 ```bash
 sudo mkdir -p /srv/vehicle-positions
+sudo chown "$USER": /srv/vehicle-positions
 cd /srv/vehicle-positions
 umask 077
 cat > .env <<EOF
