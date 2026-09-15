@@ -64,6 +64,7 @@ extension TripSession.ReportingStatus {
         case .authExpired: String(localized: "Signed out — sign in again")
         case .clockSkew: String(localized: "Check the phone's clock")
         case .needsForeground: String(localized: "Open the app on iPhone")
+        case .locationLost: String(localized: "Location stopped — tap Resume")
         }
     }
 

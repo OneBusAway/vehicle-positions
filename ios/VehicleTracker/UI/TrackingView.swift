@@ -25,7 +25,7 @@ struct TrackingView: View {
                 Text("Waiting for GPS…").foregroundStyle(.secondary)
             }
             Spacer()
-            if case .paused = session.phase {
+            if canResume {
                 Button("Resume") { session.resume() }.buttonStyle(.borderedProminent)
             } else {
                 Button("End Trip") { confirmEnd = true }.buttonStyle(.borderedProminent).tint(.red)
@@ -45,6 +45,14 @@ struct TrackingView: View {
         } message: {
             Text(endError ?? "")
         }
+    }
+
+    /// Paused (a relaunch found a stored trip) or the location stream itself
+    /// died: both need the driver to resume from the foreground rather than
+    /// end the trip.
+    private var canResume: Bool {
+        if case .paused = session.phase { return true }
+        return session.reporting == .locationLost
     }
 
     private func end() {

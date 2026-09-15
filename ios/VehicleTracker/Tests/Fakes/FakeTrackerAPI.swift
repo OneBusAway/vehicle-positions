@@ -14,6 +14,9 @@ import Foundation
     nonisolated(unsafe) var startError: (any Error)?
     nonisolated(unsafe) var endError: (any Error)?
     nonisolated(unsafe) var postError: (any Error)?
+    /// Awaited, before recording the call, so tests can exercise a request
+    /// that is still in flight.
+    nonisolated(unsafe) var endDelay: Duration?
 
     private(set) nonisolated(unsafe) var logins: [(String, String)] = []
     private(set) nonisolated(unsafe) var tripRequests: [String] = []
@@ -41,6 +44,7 @@ import Foundation
         return startedID
     }
     func endTrip(id: Int64) async throws {
+        if let endDelay { try? await Task.sleep(for: endDelay) }
         ends.append(id)
         if let endError { throw endError }
     }

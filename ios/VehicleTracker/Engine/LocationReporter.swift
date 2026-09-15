@@ -55,24 +55,37 @@ final class LocationReporter {
             fixesSent += 1
             consecutiveTimestampRejects = 0
             problem = .none
+        } catch let APIError.status(code, message) where code == 400 && message.contains("timestamp") {
+            // Only a run of consecutive timestamp rejections blames the
+            // clock; anything else in between (success or another error)
+            // starts the count over.
+            consecutiveTimestampRejects += 1
+            if consecutiveTimestampRejects >= Self.clockSkewThreshold {
+                problem = .clockSkew
+            }
         } catch let APIError.status(code, message) {
+            consecutiveTimestampRejects = 0
             switch code {
             case 401:
                 problem = .authExpired
             case 429:
                 break // rate-limited: drop silently, keep the current status
-            case 400 where message.contains("timestamp"):
-                consecutiveTimestampRejects += 1
-                if consecutiveTimestampRejects >= Self.clockSkewThreshold {
-                    problem = .clockSkew
-                }
             default:
                 log.warning("dropping location report after HTTP \(code): \(message)")
             }
         } catch {
+            consecutiveTimestampRejects = 0
             log.warning("dropping location report after transport failure: \(String(describing: error))")
             problem = .noNetwork
         }
         return true
+    }
+
+    /// Clears an auth problem the instant the driver signs in again, rather
+    /// than waiting for the next accepted report to notice.
+    func clearAuthProblem() {
+        if problem == .authExpired {
+            problem = .none
+        }
     }
 }

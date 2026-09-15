@@ -78,12 +78,34 @@ import VehiclePositionsKit
             clock.advance(5)
         }
         #expect(r.problem == .none)
+
+        // An interleaved, unrelated server error breaks the run: the two
+        // prior timestamp rejects no longer count toward the threshold.
+        api.postError = APIError.status(500, message: "internal error")
+        _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        clock.advance(5)
+
+        api.postError = APIError.status(400, message: "timestamp must be within 5 minutes of server time")
+        for _ in 0..<2 {
+            _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+            clock.advance(5)
+        }
+        #expect(r.problem == .none, "only two consecutive timestamp rejects since the 500 broke the run")
+
         _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
         #expect(r.problem == .clockSkew)
         clock.advance(5)
         api.postError = nil
         _ = await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
         #expect(r.problem == .none)
+    }
+
+    @Test func aFailedSendStillCountsForTheThrottle() async {
+        let r = reporter()
+        api.postError = APIError.transport("offline")
+        #expect(await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"))
+        #expect(!(await r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")), "no clock advance: still inside the five-second window even though the first send failed")
+        #expect(api.posted.count == 1)
     }
 }
 
