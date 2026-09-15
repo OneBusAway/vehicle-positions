@@ -106,9 +106,15 @@ func main() {
 	numVehicles := flag.Int("vehicles", 10, "Number of simulated vehicles")
 	interval := flag.Duration("interval", 10*time.Second, "Time between location reports per vehicle")
 	duration := flag.Duration("duration", 5*time.Minute, "Total simulation duration (0 = run until Ctrl+C)")
-	email := flag.String("email", os.Getenv("ADMIN_BOOTSTRAP_EMAIL"), "Account email for login (default $ADMIN_BOOTSTRAP_EMAIL)")
-	password := flag.String("password", os.Getenv("ADMIN_BOOTSTRAP_PASSWORD"), "Account password for login (default $ADMIN_BOOTSTRAP_PASSWORD)")
+	email := flag.String("email", "", "Account email for login (default $ADMIN_BOOTSTRAP_EMAIL)")
+	password := flag.String("password", "", "Account password for login (default $ADMIN_BOOTSTRAP_PASSWORD)")
 	flag.Parse()
+	if *email == "" {
+		*email = os.Getenv("ADMIN_BOOTSTRAP_EMAIL")
+	}
+	if *password == "" {
+		*password = os.Getenv("ADMIN_BOOTSTRAP_PASSWORD")
+	}
 
 	if *numVehicles <= 0 {
 		log.Fatal("vehicles must be positive")
