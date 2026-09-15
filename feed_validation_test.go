@@ -123,6 +123,17 @@ func validateFeedCompliance(t *testing.T, feed *gtfsrt.FeedMessage) []string {
 		if entity.IsDeleted != nil && *entity.IsDeleted {
 			violations = append(violations, fmt.Sprintf("E039: is_deleted set for %q", id))
 		}
+
+		// Project rule: a TripDescriptor must identify something. A descriptor
+		// with neither trip_id nor route_id is unmatchable by any consumer.
+		if trip := vp.GetTrip(); trip != nil {
+			if trip.GetTripId() == "" && trip.GetRouteId() == "" {
+				violations = append(violations, fmt.Sprintf("entity %s: TripDescriptor has neither trip_id nor route_id", id))
+			}
+			if sd := trip.GetStartDate(); sd != "" && !serviceDatePattern.MatchString(sd) {
+				violations = append(violations, fmt.Sprintf("entity %s: start_date %q is not YYYYMMDD", id, sd))
+			}
+		}
 	}
 
 	// E050: header timestamp not >60s in future
@@ -529,4 +540,17 @@ func TestFeedValidation_FeedSerializesCleanly(t *testing.T) {
 	// Verify the deserialized feed also passes compliance
 	violations := validateFeedCompliance(t, &decoded)
 	assert.Empty(t, violations, "round-tripped feed should be compliant: %v", violations)
+}
+
+func TestFeedValidation_TripDescriptorNeedsTripOrRoute(t *testing.T) {
+	now := time.Now().Unix()
+	good := buildFeed([]*VehicleState{{VehicleID: "a", RouteID: "R1", StartDate: "20260906", Latitude: 1, Longitude: 1, Timestamp: now}}, nil)
+	assert.Empty(t, validateFeedCompliance(t, good))
+
+	// Hand-build a bad descriptor: buildFeed can no longer produce one.
+	bad := buildFeed([]*VehicleState{{VehicleID: "b", Latitude: 1, Longitude: 1, Timestamp: now}}, nil)
+	bad.Entity[0].Vehicle.Trip = &gtfsrt.TripDescriptor{StartDate: proto.String("20260906")}
+	v := validateFeedCompliance(t, bad)
+	require.NotEmpty(t, v)
+	assert.Contains(t, v[0], "neither trip_id nor route_id")
 }
