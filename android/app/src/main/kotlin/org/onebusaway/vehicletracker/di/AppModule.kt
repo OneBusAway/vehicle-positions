@@ -19,6 +19,7 @@ import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
+import org.onebusaway.vehicletracker.data.tripStateDataStore
 import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApi
@@ -117,8 +118,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTripStateStore(@ApplicationContext context: Context): TripStateStore =
-        DataStoreTripStateStore(context)
+    fun provideTripStateStore(@ApplicationContext context: Context, zone: ZoneId): TripStateStore =
+        DataStoreTripStateStore(context.tripStateDataStore, zone)
 
     @Provides
     @Singleton

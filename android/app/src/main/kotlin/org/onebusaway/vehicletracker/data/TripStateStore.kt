@@ -1,6 +1,8 @@
 package org.onebusaway.vehicletracker.data
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -28,9 +30,25 @@ interface TripStateStore {
     suspend fun addRecentRoute(routeId: String)
 }
 
-private val Context.tripStateDataStore by preferencesDataStore(name = "trip_state")
+/** Internal, not private, only because [org.onebusaway.vehicletracker.di.AppModule] provides the store. */
+internal val Context.tripStateDataStore: DataStore<Preferences> by preferencesDataStore(name = "trip_state")
 
-class DataStoreTripStateStore(private val context: Context) : TripStateStore {
+/**
+ * Recovers the GTFS trip id from a trip saved by the build before gtfsTripId was split out. That
+ * build stored `gtfsTripId.ifBlank { routeId }` under `trip_location_id`, so a value equal to the
+ * stored route id means the driver entered no trip id; anything else is the id they typed.
+ */
+internal fun legacyGtfsTripId(legacy: String?, routeId: String): String =
+    legacy?.takeIf { it != routeId }?.trim().orEmpty()
+
+/**
+ * Takes a `DataStore<Preferences>` rather than a `Context` so the upgrade path from the previous
+ * build can be unit-tested without an emulator, the same trade [DataStoreVehiclePrefsStore] makes.
+ */
+class DataStoreTripStateStore(
+    private val dataStore: DataStore<Preferences>,
+    private val zone: ZoneId,
+) : TripStateStore {
     private object Keys {
         val TRIP_DB_ID = longPreferencesKey("trip_db_id")
         val TRIP_GTFS_TRIP_ID = stringPreferencesKey("trip_gtfs_trip_id")
@@ -39,9 +57,12 @@ class DataStoreTripStateStore(private val context: Context) : TripStateStore {
         val TRIP_START_DATE = stringPreferencesKey("trip_start_date")
         val TRIP_STARTED_AT = longPreferencesKey("trip_started_at")
         val RECENT_ROUTES = stringPreferencesKey("recent_routes")
+
+        /** Written only by the build before the split; read once to restore an in-progress trip. */
+        val LEGACY_LOCATION_TRIP_ID = stringPreferencesKey("trip_location_id")
     }
 
-    override val activeTrip: Flow<ActiveTrip?> = context.tripStateDataStore.data.map { prefs ->
+    override val activeTrip: Flow<ActiveTrip?> = dataStore.data.map { prefs ->
         val tripDbId = prefs[Keys.TRIP_DB_ID]
         val vehicleId = prefs[Keys.TRIP_VEHICLE_ID]
         val routeId = prefs[Keys.TRIP_ROUTE_ID]
@@ -49,12 +70,14 @@ class DataStoreTripStateStore(private val context: Context) : TripStateStore {
         if (tripDbId != null && vehicleId != null && routeId != null && startedAt != null) {
             ActiveTrip(
                 tripDbId = tripDbId,
-                // A trip persisted by a build before these keys existed has neither; treat it as
-                // route-only and date it from when it started.
-                gtfsTripId = prefs[Keys.TRIP_GTFS_TRIP_ID] ?: "",
+                // A trip saved by the build before the split has no gtfs key; recover the id the
+                // driver entered from the legacy key instead of silently dropping it.
+                gtfsTripId = prefs[Keys.TRIP_GTFS_TRIP_ID]
+                    ?: legacyGtfsTripId(prefs[Keys.LEGACY_LOCATION_TRIP_ID], routeId),
                 vehicleId = vehicleId,
-                routeId = routeId,
-                startDate = prefs[Keys.TRIP_START_DATE] ?: serviceDate(startedAt, ZoneId.systemDefault()),
+                // New saves are already trimmed (TripRepository.start); the old build's were not.
+                routeId = routeId.trim(),
+                startDate = prefs[Keys.TRIP_START_DATE] ?: serviceDate(startedAt, zone),
                 startedAtEpochSec = startedAt,
             )
         } else {
@@ -62,12 +85,12 @@ class DataStoreTripStateStore(private val context: Context) : TripStateStore {
         }
     }
 
-    override val recentRoutes: Flow<List<String>> = context.tripStateDataStore.data.map { prefs ->
+    override val recentRoutes: Flow<List<String>> = dataStore.data.map { prefs ->
         prefs[Keys.RECENT_ROUTES]?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
     }
 
     override suspend fun saveActiveTrip(trip: ActiveTrip) {
-        context.tripStateDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[Keys.TRIP_DB_ID] = trip.tripDbId
             prefs[Keys.TRIP_GTFS_TRIP_ID] = trip.gtfsTripId
             prefs[Keys.TRIP_VEHICLE_ID] = trip.vehicleId
@@ -78,21 +101,20 @@ class DataStoreTripStateStore(private val context: Context) : TripStateStore {
     }
 
     override suspend fun clearActiveTrip() {
-        context.tripStateDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(Keys.TRIP_DB_ID)
             prefs.remove(Keys.TRIP_GTFS_TRIP_ID)
             prefs.remove(Keys.TRIP_VEHICLE_ID)
             prefs.remove(Keys.TRIP_ROUTE_ID)
             prefs.remove(Keys.TRIP_START_DATE)
             prefs.remove(Keys.TRIP_STARTED_AT)
-            // Legacy key from before gtfsTripId/routeId were split out; clean up old installs.
-            prefs.remove(stringPreferencesKey("trip_location_id"))
+            prefs.remove(Keys.LEGACY_LOCATION_TRIP_ID)
         }
     }
 
     override suspend fun addRecentRoute(routeId: String) {
         val cleaned = routeId.replace("|", "")
-        context.tripStateDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[Keys.RECENT_ROUTES]?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
             val updated = (listOf(cleaned) + current.filter { it != cleaned }).take(5)
             prefs[Keys.RECENT_ROUTES] = updated.joinToString("|")
