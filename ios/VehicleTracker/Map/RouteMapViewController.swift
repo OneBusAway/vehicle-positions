@@ -4,8 +4,8 @@ import UIKit
 /// Draws the trip: the shape in the route colour, its stops, the vehicle
 /// pointed along its course, and the projected position while off route.
 /// Shared by the phone's tracking screen and the CarPlay window. The map
-/// takes no touches of its own: hosts drive it through `pan`, `zoom`,
-/// `recentre` and `followsVehicle`.
+/// takes no touches of its own: hosts drive it through `pan`, `zoom` and
+/// `followsVehicle`.
 @MainActor
 final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// Camera distance while following, metres, before the host zooms.
@@ -34,10 +34,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     }
 
     var followsVehicle = true {
-        didSet {
-            guard followsVehicle != oldValue else { return }
-            if followsVehicle { follow(animated: true) }
-        }
+        didSet { if followsVehicle { follow(animated: true) } }
     }
 
     private var trip: TripGeometry?
@@ -65,11 +62,11 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     private let snapped = SnappedAnnotation()
     private var vehiclePlaced = false
     private var snappedPlaced = false
-    /// What the vehicle image was last drawn for, and the image itself: it is
-    /// only worth redrawing when one of these changes, not on every fix and
-    /// every camera nudge.
-    private var vehicleGlyphKey: (onRoute: Bool, traitStyle: UIUserInterfaceStyle)?
-    private var vehicleGlyph: UIImage?
+    /// The vehicle image and the resolved fill it was drawn with: the fill is
+    /// the only input to the drawing, so comparing it is what decides whether
+    /// a new route colour, an on/off-route flip or a trait change needs a
+    /// redraw, and nothing has to invalidate this by hand.
+    private var vehicleGlyph: (fill: UIColor, image: UIImage)?
 
     init(allowsDirectInteraction: Bool = false) {
         self.allowsDirectInteraction = allowsDirectInteraction
@@ -122,8 +119,6 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         shape = nil
         lastAdherence = nil
         lastCourse = 0
-        // The next trip's route colour is the vehicle's fill.
-        vehicleGlyphKey = nil
         if vehiclePlaced { mapView.removeAnnotation(vehicle); vehiclePlaced = false }
         if snappedPlaced { mapView.removeAnnotation(snapped); snappedPlaced = false }
 
@@ -213,13 +208,6 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         }
     }
 
-    func recentre() {
-        followDistance = Self.defaultFollowDistance
-        // The setter only acts on a change, and recentring while already
-        // following still has to undo the driver's zoom.
-        if followsVehicle { follow(animated: true) } else { followsVehicle = true }
-    }
-
     private func follow(animated: Bool) {
         guard let adherence = lastAdherence else { return }
         let course = lastCourse
@@ -236,20 +224,17 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
     private func refreshVehicleView() {
         guard let view = mapView.view(for: vehicle) else { return }
-        let key = (onRoute: vehicle.isOnRoute, traitStyle: mapView.traitCollection.userInterfaceStyle)
-        if vehicleGlyph == nil || vehicleGlyphKey.map({ $0 == key }) != true {
-            let fill = (vehicle.isOnRoute ? routeColor : .systemGray).resolvedColor(with: mapView.traitCollection)
-            vehicleGlyph = MapGlyphs.vehicle(fill: fill)
-            vehicleGlyphKey = key
+        let fill = (vehicle.isOnRoute ? routeColor : .systemGray).resolvedColor(with: mapView.traitCollection)
+        if vehicleGlyph?.fill != fill {
+            vehicleGlyph = (fill, MapGlyphs.vehicle(fill: fill))
         }
-        view.image = vehicleGlyph
-        updateVehicleTransform()
+        view.image = vehicleGlyph?.image
+        updateVehicleTransform(of: view)
     }
 
     /// Points the vehicle along its course relative to the camera. The image
     /// says nothing about heading, so a camera move only has to turn it.
-    private func updateVehicleTransform() {
-        guard let view = mapView.view(for: vehicle) else { return }
+    private func updateVehicleTransform(of view: MKAnnotationView) {
         let relative = vehicle.course - mapView.camera.heading
         view.transform = CGAffineTransform(rotationAngle: relative * .pi / 180)
     }
@@ -259,9 +244,6 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// light/dark change — the car's own day/night switch included — leaves
     /// stale colours on screen until they are drawn again.
     func refreshGlyphs() {
-        // Traits the map view has not taken up yet would let the cached
-        // vehicle image stand; this is the one call that must always redraw.
-        vehicleGlyphKey = nil
         for stop in stops {
             guard let view = mapView.view(for: stop) else { continue }
             view.image = stopGlyph(for: stop)
@@ -336,6 +318,6 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     }
 
     func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-        updateVehicleTransform()
+        if let view = mapView.view(for: vehicle) { updateVehicleTransform(of: view) }
     }
 }

@@ -217,11 +217,10 @@ func (ix *Index) Route(id string) (RouteInfo, bool) {
 // TripsOnRoute returns the route's trips active on the "YYYYMMDD" service
 // date, ordered by first departure. The slice is the caller's to keep.
 func (ix *Index) TripsOnRoute(routeID, serviceDate string) []*TripInfo {
-	day, err := time.ParseInLocation(serviceDateLayout, serviceDate, ix.tz)
-	if err != nil {
+	day, key, ok := ix.serviceDay(serviceDate)
+	if !ok {
 		return nil
 	}
-	key := dateKey(day)
 	var out []*TripInfo
 	for _, trip := range ix.tripsByRoute[routeID] {
 		if ix.activeOn(trip, day, key) {
@@ -240,11 +239,21 @@ func (ix *Index) Stats() IndexStats { return ix.stats }
 // ActiveOn reports whether the trip runs on the given "YYYYMMDD" service date.
 // Calendar exceptions override the weekly pattern.
 func (ix *Index) ActiveOn(trip *TripInfo, serviceDate string) bool {
-	day, err := time.ParseInLocation(serviceDateLayout, serviceDate, ix.tz)
-	if err != nil {
+	day, key, ok := ix.serviceDay(serviceDate)
+	if !ok {
 		return false
 	}
-	return ix.activeOn(trip, day, dateKey(day))
+	return ix.activeOn(trip, day, key)
+}
+
+// serviceDay parses a "YYYYMMDD" service date into the day it names in the
+// feed's timezone and that day's calendar key; ok is false for anything else.
+func (ix *Index) serviceDay(serviceDate string) (day time.Time, key int, ok bool) {
+	day, err := time.ParseInLocation(serviceDateLayout, serviceDate, ix.tz)
+	if err != nil {
+		return time.Time{}, 0, false
+	}
+	return day, dateKey(day), true
 }
 
 // activeOn is ActiveOn with the service date already parsed into the day it

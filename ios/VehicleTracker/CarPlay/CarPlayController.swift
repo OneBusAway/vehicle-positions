@@ -37,15 +37,13 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// vehicle has to be back on route before another may be presented.
     private var offRouteEpisodeSeen = false
     private var details: CPInformationTemplate?
-    /// The six detail strings the information template is showing, so its
-    /// items are only rebuilt when one of them changes.
-    private var lastDetailItems: [String]?
     private var isPanning = false
     private var lastPanTranslation = CGPoint.zero
-    /// Set for the span of a `session.start` call, so a second tap on the
-    /// alert's Start button — or on an earlier list, still on screen behind
-    /// it — cannot fire a second start while the first is in flight.
-    private var startInFlight = false
+    /// Set for the span of a `load` call, so a second tap on a picker row —
+    /// or on the alert's Start button, or an earlier list still on screen
+    /// behind it — cannot push a second list or fire a second start while
+    /// the first is in flight.
+    private var loading = false
     /// Cleared when the car goes away. Anything resumed after an `await` has
     /// to check it: pushing a template onto a dead interface controller is at
     /// best wasted work, and the templates would outlive the scene.
@@ -65,7 +63,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// guidance away: tapping it hands the car screen back to us.
     private lazy var guidanceBarButton = CPBarButton(title: String(localized: "Guidance")) { [weak self] _ in
         guard let self else { return }
-        resumeGuidance()
+        guidanceSuspendedForTripID = nil
         render()
     }
     private lazy var donePanningBarButton = CPBarButton(title: String(localized: "Done")) { [weak self] _ in
@@ -115,6 +113,9 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             _ = session.phase
             _ = session.latest
             _ = session.reporting
+            // The details template shows the count; it must not depend on
+            // `reporting` happening to be rewritten alongside it.
+            _ = session.fixesSent
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -142,7 +143,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         // `.starting` are this session going away, not the run completing.
         tearDownGuidance(reason: session.phase == .idle ? .finished : .cancelled)
         dismissPanning()
-        resumeGuidance()
+        guidanceSuspendedForTripID = nil
         dismissDetails()
         map.setTrip(nil)
         map.update(nil)
@@ -158,7 +159,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private func renderPaused(_ active: ActiveTrip) {
         tearDownGuidance(reason: .cancelled)
         dismissPanning()
-        resumeGuidance()
+        guidanceSuspendedForTripID = nil
         dismissDetails()
         map.setTrip(active.trip)
         map.update(nil)
@@ -175,7 +176,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         // over for is over with the trip it was suspended on.
         let suspended = guidanceSuspendedForTripID == active.trip.id
         if !suspended {
-            resumeGuidance()
+            guidanceSuspendedForTripID = nil
             if navigationTripID != active.trip.id { startGuidance(active) }
         }
         updateGuidance(active, session.latest)
@@ -202,14 +203,11 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             if !interface.templates.contains(where: { $0 === details }) {
                 // The driver popped it with the car's own back control.
                 self.details = nil
-                lastDetailItems = nil
             } else if interface.topTemplate === details {
                 let items = detailItems(active)
                 // Every fix rebuilds the same six strings; only a changed one
                 // is worth making CarPlay redraw the template.
-                let strings = items.map { $0.detail ?? "" }
-                if strings != lastDetailItems {
-                    lastDetailItems = strings
+                if items.map(\.detail) != details.items.map(\.detail) {
                     details.items = items
                 }
             }
@@ -256,16 +254,11 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         lastPanTranslation = .zero
     }
 
-    private func resumeGuidance() {
-        guidanceSuspendedForTripID = nil
-    }
-
     private func dismissDetails() {
         if let details, interface.topTemplate === details {
             interface.popTemplate(animated: true, completion: nil)
         }
         details = nil
-        lastDetailItems = nil
     }
 
     // MARK: Guidance
@@ -370,11 +363,9 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private func showDetails() {
         guard let active = session.activeTrip else { return }
         if let details, interface.topTemplate === details { return }
-        let items = detailItems(active)
         let template = CPInformationTemplate(title: String(localized: "Trip"), layout: .leading,
-                                             items: items, actions: [])
+                                             items: detailItems(active), actions: [])
         details = template
-        lastDetailItems = items.map { $0.detail ?? "" }
         interface.pushTemplate(template, animated: true, completion: nil)
     }
 
@@ -401,8 +392,8 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
 
     func mapTemplateDidDismissPanningInterface(_ mapTemplate: CPMapTemplate) {
         isPanning = false
-        // Follow the vehicle again at whatever zoom the driver chose, rather
-        // than `recentre()`, which would also throw their zoom away.
+        // Follow the vehicle again at whatever zoom the driver chose; the
+        // follow distance is deliberately left alone.
         map.followsVehicle = true
         render()
     }
@@ -441,17 +432,24 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// an expired sign-in pops to the root, and anything else is an alert.
     /// `serverMessage` shows what the server said in place of
     /// `failureMessage` when it said anything — which starting a trip wants
-    /// and the pickers do not.
+    /// and the pickers do not. Only one load runs at a time: a tap that
+    /// lands while one is pending is dropped, so a slow fetch cannot be
+    /// asked for twice and push its list twice.
     private func load<T: Sendable>(_ failureMessage: String, serverMessage: Bool = false,
                                    _ work: @escaping @MainActor () async throws -> T,
                                    then: @escaping @MainActor (T) -> Void) {
+        guard !loading else { return }
+        loading = true
         Task { [weak self] in
             guard let self else { return }
             do {
                 let value = try await work()
+                // Cleared before `then`, which may start the next load itself.
+                loading = false
                 guard connected else { return }
                 then(value)
             } catch {
+                loading = false
                 guard connected else { return }
                 if session.handleIfUnauthorized(error) {
                     interface.popToRootTemplate(animated: true, completion: nil)
@@ -477,7 +475,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                 pickRoute(for: session.vehicles[0])
             } else {
                 let items = CarPlayTemplates.vehicleItems(session.vehicles) { [weak self] vehicle in
-                    guard let self, !startInFlight else { return }
+                    guard let self, !loading else { return }
                     pickRoute(for: vehicle)
                 }
                 interface.pushTemplate(CarPlayTemplates.list(title: String(localized: "Your vehicle"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
@@ -491,7 +489,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         } then: { [weak self] routes in
             guard let self else { return }
             let sections = CarPlayTemplates.routeSections(routes, recentIDs: session.settings.recentRouteIDs) { [weak self] route in
-                guard let self, !startInFlight else { return }
+                guard let self, !loading else { return }
                 pickTrip(vehicle: vehicle, route: route)
             }
             interface.pushTemplate(CarPlayTemplates.list(title: vehicle.label.isEmpty ? vehicle.id : vehicle.label, sections: sections, maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
@@ -504,7 +502,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         } then: { [weak self] page in
             guard let self else { return }
             let items = CarPlayTemplates.tripItems(page, now: Date()) { [weak self] trip in
-                guard let self, !startInFlight else { return }
+                guard let self, !loading else { return }
                 confirmStart(vehicle: vehicle, route: route, trip: trip, timezone: page.timezone)
             }
             let list = CarPlayTemplates.list(title: String(localized: "Route \(route.shortName)"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount)
@@ -515,7 +513,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
 
     private func confirmStart(vehicle: Vehicle, route: RouteInfo, trip: TripSummary, timezone: String) {
         let start = CPAlertAction(title: String(localized: "Start"), style: .default) { [weak self] _ in
-            guard let self, !startInFlight else { return }
+            guard let self, !loading else { return }
             guard case .idle = session.phase else {
                 // A trip is already starting or running — started on the
                 // phone, most likely, while this alert sat on the car screen.
@@ -527,9 +525,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                 return
             }
             interface.dismissTemplate(animated: true, completion: nil)
-            startInFlight = true
             load(String(localized: "Could not start the trip"), serverMessage: true) {
-                defer { self.startInFlight = false }
                 try await self.session.start(vehicle: vehicle, tripID: trip.id)
             } then: { [weak self] _ in
                 self?.interface.popToRootTemplate(animated: true, completion: nil)

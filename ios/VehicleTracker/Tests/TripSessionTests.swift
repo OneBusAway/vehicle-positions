@@ -29,11 +29,11 @@ import VehiclePositionsKit
 
     /// What a relaunch finds: a fresh token, a known server and this driver's
     /// own trip in the store, which the session takes up as `.paused`.
-    func pausedSession(tripID id: Int64 = 7, trip: TripGeometry = TripFixtures.t1) throws -> (session: TripSession, active: ActiveTrip) {
+    func pausedSession(trip: TripGeometry = TripFixtures.t1) throws -> (session: TripSession, active: ActiveTrip) {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")
         defaults.set("d@test.com", forKey: "email")
-        let active = ActiveTrip(serverTripID: id, vehicle: bus, trip: trip,
+        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: trip,
                                 startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com")
         try store.save(active)
         return (session(), active)

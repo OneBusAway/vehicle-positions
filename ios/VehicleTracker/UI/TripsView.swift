@@ -9,10 +9,7 @@ struct TripsView: View {
 
     /// A start is in flight — this list's own, or one from the car, which
     /// must disable this list just the same.
-    private var starting: Bool {
-        if case .starting = session.phase { return true }
-        return false
-    }
+    private var starting: Bool { session.phase.isStarting }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -76,11 +73,7 @@ struct TripsView: View {
                 try await session.start(vehicle: vehicle, tripID: trip.id)
             } catch {
                 guard !session.handleIfUnauthorized(error) else { return }
-                if case APIError.status(let code, let message) = error {
-                    self.error = message.isEmpty ? "Server error \(code)" : message
-                } else {
-                    self.error = error.localizedDescription
-                }
+                self.error = error.localizedDescription
             }
         }
     }

@@ -36,6 +36,13 @@ final class TripSession {
         case paused(ActiveTrip)
         case ending(ActiveTrip)
 
+        /// A start is in flight, on the phone or from the car; the run list
+        /// on either must not offer another until the server answers.
+        var isStarting: Bool {
+            if case .starting = self { return true }
+            return false
+        }
+
         /// The trip is being ended: both screens spend the End button on the
         /// first tap and say so until the server answers.
         var isEnding: Bool {
