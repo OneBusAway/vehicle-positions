@@ -3,6 +3,12 @@ import Testing
 @testable import VehicleTracker
 
 @Suite struct CarPlayTemplatesTests {
+    let evaluator = AdherenceEvaluator(trip: TripFixtures.t1)!
+    var active: ActiveTrip {
+        ActiveTrip(serverTripID: 1, vehicle: Vehicle(id: "bus-1", label: "Bus 1"), trip: TripFixtures.t1,
+                   startedAt: TripFixtures.at(7, 55), driverEmail: "d@test.com")
+    }
+
     @Test func titleButtonIsDisabledText() {
         let b = CarPlayTemplates.titleButton("Sign in on iPhone")
         #expect(b.title == "Sign in on iPhone")
@@ -36,12 +42,6 @@ import Testing
         #expect(!trailing[0].isEnabled)
     }
 
-    let evaluator = AdherenceEvaluator(trip: TripFixtures.t1)!
-    var active: ActiveTrip {
-        ActiveTrip(serverTripID: 1, vehicle: Vehicle(id: "bus-1", label: "Bus 1"), trip: TripFixtures.t1,
-                   startedAt: TripFixtures.at(7, 55), driverEmail: "d@test.com")
-    }
-
     @Test func maneuverVariantsLongestFirst() {
         // ~300 m along, due 08:03:00 → 2 min late at 08:05.
         let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6027, lon: -122.3300, at: TripFixtures.at(8, 5)), previous: nil)
@@ -54,6 +54,27 @@ import Testing
         let m = CarPlayTemplates.maneuver(stop: a.nextStop, adherence: a, timezone: "America/Los_Angeles")
         #expect(m.instructionVariants == v)
         #expect(m.symbolImage != nil)
+    }
+
+    @Test func maneuverVariantsOnTime() {
+        // ~445 m along, due 08:04:27 → 33 s late at 08:05, which reads on time.
+        let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6040, lon: -122.3300, at: TripFixtures.at(8, 5)), previous: nil)
+        #expect(a.nextStop.id == "ST2")
+        let v = CarPlayTemplates.maneuverVariants(stop: a.nextStop, adherence: a, timezone: "America/Los_Angeles")
+        #expect(v.count == 3)
+        #expect(v[0].hasPrefix("Stop ST2 · 8:05"))
+        #expect(v[0].hasSuffix(" · on time"))
+        #expect(v[1] == "Stop ST2 · on time")
+        #expect(v[2] == "Stop ST2")
+    }
+
+    @Test func mapButtonsAreAtMostThree() {
+        let buttons = CarPlayTemplates.mapButtons(onPan: {}, onZoomIn: {}, onZoomOut: {})
+        let withImages = buttons.filter { $0.image != nil }.count
+        let enabled = buttons.filter { $0.isEnabled }.count
+        #expect(buttons.count == 3)
+        #expect(withImages == 3)
+        #expect(enabled == 3)
     }
 
     @Test func maneuverWithoutAdherenceShowsScheduleOnly() {

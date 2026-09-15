@@ -103,11 +103,19 @@ enum CarPlayTemplates {
         ]
     }
 
+    static var offRouteTitle: String { String(localized: "Off route") }
+
+    /// How far off the route the vehicle is. The controller refreshes a
+    /// standing alert with this while the distance text keeps changing.
+    static func offRouteSubtitle(adherence: Adherence) -> String {
+        String(localized: "\(Formatters.distance(adherence.projection.distanceToShape)) from the route")
+    }
+
     static func offRouteAlert(adherence: Adherence, onOK: @escaping () -> Void) -> CPNavigationAlert {
         let ok = CPAlertAction(title: String(localized: "OK"), style: .default) { _ in onOK() }
         return CPNavigationAlert(
-            titleVariants: [String(localized: "Off route")],
-            subtitleVariants: [String(localized: "\(Formatters.distance(adherence.projection.distanceToShape)) from the route")],
+            titleVariants: [offRouteTitle],
+            subtitleVariants: [offRouteSubtitle(adherence: adherence)],
             image: UIImage(systemName: "exclamationmark.triangle.fill"),
             primaryAction: ok, secondaryAction: nil, duration: 0
         )

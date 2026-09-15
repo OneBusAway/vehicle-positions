@@ -17,12 +17,35 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private var navigation: CPNavigationSession?
     private var navigationTripID: String?
     private var trip: CPTrip?
-    private var maneuvers: [CPManeuver] = []
-    private var maneuverKey = ""
+    /// One reusable maneuver per stop sequence. CarPlay tracks maneuvers by
+    /// identity, so a new deviation edits the card the driver is reading
+    /// instead of replacing it.
+    private var maneuversByStop: [Int: CPManeuver] = [:]
+    /// The stop sequences currently in `upcomingManeuvers`, and every sequence
+    /// already handed to the session: maneuvers may only be added once, in
+    /// chronological order.
+    private var upcomingSequences: [Int] = []
+    private var addedSequences: Set<Int> = []
     private var offRouteAlerted = false
+    private var offRouteSubtitle: String?
     private var details: CPInformationTemplate?
     private var isPanning = false
     private var lastPanTranslation = CGPoint.zero
+
+    /// The car screen's controls are rebuilt only when what they say changes;
+    /// reassigning them on every fix makes CarPlay redraw the bar.
+    private var lastActiveChrome: (isPanning: Bool, ending: Bool)?
+
+    private lazy var endBarButton = CPBarButton(title: String(localized: "End")) { [weak self] _ in self?.confirmEnd() }
+    private lazy var detailsBarButton = CPBarButton(title: String(localized: "Details")) { [weak self] _ in self?.showDetails() }
+    private lazy var donePanningBarButton = CPBarButton(title: String(localized: "Done")) { [weak self] _ in
+        self?.mapTemplate.dismissPanningInterface(animated: true)
+    }
+    private lazy var activeMapButtons = CarPlayTemplates.mapButtons(
+        onPan: { [weak self] in self?.mapTemplate.showPanningInterface(animated: true) },
+        onZoomIn: { [weak self] in self?.map.zoom(by: 2) },
+        onZoomOut: { [weak self] in self?.map.zoom(by: 0.5) }
+    )
 
     init(session: TripSession, interface: CPInterfaceController, window: CPWindow) {
         self.session = session
@@ -41,7 +64,8 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     }
 
     func stop() {
-        tearDownGuidance()
+        // The car is going away, not the trip: the phone keeps reporting.
+        tearDownGuidance(reason: .cancelled)
     }
 
     func contentStyleDidChange(_ style: UIUserInterfaceStyle) {
@@ -80,7 +104,10 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     }
 
     private func renderIdle() {
-        tearDownGuidance()
+        // Only `.idle` means the trip itself finished; `.signedOut` and
+        // `.starting` are this session going away, not the run completing.
+        tearDownGuidance(reason: session.phase == .idle ? .finished : .cancelled)
+        dismissDetails()
         map.setTrip(nil)
         map.update(nil)
         map.showsPhoneLocation = true
@@ -91,7 +118,8 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     }
 
     private func renderPaused(_ active: ActiveTrip) {
-        tearDownGuidance()
+        tearDownGuidance(reason: .cancelled)
+        dismissDetails()
         map.setTrip(active.trip)
         map.update(nil)
         let buttons = CarPlayTemplates.pausedBarButtons { [weak self] in self?.confirmEnd() }
@@ -110,38 +138,63 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         updateOffRouteAlert(session.latest)
 
         let ending: Bool = { if case .ending = session.phase { return true } else { return false } }()
-        let end = endButton()
-        end.isEnabled = !ending
-        mapTemplate.leadingNavigationBarButtons = [end]
-        if isPanning {
-            mapTemplate.trailingNavigationBarButtons = [CPBarButton(title: String(localized: "Done")) { [weak self] _ in
-                self?.mapTemplate.dismissPanningInterface(animated: true)
-            }]
-        } else {
-            mapTemplate.trailingNavigationBarButtons = [CPBarButton(title: String(localized: "Details")) { [weak self] _ in self?.showDetails() }]
-            mapTemplate.mapButtons = CarPlayTemplates.mapButtons(
-                onPan: { [weak self] in self?.mapTemplate.showPanningInterface(animated: true) },
-                onZoomIn: { [weak self] in self?.map.zoom(by: 2) },
-                onZoomOut: { [weak self] in self?.map.zoom(by: 0.5) }
-            )
+        let chrome = (isPanning: isPanning, ending: ending)
+        if lastActiveChrome.map({ $0 == chrome }) != true {
+            lastActiveChrome = chrome
+            endBarButton.isEnabled = !ending
+            mapTemplate.leadingNavigationBarButtons = [endBarButton]
+            if isPanning {
+                // The panning interface keeps up to two map buttons on screen;
+                // none of ours make sense while the driver is dragging the map.
+                mapTemplate.trailingNavigationBarButtons = [donePanningBarButton]
+                mapTemplate.mapButtons = []
+            } else {
+                mapTemplate.trailingNavigationBarButtons = [detailsBarButton]
+                mapTemplate.mapButtons = activeMapButtons
+            }
         }
 
-        if let details, interface.topTemplate === details {
-            details.items = CarPlayTemplates.detailItems(active: active, adherence: session.latest, reporting: session.reporting)
+        if let details {
+            if !interface.templates.contains(where: { $0 === details }) {
+                // The driver popped it with the car's own back control.
+                self.details = nil
+            } else if interface.topTemplate === details {
+                details.items = CarPlayTemplates.detailItems(active: active, adherence: session.latest, reporting: session.reporting)
+            }
         }
     }
 
-    private func tearDownGuidance() {
-        navigation?.finishTrip()
+    /// Why a navigation session is being torn down. CarPlay distinguishes a
+    /// trip that finished from one that was called off, and so does the car's
+    /// own navigation.
+    private enum GuidanceEnd {
+        /// The driver's run is over.
+        case finished
+        /// The run carries on without car-screen guidance: paused, the car
+        /// disconnected, or the car's built-in navigation took over.
+        case cancelled
+    }
+
+    private func tearDownGuidance(reason: GuidanceEnd) {
+        switch reason {
+        case .finished: navigation?.finishTrip()
+        case .cancelled: navigation?.cancelTrip()
+        }
         navigation = nil
         navigationTripID = nil
         trip = nil
-        maneuvers = []
-        maneuverKey = ""
+        maneuversByStop = [:]
+        upcomingSequences = []
+        addedSequences = []
+        lastActiveChrome = nil
         if offRouteAlerted {
-            mapTemplate.dismissNavigationAlert(animated: false) { _ in }
             offRouteAlerted = false
+            offRouteSubtitle = nil
+            mapTemplate.dismissNavigationAlert(animated: false) { _ in }
         }
+    }
+
+    private func dismissDetails() {
         if let details, interface.topTemplate === details {
             interface.popTemplate(animated: true, completion: nil)
         }
@@ -153,7 +206,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// One CPTrip from the first stop to the last, with the stops as the
     /// maneuvers CarPlay shows one at a time.
     private func startGuidance(_ active: ActiveTrip) {
-        tearDownGuidance()
+        tearDownGuidance(reason: .cancelled)
         guard let first = active.trip.stops.first, let last = active.trip.stops.last else { return }
         let tz = TimeZone(identifier: active.trip.timezone)
         func waypoint(_ stop: TripStop) -> CPNavigationWaypoint {
@@ -170,39 +223,77 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private func updateGuidance(_ active: ActiveTrip, _ adherence: Adherence?) {
         guard let navigation else { return }
         let tz = active.trip.timezone
-        let next = adherence?.nextStop ?? active.trip.stops[0]
-        let key = "\(next.sequence)|\(adherence.map { Formatters.deviation($0.scheduleDeviation) } ?? "")"
-        if key != maneuverKey {
-            maneuverKey = key
-            var list = [CarPlayTemplates.maneuver(stop: next, adherence: adherence, timezone: tz)]
-            if let index = active.trip.stops.firstIndex(where: { $0.sequence == next.sequence }), index + 1 < active.trip.stops.count {
-                list.append(CarPlayTemplates.maneuver(stop: active.trip.stops[index + 1], adherence: nil, timezone: tz))
+        let stops = active.trip.stops
+        let next = adherence?.nextStop ?? stops[0]
+
+        func maneuver(for stop: TripStop, adherence: Adherence?) -> CPManeuver {
+            let variants = CarPlayTemplates.maneuverVariants(stop: stop, adherence: adherence, timezone: tz)
+            if let existing = maneuversByStop[stop.sequence] {
+                if existing.instructionVariants != variants { existing.instructionVariants = variants }
+                return existing
             }
-            maneuvers = list
-            // CarPlay requires every maneuver to be added to the session
-            // before it may appear in `upcomingManeuvers`.
-            navigation.add(list)
-            navigation.upcomingManeuvers = list
+            let made = CarPlayTemplates.maneuver(stop: stop, adherence: adherence, timezone: tz)
+            maneuversByStop[stop.sequence] = made
+            return made
         }
-        guard let adherence, let first = maneuvers.first, let trip else { return }
-        navigation.updateEstimates(CarPlayTemplates.stopEstimates(adherence: adherence), for: first)
+
+        // Never empty: the next stop is always one maneuver, with the stop
+        // after it as the follower CarPlay may show alongside.
+        var upcoming = [maneuver(for: next, adherence: adherence)]
+        var sequences = [next.sequence]
+        if let index = stops.firstIndex(where: { $0.sequence == next.sequence }), index + 1 < stops.count {
+            let following = stops[index + 1]
+            upcoming.append(maneuver(for: following, adherence: nil))
+            sequences.append(following.sequence)
+        }
+        if sequences != upcomingSequences {
+            upcomingSequences = sequences
+            let fresh = zip(sequences, upcoming).filter { !addedSequences.contains($0.0) }.map(\.1)
+            if !fresh.isEmpty {
+                // A maneuver must be handed to the session, once and in
+                // chronological order, before it may appear in `upcomingManeuvers`.
+                navigation.add(fresh)
+                addedSequences.formUnion(sequences)
+            }
+            navigation.upcomingManeuvers = upcoming
+        }
+
+        guard let adherence, let head = upcoming.first, let trip else { return }
+        navigation.updateEstimates(CarPlayTemplates.stopEstimates(adherence: adherence), for: head)
         mapTemplate.update(CarPlayTemplates.tripEstimates(active: active, adherence: adherence), for: trip,
                            with: CarPlayTemplates.timeRemainingColor(for: adherence))
     }
 
     private func updateOffRouteAlert(_ adherence: Adherence?) {
         guard let adherence else { return }
-        if !adherence.isOnRoute, !offRouteAlerted {
-            offRouteAlerted = true
-            mapTemplate.present(navigationAlert: CarPlayTemplates.offRouteAlert(adherence: adherence, onOK: {}), animated: true)
-        } else if adherence.isOnRoute, offRouteAlerted {
-            offRouteAlerted = false
-            mapTemplate.dismissNavigationAlert(animated: true) { _ in }
+        guard !adherence.isOnRoute else {
+            if offRouteAlerted {
+                offRouteAlerted = false
+                offRouteSubtitle = nil
+                mapTemplate.dismissNavigationAlert(animated: true) { _ in }
+            }
+            return
         }
+        let subtitle = CarPlayTemplates.offRouteSubtitle(adherence: adherence)
+        if offRouteAlerted {
+            // Still off route: keep the distance on the standing banner honest
+            // rather than presenting a second one.
+            if let alert = mapTemplate.currentNavigationAlert, subtitle != offRouteSubtitle {
+                offRouteSubtitle = subtitle
+                alert.updateTitleVariants([CarPlayTemplates.offRouteTitle], subtitleVariants: [subtitle])
+            }
+            return
+        }
+        // Something else may own the banner; never stack ours on top of it.
+        guard mapTemplate.currentNavigationAlert == nil else { return }
+        offRouteAlerted = true
+        offRouteSubtitle = subtitle
+        mapTemplate.present(navigationAlert: CarPlayTemplates.offRouteAlert(adherence: adherence, onOK: {}), animated: true)
     }
 
     private func showDetails() {
         guard let active = session.activeTrip else { return }
+        if let details, interface.topTemplate === details { return }
         let template = CPInformationTemplate(title: String(localized: "Trip"), layout: .leading,
                                              items: CarPlayTemplates.detailItems(active: active, adherence: session.latest, reporting: session.reporting),
                                              actions: [])
@@ -213,8 +304,11 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     // MARK: CPMapTemplateDelegate
 
     func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
-        // The car's own "end route" control: same as the driver tapping End.
-        endTrip()
+        // The *system* cancelled navigation: the car's built-in navigation
+        // started, and only one of us may guide at a time. The driver's trip
+        // and its reporting carry on — only the car-screen guidance stops.
+        // Clearing `navigationTripID` lets a later render offer it again.
+        tearDownGuidance(reason: .cancelled)
     }
 
     func mapTemplateDidShowPanningInterface(_ mapTemplate: CPMapTemplate) {
@@ -226,7 +320,9 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
 
     func mapTemplateDidDismissPanningInterface(_ mapTemplate: CPMapTemplate) {
         isPanning = false
-        map.recentre()
+        // Follow the vehicle again at whatever zoom the driver chose, rather
+        // than `recentre()`, which would also throw their zoom away.
+        map.followsVehicle = true
         render()
     }
 
@@ -336,10 +432,6 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     }
 
     // MARK: End
-
-    private func endButton() -> CPBarButton {
-        CPBarButton(title: String(localized: "End")) { [weak self] _ in self?.confirmEnd() }
-    }
 
     private func confirmEnd() {
         let end = CPAlertAction(title: String(localized: "End Trip"), style: .destructive) { [weak self] _ in
