@@ -449,3 +449,29 @@ curl http://localhost:8080/api/v1/admin/status
 - empty feed:
    - make sure timestamp is within 5 minutes of server time (this is request validation in `handlers.go`, independent of `STALENESS_THRESHOLD`)
   - ensure coordinates are valid and non-zero
+
+## iOS driver app
+
+The iOS driver app lives in `ios/VehicleTracker` (XcodeGen project; the
+`.xcodeproj` is generated and git-ignored) and depends on the local rider SDK
+package `ios/VehiclePositionsKit` for Core Location. Requires Xcode 27 and
+`brew install xcodegen`.
+
+```bash
+export DEVELOPER_DIR=/Applications/Xcode-27.0.0-release.candidate.app/Contents/Developer  # or your Xcode 27 path
+cd ios/VehicleTracker
+xcodegen generate
+open VehicleTracker.xcodeproj
+```
+
+Tests (Swift Testing, hosted by the app) run on a simulator with iOS 26.4 or
+later; create one on the iOS 27 runtime if none exists:
+
+```bash
+UDID=$(xcrun simctl create "VehicleTracker iPhone" "iPhone 17 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+xcodebuild test -project VehicleTracker.xcodeproj -scheme VehicleTracker -destination "id=$UDID"
+```
+
+For the manual end-to-end walkthrough against a local server (login, trip
+picker, simulated GPS along the fixture route, the feed check) see
+[`docs/ios-smoke-test.md`](ios-smoke-test.md).
