@@ -21,9 +21,11 @@ type gtfsRuntime struct {
 	wg        sync.WaitGroup
 }
 
-// newGTFSRuntime loads the feed at source (a failure aborts startup: nothing
-// downstream can run without a schedule) and starts reloading it every
-// `refresh`. A failed reload keeps the previous index and logs.
+// newGTFSRuntime loads the feed at source and starts reloading it every
+// `refresh`. A failure to load is fatal by policy (spec §4.1), even when only
+// the driver catalog needs the schedule and rider mode is off, so a
+// misconfigured feed is noticed at deploy time rather than as an empty
+// picker. A failed reload keeps the previous index and logs.
 func newGTFSRuntime(ctx context.Context, source string, refresh time.Duration) (*gtfsRuntime, error) {
 	// http.DefaultClient carries no timeout of its own, which is what the
 	// download wants: it applies its own, and a static feed is far too large

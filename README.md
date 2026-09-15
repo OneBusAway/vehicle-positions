@@ -79,8 +79,14 @@ all (`404`) and `GET /api/v1/admin/rider/status` answers `{"enabled":false}`.
 
 `GTFS_STATIC_URL` on its own, without rider mode, also loads the schedule and
 turns on the **driver GTFS catalog**: three read-only endpoints the driver apps
-use to pick a trip and draw its route. They take a driver or admin token and
-are not registered (`404`) when no schedule is configured.
+use to pick a trip and draw its route. A schedule that cannot be loaded at
+startup makes the server exit `1`, whether or not rider mode is enabled, so an
+operator upgrading with a stale or unreachable `GTFS_STATIC_URL` must fix or
+remove it. They take a driver or admin bearer token (the admin UI's session
+cookie also works, as on every `requireAuth` route) and are not registered
+(`404`) when no schedule is configured. Only routes with at least one trip
+that has a shape appear in the catalog, because the index skips shapeless
+trips — a route missing from the picker means its trips have no `shape_id`.
 
 | Method + path | Purpose |
 |---|---|

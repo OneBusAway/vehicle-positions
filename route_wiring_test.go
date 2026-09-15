@@ -482,6 +482,10 @@ func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
 	ix, err := rider.LoadIndex(context.Background(), "rider/testdata/fixture.zip", nil, time.Now())
 	require.NoError(t, err)
 	catalog := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
+	// T1 is weekday-only in the fixture calendar (2026 only): pin the clock so
+	// this test never depends on the day of the week it happens to run on, or
+	// on the year still being 2026.
+	catalog.now = func() time.Time { return catalogNow }
 	with := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, catalog)
 
 	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret)
@@ -495,7 +499,7 @@ func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
 		{"rider token is refused", riderTok, http.StatusForbidden},
 		{"no token", "", http.StatusUnauthorized},
 	}
-	for _, path := range []string{"/api/v1/gtfs/routes", "/api/v1/gtfs/routes/R1/trips", "/api/v1/gtfs/trips/T1"} {
+	for _, path := range []string{"/api/v1/gtfs/routes", "/api/v1/gtfs/routes/R1/trips?date=20260902", "/api/v1/gtfs/trips/T1?date=20260902"} {
 		for _, tc := range cases {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			if tc.token != "" {

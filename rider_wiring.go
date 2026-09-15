@@ -181,6 +181,9 @@ func newRiderRuntime(ctx context.Context, cfg riderConfig, refresher *rider.Refr
 		slog.Info("rider: ended rides left active by the previous process", "count", ended)
 	}
 
+	// http.DefaultClient carries no timeout of its own, and that is intended:
+	// the trusted-feed poller applies its own per-request timeout (see
+	// rider/trusted.go).
 	trusted := rider.NewTrustedFeed(cfg.TrustedURLs, http.DefaultClient, cfg.TrustedMaxAge)
 	agg := rider.NewAggregator(cfg.Thresholds, refresher.Current().Timezone())
 	svc := newRiderService(store, agg, refresher.Current, trustedSources{feed: trusted, tracker: tracker}, jwtSecret, cfg.JWTTTL, trustProxy)

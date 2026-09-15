@@ -173,7 +173,7 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 		}
 		info := RouteInfo{
 			ID: r.Id, ShortName: r.ShortName, LongName: r.LongName,
-			Color: r.Color, TextColor: r.TextColor, Type: int(r.Type), SortOrder: r.SortOrder,
+			Color: r.Color, TextColor: r.TextColor, Type: int(r.Type), SortOrder: cloneInt32(r.SortOrder),
 		}
 		ix.routes[r.Id] = info
 		ix.routeList = append(ix.routeList, info)
@@ -362,6 +362,17 @@ func newServiceCalendar(svc *gtfs.Service) serviceCalendar {
 		cal.removed[dateKey(d)] = true
 	}
 	return cal
+}
+
+// cloneInt32 copies the pointed-to value so the index does not retain the
+// parser's pointer, keeping the parsed feed out of Index and Routes()'s
+// result safe from a caller mutating it.
+func cloneInt32(p *int32) *int32 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }
 
 // dateKey reduces an instant to a comparable YYYYMMDD integer in its own

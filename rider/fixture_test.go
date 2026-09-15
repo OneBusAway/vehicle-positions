@@ -59,20 +59,7 @@ func zipFixtureFiles(t *testing.T, files []fixtureFile) []byte {
 // test needs do not have to live in it.
 func fixtureIndexEdited(t *testing.T, name, body string) *Index {
 	t.Helper()
-	files := fixtureFiles(fixtureTimezone, 1)
-	replaced := false
-	for i := range files {
-		if files[i].name == name {
-			files[i].body = body
-			replaced = true
-		}
-	}
-	require.True(t, replaced, "no fixture member named %q", name)
-	static, err := gtfs.ParseStatic(zipFixtureFiles(t, files), gtfs.ParseStaticOptions{})
-	require.NoError(t, err)
-	ix, err := BuildIndex(static, "fixture", fixtureLoadedAt)
-	require.NoError(t, err)
-	return ix
+	return fixtureIndexEditedFiles(t, map[string]string{name: body})
 }
 
 // fixtureIndexEditedFiles is fixtureIndexEdited for more than one member.

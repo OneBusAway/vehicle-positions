@@ -179,6 +179,9 @@ func (c *gtfsCatalog) handleTrip() http.HandlerFunc {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "trip not active on date"})
 			return
 		}
+		// The zero RouteInfo is the intended answer for a trip whose
+		// trips.txt row names no route the index knows; the trip is still
+		// servable without route metadata.
 		route, _ := ix.Route(trip.RouteID)
 
 		points := make([][2]float64, len(trip.Shape.Points))
