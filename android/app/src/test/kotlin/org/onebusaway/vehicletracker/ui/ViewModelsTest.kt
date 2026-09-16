@@ -10,6 +10,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -20,6 +21,9 @@ import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginViewModel
 import org.onebusaway.vehicletracker.ui.trip.TripSetupViewModel
+import java.time.ZoneOffset
+import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
+import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 
 class ViewModelsTest {
     private val dispatcher = StandardTestDispatcher()
@@ -90,7 +94,7 @@ class ViewModelsTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"not assigned"}"""))
         val store = FakeTripStateStore()
-        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, FakeVehiclePrefsStore(), clock = { 0L }, zone = ZoneOffset.UTC)
         val vm = TripSetupViewModel(repo, store, FakeServiceController())
         vm.onRouteIdChange("5")
         vm.onStartTrip("bus-1") { }
@@ -103,7 +107,7 @@ class ViewModelsTest {
         val store = FakeTripStateStore()
         store.addRecentRoute("12"); store.addRecentRoute("5")
         val server = MockWebServer().apply { start() }
-        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, clock = { 0L })
+        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, FakeVehiclePrefsStore(), clock = { 0L }, zone = ZoneOffset.UTC)
         val vm = TripSetupViewModel(repo, store, FakeServiceController())
         vm.uiState.test {
             var state = awaitItem()
@@ -112,5 +116,156 @@ class ViewModelsTest {
             cancelAndIgnoreRemainingEvents()
         }
         server.shutdown()
+    }
+
+    // --- Vehicle picker: search, favorites and recents (#36) ---
+
+    /** Deliberately not in display order, so the ordering assertions below mean something. */
+    private val threeVehiclesJson =
+        """[{"id":"bus-3","label":"Night Owl"},{"id":"van-2","label":"Airport Shuttle"},{"id":"bus-1","label":"Downtown Express"}]"""
+
+    /**
+     * Builds a [VehicleViewModel] over a `MockWebServer` serving [body] from
+     * `GET /api/v1/vehicles`, waits for the load to land, and runs [block] against it.
+     */
+    private fun withVehicleViewModel(
+        body: String = threeVehiclesJson,
+        prefs: FakeVehiclePrefsStore = FakeVehiclePrefsStore(),
+        block: (VehicleViewModel, FakeVehiclePrefsStore) -> Unit,
+    ) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody(body))
+        try {
+            val repo = VehicleRepository(
+                TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) },
+            )
+            val vm = VehicleViewModel(repo, prefs)
+            awaitCondition(description = "vehicles loaded") { vm.uiState.value is VehiclesUiState.Loaded }
+            block(vm, prefs)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    private fun loadedState(vm: VehicleViewModel): VehiclesUiState.Loaded {
+        val state = vm.uiState.value
+        assertTrue("expected Loaded, was $state", state is VehiclesUiState.Loaded)
+        return state as VehiclesUiState.Loaded
+    }
+
+    /** Applies pending ViewModel work, then reads the ids currently on screen, in order. */
+    private fun visibleIds(vm: VehicleViewModel): List<String> {
+        dispatcher.scheduler.advanceUntilIdle()
+        return loadedState(vm).visible.map { it.id }
+    }
+
+    @Test fun `search filters by id and label`() = runTest(dispatcher) {
+        withVehicleViewModel { vm, _ ->
+            vm.onQueryChange("bus")
+            assertEquals(listOf("bus-1", "bus-3"), visibleIds(vm))
+
+            vm.onQueryChange("airport")
+            assertEquals(listOf("van-2"), visibleIds(vm))
+        }
+    }
+
+    @Test fun `search is case insensitive`() = runTest(dispatcher) {
+        withVehicleViewModel { vm, _ ->
+            vm.onQueryChange("BUS")
+            assertEquals(listOf("bus-1", "bus-3"), visibleIds(vm))
+        }
+    }
+
+    @Test fun `search with an empty query shows all vehicles`() = runTest(dispatcher) {
+        withVehicleViewModel { vm, _ ->
+            vm.onQueryChange("bus")
+            assertEquals(2, visibleIds(vm).size)
+
+            vm.onQueryChange("")
+            assertEquals(listOf("van-2", "bus-1", "bus-3"), visibleIds(vm))
+        }
+    }
+
+    @Test fun `search with no matches empties the list but not the assignments`() = runTest(dispatcher) {
+        withVehicleViewModel { vm, _ ->
+            vm.onQueryChange("tram")
+            assertEquals(emptyList<String>(), visibleIds(vm))
+            assertEquals(3, loadedState(vm).vehicles.size)
+        }
+    }
+
+    @Test fun `autoSelect fires for a single assigned vehicle`() = runTest(dispatcher) {
+        withVehicleViewModel(body = """[{"id":"bus-1","label":"Downtown Express"}]""") { vm, _ ->
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals("bus-1", loadedState(vm).autoSelectId)
+        }
+    }
+
+    @Test fun `autoSelect does not fire when search narrows to one`() = runTest(dispatcher) {
+        withVehicleViewModel { vm, _ ->
+            vm.onQueryChange("bus-1")
+
+            // The search left exactly one match, but the driver is assigned three vehicles and
+            // is still typing — navigating them into a trip here is the bug this test guards.
+            assertEquals(listOf("bus-1"), visibleIds(vm))
+            assertNull(loadedState(vm).autoSelectId)
+        }
+    }
+
+    @Test fun `favorites sort first`() = runTest(dispatcher) {
+        val prefs = FakeVehiclePrefsStore().apply { favoritesState.value = setOf("bus-3") }
+        withVehicleViewModel(prefs = prefs) { vm, _ ->
+            // "Night Owl" sorts last by label, so only the star can put bus-3 in front.
+            assertEquals(listOf("bus-3", "van-2", "bus-1"), visibleIds(vm))
+        }
+    }
+
+    @Test fun `favorites toggle on and off through the store`() = runTest(dispatcher) {
+        withVehicleViewModel { vm, prefs ->
+            vm.onToggleFavorite("bus-3")
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(setOf("bus-3"), prefs.favoritesState.value)
+            assertEquals(setOf("bus-3"), loadedState(vm).favorites)
+            assertEquals("bus-3", visibleIds(vm).first())
+
+            vm.onToggleFavorite("bus-3")
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(emptySet<String>(), loadedState(vm).favorites)
+            assertEquals(listOf("van-2", "bus-1", "bus-3"), visibleIds(vm))
+        }
+    }
+
+    @Test fun `recents order most recent first`() = runTest(dispatcher) {
+        val prefs = FakeVehiclePrefsStore()
+        prefs.recordUse("bus-3")
+        prefs.recordUse("van-2")
+        withVehicleViewModel(prefs = prefs) { vm, _ ->
+            // van-2 was used last, so it leads bus-3 even though its label sorts first anyway;
+            // bus-1 has never been used and falls to the bottom.
+            assertEquals(listOf("van-2", "bus-3", "bus-1"), visibleIds(vm))
+        }
+    }
+
+    @Test fun `a favorite outranks a more recently used vehicle`() = runTest(dispatcher) {
+        val prefs = FakeVehiclePrefsStore().apply { favoritesState.value = setOf("bus-3") }
+        prefs.recordUse("van-2")
+        withVehicleViewModel(prefs = prefs) { vm, _ ->
+            assertEquals(listOf("bus-3", "van-2", "bus-1"), visibleIds(vm))
+        }
+    }
+
+    @Test fun `ordering is stable across emissions`() = runTest(dispatcher) {
+        val prefs = FakeVehiclePrefsStore()
+        prefs.recordUse("van-2")
+        withVehicleViewModel(prefs = prefs) { vm, _ ->
+            val before = visibleIds(vm)
+
+            // Two more emissions that land the inputs back exactly where they started.
+            vm.onToggleFavorite("bus-1")
+            dispatcher.scheduler.advanceUntilIdle()
+            vm.onToggleFavorite("bus-1")
+
+            assertEquals(before, visibleIds(vm))
+        }
     }
 }

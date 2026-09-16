@@ -1,0 +1,71 @@
+name: iOS CI
+
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  pull_request:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+
+jobs:
+  ios:
+    runs-on: macos-26
+    # Without `-o pipefail` every `xcodebuild ... | tail` step reports tail's
+    # exit status, so a failing build or test would pass the job.
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode
+        run: |
+          # A beta's SDK is not what we ship against; take one only if it is
+          # all the image has.
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1 || true)
+          if [ -z "$XCODE" ]; then XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1); fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Create a simulator on the newest iOS runtime
+        run: |
+          cat > "$RUNNER_TEMP/pick-runtime.py" <<'PY'
+          import json, sys
+          # Prints the newest available iOS runtime, then whether it is new
+          # enough for the app's deployment target (iOS 26.4).
+          rts = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]]
+          rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          newest = rts[-1] if rts else None
+          usable = newest is not None and [int(x) for x in newest["version"].split(".")] >= [26, 4]
+          print(newest["identifier"] if newest else "")
+          print("ok" if usable else "too-old")
+          PY
+          pick() {
+            PICK=$(xcrun simctl list runtimes -j | python3 "$RUNNER_TEMP/pick-runtime.py")
+            RUNTIME=$(printf '%s\n' "$PICK" | sed -n 1p)
+            STATUS=$(printf '%s\n' "$PICK" | sed -n 2p)
+          }
+          pick
+          if [ "$STATUS" != "ok" ]; then
+            # The image ships no runtime the app can deploy to; fetch one
+            # rather than failing on a simulator that cannot run the tests.
+            echo "No iOS 26.4+ runtime installed (newest: ${RUNTIME:-none}); downloading one."
+            sudo xcodebuild -downloadPlatform iOS
+            pick
+          fi
+          if [ -z "$RUNTIME" ]; then
+            echo "No usable iOS runtime is available." >&2
+            exit 1
+          fi
+          UDID=$(xcrun simctl create ci-iphone "iPhone 17 Pro" "$RUNTIME" 2>/dev/null || xcrun simctl create ci-iphone "iPhone 16 Pro" "$RUNTIME")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+      - name: Rider SDK tests
+        working-directory: ios/VehiclePositionsKit
+        run: xcodebuild test -scheme VehiclePositionsKit -destination "id=$UDID" | tail -40
+      - name: Driver app tests
+        working-directory: ios/VehicleTracker
+        run: |
+          xcodegen generate
+          xcodebuild test -project VehicleTracker.xcodeproj -scheme VehicleTracker -destination "id=$UDID" | tail -60

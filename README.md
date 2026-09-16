@@ -21,6 +21,9 @@ Quick-start instructions for running the server locally with Docker Compose,
 plus API sanity checks and troubleshooting, live in
 [`docs/development.md`](docs/development.md).
 
+For production — Postgres, reverse proxy and TLS, systemd, backups, monitoring
+and APK distribution — see [`docs/deployment.md`](docs/deployment.md).
+
 ### Admin web UI
 
 The server also ships a server-rendered admin web UI at `/admin` — sign in,
@@ -28,6 +31,9 @@ dashboard, live fleet map with per-trip trails, vehicle CRUD (with CSV export
 of location history), user CRUD, vehicle assignments, and trip history. It's
 built into the same binary and enabled by default; set
 `ADMIN_UI_ENABLED=false` to disable it entirely (the route returns 404).
+
+Day-to-day instructions for operators — onboarding drivers, managing vehicles,
+watching the feed — are in [`docs/operator-manual.md`](docs/operator-manual.md).
 
 **Note for operators upgrading from an earlier version:** the admin UI used to
 not exist, so there's nothing to opt into — this is a new default-on surface.
@@ -44,7 +50,10 @@ Sign in with an existing admin account. To create the first one:
 
 Deactivating a user blocks new logins immediately, but it doesn't revoke
 sessions already issued — any existing session cookie or JWT for that user
-stays valid until it expires (up to 24 hours).
+stays valid until it expires (up to 24 hours). Changing a user's password
+(from the admin UI's edit form, or by sending `password` in `PUT
+/api/v1/admin/users/{id}`) has the same limit: tokens already issued stay
+valid until they expire.
 
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
@@ -68,15 +77,32 @@ schedule there is nothing to verify against, so the server exits at startup if
 it is missing. When rider mode is off the rider routes are not registered at
 all (`404`) and `GET /api/v1/admin/rider/status` answers `{"enabled":false}`.
 
+`GTFS_STATIC_URL` on its own, without rider mode, also loads the schedule and
+turns on the **driver GTFS catalog**: three read-only endpoints the driver apps
+use to pick a trip and draw its route. A schedule that cannot be loaded at
+startup makes the server exit `1`, whether or not rider mode is enabled, so an
+operator upgrading with a stale or unreachable `GTFS_STATIC_URL` must fix or
+remove it. They take a driver or admin bearer token (the admin UI's session
+cookie also works, as on every `requireAuth` route) and are not registered
+(`404`) when no schedule is configured. Only routes with at least one trip
+that has a shape appear in the catalog, because the index skips shapeless
+trips — a route missing from the picker means its trips have no `shape_id`.
+
+| Method + path | Purpose |
+|---|---|
+| `GET /api/v1/gtfs/routes` | Routes with at least one trip, in display order. |
+| `GET /api/v1/gtfs/routes/{route_id}/trips?date=YYYYMMDD` | The route's trips active on a service date (default: today's), with absolute start and end times. |
+| `GET /api/v1/gtfs/trips/{trip_id}?date=YYYYMMDD` | One trip's shape, stops with absolute times, and the adherence thresholds the server applies. |
+
 Configuration (spec §4.1). Durations use Go's `time.ParseDuration` syntax; an
 unparseable value logs and falls back to its default.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `RIDER_MODE_ENABLED` | `false` | Enable rider routes, engine and feed merge. |
-| `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. |
+| `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. Required when rider mode is enabled; on its own it enables the driver GTFS catalog. |
 | `GTFS_STATIC_REFRESH` | `24h` | Re-download and rebuild the index. Failure keeps the old index and logs. |
-| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feed URLs. The server's own driver-reported positions are always a trusted source; with no external feed, a trip no driver is reporting has corroboration `unavailable`. |
+| `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feed URLs. The server's own driver-reported positions are always a trusted source when the driver entered the GTFS trip id (matching is by trip id, so a route-only driver report doesn't count); with no external feed, a trip no driver is reporting that way has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Poll interval; sends `If-None-Match` / `If-Modified-Since` when the server gave `ETag` / `Last-Modified`. |
 | `TRUSTED_FEED_MAX_AGE` | `5m` | Trusted entities older than this are dropped from the snapshot. |
 | `RIDER_JWT_TTL` | `8760h` | Rider token lifetime. |
@@ -117,7 +143,9 @@ distinguishable by construction: their id — and their `vehicle.id`, so that tw
 service dates of one trip are two vehicles — is `rider:<trip_id>:<start_date>`,
 and their vehicle label is `Rider-reported`. A rider-reported position is always
 snapped to the route shape, never a raw GPS fix, and a trip the trusted feed
-already reports is never published from rider data.
+already reports is never published from rider data — for the server's own
+driver reports, that requires the driver to have entered the GTFS trip id, not
+just a route.
 
 The iOS SDK that talks to this API lives in `ios/VehiclePositionsKit`. For the
 full design — verification rules, ride state machine, reputation tiers and
@@ -148,6 +176,20 @@ and the app's behavior under network loss and task removal — see
 design (screens, data flow, permissions, error handling), see
 [`docs/superpowers/specs/2026-08-04-android-driver-app-design.md`](docs/superpowers/specs/2026-08-04-android-driver-app-design.md).
 
+### iOS driver app (with CarPlay)
+
+The iOS counterpart lives in [`ios/VehicleTracker`](ios/VehicleTracker) (XcodeGen
+project; `xcodegen generate` builds the `.xcodeproj`). Drivers sign in, pick a
+vehicle and a GTFS run from the server's catalog, and report positions while
+the trip runs; the car screen shows the route, the next stop and the schedule
+deviation through a CarPlay navigation scene. Adherence is computed on the
+phone from the trip geometry the server serves, with the server's own
+thresholds. Setup and tests: [`docs/development.md`](docs/development.md#ios-driver-app);
+end-to-end walkthrough: [`docs/ios-smoke-test.md`](docs/ios-smoke-test.md);
+design: [`docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md`](docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md).
+Running in a real car needs Apple's CarPlay navigation entitlement; the
+simulator needs only the entitlements file.
+
 -----
 
 ## 1. Problem Statement
@@ -172,7 +214,7 @@ This project fills that gap by creating a lightweight, open-source vehicle track
 
 - Offline data queuing and sync (v2 — see Future Work; v1 requires an active network connection to report locations)
 - Arrival predictions / trip updates (this project produces Vehicle Positions only; arrival estimation is a separate, significantly more complex problem that can build on this data later)
-- iOS driver app (the target user base — transit drivers in developing countries — overwhelmingly uses Android)
+- iOS driver app for the GSoC deliverable (the target user base overwhelmingly uses Android). An iOS driver app with CarPlay was added later by the project owner; see docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md
 - Rider-facing features (riders consume the GTFS-RT feed through existing apps like OneBusAway; this project focuses on the data production side)
 - Replacing existing AVL systems for agencies that already have them
 - Building a general-purpose fleet management platform (the scope is deliberately narrow: location tracking → GTFS-RT feed)
@@ -201,7 +243,7 @@ The server produces a standard `FeedMessage` containing `VehiclePosition` entiti
 ```protobuf
 vehicle {
   trip {
-    trip_id: "route_5_0830"
+    trip_id: "t_5_0830"
     route_id: "5"
     start_time: "08:30:00"
     start_date: "20260715"
@@ -225,18 +267,21 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 
 **API Design:**
 
-|Endpoint                        |Method|Purpose                                             |
-|--------------------------------|------|----------------------------------------------------|
-|`POST /api/v1/auth/login`       |POST  |Driver login → returns JWT                          |
-|`POST /api/v1/locations`        |POST  |Single location report from driver app              |
-|`GET /gtfs-rt/vehicle-positions`|GET   |GTFS-RT feed (protobuf or JSON)                     |
-|`GET /api/v1/admin/vehicles`    |GET   |List vehicles                                       |
-|`POST /api/v1/admin/vehicles`   |POST  |Create/update vehicle                               |
-|`GET /api/v1/admin/users`       |GET   |List users                                          |
-|`POST /api/v1/admin/users`      |POST  |Create/update user                                  |
-|`POST /api/v1/trips/start`      |POST  |Driver starts a trip (assigns vehicle to route/trip)|
-|`POST /api/v1/trips/end`        |POST  |Driver ends a trip                                  |
-|`GET /api/v1/admin/status`      |GET   |System health, active vehicles, feed stats          |
+|Endpoint                            |Method|Purpose                                             |
+|------------------------------------|------|----------------------------------------------------|
+|`POST /api/v1/auth/login`           |POST  |Driver login → returns JWT                          |
+|`POST /api/v1/locations`            |POST  |Single location report from driver app              |
+|`GET /gtfs-rt/vehicle-positions`    |GET   |GTFS-RT feed (protobuf or JSON) — see Feed API Keys |
+|`GET /api/v1/admin/vehicles`        |GET   |List vehicles                                       |
+|`POST /api/v1/admin/vehicles`       |POST  |Create/update vehicle                               |
+|`GET /api/v1/admin/users`           |GET   |List users                                          |
+|`POST /api/v1/admin/users`          |POST  |Create/update user                                  |
+|`GET /api/v1/admin/api-keys`        |GET   |List feed API keys                                  |
+|`POST /api/v1/admin/api-keys`       |POST  |Create a feed API key (raw key shown once)          |
+|`DELETE /api/v1/admin/api-keys/{id}`|DELETE|Revoke a feed API key                               |
+|`POST /api/v1/trips/start`          |POST  |Driver starts a trip (assigns vehicle to route/trip)|
+|`POST /api/v1/trips/end`            |POST  |Driver ends a trip                                  |
+|`GET /api/v1/admin/status`          |GET   |System health, active vehicles, feed stats          |
 
 **Location Report Payload:**
 
@@ -245,7 +290,9 @@ Each location report is a single point sent directly from the Android app as it 
 ```json
 {
   "vehicle_id": "vehicle-042",
-  "trip_id": "route_5_0830",
+  "trip_id": "t_5_0830",
+  "route_id": "5",
+  "start_date": "20260715",
   "latitude": -1.2921,
   "longitude": 36.8219,
   "bearing": 180.0,
@@ -257,6 +304,8 @@ Each location report is a single point sent directly from the Android app as it 
 
 The server updates its in-memory state with the latest position and persists the point to the database. Points older than a configurable staleness threshold (default 5 minutes) are excluded from the GTFS-RT feed.
 
+> `trip_id`, `route_id` and `start_date` are all optional. `trip_id` is the GTFS `trip_id` and must be left empty when the driver only knows the route — never send a route id in `trip_id`. `route_id` is the GTFS `route_id`; when `trip_id` is empty it is the only thing a consumer can match on. `start_date` is the service date, `YYYYMMDD`, and is accepted only alongside `trip_id` or `route_id`. The feed's `TripDescriptor` carries exactly the fields that were sent, and is omitted entirely when both `trip_id` and `route_id` are empty.
+
 **`POST /api/v1/locations` validation and error contract**
 
 The ingest endpoint performs strict request validation before writing data:
@@ -265,6 +314,7 @@ The ingest endpoint performs strict request validation before writing data:
 - The request body must contain exactly one JSON object.
 - Unknown JSON fields are rejected.
 - Standard payload validation still applies (`vehicle_id`, coordinates, timestamp).
+- `trip_id` and `route_id` are capped at 100 characters; `start_date` must be a real `YYYYMMDD` date.
 
 Response codes:
 
@@ -278,7 +328,7 @@ Examples:
 # Valid request
 curl -i -X POST http://localhost:8080/api/v1/locations \
   -H "Content-Type: application/json" \
-  -d '{"vehicle_id":"bus-1","trip_id":"route-5","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
+  -d '{"vehicle_id":"bus-1","route_id":"5","latitude":-1.29,"longitude":36.82,"timestamp":1752566400}'
 
 # Invalid content type -> 415
 curl -i -X POST http://localhost:8080/api/v1/locations \
@@ -318,6 +368,71 @@ Example — keep 90 days of history, sweeping hourly:
 export LOCATION_RETENTION_PERIOD=2160h
 export LOCATION_PRUNE_INTERVAL=1h
 ```
+
+**Feed API Keys**
+
+`GET /gtfs-rt/vehicle-positions` is the only data endpoint the server can serve
+without authentication. An agency that doesn't want its live fleet positions on
+the open internet can require an API key on it:
+
+|Variable           |Default|Purpose                                          |
+|-------------------|-------|-------------------------------------------------|
+|`FEED_AUTH_ENABLED`|`false`|Require an `X-API-Key` header on the GTFS-RT feed|
+
+**Upgrade note.** Feed auth is off by default, so upgrading changes nothing on
+its own. Turning it on is a breaking change for feed consumers: every consumer
+that doesn't send a key starts getting `401`. Issue keys first, then flip the
+flag.
+
+`FEED_AUTH_ENABLED` accepts only what Go's `strconv.ParseBool` accepts —
+`true`/`false`, `1`/`0`, `t`/`f`, and their capitalizations. Anything else
+(`yes`, `on`, a typo) stops the server at startup instead of falling back to a
+default, so a misspelled flag can't leave the feed public while you believe it
+is locked.
+
+Keys are managed through the admin API, which needs an admin JWT:
+
+```bash
+# Create a key. The raw key is in this response and nowhere else — only its
+# SHA-256 hash is stored, so it can never be recovered or re-displayed.
+curl -X POST http://localhost:8080/api/v1/admin/api-keys \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"transit-app"}'
+# 201 {"id":1,"name":"transit-app","active":true,"last_used_at":null,...,"key":"<raw key>"}
+
+# List keys — metadata only, hashes are never returned
+curl http://localhost:8080/api/v1/admin/api-keys \
+  -H "Authorization: Bearer $ADMIN_JWT"
+
+# Revoke a key -> 204, or 404 if no key has that id
+curl -X DELETE http://localhost:8080/api/v1/admin/api-keys/1 \
+  -H "Authorization: Bearer $ADMIN_JWT"
+
+# Read the feed with a key
+curl -H "X-API-Key: <raw key>" \
+  'http://localhost:8080/gtfs-rt/vehicle-positions?format=json'
+```
+
+With `FEED_AUTH_ENABLED=true` the feed returns `401` and a JSON error body for a
+missing (`missing API key`), unknown (`invalid API key`), or revoked
+(`inactive API key`) key.
+
+Notes for operators:
+
+- **Revoking deactivates, it doesn't delete.** `DELETE` clears the key's active
+  flag and keeps the row, so `last_used_at` survives — which is exactly what you
+  want to look at when you're revoking a key.
+- Keys are 32 random bytes from `crypto/rand`, hex-encoded, and stored only as a
+  SHA-256 hash. bcrypt is deliberately not used: its work factor protects
+  low-entropy passwords and would add latency to the busiest endpoint in the
+  system for no gain against a 256-bit random value.
+- `last_used_at` is best-effort. If that write fails the request is still
+  served and the failure is logged, so an audit column can't take the feed down.
+- For local development, [`seed_dev.sql`](seed_dev.sql) seeds the key
+  `local-dev-feed-key`. It is public in this repository — never use it anywhere
+  but a local machine.
+- Per-key rate limiting isn't implemented yet; the feed is unthrottled.
 
 **Technology Stack:**
 

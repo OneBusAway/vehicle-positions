@@ -341,11 +341,11 @@ func TestStore_ListUsersPage(t *testing.T) {
 		seeded[email] = true
 	}
 
-	first, err := store.ListUsersPage(ctx, 3, 0)
+	first, err := store.ListUsersPage(ctx, UserFilter{Limit: 3, Offset: 0})
 	require.NoError(t, err)
 	require.Len(t, first, 3, "limit must cap the page")
 
-	second, err := store.ListUsersPage(ctx, 3, 3)
+	second, err := store.ListUsersPage(ctx, UserFilter{Limit: 3, Offset: 3})
 	require.NoError(t, err)
 	require.NotEmpty(t, second)
 
@@ -364,7 +364,7 @@ func TestStore_ListUsersPage(t *testing.T) {
 		assert.Equal(t, 1, seen[email], "user %s must appear on exactly one page", email)
 	}
 
-	past, err := store.ListUsersPage(ctx, 3, 1_000_000)
+	past, err := store.ListUsersPage(ctx, UserFilter{Limit: 3, Offset: 1_000_000})
 	require.NoError(t, err)
 	assert.NotNil(t, past, "an offset past the end should be [], not nil")
 	assert.Empty(t, past)
@@ -395,4 +395,193 @@ func TestStore_ListUsers_SafetyBound(t *testing.T) {
 	users, err := store.ListUsers(ctx)
 	require.NoError(t, err)
 	assert.Len(t, users, 1000, "ListUsers must stop at its 1000-row safety bound")
+}
+
+// listUsersFilterEmails are the seeded accounts the filter tests below share.
+// They cover both roles and both active states so each test can assert on the
+// slice of them it cares about.
+var listUsersFilterEmails = []string{
+	"filter-amina@example.com",
+	"filter-brian@example.com",
+	"filter-admin@example.com",
+	"filter-retired@example.com",
+}
+
+// seedFilterUsers creates the shared filter fixtures and returns them by
+// email. The users table is not truncated between tests, so every assertion
+// below narrows to these rows rather than counting the whole table.
+func seedFilterUsers(t *testing.T, store *Store) map[string]*UserResponse {
+	t.Helper()
+	ctx := context.Background()
+	cleanupTestUsers(t, store, listUsersFilterEmails...)
+	t.Cleanup(func() { cleanupTestUsers(t, store, listUsersFilterEmails...) })
+
+	seed := []struct {
+		name, email, role string
+		deactivate        bool
+	}{
+		{"Amina Otieno", "filter-amina@example.com", "driver", false},
+		{"Brian Kimani", "filter-brian@example.com", "driver", false},
+		{"Carol Njoroge", "filter-admin@example.com", "admin", false},
+		{"Retired Driver", "filter-retired@example.com", "driver", true},
+	}
+
+	byEmail := make(map[string]*UserResponse, len(seed))
+	for _, s := range seed {
+		u, err := store.CreateUser(ctx, s.name, s.email, "securepass", s.role)
+		require.NoError(t, err)
+		if s.deactivate {
+			require.NoError(t, store.SetUserActive(ctx, u.ID, false))
+			u.Active = false
+		}
+		byEmail[s.email] = u
+	}
+	return byEmail
+}
+
+// seededSubset narrows a page of users to the rows this test seeded, keyed by
+// email. Other tests' users share the table, so a filter assertion has to
+// ignore them.
+func seededSubset(users []UserResponse) map[string]UserResponse {
+	got := make(map[string]UserResponse)
+	for _, u := range users {
+		for _, email := range listUsersFilterEmails {
+			if u.Email == email {
+				got[u.Email] = u
+			}
+		}
+	}
+	return got
+}
+
+// TestStore_ListUsersPage_EmptyFilterMatchesAll pins the behaviour every
+// existing caller relied on before filters existed: a filter carrying only
+// paging returns every user, deactivated ones included, exactly as the
+// unfiltered list always did.
+func TestStore_ListUsersPage_EmptyFilterMatchesAll(t *testing.T) {
+	store := newTestStore(t)
+	seedFilterUsers(t, store)
+
+	users, err := store.ListUsersPage(context.Background(), UserFilter{Limit: 1000})
+	require.NoError(t, err)
+
+	got := seededSubset(users)
+	assert.Len(t, got, len(listUsersFilterEmails), "a zero-value filter must not hide anyone")
+	assert.Contains(t, got, "filter-retired@example.com", "deactivated users were listed before and must still be")
+}
+
+// TestStore_ListUsersPage_FilterByQ covers the free-text search: it must
+// match on name as well as email, case-insensitively, since an admin looking
+// up a driver has one or the other to hand.
+func TestStore_ListUsersPage_FilterByQ(t *testing.T) {
+	store := newTestStore(t)
+	seedFilterUsers(t, store)
+	ctx := context.Background()
+
+	byName, err := store.ListUsersPage(ctx, UserFilter{Q: "amina", Limit: 1000})
+	require.NoError(t, err)
+	got := seededSubset(byName)
+	require.Len(t, got, 1, "q must match on name, case-insensitively")
+	assert.Contains(t, got, "filter-amina@example.com")
+
+	byEmail, err := store.ListUsersPage(ctx, UserFilter{Q: "filter-brian@", Limit: 1000})
+	require.NoError(t, err)
+	got = seededSubset(byEmail)
+	require.Len(t, got, 1, "q must match on email")
+	assert.Contains(t, got, "filter-brian@example.com")
+
+	none, err := store.ListUsersPage(ctx, UserFilter{Q: "filter-nobody@example.com", Limit: 1000})
+	require.NoError(t, err)
+	assert.NotNil(t, none, "no matches should be [], not nil")
+	assert.Empty(t, seededSubset(none))
+}
+
+// TestStore_ListUsersPage_FilterByRole checks the role filter selects one
+// role and excludes the other — in both directions, so a filter that
+// happened to ignore its argument could not pass.
+func TestStore_ListUsersPage_FilterByRole(t *testing.T) {
+	store := newTestStore(t)
+	seedFilterUsers(t, store)
+	ctx := context.Background()
+
+	drivers, err := store.ListUsersPage(ctx, UserFilter{Role: roleDriver, Q: "filter-", Limit: 1000})
+	require.NoError(t, err)
+	got := seededSubset(drivers)
+	assert.Len(t, got, 3, "the three seeded drivers, active and deactivated")
+	assert.NotContains(t, got, "filter-admin@example.com", "role=driver must exclude admins")
+
+	admins, err := store.ListUsersPage(ctx, UserFilter{Role: roleAdmin, Q: "filter-", Limit: 1000})
+	require.NoError(t, err)
+	got = seededSubset(admins)
+	require.Len(t, got, 1)
+	assert.Contains(t, got, "filter-admin@example.com", "role=admin must exclude drivers")
+}
+
+// TestStore_ListUsersPage_FilterByActive checks the opt-in active filter:
+// deactivated accounts are listed by default and hidden only when asked.
+func TestStore_ListUsersPage_FilterByActive(t *testing.T) {
+	store := newTestStore(t)
+	seedFilterUsers(t, store)
+	ctx := context.Background()
+
+	all, err := store.ListUsersPage(ctx, UserFilter{Q: "filter-", Limit: 1000})
+	require.NoError(t, err)
+	assert.Contains(t, seededSubset(all), "filter-retired@example.com", "deactivated users are listed by default")
+
+	activeOnly, err := store.ListUsersPage(ctx, UserFilter{Q: "filter-", ActiveOnly: true, Limit: 1000})
+	require.NoError(t, err)
+	got := seededSubset(activeOnly)
+	assert.Len(t, got, 3)
+	assert.NotContains(t, got, "filter-retired@example.com", "ActiveOnly must hide deactivated users")
+}
+
+// TestStore_ListUsersPage_FiltersCombine checks the filters AND together
+// rather than each merely working alone.
+func TestStore_ListUsersPage_FiltersCombine(t *testing.T) {
+	store := newTestStore(t)
+	seedFilterUsers(t, store)
+
+	got, err := store.ListUsersPage(context.Background(), UserFilter{
+		Role:       roleDriver,
+		Q:          "filter-",
+		ActiveOnly: true,
+		Limit:      1000,
+	})
+	require.NoError(t, err)
+
+	subset := seededSubset(got)
+	assert.Len(t, subset, 2, "role, q and the active filter must AND together")
+	assert.NotContains(t, subset, "filter-admin@example.com")
+	assert.NotContains(t, subset, "filter-retired@example.com")
+}
+
+// TestStore_ListUsersPage_FilterWithPaging checks the filter survives the
+// LIMIT/OFFSET window: the two pages of a filtered result tile the matching
+// set exactly, with nothing skipped, repeated, or leaking in from outside
+// the filter.
+func TestStore_ListUsersPage_FilterWithPaging(t *testing.T) {
+	store := newTestStore(t)
+	seedFilterUsers(t, store)
+	ctx := context.Background()
+
+	filter := UserFilter{Role: roleDriver, Q: "filter-", ActiveOnly: true, Limit: 1}
+	first, err := store.ListUsersPage(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	filter.Offset = 1
+	second, err := store.ListUsersPage(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, second, 1, "page 2 must still be filtered, not the unfiltered remainder")
+
+	seen := make(map[string]int, 2)
+	for _, page := range [][]UserResponse{first, second} {
+		for _, u := range page {
+			seen[u.Email]++
+		}
+	}
+	assert.Len(t, seen, 2, "the two pages together must cover both matching drivers")
+	for _, email := range []string{"filter-amina@example.com", "filter-brian@example.com"} {
+		assert.Equal(t, 1, seen[email], "user %s must appear on exactly one page", email)
+	}
 }

@@ -25,6 +25,7 @@ import (
 
 type locationReport struct {
 	VehicleID string  `json:"vehicle_id"`
+	RouteID   string  `json:"route_id"`
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 	Bearing   float64 `json:"bearing"`
@@ -183,9 +184,10 @@ func main() {
 		wg.Add(1)
 		vehicleID := fmt.Sprintf("sim-vehicle-%03d", i+1)
 		route := routes[i%len(routes)]
+		routeID := fmt.Sprintf("sim-route-%d", i%len(routes)+1)
 		go func() {
 			defer wg.Done()
-			simulateVehicle(ctx, clients[i], *baseURL, vehicleID, route, *interval, s)
+			simulateVehicle(ctx, clients[i], *baseURL, vehicleID, route, routeID, *interval, s)
 		}()
 	}
 	wg.Wait()
@@ -199,7 +201,7 @@ func main() {
 	log.Printf("simulation complete: %d requests, %d ok, %d failed, avg=%dms", ok+fail, ok, fail, avgMS)
 }
 
-func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleID string, route []Waypoint, interval time.Duration, s *stats) {
+func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleID string, route []Waypoint, routeID string, interval time.Duration, s *stats) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -241,6 +243,7 @@ func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleI
 
 			report := locationReport{
 				VehicleID: vehicleID,
+				RouteID:   routeID,
 				Latitude:  pos.Lat,
 				Longitude: pos.Lon,
 				Bearing:   brng,

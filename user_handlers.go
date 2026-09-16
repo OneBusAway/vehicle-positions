@@ -22,11 +22,16 @@ type UpdateUserRequest struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 	Role  string `json:"role"`
+	// Password, when non-empty, replaces the user's password. Blank keeps
+	// the current one — the same contract as the admin UI's edit form.
+	Password string `json:"password"`
 }
 
 // handleListUsers returns one page of users, newest first, bounded by the
-// limit/offset query params. The response stays a bare JSON array rather
-// than a paging envelope so existing clients keep working.
+// limit/offset query params and narrowed by the optional q and role filters.
+// Deactivated users are included, as they always have been. The response
+// stays a bare JSON array rather than a paging envelope so existing clients
+// keep working.
 func handleListUsers(store UserPager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit, offset, ok := parseListPageParams(w, r)
@@ -34,7 +39,24 @@ func handleListUsers(store UserPager) http.HandlerFunc {
 			return
 		}
 
-		users, err := store.ListUsersPage(r.Context(), int32(limit), int32(offset))
+		query := r.URL.Query()
+		q := query.Get("q")
+		if err := validateListQuery(q); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		role := query.Get("role")
+		if !validUserRoleFilter(role) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `role must be "", "driver", or "admin"`})
+			return
+		}
+
+		users, err := store.ListUsersPage(r.Context(), UserFilter{
+			Role:   role,
+			Q:      q,
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
 		if err != nil {
 			slog.Error("failed to list users", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
@@ -171,6 +193,12 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver' or 'admin'"})
 			return
 		}
+		if req.Password != "" {
+			if err := validatePassword(req.Password); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+		}
 
 		user, err := store.UpdateUser(r.Context(), id, req.Name, req.Email, req.Role)
 		if err != nil {
@@ -186,6 +214,19 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
+
+		if req.Password != "" {
+			if err := store.UpdateUserPassword(r.Context(), id, req.Password); err != nil {
+				if errors.Is(err, ErrUserNotFound) {
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+					return
+				}
+				slog.Error("failed to update user password", "id", id, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				return
+			}
+		}
+
 		writeJSON(w, http.StatusOK, user)
 	}
 }

@@ -338,11 +338,11 @@ func TestStore_ListVehiclesPage(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	first, err := store.ListVehiclesPage(ctx, true, 3, 0)
+	first, err := store.ListVehiclesPage(ctx, VehicleFilter{IncludeInactive: true, Limit: 3, Offset: 0})
 	require.NoError(t, err)
 	require.Len(t, first, 3)
 
-	second, err := store.ListVehiclesPage(ctx, true, 3, 3)
+	second, err := store.ListVehiclesPage(ctx, VehicleFilter{IncludeInactive: true, Limit: 3, Offset: 3})
 	require.NoError(t, err)
 	require.Len(t, second, 2)
 
@@ -357,7 +357,7 @@ func TestStore_ListVehiclesPage(t *testing.T) {
 		assert.Equal(t, 1, seen[id], "vehicle %s must appear on exactly one page", id)
 	}
 
-	past, err := store.ListVehiclesPage(ctx, true, 3, 100)
+	past, err := store.ListVehiclesPage(ctx, VehicleFilter{IncludeInactive: true, Limit: 3, Offset: 100})
 	require.NoError(t, err)
 	assert.NotNil(t, past, "an offset past the end should be [], not nil")
 	assert.Empty(t, past)
@@ -367,7 +367,7 @@ func TestStore_ListVehiclesPage_Empty(t *testing.T) {
 	store := newTestStore(t)
 	cleanupVehicles(t, store)
 
-	vehicles, err := store.ListVehiclesPage(context.Background(), true, 50, 0)
+	vehicles, err := store.ListVehiclesPage(context.Background(), VehicleFilter{IncludeInactive: true, Limit: 50, Offset: 0})
 	require.NoError(t, err)
 	assert.NotNil(t, vehicles, "empty page should be [], not nil")
 	assert.Empty(t, vehicles)
@@ -388,12 +388,12 @@ func TestStore_ListVehiclesPage_ExcludesInactive(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.DeactivateVehicle(ctx, "page-retired"))
 
-	activeOnly, err := store.ListVehiclesPage(ctx, false, 50, 0)
+	activeOnly, err := store.ListVehiclesPage(ctx, VehicleFilter{Limit: 50, Offset: 0})
 	require.NoError(t, err)
 	require.Len(t, activeOnly, 1)
 	assert.Equal(t, "page-active", activeOnly[0].ID)
 
-	all, err := store.ListVehiclesPage(ctx, true, 50, 0)
+	all, err := store.ListVehiclesPage(ctx, VehicleFilter{IncludeInactive: true, Limit: 50, Offset: 0})
 	require.NoError(t, err)
 	assert.Len(t, all, 2, "includeInactive must return deactivated vehicles too")
 }
@@ -413,4 +413,176 @@ func TestStore_ListVehicles_SafetyBound(t *testing.T) {
 	vehicles, err := store.ListVehicles(ctx)
 	require.NoError(t, err)
 	assert.Len(t, vehicles, 1000, "ListVehicles must stop at its 1000-row safety bound")
+}
+
+// TestStore_ListVehiclesPage_EmptyFilterMatchesAll pins the behaviour every
+// existing caller relied on before filters existed: a filter carrying only
+// paging returns the active fleet, newest-first, exactly as the unfiltered
+// page always did.
+func TestStore_ListVehiclesPage_EmptyFilterMatchesAll(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	for _, id := range []string{"empty-a", "empty-b", "empty-c"} {
+		_, err := store.UpsertVehicle(ctx, id, "Label "+id, "agency")
+		require.NoError(t, err)
+	}
+	require.NoError(t, store.DeactivateVehicle(ctx, "empty-c"))
+
+	vehicles, err := store.ListVehiclesPage(ctx, VehicleFilter{Limit: 50, Offset: 0})
+	require.NoError(t, err)
+	require.Len(t, vehicles, 2, "a zero-value filter must still hide deactivated vehicles")
+
+	ids := []string{vehicles[0].ID, vehicles[1].ID}
+	assert.ElementsMatch(t, []string{"empty-a", "empty-b"}, ids)
+}
+
+// TestStore_ListVehiclesPage_FilterByQ covers the free-text search: it must
+// match on id as well as label, and must be case-insensitive (ILIKE), since
+// an operator hunting for a bus types whatever is painted on its side.
+func TestStore_ListVehiclesPage_FilterByQ(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	_, err := store.UpsertVehicle(ctx, "kbz-1042", "Nairobi Express", "agency")
+	require.NoError(t, err)
+	_, err = store.UpsertVehicle(ctx, "kbz-2000", "Mombasa Local", "agency")
+	require.NoError(t, err)
+
+	byID, err := store.ListVehiclesPage(ctx, VehicleFilter{Q: "1042", Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, byID, 1, "q must match on id")
+	assert.Equal(t, "kbz-1042", byID[0].ID)
+
+	byLabel, err := store.ListVehiclesPage(ctx, VehicleFilter{Q: "mombasa", Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, byLabel, 1, "q must match on label, case-insensitively")
+	assert.Equal(t, "kbz-2000", byLabel[0].ID)
+
+	none, err := store.ListVehiclesPage(ctx, VehicleFilter{Q: "kisumu", Limit: 50})
+	require.NoError(t, err)
+	assert.NotNil(t, none, "no matches should be [], not nil")
+	assert.Empty(t, none)
+}
+
+// TestStore_ListVehiclesPage_QEscapesWildcards is the guard for the shared
+// LIKE escaping. Vehicle ids permit dots, hyphens and underscores, so an
+// underscore in a search term is a realistic input, not a theoretical one:
+// unescaped it is a single-character wildcard, and "bus_1" would also match
+// "bus-1". A bare "%" must likewise match nothing rather than everything.
+func TestStore_ListVehiclesPage_QEscapesWildcards(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	for _, id := range []string{"bus_1", "bus-1"} {
+		_, err := store.UpsertVehicle(ctx, id, "Label "+id, "agency")
+		require.NoError(t, err)
+	}
+
+	underscore, err := store.ListVehiclesPage(ctx, VehicleFilter{Q: "bus_1", Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, underscore, 1, "the underscore must be a literal, not a wildcard")
+	assert.Equal(t, "bus_1", underscore[0].ID)
+
+	percent, err := store.ListVehiclesPage(ctx, VehicleFilter{Q: "%", Limit: 50})
+	require.NoError(t, err)
+	assert.Empty(t, percent, "a literal %% matches no id or label here, so it must not return everything")
+}
+
+// TestStore_ListVehiclesPage_FilterByAgency covers the exact-match agency
+// filter: an agency tag selects only its own fleet, and the filter is not a
+// substring match.
+func TestStore_ListVehiclesPage_FilterByAgency(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	_, err := store.UpsertVehicle(ctx, "agency-a1", "A One", "nairobi")
+	require.NoError(t, err)
+	_, err = store.UpsertVehicle(ctx, "agency-b1", "B One", "mombasa")
+	require.NoError(t, err)
+
+	nairobi, err := store.ListVehiclesPage(ctx, VehicleFilter{AgencyTag: "nairobi", Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, nairobi, 1)
+	assert.Equal(t, "agency-a1", nairobi[0].ID)
+
+	partial, err := store.ListVehiclesPage(ctx, VehicleFilter{AgencyTag: "nair", Limit: 50})
+	require.NoError(t, err)
+	assert.Empty(t, partial, "agency_tag is an exact match, not a substring one")
+}
+
+// TestStore_ListVehiclesPage_FiltersCombine checks the filters AND together
+// rather than each merely working alone: only the vehicle satisfying all
+// three conditions comes back.
+func TestStore_ListVehiclesPage_FiltersCombine(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	seed := []struct {
+		id, label, agency string
+		deactivate        bool
+	}{
+		{"combo-match", "Express One", "nairobi", false},
+		{"combo-other-agency", "Express Two", "mombasa", false},
+		{"combo-inactive", "Express Three", "nairobi", true},
+		{"combo-no-match", "Local Four", "nairobi", false},
+	}
+	for _, s := range seed {
+		_, err := store.UpsertVehicle(ctx, s.id, s.label, s.agency)
+		require.NoError(t, err)
+		if s.deactivate {
+			require.NoError(t, store.DeactivateVehicle(ctx, s.id))
+		}
+	}
+
+	got, err := store.ListVehiclesPage(ctx, VehicleFilter{AgencyTag: "nairobi", Q: "express", Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, got, 1, "q, agency_tag and the active filter must AND together")
+	assert.Equal(t, "combo-match", got[0].ID)
+}
+
+// TestStore_ListVehiclesPage_FilterWithPaging checks the filter survives the
+// LIMIT/OFFSET window: the two pages of a filtered result tile the matching
+// set exactly, with nothing skipped, repeated, or leaking in from outside
+// the filter.
+func TestStore_ListVehiclesPage_FilterWithPaging(t *testing.T) {
+	store := newTestStore(t)
+	cleanupVehicles(t, store)
+	ctx := context.Background()
+
+	matching := []string{"pf-match-1", "pf-match-2", "pf-match-3"}
+	for _, id := range matching {
+		_, err := store.UpsertVehicle(ctx, id, "Match "+id, "agency")
+		require.NoError(t, err)
+	}
+	for _, id := range []string{"pf-other-1", "pf-other-2"} {
+		_, err := store.UpsertVehicle(ctx, id, "Other "+id, "agency")
+		require.NoError(t, err)
+	}
+
+	filter := VehicleFilter{Q: "pf-match", Limit: 2}
+	first, err := store.ListVehiclesPage(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+
+	filter.Offset = 2
+	second, err := store.ListVehiclesPage(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, second, 1, "page 2 must still be filtered, not the unfiltered remainder")
+
+	seen := make(map[string]int, len(matching))
+	for _, page := range [][]VehicleResponse{first, second} {
+		for _, v := range page {
+			seen[v.ID]++
+		}
+	}
+	assert.Len(t, seen, len(matching), "the two pages together must cover every match")
+	for _, id := range matching {
+		assert.Equal(t, 1, seen[id], "vehicle %s must appear on exactly one page", id)
+	}
 }

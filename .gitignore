@@ -44,3 +44,8 @@ android/local.properties
 
 # Pinned tool binaries (downloaded by `make css`; see Makefile)
 .tools/
+
+# iOS driver app (XcodeGen-generated project and build products)
+ios/VehicleTracker/VehicleTracker.xcodeproj/
+ios/VehicleTracker/build/
+ios/DerivedData/

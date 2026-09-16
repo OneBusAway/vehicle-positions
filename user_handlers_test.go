@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,18 +23,19 @@ type mockUserPager struct {
 	users []UserResponse
 	err   error
 
-	// Recorded by ListUsersPage so paging tests can assert what the handler
-	// asked the store for.
-	gotLimit  int32
-	gotOffset int32
+	// Recorded by ListUsersPage so paging and filter tests can assert what
+	// the handler asked the store for.
+	gotFilter UserFilter
 }
 
-func (m *mockUserPager) ListUsersPage(_ context.Context, limit, offset int32) ([]UserResponse, error) {
-	m.gotLimit, m.gotOffset = limit, offset
+// Role, Q and ActiveOnly are recorded rather than applied — matching them is
+// the store's job, tested against Postgres.
+func (m *mockUserPager) ListUsersPage(_ context.Context, filter UserFilter) ([]UserResponse, error) {
+	m.gotFilter = filter
 	if m.err != nil {
 		return nil, m.err
 	}
-	return pageSlice(m.users, limit, offset), nil
+	return pageSlice(m.users, filter.Limit, filter.Offset), nil
 }
 
 type mockUserGetter struct {
@@ -57,10 +59,28 @@ func (m *mockUserCreator) CreateUser(ctx context.Context, name, email, password,
 type mockUserUpdater struct {
 	user *UserResponse
 	err  error
+
+	passwordUpdates map[int64]string
+	updateUserCalls int
+	calls           []string // "profile" / "password", in call order
 }
 
 func (m *mockUserUpdater) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
+	m.updateUserCalls++
+	m.calls = append(m.calls, "profile")
 	return m.user, m.err
+}
+
+func (m *mockUserUpdater) UpdateUserPassword(_ context.Context, id int64, password string) error {
+	m.calls = append(m.calls, "password")
+	if m.err != nil {
+		return m.err
+	}
+	if m.passwordUpdates == nil {
+		m.passwordUpdates = map[int64]string{}
+	}
+	m.passwordUpdates[id] = password
+	return nil
 }
 
 type mockUserDeleter struct {
@@ -79,6 +99,20 @@ func decodeErrorResponse(t *testing.T, w *httptest.ResponseRecorder) string {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	return resp["error"]
+}
+
+// putUser builds and runs a PUT /api/v1/admin/users/{id} request against
+// handleUpdateUser(store), returning the recorder for assertions.
+func putUser(t *testing.T, store UserUpdater, id int64, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	handler := handleUpdateUser(store)
+	idStr := strconv.FormatInt(id, 10)
+	req := httptest.NewRequest("PUT", "/api/v1/admin/users/"+idStr, bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", idStr)
+	w := httptest.NewRecorder()
+	handler(w, req)
+	return w
 }
 
 func newSampleUser() *UserResponse {
@@ -168,8 +202,8 @@ func TestHandleListUsers_PagingParams(t *testing.T) {
 				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
 				return
 			}
-			assert.Equal(t, tt.wantLimit, store.gotLimit, "limit passed to the store")
-			assert.Equal(t, tt.wantOffset, store.gotOffset, "offset passed to the store")
+			assert.Equal(t, tt.wantLimit, store.gotFilter.Limit, "limit passed to the store")
+			assert.Equal(t, tt.wantOffset, store.gotFilter.Offset, "offset passed to the store")
 		})
 	}
 }
@@ -651,7 +685,7 @@ func TestHandleUpdateUser_TrailingJSONRejected(t *testing.T) {
 
 func TestHandleUpdateUser_UnknownFieldRejected(t *testing.T) {
 	handler := handleUpdateUser(&mockUserUpdater{})
-	body := `{"name":"Alice","email":"a@b.com","role":"driver","password":"sneaky"}`
+	body := `{"name":"Alice","email":"a@b.com","role":"driver","sneaky":"field"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "1")
@@ -686,6 +720,39 @@ func TestHandleUpdateUser_BodyTooLarge(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, decodeErrorResponse(t, w), "invalid JSON")
+}
+
+func TestHandleUpdateUser_PasswordOptional(t *testing.T) {
+	t.Run("blank password leaves the hash alone", func(t *testing.T) {
+		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver"}`)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.Empty(t, store.passwordUpdates)
+	})
+	t.Run("new password is applied after the profile update", func(t *testing.T) {
+		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","password":"newlongpassword"}`)
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		assert.Equal(t, "newlongpassword", store.passwordUpdates[1])
+		assert.NotContains(t, rr.Body.String(), "newlongpassword")
+		assert.Equal(t, []string{"profile", "password"}, store.calls)
+	})
+	t.Run("short password is rejected before any write", func(t *testing.T) {
+		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","password":"short"}`)
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.Contains(t, rr.Body.String(), "password must be at least 8 characters")
+		assert.Empty(t, store.passwordUpdates)
+		assert.Zero(t, store.updateUserCalls, "profile must not be updated when the password is rejected")
+	})
+	t.Run("password over bcrypt's 72-byte limit is rejected before any write", func(t *testing.T) {
+		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		body := `{"name":"N","email":"n@test.com","role":"driver","password":"` + strings.Repeat("a", 73) + `"}`
+		rr := putUser(t, store, 1, body)
+		require.Equal(t, http.StatusBadRequest, rr.Code, rr.Body.String())
+		assert.Contains(t, rr.Body.String(), "password must be at most 72 bytes")
+		assert.Empty(t, store.calls, "neither the profile nor the password may be written")
+	})
 }
 
 // --- Delete User ---
@@ -732,4 +799,83 @@ func TestHandleDeleteUser_DBError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "internal server error", decodeErrorResponse(t, w))
+}
+
+// TestHandleListUsers_FilterParams is the validation table for the search and
+// role filters. Every case asserts the filter the handler handed the store,
+// or the exact error message, so a case can't pass for the wrong reason. The
+// 255/256 pair is the boundary guard on q's length cap.
+func TestHandleListUsers_FilterParams(t *testing.T) {
+	qError := fmt.Sprintf("q must be at most %d characters", maxFieldLength)
+	const roleError = `role must be "", "driver", or "admin"`
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+		wantError  string
+		wantQ      string
+		wantRole   string
+	}{
+		{name: "no filters", query: "", wantStatus: http.StatusOK},
+		{name: "search term", query: "?q=amina", wantStatus: http.StatusOK, wantQ: "amina"},
+		{name: "empty q does not filter", query: "?q=", wantStatus: http.StatusOK},
+		{name: "role driver", query: "?role=driver", wantStatus: http.StatusOK, wantRole: "driver"},
+		{name: "role admin", query: "?role=admin", wantStatus: http.StatusOK, wantRole: "admin"},
+		{name: "empty role means all roles", query: "?role=", wantStatus: http.StatusOK},
+		{name: "unknown role", query: "?role=superuser", wantStatus: http.StatusBadRequest, wantError: roleError},
+		{name: "role is case-sensitive", query: "?role=Driver", wantStatus: http.StatusBadRequest, wantError: roleError},
+		{name: "both filters", query: "?q=amina&role=driver", wantStatus: http.StatusOK, wantQ: "amina", wantRole: "driver"},
+		{
+			name:       "q at the maximum length",
+			query:      "?q=" + strings.Repeat("a", maxFieldLength),
+			wantStatus: http.StatusOK,
+			wantQ:      strings.Repeat("a", maxFieldLength),
+		},
+		{
+			name:       "q one past the maximum length",
+			query:      "?q=" + strings.Repeat("a", maxFieldLength+1),
+			wantStatus: http.StatusBadRequest,
+			wantError:  qError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &mockUserPager{}
+			handler := handleListUsers(store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/users"+tt.query, nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+			if tt.wantStatus != http.StatusOK {
+				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
+				return
+			}
+			assert.Equal(t, tt.wantQ, store.gotFilter.Q, "q passed to the store")
+			assert.Equal(t, tt.wantRole, store.gotFilter.Role, "role passed to the store")
+		})
+	}
+}
+
+// TestHandleListUsers_IncludesInactive pins that the endpoint still lists
+// deactivated users, which it has always done — the admin page's active-only
+// filter must not leak into the API.
+func TestHandleListUsers_IncludesInactive(t *testing.T) {
+	store := &mockUserPager{users: []UserResponse{
+		{ID: 1, Name: "Active", Email: "active@example.com", Role: "driver", Active: true},
+		{ID: 2, Name: "Retired", Email: "retired@example.com", Role: "driver", Active: false},
+	}}
+
+	handler := handleListUsers(store)
+	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, store.gotFilter.ActiveOnly, "the API must not narrow to active users only")
+	var users []UserResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&users))
+	assert.Len(t, users, 2)
 }

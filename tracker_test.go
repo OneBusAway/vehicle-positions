@@ -335,3 +335,14 @@ func TestTracker_ActiveVehicles_ReturnsDeepCopies(t *testing.T) {
 	require.NotNil(t, fresh[0].Accuracy)
 	assert.Equal(t, 30.0, *fresh[0].Accuracy)
 }
+
+func TestTracker_UpdateStoresTripFields(t *testing.T) {
+	tr := NewTracker(time.Minute)
+	defer tr.Stop()
+	tr.Update(&LocationReport{VehicleID: "bus-1", TripID: "trip-0830", RouteID: "5", StartDate: "20260906", Latitude: 1, Longitude: 1, Timestamp: time.Now().Unix()})
+	v := tr.ActiveVehicles()
+	require.Len(t, v, 1)
+	assert.Equal(t, "trip-0830", v[0].TripID)
+	assert.Equal(t, "5", v[0].RouteID)
+	assert.Equal(t, "20260906", v[0].StartDate)
+}

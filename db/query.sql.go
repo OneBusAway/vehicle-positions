@@ -180,6 +180,32 @@ func (q *Queries) CountUsersByRole(ctx context.Context, role string) (int64, err
 	return count, err
 }
 
+const createAPIKey = `-- name: CreateAPIKey :one
+INSERT INTO api_keys (name, key_hash)
+VALUES ($1, $2)
+RETURNING id, name, key_hash, active, last_used_at, created_at, updated_at
+`
+
+type CreateAPIKeyParams struct {
+	Name    string
+	KeyHash string
+}
+
+func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createAPIKey, arg.Name, arg.KeyHash)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.KeyHash,
+		&i.Active,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, role)
 VALUES ($1, $2, $3, $4)
@@ -237,6 +263,20 @@ type CreateVehicleParams struct {
 
 func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (int64, error) {
 	result, err := q.db.Exec(ctx, createVehicle, arg.ID, arg.Label, arg.AgencyTag)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deactivateAPIKey = `-- name: DeactivateAPIKey :execrows
+UPDATE api_keys
+SET active = false, updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) DeactivateAPIKey(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateAPIKey, id)
 	if err != nil {
 		return 0, err
 	}
@@ -358,6 +398,29 @@ func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (int64, error)
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+WHERE key_hash = $1
+`
+
+// Inactive keys are returned too: the middleware distinguishes a revoked key
+// from an unknown one.
+func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByHash, keyHash)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.KeyHash,
+		&i.Active,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getActiveTripByUser = `-- name: GetActiveTripByUser :one
@@ -737,6 +800,42 @@ func (q *Queries) InsertRide(ctx context.Context, arg InsertRideParams) (Ride, e
 	return i, err
 }
 
+const listAPIKeys = `-- name: ListAPIKeys :many
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+ORDER BY created_at DESC
+LIMIT 1000
+`
+
+// safety bound; not pagination
+func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAPIKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.KeyHash,
+			&i.Active,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveTripsByVehicle = `-- name: ListActiveTripsByVehicle :many
 SELECT DISTINCT ON (t.vehicle_id)
        t.vehicle_id, t.id, t.route_id, t.gtfs_trip_id, t.user_id, u.name AS driver_name
@@ -812,58 +911,6 @@ func (q *Queries) ListActiveVehiclesByUser(ctx context.Context, userID int64) ([
 	var items []ListActiveVehiclesByUserRow
 	for rows.Next() {
 		var i ListActiveVehiclesByUserRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Label,
-			&i.AgencyTag,
-			&i.Active,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listActiveVehiclesPage = `-- name: ListActiveVehiclesPage :many
-SELECT id, label, agency_tag, active, created_at, updated_at
-FROM vehicles
-WHERE active
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListActiveVehiclesPageParams struct {
-	Limit  int32
-	Offset int32
-}
-
-type ListActiveVehiclesPageRow struct {
-	ID        string
-	Label     string
-	AgencyTag string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-// The admin vehicle list hides deactivated vehicles unless
-// ?include_inactive=1. Filtering here rather than after the fetch keeps
-// every page a full page.
-func (q *Queries) ListActiveVehiclesPage(ctx context.Context, arg ListActiveVehiclesPageParams) ([]ListActiveVehiclesPageRow, error) {
-	rows, err := q.db.Query(ctx, listActiveVehiclesPage, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListActiveVehiclesPageRow
-	for rows.Next() {
-		var i ListActiveVehiclesPageRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Label,
@@ -1066,56 +1113,6 @@ func (q *Queries) ListUsersByVehicle(ctx context.Context, vehicleID string) ([]U
 	return items, nil
 }
 
-const listUsersPage = `-- name: ListUsersPage :many
-SELECT id, name, email, role, active, created_at, updated_at
-FROM users
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListUsersPageParams struct {
-	Limit  int32
-	Offset int32
-}
-
-type ListUsersPageRow struct {
-	ID        int64
-	Name      string
-	Email     string
-	Role      string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) ListUsersPage(ctx context.Context, arg ListUsersPageParams) ([]ListUsersPageRow, error) {
-	rows, err := q.db.Query(ctx, listUsersPage, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUsersPageRow
-	for rows.Next() {
-		var i ListUsersPageRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Email,
-			&i.Role,
-			&i.Active,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listVehicles = `-- name: ListVehicles :many
 SELECT id, label, agency_tag, active, created_at, updated_at
 FROM vehicles
@@ -1181,54 +1178,6 @@ func (q *Queries) ListVehiclesByUser(ctx context.Context, userID int64) ([]UserV
 	for rows.Next() {
 		var i UserVehicle
 		if err := rows.Scan(&i.UserID, &i.VehicleID, &i.CreatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listVehiclesPage = `-- name: ListVehiclesPage :many
-SELECT id, label, agency_tag, active, created_at, updated_at
-FROM vehicles
-ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListVehiclesPageParams struct {
-	Limit  int32
-	Offset int32
-}
-
-type ListVehiclesPageRow struct {
-	ID        string
-	Label     string
-	AgencyTag string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) ListVehiclesPage(ctx context.Context, arg ListVehiclesPageParams) ([]ListVehiclesPageRow, error) {
-	rows, err := q.db.Query(ctx, listVehiclesPage, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListVehiclesPageRow
-	for rows.Next() {
-		var i ListVehiclesPageRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Label,
-			&i.AgencyTag,
-			&i.Active,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1348,6 +1297,17 @@ func (q *Queries) UnassignUserVehicle(ctx context.Context, arg UnassignUserVehic
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateAPIKeyLastUsed = `-- name: UpdateAPIKeyLastUsed :exec
+UPDATE api_keys
+SET last_used_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, updateAPIKeyLastUsed, id)
+	return err
 }
 
 const updateRideProgress = `-- name: UpdateRideProgress :execrows

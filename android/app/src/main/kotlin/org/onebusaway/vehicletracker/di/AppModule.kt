@@ -15,13 +15,18 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.data.DataStoreSessionStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
+import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.VehiclePrefsStore
+import org.onebusaway.vehicletracker.data.tripStateDataStore
+import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
+import java.time.ZoneId
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -113,8 +118,13 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTripStateStore(@ApplicationContext context: Context): TripStateStore =
-        DataStoreTripStateStore(context)
+    fun provideTripStateStore(@ApplicationContext context: Context, zone: ZoneId): TripStateStore =
+        DataStoreTripStateStore(context.tripStateDataStore, zone)
+
+    @Provides
+    @Singleton
+    fun provideVehiclePrefsStore(@ApplicationContext context: Context): VehiclePrefsStore =
+        DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore)
 
     @Provides
     @Singleton
@@ -139,6 +149,9 @@ object AppModule {
     @Provides
     @EpochSecondsClock
     fun provideClock(): () -> Long = { System.currentTimeMillis() / 1000 }
+
+    @Provides
+    fun provideZoneId(): ZoneId = ZoneId.systemDefault()
 
     @Provides
     @Singleton

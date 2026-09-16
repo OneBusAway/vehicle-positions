@@ -64,6 +64,8 @@ You can run Postgres in Docker and run the Go server directly:
    export DATABASE_URL='postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable'
    export JWT_SECRET=$(openssl rand -hex 32)   # required; the server exits without 32+ bytes
    export STALENESS_THRESHOLD=5m
+   export FEED_AUTH_ENABLED=false   # true requires an X-API-Key on the GTFS-RT feed
+                                    # only true/false/1/0 parse; anything else exits at startup
    ```
 
    Location retention is optional and off unless you set it:
@@ -381,6 +383,44 @@ Timestamps go over the wire as whole seconds and the server ignores a fix that
 is not newer than the last one, so `-interval` below `1s` samples the shape
 more finely but still uploads at most one fix per second.
 
+## Feed API Keys Locally
+
+With `FEED_AUTH_ENABLED=true` the GTFS-RT feed requires an `X-API-Key` header.
+`seed_dev.sql` seeds the key `local-dev-feed-key`, so the quickest check is:
+
+```bash
+curl -H 'X-API-Key: local-dev-feed-key' \
+  'http://localhost:8080/gtfs-rt/vehicle-positions?format=json'   # 200
+
+curl -i 'http://localhost:8080/gtfs-rt/vehicle-positions'         # 401
+```
+
+To walk the real flow instead, mint a key through the admin API:
+
+```bash
+ADMIN_JWT=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@test.com","password":"password"}' | jq -r .token)
+
+# The raw key is in this response only; it is stored as a SHA-256 hash
+KEY=$(curl -s -X POST http://localhost:8080/api/v1/admin/api-keys \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"local test"}' | jq -r .key)
+
+curl -s -o /dev/null -w '%{http_code}\n' -H "X-API-Key: $KEY" \
+  http://localhost:8080/gtfs-rt/vehicle-positions   # 200
+
+# Revoke it, then the same key is rejected
+ID=$(curl -s -H "Authorization: Bearer $ADMIN_JWT" \
+  http://localhost:8080/api/v1/admin/api-keys | jq -r '.[0].id')
+curl -s -X DELETE -H "Authorization: Bearer $ADMIN_JWT" \
+  "http://localhost:8080/api/v1/admin/api-keys/$ID"
+
+curl -s -H "X-API-Key: $KEY" \
+  http://localhost:8080/gtfs-rt/vehicle-positions   # 401 inactive API key
+```
+
 ## API Sanity Checks
 
 ### Submit one location
@@ -390,7 +430,8 @@ curl -X POST http://localhost:8080/api/v1/locations \
   -H 'Content-Type: application/json' \
   -d '{
     "vehicle_id": "demo-vehicle-42",
-    "trip_id": "route-5-0830",
+    "trip_id": "t_5_0830",
+    "route_id": "5",
     "latitude": -1.2921,
     "longitude": 36.8219,
     "bearing": 180,
@@ -406,10 +447,23 @@ curl -X POST http://localhost:8080/api/v1/locations \
 curl 'http://localhost:8080/gtfs-rt/vehicle-positions?format=json'
 ```
 
+Add `-H 'X-API-Key: local-dev-feed-key'` when running with
+`FEED_AUTH_ENABLED=true`.
+
 ### Get admin status
 
 ```bash
 curl http://localhost:8080/api/v1/admin/status
+```
+
+### Browse the GTFS catalog
+
+With `GTFS_STATIC_URL=rider/testdata/fixture.zip` and a driver token in `$TOKEN`:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/gtfs/routes | jq
+curl -s -H "Authorization: Bearer $TOKEN" 'http://localhost:8080/api/v1/gtfs/routes/R1/trips' | jq
+curl -s -H "Authorization: Bearer $TOKEN" 'http://localhost:8080/api/v1/gtfs/trips/T1' | jq '.stops[0], .thresholds'
 ```
 
 ## Troubleshooting
@@ -422,6 +476,35 @@ curl http://localhost:8080/api/v1/admin/status
 - `address already in use` for `0.0.0.0:5432` when running `make up`:
    - another local Postgres is using port `5432`
    - stop that service, or update [docker-compose.yml](docker-compose.yml) to map a different host port and adjust `DATABASE_URL` accordingly
+- `401` from the feed:
+   - `FEED_AUTH_ENABLED=true` requires an `X-API-Key` header; the seeded dev key is `local-dev-feed-key`
+   - `inactive API key` means the key exists but was revoked — mint a new one via `POST /api/v1/admin/api-keys`
 - empty feed:
    - make sure timestamp is within 5 minutes of server time (this is request validation in `handlers.go`, independent of `STALENESS_THRESHOLD`)
   - ensure coordinates are valid and non-zero
+
+## iOS driver app
+
+The iOS driver app lives in `ios/VehicleTracker` (XcodeGen project; the
+`.xcodeproj` is generated and git-ignored) and depends on the local rider SDK
+package `ios/VehiclePositionsKit` for Core Location. Requires Xcode 27 and
+`brew install xcodegen`.
+
+```bash
+export DEVELOPER_DIR=/Applications/Xcode-27.0.0-release.candidate.app/Contents/Developer  # or your Xcode 27 path
+cd ios/VehicleTracker
+xcodegen generate
+open VehicleTracker.xcodeproj
+```
+
+Tests (Swift Testing, hosted by the app) run on a simulator with iOS 26.4 or
+later; create one on the iOS 27 runtime if none exists:
+
+```bash
+UDID=$(xcrun simctl create "VehicleTracker iPhone" "iPhone 17 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+xcodebuild test -project VehicleTracker.xcodeproj -scheme VehicleTracker -destination "id=$UDID"
+```
+
+For the manual end-to-end walkthrough against a local server (login, trip
+picker, simulated GPS along the fixture route, the feed check) see
+[`docs/ios-smoke-test.md`](ios-smoke-test.md).

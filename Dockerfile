@@ -5,6 +5,7 @@ RUN go mod download
 COPY migrations ./migrations
 COPY db ./db
 COPY web ./web
+COPY rider ./rider
 COPY *.go ./
 RUN CGO_ENABLED=0 go build -o /vehicle-positions .
 

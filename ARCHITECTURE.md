@@ -16,6 +16,7 @@ It outlines the system's core components, module structure, data flow, and how t
 6. [Module Overview](#6-module-overview)
 7. [Extending the System](#7-extending-the-system)
 8. [Rider Mode](#8-rider-mode)
+9. [iOS Driver App and CarPlay](#9-ios-driver-app-and-carplay)
 
 ---
 
@@ -272,7 +273,7 @@ When a driver application reports a vehicle position, the following sequence occ
 
 1. Consumer sends `GET /gtfs-rt/vehicle-positions` (optionally `?format=json`).
 2. Handler calls `tracker.ActiveVehicles()`, which reads the in-memory map and returns only vehicles whose `UpdatedAt` is newer than `time.Now().Add(-maxAge)`.
-3. `buildFeed()` constructs a `gtfs.FeedMessage` with a `FULL_DATASET` header and one `VehiclePosition` entity per active vehicle. `TripDescriptor` is omitted when `trip_id` is empty.
+3. `buildFeed()` constructs a `gtfs.FeedMessage` with a `FULL_DATASET` header and one `VehiclePosition` entity per active vehicle. `TripDescriptor` carries `trip_id`, `route_id` and `start_date` as sent, and is omitted when both `trip_id` and `route_id` are empty.
 4. Response is serialized with `proto.Marshal` (protobuf, default) or `protojson.Marshal` (`?format=json`) and written with the appropriate `Content-Type`.
 
 ### 5.3 Sequence Diagrams
@@ -361,7 +362,9 @@ Authentication is per endpoint, not global:
 ```json
 {
   "vehicle_id":  "bus-42",
-  "trip_id":     "route-5",
+  "trip_id":     "t_5_0830",
+  "route_id":    "5",
+  "start_date":  "20260715",
   "latitude":    -1.2921,
   "longitude":   36.8219,
   "bearing":     90.0,
@@ -374,7 +377,9 @@ Authentication is per endpoint, not global:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `vehicle_id` | ✅ | Non-empty string identifier for the vehicle. |
-| `trip_id` | ❌ | Optional trip identifier; empty string is allowed and results in no `TripDescriptor` in the feed. |
+| `trip_id` | ❌ | GTFS `trip_id`. Empty when the driver only knows the route; never a route id. Max 100 characters. |
+| `route_id` | ❌ | GTFS `route_id`. Max 100 characters. |
+| `start_date` | ❌ | Service date `YYYYMMDD`; accepted only with `trip_id` or `route_id`. |
 | `latitude` | ✅ | Decimal degrees, range `-90` to `90`. Cannot be `0` when `longitude` is also `0`. |
 | `longitude` | ✅ | Decimal degrees, range `-180` to `180`. |
 | `bearing` | ❌ | Direction of travel in degrees. |
@@ -389,6 +394,11 @@ Authentication is per endpoint, not global:
 - `latitude` must be in the range `-90` to `90`. Error: `latitude must be between -90 and 90`.
 - `longitude` must be in the range `-180` to `180`. Error: `longitude must be between -180 and 180`.
 - `timestamp` must be positive. Error: `timestamp must be positive`.
+- `trip_id` is capped at 100 characters. Error: `trip_id must be at most 100 characters`.
+- `route_id` is capped at 100 characters. Error: `route_id must be at most 100 characters`.
+- `start_date` must match `YYYYMMDD`. Error: `start_date must be YYYYMMDD`.
+- `start_date` must be a real calendar date. Error: `start_date must be a valid YYYYMMDD date`.
+- `start_date` requires `trip_id` or `route_id` to be non-empty. Error: `start_date requires trip_id or route_id`.
 
 **Decoding behavior:**
 
@@ -408,7 +418,7 @@ The feed is generated on every request entirely from the in-memory Tracker — t
 - **Header:** GTFS-Realtime version `2.0`, incrementality `FULL_DATASET`, current Unix timestamp.
 - One `FeedEntity` per active vehicle (`id = vehicle_id`).
 - Each entity carries a `VehiclePosition` with `Position` (latitude, longitude, bearing, speed), a `VehicleDescriptor` (`id` only), and an epoch `Timestamp` copied from the incoming report.
-- A `TripDescriptor` (`trip_id`) only when `trip_id` is non-empty.
+- A `TripDescriptor` with `trip_id`, `route_id` and `start_date` as reported, only when `trip_id` or `route_id` is non-empty.
 
 Consumers can request JSON encoding by appending `?format=json` to the URL. The default response is binary protobuf (`application/x-protobuf`). Any other `format` value falls back to protobuf because only the exact string `json` is checked.
 
@@ -619,6 +629,35 @@ reports is skipped by `Aggregator.Estimates`, so rider data only ever appears
 where there was nothing. The `source` query parameter (`driver`, `rider`, or
 the default `all`) lets a consumer take one half, which is also how the merge
 is exercised end to end in the smoke test.
+
+### 8.6 GTFS catalog for drivers
+
+The schedule index (`rider.Index`) is loaded by `gtfs_wiring.go` whenever
+`GTFS_STATIC_URL` is set, independently of rider mode, and refreshed on
+`GTFS_STATIC_REFRESH`. Rider mode borrows the refresher. `gtfs_handlers.go`
+serves the index to drivers as `GET /api/v1/gtfs/routes`,
+`GET /api/v1/gtfs/routes/{route_id}/trips` and `GET /api/v1/gtfs/trips/{trip_id}`
+behind `requireAuth`. Absolute stop times are `rider.ServiceDayStart(date, tz)`
+plus the `stop_times.txt` offsets, so after-midnight trips land on the next
+calendar day. The trip payload carries the server's `RIDER_MAX_SHAPE_DISTANCE`
+and schedule window so a client computing adherence locally applies the same
+numbers.
+
+---
+
+## 9. iOS driver app and CarPlay
+
+`ios/VehicleTracker` is a SwiftUI app whose state lives in one `TripSession`
+(`Engine/TripSession.swift`): sign-in, the active trip, the Core Location
+stream (from the rider SDK's `CoreLocationSource`), adherence, and a throttled
+`LocationReporter` that honours the server's one-report-per-5-s limit. The
+engine (`ShapeGeometry`, `ScheduleInterpolator`, `AdherenceEvaluator`) is a
+port of `rider/shape.go` and `rider.ScheduledOffsetAt`, judged with the
+thresholds `GET /api/v1/gtfs/trips/{id}` returns. `Map/RouteMapViewController`
+draws the trip for both the phone and the CarPlay window; `CarPlay/` holds the
+scene delegate, a controller that observes `TripSession`, and pure template
+builders. The CarPlay scene is a navigation app (`CPMapTemplate` root,
+`CPNavigationSession` whose maneuvers are the stops).
 
 ---
 

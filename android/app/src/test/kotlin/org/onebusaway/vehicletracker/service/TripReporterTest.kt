@@ -1,7 +1,9 @@
 package org.onebusaway.vehicletracker.service
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
@@ -13,7 +15,7 @@ import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 
 class TripReporterTest {
-    private val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", 100L)
+    private val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L)
     private fun fix(ts: Long = 1000L) = LocationFix(-1.29, 36.82, bearing = 180.0, speed = 8.5, accuracy = 12.0, timeEpochSec = ts)
 
     private fun reporterWith(server: MockWebServer): Pair<TripReporter, TrackingRepository> {
@@ -159,6 +161,25 @@ class TripReporterTest {
         repeat(2) { reporter.report(trip, fix()) } // two more rejects, streak restarted so still below threshold
 
         assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
+        server.shutdown()
+    }
+
+    @Test fun `report sends route_id and start_date, and trip_id only when a gtfs id exists`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        val (reporter, _) = reporterWith(server)
+
+        reporter.report(trip, fix())
+        val withTrip = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("trip-0830", withTrip["trip_id"]!!.jsonPrimitive.content)
+        assertEquals("5", withTrip["route_id"]!!.jsonPrimitive.content)
+        assertEquals("20260804", withTrip["start_date"]!!.jsonPrimitive.content)
+
+        reporter.report(trip.copy(gtfsTripId = ""), fix())
+        val routeOnly = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals(false, routeOnly.containsKey("trip_id"))
+        assertEquals("5", routeOnly["route_id"]!!.jsonPrimitive.content)
         server.shutdown()
     }
 }

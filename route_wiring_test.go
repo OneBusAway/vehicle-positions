@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // noopStore satisfies appStore with no-op method bodies.
@@ -24,7 +26,7 @@ func (n *noopStore) GetUserByEmail(_ context.Context, _ string) (*User, error) {
 func (n *noopStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
 }
-func (n *noopStore) ListUsersPage(_ context.Context, _, _ int32) ([]UserResponse, error) {
+func (n *noopStore) ListUsersPage(_ context.Context, _ UserFilter) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
 }
 func (n *noopStore) GetUser(_ context.Context, _ int64) (*UserResponse, error) {
@@ -42,7 +44,7 @@ func (n *noopStore) DeleteUser(_ context.Context, _ int64) error {
 func (n *noopStore) ListVehicles(_ context.Context) ([]VehicleResponse, error) {
 	return make([]VehicleResponse, 0), nil
 }
-func (n *noopStore) ListVehiclesPage(_ context.Context, _ bool, _, _ int32) ([]VehicleResponse, error) {
+func (n *noopStore) ListVehiclesPage(_ context.Context, _ VehicleFilter) ([]VehicleResponse, error) {
 	return make([]VehicleResponse, 0), nil
 }
 func (n *noopStore) GetVehicle(_ context.Context, _ string) (*VehicleResponse, error) {
@@ -126,6 +128,21 @@ func (n *noopStore) ListTripLocations(_ context.Context, _ int64) ([]LocationPoi
 func (n *noopStore) ListActiveTripsByVehicle(_ context.Context) (map[string]ActiveTripInfo, error) {
 	return nil, nil
 }
+func (n *noopStore) GetAPIKeyByHash(_ context.Context, _ string) (*APIKey, error) {
+	return nil, ErrAPIKeyNotFound
+}
+func (n *noopStore) UpdateAPIKeyLastUsed(_ context.Context, _ int64) error {
+	return nil
+}
+func (n *noopStore) CreateAPIKey(_ context.Context, _, _ string) (*APIKey, error) {
+	return &APIKey{}, nil
+}
+func (n *noopStore) ListAPIKeys(_ context.Context) ([]APIKey, error) {
+	return make([]APIKey, 0), nil
+}
+func (n *noopStore) DeactivateAPIKey(_ context.Context, _ int64) error {
+	return nil
+}
 
 // Rider-mode store methods. Rider routes are not registered on a mux built
 // with a nil rider service, so only the two admin rider endpoints reach these;
@@ -168,7 +185,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 
 	// nil tracker and rateLimiter are safe: adminMiddleware rejects driver
 	// tokens before any handler body runs, so neither is dereferenced.
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		method string
@@ -195,6 +212,9 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 		{"GET", "/api/v1/admin/vehicles/bus-1/users"},
 		{"GET", "/api/v1/admin/rider/status"},
 		{"GET", "/api/v1/admin/rider/rides"},
+		{"GET", "/api/v1/admin/api-keys"},
+		{"POST", "/api/v1/admin/api-keys"},
+		{"DELETE", "/api/v1/admin/api-keys/1"},
 	}
 
 	for _, tc := range tests {
@@ -224,7 +244,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	// Same routes as the driver-rejection table — every admin route must
 	// let a valid admin token through both middleware layers.
@@ -253,6 +273,9 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 		{"GET", "/api/v1/admin/vehicles/bus-1/users"},
 		{"GET", "/api/v1/admin/rider/status"},
 		{"GET", "/api/v1/admin/rider/rides"},
+		{"GET", "/api/v1/admin/api-keys"},
+		{"POST", "/api/v1/admin/api-keys"},
+		{"DELETE", "/api/v1/admin/api-keys/1"},
 	}
 
 	for _, tc := range tests {
@@ -283,7 +306,7 @@ func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/vehicles/live", nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -367,7 +390,7 @@ func TestDriverVehiclesRoute_Wiring(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		name       string
@@ -389,5 +412,102 @@ func TestDriverVehiclesRoute_Wiring(t *testing.T) {
 
 			assert.Equal(t, tc.wantStatus, w.Code)
 		})
+	}
+}
+
+// apiKeyStubStore is a noopStore that recognizes exactly one API key, so the
+// wired feed route can be exercised with a key that actually validates.
+type apiKeyStubStore struct {
+	noopStore
+	rawKey string
+}
+
+func (s *apiKeyStubStore) GetAPIKeyByHash(_ context.Context, keyHash string) (*APIKey, error) {
+	if keyHash != hashAPIKey(s.rawKey) {
+		return nil, ErrAPIKeyNotFound
+	}
+	return &APIKey{ID: 1, Name: "feed consumer", KeyHash: keyHash, Active: true}, nil
+}
+
+// TestFeedRoute_Wiring verifies that FEED_AUTH_ENABLED actually gates the
+// wired GTFS-RT route. Middleware unit tests cannot catch a refactor that
+// drops the requireAPIKey wrapper from newMux — the feed would silently go
+// public again and every other test would still pass — so for this security
+// control the wiring is the thing worth pinning. It also pins the other
+// direction: with feed auth off the route stays open, which is what every
+// existing deployment upgrades into.
+func TestFeedRoute_Wiring(t *testing.T) {
+	const rawKey = "wired-feed-key"
+
+	tests := []struct {
+		name            string
+		feedAuthEnabled bool
+		apiKey          string
+		wantStatus      int
+	}{
+		{"auth disabled, no key", false, "", http.StatusOK},
+		{"auth enabled, no key", true, "", http.StatusUnauthorized},
+		{"auth enabled, wrong key", true, "not-the-key", http.StatusUnauthorized},
+		{"auth enabled, valid key", true, rawKey, http.StatusOK},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker := NewTracker(5 * time.Minute)
+			defer tracker.Stop()
+
+			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, time.Time{}, nil, false, tc.feedAuthEnabled, nil, nil)
+
+			req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
+			if tc.apiKey != "" {
+				req.Header.Set(apiKeyHeader, tc.apiKey)
+			}
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.wantStatus, w.Code)
+			if tc.wantStatus == http.StatusUnauthorized {
+				assert.Contains(t, decodeError(t, w), "API key")
+			}
+		})
+	}
+}
+
+func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
+	without := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	rec := httptest.NewRecorder()
+	without.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/gtfs/routes", nil))
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	ix, err := rider.LoadIndex(context.Background(), "rider/testdata/fixture.zip", nil, time.Now())
+	require.NoError(t, err)
+	catalog := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
+	// T1 is weekday-only in the fixture calendar (2026 only): pin the clock so
+	// this test never depends on the day of the week it happens to run on, or
+	// on the year still being 2026.
+	catalog.now = func() time.Time { return catalogNow }
+	with := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, catalog)
+
+	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret)
+	riderTok, _ := generateRiderJWT("rider-1", testSecret, time.Hour)
+	cases := []struct {
+		name  string
+		token string
+		want  int
+	}{
+		{"driver", driverTok, http.StatusOK},
+		{"rider token is refused", riderTok, http.StatusForbidden},
+		{"no token", "", http.StatusUnauthorized},
+	}
+	for _, path := range []string{"/api/v1/gtfs/routes", "/api/v1/gtfs/routes/R1/trips?date=20260902", "/api/v1/gtfs/trips/T1?date=20260902"} {
+		for _, tc := range cases {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			if tc.token != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			rec := httptest.NewRecorder()
+			with.ServeHTTP(rec, req)
+			assert.Equal(t, tc.want, rec.Code, "%s %s", tc.name, path)
+		}
 	}
 }
