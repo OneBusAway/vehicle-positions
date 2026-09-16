@@ -1,0 +1,2410 @@
+openapi: 3.1.0
+info:
+  title: Vehicle Positions API
+  version: 0.1.0
+  summary: Realtime vehicle position tracking for transit agencies without AVL hardware.
+  description: |
+    The Vehicle Positions server ingests GPS reports from driver Android apps
+    and serves a standards-compliant GTFS-RT Vehicle Positions feed. It is
+    built for transit agencies in developing countries that have a GTFS static
+    feed and a fleet of Android phones but no AVL infrastructure.
+
+    This document describes every JSON API endpoint the server registers.
+    Schemas, validation rules, and status codes are derived directly from the
+    handler source.
+
+    `openapi_test.go` parses the server's Go source and holds this file to
+    it: routes must match the mux registrations in both directions, every
+    route behind `requireAuth` / `requireAdmin` must declare the matching
+    `401` / `403`, and the validation keywords that mirror a Go constant
+    must equal it. What none of that reaches is prose — descriptions still
+    have to be read against the handlers by hand.
+
+    Out of scope: the server-rendered admin UI (`/admin/*`, `/static/*`),
+    which serves HTML pages and form posts rather than JSON and is disabled
+    by setting `ADMIN_UI_ENABLED` to a false value (it is on by default).
+    Those routes are listed explicitly in `openapi_test.go` so that adding
+    one is a deliberate decision rather than an invisible gap.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: auth
+    description: Driver authentication.
+  - name: locations
+    description: GPS location ingest.
+  - name: feed
+    description: GTFS-RT feed consumption.
+  - name: health
+    description: Liveness and readiness probes.
+  - name: admin
+    description: Administrative management endpoints.
+  - name: trips
+    description: Driver trip lifecycle.
+  - name: vehicles
+    description: Driver-facing vehicle access.
+  - name: rider
+    description: Crowd-sourced positioning from rider devices.
+
+# All endpoints require a bearer JWT unless they explicitly opt out with `security: []`.
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in with email and password
+      description: |
+        Exchanges an email and password for a JWT bearer token valid for 24
+        hours. The returned token must be supplied as
+        `Authorization: Bearer <token>` on protected endpoints.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Missing or invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: |
+            Too many login attempts. The limiter keys on client IP and the
+            submitted email; a successful login clears the email's counter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/locations:
+    post:
+      tags: [locations]
+      summary: Submit a single location report
+      description: |
+        Records a GPS fix from a driver's device. The driver identity comes
+        from the JWT `sub` claim, not the request body. Requests are
+        rate-limited to one report per driver per 5 seconds; additional
+        reports receive HTTP 429. Request bodies are capped at 1 MiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationReport'
+      responses:
+        '201':
+          description: Location accepted and persisted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          description: Invalid JSON or payload validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Rate limit exceeded for this driver.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/vehicles:
+    get:
+      tags: [vehicles]
+      summary: List the vehicles assigned to the authenticated driver
+      description: |
+        Returns the active vehicles the calling driver is assigned to. The
+        driver identity comes from the JWT `sub` claim, so there is no path
+        or query parameter. Requires a valid bearer token but not the
+        `admin` role — this is the driver-facing counterpart to
+        `GET /api/v1/admin/vehicles`.
+      responses:
+        '200':
+          description: |
+            Vehicles assigned to this driver. Empty array when the driver has
+            no active assignments.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vehicle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/rider/register:
+    post:
+      tags: [rider]
+      summary: Register a rider device
+      description: |
+        Exchanges a device installation for a rider token. This is the only
+        rider endpoint open to an unauthenticated caller.
+
+        Registration is idempotent per installation: a known `installation_id`
+        answers `200`, a new one `201`. The response carries the cadence the
+        server wants, so clients take their batch size and interval from here
+        rather than hard-coding them.
+
+        Bodies are capped at 64 KiB and rate-limited per client.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiderRegisterRequest'
+      responses:
+        '200':
+          description: Existing installation; the token is reissued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiderRegisterResponse'
+        '201':
+          description: New installation registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiderRegisterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Too many registrations from this client.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/rider/rides:
+    post:
+      tags: [rider]
+      summary: Start a ride
+      description: |
+        Declares that the rider has boarded a trip, so their positions can be
+        matched against its shape.
+
+        `422` means the request was well-formed but the trip could not be
+        matched against the loaded schedule; `503` means no schedule is
+        loaded at all.
+      security:
+        - riderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartRideRequest'
+      responses:
+        '201':
+          description: Ride started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartRideResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such trip in the loaded schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: This rider already has a ride in progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          description: The trip could not be matched against the schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rides are being started too quickly for this rider.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ScheduleUnavailable'
+
+  /api/v1/rider/rides/{id}/positions:
+    parameters:
+      - $ref: '#/components/parameters/RideIDPath'
+    post:
+      tags: [rider]
+      summary: Upload a batch of positions
+      description: |
+        Submits a batch of fixes for a ride. The response reports what was
+        accepted, whether the ride is now publishable, and whether the server
+        ended it — a rider who has drifted off the route for long enough is
+        ended server-side, reported through `ended` and `end_reason` rather
+        than an error status.
+
+        Batches are capped at 12 positions and 64 KiB, and rate-limited to
+        the advertised reporting interval.
+      security:
+        - riderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PositionsRequest'
+      responses:
+        '200':
+          description: Batch processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The ride is not in a state that accepts positions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Batches are arriving faster than the reporting interval allows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/rider/rides/{id}/end:
+    parameters:
+      - $ref: '#/components/parameters/RideIDPath'
+    post:
+      tags: [rider]
+      summary: End a ride
+      description: Closes a ride and reports what it contributed.
+      security:
+        - riderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndRideRequest'
+      responses:
+        '200':
+          description: Ride ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndRideResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The ride has already ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Too many requests from this rider.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/rider/trips/{trip_id}/status:
+    parameters:
+      - $ref: '#/components/parameters/TripGTFSIDPath'
+    get:
+      tags: [rider]
+      summary: Whether a trip is already covered
+      description: |
+        Tells a client whether a trip already has a trusted AVL feed or other
+        riders reporting, so it can decide not to spend battery duplicating
+        coverage.
+      security:
+        - riderAuth: []
+      parameters:
+        - in: query
+          name: start_date
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]{8}$'
+          description: |
+            GTFS service date as `YYYYMMDD`. Defaults to the service date the
+            loaded schedule considers current.
+      responses:
+        '200':
+          description: Coverage for this trip.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripCoverage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No such trip in the loaded schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ScheduleUnavailable'
+
+  /gtfs-rt/vehicle-positions:
+    get:
+      tags: [feed]
+      summary: GTFS-RT Vehicle Positions feed
+      description: |
+        Returns a standards-compliant GTFS-RT `FeedMessage` containing every
+        vehicle that has reported within the staleness threshold (default 5
+        minutes). Defaults to protobuf; pass `?format=json` to receive the
+        protojson-encoded form for debugging.
+      security: []
+      parameters:
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [json]
+          description: When set to `json`, returns the protojson-encoded feed.
+      responses:
+        '200':
+          description: GTFS-RT FeedMessage.
+          content:
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+                description: Serialized GTFS-RT `FeedMessage` protobuf.
+            application/json:
+              schema:
+                type: object
+                description: protojson-encoded GTFS-RT `FeedMessage`.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      description: Returns 200 if the process is serving requests.
+      security: []
+      responses:
+        '200':
+          description: Server is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  /ready:
+    get:
+      tags: [health]
+      summary: Readiness probe
+      description: |
+        Returns 200 if the server can reach the database within 2 seconds,
+        or 503 if the database ping fails.
+      security: []
+      responses:
+        '200':
+          description: Server is ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '503':
+          description: Server is degraded (database unreachable).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  /api/v1/admin/rider/status:
+    get:
+      tags: [admin]
+      summary: Rider subsystem health
+      description: |
+        Reports the rider engine's state: the schedule snapshot it is matching
+        against, the trusted feeds it corroborates with, and current rider and
+        ride counts. Requires the `admin` role.
+
+        Rider mode being off is a fact about the server, not an error — a
+        disabled server answers `200` with `enabled: false` and omits the
+        detail sections rather than returning `404`.
+      responses:
+        '200':
+          description: Rider subsystem status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiderStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/rider/rides:
+    get:
+      tags: [admin]
+      summary: List rider rides
+      description: |
+        Lists rides newest-first, filtered by status. Requires the `admin`
+        role. Like the other admin lists, one row beyond `limit` is read to
+        set `has_more`.
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [active, ended]
+            default: active
+          description: Which rides to return. Defaults to `active`.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            $ref: '#/components/schemas/RiderRideListLimit'
+          description: Maximum number of rides to return.
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of rides to skip.
+      responses:
+        '200':
+          description: Matching rides.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRides'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/status:
+    get:
+      tags: [admin]
+      summary: System status and vehicle counts
+      description: Requires the `admin` role.
+      responses:
+        '200':
+          description: Current status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/vehicles:
+    get:
+      tags: [admin]
+      summary: List vehicles
+      description: |
+        Returns one page of active vehicles. Requires the `admin` role.
+      parameters:
+        - $ref: '#/components/parameters/ListLimitQuery'
+        - $ref: '#/components/parameters/ListOffsetQuery'
+      responses:
+        '200':
+          description: Vehicles. A bare array — there is no paging envelope.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [admin]
+      summary: Create or update a vehicle
+      description: |
+        Upserts by `id`. Requires the `admin` role. Request bodies are capped
+        at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertVehicleRequest'
+      responses:
+        '200':
+          description: Vehicle created or updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/vehicles/live:
+    get:
+      tags: [admin]
+      summary: Snapshot of currently reporting vehicles
+      description: |
+        Returns every vehicle the tracker considers active — those that have
+        reported within `STALENESS_THRESHOLD` — joined with the vehicle's
+        label and, where a trip is running, that trip's route and driver.
+        Ordered by `vehicle_id`. Requires the `admin` role.
+
+        This reads the in-memory tracker rather than the locations table, so
+        it reflects live state, not history. Use
+        `GET /api/v1/admin/vehicles/{vehicleID}/locations` for the recorded
+        trail.
+      responses:
+        '200':
+          description: Active vehicles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveVehicles'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/vehicles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/VehicleIDPath'
+    get:
+      tags: [admin]
+      summary: Get a vehicle by id
+      description: Requires the `admin` role.
+      responses:
+        '200':
+          description: Vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [admin]
+      summary: Deactivate a vehicle
+      description: |
+        Sets `active = false`. The row is preserved so historical trips keep
+        referencing it. Requires the `admin` role.
+      responses:
+        '204':
+          description: Vehicle deactivated.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/vehicles/{vehicleID}/locations:
+    parameters:
+      - $ref: '#/components/parameters/VehicleIDPathNamed'
+    get:
+      tags: [admin]
+      summary: Export a vehicle's location history
+      description: |
+        Returns the GPS fixes recorded for a vehicle within a time window,
+        as JSON or as a CSV download. Requires the `admin` role.
+
+        The window defaults to the 24 hours ending at `to` rather than to
+        all of history, so an unbounded request cannot trigger a full-table
+        scan. Note that `from` defaults relative to `to`, not to the current
+        time: a `to` in the past selects the 24 hours ending there instead
+        of failing the `from <= to` check.
+
+        Results are capped by `limit`. The handler reads one row beyond the
+        cap to set `has_more`, so a truncated response is distinguishable
+        from an exact fit.
+      parameters:
+        - in: query
+          name: from
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: |
+            Start of the window, Unix seconds, inclusive. Defaults to
+            `to - 86400`. Must be less than or equal to `to`.
+        - in: query
+          name: to
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: End of the window, Unix seconds, inclusive. Defaults to the current server time.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            $ref: '#/components/schemas/HistoryLimit'
+          description: Maximum number of fixes to return.
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+          description: |
+            Response encoding. `csv` returns `text/csv` with a
+            `Content-Disposition: attachment` header naming the file
+            `<vehicle_id>_locations.csv`.
+      responses:
+        '200':
+          description: |
+            Location history. The CSV variant carries the same rows with the
+            header `timestamp,latitude,longitude,bearing,speed,accuracy,trip_id,received_at`;
+            absent `bearing` / `speed` / `accuracy` render as empty cells, and
+            `trip_id` is prefixed with `'` when it starts with a character a
+            spreadsheet would treat as a formula.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationHistory'
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No vehicle exists with this id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/trips:
+    get:
+      tags: [admin]
+      summary: List trips
+      description: |
+        Returns trips newest-first with the vehicle label and driver name
+        resolved. Requires the `admin` role.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: ['', active, completed]
+          description: Filter by trip status. Omit or pass an empty string for all trips.
+        - in: query
+          name: vehicle_id
+          required: false
+          schema:
+            type: string
+          description: Restrict to one vehicle. Omit for all vehicles.
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: |
+            Restrict to one driver. Omit for all drivers; a present value must
+            be a positive integer.
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: |
+            Case-insensitive substring search over driver name, route id, and
+            GTFS trip id. It does not search vehicle fields — use `vehicle_id`
+            for that.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            $ref: '#/components/schemas/TripListLimit'
+          description: Maximum number of trips to return.
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of trips to skip.
+      responses:
+        '200':
+          description: Matching trips.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/trips/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TripIDPath'
+    get:
+      tags: [admin]
+      summary: Get a trip by id
+      description: |
+        Returns one trip with its vehicle label and driver name resolved.
+        Requires the `admin` role.
+
+        As with the trail endpoint, a non-numeric `id` returns `404` rather
+        than `400` — an unparseable id is treated as a trip that does not
+        exist.
+      responses:
+        '200':
+          description: Trip.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No trip exists with this id, or the id is not a number.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/trips/{id}/locations:
+    parameters:
+      - $ref: '#/components/parameters/TripIDPath'
+    get:
+      tags: [admin]
+      summary: Get a trip with its recorded trail
+      description: |
+        Returns the trip summary together with every location fix recorded
+        against it, oldest first. Requires the `admin` role.
+
+        A non-numeric `id` returns `404` rather than `400` — the handler
+        treats an unparseable id as a trip that does not exist.
+      responses:
+        '200':
+          description: |
+            Trip and its trail. `points` is an empty array for a trip with no
+            recorded fixes; the `trip` object is still returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripTrail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No trip exists with this id, or the id is not a number.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/users:
+    get:
+      tags: [admin]
+      summary: List users
+      description: |
+        Returns one page of users. Requires the `admin` role.
+      parameters:
+        - $ref: '#/components/parameters/ListLimitQuery'
+        - $ref: '#/components/parameters/ListOffsetQuery'
+      responses:
+        '200':
+          description: Users. A bare array — there is no paging envelope.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [admin]
+      summary: Create a user
+      description: |
+        Requires the `admin` role. Request bodies are capped at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Email already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/UserIDPath'
+    get:
+      tags: [admin]
+      summary: Get a user by id
+      description: Requires the `admin` role.
+      responses:
+        '200':
+          description: User.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [admin]
+      summary: Update a user
+      description: |
+        Updates name, email, and role. Requires the `admin` role. Request
+        bodies are capped at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Email already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [admin]
+      summary: Delete a user
+      description: Requires the `admin` role.
+      responses:
+        '204':
+          description: User deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/assignments:
+    post:
+      tags: [admin]
+      summary: Assign a driver to a vehicle
+      description: |
+        Links a driver to a vehicle. A driver must hold an assignment for a
+        vehicle before `POST /api/v1/trips/start` will accept a trip on it.
+        Requires the `admin` role. Request bodies are capped at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssignmentRequest'
+      responses:
+        '201':
+          description: Assignment created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assignment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: |
+            The referenced user or vehicle does not exist. Surfaced from the
+            foreign-key violation, so the message is either `user not found`
+            or `vehicle not found`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: This driver is already assigned to this vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/users/{id}/vehicles:
+    parameters:
+      - $ref: '#/components/parameters/UserIDPath'
+    get:
+      tags: [admin]
+      summary: List the vehicles assigned to a driver
+      description: |
+        Requires the `admin` role. The handler validates the id but does not
+        check that the user exists, so an unknown id returns `200` with an
+        empty array rather than `404`.
+      responses:
+        '200':
+          description: Assignments held by this driver.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Assignment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/users/{userID}/vehicles/{vehicleID}:
+    parameters:
+      - $ref: '#/components/parameters/AssignmentUserIDPath'
+      - $ref: '#/components/parameters/VehicleIDPathNamed'
+    delete:
+      tags: [admin]
+      summary: Remove a driver's vehicle assignment
+      description: |
+        Deletes the assignment linking a driver to a vehicle. Requires the
+        `admin` role. Unlike the other delete endpoints in this API, this one
+        answers `200` with a status body rather than `204`.
+      responses:
+        '200':
+          description: Assignment removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No assignment links this driver to this vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/vehicles/{id}/users:
+    parameters:
+      - $ref: '#/components/parameters/VehicleIDPath'
+    get:
+      tags: [admin]
+      summary: List the drivers assigned to a vehicle
+      description: |
+        Requires the `admin` role. The handler validates the id but does not
+        check that the vehicle exists, so an unknown id returns `200` with an
+        empty array rather than `404`.
+      responses:
+        '200':
+          description: |
+            Assignments on this vehicle. Each item is the same `Assignment`
+            object returned by the user-scoped listing, so `vehicle_id` is
+            constant across the array.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Assignment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/trips/start:
+    post:
+      tags: [trips]
+      summary: Start a trip
+      description: |
+        Creates a new active trip for the authenticated driver. The driver
+        must be assigned to the vehicle and must not already have an active
+        trip. Request bodies are capped at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartTripRequest'
+      responses:
+        '201':
+          description: Trip started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Driver is not assigned to this vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Driver already has an active trip.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/trips/end:
+    post:
+      tags: [trips]
+      summary: End an active trip
+      description: Request bodies are capped at 1 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndTripRequest'
+      responses:
+        '200':
+          description: Trip ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No active trip matched the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT bearer token issued by `POST /api/v1/auth/login`. Signed HS256,
+        24-hour TTL, `iss: vehicle-positions-api`.
+
+    riderAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by `POST /api/v1/rider/register`, carrying the `rider`
+        role. It is not interchangeable with the driver/admin token from
+        `POST /api/v1/auth/login`: `requireRider` accepts only the rider
+        role, and the rest of the API rejects it.
+
+  parameters:
+    VehicleIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/VehicleID'
+      description: Vehicle identifier.
+    UserIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      description: User identifier.
+    AssignmentUserIDPath:
+      name: userID
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      description: User identifier.
+    # Two components describe the same vehicle id because the routes spell the
+    # path variable differently: most use {id}, while the assignment-delete and
+    # location-history routes use {vehicleID}. OpenAPI requires `name` to match
+    # the template variable, so the pair cannot be collapsed.
+    ListLimitQuery:
+      name: limit
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ListLimit'
+      description: Maximum number of rows to return.
+    ListOffsetQuery:
+      name: offset
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ListOffset'
+      description: Number of rows to skip.
+    RideIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Ride identifier returned by `POST /api/v1/rider/rides`.
+    TripGTFSIDPath:
+      name: trip_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: GTFS trip identifier from the loaded schedule.
+    TripIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      description: Trip identifier.
+    VehicleIDPathNamed:
+      name: vehicleID
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/VehicleID'
+      description: Vehicle identifier.
+
+  responses:
+    BadRequest:
+      description: Invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Caller lacks the required role.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: Request body exceeded the handler's size limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: Content-Type must be `application/json`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ScheduleUnavailable:
+      description: |
+        No GTFS schedule is loaded, so the rider engine cannot match trips.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # Every vehicle-id-shaped field references this schema instead of
+    # restating the constraints, so the drift guard has a single place to
+    # compare against vehicleIDPattern / maxVehicleIDLength in handlers.go.
+    VehicleID:
+      type: string
+      minLength: 1
+      maxLength: 50
+      pattern: '^[a-zA-Z0-9._-]+$'
+      description: |
+        Agency-assigned vehicle identifier. Constraints mirror
+        `maxVehicleIDLength` and `vehicleIDPattern` in `handlers.go`.
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message (matches the `writeJSON` helper).
+
+    StatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: JWT bearer token (HS256, 24-hour TTL).
+
+    LocationReport:
+      type: object
+      additionalProperties: false
+      required: [vehicle_id, latitude, longitude, timestamp]
+      description: |
+        A single GPS fix. Beyond the per-field constraints below, the handler
+        rejects reports where `latitude` and `longitude` are *both* zero —
+        null island is far likelier to be a failed fix than a real position.
+        That is a cross-field rule no JSON Schema keyword can express, so it
+        is stated here rather than encoded.
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        trip_id:
+          type: string
+          description: |
+            Optional GTFS trip identifier the driver is currently operating.
+            Not validated — any string is accepted and stored verbatim.
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        bearing:
+          type: [number, 'null']
+          format: double
+          minimum: 0
+          maximum: 360
+          description: Compass heading in degrees. May be null or omitted if unknown.
+        speed:
+          type: [number, 'null']
+          format: double
+          minimum: 0
+          description: |
+            Ground speed in metres per second. Rejected if negative; there is
+            no upper bound. May be null or omitted if unknown.
+        accuracy:
+          type: [number, 'null']
+          format: double
+          description: |
+            GPS horizontal accuracy in metres. May be null or omitted if
+            unknown. Unlike `bearing` and `speed`, this field is not
+            validated — any value the JSON decoder accepts is stored.
+        timestamp:
+          type: integer
+          format: int64
+          minimum: 1
+          description: |
+            Unix seconds. Must be positive and within 5 minutes of the server
+            clock in either direction; reports outside that window are
+            rejected with 400.
+
+    UpsertVehicleRequest:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          $ref: '#/components/schemas/VehicleID'
+        label:
+          type: string
+          maxLength: 255
+        agency_tag:
+          type: string
+          maxLength: 255
+
+    Vehicle:
+      type: object
+      required: [id, label, agency_tag, active, created_at, updated_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/VehicleID'
+        label:
+          type: string
+        agency_tag:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          type: string
+          enum: [driver, admin]
+
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, role]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [driver, admin]
+
+    User:
+      type: object
+      required: [id, name, email, role, active, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [driver, admin]
+        active:
+          type: boolean
+          description: |
+            False once the account has been deactivated. Deactivated users
+            keep their rows so historical trips still resolve a driver.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LiveVehicles:
+      type: object
+      required: [count, vehicles]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveVehicleEntry'
+
+    LiveVehicleEntry:
+      type: object
+      description: |
+        A vehicle's current tracker state. `trip_db_id`, `route_id`, and
+        `driver_name` are populated only while a trip is running on the
+        vehicle and are explicitly `null` otherwise — none carry `omitempty`,
+        so the key is always present. Likewise `bearing` and `speed` are
+        `null` when the device did not report them, keeping "unknown"
+        distinct from a real zero.
+      required:
+        - vehicle_id
+        - label
+        - latitude
+        - longitude
+        - bearing
+        - speed
+        - gtfs_trip_id
+        - trip_db_id
+        - route_id
+        - driver_name
+        - reported_at
+        - updated_at
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        label:
+          type: string
+          description: |
+            The vehicle's label, or the vehicle id when the vehicle has no
+            row in the vehicles table.
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        gtfs_trip_id:
+          type: string
+          description: The GTFS trip id from the last location report. Empty when none was sent.
+        trip_db_id:
+          type: [integer, 'null']
+          format: int64
+          description: Database id of the active trip, or null when no trip is running.
+        route_id:
+          type: [string, 'null']
+        driver_name:
+          type: [string, 'null']
+        reported_at:
+          type: integer
+          format: int64
+          description: Device timestamp of the last fix, Unix seconds.
+        updated_at:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC time the tracker last recorded this vehicle.
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultRiderRideListLimit / maxRiderRideListLimit in
+    # rider_admin_handlers.go.
+    RiderRideListLimit:
+      type: integer
+      minimum: 1
+      maximum: 200
+      default: 50
+
+    RiderRegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [installation_id, platform, app_id, app_version, attestation]
+      properties:
+        installation_id:
+          type: string
+          maxLength: 100
+          description: Stable per-install identifier. Re-registering with the same value reissues the token.
+        platform:
+          type: string
+          maxLength: 100
+        app_id:
+          type: string
+          maxLength: 100
+        app_version:
+          type: string
+          maxLength: 100
+        attestation:
+          type: ['object', 'null']
+          description: |
+            Opaque platform attestation, passed through to the configured
+            verifier. Null when the client has none to offer.
+
+    RiderRegisterResponse:
+      type: object
+      required: [rider_id, token, report_interval_seconds, max_batch_size]
+      properties:
+        rider_id:
+          type: string
+        token:
+          type: string
+          description: Rider JWT for the `riderAuth` scheme.
+        report_interval_seconds:
+          type: integer
+          description: How often the server wants position batches.
+        max_batch_size:
+          type: integer
+          description: Largest batch the positions endpoint will accept.
+
+    StartRideRequest:
+      type: object
+      additionalProperties: false
+      required: [trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id]
+      properties:
+        trip_id:
+          type: string
+          maxLength: 100
+        start_date:
+          type: string
+          pattern: '^[0-9]{8}$'
+          description: GTFS service date as `YYYYMMDD`.
+        route_id:
+          type: string
+          maxLength: 100
+        vehicle_id:
+          type: string
+          maxLength: 100
+          description: |
+            Free text as the rider's app knows it. Unlike the driver API this
+            is not held to `VehicleID` — it is a hint, not a key.
+        boarding_stop_id:
+          type: string
+          maxLength: 100
+        destination_stop_id:
+          type: string
+          maxLength: 100
+
+    StartRideResponse:
+      type: object
+      required: [ride_id, state, report_interval_seconds, max_batch_size]
+      properties:
+        ride_id:
+          type: string
+        state:
+          type: string
+          description: The ride's initial matching state.
+        report_interval_seconds:
+          type: integer
+        max_batch_size:
+          type: integer
+        destination:
+          $ref: '#/components/schemas/RideDestination'
+
+    RideDestination:
+      type: object
+      description: |
+        Where the rider said they are getting off, resolved to a position.
+        Omitted when the destination stop could not be placed.
+      required: [stop_id, latitude, longitude]
+      properties:
+        stop_id:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+
+    PositionsRequest:
+      type: object
+      additionalProperties: false
+      required: [positions]
+      properties:
+        positions:
+          type: array
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/PositionUpload'
+
+    PositionUpload:
+      type: object
+      additionalProperties: false
+      description: |
+        One fix from the device. `accuracy`, `speed`, and `bearing` are
+        required and nullable: a device with no reading must be able to say so
+        rather than claim a zero.
+      required: [latitude, longitude, accuracy, speed, bearing, timestamp]
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        accuracy:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix seconds.
+
+    PositionsResponse:
+      type: object
+      required:
+        - state
+        - published
+        - corroboration
+        - accepted
+        - ignored
+        - off_route_streak
+        - ended
+        - end_reason
+      properties:
+        state:
+          type: string
+          description: The ride's matching state after this batch.
+        published:
+          type: boolean
+          description: Whether the ride is now contributing to the public feed.
+        corroboration:
+          type: string
+        accepted:
+          type: integer
+        ignored:
+          type: integer
+          description: Fixes discarded as off-route, stale, or duplicated.
+        off_route_streak:
+          type: integer
+        ended:
+          type: boolean
+          description: |
+            True when the server ended the ride itself, typically after a long
+            off-route streak. The batch still returns 200.
+        end_reason:
+          type: string
+          description: Empty unless `ended` is true.
+
+    EndRideRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 100
+
+    EndRideResponse:
+      type: object
+      required: [status, summary]
+      properties:
+        status:
+          type: string
+        summary:
+          $ref: '#/components/schemas/RideSummary'
+
+    RideSummary:
+      type: object
+      required: [points, matched, corroborated, duration_seconds]
+      properties:
+        points:
+          type: integer
+        matched:
+          type: integer
+        corroborated:
+          type: integer
+        duration_seconds:
+          type: integer
+
+    TripCoverage:
+      type: object
+      required: [trip_id, start_date, trusted, rider_reported, riders]
+      properties:
+        trip_id:
+          type: string
+        start_date:
+          type: string
+          pattern: '^[0-9]{8}$'
+        trusted:
+          type: boolean
+          description: A trusted AVL feed already covers this trip.
+        rider_reported:
+          type: boolean
+          description: At least one rider is currently positioning this trip.
+        riders:
+          type: integer
+          description: How many riders are reporting it.
+
+    RiderStatus:
+      type: object
+      description: |
+        The detail sections are omitted when rider mode is off, so a disabled
+        server answers `{"enabled": false}`.
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        gtfs:
+          $ref: '#/components/schemas/RiderGTFSStatus'
+        trusted_feeds:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiderFeedStatus'
+        riders:
+          $ref: '#/components/schemas/RiderTierCounts'
+        rides:
+          $ref: '#/components/schemas/RiderRideCounts'
+
+    RiderGTFSStatus:
+      type: object
+      required: [source, loaded_at, trips, shapes, timezone]
+      properties:
+        source:
+          type: string
+        loaded_at:
+          type: string
+          format: date-time
+        trips:
+          type: integer
+        shapes:
+          type: integer
+        timezone:
+          type: string
+
+    RiderFeedStatus:
+      type: object
+      required: [url, last_success, last_error, entities]
+      properties:
+        url:
+          type: string
+        last_success:
+          type: string
+          description: RFC 3339 UTC, or an empty string if the feed has never succeeded.
+        last_error:
+          type: string
+        entities:
+          type: integer
+
+    RiderTierCounts:
+      type: object
+      required: [total, trusted, blocked]
+      properties:
+        total:
+          type: integer
+        trusted:
+          type: integer
+        blocked:
+          type: integer
+
+    RiderRideCounts:
+      type: object
+      required: [active, publishable]
+      properties:
+        active:
+          type: integer
+        publishable:
+          type: integer
+
+    AdminRides:
+      type: object
+      required: [count, has_more, rides]
+      properties:
+        count:
+          type: integer
+        has_more:
+          type: boolean
+        rides:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRide'
+
+    AdminRide:
+      type: object
+      required:
+        - id
+        - rider_id
+        - trip_id
+        - start_date
+        - route_id
+        - state
+        - corroborated
+        - status
+        - end_reason
+        - points_total
+        - points_matched
+        - points_corroborated
+        - started_at
+        - ended_at
+      properties:
+        id:
+          type: string
+        rider_id:
+          type: string
+        trip_id:
+          type: string
+        start_date:
+          type: string
+        route_id:
+          type: string
+        state:
+          type: string
+        corroborated:
+          type: boolean
+        status:
+          type: string
+          enum: [active, ended]
+        end_reason:
+          type: string
+        points_total:
+          type: integer
+        points_matched:
+          type: integer
+        points_corroborated:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null while the ride is still active.
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultListLimit / maxListLimit in handlers.go.
+    ListLimit:
+      type: integer
+      minimum: 1
+      maximum: 200
+      default: 50
+
+    # maxListOffset is math.MaxInt32: the paged queries take an int32 offset,
+    # and a larger value would wrap negative and surface as a 500 rather than
+    # a 400.
+    ListOffset:
+      type: integer
+      minimum: 0
+      maximum: 2147483647
+      default: 0
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultTripListLimit / maxTripListLimit in admin_live_handlers.go.
+    TripListLimit:
+      type: integer
+      minimum: 1
+      maximum: 200
+      default: 50
+
+    TripList:
+      type: object
+      required: [count, has_more, trips]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of trips in `trips`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more trips match the filter than this page returned.
+        trips:
+          type: array
+          items:
+            $ref: '#/components/schemas/TripSummary'
+
+    TripSummary:
+      type: object
+      description: |
+        A trip with its vehicle label and driver name resolved. Distinct from
+        `Trip`, which is what the driver-facing trip endpoints return.
+      required:
+        - id
+        - vehicle_id
+        - vehicle_label
+        - user_id
+        - driver_name
+        - route_id
+        - gtfs_trip_id
+        - start_time
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        vehicle_label:
+          type: string
+        user_id:
+          type: integer
+          format: int64
+        driver_name:
+          type: string
+        route_id:
+          type: string
+        gtfs_trip_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+          description: |
+            Present only on completed trips. The server omits this field while
+            the trip is active (Go `*time.Time` with `omitempty`).
+        status:
+          type: string
+          enum: [active, completed]
+
+    TripTrail:
+      type: object
+      required: [trip, points]
+      properties:
+        trip:
+          $ref: '#/components/schemas/TripSummary'
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TripTrailPoint'
+
+    TripTrailPoint:
+      type: object
+      description: |
+        `bearing`, `speed`, and `accuracy` are required and nullable for the
+        same reason as elsewhere: the Go fields are pointers without
+        `omitempty`, so an absent reading is `null` rather than missing.
+      required:
+        - latitude
+        - longitude
+        - bearing
+        - speed
+        - accuracy
+        - reported_at
+        - received_at
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        accuracy:
+          type: [number, 'null']
+          format: double
+        reported_at:
+          type: integer
+          format: int64
+          description: Device timestamp, Unix seconds.
+        received_at:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC timestamp of when the server stored the fix.
+
+    # Named so the drift guard has a stable address to pin against
+    # defaultHistoryLimit / maxHistoryLimit in location_history_handlers.go.
+    HistoryLimit:
+      type: integer
+      minimum: 1
+      maximum: 1000
+      default: 100
+
+    LocationHistory:
+      type: object
+      required: [vehicle_id, count, has_more, locations]
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        count:
+          type: integer
+          minimum: 0
+          description: Number of fixes in `locations`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: |
+            True when more fixes exist in the window than `limit` allowed.
+            Narrow the window or raise `limit` to see them.
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocationHistoryEntry'
+
+    LocationHistoryEntry:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - bearing
+        - speed
+        - accuracy
+        - timestamp
+        - trip_id
+        - received_at
+      description: |
+        `bearing`, `speed`, and `accuracy` carry no `omitempty`, so they are
+        always present and are explicitly `null` when the device did not
+        report them. That distinguishes "unknown" from a real zero — a
+        bearing of 0 is due north, not a missing value.
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        bearing:
+          type: [number, 'null']
+          format: double
+        speed:
+          type: [number, 'null']
+          format: double
+        accuracy:
+          type: [number, 'null']
+          format: double
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix seconds, as reported by the device.
+        trip_id:
+          type: string
+          description: Empty string when the fix was not associated with a trip.
+        received_at:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC timestamp of when the server stored the fix.
+
+    CreateAssignmentRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id, vehicle_id]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+          minimum: 1
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+
+    Assignment:
+      type: object
+      required: [user_id, vehicle_id, created_at]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        created_at:
+          type: string
+          format: date-time
+
+    StartTripRequest:
+      type: object
+      additionalProperties: false
+      required: [vehicle_id]
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        route_id:
+          type: string
+          maxLength: 100
+        gtfs_trip_id:
+          type: string
+          maxLength: 100
+
+    EndTripRequest:
+      type: object
+      additionalProperties: false
+      required: [trip_id]
+      properties:
+        trip_id:
+          type: integer
+          format: int64
+          minimum: 1
+
+    Trip:
+      type: object
+      required:
+        - id
+        - user_id
+        - vehicle_id
+        - route_id
+        - gtfs_trip_id
+        - start_time
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        route_id:
+          type: string
+        gtfs_trip_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+          description: |
+            Present only on completed trips. The server omits this field
+            while the trip is active (Go `*time.Time` with `omitempty`).
+        status:
+          type: string
+          enum: [active, completed]
+
+    AdminStatus:
+      type: object
+      required:
+        - status
+        - uptime_seconds
+        - active_vehicles
+        - total_vehicles_tracked
+      properties:
+        status:
+          type: string
+        uptime_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+        active_vehicles:
+          type: integer
+          minimum: 0
+        total_vehicles_tracked:
+          type: integer
+          minimum: 0
+        last_update:
+          type: string
+          format: date-time
+          description: |
+            Timestamp of the most recent location report. Omitted when no
+            vehicle has reported yet (Go `*time.Time` with `omitempty`).
