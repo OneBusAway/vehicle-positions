@@ -323,6 +323,7 @@ Response codes:
 - `201 Created` — location accepted and persisted.
 - `400 Bad Request` — invalid JSON or payload validation failure.
 - `401 Unauthorized` — missing, malformed, or expired bearer token.
+- `403 Forbidden` — valid token whose role cannot use the driver API (e.g. a rider token).
 - `415 Unsupported Media Type` — non-JSON `Content-Type`.
 - `429 Too Many Requests` — driver exceeded the ingest rate limit.
 - `500 Internal Server Error` — the location could not be persisted. The
