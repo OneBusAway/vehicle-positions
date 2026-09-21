@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -177,6 +178,124 @@ class RepositoriesTest {
         val store = FakeTripStateStore()
         for (r in listOf("1", "2", "3", "1", "4", "5", "6")) store.addRecentRoute(r)
         assertEquals(listOf("6", "5", "4", "1", "3"), store.recentRoutes.first())
+    }
+
+    // --- Schedule catalog: GET /api/v1/gtfs/routes and .../routes/{id}/trips ---
+
+    private val twoRoutesJson =
+        """{"routes":[{"id":"R1","short_name":"1","long_name":"Straight","color":"0077C0","text_color":"FFFFFF","type":3},""" +
+            """{"id":"R2","short_name":"2","long_name":"Loop","color":"","text_color":"","type":3}]}"""
+
+    private val oneTripJson =
+        """{"route_id":"R1","service_date":"20260922","timezone":"Africa/Nairobi","trips":[""" +
+            """{"id":"T1","headsign":"North","direction_id":null,"starts_at":"2026-09-22T07:02:00+03:00",""" +
+            """"ends_at":"2026-09-22T07:40:00+03:00","first_stop":"Stop ST1","last_stop":"Stop ST3"}]}"""
+
+    private fun catalogFor(server: MockWebServer) = CatalogRepository(TrackerApiProvider { apiFor(server) })
+
+    @Test fun `catalog routes parse, including a route the feed gave no colour`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody(twoRoutesJson))
+
+        val routes = catalogFor(server).routes().getOrThrow()
+
+        assertEquals(listOf("R1", "R2"), routes.map { it.id })
+        assertEquals("Straight", routes[0].longName)
+        assertEquals("0077C0", routes[0].color)
+        // route_color is optional in GTFS; "" has to survive as "" so the badge can fall back.
+        assertEquals("", routes[1].color)
+        assertEquals("", routes[1].textColor)
+        server.shutdown()
+    }
+
+    @Test fun `catalog routes 404 with a text plain body means no schedule is loaded`() = runTest {
+        val server = MockWebServer().apply { start() }
+        // What net/http's default mux answers when GTFS_STATIC_URL is unset and the catalog
+        // routes were never registered: not JSON, so the body must never be parsed.
+        server.enqueue(
+            MockResponse().setResponseCode(404)
+                .setHeader("Content-Type", "text/plain; charset=utf-8")
+                .setBody("404 page not found\n"),
+        )
+
+        val result = catalogFor(server).routes()
+
+        assertTrue(result.exceptionOrNull() is ApiError.CatalogUnavailable)
+        server.shutdown()
+    }
+
+    @Test fun `catalog routes 503 means no schedule is loaded yet`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(503).setBody("""{"error":"schedule data unavailable"}"""))
+
+        val result = catalogFor(server).routes()
+
+        assertTrue(result.exceptionOrNull() is ApiError.CatalogUnavailable)
+        server.shutdown()
+    }
+
+    @Test fun `catalog routes 401 still maps to Unauthorized`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid token"}"""))
+
+        val result = catalogFor(server).routes()
+
+        assertTrue(result.exceptionOrNull() is ApiError.Unauthorized)
+        server.shutdown()
+    }
+
+    @Test fun `catalog routes map a transport failure to a network error`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+
+        val result = catalogFor(server).routes()
+
+        assertEquals(ApiError.Other("network"), result.exceptionOrNull())
+        server.shutdown()
+    }
+
+    @Test fun `catalog trips keep the wire timestamps and a null direction id`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody(oneTripJson))
+
+        val page = catalogFor(server).trips("R1").getOrThrow()
+
+        assertEquals("Africa/Nairobi", page.timezone)
+        assertEquals("20260922", page.serviceDate)
+        val trip = page.trips.single()
+        assertEquals("T1", trip.id)
+        assertNull(trip.directionId)
+        // Parsed later, in the response's zone; the repository must not flatten the offset away.
+        assertEquals("2026-09-22T07:02:00+03:00", trip.startsAt)
+        assertEquals("Stop ST3", trip.lastStop)
+        // No date parameter: the server picks today's service date in the agency's timezone.
+        assertEquals("/api/v1/gtfs/routes/R1/trips", server.takeRequest().path)
+        server.shutdown()
+    }
+
+    @Test fun `catalog trips percent-encode a route id containing a slash and a space`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody(oneTripJson))
+
+        catalogFor(server).trips("1/A Main")
+
+        // A GTFS route_id is arbitrary text. Both characters have to stay inside one path
+        // segment or the request lands on a different route, or on no route at all.
+        assertEquals("/api/v1/gtfs/routes/1%2FA%20Main/trips", server.takeRequest().path)
+        server.shutdown()
+    }
+
+    @Test fun `catalog trips 404 is an unknown route, not a missing schedule`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"unknown route"}"""))
+
+        val result = catalogFor(server).trips("R9")
+
+        // Falling back to manual entry here would be wrong: the routes call already succeeded,
+        // so a schedule exists — this route just is not in it.
+        assertTrue(result.exceptionOrNull() !is ApiError.CatalogUnavailable)
+        assertTrue(result.exceptionOrNull() is ApiError.Other)
+        server.shutdown()
     }
 
     // --- Cold-start / no-server-URL crash regression coverage (Task 8 review finding) ---

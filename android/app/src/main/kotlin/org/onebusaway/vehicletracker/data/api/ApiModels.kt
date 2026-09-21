@@ -37,3 +37,38 @@ import kotlinx.serialization.Serializable
     val accuracy: Double? = null,
     val timestamp: Long,
 )
+
+/** One route from the schedule catalog (`GET /api/v1/gtfs/routes`). */
+@Serializable data class RouteDto(
+    val id: String,
+    @SerialName("short_name") val shortName: String,
+    @SerialName("long_name") val longName: String,
+    /** GTFS hex colour without a leading `#`, or "" when the feed omits it. */
+    val color: String,
+    @SerialName("text_color") val textColor: String,
+    val type: Int,
+)
+
+@Serializable data class RoutesResponse(val routes: List<RouteDto>)
+
+/**
+ * One run of a route on a service date. [startsAt] and [endsAt] stay as they arrived — RFC 3339
+ * with a zone offset — because only the screen that displays them knows which zone to read them
+ * in; see `clockTime` in `ui/runs/HighlightedRun.kt`.
+ */
+@Serializable data class TripSummaryDto(
+    val id: String,
+    val headsign: String,
+    @SerialName("direction_id") val directionId: Int? = null,
+    @SerialName("starts_at") val startsAt: String,
+    @SerialName("ends_at") val endsAt: String,
+    @SerialName("first_stop") val firstStop: String,
+    @SerialName("last_stop") val lastStop: String,
+)
+
+@Serializable data class RouteTripsDto(
+    @SerialName("route_id") val routeId: String,
+    @SerialName("service_date") val serviceDate: String,
+    val timezone: String,
+    val trips: List<TripSummaryDto>,
+)

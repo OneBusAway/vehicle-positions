@@ -3,6 +3,7 @@ package org.onebusaway.vehicletracker.data.api
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 
 interface TrackerApi {
     @POST("api/v1/auth/login") suspend fun login(@Body body: LoginRequest): LoginResponse
@@ -10,6 +11,12 @@ interface TrackerApi {
     @POST("api/v1/trips/start") suspend fun startTrip(@Body body: StartTripRequest): TripDto
     @POST("api/v1/trips/end") suspend fun endTrip(@Body body: EndTripRequest)
     @POST("api/v1/locations") suspend fun postLocation(@Body body: LocationReportDto)
+    @GET("api/v1/gtfs/routes") suspend fun routes(): RoutesResponse
+
+    // A GTFS route_id is arbitrary text, so the id is left to Retrofit to percent-encode
+    // rather than interpolated raw: "1/A" must stay one path segment.
+    @GET("api/v1/gtfs/routes/{route_id}/trips")
+    suspend fun routeTrips(@Path("route_id") routeId: String): RouteTripsDto
 }
 
 /**
