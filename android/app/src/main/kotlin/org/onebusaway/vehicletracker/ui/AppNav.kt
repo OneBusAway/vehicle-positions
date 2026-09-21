@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -11,6 +12,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -26,7 +28,8 @@ import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.ui.login.LoginScreen
-import org.onebusaway.vehicletracker.ui.trip.TripSetupScreen
+import org.onebusaway.vehicletracker.ui.routes.RoutesScreen
+import org.onebusaway.vehicletracker.ui.runs.RunsScreen
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreen
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleScreen
 import javax.inject.Inject
@@ -37,9 +40,21 @@ private const val ROUTE_LOGIN = "login"
 // post-login destination — returns to the still-active Tracking screen instead of Vehicles.
 private const val ROUTE_LOGIN_REAUTH = "login_reauth"
 private const val ROUTE_VEHICLES = "vehicles"
-private const val ROUTE_TRIP = "trip/{vehicleId}"
+private const val ROUTE_ROUTES = "trip/{vehicleId}"
+private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}"
 private const val ROUTE_TRACKING = "tracking"
 private const val ARG_VEHICLE_ID = "vehicleId"
+private const val ARG_ROUTE_ID = "routeId"
+
+/**
+ * A path argument for a string route. A GTFS `route_id` is arbitrary text — spaces, slashes
+ * and colons are all legal — and these routes carry their arguments in the path, so an id that
+ * went in raw would split the path and match nothing.
+ */
+private fun arg(value: String): String = Uri.encode(value)
+
+private fun NavBackStackEntry.decodedArg(name: String): String =
+    Uri.decode(arguments?.getString(name).orEmpty())
 
 /** Determines which route the app should land on at launch, based on persisted session/trip state. */
 @HiltViewModel
@@ -97,16 +112,30 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
         }
         composable(ROUTE_VEHICLES) {
             VehicleScreen(
-                onVehicleSelected = { vehicleId -> navController.navigate("trip/$vehicleId") },
+                onVehicleSelected = { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") },
             )
         }
         composable(
-            route = ROUTE_TRIP,
+            route = ROUTE_ROUTES,
             arguments = listOf(navArgument(ARG_VEHICLE_ID) { type = NavType.StringType }),
         ) { backStackEntry ->
-            val vehicleId = backStackEntry.arguments?.getString(ARG_VEHICLE_ID).orEmpty()
-            TripSetupScreen(
-                vehicleId = vehicleId,
+            val vehicleId = backStackEntry.decodedArg(ARG_VEHICLE_ID)
+            RoutesScreen(
+                onRouteSelected = { routeId ->
+                    navController.navigate("trip/${arg(vehicleId)}/routes/${arg(routeId)}")
+                },
+            )
+        }
+        composable(
+            route = ROUTE_RUNS,
+            arguments = listOf(
+                navArgument(ARG_VEHICLE_ID) { type = NavType.StringType },
+                navArgument(ARG_ROUTE_ID) { type = NavType.StringType },
+            ),
+        ) { backStackEntry ->
+            RunsScreen(
+                vehicleId = backStackEntry.decodedArg(ARG_VEHICLE_ID),
+                routeId = backStackEntry.decodedArg(ARG_ROUTE_ID),
                 onTripStarted = {
                     navController.navigate(ROUTE_TRACKING) {
                         popUpTo(0) { inclusive = true }
