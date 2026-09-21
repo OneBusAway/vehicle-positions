@@ -395,7 +395,7 @@ func TestLogoutRoute_Wiring(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		name       string
