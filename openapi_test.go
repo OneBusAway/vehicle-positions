@@ -107,6 +107,18 @@ var schemaStructs = map[string]string{
 	"RiderRideCounts":       "riderRideCounts",
 	"AdminRides":            "adminRidesResponse",
 	"AdminRide":             "adminRideEntry",
+
+	// Feed API keys and the GTFS catalog.
+	"APIKey":             "APIKey",
+	"CatalogRoutes":      "catalogRoutesResponse",
+	"CatalogRoute":       "catalogRoute",
+	"CatalogRouteTrips":  "catalogRouteTripsResponse",
+	"CatalogTripSummary": "catalogTripSummary",
+	"CatalogTrip":        "catalogTripResponse",
+	"CatalogTripRoute":   "catalogTripRoute",
+	"CatalogShape":       "catalogShape",
+	"CatalogStop":        "catalogStop",
+	"CatalogThresholds":  "catalogThresholds",
 }
 
 // operationMethods are the path-item fields that describe an operation. Every
@@ -195,17 +207,24 @@ func (r registeredRoute) String() string { return r.method + " " + r.path }
 // means routes registered elsewhere — registerAdminUI in
 // admin_page_handlers.go, today — are visible too, and a future move into a
 // subpackage would not blind the guard.
-// walkModuleSources parses every non-test Go file in this module and hands each
-// syntax tree to visit, along with the FileSet for position reporting.
-func walkModuleSources(t *testing.T, visit func(fileSet *token.FileSet, file *ast.File)) {
+// moduleFiles parses every non-test Go file in this module. rootOnly restricts
+// the result to the server package at the repository root, which matters when
+// a name is only unique there — cmd/ridersim declares its own
+// startRideResponse and positionsResponse for talking to this API.
+func moduleFiles(t *testing.T, rootOnly bool) (*token.FileSet, []*ast.File) {
 	t.Helper()
 
 	fileSet := token.NewFileSet()
+	var files []*ast.File
+
 	walkErr := filepath.WalkDir(".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
+			if rootOnly && path != "." {
+				return filepath.SkipDir
+			}
 			return skipNonModuleDir(path, entry)
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -214,10 +233,13 @@ func walkModuleSources(t *testing.T, visit func(fileSet *token.FileSet, file *as
 
 		parsed, err := parser.ParseFile(fileSet, path, nil, parser.SkipObjectResolution)
 		require.NoErrorf(t, err, "parsing %s", path)
-		visit(fileSet, parsed)
+		files = append(files, parsed)
 		return nil
 	})
 	require.NoError(t, walkErr)
+	require.NotEmpty(t, files, "expected Go sources in the module")
+
+	return fileSet, files
 }
 
 func extractRegisteredRoutes(t *testing.T) []registeredRoute {
@@ -225,9 +247,11 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 
 	routes := make([]registeredRoute, 0, len(htmlUIRoutes))
 
-	walkModuleSources(t, func(fileSet *token.FileSet, parsed *ast.File) {
-		aliases := middlewareAliases(parsed)
-		ast.Inspect(parsed, func(node ast.Node) bool {
+	fileSet, files := moduleFiles(t, false)
+	scopes := resolveMiddleware(files)
+
+	for function, scope := range scopes {
+		ast.Inspect(function, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
 			if !ok || len(call.Args) != 2 {
 				return true
@@ -249,13 +273,13 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 				method: method,
 				path:   path,
 				source: source,
-				auth:   wrappedBy(call.Args[1], aliases, "requireAuth"),
-				admin:  wrappedBy(call.Args[1], aliases, "requireAdmin"),
-				rider:  wrappedBy(call.Args[1], aliases, "requireRider"),
+				auth:   wrappedBy(call.Args[1], scope, "requireAuth"),
+				admin:  wrappedBy(call.Args[1], scope, "requireAdmin"),
+				rider:  wrappedBy(call.Args[1], scope, "requireRider"),
 			})
 			return true
 		})
-	})
+	}
 
 	require.NotEmpty(t, routes, "expected mux route registrations in the server source")
 	return routes
@@ -315,44 +339,140 @@ var middlewareConstructors = map[string]struct{}{
 	"requireAuth": {}, "requireAdmin": {}, "requireRider": {},
 }
 
-// middlewareAliases maps each local variable holding an auth middleware to the
-// constructor that produced it — `authMiddleware := requireAuth(secret)` in
-// newMux, `auth := requireRider(s.jwtSecret)` in registerRiderRoutes.
+// middlewareScope maps the identifiers naming an auth middleware inside one
+// function to the constructor that produced each.
+type middlewareScope map[string]string
+
+// resolveMiddleware works out, for every function in the module, which
+// identifiers hold an auth middleware.
 //
-// Resolving the alias rather than matching the variable name is what lets the
-// guard see that the rider routes are authenticated: they spell their wrapper
-// `auth`, and a name-based check would read them as public.
-func middlewareAliases(file *ast.File) map[string]string {
-	aliases := make(map[string]string)
-	ast.Inspect(file, func(node ast.Node) bool {
-		assign, ok := node.(*ast.AssignStmt)
-		if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
-			return true
+// An identifier acquires one two ways. By assignment — `authMiddleware :=
+// requireAuth(jwtSecret)` in newMux, `auth := requireRider(s.jwtSecret)` in
+// registerRiderRoutes. Or by parameter: newMux calls
+// `registerGTFSRoutes(mux, authMiddleware, catalog)`, and the callee knows that
+// same middleware as `auth`.
+//
+// Following both matters because the alternative is silently wrong in the
+// dangerous direction: an unresolved identifier looks like no middleware at
+// all, so an authenticated route would be documented as public.
+func resolveMiddleware(files []*ast.File) map[*ast.FuncDecl]middlewareScope {
+	scopes := make(map[*ast.FuncDecl]middlewareScope)
+	byName := make(map[string]*ast.FuncDecl)
+
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			function, ok := decl.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			scopes[function] = make(middlewareScope)
+			if function.Recv == nil {
+				byName[function.Name.Name] = function
+			}
 		}
-		name, ok := assign.Lhs[0].(*ast.Ident)
+	}
+
+	// Assignments first: a call site can only pass on a middleware its own
+	// function already resolved.
+	for function, scope := range scopes {
+		ast.Inspect(function, func(node ast.Node) bool {
+			assign, ok := node.(*ast.AssignStmt)
+			if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+				return true
+			}
+			name, ok := assign.Lhs[0].(*ast.Ident)
+			if !ok {
+				return true
+			}
+			if constructor, ok := constructorOf(assign.Rhs[0], nil); ok {
+				scope[name.Name] = constructor
+			}
+			return true
+		})
+	}
+
+	// Then parameters, resolved from each call site.
+	for caller, callerScope := range scopes {
+		ast.Inspect(caller, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			name, ok := call.Fun.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			callee, ok := byName[name.Name]
+			if !ok || callee.Type.Params == nil {
+				return true
+			}
+
+			position := 0
+			for _, field := range callee.Type.Params.List {
+				for _, param := range field.Names {
+					if position < len(call.Args) && isMiddlewareType(field.Type) {
+						if constructor, ok := constructorOf(call.Args[position], callerScope); ok {
+							scopes[callee][param.Name] = constructor
+						}
+					}
+					position++
+				}
+			}
+			return true
+		})
+	}
+
+	return scopes
+}
+
+// constructorOf reports which middleware constructor an expression yields,
+// either by calling one directly or by naming an identifier already resolved
+// to one.
+func constructorOf(expr ast.Expr, scope middlewareScope) (string, bool) {
+	switch value := expr.(type) {
+	case *ast.CallExpr:
+		name, ok := value.Fun.(*ast.Ident)
 		if !ok {
-			return true
+			return "", false
 		}
-		call, ok := assign.Rhs[0].(*ast.CallExpr)
-		if !ok {
-			return true
+		if _, isMiddleware := middlewareConstructors[name.Name]; isMiddleware {
+			return name.Name, true
 		}
-		constructor, ok := call.Fun.(*ast.Ident)
-		if !ok {
-			return true
+	case *ast.Ident:
+		if constructor, ok := scope[value.Name]; ok {
+			return constructor, true
 		}
-		if _, isMiddleware := middlewareConstructors[constructor.Name]; isMiddleware {
-			aliases[name.Name] = constructor.Name
-		}
-		return true
-	})
-	return aliases
+	}
+	return "", false
+}
+
+// isMiddlewareType reports whether a parameter is declared as
+// func(http.Handler) http.Handler — the shape every wrapper in this codebase
+// takes.
+func isMiddlewareType(expr ast.Expr) bool {
+	signature, ok := expr.(*ast.FuncType)
+	if !ok || signature.Params == nil || len(signature.Params.List) != 1 {
+		return false
+	}
+	if signature.Results == nil || len(signature.Results.List) != 1 {
+		return false
+	}
+	return isHTTPHandler(signature.Params.List[0].Type) && isHTTPHandler(signature.Results.List[0].Type)
+}
+
+func isHTTPHandler(expr ast.Expr) bool {
+	selector, ok := expr.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "Handler" {
+		return false
+	}
+	pkg, ok := selector.X.(*ast.Ident)
+	return ok && pkg.Name == "http"
 }
 
 // wrappedBy reports whether the handler argument of a mux registration is
 // wrapped, at any depth, in a middleware built by the named constructor —
 // newMux composes them as authMiddleware(adminMiddleware(handler)).
-func wrappedBy(handler ast.Expr, aliases map[string]string, constructor string) bool {
+func wrappedBy(handler ast.Expr, scope middlewareScope, constructor string) bool {
 	wrapped := false
 	ast.Inspect(handler, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
@@ -363,7 +483,7 @@ func wrappedBy(handler ast.Expr, aliases map[string]string, constructor string) 
 		if !ok {
 			return true
 		}
-		if name.Name == constructor || aliases[name.Name] == constructor {
+		if name.Name == constructor || scope[name.Name] == constructor {
 			wrapped = true
 			return false
 		}
@@ -637,7 +757,8 @@ func structJSONFields(t *testing.T) map[string][]structJSONField {
 	t.Helper()
 
 	structs := make(map[string][]structJSONField)
-	walkModuleSources(t, func(_ *token.FileSet, parsed *ast.File) {
+	_, files := moduleFiles(t, true)
+	for _, parsed := range files {
 		ast.Inspect(parsed, func(node ast.Node) bool {
 			spec, ok := node.(*ast.TypeSpec)
 			if !ok {
@@ -662,7 +783,7 @@ func structJSONFields(t *testing.T) map[string][]structJSONField {
 			structs[spec.Name.Name] = fields
 			return true
 		})
-	})
+	}
 
 	return structs
 }

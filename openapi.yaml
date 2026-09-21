@@ -48,8 +48,14 @@ tags:
     description: Driver trip lifecycle.
   - name: vehicles
     description: Driver-facing vehicle access.
+  - name: gtfs
+    description: Read-only access to the loaded GTFS schedule.
   - name: rider
-    description: Crowd-sourced positioning from rider devices.
+    description: |
+      Crowd-sourced positioning from rider devices. These five routes are
+      registered only when rider mode is configured; a server without it
+      answers 404 for all of them. `GET /api/v1/admin/rider/status` reports
+      which it is, and is always present.
 
 # All endpoints require a bearer JWT unless they explicitly opt out with `security: []`.
 security:
@@ -256,7 +262,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: This rider already has a ride in progress.
+          description: |
+            A concurrent start for the same rider won the insert. Starting a
+            ride while one is already in progress normally supersedes it — this
+            is only reachable when two server instances race, and the client's
+            retry resolves it.
           content:
             application/json:
               schema:
@@ -318,6 +328,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          description: |
+            No such ride for this rider — either the id is not a UUID, or the
+            ride belongs to someone else. The two are deliberately
+            indistinguishable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: The ride is not in a state that accepts positions.
           content:
@@ -365,6 +384,15 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          description: |
+            No such ride for this rider — either the id is not a UUID, or the
+            ride belongs to someone else. The two are deliberately
+            indistinguishable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: The ride has already ended.
           content:
@@ -433,10 +461,13 @@ paths:
       tags: [feed]
       summary: GTFS-RT Vehicle Positions feed
       description: |
-        Returns a standards-compliant GTFS-RT `FeedMessage` containing every
-        vehicle that has reported within the staleness threshold (default 5
-        minutes). Defaults to protobuf; pass `?format=json` to receive the
-        protojson-encoded form for debugging.
+        Returns a standards-compliant GTFS-RT `FeedMessage`. By default it
+        carries both halves of the feed: driver vehicles that have reported
+        within the staleness threshold (default 5 minutes), and trip estimates
+        derived from rider reports. Use `source` to take one half.
+
+        Defaults to protobuf; pass `?format=json` for the protojson-encoded
+        form for debugging.
       security: []
       parameters:
         - in: query
@@ -446,6 +477,17 @@ paths:
             type: string
             enum: [json]
           description: When set to `json`, returns the protojson-encoded feed.
+        - in: query
+          name: source
+          required: false
+          schema:
+            type: string
+            enum: [all, driver, rider]
+            default: all
+          description: |
+            Which half of the feed to publish. Omitted or `all` returns both.
+            An unrecognised value matches neither half, so it is rejected
+            rather than served as an empty feed.
       responses:
         '200':
           description: GTFS-RT FeedMessage.
@@ -459,6 +501,12 @@ paths:
               schema:
                 type: object
                 description: protojson-encoded GTFS-RT `FeedMessage`.
+        '400':
+          description: '`source` was not one of `all`, `driver` or `rider`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -497,6 +545,177 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+
+  /api/v1/admin/api-keys:
+    get:
+      tags: [admin]
+      summary: List feed API keys
+      description: Requires the `admin` role. The raw keys are never returned — only their hashes are stored.
+      responses:
+        '200':
+          description: API keys.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APIKey'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [admin]
+      summary: Create a feed API key
+      description: |
+        Requires the `admin` role. The response is the only place the raw key
+        appears: only its hash is stored, so it cannot be recovered later.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAPIKeyRequest'
+      responses:
+        '201':
+          description: Key created. `key` is shown once and never again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/api-keys/{id}:
+    parameters:
+      - $ref: '#/components/parameters/APIKeyIDPath'
+    delete:
+      tags: [admin]
+      summary: Deactivate a feed API key
+      description: |
+        Sets `active = false`. The row is kept so `last_used_at` stays
+        auditable. Requires the `admin` role.
+      responses:
+        '204':
+          description: Key deactivated.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/gtfs/routes:
+    get:
+      tags: [gtfs]
+      summary: List routes in the loaded schedule
+      description: |
+        Requires a driver or admin bearer token. Registered only when a GTFS
+        schedule is configured; without one the route does not exist and the
+        server answers 404.
+      responses:
+        '200':
+          description: Routes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogRoutes'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ScheduleUnavailable'
+
+  /api/v1/gtfs/routes/{route_id}/trips:
+    parameters:
+      - $ref: '#/components/parameters/RouteIDPath'
+    get:
+      tags: [gtfs]
+      summary: List a route's trips on a service date
+      description: Requires a driver or admin bearer token.
+      parameters:
+        - $ref: '#/components/parameters/ServiceDateQuery'
+      responses:
+        '200':
+          description: Trips on this route for the service date.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogRouteTrips'
+        '400':
+          description: '`date` was not `YYYYMMDD`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such route in the loaded schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ScheduleUnavailable'
+
+  /api/v1/gtfs/trips/{trip_id}:
+    parameters:
+      - $ref: '#/components/parameters/TripGTFSIDPath'
+    get:
+      tags: [gtfs]
+      summary: Get a trip's shape, stops and matching thresholds
+      description: |
+        Returns everything a client needs to follow a trip: its shape, its
+        stops with scheduled times, and the thresholds the server uses when
+        judging whether a vehicle is on route and on time. Requires a driver
+        or admin bearer token.
+      parameters:
+        - $ref: '#/components/parameters/ServiceDateQuery'
+      responses:
+        '200':
+          description: Trip detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTrip'
+        '400':
+          description: '`date` was not `YYYYMMDD`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such trip in the loaded schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The trip exists but does not run on the requested date.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ScheduleUnavailable'
 
   /api/v1/admin/rider/status:
     get:
@@ -1373,6 +1592,32 @@ components:
       schema:
         type: string
       description: Ride identifier returned by `POST /api/v1/rider/rides`.
+    APIKeyIDPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      description: API key identifier.
+    RouteIDPath:
+      name: route_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: GTFS route identifier.
+    ServiceDateQuery:
+      name: date
+      in: query
+      required: false
+      schema:
+        type: string
+        pattern: '^[0-9]{8}$'
+      description: |
+        GTFS service date as `YYYYMMDD`. Defaults to the schedule's current
+        service date.
     TripGTFSIDPath:
       name: trip_id
       in: path
@@ -1729,6 +1974,233 @@ components:
       maximum: 200
       default: 50
 
+    APIKey:
+      type: object
+      description: |
+        A feed API key. `key_hash` is deliberately absent: the Go struct tags
+        it `json:"-"`, because only the hash is stored and it is never served.
+      required: [id, name, active, last_used_at, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          maxLength: 255
+        active:
+          type: boolean
+        last_used_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null until the key authenticates a feed request.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    APIKeyCreated:
+      allOf:
+        - $ref: '#/components/schemas/APIKey'
+        - type: object
+          required: [key]
+          properties:
+            key:
+              type: string
+              description: |
+                The raw key, returned only here. Only its hash is stored, so
+                it cannot be recovered afterwards.
+
+    CreateAPIKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    CatalogRoutes:
+      type: object
+      required: [routes]
+      properties:
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogRoute'
+
+    CatalogRoute:
+      type: object
+      required: [id, short_name, long_name, color, text_color, type]
+      properties:
+        id:
+          type: string
+        short_name:
+          type: string
+        long_name:
+          type: string
+        color:
+          type: string
+        text_color:
+          type: string
+        type:
+          type: integer
+          description: GTFS `route_type`.
+
+    CatalogRouteTrips:
+      type: object
+      required: [route_id, service_date, timezone, trips]
+      properties:
+        route_id:
+          type: string
+        service_date:
+          type: string
+          pattern: '^[0-9]{8}$'
+        timezone:
+          type: string
+          description: IANA name the schedule's times are expressed in.
+        trips:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogTripSummary'
+
+    CatalogTripSummary:
+      type: object
+      required: [id, headsign, direction_id, starts_at, ends_at, first_stop, last_stop]
+      properties:
+        id:
+          type: string
+        headsign:
+          type: string
+        direction_id:
+          type: [integer, 'null']
+          description: Null when the schedule does not give one.
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        first_stop:
+          type: string
+        last_stop:
+          type: string
+
+    CatalogTrip:
+      type: object
+      required:
+        - id
+        - route_id
+        - headsign
+        - direction_id
+        - service_date
+        - timezone
+        - route
+        - shape
+        - stops
+        - thresholds
+      properties:
+        id:
+          type: string
+        route_id:
+          type: string
+        headsign:
+          type: string
+        direction_id:
+          type: [integer, 'null']
+        service_date:
+          type: string
+          pattern: '^[0-9]{8}$'
+        timezone:
+          type: string
+        route:
+          $ref: '#/components/schemas/CatalogTripRoute'
+        shape:
+          $ref: '#/components/schemas/CatalogShape'
+        stops:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogStop'
+        thresholds:
+          $ref: '#/components/schemas/CatalogThresholds'
+
+    CatalogTripRoute:
+      type: object
+      description: |
+        The trip's route, flattened. All-empty when the schedule has no route
+        record for it — the zero value is the intended answer rather than an
+        error.
+      required: [short_name, long_name, color, text_color]
+      properties:
+        short_name:
+          type: string
+        long_name:
+          type: string
+        color:
+          type: string
+        text_color:
+          type: string
+
+    CatalogShape:
+      type: object
+      required: [length_m, points]
+      properties:
+        length_m:
+          type: number
+          format: double
+        points:
+          type: array
+          description: Ordered `[latitude, longitude]` pairs.
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: number
+              format: double
+
+    CatalogStop:
+      type: object
+      required: [id, name, sequence, lat, lon, along_shape_m, arrival_at, departure_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        sequence:
+          type: integer
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        along_shape_m:
+          type: number
+          format: double
+          description: Distance from the start of the shape to this stop.
+        arrival_at:
+          type: string
+          format: date-time
+        departure_at:
+          type: string
+          format: date-time
+
+    CatalogThresholds:
+      type: object
+      description: The tolerances the server applies when judging a vehicle against this trip.
+      required: [max_shape_distance_m, schedule_early_s, schedule_late_s]
+      properties:
+        max_shape_distance_m:
+          type: number
+          format: double
+        schedule_early_s:
+          type: integer
+        schedule_late_s:
+          type: integer
+
     RiderRegisterRequest:
       type: object
       additionalProperties: false
@@ -1736,11 +2208,14 @@ components:
       properties:
         installation_id:
           type: string
-          maxLength: 100
-          description: Stable per-install identifier. Re-registering with the same value reissues the token.
+          format: uuid
+          description: |
+            Stable per-install identifier, and a UUID — anything else is
+            rejected with 400. Re-registering with the same value reissues the
+            token rather than creating a second rider.
         platform:
           type: string
-          maxLength: 100
+          enum: [ios, android, other]
         app_id:
           type: string
           maxLength: 100
@@ -1748,10 +2223,12 @@ components:
           type: string
           maxLength: 100
         attestation:
-          type: ['object', 'null']
+          type: 'null'
           description: |
-            Opaque platform attestation, passed through to the configured
-            verifier. Null when the client has none to offer.
+            Reserved. No verifier is wired up yet, so the field must be null or
+            omitted; any other value is rejected with
+            `400 attestation not supported` rather than silently ignored,
+            which would let a client believe it had attested.
 
     RiderRegisterResponse:
       type: object
@@ -1772,24 +2249,34 @@ components:
     StartRideRequest:
       type: object
       additionalProperties: false
-      required: [trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id]
+      description: |
+        Only `trip_id` is required. An absent `start_date` falls back to the
+        trip's current service date, and the remaining fields are optional
+        context the matcher uses when present.
+      required: [trip_id]
       properties:
         trip_id:
           type: string
+          minLength: 1
           maxLength: 100
         start_date:
           type: string
           pattern: '^[0-9]{8}$'
-          description: GTFS service date as `YYYYMMDD`.
+          description: |
+            GTFS service date as `YYYYMMDD`. Defaults to the trip's current
+            service date when omitted or empty.
         route_id:
           type: string
           maxLength: 100
         vehicle_id:
-          type: string
-          maxLength: 100
+          anyOf:
+            - $ref: '#/components/schemas/VehicleID'
+            - const: ''
           description: |
-            Free text as the rider's app knows it. Unlike the driver API this
-            is not held to `VehicleID` — it is a hint, not a key.
+            A vehicle id names the same thing here as everywhere else in the
+            API, so it is held to the same shape — `handleStartRide` runs the
+            same `validateVehicleID` the driver endpoints use. Omit it, or
+            send an empty string, when the rider's app does not know it.
         boarding_stop_id:
           type: string
           maxLength: 100
@@ -1844,10 +2331,10 @@ components:
       type: object
       additionalProperties: false
       description: |
-        One fix from the device. `accuracy`, `speed`, and `bearing` are
-        required and nullable: a device with no reading must be able to say so
+        One fix from the device. `accuracy`, `speed`, and `bearing` may be sent
+        as null or left out entirely — a device with no reading should say so
         rather than claim a zero.
-      required: [latitude, longitude, accuracy, speed, bearing, timestamp]
+      required: [latitude, longitude, timestamp]
       properties:
         latitude:
           type: number
