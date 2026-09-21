@@ -17,11 +17,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// configDocGlobs are the files a variable may be documented in. The guard
-// deliberately does not name one canonical file: the reference has lived in
-// docs/ and in the README at different times, and #102 adds a second one, so
-// pinning a path would make this test fail for a reason that has nothing to do
-// with whether the variable is documented.
+// configReferencePath is the canonical reference. Its opening line promises a
+// complete list, so completeness is enforced against this file by name:
+// a row in README.md or another doc does not discharge the promise this file
+// makes. Without the pin, a variable documented in only one of two copies
+// still passes, and the file can quietly stop being complete while continuing
+// to claim it is.
+const configReferencePath = "docs/configuration.md"
+
+// configDocGlobs are the files a reference-table row may live in, used for the
+// no-stale-rows direction. That direction deliberately does not name one file:
+// a row anywhere in the operator docs has to name a variable something still
+// reads, wherever the reference has moved to over time.
 var configDocGlobs = []string{"README.md", "docs/*.md"}
 
 // configDocVariablePattern matches the first cell of a reference table row: a
@@ -36,11 +43,11 @@ var configDocVariablePattern = regexp.MustCompile("^`([A-Z][A-Z0-9_]*)`$")
 // One direction alone rots — a reference can be complete and wrong.
 func TestConfigDoc_AllVariablesDocumented(t *testing.T) {
 	inSource := envVarsReadInSource(t)
-	documented := documentedVariables(t)
+	inReference := referenceVariables(t)
 
 	for _, name := range sortedNames(inSource) {
-		assert.Contains(t, documented, name,
-			"%s is read by the server but has no reference-table row in %s", name, configDocGlobs)
+		assert.Contains(t, inReference, name,
+			"%s is read by the server but has no reference-table row in %s", name, configReferencePath)
 	}
 }
 
@@ -63,6 +70,9 @@ func TestConfigDoc_ParsesVariables(t *testing.T) {
 
 	documented := documentedVariables(t)
 	require.NotEmpty(t, documented, "no variables parsed out of %s; the table format may have changed", configDocGlobs)
+
+	inReference := referenceVariables(t)
+	require.NotEmpty(t, inReference, "no variables parsed out of %s; the completeness guard would pass vacuously", configReferencePath)
 }
 
 // TestConfigDoc_ExcludesTestOnlyVariables pins the walk's exclusion of _test.go
@@ -251,9 +261,25 @@ func isEnvRead(call *ast.CallExpr, readers map[string]struct{}) bool {
 // name the file to edit.
 func documentedVariables(t *testing.T) map[string]string {
 	t.Helper()
+	return variablesInDocs(t, configDocFiles(t))
+}
+
+// referenceVariables returns the variables with a row in the canonical
+// reference alone. TestConfigDoc_AllVariablesDocumented uses this rather than
+// documentedVariables so a row in README.md cannot stand in for a missing row
+// here.
+func referenceVariables(t *testing.T) map[string]string {
+	t.Helper()
+	return variablesInDocs(t, []string{configReferencePath})
+}
+
+// variablesInDocs parses reference-table rows out of the given files, mapping
+// each variable to the first file it was found in.
+func variablesInDocs(t *testing.T, paths []string) map[string]string {
+	t.Helper()
 
 	documented := make(map[string]string)
-	for _, path := range configDocFiles(t) {
+	for _, path := range paths {
 		raw, err := os.ReadFile(path)
 		require.NoError(t, err)
 
