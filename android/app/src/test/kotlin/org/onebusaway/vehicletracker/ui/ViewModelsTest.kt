@@ -30,7 +30,6 @@ import org.onebusaway.vehicletracker.ui.runs.RunHighlight
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.RunsViewModel
 import org.onebusaway.vehicletracker.ui.runs.TripError
-import org.onebusaway.vehicletracker.ui.trip.TripSetupViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 import java.time.OffsetDateTime
@@ -99,34 +98,6 @@ class ViewModelsTest {
             assertEquals("https://saved.example.com", state.serverUrl)
             cancelAndIgnoreRemainingEvents()
         }
-    }
-
-    @Test fun `trip setup maps 403 to NOT_ASSIGNED error`() = runTest(dispatcher) {
-        val server = MockWebServer().apply { start() }
-        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"not assigned"}"""))
-        val store = FakeTripStateStore()
-        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, FakeVehiclePrefsStore(), clock = { 0L }, zone = ZoneOffset.UTC)
-        val vm = TripSetupViewModel(repo, store, FakeServiceController())
-        vm.onRouteIdChange("5")
-        vm.onStartTrip("bus-1") { }
-        awaitCondition(description = "trip setup error set") { vm.uiState.value.error != null }
-        assertEquals(org.onebusaway.vehicletracker.ui.trip.TripError.NOT_ASSIGNED, vm.uiState.value.error)
-        server.shutdown()
-    }
-
-    @Test fun `trip setup exposes recent routes`() = runTest(dispatcher) {
-        val store = FakeTripStateStore()
-        store.addRecentRoute("12"); store.addRecentRoute("5")
-        val server = MockWebServer().apply { start() }
-        val repo = TripRepository(TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }, store, FakeVehiclePrefsStore(), clock = { 0L }, zone = ZoneOffset.UTC)
-        val vm = TripSetupViewModel(repo, store, FakeServiceController())
-        vm.uiState.test {
-            var state = awaitItem()
-            while (state.recentRoutes.isEmpty()) state = awaitItem()
-            assertEquals(listOf("5", "12"), state.recentRoutes)
-            cancelAndIgnoreRemainingEvents()
-        }
-        server.shutdown()
     }
 
     // --- Vehicle picker: search, favorites and recents (#36) ---
@@ -372,6 +343,24 @@ class ViewModelsTest {
         withRoutesViewModel(response = MockResponse().setResponseCode(401).setBody("""{"error":"bad token"}""")) { vm ->
             // Retrying with the same dead token only fails again; the driver has to sign in.
             assertEquals(RoutesUiState.Error(retry = false), vm.uiState.value)
+        }
+    }
+
+    @Test fun `a server with no schedule has no routes to offer and no retry`() = runTest(dispatcher) {
+        // net/http's own 404: GTFS_STATIC_URL is unset, so the catalog was never registered.
+        val unregistered = MockResponse().setResponseCode(404)
+            .setHeader("Content-Type", "text/plain; charset=utf-8")
+            .setBody("404 page not found\n")
+        withRoutesViewModel(response = unregistered) { vm ->
+            assertEquals(RoutesUiState.NoSchedule, vm.uiState.value)
+        }
+    }
+
+    @Test fun `a schedule that is still loading reads the same as none`() = runTest(dispatcher) {
+        val loading = MockResponse().setResponseCode(503).setBody("""{"error":"schedule data unavailable"}""")
+        withRoutesViewModel(response = loading) { vm ->
+            // Both mean "nothing to pick from"; neither is a failure the driver can act on.
+            assertEquals(RoutesUiState.NoSchedule, vm.uiState.value)
         }
     }
 

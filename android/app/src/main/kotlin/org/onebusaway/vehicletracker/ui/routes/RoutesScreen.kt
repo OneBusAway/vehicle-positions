@@ -80,6 +80,9 @@ fun RoutesScreenContent(
                     }
                 }
             }
+            is RoutesUiState.NoSchedule -> {
+                Text(stringResource(R.string.routes_no_schedule))
+            }
             is RoutesUiState.Error -> {
                 Text(stringResource(R.string.routes_error_message))
                 if (state.retry) {

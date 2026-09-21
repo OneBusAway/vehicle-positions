@@ -28,6 +28,13 @@ sealed interface RoutesUiState {
         val query: String,
     ) : RoutesUiState
 
+    /**
+     * The server has no schedule to pick from. Retrying will not produce one, and there is no
+     * manual entry to fall back to: adherence needs a real GTFS trip id, so a trip cannot be
+     * started here until an operator configures `GTFS_STATIC_URL`.
+     */
+    data object NoSchedule : RoutesUiState
+
     data class Error(val retry: Boolean) : RoutesUiState
 }
 
@@ -59,6 +66,7 @@ class RoutesViewModel @Inject constructor(
                     query = query,
                 )
             }
+            result.exceptionOrNull() is ApiError.CatalogUnavailable -> RoutesUiState.NoSchedule
             else -> RoutesUiState.Error(retry = result.exceptionOrNull() !is ApiError.Unauthorized)
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RoutesUiState.Loading)
