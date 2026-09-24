@@ -6,7 +6,6 @@ import org.onebusaway.vehicletracker.data.api.EndTripRequest
 import org.onebusaway.vehicletracker.data.api.StartTripRequest
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
-import java.time.ZoneId
 import javax.inject.Inject
 
 private const val TAG = "TripRepository"
@@ -16,12 +15,23 @@ class TripRepository @Inject constructor(
     private val tripStateStore: TripStateStore,
     private val vehiclePrefsStore: VehiclePrefsStore,
     @param:EpochSecondsClock private val clock: () -> Long,
-    private val zone: ZoneId,
 ) {
-    // apiProvider.get() is called here (not injected as a resolved TrackerApi) so that a missing
-    // server URL (e.g. cold start racing session restore) surfaces as Result.failure instead of
-    // an uncaught exception during construction.
-    suspend fun start(vehicleId: String, routeId: String, gtfsTripId: String): Result<ActiveTrip> = try {
+    /**
+     * [serviceDate] is the catalog's own `service_date` for the run, YYYYMMDD, and not the
+     * device's calendar date: a run scheduled past midnight belongs to the service date before
+     * it, and a phone in another timezone can be a day out besides. It is what the feed's
+     * `TripDescriptor.start_date` ends up carrying.
+     *
+     * `apiProvider.get()` is called here (not injected as a resolved `TrackerApi`) so that a
+     * missing server URL — a cold start racing session restore — surfaces as `Result.failure`
+     * instead of an uncaught exception during construction.
+     */
+    suspend fun start(
+        vehicleId: String,
+        routeId: String,
+        gtfsTripId: String,
+        serviceDate: String,
+    ): Result<ActiveTrip> = try {
         val cleanedTripId = gtfsTripId.trim()
         val cleanedRouteId = routeId.trim()
         val trip = apiProvider.get().startTrip(StartTripRequest(vehicleId, cleanedRouteId, cleanedTripId))
@@ -31,7 +41,7 @@ class TripRepository @Inject constructor(
             gtfsTripId = cleanedTripId,
             vehicleId = vehicleId,
             routeId = cleanedRouteId,
-            startDate = serviceDate(startedAt, zone),
+            startDate = serviceDate,
             startedAtEpochSec = startedAt,
         )
         tripStateStore.saveActiveTrip(activeTrip)

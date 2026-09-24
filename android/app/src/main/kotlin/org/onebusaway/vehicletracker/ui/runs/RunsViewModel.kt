@@ -102,17 +102,18 @@ class RunsViewModel @Inject constructor(
     }
 
     /**
-     * Starts [runId] on the route the catalog listed it under — the ids the feed's
-     * `TripDescriptor` ends up carrying.
+     * Starts [runId] on the route the catalog listed it under, on the service date the catalog
+     * dated the list — the three things the feed's `TripDescriptor` ends up carrying.
      */
     fun onStartRun(runId: String, onStarted: () -> Unit) {
         // A second tap on a list whose rows are still enabled would come back 409.
         if (starting.value) return
+        val serviceDate = (uiState.value as? RunsUiState.Loaded)?.page?.serviceDate ?: return
         starting.value = true
         startError.value = null
         // TODO(phase 2): fetch GET /api/v1/gtfs/trips/{id} here and persist the geometry for adherence.
         viewModelScope.launch {
-            tripRepository.start(vehicleId, routeId, runId).fold(
+            tripRepository.start(vehicleId, routeId, runId, serviceDate).fold(
                 onSuccess = {
                     serviceController.startTracking()
                     starting.value = false

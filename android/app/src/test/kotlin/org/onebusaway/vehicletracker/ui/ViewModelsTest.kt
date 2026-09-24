@@ -34,7 +34,6 @@ import org.onebusaway.vehicletracker.ui.runs.TripError
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 import java.time.OffsetDateTime
-import java.time.ZoneOffset
 
 class ViewModelsTest {
     private val dispatcher = StandardTestDispatcher()
@@ -394,13 +393,7 @@ class ViewModelsTest {
             val nowEpochSec = OffsetDateTime.parse(now).toEpochSecond()
             val clock = { nowEpochSec }
             val tripState = FakeTripStateStore()
-            val tripRepository = TripRepository(
-                provider,
-                tripState,
-                FakeVehiclePrefsStore(),
-                clock = clock,
-                zone = ZoneOffset.UTC,
-            )
+            val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), clock = clock)
             val serviceController = FakeServiceController()
             // The nav graph's arguments, which is where the ViewModel reads them from — and it
             // loads off them in init, with no load() call from the screen.
@@ -456,6 +449,29 @@ class ViewModelsTest {
             assertEquals("/api/v1/gtfs/routes/R1/trips", server.takeRequest().path)
             assertEquals(1, server.requestCount)
             assertEquals(listOf("T1", "T4"), loadedRuns(vm).page.runs.map { it.id })
+        }
+    }
+
+    @Test fun `starting an after-midnight run saves the catalog's service date`() = runTest(dispatcher) {
+        // The fixture's 25:00 case: a run that departs at 01:00 still belongs to the service
+        // date before it, so the device's calendar date would put the trip a day late.
+        val afterMidnight =
+            """{"route_id":"R2","service_date":"20260921","timezone":"America/Los_Angeles","trips":[""" +
+                """{"id":"T3","headsign":"Loop","direction_id":1,"starts_at":"2026-09-22T01:00:00-07:00",""" +
+                """"ends_at":"2026-09-22T01:20:00-07:00","first_stop":"Stop LP1","last_stop":"Stop LP1"}]}"""
+        val started = MockResponse().setResponseCode(201).setBody(
+            """{"id":9,"user_id":1,"vehicle_id":"bus-1","route_id":"R2","gtfs_trip_id":"T3","start_time":"2026-09-22T08:00:00Z","status":"active"}""",
+        )
+        withRunsViewModel(
+            tripsBody = afterMidnight,
+            now = "2026-09-22T01:05:00-07:00",
+            startResponses = listOf(started),
+        ) { vm, _, _, tripState ->
+            var navigated = false
+            vm.onStartRun("T3") { navigated = true }
+            awaitCondition(description = "trip started") { navigated }
+
+            assertEquals("20260921", tripState.tripState.value!!.startDate)
         }
     }
 
