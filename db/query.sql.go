@@ -800,6 +800,17 @@ func (q *Queries) InsertRide(ctx context.Context, arg InsertRideParams) (Ride, e
 	return i, err
 }
 
+const isTokenRevoked = `-- name: IsTokenRevoked :one
+SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1)
+`
+
+func (q *Queries) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
+	row := q.db.QueryRow(ctx, isTokenRevoked, jti)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listAPIKeys = `-- name: ListAPIKeys :many
 SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
 FROM api_keys
@@ -1186,6 +1197,24 @@ func (q *Queries) ListVehiclesByUser(ctx context.Context, userID int64) ([]UserV
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeToken = `-- name: RevokeToken :exec
+INSERT INTO revoked_tokens (jti, user_id, expires_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (jti) DO NOTHING
+`
+
+type RevokeTokenParams struct {
+	Jti       string
+	UserID    pgtype.Int8
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Idempotent: logging out twice must not error.
+func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
+	_, err := q.db.Exec(ctx, revokeToken, arg.Jti, arg.UserID, arg.ExpiresAt)
+	return err
 }
 
 const setRiderTier = `-- name: SetRiderTier :exec

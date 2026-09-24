@@ -306,3 +306,12 @@ LIMIT 1000;
 UPDATE api_keys
 SET active = false, updated_at = NOW()
 WHERE id = $1;
+
+-- name: RevokeToken :exec
+-- Idempotent: logging out twice must not error.
+INSERT INTO revoked_tokens (jti, user_id, expires_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (jti) DO NOTHING;
+
+-- name: IsTokenRevoked :one
+SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1);

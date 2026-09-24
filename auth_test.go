@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -185,7 +187,7 @@ func TestRequireAuth_MissingHeader(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/locations", nil)
 	w := httptest.NewRecorder()
 
-	requireAuth(testSecret)(dummyHandler()).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
@@ -205,7 +207,7 @@ func TestRequireAuth_MalformedHeader(t *testing.T) {
 			req.Header.Set("Authorization", tc.header)
 			w := httptest.NewRecorder()
 
-			requireAuth(testSecret)(dummyHandler()).ServeHTTP(w, req)
+			requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
 
 			assert.Equal(t, http.StatusUnauthorized, w.Code)
 		})
@@ -217,7 +219,7 @@ func TestRequireAuth_InvalidToken(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer notavalidtoken")
 	w := httptest.NewRecorder()
 
-	requireAuth(testSecret)(dummyHandler()).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
@@ -234,7 +236,7 @@ func TestRequireAuth_ExpiredToken(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rr := httptest.NewRecorder()
 
-	middleware := requireAuth(testSecret)
+	middleware := requireAuth(testSecret, newFakeRevocations())
 	handler := middleware(dummyHandler())
 
 	handler.ServeHTTP(rr, req)
@@ -260,7 +262,7 @@ func TestRequireAuth_ValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	requireAuth(testSecret)(handler).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(handler).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
@@ -269,7 +271,7 @@ func TestRequireAuthCookieFallback(t *testing.T) {
 	token, err := generateJWT(&User{ID: 3, Email: "admin@test.com", Role: "admin", Active: true}, testSecret)
 	require.NoError(t, err)
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-	h := requireAuth(testSecret)(next)
+	h := requireAuth(testSecret, newFakeRevocations())(next)
 
 	t.Run("cookie only → 200", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -337,7 +339,7 @@ func TestRequireAuth_WrongSecret(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rr := httptest.NewRecorder()
 
-	middleware := requireAuth(testSecret)
+	middleware := requireAuth(testSecret, newFakeRevocations())
 	handler := middleware(dummyHandler())
 
 	handler.ServeHTTP(rr, req)
@@ -354,7 +356,7 @@ func TestRequireAuth_AlgorithmConfusion(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rr := httptest.NewRecorder()
 
-	middleware := requireAuth(testSecret)
+	middleware := requireAuth(testSecret, newFakeRevocations())
 	handler := middleware(dummyHandler())
 
 	handler.ServeHTTP(rr, req)
@@ -377,7 +379,7 @@ func TestRequireAdmin_AdminAllowed(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	requireAuth(testSecret)(requireAdmin()(handler)).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(handler)).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "admin", receivedRole)
@@ -391,7 +393,7 @@ func TestRequireAdmin_DriverDenied(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
-	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 
@@ -425,7 +427,7 @@ func TestRequireAdmin_EmptyRole(t *testing.T) {
 
 	// Over the real chain requireAuth now rejects any role outside
 	// driver/admin at the door, so the token never reaches requireAdmin.
-	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Equal(t, "forbidden", decodeError(t, w))
@@ -460,7 +462,7 @@ func TestRequireAdmin_InvalidRoleType(t *testing.T) {
 
 	// A non-string role reads as "" to requireAuth's role check, so the
 	// request is denied at the door before requireAdmin runs.
-	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Equal(t, "forbidden", decodeError(t, w))
@@ -478,7 +480,7 @@ func TestRequireAdmin_NoAuthHeader(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
 	w := httptest.NewRecorder()
 
-	requireAuth(testSecret)(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
@@ -486,7 +488,7 @@ func TestRequireAdmin_NoAuthHeader(t *testing.T) {
 func TestRequireAuth_RejectsRiderRole(t *testing.T) {
 	riderTok, _ := generateRiderJWT("rider-1", testSecret, time.Hour)
 	called := false
-	h := requireAuth(testSecret)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	h := requireAuth(testSecret, newFakeRevocations())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
 	req := httptest.NewRequest("GET", "/x", nil)
 	req.Header.Set("Authorization", "Bearer "+riderTok)
 	w := httptest.NewRecorder()
@@ -494,4 +496,405 @@ func TestRequireAuth_RejectsRiderRole(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.False(t, called)
 	assert.Equal(t, "forbidden", decodeError(t, w))
+}
+
+// fakeRevocations is an in-memory TokenChecker/TokenRevoker for middleware and
+// handler tests. Setting err makes both methods fail, which exercises the
+// fail-closed paths.
+type fakeRevocations struct {
+	revoked       map[string]struct{}
+	err           error
+	lastUserID    int64
+	lastExpiresAt time.Time
+	revokeCalls   int
+}
+
+func newFakeRevocations() *fakeRevocations {
+	return &fakeRevocations{revoked: make(map[string]struct{})}
+}
+
+func (f *fakeRevocations) IsTokenRevoked(_ context.Context, jti string) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	_, ok := f.revoked[jti]
+	return ok, nil
+}
+
+func (f *fakeRevocations) RevokeToken(_ context.Context, jti string, userID int64, expiresAt time.Time) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.revokeCalls++
+	f.lastUserID = userID
+	f.lastExpiresAt = expiresAt
+	f.revoked[jti] = struct{}{}
+	return nil
+}
+
+var _ TokenChecker = (*fakeRevocations)(nil)
+var _ TokenRevoker = (*fakeRevocations)(nil)
+
+// jtiOf extracts the jti claim from a signed token.
+func jtiOf(t *testing.T, tokenStr string) string {
+	t.Helper()
+	claims, err := parseSessionToken(tokenStr, testSecret)
+	require.NoError(t, err)
+	jti, ok := claims["jti"].(string)
+	require.True(t, ok, "token must carry a string jti")
+	require.NotEmpty(t, jti)
+	return jti
+}
+
+// errorBody decodes a JSON error response and returns its "error" field.
+func errorBody(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	var resp map[string]string
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	return resp["error"]
+}
+
+func TestGenerateJWT_IncludesJti(t *testing.T) {
+	tokenStr, err := generateJWT(&User{ID: 7, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	claims, err := parseSessionToken(tokenStr, testSecret)
+	require.NoError(t, err)
+
+	jti, ok := claims["jti"].(string)
+	require.True(t, ok, "jti must be present and a string")
+	assert.NotEmpty(t, jti)
+	assert.Len(t, jti, 32, "128 random bits, hex-encoded")
+}
+
+func TestGenerateJWT_JtiIsUnique(t *testing.T) {
+	user := &User{ID: 7, Email: "driver@test.com", Role: "driver"}
+
+	first, err := generateJWT(user, testSecret)
+	require.NoError(t, err)
+	second, err := generateJWT(user, testSecret)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, jtiOf(t, first), jtiOf(t, second),
+		"each token needs its own identifier, or revoking one revokes them all")
+}
+
+func TestNewJTI_Unique(t *testing.T) {
+	seen := make(map[string]struct{}, 100)
+	for i := 0; i < 100; i++ {
+		jti, err := newJTI()
+		require.NoError(t, err)
+		require.NotEmpty(t, jti)
+		_, dup := seen[jti]
+		require.False(t, dup, "newJTI must not repeat")
+		seen[jti] = struct{}{}
+	}
+	assert.Len(t, seen, 100)
+}
+
+func TestRequireAuth_RejectsRevokedToken(t *testing.T) {
+	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	revocations.revoked[jtiOf(t, token)] = struct{}{}
+
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, revocations)(next).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "invalid token", errorBody(t, w),
+		"a revoked token must be indistinguishable from a malformed one")
+	assert.False(t, reached, "the downstream handler must not run")
+}
+
+func TestRequireAuth_AllowsUnrevokedToken(t *testing.T) {
+	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	// A different token is revoked: the check must be per-jti, not per-user.
+	other, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+	revocations := newFakeRevocations()
+	revocations.revoked[jtiOf(t, other)] = struct{}{}
+
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
+		require.True(t, ok, "claims must reach the downstream handler")
+		assert.Equal(t, jtiOf(t, token), claims["jti"])
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, revocations)(next).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, reached, "the downstream handler must run")
+}
+
+// TestRequireAuth_AllowsTokenWithoutJti covers the backwards-compatibility
+// shim in checkRevoked: tokens issued before jti existed are still accepted
+// (they just can't be revoked), and doing so is logged.
+// Not safe for t.Parallel(); uses global logger.
+func TestRequireAuth_AllowsTokenWithoutJti(t *testing.T) {
+	claims := jwt.MapClaims{
+		"sub":   "1",
+		"email": "driver@test.com",
+		"role":  "driver",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"iat":   time.Now().Unix(),
+		"iss":   "vehicle-positions-api",
+	}
+	tokenStr, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(testSecret)
+	require.NoError(t, err)
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "a pre-jti token must not be locked out")
+	assert.Contains(t, logs.String(), "accepted token without jti",
+		"accepting an unrevokable token must be logged")
+}
+
+func TestRequireAuth_CheckerErrorFailsClosed(t *testing.T) {
+	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	revocations.err = errors.New("database unavailable")
+
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, revocations)(next).ServeHTTP(w, req)
+
+	assert.NotEqual(t, http.StatusOK, w.Code, "an undecidable revocation check must not allow the request")
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "internal server error", errorBody(t, w))
+	assert.False(t, reached, "the downstream handler must not run")
+}
+
+// TestRequireAuth_RejectsTokenWithoutExp pins the tightened parseSessionToken:
+// a signed token with no exp is not one generateJWT issued, and a revocation
+// row could not record an expiry for it.
+func TestRequireAuth_RejectsTokenWithoutExp(t *testing.T) {
+	claims := jwt.MapClaims{
+		"sub":   "1",
+		"email": "driver@test.com",
+		"role":  "driver",
+		"jti":   "abc123",
+		"iat":   time.Now().Unix(),
+		"iss":   "vehicle-positions-api",
+	}
+	tokenStr, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(testSecret)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "invalid token", errorBody(t, w))
+}
+
+// TestRequireAuthCookiePath_RejectsRevokedToken is the divergence guard for
+// requireAuth's cookie fallback: the admin UI's vp_session cookie carries the
+// same JWT as the Authorization header, so revocation must be enforced no
+// matter which one delivers it.
+func TestRequireAuthCookiePath_RejectsRevokedToken(t *testing.T) {
+	token, err := generateJWT(&User{ID: 3, Email: "admin@test.com", Role: "admin", Active: true}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	revocations.revoked[jtiOf(t, token)] = struct{}{}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, revocations)(dummyHandler()).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "invalid token", errorBody(t, w))
+}
+
+// logoutRequest builds an authenticated logout request whose context carries
+// the claims requireAuth would have put there.
+func logoutRequest(t *testing.T, tokenStr string) *http.Request {
+	t.Helper()
+	claims, err := parseSessionToken(tokenStr, testSecret)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	return req.WithContext(contextWithClaims(req.Context(), claims))
+}
+
+func TestHandleLogout_Returns204(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	handleLogout(newFakeRevocations())(w, logoutRequest(t, token))
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.String(), "204 means no body")
+}
+
+func TestHandleLogout_RevokesCallerToken(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	w := httptest.NewRecorder()
+	handleLogout(revocations)(w, logoutRequest(t, token))
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	assert.Contains(t, revocations.revoked, jtiOf(t, token), "the caller's own jti must be revoked")
+	assert.Equal(t, int64(5), revocations.lastUserID, "user_id comes from the string sub claim")
+	assert.WithinDuration(t, time.Now().Add(tokenLifetime), revocations.lastExpiresAt, time.Minute,
+		"expires_at must be the token's own exp")
+}
+
+// TestHandleLogout_Idempotent covers the handler and store contract: a repeat
+// logout must not error. End to end the second call actually gets a 401,
+// because requireAuth rejects the now-revoked token before the handler runs —
+// the idempotency that matters is the store's ON CONFLICT DO NOTHING.
+func TestHandleLogout_Idempotent(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		handleLogout(revocations)(w, logoutRequest(t, token))
+		assert.Equal(t, http.StatusNoContent, w.Code, "a repeat logout must not error")
+	}
+	assert.Equal(t, 2, revocations.revokeCalls, "both calls reach the store; the store deduplicates")
+}
+
+func TestHandleLogout_MissingClaims(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	w := httptest.NewRecorder()
+	handleLogout(newFakeRevocations())(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "unauthorized", errorBody(t, w))
+}
+
+// TestHandleLogout_TokenWithoutJti covers the compatibility shim's logout
+// side: there is nothing to revoke, but the client still gets a 204 so old
+// and new clients see one contract.
+// Not safe for t.Parallel(); uses global logger.
+func TestHandleLogout_TokenWithoutJti(t *testing.T) {
+	claims := jwt.MapClaims{
+		"sub": "5",
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "vehicle-positions-api",
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req = req.WithContext(contextWithClaims(req.Context(), claims))
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	revocations := newFakeRevocations()
+	w := httptest.NewRecorder()
+	handleLogout(revocations)(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Zero(t, revocations.revokeCalls, "there is no jti to record")
+	assert.Contains(t, logs.String(), "nothing to revoke")
+}
+
+// Not safe for t.Parallel(); uses global logger.
+func TestHandleLogout_StoreError(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	require.NoError(t, err)
+
+	revocations := newFakeRevocations()
+	revocations.err = errors.New("database unavailable")
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	w := httptest.NewRecorder()
+	handleLogout(revocations)(w, logoutRequest(t, token))
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "internal server error", errorBody(t, w))
+	assert.Contains(t, logs.String(), "failed to revoke token",
+		"a failed revocation must be logged, not swallowed")
+}
+
+// TestLoginLogoutRevokeFlow walks the whole lifecycle through the real mux:
+// log in, use the token, log out, then find the same token rejected.
+func TestLoginLogoutRevokeFlow(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcryptCost)
+	require.NoError(t, err)
+	users := &mockUserStore{user: &User{
+		ID:           11,
+		Email:        "driver@test.com",
+		PasswordHash: string(hash),
+		Role:         "driver",
+		Active:       true,
+	}}
+	revocations := newFakeRevocations()
+
+	login := handleLogin(users, testSecret, nil, false)
+	w := postLogin(login, "driver@test.com", "password")
+	require.Equal(t, http.StatusOK, w.Code)
+	var loginResp LoginResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&loginResp))
+	require.NotEmpty(t, loginResp.Token)
+
+	authed := requireAuth(testSecret, revocations)
+	protected := authed(dummyHandler())
+
+	call := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.Token)
+		rec := httptest.NewRecorder()
+		protected.ServeHTTP(rec, req)
+		return rec
+	}
+
+	require.Equal(t, http.StatusOK, call().Code, "the fresh token must work")
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+loginResp.Token)
+	logoutRec := httptest.NewRecorder()
+	authed(handleLogout(revocations)).ServeHTTP(logoutRec, logoutReq)
+	require.Equal(t, http.StatusNoContent, logoutRec.Code)
+
+	after := call()
+	assert.Equal(t, http.StatusUnauthorized, after.Code, "the same token must now be rejected")
+	assert.Equal(t, "invalid token", errorBody(t, after))
 }
