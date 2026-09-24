@@ -315,3 +315,23 @@ ON CONFLICT (jti) DO NOTHING;
 
 -- name: IsTokenRevoked :one
 SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1);
+
+-- name: CreateRefreshToken :exec
+INSERT INTO refresh_tokens (token_hash, user_id, expires_at)
+VALUES ($1, $2, $3);
+
+-- name: GetRefreshTokenByHash :one
+SELECT id, token_hash, user_id, expires_at, used_at, created_at
+FROM refresh_tokens
+WHERE token_hash = $1;
+
+-- name: MarkRefreshTokenUsed :execrows
+-- The used_at IS NULL guard makes consumption a compare-and-set: two
+-- concurrent refreshes with the same token both read an unused row, but only
+-- one updates it. Zero rows affected means this caller lost that race.
+UPDATE refresh_tokens
+SET used_at = NOW()
+WHERE id = $1 AND used_at IS NULL;
+
+-- name: DeleteRefreshTokensForUser :exec
+DELETE FROM refresh_tokens WHERE user_id = $1;

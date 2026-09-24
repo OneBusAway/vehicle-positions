@@ -206,6 +206,22 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 	return i, err
 }
 
+const createRefreshToken = `-- name: CreateRefreshToken :exec
+INSERT INTO refresh_tokens (token_hash, user_id, expires_at)
+VALUES ($1, $2, $3)
+`
+
+type CreateRefreshTokenParams struct {
+	TokenHash string
+	UserID    int64
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, createRefreshToken, arg.TokenHash, arg.UserID, arg.ExpiresAt)
+	return err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, role)
 VALUES ($1, $2, $3, $4)
@@ -306,6 +322,15 @@ func (q *Queries) DeleteLocationPointsBefore(ctx context.Context, arg DeleteLoca
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteRefreshTokensForUser = `-- name: DeleteRefreshTokensForUser :exec
+DELETE FROM refresh_tokens WHERE user_id = $1
+`
+
+func (q *Queries) DeleteRefreshTokensForUser(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, deleteRefreshTokensForUser, userID)
+	return err
 }
 
 const deleteRidePointsBefore = `-- name: DeleteRidePointsBefore :execrows
@@ -557,6 +582,26 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 		return nil, err
 	}
 	return items, nil
+}
+
+const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
+SELECT id, token_hash, user_id, expires_at, used_at, created_at
+FROM refresh_tokens
+WHERE token_hash = $1
+`
+
+func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenByHash, tokenHash)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.TokenHash,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getRide = `-- name: GetRide :one
@@ -1197,6 +1242,23 @@ func (q *Queries) ListVehiclesByUser(ctx context.Context, userID int64) ([]UserV
 		return nil, err
 	}
 	return items, nil
+}
+
+const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :execrows
+UPDATE refresh_tokens
+SET used_at = NOW()
+WHERE id = $1 AND used_at IS NULL
+`
+
+// The used_at IS NULL guard makes consumption a compare-and-set: two
+// concurrent refreshes with the same token both read an unused row, but only
+// one updates it. Zero rows affected means this caller lost that race.
+func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, markRefreshTokenUsed, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeToken = `-- name: RevokeToken :exec
