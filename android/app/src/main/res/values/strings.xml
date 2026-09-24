@@ -21,16 +21,36 @@
     <string name="vehicles_favorite_description">Add %1$s to favorites</string>
     <string name="vehicles_unfavorite_description">Remove %1$s from favorites</string>
 
-    <!-- Trip setup screen -->
-    <string name="trip_setup_title">Start a Trip</string>
-    <string name="trip_route_id_label">Route ID</string>
-    <string name="trip_gtfs_trip_id_label">GTFS Trip ID (optional)</string>
-    <string name="trip_recent_routes_label">Recent routes</string>
-    <string name="trip_start_button">Start Trip</string>
-    <string name="trip_error_not_assigned">You are not assigned to this vehicle.</string>
-    <string name="trip_error_trip_active">You already have an active trip.</string>
-    <string name="trip_error_network">Could not reach the server. Check your connection.</string>
-    <string name="trip_error_other">Enter a route ID to start a trip.</string>
+    <!-- Route picker -->
+    <string name="routes_title">Select a Route</string>
+    <string name="routes_search_label">Route number or name</string>
+    <string name="routes_section_recent">Recent</string>
+    <string name="routes_section_all">All routes</string>
+    <string name="routes_section_matches">Matches</string>
+    <string name="routes_search_no_matches">No routes match your search.</string>
+    <string name="routes_empty">The schedule has no routes.</string>
+    <string name="routes_error_message">Could not load the routes.</string>
+    <string name="routes_no_schedule">This server has no schedule loaded, so there are no routes to start a trip on.</string>
+    <string name="routes_retry_button">Retry</string>
+    <!-- Stands in for a route whose feed gave no short name. -->
+    <string name="routes_badge_placeholder">\u2014</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Select a Run</string>
+    <string name="runs_empty">No runs on this route today.</string>
+    <string name="runs_badge_now">Now</string>
+    <string name="runs_badge_next">Next</string>
+    <!-- Start time, then where the run is headed. -->
+    <string name="runs_row_headsign">%1$s \u2192 %2$s</string>
+    <!-- First stop, then last stop. -->
+    <string name="runs_row_stops">%1$s \u2192 %2$s</string>
+    <string name="runs_starting">Starting\u2026</string>
+    <string name="runs_error_message">Could not load this route\'s runs.</string>
+    <string name="runs_retry_button">Retry</string>
+    <string name="runs_error_not_assigned">You are not assigned to this vehicle.</string>
+    <string name="runs_error_trip_active">You already have an active trip.</string>
+    <string name="runs_error_network">Could not reach the server. Check your connection.</string>
+    <string name="runs_error_other">Could not start the trip.</string>
 
     <!-- Tracking screen -->
     <string name="tracking_status_connected">Tracking – Connected</string>
