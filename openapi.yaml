@@ -137,6 +137,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
         '429':
@@ -145,6 +147,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the caller's token
+      description: |
+        Adds the caller's own `jti` to the revocation list, so the token stops
+        being accepted before it would otherwise expire. A caller can only
+        revoke the token it presents.
+
+        A token issued before revocation existed carries no `jti`; there is
+        nothing to revoke, so it answers `204` without recording anything.
+      responses:
+        '204':
+          description: Token revoked, or nothing to revoke.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -171,6 +194,8 @@ paths:
                   $ref: '#/components/schemas/Vehicle'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -468,7 +493,14 @@ paths:
 
         Defaults to protobuf; pass `?format=json` for the protojson-encoded
         form for debugging.
-      security: []
+
+        Access depends on how the server is run. With `FEED_AUTH_ENABLED` the
+        feed sits behind `requireAPIKey` and needs an `X-API-Key` header;
+        without it the feed is public and the header is ignored. The guarded
+        form is documented here, so a client built against this spec works
+        either way.
+      security:
+        - apiKey: []
       parameters:
         - in: query
           name: format
@@ -503,6 +535,14 @@ paths:
                 description: protojson-encoded GTFS-RT `FeedMessage`.
         '400':
           description: '`source` was not one of `all`, `driver` or `rider`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: |
+            The API key was missing, unknown or deactivated. Only reachable
+            when the server runs with `FEED_AUTH_ENABLED`.
           content:
             application/json:
               schema:
@@ -638,6 +678,8 @@ paths:
                 $ref: '#/components/schemas/CatalogRoutes'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/ScheduleUnavailable'
 
@@ -665,6 +707,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No such route in the loaded schedule.
           content:
@@ -702,6 +746,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No such trip in the loaded schedule.
           content:
@@ -1508,6 +1554,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No active trip matched the request.
           content:
@@ -1530,6 +1578,15 @@ components:
       description: |
         JWT bearer token issued by `POST /api/v1/auth/login`. Signed HS256,
         24-hour TTL, `iss: vehicle-positions-api`.
+
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        A feed key created by `POST /api/v1/admin/api-keys`. It gates the
+        GTFS-RT feed only when the server runs with `FEED_AUTH_ENABLED`; with
+        the flag off the feed is public and the header is ignored.
 
     riderAuth:
       type: http
@@ -1755,9 +1812,23 @@ components:
           $ref: '#/components/schemas/VehicleID'
         trip_id:
           type: string
+          maxLength: 100
           description: |
-            Optional GTFS trip identifier the driver is currently operating.
-            Not validated — any string is accepted and stored verbatim.
+            GTFS `trip_id` when the driver knows it. Leave empty when only the
+            route is known — it must never carry a route id.
+        route_id:
+          type: string
+          maxLength: 100
+          description: |
+            GTFS `route_id`. Optional, but the only thing a consumer can match
+            on when `trip_id` is empty.
+        start_date:
+          type: string
+          pattern: '^[0-9]{8}$'
+          description: |
+            The trip's service date, `YYYYMMDD` in the agency's local time, and
+            a real calendar date. Optional, but meaningless alone: sending it
+            without `trip_id` or `route_id` is rejected with 400.
         latitude:
           type: number
           format: double
@@ -2204,7 +2275,7 @@ components:
     RiderRegisterRequest:
       type: object
       additionalProperties: false
-      required: [installation_id, platform, app_id, app_version, attestation]
+      required: [installation_id, platform]
       properties:
         installation_id:
           type: string
@@ -2399,7 +2470,20 @@ components:
       properties:
         reason:
           type: string
-          maxLength: 100
+          description: |
+            Why the client stopped the ride. Only these eight are accepted —
+            a rider cannot claim its own ride was superseded or rejected, so
+            the server-side reasons are not in this list and anything outside
+            it is a 400.
+          enum:
+            - user_requested
+            - arrived
+            - stationary
+            - max_duration
+            - location_unavailable
+            - authorization_denied
+            - network_failure
+            - app_terminated
 
     EndRideResponse:
       type: object

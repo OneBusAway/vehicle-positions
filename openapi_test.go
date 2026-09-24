@@ -121,6 +121,29 @@ var schemaStructs = map[string]string{
 	"CatalogThresholds":  "catalogThresholds",
 }
 
+// requestSchemaStructs pairs a request schema with the Go struct the handler
+// decodes it into. Only the property set is compared, not `required`: a request
+// schema's `required` reflects what the handler validates, which the struct
+// cannot express — an optional field and a mandatory one look identical in Go.
+//
+// The property set is still worth pinning, because every one of these schemas
+// sets additionalProperties: false to mirror DisallowUnknownFields. A field the
+// server accepts but the spec omits makes a spec-following client unable to
+// send it at all.
+var requestSchemaStructs = map[string]string{
+	"LocationReport":          "LocationReport",
+	"UpsertVehicleRequest":    "upsertVehicleRequest",
+	"StartTripRequest":        "StartTripRequest",
+	"EndTripRequest":          "EndTripRequest",
+	"CreateAssignmentRequest": "AssignmentRequest",
+	"CreateAPIKeyRequest":     "createAPIKeyRequest",
+	"RiderRegisterRequest":    "riderRegisterRequest",
+	"StartRideRequest":        "startRideRequest",
+	"PositionsRequest":        "positionsRequest",
+	"PositionUpload":          "positionUpload",
+	"EndRideRequest":          "endRideRequest",
+}
+
 // operationMethods are the path-item fields that describe an operation. Every
 // other key under a path ("parameters", "summary", …) must be ignored.
 var operationMethods = map[string]struct{}{
@@ -193,6 +216,7 @@ type registeredRoute struct {
 	auth         bool
 	admin        bool
 	rider        bool
+	apiKey       bool
 }
 
 func (r registeredRoute) String() string { return r.method + " " + r.path }
@@ -276,6 +300,7 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 				auth:   wrappedBy(call.Args[1], scope, "requireAuth"),
 				admin:  wrappedBy(call.Args[1], scope, "requireAdmin"),
 				rider:  wrappedBy(call.Args[1], scope, "requireRider"),
+				apiKey: wrappedBy(call.Args[1], scope, "requireAPIKey"),
 			})
 			return true
 		})
@@ -309,11 +334,34 @@ func apiRoutes(t *testing.T) []registeredRoute {
 	t.Helper()
 
 	all := extractRegisteredRoutes(t)
-	api := make([]registeredRoute, 0, len(all))
+
+	// A route can be registered more than once behind different middleware —
+	// newMux mounts the feed with requireAPIKey or bare depending on
+	// FEED_AUTH_ENABLED. Merge those into one route that carries every
+	// middleware any branch applies, so the spec is held to the guarded form.
+	merged := make(map[string]registeredRoute, len(all))
+	order := make([]string, 0, len(all))
 	for _, route := range all {
-		if _, isUI := htmlUIRoutes[route.String()]; !isUI {
-			api = append(api, route)
+		if _, isUI := htmlUIRoutes[route.String()]; isUI {
+			continue
 		}
+		key := route.String()
+		existing, seen := merged[key]
+		if !seen {
+			merged[key] = route
+			order = append(order, key)
+			continue
+		}
+		existing.auth = existing.auth || route.auth
+		existing.admin = existing.admin || route.admin
+		existing.rider = existing.rider || route.rider
+		existing.apiKey = existing.apiKey || route.apiKey
+		merged[key] = existing
+	}
+
+	api := make([]registeredRoute, 0, len(order))
+	for _, key := range order {
+		api = append(api, merged[key])
 	}
 
 	require.NotEmpty(t, api, "expected JSON API routes outside the admin UI")
@@ -336,7 +384,7 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 // route is classified by which of these produced the wrapper around its
 // handler, not by what the local variable happens to be called.
 var middlewareConstructors = map[string]struct{}{
-	"requireAuth": {}, "requireAdmin": {}, "requireRider": {},
+	"requireAuth": {}, "requireAdmin": {}, "requireRider": {}, "requireAPIKey": {},
 }
 
 // middlewareScope maps the identifiers naming an auth middleware inside one
@@ -574,6 +622,16 @@ func TestOpenAPI_AuthRequirementsMatchCode(t *testing.T) {
 		security, overridden := operation["security"]
 
 		switch {
+		case route.apiKey:
+			// The feed is mounted behind requireAPIKey only when
+			// FEED_AUTH_ENABLED is set, so the spec documents the guarded
+			// form and says when it applies.
+			assert.Truef(t, overridden && declaresScheme(security, "apiKey"),
+				"%s wraps %s in requireAPIKey, so the spec must declare `security: [{apiKey: []}]`",
+				route.source, route)
+			assert.Containsf(t, operation["responses"], "401",
+				"%s wraps %s in requireAPIKey, so the spec must document a 401 response", route.source, route)
+
 		case route.rider:
 			// The rider API carries its own token: requireRider accepts a JWT
 			// with the rider role, not the driver/admin one the global scheme
@@ -593,6 +651,12 @@ func TestOpenAPI_AuthRequirementsMatchCode(t *testing.T) {
 				route.source, route)
 			assert.Containsf(t, operation["responses"], "401",
 				"%s wraps %s in requireAuth, so the spec must document a 401 response", route.source, route)
+			// requireAuth admits only the staff roles, so a valid token with
+			// any other role — a rider token, handed out anonymously — is a
+			// 403 rather than a 401.
+			assert.Containsf(t, operation["responses"], "403",
+				"%s wraps %s in requireAuth, which rejects a non-staff role, so the spec must document a 403 response",
+				route.source, route)
 
 		default:
 			assert.Truef(t, overridden && isEmptyList(security),
@@ -872,6 +936,49 @@ func TestOpenAPI_SchemaPropertiesMatchStructs(t *testing.T) {
 					"%s.%s is always marshalled by %s, so it must be listed as required",
 					schemaName, field.name, structName)
 			}
+		})
+	}
+}
+
+// TestOpenAPI_RequestSchemaPropertiesMatchStructs holds each request schema's
+// property set to the struct the handler decodes into.
+//
+// Response schemas were already pinned; request bodies were the remaining gap,
+// and it is the one that bites hardest: these schemas all set
+// additionalProperties: false, so a field the spec omits is a field a
+// spec-following client cannot send.
+func TestOpenAPI_RequestSchemaPropertiesMatchStructs(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPISpec(t)
+	mappings := spec.mappings()
+	structs := structJSONFields(t)
+
+	for schemaName, structName := range requestSchemaStructs {
+		t.Run(schemaName, func(t *testing.T) {
+			schema, ok := mappings["#/components/schemas/"+schemaName]
+			require.Truef(t, ok, "schema %s must exist", schemaName)
+
+			fields, ok := structs[structName]
+			require.Truef(t, ok, "Go struct %s must exist", structName)
+			require.NotEmptyf(t, fields, "Go struct %s must decode at least one field", structName)
+
+			properties, ok := schema["properties"].(map[string]any)
+			require.Truef(t, ok, "%s must declare properties", schemaName)
+
+			documented := make([]string, 0, len(properties))
+			for name := range properties {
+				documented = append(documented, name)
+			}
+			decoded := make([]string, 0, len(fields))
+			for _, field := range fields {
+				decoded = append(decoded, field.name)
+			}
+			slices.Sort(documented)
+			slices.Sort(decoded)
+
+			assert.Equalf(t, decoded, documented,
+				"%s properties must match the JSON fields %s decodes; it sets additionalProperties: false, so anything missing here is unsendable",
+				schemaName, structName)
 		})
 	}
 }
