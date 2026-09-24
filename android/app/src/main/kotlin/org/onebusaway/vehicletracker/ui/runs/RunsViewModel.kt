@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui.runs
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,6 +15,8 @@ import org.onebusaway.vehicletracker.data.CatalogRepository
 import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.service.ServiceController
+import org.onebusaway.vehicletracker.ui.ARG_ROUTE_ID
+import org.onebusaway.vehicletracker.ui.ARG_VEHICLE_ID
 import java.time.Instant
 import javax.inject.Inject
 
@@ -44,16 +47,21 @@ sealed interface RunsUiState {
 
 @HiltViewModel
 class RunsViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val catalogRepository: CatalogRepository,
     private val tripRepository: TripRepository,
     private val serviceController: ServiceController,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) : ViewModel() {
+    // Read here rather than handed in by the screen, so a rotation reuses the ViewModel and its
+    // already-loaded runs instead of refetching them. The nav graph guarantees both are present.
+    private val vehicleId: String = checkNotNull(savedStateHandle[ARG_VEHICLE_ID]) { "no $ARG_VEHICLE_ID argument" }
+    private val routeId: String = checkNotNull(savedStateHandle[ARG_ROUTE_ID]) { "no $ARG_ROUTE_ID argument" }
+
     /** null while a load is in flight; otherwise the outcome of the last one. */
     private val loadResult = MutableStateFlow<Result<RunPage>?>(null)
     private val starting = MutableStateFlow(false)
     private val startError = MutableStateFlow<TripError?>(null)
-    private var routeId: String? = null
 
     val uiState: StateFlow<RunsUiState> = combine(
         loadResult,
@@ -78,8 +86,13 @@ class RunsViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RunsUiState.Loading)
 
-    fun load(routeId: String) {
-        this.routeId = routeId
+    init {
+        load()
+    }
+
+    fun retry() = load()
+
+    private fun load() {
         loadResult.value = null
         viewModelScope.launch {
             // mapCatching: a zone or a schedule time this platform cannot read is a bad reply,
@@ -88,23 +101,18 @@ class RunsViewModel @Inject constructor(
         }
     }
 
-    fun retry() {
-        routeId?.let { load(it) }
-    }
-
     /**
-     * Starts [runId] on [vehicleId] with the route the catalog listed it under — the ids the
-     * feed's `TripDescriptor` ends up carrying.
+     * Starts [runId] on the route the catalog listed it under — the ids the feed's
+     * `TripDescriptor` ends up carrying.
      */
-    fun onStartRun(vehicleId: String, runId: String, onStarted: () -> Unit) {
+    fun onStartRun(runId: String, onStarted: () -> Unit) {
         // A second tap on a list whose rows are still enabled would come back 409.
         if (starting.value) return
-        val route = routeId ?: return
         starting.value = true
         startError.value = null
         // TODO(phase 2): fetch GET /api/v1/gtfs/trips/{id} here and persist the geometry for adherence.
         viewModelScope.launch {
-            tripRepository.start(vehicleId, route, runId).fold(
+            tripRepository.start(vehicleId, routeId, runId).fold(
                 onSuccess = {
                     serviceController.startTracking()
                     starting.value = false

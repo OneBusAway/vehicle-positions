@@ -43,8 +43,10 @@ private const val ROUTE_VEHICLES = "vehicles"
 private const val ROUTE_ROUTES = "trip/{vehicleId}"
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}"
 private const val ROUTE_TRACKING = "tracking"
-private const val ARG_VEHICLE_ID = "vehicleId"
-private const val ARG_ROUTE_ID = "routeId"
+// Not private: RunsViewModel reads both out of its SavedStateHandle, and the names have to
+// be the ones the nav graph wrote.
+internal const val ARG_VEHICLE_ID = "vehicleId"
+internal const val ARG_ROUTE_ID = "routeId"
 
 /**
  * A path argument for a string route. A GTFS `route_id` is arbitrary text — spaces, slashes
@@ -53,8 +55,9 @@ private const val ARG_ROUTE_ID = "routeId"
  */
 private fun arg(value: String): String = Uri.encode(value)
 
-private fun NavBackStackEntry.decodedArg(name: String): String =
-    Uri.decode(arguments?.getString(name).orEmpty())
+// Reading one back needs no matching decode: NavDeepLink.getMatchingPathArguments already runs
+// every captured path argument through NavUriUtils.decode before it reaches the bundle.
+private fun NavBackStackEntry.pathArg(name: String): String = arguments?.getString(name).orEmpty()
 
 /** Determines which route the app should land on at launch, based on persisted session/trip state. */
 @HiltViewModel
@@ -119,7 +122,7 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
             route = ROUTE_ROUTES,
             arguments = listOf(navArgument(ARG_VEHICLE_ID) { type = NavType.StringType }),
         ) { backStackEntry ->
-            val vehicleId = backStackEntry.decodedArg(ARG_VEHICLE_ID)
+            val vehicleId = backStackEntry.pathArg(ARG_VEHICLE_ID)
             RoutesScreen(
                 onRouteSelected = { routeId ->
                     navController.navigate("trip/${arg(vehicleId)}/routes/${arg(routeId)}")
@@ -132,10 +135,9 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
                 navArgument(ARG_VEHICLE_ID) { type = NavType.StringType },
                 navArgument(ARG_ROUTE_ID) { type = NavType.StringType },
             ),
-        ) { backStackEntry ->
+        ) {
+            // vehicleId and routeId reach RunsViewModel through its SavedStateHandle.
             RunsScreen(
-                vehicleId = backStackEntry.decodedArg(ARG_VEHICLE_ID),
-                routeId = backStackEntry.decodedArg(ARG_ROUTE_ID),
                 onTripStarted = {
                     navController.navigate(ROUTE_TRACKING) {
                         popUpTo(0) { inclusive = true }

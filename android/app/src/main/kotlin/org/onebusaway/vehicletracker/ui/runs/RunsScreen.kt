@@ -44,19 +44,16 @@ import java.time.format.FormatStyle
 
 @Composable
 fun RunsScreen(
-    vehicleId: String,
-    routeId: String,
     onTripStarted: () -> Unit,
     viewModel: RunsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(routeId) { viewModel.load(routeId) }
 
     // The permission sequence has no argument to carry the tapped run through, so the run waits
-    // here until it comes back ready — the same shape the manual form uses for its own fields.
+    // here until it comes back ready.
     var pendingRunId by rememberSaveable { mutableStateOf<String?>(null) }
     val permissionFlow = rememberPermissionFlow(
-        onReady = { pendingRunId?.let { viewModel.onStartRun(vehicleId, it, onTripStarted) } },
+        onReady = { pendingRunId?.let { viewModel.onStartRun(it, onTripStarted) } },
     )
 
     val listState = rememberLazyListState()

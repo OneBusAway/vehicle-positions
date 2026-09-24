@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -383,7 +384,7 @@ class ViewModelsTest {
         tripsBody: String = twoRunsJson,
         now: String = "2026-09-22T08:05:00-07:00",
         startResponses: List<MockResponse> = emptyList(),
-        block: (RunsViewModel, MockWebServer, FakeServiceController) -> Unit,
+        block: (RunsViewModel, MockWebServer, FakeServiceController, FakeTripStateStore) -> Unit,
     ) {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody(tripsBody))
@@ -392,18 +393,21 @@ class ViewModelsTest {
             val provider = TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }
             val nowEpochSec = OffsetDateTime.parse(now).toEpochSecond()
             val clock = { nowEpochSec }
+            val tripState = FakeTripStateStore()
             val tripRepository = TripRepository(
                 provider,
-                FakeTripStateStore(),
+                tripState,
                 FakeVehiclePrefsStore(),
                 clock = clock,
                 zone = ZoneOffset.UTC,
             )
             val serviceController = FakeServiceController()
-            val vm = RunsViewModel(CatalogRepository(provider), tripRepository, serviceController, clock)
-            vm.load("R1")
+            // The nav graph's arguments, which is where the ViewModel reads them from — and it
+            // loads off them in init, with no load() call from the screen.
+            val args = SavedStateHandle(mapOf("vehicleId" to "bus-1", "routeId" to "R1"))
+            val vm = RunsViewModel(args, CatalogRepository(provider), tripRepository, serviceController, clock)
             awaitCondition(description = "runs settled") { vm.uiState.value !is RunsUiState.Loading }
-            block(vm, server, serviceController)
+            block(vm, server, serviceController, tripState)
         } finally {
             server.shutdown()
         }
@@ -417,7 +421,7 @@ class ViewModelsTest {
     }
 
     @Test fun `the run under way is badged Now`() = runTest(dispatcher) {
-        withRunsViewModel(now = "2026-09-22T08:05:00-07:00") { vm, _, _ ->
+        withRunsViewModel(now = "2026-09-22T08:05:00-07:00") { vm, _, _, _ ->
             val state = loadedRuns(vm)
             assertEquals("T1", state.highlightedId)
             assertEquals(RunHighlight.NOW, state.highlight)
@@ -427,7 +431,7 @@ class ViewModelsTest {
     }
 
     @Test fun `the next run to start is badged Next once the earlier one is over`() = runTest(dispatcher) {
-        withRunsViewModel(now = "2026-09-22T09:00:00-07:00") { vm, _, _ ->
+        withRunsViewModel(now = "2026-09-22T09:00:00-07:00") { vm, _, _, _ ->
             val state = loadedRuns(vm)
             assertEquals("T4", state.highlightedId)
             assertEquals(RunHighlight.NEXT, state.highlight)
@@ -436,7 +440,7 @@ class ViewModelsTest {
 
     @Test fun `a route with no runs today loads empty rather than failing`() = runTest(dispatcher) {
         val body = """{"route_id":"R1","service_date":"20260922","timezone":"America/Los_Angeles","trips":[]}"""
-        withRunsViewModel(tripsBody = body) { vm, _, _ ->
+        withRunsViewModel(tripsBody = body) { vm, _, _, _ ->
             // A schedule exists, this route just is not running today — not a reason to doubt
             // the catalog.
             val state = loadedRuns(vm)
@@ -445,13 +449,23 @@ class ViewModelsTest {
         }
     }
 
+    @Test fun `a route's runs are loaded once, off the nav arguments`() = runTest(dispatcher) {
+        withRunsViewModel { vm, server, _, _ ->
+            // The ViewModel reads routeId from its SavedStateHandle and loads in init, so the
+            // screen has no load() to re-run — which is what made every rotation refetch.
+            assertEquals("/api/v1/gtfs/routes/R1/trips", server.takeRequest().path)
+            assertEquals(1, server.requestCount)
+            assertEquals(listOf("T1", "T4"), loadedRuns(vm).page.runs.map { it.id })
+        }
+    }
+
     @Test fun `starting a run sends the catalog's route id and trip id, then starts tracking`() = runTest(dispatcher) {
         val started = MockResponse().setResponseCode(201).setBody(
             """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-22T15:00:00Z","status":"active"}""",
         )
-        withRunsViewModel(startResponses = listOf(started)) { vm, server, serviceController ->
+        withRunsViewModel(startResponses = listOf(started)) { vm, server, serviceController, _ ->
             var navigated = false
-            vm.onStartRun("bus-1", "T1") { navigated = true }
+            vm.onStartRun("T1") { navigated = true }
             awaitCondition(description = "trip started") { navigated }
 
             assertEquals(1, serviceController.startCount)
@@ -468,12 +482,12 @@ class ViewModelsTest {
             MockResponse().setResponseCode(403).setBody("""{"error":"driver is not assigned to this vehicle"}"""),
             MockResponse().setResponseCode(409).setBody("""{"error":"driver already has an active trip"}"""),
         )
-        withRunsViewModel(startResponses = refusals) { vm, _, serviceController ->
-            vm.onStartRun("bus-1", "T1") { }
+        withRunsViewModel(startResponses = refusals) { vm, _, serviceController, _ ->
+            vm.onStartRun("T1") { }
             awaitCondition(description = "403 surfaced") { loadedRuns(vm).error != null }
             assertEquals(TripError.NOT_ASSIGNED, loadedRuns(vm).error)
 
-            vm.onStartRun("bus-1", "T1") { }
+            vm.onStartRun("T1") { }
             awaitCondition(description = "409 surfaced") { loadedRuns(vm).error == TripError.TRIP_ACTIVE }
             assertEquals(0, serviceController.startCount)
         }
@@ -483,12 +497,12 @@ class ViewModelsTest {
         val started = MockResponse().setResponseCode(201).setBody(
             """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-22T15:00:00Z","status":"active"}""",
         )
-        withRunsViewModel(startResponses = listOf(started)) { vm, server, _ ->
+        withRunsViewModel(startResponses = listOf(started)) { vm, server, _, _ ->
             var navigated = false
-            vm.onStartRun("bus-1", "T1") { navigated = true }
+            vm.onStartRun("T1") { navigated = true }
             // The rows are disabled while a start is in flight, but a tap already on its way in
             // must not turn into a second POST — the server would answer that one 409.
-            vm.onStartRun("bus-1", "T4") { navigated = true }
+            vm.onStartRun("T4") { navigated = true }
             awaitCondition(description = "trip started") { navigated }
 
             assertEquals(2, server.requestCount)
