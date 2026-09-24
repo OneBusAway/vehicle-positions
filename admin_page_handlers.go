@@ -213,7 +213,7 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email)
 		return
 	}
-	token, err := generateJWT(user, ui.jwtSecret)
+	token, err := generateJWT(user, ui.jwtSecret, sessionLifetime)
 	if err != nil {
 		slog.Error("admin login: token generation failed", "error", err)
 		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email)

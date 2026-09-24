@@ -51,7 +51,7 @@ func TestHandleLogin_Success(t *testing.T) {
 		Active:       true,
 	}}
 
-	handler := handleLogin(store, testSecret, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "driver@test.com", "password")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -60,6 +60,92 @@ func TestHandleLogin_Success(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.Token)
+}
+
+// loginTestUser is an active driver whose password is "password".
+func loginTestUser() *mockUserStore {
+	return &mockUserStore{user: &User{
+		ID:           1,
+		Email:        "driver@test.com",
+		PasswordHash: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
+		Role:         "driver",
+		Active:       true,
+	}}
+}
+
+// TestHandleLogin_ReturnsBothTokenAndAccessToken guards the decision in this
+// PR that departs from #62: the response gained access_token but kept token.
+// If these two ever stop agreeing, clients reading either field are broken.
+func TestHandleLogin_ReturnsBothTokenAndAccessToken(t *testing.T) {
+	handler := handleLogin(loginTestUser(), newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	w := postLogin(handler, "driver@test.com", "password")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := decodeTokens(t, w)
+
+	require.NotEmpty(t, resp.AccessToken)
+	require.NotEmpty(t, resp.Token)
+	assert.Equal(t, resp.AccessToken, resp.Token, "the deprecated alias must carry the access token verbatim")
+	assert.Equal(t, int(defaultAccessTokenTTL.Seconds()), resp.ExpiresIn)
+}
+
+// TestLoginResponse_BackwardCompatibleJSON is the test that stops a future
+// refactor from silently breaking every current client. It asserts on raw
+// JSON rather than the struct, because the struct is exactly what such a
+// refactor would change: main's Android app declares `token` non-nullable
+// (kotlinx.serialization raises MissingFieldException, it does not default to
+// ""), and PR #96's simulator errors when `token` is empty.
+func TestLoginResponse_BackwardCompatibleJSON(t *testing.T) {
+	handler := handleLogin(loginTestUser(), newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	w := postLogin(handler, "driver@test.com", "password")
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+
+	for _, field := range []string{"token", "access_token", "refresh_token", "expires_in"} {
+		assert.Contains(t, raw, field, "the login response must keep the %q field", field)
+	}
+
+	var token string
+	require.NoError(t, json.Unmarshal(raw["token"], &token))
+	assert.NotEmpty(t, token, `"token" must stay non-empty: an existing client that reads it would otherwise get ""`)
+}
+
+func TestHandleLogin_ReturnsRefreshToken(t *testing.T) {
+	refreshTokens := newFakeRefreshTokens()
+	handler := handleLogin(loginTestUser(), refreshTokens, testSecret, testTTLs, nil, false)
+
+	w := postLogin(handler, "driver@test.com", "password")
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := decodeTokens(t, w)
+
+	require.NotEmpty(t, resp.RefreshToken)
+	assert.Equal(t, 1, refreshTokens.createCalls, "login must store exactly one refresh token")
+
+	stored, err := refreshTokens.GetRefreshToken(context.Background(), hashRefreshToken(resp.RefreshToken))
+	require.NoError(t, err, "the stored row must be findable by the hash of the returned token")
+	assert.Equal(t, int64(1), stored.UserID)
+	assert.Nil(t, stored.UsedAt)
+	assert.WithinDuration(t, time.Now().Add(defaultRefreshTokenTTL), stored.ExpiresAt, time.Minute)
+
+	_, err = refreshTokens.GetRefreshToken(context.Background(), resp.RefreshToken)
+	assert.ErrorIs(t, err, ErrRefreshTokenNotFound, "the token itself must never be stored, only its hash")
+}
+
+// TestHandleLogin_RefreshTokenStoreError covers review item 4 on #62: the
+// path where the refresh token cannot be persisted was untested. Handing back
+// an access token with no way to renew it is worse than a failed login the
+// client can retry.
+func TestHandleLogin_RefreshTokenStoreError(t *testing.T) {
+	refreshTokens := newFakeRefreshTokens()
+	refreshTokens.createErr = errors.New("database unavailable")
+	handler := handleLogin(loginTestUser(), refreshTokens, testSecret, testTTLs, nil, false)
+
+	w := postLogin(handler, "driver@test.com", "password")
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "internal server error", errorBody(t, w))
 }
 
 func TestHandleLogin_WrongPassword(t *testing.T) {
@@ -71,7 +157,7 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 		Active:       true,
 	}}
 
-	handler := handleLogin(store, testSecret, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "driver@test.com", "wrongpassword")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -93,7 +179,7 @@ func TestHandleLogin_DeactivatedUser(t *testing.T) {
 		Active:       false,
 	}}
 
-	handler := handleLogin(store, testSecret, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "gone@test.com", "password123")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -107,7 +193,7 @@ func TestHandleLogin_DeactivatedUser(t *testing.T) {
 func TestHandleLogin_UserNotFound(t *testing.T) {
 	store := &mockUserStore{err: ErrUserNotFound}
 
-	handler := handleLogin(store, testSecret, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "nobody@test.com", "password")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -115,7 +201,7 @@ func TestHandleLogin_UserNotFound(t *testing.T) {
 
 func TestHandleLogin_MissingFields(t *testing.T) {
 	store := &mockUserStore{}
-	handler := handleLogin(store, testSecret, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 
 	tests := []struct {
 		name     string
@@ -149,7 +235,7 @@ func TestHandleLogin_RateLimited(t *testing.T) {
 	limiter := NewLoginRateLimiter()
 	defer limiter.Stop()
 
-	handler := handleLogin(store, testSecret, limiter, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, limiter, false)
 
 	for range loginEmailLimit {
 		w := postLogin(handler, "driver@test.com", "wrongpassword")
@@ -167,7 +253,7 @@ func TestHandleLogin_RateLimited(t *testing.T) {
 
 func TestHandleLogin_InvalidJSON(t *testing.T) {
 	store := &mockUserStore{}
-	handler := handleLogin(store, testSecret, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 
 	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader([]byte("{bad json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -244,7 +330,7 @@ func TestRequireAuth_ExpiredToken(t *testing.T) {
 }
 
 func TestRequireAuth_ValidToken(t *testing.T) {
-	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("POST", "/api/v1/locations", nil)
@@ -268,7 +354,7 @@ func TestRequireAuth_ValidToken(t *testing.T) {
 }
 
 func TestRequireAuthCookieFallback(t *testing.T) {
-	token, err := generateJWT(&User{ID: 3, Email: "admin@test.com", Role: "admin", Active: true}, testSecret)
+	token, err := generateJWT(&User{ID: 3, Email: "admin@test.com", Role: "admin", Active: true}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	h := requireAuth(testSecret, newFakeRevocations())(next)
@@ -308,7 +394,7 @@ func TestRequireAuthCookieFallback(t *testing.T) {
 func TestGenerateJWT_Claims(t *testing.T) {
 	user := &User{ID: 42, Email: "driver@transit.com", Role: "driver"}
 
-	tokenStr, err := generateJWT(user, testSecret)
+	tokenStr, err := generateJWT(user, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
@@ -333,7 +419,7 @@ func TestRequireAuth_WrongSecret(t *testing.T) {
 	wrongSecret := []byte("the-wrong-secret-key-32-bytes-!!")
 
 	user := &User{ID: 1, Email: "hacker@evil.com", Role: "admin"}
-	tokenStr, _ := generateJWT(user, wrongSecret)
+	tokenStr, _ := generateJWT(user, wrongSecret, defaultAccessTokenTTL)
 
 	req := httptest.NewRequest("POST", "/api/v1/locations", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
@@ -364,7 +450,7 @@ func TestRequireAuth_AlgorithmConfusion(t *testing.T) {
 }
 
 func TestRequireAdmin_AdminAllowed(t *testing.T) {
-	token, err := generateJWT(&User{ID: 1, Email: "admin@test.com", Role: "admin"}, testSecret)
+	token, err := generateJWT(&User{ID: 1, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
@@ -386,7 +472,7 @@ func TestRequireAdmin_AdminAllowed(t *testing.T) {
 }
 
 func TestRequireAdmin_DriverDenied(t *testing.T) {
-	token, err := generateJWT(&User{ID: 2, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 2, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
@@ -418,7 +504,7 @@ func TestRequireAdmin_MissingClaims(t *testing.T) {
 }
 
 func TestRequireAdmin_EmptyRole(t *testing.T) {
-	token, err := generateJWT(&User{ID: 3, Email: "empty@test.com", Role: ""}, testSecret)
+	token, err := generateJWT(&User{ID: 3, Email: "empty@test.com", Role: ""}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
@@ -555,7 +641,7 @@ func errorBody(t *testing.T, w *httptest.ResponseRecorder) string {
 }
 
 func TestGenerateJWT_IncludesJti(t *testing.T) {
-	tokenStr, err := generateJWT(&User{ID: 7, Email: "driver@test.com", Role: "driver"}, testSecret)
+	tokenStr, err := generateJWT(&User{ID: 7, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	claims, err := parseSessionToken(tokenStr, testSecret)
@@ -570,9 +656,9 @@ func TestGenerateJWT_IncludesJti(t *testing.T) {
 func TestGenerateJWT_JtiIsUnique(t *testing.T) {
 	user := &User{ID: 7, Email: "driver@test.com", Role: "driver"}
 
-	first, err := generateJWT(user, testSecret)
+	first, err := generateJWT(user, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
-	second, err := generateJWT(user, testSecret)
+	second, err := generateJWT(user, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, jtiOf(t, first), jtiOf(t, second),
@@ -593,7 +679,7 @@ func TestNewJTI_Unique(t *testing.T) {
 }
 
 func TestRequireAuth_RejectsRevokedToken(t *testing.T) {
-	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	revocations := newFakeRevocations()
@@ -617,11 +703,11 @@ func TestRequireAuth_RejectsRevokedToken(t *testing.T) {
 }
 
 func TestRequireAuth_AllowsUnrevokedToken(t *testing.T) {
-	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	// A different token is revoked: the check must be per-jti, not per-user.
-	other, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	other, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 	revocations := newFakeRevocations()
 	revocations.revoked[jtiOf(t, other)] = struct{}{}
@@ -676,7 +762,7 @@ func TestRequireAuth_AllowsTokenWithoutJti(t *testing.T) {
 }
 
 func TestRequireAuth_CheckerErrorFailsClosed(t *testing.T) {
-	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	revocations := newFakeRevocations()
@@ -728,7 +814,7 @@ func TestRequireAuth_RejectsTokenWithoutExp(t *testing.T) {
 // same JWT as the Authorization header, so revocation must be enforced no
 // matter which one delivers it.
 func TestRequireAuthCookiePath_RejectsRevokedToken(t *testing.T) {
-	token, err := generateJWT(&User{ID: 3, Email: "admin@test.com", Role: "admin", Active: true}, testSecret)
+	token, err := generateJWT(&User{ID: 3, Email: "admin@test.com", Role: "admin", Active: true}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	revocations := newFakeRevocations()
@@ -754,28 +840,28 @@ func logoutRequest(t *testing.T, tokenStr string) *http.Request {
 }
 
 func TestHandleLogout_Returns204(t *testing.T) {
-	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	handleLogout(newFakeRevocations())(w, logoutRequest(t, token))
+	handleLogout(newFakeRevocations(), newFakeRefreshTokens())(w, logoutRequest(t, token))
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Empty(t, w.Body.String(), "204 means no body")
 }
 
 func TestHandleLogout_RevokesCallerToken(t *testing.T) {
-	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	revocations := newFakeRevocations()
 	w := httptest.NewRecorder()
-	handleLogout(revocations)(w, logoutRequest(t, token))
+	handleLogout(revocations, newFakeRefreshTokens())(w, logoutRequest(t, token))
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 	assert.Contains(t, revocations.revoked, jtiOf(t, token), "the caller's own jti must be revoked")
 	assert.Equal(t, int64(5), revocations.lastUserID, "user_id comes from the string sub claim")
-	assert.WithinDuration(t, time.Now().Add(tokenLifetime), revocations.lastExpiresAt, time.Minute,
+	assert.WithinDuration(t, time.Now().Add(defaultAccessTokenTTL), revocations.lastExpiresAt, time.Minute,
 		"expires_at must be the token's own exp")
 }
 
@@ -784,22 +870,70 @@ func TestHandleLogout_RevokesCallerToken(t *testing.T) {
 // because requireAuth rejects the now-revoked token before the handler runs —
 // the idempotency that matters is the store's ON CONFLICT DO NOTHING.
 func TestHandleLogout_Idempotent(t *testing.T) {
-	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	revocations := newFakeRevocations()
 	for i := 0; i < 2; i++ {
 		w := httptest.NewRecorder()
-		handleLogout(revocations)(w, logoutRequest(t, token))
+		handleLogout(revocations, newFakeRefreshTokens())(w, logoutRequest(t, token))
 		assert.Equal(t, http.StatusNoContent, w.Code, "a repeat logout must not error")
 	}
 	assert.Equal(t, 2, revocations.revokeCalls, "both calls reach the store; the store deduplicates")
 }
 
+// TestHandleLogout_DeletesRefreshTokens pins the half of logout that
+// revocation alone does not cover: a revoked access token is worthless if the
+// caller can trade a surviving refresh token for a new one.
+func TestHandleLogout_DeletesRefreshTokens(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+
+	refreshTokens := newFakeRefreshTokens()
+	kept := storeRefreshToken(t, refreshTokens, 6, time.Now().Add(defaultRefreshTokenTTL))
+	revoked := storeRefreshToken(t, refreshTokens, 5, time.Now().Add(defaultRefreshTokenTTL))
+
+	w := httptest.NewRecorder()
+	handleLogout(newFakeRevocations(), refreshTokens)(w, logoutRequest(t, token))
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, []int64{5}, refreshTokens.deletedUsers, "only the caller's tokens may be deleted")
+
+	_, err = refreshTokens.GetRefreshToken(context.Background(), hashRefreshToken(revoked))
+	assert.ErrorIs(t, err, ErrRefreshTokenNotFound, "the caller's refresh token must be gone")
+
+	_, err = refreshTokens.GetRefreshToken(context.Background(), hashRefreshToken(kept))
+	assert.NoError(t, err, "another user's refresh token must survive")
+}
+
+// Not safe for t.Parallel(); uses global logger.
+func TestHandleLogout_RefreshTokenDeleteError(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+
+	refreshTokens := newFakeRefreshTokens()
+	refreshTokens.deleteErr = errors.New("database unavailable")
+	revocations := newFakeRevocations()
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	w := httptest.NewRecorder()
+	handleLogout(revocations, refreshTokens)(w, logoutRequest(t, token))
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, "internal server error", errorBody(t, w))
+	assert.Contains(t, logs.String(), "failed to delete refresh tokens")
+	assert.Zero(t, revocations.revokeCalls,
+		"a logout that could not clear refresh tokens must report failure rather than half-finish")
+}
+
 func TestHandleLogout_MissingClaims(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	w := httptest.NewRecorder()
-	handleLogout(newFakeRevocations())(w, req)
+	handleLogout(newFakeRevocations(), newFakeRefreshTokens())(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Equal(t, "unauthorized", errorBody(t, w))
@@ -825,7 +959,7 @@ func TestHandleLogout_TokenWithoutJti(t *testing.T) {
 
 	revocations := newFakeRevocations()
 	w := httptest.NewRecorder()
-	handleLogout(revocations)(w, req)
+	handleLogout(revocations, newFakeRefreshTokens())(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Zero(t, revocations.revokeCalls, "there is no jti to record")
@@ -834,7 +968,7 @@ func TestHandleLogout_TokenWithoutJti(t *testing.T) {
 
 // Not safe for t.Parallel(); uses global logger.
 func TestHandleLogout_StoreError(t *testing.T) {
-	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret)
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	revocations := newFakeRevocations()
@@ -846,7 +980,7 @@ func TestHandleLogout_StoreError(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(original) })
 
 	w := httptest.NewRecorder()
-	handleLogout(revocations)(w, logoutRequest(t, token))
+	handleLogout(revocations, newFakeRefreshTokens())(w, logoutRequest(t, token))
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "internal server error", errorBody(t, w))
@@ -868,7 +1002,7 @@ func TestLoginLogoutRevokeFlow(t *testing.T) {
 	}}
 	revocations := newFakeRevocations()
 
-	login := handleLogin(users, testSecret, nil, false)
+	login := handleLogin(users, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 	w := postLogin(login, "driver@test.com", "password")
 	require.Equal(t, http.StatusOK, w.Code)
 	var loginResp LoginResponse
@@ -891,7 +1025,7 @@ func TestLoginLogoutRevokeFlow(t *testing.T) {
 	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	logoutReq.Header.Set("Authorization", "Bearer "+loginResp.Token)
 	logoutRec := httptest.NewRecorder()
-	authed(handleLogout(revocations)).ServeHTTP(logoutRec, logoutReq)
+	authed(handleLogout(revocations, newFakeRefreshTokens())).ServeHTTP(logoutRec, logoutReq)
 	require.Equal(t, http.StatusNoContent, logoutRec.Code)
 
 	after := call()
