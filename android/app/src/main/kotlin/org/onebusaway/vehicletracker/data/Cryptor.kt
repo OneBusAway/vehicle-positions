@@ -7,6 +7,7 @@ import android.util.Log
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
+import java.security.ProviderException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -27,6 +28,24 @@ interface Cryptor {
 
     /** @throws GeneralSecurityException if the key is gone or the ciphertext does not verify. */
     fun decrypt(ciphertext: String): String
+}
+
+/**
+ * Runs a Keystore call, converting the provider's unchecked [ProviderException] into the
+ * [GeneralSecurityException] that [Cryptor] documents — the same normalisation [KeystoreCryptor]
+ * applies to malformed Base64 in [KeystoreCryptor.decrypt].
+ *
+ * Some devices report a Keystore that cannot generate or read a key as `ProviderException`
+ * ("Keystore key generation failed"), which is a `RuntimeException` and so slips past every
+ * `GeneralSecurityException` catch between here and the UI. Unconverted it escapes the session
+ * flow and cancels its collectors, and because a failed migration leaves the legacy token in
+ * place, the next launch would hit it again — turning a device with a broken Keystore into a
+ * crash on every launch, for a driver who was simply logged in before.
+ */
+internal fun <T> normalizingKeystoreFailures(message: String, block: () -> T): T = try {
+    block()
+} catch (e: ProviderException) {
+    throw GeneralSecurityException(message, e)
 }
 
 private const val LOG_TAG = "KeystoreCryptor"
@@ -113,12 +132,15 @@ class KeystoreCryptor : Cryptor {
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
 
-    private fun existingKey(): SecretKey? =
+    private fun existingKey(): SecretKey? = normalizingKeystoreFailures("session key is unreadable") {
         (keyStore().getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
+    }
 
-    private fun deleteKey() = keyStore().deleteEntry(KEY_ALIAS)
+    private fun deleteKey() = normalizingKeystoreFailures("session key could not be deleted") {
+        keyStore().deleteEntry(KEY_ALIAS)
+    }
 
-    private fun generateKey(): SecretKey =
+    private fun generateKey(): SecretKey = normalizingKeystoreFailures("session key could not be generated") {
         KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE).apply {
             init(
                 KeyGenParameterSpec.Builder(
@@ -131,4 +153,5 @@ class KeystoreCryptor : Cryptor {
                     .build(),
             )
         }.generateKey()
+    }
 }

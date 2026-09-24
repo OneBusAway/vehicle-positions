@@ -11,19 +11,24 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.security.GeneralSecurityException
+import java.security.ProviderException
 
 /**
  * Exercises [EncryptedSessionStore] against a real file-backed DataStore and a [FakeCryptor],
@@ -176,11 +181,67 @@ class SessionStoreTest {
         assertTrue("a half-written session is worse than none", dataStore.data.first().asMap().isEmpty())
     }
 
+    @Test fun `a keystore that fails key generation leaves the driver logged in`() = runTest {
+        val dataStore = newDataStore()
+        seedLegacySession(dataStore)
+        // Some devices report a Keystore that cannot generate a key as an unchecked
+        // ProviderException. Normalised, it lands in the store's existing catch; unnormalised it
+        // escaped the session flow, cancelled its collectors, and — because the legacy token
+        // stays put — crashed again on every launch.
+        val cryptor = FakeCryptor().apply {
+            failEncrypt = true
+            encryptFailure = ProviderException("Keystore key generation failed")
+        }
+
+        val session = EncryptedSessionStore(dataStore, cryptor).session.first()
+
+        assertEquals("the driver was logged in before the upgrade and must stay so", TOKEN, session.token)
+        assertEquals(TOKEN, dataStore.data.first()[LEGACY_TOKEN_KEY])
+    }
+
+    @Test fun `an unchecked keystore failure is reported as a GeneralSecurityException`() {
+        val failure = runCatching {
+            normalizingKeystoreFailures("boom") { throw ProviderException("Keystore key generation failed") }
+        }.exceptionOrNull()
+
+        assertTrue("expected a GeneralSecurityException, got $failure", failure is GeneralSecurityException)
+        assertTrue("the cause must survive for the log", failure?.cause is ProviderException)
+    }
+
+    @Test fun `normalizing leaves other failures alone so the retry still sees them`() {
+        val original = GeneralSecurityException("unreadable")
+
+        val failure = runCatching { normalizingKeystoreFailures("boom") { throw original } }.exceptionOrNull()
+
+        assertSame(original, failure)
+    }
+
+    @Test fun `an unreadable session file reads as logged out`() = runTest {
+        val store = EncryptedSessionStore(FailingDataStore(IOException("session file is gone")), FakeCryptor())
+
+        assertEquals(Session(null, null, null), store.session.first())
+    }
+
+    @Test fun `a non-IO storage failure is not swallowed`() = runTest {
+        val store = EncryptedSessionStore(FailingDataStore(IllegalStateException("a bug, not a bad disk")), FakeCryptor())
+
+        val failure = runCatching { store.session.first() }.exceptionOrNull()
+
+        assertTrue("expected an IllegalStateException, got $failure", failure is IllegalStateException)
+    }
+
     @Test fun `hasFreshToken holds one second before 24h and lapses at 24h`() {
         val session = Session(SERVER, TOKEN, ISSUED_AT)
 
         assertTrue(session.hasFreshToken(ISSUED_AT + 24 * 3600 - 1))
         assertFalse(session.hasFreshToken(ISSUED_AT + 24 * 3600))
+    }
+
+    /** Stands in for storage that cannot be read at all, so the failure paths are reachable. */
+    private class FailingDataStore(private val failure: Throwable) : DataStore<Preferences> {
+        override val data: Flow<Preferences> = flow { throw failure }
+        override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+            throw failure
     }
 
     private companion object {

@@ -5,10 +5,12 @@ import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -63,13 +65,20 @@ class EncryptedSessionStore(
     override val session: Flow<Session> = flow {
         migrateLegacyToken()
         emitAll(
-            dataStore.data.map { prefs ->
-                Session(
-                    serverUrl = prefs[Keys.SERVER_URL],
-                    token = readToken(prefs),
-                    issuedAtEpochSec = prefs[Keys.TOKEN_ISSUED_AT],
-                )
-            },
+            dataStore.data
+                // An unreadable session file reads as logged out, for the same reason an
+                // undecryptable token does: this flow is collected by ApiHolder and
+                // AppNavViewModel, and letting the read failure through would cancel those
+                // collectors rather than send the driver to login. Anything that is not an IO
+                // failure still propagates.
+                .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+                .map { prefs ->
+                    Session(
+                        serverUrl = prefs[Keys.SERVER_URL],
+                        token = readToken(prefs),
+                        issuedAtEpochSec = prefs[Keys.TOKEN_ISSUED_AT],
+                    )
+                },
         )
     }
 
@@ -102,9 +111,13 @@ class EncryptedSessionStore(
 
     /**
      * A token that cannot be decrypted — the Keystore key is gone after a restore to a new device,
-     * or the entry was invalidated — is reported as no token rather than deleted. The flow emits
-     * `token = null`, the existing launch-destination check sends the driver to login, and nothing
-     * is erased on what may be a transient failure.
+     * or was replaced because it had become unreadable — is reported as no token. The flow emits
+     * `token = null` and the existing launch-destination check sends the driver to login.
+     *
+     * This store does not delete the stored value, but that is not a promise the token is
+     * recoverable: [KeystoreCryptor] regenerates the key when it cannot read the old one, so by
+     * the time a decrypt fails here the ciphertext is usually already unrecoverable. It is
+     * overwritten at the next login.
      */
     private fun readToken(prefs: Preferences): String? {
         val stored = prefs[Keys.TOKEN] ?: return prefs[Keys.LEGACY_TOKEN]

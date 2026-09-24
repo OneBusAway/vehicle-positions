@@ -16,9 +16,17 @@ class FakeCryptor : Cryptor {
     var failEncrypt = false
     var failDecrypt = false
 
-    override fun encrypt(plaintext: String): String {
-        if (failEncrypt) throw GeneralSecurityException("keystore unavailable")
-        return PREFIX + plaintext.reversed()
+    /**
+     * Thrown from [encrypt] when [failEncrypt] is set. Set it to a `ProviderException` to stand in
+     * for a device whose Keystore reports failures as an unchecked exception.
+     */
+    var encryptFailure: Exception = GeneralSecurityException("keystore unavailable")
+
+    // Routed through the same normalisation KeystoreCryptor applies, so a test that injects an
+    // unchecked Keystore failure exercises the real conversion rather than a fake of it.
+    override fun encrypt(plaintext: String): String = normalizingKeystoreFailures("session key unavailable") {
+        if (failEncrypt) throw encryptFailure
+        PREFIX + plaintext.reversed()
     }
 
     override fun decrypt(ciphertext: String): String {
