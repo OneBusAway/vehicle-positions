@@ -181,22 +181,23 @@ class SessionStoreTest {
         assertTrue("a half-written session is worse than none", dataStore.data.first().asMap().isEmpty())
     }
 
-    @Test fun `a keystore that fails key generation leaves the driver logged in`() = runTest {
+    @Test fun `an unchecked cryptor failure is not mistaken for a logged-out driver`() = runTest {
         val dataStore = newDataStore()
         seedLegacySession(dataStore)
-        // Some devices report a Keystore that cannot generate a key as an unchecked
-        // ProviderException. Normalised, it lands in the store's existing catch; unnormalised it
-        // escaped the session flow, cancelled its collectors, and — because the legacy token
-        // stays put — crashed again on every launch.
+        // The store's catches are narrow on purpose, so a Cryptor that breaks its contract
+        // surfaces instead of being quietly read as "no token". Keeping real Keystore failures
+        // inside that contract is KeystoreCryptor's job — it wraps every Keystore call, and
+        // `normalizingKeystoreFailures` below covers the conversion itself.
         val cryptor = FakeCryptor().apply {
             failEncrypt = true
-            encryptFailure = ProviderException("Keystore key generation failed")
+            encryptFailure = ProviderException("Failed to communicate with keystore service")
         }
 
-        val session = EncryptedSessionStore(dataStore, cryptor).session.first()
+        val failure = runCatching {
+            EncryptedSessionStore(dataStore, cryptor).session.first()
+        }.exceptionOrNull()
 
-        assertEquals("the driver was logged in before the upgrade and must stay so", TOKEN, session.token)
-        assertEquals(TOKEN, dataStore.data.first()[LEGACY_TOKEN_KEY])
+        assertTrue("expected the ProviderException to surface, got $failure", failure is ProviderException)
     }
 
     @Test fun `an unchecked keystore failure is reported as a GeneralSecurityException`() {

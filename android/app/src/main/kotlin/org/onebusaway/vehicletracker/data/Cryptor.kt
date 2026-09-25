@@ -71,16 +71,19 @@ private const val GCM_TAG_BITS = 128
 class KeystoreCryptor : Cryptor {
     @Volatile private var cached: SecretKey? = null
 
-    override fun encrypt(plaintext: String): String {
+    // The whole body is wrapped, not just the key lookup: on the Android Keystore `Cipher.init`
+    // can throw KeyStoreConnectException ("Failed to communicate with keystore service"), which is
+    // a ProviderException too. Nesting with the wrappers inside key() is harmless.
+    override fun encrypt(plaintext: String): String = normalizingKeystoreFailures("could not encrypt the session token") {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         // GCM needs its nonce to decrypt and the nonce is not secret, so it travels with the
         // ciphertext. Cipher picks a fresh random one per call.
-        return Base64.encodeToString(cipher.iv + ciphertext, Base64.NO_WRAP)
+        Base64.encodeToString(cipher.iv + ciphertext, Base64.NO_WRAP)
     }
 
-    override fun decrypt(ciphertext: String): String {
+    override fun decrypt(ciphertext: String): String = normalizingKeystoreFailures("could not decrypt the session token") {
         val raw = try {
             Base64.decode(ciphertext, Base64.NO_WRAP)
         } catch (e: IllegalArgumentException) {
@@ -93,7 +96,7 @@ class KeystoreCryptor : Cryptor {
         }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(GCM_TAG_BITS, raw, 0, NONCE_BYTES))
-        return String(cipher.doFinal(raw, NONCE_BYTES, raw.size - NONCE_BYTES), Charsets.UTF_8)
+        String(cipher.doFinal(raw, NONCE_BYTES, raw.size - NONCE_BYTES), Charsets.UTF_8)
     }
 
     /**

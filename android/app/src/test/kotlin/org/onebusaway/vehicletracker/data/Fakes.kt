@@ -22,11 +22,11 @@ class FakeCryptor : Cryptor {
      */
     var encryptFailure: Exception = GeneralSecurityException("keystore unavailable")
 
-    // Routed through the same normalisation KeystoreCryptor applies, so a test that injects an
-    // unchecked Keystore failure exercises the real conversion rather than a fake of it.
-    override fun encrypt(plaintext: String): String = normalizingKeystoreFailures("session key unavailable") {
+    // Thrown raw, the way the Keystore itself does. Normalising here instead would make the store
+    // tests pass whether or not KeystoreCryptor converts anything, which is no test at all.
+    override fun encrypt(plaintext: String): String {
         if (failEncrypt) throw encryptFailure
-        PREFIX + plaintext.reversed()
+        return PREFIX + plaintext.reversed()
     }
 
     override fun decrypt(ciphertext: String): String {
