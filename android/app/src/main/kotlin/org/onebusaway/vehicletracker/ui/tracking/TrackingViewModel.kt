@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
+import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.service.ServiceController
@@ -32,6 +33,7 @@ class TrackingViewModel @Inject constructor(
     private val tripStateStore: TripStateStore,
     private val tripRepository: TripRepository,
     private val serviceController: ServiceController,
+    private val tripGeometryStore: TripGeometryStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TrackingUiState())
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
@@ -49,6 +51,7 @@ class TrackingViewModel @Inject constructor(
             val result = tripRepository.end(trip.tripDbId)
             result.fold(
                 onSuccess = {
+                    tripGeometryStore.clear()
                     serviceController.stopTracking()
                     _uiState.update { it.copy(ending = false, endTripError = false) }
                     onEnded()
@@ -63,6 +66,7 @@ class TrackingViewModel @Inject constructor(
     fun onEndTripLocally(onEnded: () -> Unit) {
         viewModelScope.launch {
             tripStateStore.clearActiveTrip()
+            tripGeometryStore.clear()
             serviceController.stopTracking()
             _uiState.update { it.copy(ending = false, endTripError = false) }
             onEnded()

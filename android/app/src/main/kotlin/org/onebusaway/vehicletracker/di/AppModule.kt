@@ -16,7 +16,9 @@ import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.data.DataStoreSessionStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
+import org.onebusaway.vehicletracker.data.FileTripGeometryStore
 import org.onebusaway.vehicletracker.data.SessionStore
+import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
 import org.onebusaway.vehicletracker.data.tripStateDataStore
@@ -26,6 +28,7 @@ import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
+import java.io.File
 import java.time.ZoneId
 import javax.inject.Qualifier
 import javax.inject.Singleton
@@ -120,6 +123,11 @@ object AppModule {
     @Singleton
     fun provideTripStateStore(@ApplicationContext context: Context, zone: ZoneId): TripStateStore =
         DataStoreTripStateStore(context.tripStateDataStore, zone)
+
+    @Provides
+    @Singleton
+    fun provideTripGeometryStore(@ApplicationContext context: Context): TripGeometryStore =
+        FileTripGeometryStore(File(context.filesDir, "active_trip_geometry.json"))
 
     @Provides
     @Singleton

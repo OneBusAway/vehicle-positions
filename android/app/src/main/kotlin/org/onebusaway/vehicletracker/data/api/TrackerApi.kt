@@ -17,6 +17,10 @@ interface TrackerApi {
     // rather than interpolated raw: "1/A" must stay one path segment.
     @GET("api/v1/gtfs/routes/{route_id}/trips")
     suspend fun routeTrips(@Path("route_id") routeId: String): RouteTripsDto
+
+    // A GTFS trip_id is arbitrary text too, so it is Retrofit's to percent-encode as well.
+    @GET("api/v1/gtfs/trips/{trip_id}")
+    suspend fun trip(@Path("trip_id") tripId: String): TripGeometryDto
 }
 
 /**

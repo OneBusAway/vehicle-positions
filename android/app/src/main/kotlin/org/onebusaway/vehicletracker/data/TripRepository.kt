@@ -56,22 +56,6 @@ class TripRepository @Inject constructor(
         Result.failure(mapHttpError(e))
     }
 
-    /**
-     * Runs a local bookkeeping write that must not be allowed to fail the trip. By the time
-     * these run the trip is already active on the server and saved locally, so letting a
-     * DataStore error reach the caller's catch would report a started trip as a network
-     * failure — and the driver's retry would come back 409. Cancellation still propagates.
-     */
-    private suspend fun recordLocally(what: String, write: suspend () -> Unit) {
-        try {
-            write()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not record $what", e)
-        }
-    }
-
     suspend fun end(tripDbId: Long): Result<Unit> = try {
         apiProvider.get().endTrip(EndTripRequest(tripDbId))
         tripStateStore.clearActiveTrip()
@@ -80,5 +64,21 @@ class TripRepository @Inject constructor(
         throw e
     } catch (e: Exception) {
         Result.failure(mapHttpError(e))
+    }
+}
+
+/**
+ * Runs a local bookkeeping write that must not be allowed to fail the trip. By the time these
+ * run the trip is already active on the server, so letting a disk error reach the caller would
+ * report a started trip as a failure — and the driver's retry would come back 409. Cancellation
+ * still propagates.
+ */
+internal suspend fun recordLocally(what: String, write: suspend () -> Unit) {
+    try {
+        write()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not record $what", e)
     }
 }

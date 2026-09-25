@@ -12,20 +12,24 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.CatalogRepository
+import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripRepository
+import org.onebusaway.vehicletracker.data.recordLocally
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
+import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.ui.ARG_ROUTE_ID
 import org.onebusaway.vehicletracker.ui.ARG_VEHICLE_ID
 import java.time.Instant
 import javax.inject.Inject
 
-/** Why `POST /api/v1/trips/start` refused, in the terms the driver is shown. */
-enum class TripError { NOT_ASSIGNED, TRIP_ACTIVE, NETWORK, OTHER }
+/** Why a run could not be started, in the terms the driver is shown. */
+enum class TripError { NOT_ASSIGNED, TRIP_ACTIVE, NETWORK, NO_GEOMETRY, TRIP_NOT_ACTIVE, OTHER }
 
 fun Throwable.toTripError(): TripError = when {
     this is ApiError.NotAssigned -> TripError.NOT_ASSIGNED
     this is ApiError.TripAlreadyActive -> TripError.TRIP_ACTIVE
+    this is ApiError.TripNotActiveToday -> TripError.TRIP_NOT_ACTIVE
     this is ApiError.Other && msg == "network" -> TripError.NETWORK
     else -> TripError.OTHER
 }
@@ -50,6 +54,7 @@ class RunsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val catalogRepository: CatalogRepository,
     private val tripRepository: TripRepository,
+    private val tripGeometryStore: TripGeometryStore,
     private val serviceController: ServiceController,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) : ViewModel() {
@@ -94,6 +99,9 @@ class RunsViewModel @Inject constructor(
 
     private fun load() {
         loadResult.value = null
+        // Whatever refused a start against the old list — a run gone out of service — is not
+        // true of the new one.
+        startError.value = null
         viewModelScope.launch {
             // mapCatching: a zone or a schedule time this platform cannot read is a bad reply,
             // not a crash — the screen offers a retry as it would for any other failed load.
@@ -111,19 +119,37 @@ class RunsViewModel @Inject constructor(
         val serviceDate = (uiState.value as? RunsUiState.Loaded)?.page?.serviceDate ?: return
         starting.value = true
         startError.value = null
-        // TODO(phase 2): fetch GET /api/v1/gtfs/trips/{id} here and persist the geometry for adherence.
         viewModelScope.launch {
-            tripRepository.start(vehicleId, routeId, runId, serviceDate).fold(
-                onSuccess = {
+            when (val error = startRun(runId, serviceDate)) {
+                null -> {
                     serviceController.startTracking()
                     starting.value = false
                     onStarted()
-                },
-                onFailure = { error ->
+                }
+                else -> {
                     starting.value = false
-                    startError.value = error.toTripError()
-                },
-            )
+                    startError.value = error
+                }
+            }
         }
+    }
+
+    /**
+     * Fetches and checks the run's geometry before telling the server anything, as iOS's
+     * `TripSession.start` does: if there is nothing to judge adherence against, nothing should be
+     * started, so a retry does not run into "trip already active". Null once the run has started.
+     */
+    private suspend fun startRun(runId: String, serviceDate: String): TripError? {
+        val geometry = catalogRepository.trip(runId).getOrElse { return it.toTripError() }
+        // The server dates the run by the day it runs on now. If the service day has rolled over
+        // at 03:00 since the list was loaded, that is not the list's date, and the feed would
+        // carry one day's start_date against the other day's schedule.
+        if (geometry.serviceDate != serviceDate) return TripError.TRIP_NOT_ACTIVE
+        if (AdherenceEvaluator.of(geometry) == null) return TripError.NO_GEOMETRY
+        tripRepository.start(vehicleId, routeId, runId, serviceDate).onFailure { return it.toTripError() }
+        // Best-effort, as the other writes after a start are: without it the trip still reports,
+        // and the tracking screen says the schedule is unavailable.
+        recordLocally("trip geometry") { tripGeometryStore.save(geometry) }
+        return null
     }
 }

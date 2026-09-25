@@ -10,8 +10,10 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -23,6 +25,9 @@ import org.junit.Test
 import org.onebusaway.vehicletracker.data.*
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
+import org.onebusaway.vehicletracker.engine.TripFixtures
+import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginViewModel
 import org.onebusaway.vehicletracker.ui.routes.RoutesUiState
@@ -31,9 +36,12 @@ import org.onebusaway.vehicletracker.ui.runs.RunHighlight
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.RunsViewModel
 import org.onebusaway.vehicletracker.ui.runs.TripError
+import org.onebusaway.vehicletracker.ui.tracking.TrackingViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
+import java.io.IOException
 import java.time.OffsetDateTime
+import java.util.concurrent.ConcurrentLinkedQueue
 
 class ViewModelsTest {
     private val dispatcher = StandardTestDispatcher()
@@ -374,20 +382,33 @@ class ViewModelsTest {
             """{"id":"T4","headsign":"North","direction_id":null,"starts_at":"2026-09-22T10:00:00-07:00",""" +
             """"ends_at":"2026-09-22T10:10:00-07:00","first_stop":"Stop ST1","last_stop":"Stop ST3"}]}"""
 
+    /** T1's geometry, dated the service day [twoRunsJson] lists it under. */
+    private val t1GeometryJson = TripFixtures.tripJson(serviceDate = "20260922")
+
     /**
-     * Builds a [RunsViewModel] over a `MockWebServer` answering the trips call with [tripsBody]
-     * and then each of [startResponses] in turn, loads route R1 at wall-clock time [now], and
-     * runs [block] against it.
+     * Builds a [RunsViewModel] over a `MockWebServer` answering the trips call with [tripsBody],
+     * every geometry fetch with [geometry], and each start with the next of [startResponses],
+     * loads route R1 at wall-clock time [now], and runs [block] against it.
      */
     private fun withRunsViewModel(
         tripsBody: String = twoRunsJson,
         now: String = "2026-09-22T08:05:00-07:00",
+        geometry: () -> MockResponse = { MockResponse().setBody(t1GeometryJson) },
         startResponses: List<MockResponse> = emptyList(),
+        geometryStore: TripGeometryStore = FakeTripGeometryStore(),
         block: (RunsViewModel, MockWebServer, FakeServiceController, FakeTripStateStore) -> Unit,
     ) {
         val server = MockWebServer().apply { start() }
-        server.enqueue(MockResponse().setBody(tripsBody))
-        startResponses.forEach { server.enqueue(it) }
+        val starts = ConcurrentLinkedQueue(startResponses)
+        // Routed by path rather than queued: every start fetches the run's geometry before it
+        // posts, and a reload fetches the list again.
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.path == "/api/v1/trips/start" -> starts.poll() ?: MockResponse().setResponseCode(500)
+                request.path.orEmpty().startsWith("/api/v1/gtfs/trips/") -> geometry()
+                else -> MockResponse().setBody(tripsBody)
+            }
+        }
         try {
             val provider = TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }
             val nowEpochSec = OffsetDateTime.parse(now).toEpochSecond()
@@ -398,7 +419,7 @@ class ViewModelsTest {
             // The nav graph's arguments, which is where the ViewModel reads them from — and it
             // loads off them in init, with no load() call from the screen.
             val args = SavedStateHandle(mapOf("vehicleId" to "bus-1", "routeId" to "R1"))
-            val vm = RunsViewModel(args, CatalogRepository(provider), tripRepository, serviceController, clock)
+            val vm = RunsViewModel(args, CatalogRepository(provider), tripRepository, geometryStore, serviceController, clock)
             awaitCondition(description = "runs settled") { vm.uiState.value !is RunsUiState.Loading }
             block(vm, server, serviceController, tripState)
         } finally {
@@ -465,6 +486,7 @@ class ViewModelsTest {
         withRunsViewModel(
             tripsBody = afterMidnight,
             now = "2026-09-22T01:05:00-07:00",
+            geometry = { MockResponse().setBody(TripFixtures.tripJson(id = "T3", serviceDate = "20260921")) },
             startResponses = listOf(started),
         ) { vm, _, _, tripState ->
             var navigated = false
@@ -486,6 +508,7 @@ class ViewModelsTest {
 
             assertEquals(1, serviceController.startCount)
             server.takeRequest() // the trips call
+            server.takeRequest() // the run's geometry
             val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
             // The whole point of the picker: real ids from the schedule, not typed ones.
             assertEquals("R1", body["route_id"]!!.jsonPrimitive.content)
@@ -521,7 +544,194 @@ class ViewModelsTest {
             vm.onStartRun("T4") { navigated = true }
             awaitCondition(description = "trip started") { navigated }
 
-            assertEquals(2, server.requestCount)
+            // The list, then one geometry fetch and one POST: T1's alone.
+            assertEquals(3, server.requestCount)
+        }
+    }
+
+    // --- Starting a run: the geometry is fetched and checked before the server is told ---
+
+    private fun requestPaths(server: MockWebServer): List<String> =
+        List(server.requestCount) { server.takeRequest().path.orEmpty() }
+
+    @Test fun `the run's geometry is fetched before the trip is started`() = runTest(dispatcher) {
+        val started = MockResponse().setResponseCode(201).setBody(
+            """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-22T15:00:00Z","status":"active"}""",
+        )
+        withRunsViewModel(startResponses = listOf(started)) { vm, server, _, _ ->
+            var navigated = false
+            vm.onStartRun("T1") { navigated = true }
+            awaitCondition(description = "trip started") { navigated }
+
+            assertEquals(
+                listOf("/api/v1/gtfs/routes/R1/trips", "/api/v1/gtfs/trips/T1", "/api/v1/trips/start"),
+                requestPaths(server),
+            )
+        }
+    }
+
+    @Test fun `a run with too short a shape is refused before the server is told`() = runTest(dispatcher) {
+        val onePoint = TripFixtures.tripJson(serviceDate = "20260922", points = "[[47.6,-122.33]]")
+        val geometryStore = FakeTripGeometryStore()
+        withRunsViewModel(
+            geometry = { MockResponse().setBody(onePoint) },
+            geometryStore = geometryStore,
+        ) { vm, server, serviceController, tripState ->
+            vm.onStartRun("T1") { fail("a run with nothing to judge against must not start") }
+            awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+
+            assertEquals(TripError.NO_GEOMETRY, loadedRuns(vm).error)
+            assertTrue("/api/v1/trips/start" !in requestPaths(server))
+            assertEquals(0, serviceController.startCount)
+            assertNull(tripState.tripState.value)
+            assertNull(geometryStore.stored)
+        }
+    }
+
+    @Test fun `a run with no stops is refused before the server is told`() = runTest(dispatcher) {
+        val noStops = TripFixtures.tripJson(serviceDate = "20260922", stops = "[]")
+        withRunsViewModel(geometry = { MockResponse().setBody(noStops) }) { vm, server, _, _ ->
+            vm.onStartRun("T1") { fail("a run with nothing to judge against must not start") }
+            awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+
+            assertEquals(TripError.NO_GEOMETRY, loadedRuns(vm).error)
+            assertTrue("/api/v1/trips/start" !in requestPaths(server))
+        }
+    }
+
+    @Test fun `a run gone out of service is refused, and a reload clears the refusal`() = runTest(dispatcher) {
+        val notActive = MockResponse().setResponseCode(422).setBody("""{"error":"trip not active on date"}""")
+        withRunsViewModel(geometry = { notActive }) { vm, server, _, _ ->
+            vm.onStartRun("T1") { fail("a run not in service must not start") }
+            awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+            assertEquals(TripError.TRIP_NOT_ACTIVE, loadedRuns(vm).error)
+
+            vm.retry()
+            awaitCondition(description = "runs reloaded") { vm.uiState.value is RunsUiState.Loaded }
+
+            assertNull(loadedRuns(vm).error)
+            assertEquals(
+                listOf("/api/v1/gtfs/routes/R1/trips", "/api/v1/gtfs/trips/T1", "/api/v1/gtfs/routes/R1/trips"),
+                requestPaths(server),
+            )
+        }
+    }
+
+    @Test fun `a run the server now dates to another service day is refused`() = runTest(dispatcher) {
+        // The list was loaded for the 22nd; past 03:00 on the 23rd the server resolves the same
+        // run to the 23rd, which the list's service date would then misreport in the feed.
+        val nextDay = TripFixtures.tripJson(serviceDate = "20260923")
+        withRunsViewModel(geometry = { MockResponse().setBody(nextDay) }) { vm, server, _, _ ->
+            vm.onStartRun("T1") { fail("a run dated to another day must not start") }
+            awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+
+            assertEquals(TripError.TRIP_NOT_ACTIVE, loadedRuns(vm).error)
+            assertTrue("/api/v1/trips/start" !in requestPaths(server))
+        }
+    }
+
+    private val t1Started = MockResponse().setResponseCode(201).setBody(
+        """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-22T15:00:00Z","status":"active"}""",
+    )
+
+    @Test fun `a started run's geometry is saved for the tracking service`() = runTest(dispatcher) {
+        val geometryStore = FakeTripGeometryStore()
+        withRunsViewModel(startResponses = listOf(t1Started), geometryStore = geometryStore) { vm, _, _, _ ->
+            var navigated = false
+            vm.onStartRun("T1") { navigated = true }
+            awaitCondition(description = "trip started") { navigated }
+
+            val saved = requireNotNull(geometryStore.stored)
+            assertEquals("T1", saved.tripId)
+            assertEquals("20260922", saved.serviceDate)
+            assertEquals(3, saved.shapePoints.size)
+        }
+    }
+
+    @Test fun `a geometry save that fails still completes the start`() = runTest(dispatcher) {
+        // The trip is running on the server by the time the save is reached, so a disk error
+        // there must not be reported as a failed start — the driver's retry would come back 409.
+        val failingStore = object : TripGeometryStore {
+            override suspend fun save(geometry: TripGeometry): Unit = throw IOException("disk full")
+            override suspend fun load(): TripGeometry? = null
+            override suspend fun clear() = Unit
+        }
+        withRunsViewModel(startResponses = listOf(t1Started), geometryStore = failingStore) { vm, _, serviceController, tripState ->
+            var navigated = false
+            vm.onStartRun("T1") { navigated = true }
+            awaitCondition(description = "trip started") { navigated }
+
+            assertEquals(1, serviceController.startCount)
+            assertEquals("T1", tripState.tripState.value?.gtfsTripId)
+            assertNull(loadedRuns(vm).error)
+        }
+    }
+
+    // --- Tracking screen: what the service judged, and the stored geometry's lifetime ---
+
+    private val t1Trip = ActiveTrip(7L, "T1", "bus-1", "R1", "20260902", 100L)
+
+    /** Builds a [TrackingViewModel] on an active T1 whose server answers each end with [endResponse]. */
+    private fun withTrackingViewModel(
+        endResponse: MockResponse = MockResponse().setBody("""{"status":"trip ended"}"""),
+        block: (TrackingViewModel, TrackingRepository, FakeTripGeometryStore) -> Unit,
+    ) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(endResponse)
+        try {
+            val provider = TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }
+            val tripState = FakeTripStateStore().apply { tripState.value = t1Trip }
+            val tracking = TrackingRepository()
+            val geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1 }
+            val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), clock = { 0L })
+            val vm = TrackingViewModel(tracking, tripState, tripRepository, FakeServiceController(), geometryStore)
+            awaitCondition(description = "active trip loaded") { vm.uiState.value.activeTrip != null }
+            block(vm, tracking, geometryStore)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test fun `adherence the tracking service publishes reaches the screen`() = runTest(dispatcher) {
+        withTrackingViewModel { vm, tracking, _ ->
+            val evaluator = requireNotNull(AdherenceEvaluator.of(TripFixtures.t1))
+            val adherence = evaluator.evaluate(TripFixtures.fix(47.6045, -122.3300, TripFixtures.at(8, 5)), previous = null)
+
+            tracking.update { it.copy(geometry = TripFixtures.t1, adherence = adherence) }
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(adherence, vm.uiState.value.tracking.adherence)
+            assertEquals(TripFixtures.t1, vm.uiState.value.tracking.geometry)
+        }
+    }
+
+    @Test fun `ending a trip clears its stored geometry`() = runTest(dispatcher) {
+        withTrackingViewModel { vm, _, geometryStore ->
+            var ended = false
+            vm.onEndTrip { ended = true }
+            awaitCondition(description = "trip ended") { ended }
+
+            assertNull(geometryStore.stored)
+        }
+    }
+
+    @Test fun `a trip the server did not confirm ended keeps its geometry`() = runTest(dispatcher) {
+        withTrackingViewModel(endResponse = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)) { vm, _, geometryStore ->
+            vm.onEndTrip { fail("an unconfirmed end must not leave the screen") }
+            awaitCondition(description = "end failure surfaced") { vm.uiState.value.endTripError }
+
+            // Still running, so still judged: the driver can retry or end locally from here.
+            assertEquals(TripFixtures.t1, geometryStore.stored)
+        }
+    }
+
+    @Test fun `ending a trip on this device only clears its stored geometry`() = runTest(dispatcher) {
+        withTrackingViewModel { vm, _, geometryStore ->
+            var ended = false
+            vm.onEndTripLocally { ended = true }
+            awaitCondition(description = "trip ended locally") { ended }
+
+            assertNull(geometryStore.stored)
         }
     }
 }
