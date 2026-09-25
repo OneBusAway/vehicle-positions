@@ -142,6 +142,9 @@ var requestSchemaStructs = map[string]string{
 	"PositionsRequest":        "positionsRequest",
 	"PositionUpload":          "positionUpload",
 	"EndRideRequest":          "endRideRequest",
+	"CreateUserRequest":       "CreateUserRequest",
+	"UpdateUserRequest":       "UpdateUserRequest",
+	"LoginRequest":            "LoginRequest",
 }
 
 // operationMethods are the path-item fields that describe an operation. Every
@@ -631,6 +634,9 @@ func TestOpenAPI_AuthRequirementsMatchCode(t *testing.T) {
 				route.source, route)
 			assert.Containsf(t, operation["responses"], "401",
 				"%s wraps %s in requireAPIKey, so the spec must document a 401 response", route.source, route)
+			assert.Containsf(t, operation["responses"], "500",
+				"%s wraps %s in requireAPIKey, which fails with 500 when the key lookup does, so the spec must document a 500 response",
+				route.source, route)
 
 		case route.rider:
 			// The rider API carries its own token: requireRider accepts a JWT
@@ -644,6 +650,9 @@ func TestOpenAPI_AuthRequirementsMatchCode(t *testing.T) {
 			assert.Containsf(t, operation["responses"], "403",
 				"%s wraps %s in requireRider, which rejects a non-rider role, so the spec must document a 403 response",
 				route.source, route)
+			assert.Containsf(t, operation["responses"], "500",
+				"%s wraps %s in requireRider, which fails with 500 when the revocation lookup does, so the spec must document a 500 response",
+				route.source, route)
 
 		case route.auth:
 			assert.Falsef(t, overridden,
@@ -656,6 +665,12 @@ func TestOpenAPI_AuthRequirementsMatchCode(t *testing.T) {
 			// 403 rather than a 401.
 			assert.Containsf(t, operation["responses"], "403",
 				"%s wraps %s in requireAuth, which rejects a non-staff role, so the spec must document a 403 response",
+				route.source, route)
+			// Since #98 the token is checked against the revocation list, and a
+			// failed lookup is a 500 — failing closed rather than letting a
+			// possibly-revoked token through.
+			assert.Containsf(t, operation["responses"], "500",
+				"%s wraps %s in requireAuth, which fails with 500 when the revocation lookup does, so the spec must document a 500 response",
 				route.source, route)
 
 		default:
@@ -714,6 +729,7 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		riderLimit    = "#/components/schemas/RiderRideListLimit"
 		riderBatch    = "#/components/schemas/PositionsRequest/properties/positions"
 		riderRegister = "#/components/schemas/RiderRegisterResponse/properties"
+		password      = "#/components/schemas/Password"
 	)
 
 	constraints := []struct {
@@ -736,6 +752,7 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		{riderLimit, "maximum", maxRiderRideListLimit, "maxRiderRideListLimit"},
 		{riderLimit, "default", defaultRiderRideListLimit, "defaultRiderRideListLimit"},
 		{riderBatch, "maxItems", riderMaxBatchSize, "riderMaxBatchSize"},
+		{password, "minLength", minPasswordLength, "minPasswordLength"},
 	}
 
 	for _, constraint := range constraints {
@@ -981,4 +998,60 @@ func TestOpenAPI_RequestSchemaPropertiesMatchStructs(t *testing.T) {
 				schemaName, structName)
 		})
 	}
+}
+
+// TestOpenAPI_EveryRequestBodyIsPinned keeps requestSchemaStructs complete.
+// The map is maintained by hand, and a request schema left out of it is simply
+// never checked — which is how UpdateUserRequest.password went undocumented
+// after the request-schema guard already existed. So every schema an operation
+// takes as its JSON body must be mapped.
+func TestOpenAPI_EveryRequestBodyIsPinned(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPISpec(t)
+
+	bodies := 0
+	for path, pathItem := range spec.Paths {
+		for method, raw := range pathItem {
+			if _, isOperation := operationMethods[method]; !isOperation {
+				continue
+			}
+			operation, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			schema := jsonRequestSchema(operation)
+			if schema == "" {
+				continue
+			}
+			bodies++
+			assert.Containsf(t, requestSchemaStructs, schema,
+				"%s %s takes %s as its request body, so requestSchemaStructs must map it to the struct the handler decodes into",
+				strings.ToUpper(method), path, schema)
+		}
+	}
+
+	require.NotZero(t, bodies, "expected operations with JSON request bodies")
+}
+
+// jsonRequestSchema returns the component name an operation's JSON request
+// body references, or "" when it has none.
+func jsonRequestSchema(operation map[string]any) string {
+	body, ok := operation["requestBody"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	content, ok := body["content"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	media, ok := content["application/json"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	schema, ok := media["schema"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	ref, _ := schema["$ref"].(string)
+	return strings.TrimPrefix(ref, "#/components/schemas/")
 }

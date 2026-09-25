@@ -478,6 +478,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ScheduleUnavailable'
 
@@ -680,6 +682,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ScheduleUnavailable'
 
@@ -715,6 +719,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ScheduleUnavailable'
 
@@ -760,6 +766,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ScheduleUnavailable'
 
@@ -852,6 +860,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/admin/vehicles:
     get:
@@ -1296,7 +1306,7 @@ paths:
       tags: [admin]
       summary: Update a user
       description: |
-        Updates name, email, and role. Requires the `admin` role. Request
+        Updates name, email, role and, optionally, password. Requires the `admin` role. Request
         bodies are capped at 1 KiB.
       requestBody:
         required: true
@@ -1824,7 +1834,7 @@ components:
             on when `trip_id` is empty.
         start_date:
           type: string
-          pattern: '^[0-9]{8}$'
+          pattern: '^([0-9]{8})?$'
           description: |
             The trip's service date, `YYYYMMDD` in the agency's local time, and
             a real calendar date. Optional, but meaningless alone: sending it
@@ -1913,9 +1923,7 @@ components:
           type: string
           format: email
         password:
-          type: string
-          format: password
-          minLength: 8
+          $ref: '#/components/schemas/Password'
         role:
           type: string
           enum: [driver, admin]
@@ -1934,6 +1942,26 @@ components:
         role:
           type: string
           enum: [driver, admin]
+        password:
+          anyOf:
+            - $ref: '#/components/schemas/Password'
+            - const: ''
+          description: |
+            Optional. A non-empty value replaces the user's password, held to
+            the same rules as on create. Omit it, or send an empty string, to
+            keep the current one.
+
+    # Shared by create and update so the length rules live in one place. The
+    # upper bound is bcrypt's 72-byte input limit, which JSON Schema's
+    # character-based maxLength cannot express exactly, so it is stated in the
+    # description instead.
+    Password:
+      type: string
+      format: password
+      minLength: 8
+      description: |
+        At least 8 characters and at most 72 bytes — bcrypt's input limit. A
+        multi-byte password can exceed 72 bytes well before 72 characters.
 
     User:
       type: object
@@ -2332,7 +2360,7 @@ components:
           maxLength: 100
         start_date:
           type: string
-          pattern: '^[0-9]{8}$'
+          pattern: '^([0-9]{8})?$'
           description: |
             GTFS service date as `YYYYMMDD`. Defaults to the trip's current
             service date when omitted or empty.
