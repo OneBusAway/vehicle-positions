@@ -69,6 +69,29 @@ bucketing and whether the session cookie is marked `Secure`. Leave it unset
 (false) when the server is reachable directly, since trusting those headers
 from an untrusted client would let it spoof its IP.
 
+### GTFS schedule
+
+The server needs the agency's GTFS static schedule and **refuses to start
+without it**: set `GTFS_STATIC_URL` to a GTFS static zip, as an `http(s)://`
+URL or a local file path. Drivers pick their route and run from this schedule,
+so a server without one could not serve a driver at all. The server exits `1`
+before touching the database when the variable is unset, and also exits `1`
+when a schedule is set but cannot be loaded at startup, so an operator
+upgrading with a stale or unreachable `GTFS_STATIC_URL` must fix it.
+
+The schedule is served as the **driver GTFS catalog**: three read-only
+endpoints the driver apps use to pick a trip and draw its route. They take a
+driver or admin bearer token (the admin UI's session cookie also works, as on
+every `requireAuth` route). Only routes with at least one trip that has a shape
+appear in the catalog, because the index skips shapeless trips — a route
+missing from the picker means its trips have no `shape_id`.
+
+| Method + path | Purpose |
+|---|---|
+| `GET /api/v1/gtfs/routes` | Routes with at least one trip, in display order. |
+| `GET /api/v1/gtfs/routes/{route_id}/trips?date=YYYYMMDD` | The route's trips active on a service date (default: today's), with absolute start and end times. |
+| `GET /api/v1/gtfs/trips/{trip_id}?date=YYYYMMDD` | One trip's shape, stops with absolute times, and the adherence thresholds the server applies. |
+
 ### Rider mode (crowdsourced positions)
 
 Rider mode lets riders' phones fill the gaps in a feed no driver app covers.
@@ -78,28 +101,10 @@ shape, and publishes a snapped, route-projected position for trips the agency's
 own feed does not already report. It is **off by default** and adds no
 behaviour to the driver-reported feed when disabled.
 
-Turn it on by setting `RIDER_MODE_ENABLED=true` and pointing `GTFS_STATIC_URL`
-at a GTFS static zip (an `http(s)://` URL or a local file path). Without a
-schedule there is nothing to verify against, so the server exits at startup if
-it is missing. When rider mode is off the rider routes are not registered at
-all (`404`) and `GET /api/v1/admin/rider/status` answers `{"enabled":false}`.
-
-`GTFS_STATIC_URL` on its own, without rider mode, also loads the schedule and
-turns on the **driver GTFS catalog**: three read-only endpoints the driver apps
-use to pick a trip and draw its route. A schedule that cannot be loaded at
-startup makes the server exit `1`, whether or not rider mode is enabled, so an
-operator upgrading with a stale or unreachable `GTFS_STATIC_URL` must fix or
-remove it. They take a driver or admin bearer token (the admin UI's session
-cookie also works, as on every `requireAuth` route) and are not registered
-(`404`) when no schedule is configured. Only routes with at least one trip
-that has a shape appear in the catalog, because the index skips shapeless
-trips — a route missing from the picker means its trips have no `shape_id`.
-
-| Method + path | Purpose |
-|---|---|
-| `GET /api/v1/gtfs/routes` | Routes with at least one trip, in display order. |
-| `GET /api/v1/gtfs/routes/{route_id}/trips?date=YYYYMMDD` | The route's trips active on a service date (default: today's), with absolute start and end times. |
-| `GET /api/v1/gtfs/trips/{trip_id}?date=YYYYMMDD` | One trip's shape, stops with absolute times, and the adherence thresholds the server applies. |
+Turn it on by setting `RIDER_MODE_ENABLED=true`. Riders are verified against
+the same schedule the driver catalog serves (see [GTFS schedule](#gtfs-schedule)).
+When rider mode is off the rider routes are not registered at all (`404`) and
+`GET /api/v1/admin/rider/status` answers `{"enabled":false}`.
 
 Configuration (spec §4.1). Durations use Go's `time.ParseDuration` syntax; an
 unparseable value logs and falls back to its default.
@@ -107,7 +112,7 @@ unparseable value logs and falls back to its default.
 | Variable | Default | Purpose |
 |---|---|---|
 | `RIDER_MODE_ENABLED` | `false` | Enable rider routes, engine and feed merge. |
-| `GTFS_STATIC_URL` | — (required when enabled; exit 1 if missing) | GTFS zip URL or path. Required when rider mode is enabled; on its own it enables the driver GTFS catalog. |
+| `GTFS_STATIC_URL` | — (required; exit 1 if missing) | GTFS zip URL or path. Required whether or not rider mode is on — see [GTFS schedule](#gtfs-schedule). |
 | `GTFS_STATIC_REFRESH` | `24h` | Re-download and rebuild the index. Failure keeps the old index and logs. |
 | `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feed URLs. The server's own driver-reported positions are always a trusted source when the driver entered the GTFS trip id (matching is by trip id, so a route-only driver report doesn't count); with no external feed, a trip no driver is reporting that way has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Poll interval; sends `If-None-Match` / `If-Modified-Since` when the server gave `ETag` / `Last-Modified`. |

@@ -632,10 +632,11 @@ is exercised end to end in the smoke test.
 
 ### 8.6 GTFS catalog for drivers
 
-The schedule index (`rider.Index`) is loaded by `gtfs_wiring.go` whenever
-`GTFS_STATIC_URL` is set, independently of rider mode, and refreshed on
-`GTFS_STATIC_REFRESH`. Rider mode borrows the refresher. `gtfs_handlers.go`
-serves the index to drivers as `GET /api/v1/gtfs/routes`,
+The schedule index (`rider.Index`) is loaded by `gtfs_wiring.go` from
+`GTFS_STATIC_URL`, independently of rider mode, and refreshed on
+`GTFS_STATIC_REFRESH`. The variable is required: `main` refuses to start
+without it, before opening the database. Rider mode borrows the refresher.
+`gtfs_handlers.go` serves the index to drivers as `GET /api/v1/gtfs/routes`,
 `GET /api/v1/gtfs/routes/{route_id}/trips` and `GET /api/v1/gtfs/trips/{trip_id}`
 behind `requireAuth`. Absolute stop times are `rider.ServiceDayStart(date, tz)`
 plus the `stop_times.txt` offsets, so after-midnight trips land on the next
