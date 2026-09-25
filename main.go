@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	// Every GTFS feed names its agency's timezone, and the runtime image
+	// ships no zoneinfo, so the database is compiled in.
+	_ "time/tzdata"
 )
 
 //go:embed web/templates web/static
