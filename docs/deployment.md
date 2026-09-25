@@ -32,6 +32,7 @@ few seconds of feed continuity.
 | Host | A Linux server with a public IP. 1 vCPU and 1 GB RAM comfortably serves a fleet of tens of vehicles; the process holds one small record per active vehicle in memory. |
 | Disk | Sized for `location_points`, the only table that grows quickly. Fifty vehicles reporting every 10 seconds over a 16-hour service day is roughly 105 million rows a year (see the README's [Data Retention & Privacy](../README.md#31-server-go) notes). Turn on retention (section 6) and this stops mattering. |
 | PostgreSQL | 15 or newer. The project's own stack runs `postgres:17-alpine` (`docker-compose.yml`), so 17 is the best-tested choice for a new install. It may run on the same host or a managed service. |
+| GTFS schedule | Your agency's GTFS static zip, at a URL the server can download or as a file on the host. The server will not start without one: drivers pick their route and run from it. Use the same feed OneBusAway uses (section 11). |
 | DNS + TLS | A hostname (`tracker.example.org` throughout this guide) pointing at the host, and a certificate. Section 7 uses Let's Encrypt. |
 | Build tooling | Either Docker (option A) **or** Go 1.25 or newer (option B, `go.mod` declares `go 1.25.0`). There is no published container image — agencies build from this repository. |
 | Ports | 80 and 443 open to the internet. Port 8080 (the app) and 5432 (PostgreSQL) must **not** be reachable from the internet. |
@@ -69,6 +70,13 @@ Rules that apply to the whole table:
 | `READ_TIMEOUT` | `15s` | HTTP server read timeout. |
 | `WRITE_TIMEOUT` | `15s` | HTTP server write timeout. |
 | `IDLE_TIMEOUT` | `60s` | HTTP keep-alive idle timeout. |
+
+### GTFS schedule
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GTFS_STATIC_URL` | — (required) | Your agency's GTFS static zip, as an `http(s)://` URL or a local file path. Drivers pick their route and run from it. The server logs an error and exits 1 if it is unset, before touching the database, or if the feed cannot be downloaded or parsed at startup. |
+| `GTFS_STATIC_REFRESH` | `24h` | How often the schedule is re-downloaded. A failed refresh keeps the previous index and logs. Must be positive; a zero or negative value is rejected with a warning and the default is used. |
 
 ### Admin UI and proxying
 
@@ -115,12 +123,11 @@ the operator caveats in full.
 
 Rider mode is off by default and adds nothing to the driver-reported feed when
 disabled. Turn it on only if you intend to accept positions from riders' phones.
+Riders are verified against the schedule in [GTFS schedule](#gtfs-schedule).
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `RIDER_MODE_ENABLED` | `false` | Enable the rider routes, verification engine and feed merge. |
-| `GTFS_STATIC_URL` | — (required when rider mode is on) | GTFS static zip, as an `http(s)://` URL or a local file path. The server exits 1 if rider mode is enabled without one. |
-| `GTFS_STATIC_REFRESH` | `24h` | How often the schedule is re-downloaded. A failed refresh keeps the previous index and logs. |
 | `TRUSTED_GTFS_RT_URLS` | empty | Comma-separated external VehiclePositions feeds used to corroborate riders. This server's own driver-reported positions count as a trusted source only when the driver entered the GTFS trip id (matching is by trip id, so a route-only driver report doesn't corroborate); with no external feed, a trip no driver is reporting that way has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Poll interval for those feeds. |
 | `TRUSTED_FEED_MAX_AGE` | `5m` | Trusted entities older than this are dropped. |
@@ -174,6 +181,7 @@ cd /srv/vehicle-positions
 umask 077
 cat > .env <<EOF
 JWT_SECRET=$(openssl rand -hex 32)
+GTFS_STATIC_URL=https://agency.example.org/gtfs.zip
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 ADMIN_BOOTSTRAP_EMAIL=ops@example.org
 ADMIN_BOOTSTRAP_PASSWORD=$(openssl rand -hex 12)
@@ -181,6 +189,10 @@ EOF
 chmod 600 .env
 cat .env   # copy the bootstrap password somewhere safe, you need it once
 ```
+
+Replace the `GTFS_STATIC_URL` value with your agency's GTFS static zip. It has
+to be a URL: the image carries no GTFS file, so a path on the host does not
+exist inside the container.
 
 `chmod 600` matters: `JWT_SECRET` is the key that signs admin tokens, so anyone
 who can read this file can mint an administrator session for your server.
@@ -219,6 +231,7 @@ services:
       PORT: "8080"
       DATABASE_URL: "postgres://vehicle_positions:${POSTGRES_PASSWORD}@db:5432/vehicle_positions?sslmode=disable"
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET must be set; the server requires 32+ bytes}"
+      GTFS_STATIC_URL: "${GTFS_STATIC_URL:?set GTFS_STATIC_URL in .env}"
       STALENESS_THRESHOLD: "5m"
       TRUST_PROXY_HEADERS: "true"
       ADMIN_UI_ENABLED: "true"
@@ -290,6 +303,7 @@ sudo tee /etc/vehicle-positions.env >/dev/null <<'EOF'
 PORT=8080
 DATABASE_URL=postgres://vehicle_positions:CHANGE_ME@127.0.0.1:5432/vehicle_positions?sslmode=disable
 JWT_SECRET=CHANGE_ME
+GTFS_STATIC_URL=CHANGE_ME
 STALENESS_THRESHOLD=5m
 TRUST_PROXY_HEADERS=true
 ADMIN_UI_ENABLED=true
@@ -301,8 +315,9 @@ ADMIN_BOOTSTRAP_PASSWORD=CHANGE_ME
 EOF
 ```
 
-Then replace each `CHANGE_ME` (`openssl rand -hex 32` for `JWT_SECRET`). Two
-things to know about this file:
+Then replace each `CHANGE_ME` (`openssl rand -hex 32` for `JWT_SECRET`, your
+agency's GTFS static zip for `GTFS_STATIC_URL`). Two things to know about this
+file:
 
 - systemd's `EnvironmentFile` is **not** a shell script. Write
   `JWT_SECRET=abc123`, not `export JWT_SECRET=...`, and do not expect
@@ -348,9 +363,9 @@ WantedBy=multi-user.target
 
 `ProtectSystem=strict` makes the whole filesystem read-only for this service.
 That is fine because the server writes nothing to disk — it logs to stdout and
-stores everything else in PostgreSQL. If you enable rider mode with a *local*
-GTFS zip, give `GTFS_STATIC_URL` an absolute path to a file the service can
-read; a URL needs no filesystem access at all.
+stores everything else in PostgreSQL. If `GTFS_STATIC_URL` is a *local* GTFS
+zip, give it an absolute path to a file the service can read; a URL needs no
+filesystem access at all.
 
 `After=postgresql.service` only orders startup when PostgreSQL runs on this
 same host. If the database is remote, drop it — the server exits 1 when it
@@ -715,6 +730,11 @@ admin UI is the example the README calls out: it did not exist in earlier
 versions and it is **on by default**, so an upgrade exposes `/admin` unless you
 set `ADMIN_UI_ENABLED=false` first.
 
+Upgrading from a version that ran without `GTFS_STATIC_URL`: it is now
+required. Add it to `.env` and `compose.yaml` (option A) or the environment
+file (option B) **before** you restart onto the new version, or the server
+exits 1 at startup and the feed stays down until you do.
+
 To roll back, start the previous image tag (Compose) or reinstall the previous
 binary (systemd). If the newer version applied a migration, restore the pre-
 upgrade dump as well.
@@ -759,7 +779,8 @@ A driver-reported entity's id and `vehicle.id` are the `vehicle_id` the app
 reported — the vehicle the driver picked, which you created in the admin UI —
 and its `trip.trip_id` and `trip.route_id` are whatever the app sent with the
 fix. For OBA to match them to your schedule, those must be the ids from the
-same GTFS static feed OBA is using.
+same GTFS static feed OBA is using. The driver app takes them from this
+server's schedule, so point `GTFS_STATIC_URL` at that same feed.
 
 ## 12. Distributing the Android app
 
