@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules for Android 11 and below. Kept in step with data_extraction_rules.xml, which
+  covers Android 12 and above.
+
+  The driver's JWT lives in the "session" DataStore. It is encrypted with an Android Keystore
+  key that never leaves the device, so a restored copy could not be decrypted on the target
+  device anyway - and a bearer token that authorises location reporting and trip start/end has
+  no business travelling through cloud backup in the first place.
+
+  trip_state and vehicle_prefs hold no credentials - an in-progress trip and the driver's
+  vehicle favourites/recents - so they stay backed up.
+-->
+<full-backup-content>
+    <exclude domain="file" path="datastore/session.preferences_pb" />
+</full-backup-content>
