@@ -7,10 +7,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
@@ -21,6 +23,8 @@ import org.onebusaway.vehicletracker.engine.TripStop
 import org.onebusaway.vehicletracker.service.LocationFix
 import org.onebusaway.vehicletracker.ui.login.LoginScreenContent
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
+import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreenContent
+import org.onebusaway.vehicletracker.ui.resume.ResumeShiftUiState
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreenContent
 import org.onebusaway.vehicletracker.ui.tracking.TrackingUiState
 import java.time.Instant
@@ -89,6 +93,32 @@ class ScreenFlowTest {
 
         compose.onNodeWithText(getString(R.string.tracking_end_trip_dialog_title)).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.tracking_end_trip_dialog_message)).assertIsDisplayed()
+    }
+
+    @Test
+    fun resumeScreen_namesTheShiftAndOffersBothActions() {
+        var resumed = false
+        var ended = false
+        compose.setContent {
+            ResumeShiftScreenContent(
+                state = ResumeShiftUiState(
+                    trip = ActiveTrip(7L, "T1", "bus-1", "R1", "20260902", 100L),
+                    startedAgoSec = 2 * 3600L + 5 * 60,
+                ),
+                onResumeClick = { resumed = true },
+                onEndShiftClick = { ended = true },
+                onEndShiftLocallyClick = {},
+                onDismissError = {},
+            )
+        }
+
+        compose.onNodeWithText(resources.getString(R.string.resume_message, "bus-1")).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.resume_route, "R1")).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.resume_started_hours_ago, 2, 5)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.resume_button)).performClick()
+        compose.onNodeWithText(getString(R.string.resume_end_shift_button)).performClick()
+        assertTrue(resumed)
+        assertTrue(ended)
     }
 
     // --- The adherence panel, against the server fixture's trip T1 ---

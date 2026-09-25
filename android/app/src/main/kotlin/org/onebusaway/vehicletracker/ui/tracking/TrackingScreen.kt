@@ -149,22 +149,28 @@ fun TrackingScreenContent(
     }
 
     if (state.endTripError) {
-        AlertDialog(
-            onDismissRequest = onDismissError,
-            title = { Text(stringResource(R.string.tracking_end_trip_error_title)) },
-            text = { Text(stringResource(R.string.tracking_end_trip_error_message)) },
-            confirmButton = {
-                TextButton(onClick = onEndTripClick) {
-                    Text(stringResource(R.string.tracking_end_trip_error_retry))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onEndTripLocallyClick) {
-                    Text(stringResource(R.string.tracking_end_trip_error_end_locally))
-                }
-            },
-        )
+        EndTripErrorDialog(onRetry = onEndTripClick, onEndLocally = onEndTripLocallyClick, onDismiss = onDismissError)
     }
+}
+
+/** The server did not confirm the end. Shared with the resume prompt, which ends trips through [TripEnder] too. */
+@Composable
+internal fun EndTripErrorDialog(onRetry: () -> Unit, onEndLocally: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.tracking_end_trip_error_title)) },
+        text = { Text(stringResource(R.string.tracking_end_trip_error_message)) },
+        confirmButton = {
+            TextButton(onClick = onRetry) {
+                Text(stringResource(R.string.tracking_end_trip_error_retry))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onEndLocally) {
+                Text(stringResource(R.string.tracking_end_trip_error_end_locally))
+            }
+        },
+    )
 }
 
 @Composable

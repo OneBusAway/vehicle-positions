@@ -36,12 +36,15 @@ import org.onebusaway.vehicletracker.ui.runs.RunHighlight
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.RunsViewModel
 import org.onebusaway.vehicletracker.ui.runs.TripError
+import org.onebusaway.vehicletracker.ui.resume.ResumeShiftViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TrackingViewModel
+import org.onebusaway.vehicletracker.ui.tracking.TripEnder
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 import java.io.IOException
 import java.time.OffsetDateTime
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 class ViewModelsTest {
     private val dispatcher = StandardTestDispatcher()
@@ -684,7 +687,8 @@ class ViewModelsTest {
             val tracking = TrackingRepository()
             val geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1 }
             val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), clock = { 0L })
-            val vm = TrackingViewModel(tracking, tripState, tripRepository, FakeServiceController(), geometryStore)
+            val tripEnder = TripEnder(tripRepository, tripState, geometryStore, FakeServiceController())
+            val vm = TrackingViewModel(tracking, tripState, tripEnder)
             awaitCondition(description = "active trip loaded") { vm.uiState.value.activeTrip != null }
             block(vm, tracking, geometryStore)
         } finally {
@@ -732,6 +736,127 @@ class ViewModelsTest {
             awaitCondition(description = "trip ended locally") { ended }
 
             assertNull(geometryStore.stored)
+        }
+    }
+
+    // --- Resume prompt: a stored trip whose tracking service is not running ---
+
+    private class ResumeFixture(
+        val vm: ResumeShiftViewModel,
+        val server: MockWebServer,
+        /** Every time a repository asked for the API — taken before any request is sent, so nothing in flight is missed. */
+        val apiCalls: AtomicInteger,
+        val tripState: FakeTripStateStore,
+        val geometryStore: FakeTripGeometryStore,
+        val serviceController: FakeServiceController,
+    )
+
+    /**
+     * Builds a [ResumeShiftViewModel] on a stored T1 that started 2 h 5 min ago, whose server
+     * answers each end with the next of [endResponses], and runs [block] against it.
+     */
+    private fun withResumeShiftViewModel(
+        endResponses: List<MockResponse> = listOf(MockResponse().setBody("""{"status":"trip ended"}""")),
+        block: (ResumeFixture) -> Unit,
+    ) {
+        val server = MockWebServer().apply { start() }
+        endResponses.forEach(server::enqueue)
+        try {
+            val apiCalls = AtomicInteger()
+            val provider = TrackerApiProvider {
+                apiCalls.incrementAndGet()
+                ApiFactory { "jwt" }.create(server.url("/").toString())
+            }
+            val tripState = FakeTripStateStore().apply { tripState.value = t1Trip }
+            val geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1 }
+            val serviceController = FakeServiceController()
+            val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), clock = { 0L })
+            val tripEnder = TripEnder(tripRepository, tripState, geometryStore, serviceController)
+            val now = t1Trip.startedAtEpochSec + 2 * 3600 + 5 * 60
+            val vm = ResumeShiftViewModel(tripState, serviceController, tripEnder, clock = { now })
+            awaitCondition(description = "stored trip loaded") { vm.uiState.value.trip != null }
+            block(ResumeFixture(vm, server, apiCalls, tripState, geometryStore, serviceController))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test fun exposesVehicleRouteAndElapsed() = runTest(dispatcher) {
+        withResumeShiftViewModel { f ->
+            val state = f.vm.uiState.value
+            assertEquals("bus-1", state.trip?.vehicleId)
+            assertEquals("R1", state.trip?.routeId)
+            assertEquals(2 * 3600L + 5 * 60, state.startedAgoSec)
+        }
+    }
+
+    @Test fun resume_startsTheServiceAndMakesNoServerCall() = runTest(dispatcher) {
+        withResumeShiftViewModel { f ->
+            var resumed = false
+            f.vm.onResumeShift { resumed = true }
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(resumed)
+            assertEquals(1, f.serviceController.startCount)
+            // The trip is still open on the server, as on iOS: resuming neither starts it again
+            // (that would be a 409) nor ends it, and what the phone stored stays as it was.
+            assertEquals(0, f.apiCalls.get())
+            assertEquals(0, f.server.requestCount)
+            assertEquals(t1Trip, f.tripState.tripState.value)
+            assertEquals(TripFixtures.t1, f.geometryStore.stored)
+        }
+    }
+
+    @Test fun endShift_callsEndAndClearsTheTrip() = runTest(dispatcher) {
+        withResumeShiftViewModel { f ->
+            var ended = false
+            f.vm.onEndShift { ended = true }
+            awaitCondition(description = "shift ended") { ended }
+
+            val request = f.server.takeRequest()
+            assertEquals("/api/v1/trips/end", request.path)
+            val body = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
+            assertEquals(t1Trip.tripDbId.toString(), body["trip_id"]?.jsonPrimitive?.content)
+            assertNull(f.tripState.tripState.value)
+            assertNull(f.geometryStore.stored)
+            assertEquals(1, f.serviceController.stopCount)
+            assertEquals(0, f.serviceController.startCount)
+        }
+    }
+
+    @Test fun endShift_failure_surfacesTheSameErrorAsTracking() = runTest(dispatcher) {
+        val refused = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)
+        withResumeShiftViewModel(endResponses = listOf(refused)) { f ->
+            f.vm.onEndShift { fail("an unconfirmed end must not leave the prompt") }
+            awaitCondition(description = "end failure surfaced") { f.vm.uiState.value.endTripError }
+
+            assertTrue(!f.vm.uiState.value.ending)
+            assertEquals(t1Trip, f.tripState.tripState.value)
+            assertEquals(TripFixtures.t1, f.geometryStore.stored)
+
+            // And the same way out as the tracking screen offers: end it on this device only.
+            var ended = false
+            f.vm.onEndShiftLocally { ended = true }
+            awaitCondition(description = "shift ended locally") { ended }
+            assertTrue(!f.vm.uiState.value.endTripError)
+            assertNull(f.tripState.tripState.value)
+            assertNull(f.geometryStore.stored)
+            assertEquals(1, f.serviceController.stopCount)
+        }
+    }
+
+    @Test fun `a second end while one is in flight is ignored`() = runTest(dispatcher) {
+        withResumeShiftViewModel { f ->
+            var ends = 0
+            f.vm.onEndShift { ends++ }
+            // The buttons are disabled while an end is in flight, but a tap already on its way in
+            // must not turn into a second POST.
+            f.vm.onEndShift { ends++ }
+            awaitCondition(description = "shift ended") { ends > 0 }
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(1, ends)
+            assertEquals(1, f.apiCalls.get())
         }
     }
 }
