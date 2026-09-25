@@ -201,10 +201,12 @@ adb emu geo fix -122.1060 37.4269
 (Equivalently, use the emulator's Extended Controls → Location panel to load
 a route or set points interactively.)
 
-## The 6 checks
+## The checks
 
 Run checks 1-5 in order against a single trip; check 5 ends it. Check 6
-restarts the server without a schedule and needs no trip at all.
+restarts the server without a schedule and needs no trip at all. Check 2b needs
+a run scheduled around now, so it has its own setup and its own trips: run it on
+its own, before or after the rest.
 
 ### Check 1 — Login → vehicle → route → run → permissions → tracking starts
 
@@ -230,8 +232,10 @@ restarts the server without a schedule and needs no trip at all.
 
 **Expected outcome:** after the permission sequence completes and device
 location services are confirmed on, the app navigates to the Tracking screen
-showing a green "Tracking – Connected" status and `Route R1`, and a persistent
-foreground-service notification appears in the status bar.
+showing a green "Tracking – Connected" status, the adherence panel above
+`Route R1` — "Waiting for GPS…" until the first fix arrives, then its
+judgement of that fix (Check 2b) — and a persistent foreground-service
+notification in the status bar.
 
 There is no route-id or trip-id text box anywhere in this flow any more. The
 ids now come from the catalog, which is the point of Check 2.
@@ -266,6 +270,107 @@ box — and the feed would carry it.
 date the run list showed if the phone and the agency are on different sides of
 midnight. That is `ServiceDate.kt`'s existing behaviour for the report and is
 not something the picker changes.)
+
+### Check 2b — The adherence panel follows the schedule and the route
+
+The panel under the status banner judges every fix against the run's shape and
+schedule on the phone, by the server's own thresholds, and mirrors iOS Check 2.
+Against the stock fixture it is only interesting at 08:00 Pacific: at any other
+time `T1` is hours off its schedule and the panel correctly reads
+`Off schedule · N min late` in blue (or `… early` in red), because the server's
+window is 900 s early and 5400 s late.
+
+To see **On time**, serve a copy of the fixture with `T1` moved to start 15
+minutes from now. Do this between 03:00 and 23:30 Pacific: the service day rolls
+over at 03:00, and the times below do not wrap past midnight.
+
+```bash
+mkdir -p /tmp/vt-fixture && (cd /tmp/vt-fixture && unzip -o -q "$OLDPWD/rider/testdata/fixture.zip")
+read ST1 ST2 ST3 < <(python3 -c 'from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+t = datetime.now(ZoneInfo("America/Los_Angeles")).replace(second=0) + timedelta(minutes=15)
+print(*[(t + timedelta(minutes=m)).strftime("%H:%M:00") for m in (0, 5, 10)])')
+sed -i.bak -e "s/^T1,08:00:00,08:00:00,/T1,$ST1,$ST1,/" \
+           -e "s/^T1,08:05:00,08:05:00,/T1,$ST2,$ST2,/" \
+           -e "s/^T1,08:10:00,08:10:00,/T1,$ST3,$ST3,/" /tmp/vt-fixture/stop_times.txt
+(cd /tmp/vt-fixture && rm -f ../vt-fixture-now.zip && zip -q ../vt-fixture-now.zip *.txt)
+echo "T1 now runs $ST1 to $ST3 Pacific"
+```
+
+Restart the server from step 1 with `GTFS_STATIC_URL=/tmp/vt-fixture-now.zip`,
+then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
+
+1. Park the emulator on the first stop, and wait for a fix to land:
+
+   ```bash
+   adb emu geo fix -122.3300 47.6000
+   ```
+
+2. At `$ST1`, drive the route at its scheduled pace — ST1 to ST3 in ten
+   minutes, a fix every 2 s — with 50 s spent 150 m east of the line as a
+   deliberate detour:
+
+   ```bash
+   for i in $(seq 0 300); do
+     lat=$(awk -v i=$i 'BEGIN { printf "%.6f", 47.6 + 0.009 * i / 300 }')
+     lon=-122.3300; [ $i -ge 60 ] && [ $i -lt 85 ] && lon=-122.3280
+     adb emu geo fix $lon $lat
+     sleep 2
+   done
+   ```
+
+   `ios/VehicleTracker/gpx/fixture-t1.gpx` holds the same three stops, if you
+   would rather load them in the emulator's Extended Controls → Location.
+
+3. While the loop runs (it has passed ST2 by then), force-stop the app, stop the
+   server, and relaunch the app:
+
+   ```bash
+   adb shell am force-stop org.onebusaway.vehicletracker
+   kill $(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t)
+   adb shell am start -n org.onebusaway.vehicletracker/.MainActivity
+   ```
+
+   Then start the server again as in step 1.
+
+4. With the loop still running, delete the stored geometry to stand in for a
+   trip started by an older build, and relaunch:
+
+   ```bash
+   adb shell run-as org.onebusaway.vehicletracker rm files/active_trip_geometry.json
+   adb shell am force-stop org.onebusaway.vehicletracker
+   adb shell am start -n org.onebusaway.vehicletracker/.MainActivity
+   ```
+
+5. End the trip, start `T1` again, and end that one too, listing the app's
+   files while the second trip runs and after it ends:
+
+   ```bash
+   adb shell run-as org.onebusaway.vehicletracker ls files
+   ```
+
+**Expected outcome:**
+
+- **Parked at ST1 before `$ST1`:** the panel reads `N min early` in red — or
+  `Off schedule · 15 min early`, if the fix lands more than 900 s ahead, past
+  the server's window. Under it, `Next: Stop ST2` with ST2's time on the
+  agency's clock (`$ST2`, whatever zone the phone is set to) and the distance
+  to it.
+- **On the route:** `On time` in green. The distance to ST2 counts down every
+  location update (about 10 s).
+- **The detour:** within a location update, `Off route · 150 m from the route`
+  in grey. It flips back to `On time` once the fixes are back on the line.
+- **Past ST2:** the next stop becomes `Stop ST3` with `$ST3`.
+- **Relaunched with the server down:** the app reopens on the Tracking screen
+  with a red "No connection" banner. The panel still judges every fix, and the
+  distance to ST3 keeps counting down — the shape and schedule are on the phone,
+  not refetched. Once the server is back the banner turns green again. (The
+  "Location updates sent" counter starts again from 0 with the new process.)
+- **Relaunched without the stored geometry:** the panel reads `Schedule
+  unavailable`, and the "Location updates sent" counter keeps climbing:
+  reporting does not depend on it.
+- **Ending a trip:** `active_trip_geometry.json` is listed while the second
+  trip runs, and gone once it has ended.
 
 ### Check 3 — Network loss flips the status red, recovery flips it back green
 
@@ -323,6 +428,9 @@ persisted).
   vehicletracker` returns nothing.
 - The service is stopped: `adb shell dumpsys activity services
   LocationTrackingService` returns nothing.
+- The trip's geometry is gone: `adb shell run-as
+  org.onebusaway.vehicletracker ls files` no longer lists
+  `active_trip_geometry.json`.
 
 **Expected outcome, after the staleness window:** the server's
 `STALENESS_THRESHOLD` (default 5 minutes; `docker-compose.yml` sets it
