@@ -75,6 +75,29 @@
     <string name="tracking_end_trip_error_end_locally">End Locally</string>
     <string name="tracking_reauth_button">Log in</string>
 
+    <!-- Adherence panel: how the driver is keeping to the route and the schedule -->
+    <string name="tracking_adherence_on_time">On time</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d min late</item>
+        <item quantity="other">%1$d min late</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d min early</item>
+        <item quantity="other">%1$d min early</item>
+    </plurals>
+    <!-- Beyond the server's schedule window, then how far off it, e.g. "Off schedule · 20 min late". -->
+    <string name="tracking_adherence_off_schedule">Off schedule · %1$s</string>
+    <!-- How far from the route, e.g. "Off route · 120 m from the route". -->
+    <string name="tracking_adherence_off_route">Off route · %1$s from the route</string>
+    <string name="tracking_adherence_next_stop">Next: %1$s</string>
+    <!-- The next stop's scheduled time in the agency's zone, then the distance to it. -->
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">Waiting for GPS…</string>
+    <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
+    <string name="tracking_adherence_no_schedule">Schedule unavailable</string>
+
     <!-- Tracking notification -->
     <string name="tracking_notification_channel_name">Trip Tracking</string>
     <string name="tracking_notification_title">OBA Tracker is active</string>
