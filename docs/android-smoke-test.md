@@ -6,7 +6,8 @@ end. It complements the automated test suites (`make test` for the server,
 `./gradlew :app:testDebugUnitTest` for the app) — those check units of
 behavior in isolation; this checks that the whole system actually works
 together: login, the vehicle/route/run pickers, permissions, GPS capture,
-network loss, task removal, and trip lifecycle, as seen through both the app UI
+network loss, task removal, an interrupted shift, and trip lifecycle, as seen
+through both the app UI
 and the GTFS-RT feed.
 
 Run this before cutting an APK for a pilot deployment, and after any change
@@ -201,10 +202,12 @@ adb emu geo fix -122.1060 37.4269
 (Equivalently, use the emulator's Extended Controls → Location panel to load
 a route or set points interactively.)
 
-## The 6 checks
+## The checks
 
 Run checks 1-5 in order against a single trip; check 5 ends it. Check 6
-restarts the server without a schedule and needs no trip at all.
+restarts the server without a schedule and needs no trip at all. Check 2b needs
+a run scheduled around now, so it has its own setup and its own trips: run it on
+its own, before or after the rest.
 
 ### Check 1 — Login → vehicle → route → run → permissions → tracking starts
 
@@ -230,8 +233,10 @@ restarts the server without a schedule and needs no trip at all.
 
 **Expected outcome:** after the permission sequence completes and device
 location services are confirmed on, the app navigates to the Tracking screen
-showing a green "Tracking – Connected" status and `Route R1`, and a persistent
-foreground-service notification appears in the status bar.
+showing a green "Tracking – Connected" status, the adherence panel above
+`Route R1` — "Waiting for GPS…" until the first fix arrives, then its
+judgement of that fix (Check 2b) — and a persistent foreground-service
+notification in the status bar.
 
 There is no route-id or trip-id text box anywhere in this flow any more. The
 ids now come from the catalog, which is the point of Check 2.
@@ -266,6 +271,107 @@ box — and the feed would carry it.
 date the run list showed if the phone and the agency are on different sides of
 midnight. That is `ServiceDate.kt`'s existing behaviour for the report and is
 not something the picker changes.)
+
+### Check 2b — The adherence panel follows the schedule and the route
+
+The panel under the status banner judges every fix against the run's shape and
+schedule on the phone, by the server's own thresholds, and mirrors iOS Check 2.
+Against the stock fixture it is only interesting at 08:00 Pacific: at any other
+time `T1` is hours off its schedule and the panel correctly reads
+`Off schedule · N min late` in blue (or `… early` in red), because the server's
+window is 900 s early and 5400 s late.
+
+To see **On time**, serve a copy of the fixture with `T1` moved to start 15
+minutes from now. Do this between 03:00 and 23:30 Pacific: the service day rolls
+over at 03:00, and the times below do not wrap past midnight.
+
+```bash
+mkdir -p /tmp/vt-fixture && (cd /tmp/vt-fixture && unzip -o -q "$OLDPWD/rider/testdata/fixture.zip")
+read ST1 ST2 ST3 < <(python3 -c 'from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+t = datetime.now(ZoneInfo("America/Los_Angeles")).replace(second=0) + timedelta(minutes=15)
+print(*[(t + timedelta(minutes=m)).strftime("%H:%M:00") for m in (0, 5, 10)])')
+sed -i.bak -e "s/^T1,08:00:00,08:00:00,/T1,$ST1,$ST1,/" \
+           -e "s/^T1,08:05:00,08:05:00,/T1,$ST2,$ST2,/" \
+           -e "s/^T1,08:10:00,08:10:00,/T1,$ST3,$ST3,/" /tmp/vt-fixture/stop_times.txt
+(cd /tmp/vt-fixture && rm -f ../vt-fixture-now.zip && zip -q ../vt-fixture-now.zip *.txt)
+echo "T1 now runs $ST1 to $ST3 Pacific"
+```
+
+Restart the server from step 1 with `GTFS_STATIC_URL=/tmp/vt-fixture-now.zip`,
+then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
+
+1. Park the emulator on the first stop, and wait for a fix to land:
+
+   ```bash
+   adb emu geo fix -122.3300 47.6000
+   ```
+
+2. At `$ST1`, drive the route at its scheduled pace — ST1 to ST3 in ten
+   minutes, a fix every 2 s — with 50 s spent 150 m east of the line as a
+   deliberate detour:
+
+   ```bash
+   for i in $(seq 0 300); do
+     lat=$(awk -v i=$i 'BEGIN { printf "%.6f", 47.6 + 0.009 * i / 300 }')
+     lon=-122.3300; [ $i -ge 60 ] && [ $i -lt 85 ] && lon=-122.3280
+     adb emu geo fix $lon $lat
+     sleep 2
+   done
+   ```
+
+   `ios/VehicleTracker/gpx/fixture-t1.gpx` holds the same three stops, if you
+   would rather load them in the emulator's Extended Controls → Location.
+
+3. While the loop runs (it has passed ST2 by then), force-stop the app, stop the
+   server, and relaunch the app:
+
+   ```bash
+   adb shell am force-stop org.onebusaway.vehicletracker
+   kill $(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t)
+   adb shell am start -n org.onebusaway.vehicletracker/.MainActivity
+   ```
+
+   Then start the server again as in step 1.
+
+4. With the loop still running, delete the stored geometry to stand in for a
+   trip started by an older build, and relaunch:
+
+   ```bash
+   adb shell run-as org.onebusaway.vehicletracker rm files/active_trip_geometry.json
+   adb shell am force-stop org.onebusaway.vehicletracker
+   adb shell am start -n org.onebusaway.vehicletracker/.MainActivity
+   ```
+
+5. End the trip, start `T1` again, and end that one too, listing the app's
+   files while the second trip runs and after it ends:
+
+   ```bash
+   adb shell run-as org.onebusaway.vehicletracker ls files
+   ```
+
+**Expected outcome:**
+
+- **Parked at ST1 before `$ST1`:** the panel reads `N min early` in red — or
+  `Off schedule · 15 min early`, if the fix lands more than 900 s ahead, past
+  the server's window. Under it, `Next: Stop ST2` with ST2's time on the
+  agency's clock (`$ST2`, whatever zone the phone is set to) and the distance
+  to it.
+- **On the route:** `On time` in green. The distance to ST2 counts down every
+  location update (about 10 s).
+- **The detour:** within a location update, `Off route · 150 m from the route`
+  in grey. It flips back to `On time` once the fixes are back on the line.
+- **Past ST2:** the next stop becomes `Stop ST3` with `$ST3`.
+- **Relaunched with the server down:** the app reopens on the Tracking screen
+  with a red "No connection" banner. The panel still judges every fix, and the
+  distance to ST3 keeps counting down — the shape and schedule are on the phone,
+  not refetched. Once the server is back the banner turns green again. (The
+  "Location updates sent" counter starts again from 0 with the new process.)
+- **Relaunched without the stored geometry:** the panel reads `Schedule
+  unavailable`, and the "Location updates sent" counter keeps climbing:
+  reporting does not depend on it.
+- **Ending a trip:** `active_trip_geometry.json` is listed while the second
+  trip runs, and gone once it has ended.
 
 ### Check 3 — Network loss flips the status red, recovery flips it back green
 
@@ -307,7 +413,49 @@ resume climbing from wherever it left off, not "catch up".
 task removal (this is the point of running as a foreground service), and
 location fixes keep arriving at the server the whole time. Relaunching the
 app should rehydrate directly to the Tracking screen (active trip state is
-persisted).
+persisted), with **no** Resume Shift prompt: the service never stopped, so there
+is nothing to resume. A prompt here is a bug — it would interrupt every healthy
+shift whose driver reopens the app.
+
+### Check 4b — A force-stopped trip asks before resuming
+
+Unlike swiping the app away, a force-stop kills the service too, and Android
+does not restart a force-stopped app's services. The trip is still stored on
+the phone and still open on the server, but nothing is reporting it, so the app
+asks the driver instead of carrying on as if it were.
+
+1. Force-stop the app and confirm the service is gone:
+
+   ```bash
+   adb shell am force-stop org.onebusaway.vehicletracker
+   adb shell dumpsys activity services LocationTrackingService   # should be empty
+   ```
+
+2. Relaunch the app from the launcher.
+
+**Expected outcome:** a spinner for about two seconds — the app gives a service
+that the system is restarting that long to announce itself — then **Resume
+Shift?**: "An incomplete shift with Vehicle bus-1 was detected. The app was
+closed while tracking was active.", the route, how long ago the trip started,
+and a blue **Resume** and a red **End Shift** button. The service stays stopped
+while the prompt is up.
+
+3. Tap **Resume**.
+
+**Expected outcome:** the Tracking screen, with the trip duration still counted
+from the original start and the adherence panel back. Location reports reach the
+server again, and there is **no** second `POST /api/v1/trips/start`: the trip
+was never ended on the server, so resuming does not start it again (a second
+start would be refused with a 409). Only the start from Check 1 is listed:
+
+```bash
+grep -o '"path":"/api/v1/trips/[a-z]*"' /tmp/vt-server.log
+# "path":"/api/v1/trips/start"
+```
+
+**End Shift** on the same prompt is the other way out. It takes the same path as
+**End Trip** in Check 5, so Check 5 covers it: to run it from here instead,
+force-stop and relaunch again and tap **End Shift**.
 
 ### Check 5 — Ending the trip stops everything and the vehicle drops from the feed
 
@@ -315,7 +463,9 @@ persisted).
 2. Confirm in the dialog ("End this trip? This will stop location tracking
    and mark the trip as complete.").
 
-**Expected outcome, immediately:**
+**Expected outcome, immediately** (the same from **End Shift** on the resume
+prompt):
+- `POST /api/v1/trips/end` in the server log, answered `200`.
 - The app navigates back to the start of the picker (the session token is
   still fresh, so there's no need to log in again) — the route list, since a
   driver with one assigned vehicle skips the vehicle list.
@@ -323,6 +473,9 @@ persisted).
   vehicletracker` returns nothing.
 - The service is stopped: `adb shell dumpsys activity services
   LocationTrackingService` returns nothing.
+- The trip's geometry is gone: `adb shell run-as
+  org.onebusaway.vehicletracker ls files` no longer lists
+  `active_trip_geometry.json`.
 
 **Expected outcome, after the staleness window:** the server's
 `STALENESS_THRESHOLD` (default 5 minutes; `docker-compose.yml` sets it

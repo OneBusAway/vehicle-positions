@@ -102,6 +102,16 @@ fun RunsScreenContent(
                         text = stringResource(runsErrorMessageRes(state.error)),
                         color = MaterialTheme.colorScheme.error,
                     )
+                    // The list itself is out of date, so reloading it is what helps, not the same tap again.
+                    if (state.error == TripError.TRIP_NOT_ACTIVE) {
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = onRetry,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                        ) {
+                            Text(stringResource(R.string.runs_reload_button))
+                        }
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 if (state.page.runs.isEmpty()) {
@@ -206,5 +216,7 @@ private fun runsErrorMessageRes(error: TripError): Int = when (error) {
     TripError.NOT_ASSIGNED -> R.string.runs_error_not_assigned
     TripError.TRIP_ACTIVE -> R.string.runs_error_trip_active
     TripError.NETWORK -> R.string.runs_error_network
+    TripError.NO_GEOMETRY -> R.string.runs_error_no_geometry
+    TripError.TRIP_NOT_ACTIVE -> R.string.runs_error_trip_not_active
     TripError.OTHER -> R.string.runs_error_other
 }

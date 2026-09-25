@@ -33,22 +33,27 @@ import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
+import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.loadFor
+import org.onebusaway.vehicletracker.engine.AdherenceTracker
 import javax.inject.Inject
 
 private const val TAG = "LocationTrackingService"
 private const val LOCATION_INTERVAL_MS = 10_000L
 
 /**
- * Foreground service that owns the fused-location request and hands each fix to [TripReporter].
- * Framework-glue shell only — the send loop / status machine lives in [TripReporter] (Task 6),
- * already covered by JVM tests; nothing here is separately unit tested.
+ * Foreground service that owns the fused-location request and hands each fix to [TripReporter]
+ * and [AdherenceTracker]. Framework-glue shell only — the send loop / status machine lives in
+ * [TripReporter] (Task 6) and the per-fix judgement in [AdherenceTracker], both covered by JVM
+ * tests; nothing here is separately unit tested.
  */
 @AndroidEntryPoint
 class LocationTrackingService : Service() {
 
     @Inject lateinit var tripReporter: TripReporter
     @Inject lateinit var tripStateStore: TripStateStore
+    @Inject lateinit var tripGeometryStore: TripGeometryStore
     @Inject lateinit var trackingRepository: TrackingRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,6 +62,7 @@ class LocationTrackingService : Service() {
     private lateinit var connectivityManager: ConnectivityManager
 
     private var activeTrip: ActiveTrip? = null
+    private var adherenceTracker: AdherenceTracker? = null
     private var initialized = false
     private var locationUpdatesActive = false
 
@@ -72,6 +78,11 @@ class LocationTrackingService : Service() {
                 accuracy = if (loc.hasAccuracy()) loc.accuracy.toDouble() else null,
                 timeEpochSec = loc.time / 1000,
             )
+            // Judged here, beside the report rather than inside it: the reporter is about reaching
+            // the server, and adherence holds with no network at all.
+            adherenceTracker?.onFix(fix)?.let { adherence ->
+                trackingRepository.update { it.copy(adherence = adherence) }
+            }
             scope.launch { tripReporter.report(trip, fix) }
         }
 
@@ -121,8 +132,14 @@ class LocationTrackingService : Service() {
                 return START_NOT_STICKY
             }
             activeTrip = trip
+            // Read off the phone rather than refetched, so adherence works offline and picks up
+            // again after a relaunch, as on iOS.
+            val geometry = runBlocking { tripGeometryStore.loadFor(trip) }
+            adherenceTracker = AdherenceTracker(geometry)
             initialized = true
-            trackingRepository.update { it.copy(active = true, tripStartedAtEpochSec = trip.startedAtEpochSec) }
+            trackingRepository.update {
+                it.copy(active = true, tripStartedAtEpochSec = trip.startedAtEpochSec, geometry = geometry)
+            }
             observeTrackingState()
         }
 

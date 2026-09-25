@@ -8,11 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.ui.AppNav
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
@@ -22,7 +19,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var serviceController: ServiceController
-    @Inject lateinit var tripStateStore: TripStateStore
+    @Inject lateinit var trackingRepository: TrackingRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,12 +38,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Covers both the initial cold-start-into-Tracking case and the degraded restart path
-        // (SecurityException in the service): re-request tracking whenever a trip is active.
-        lifecycleScope.launch {
-            if (tripStateStore.activeTrip.first() != null) {
-                serviceController.startTracking()
-            }
+        // Re-arms a service that is running without location updates: the degraded restart
+        // path (SecurityException in the service). A stored trip with no service running is not
+        // started here — that shift was interrupted, and the resume prompt asks the driver.
+        if (trackingRepository.state.value.active) {
+            serviceController.startTracking()
         }
     }
 }

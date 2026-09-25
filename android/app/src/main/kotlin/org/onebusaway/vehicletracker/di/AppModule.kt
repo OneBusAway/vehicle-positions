@@ -16,7 +16,9 @@ import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.data.DataStoreSessionStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
+import org.onebusaway.vehicletracker.data.FileTripGeometryStore
 import org.onebusaway.vehicletracker.data.SessionStore
+import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
 import org.onebusaway.vehicletracker.data.tripStateDataStore
@@ -26,6 +28,8 @@ import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
+import java.io.File
+import java.time.Duration
 import java.time.ZoneId
 import javax.inject.Qualifier
 import javax.inject.Singleton
@@ -34,6 +38,11 @@ import javax.inject.Singleton
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class EpochSecondsClock
+
+/** Qualifies how long launch waits for a restarting tracking service to announce itself. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ServiceAnnounceGrace
 
 /**
  * Keeps a `@Volatile` cache of the current auth token + server URL in sync with [SessionStore],
@@ -123,6 +132,11 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideTripGeometryStore(@ApplicationContext context: Context): TripGeometryStore =
+        FileTripGeometryStore(File(context.filesDir, "active_trip_geometry.json"))
+
+    @Provides
+    @Singleton
     fun provideVehiclePrefsStore(@ApplicationContext context: Context): VehiclePrefsStore =
         DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore)
 
@@ -152,6 +166,16 @@ object AppModule {
 
     @Provides
     fun provideZoneId(): ZoneId = ZoneId.systemDefault()
+
+    /**
+     * How long launch lets a tracking service the system is restarting mark itself active before
+     * a stored trip is taken as interrupted. Without it, a healthy shift would get the resume
+     * prompt whenever the app opened a moment ahead of the service. Only a trip with no service
+     * waits it out.
+     */
+    @Provides
+    @ServiceAnnounceGrace
+    fun provideServiceAnnounceGrace(): Duration = Duration.ofSeconds(2)
 
     @Provides
     @Singleton

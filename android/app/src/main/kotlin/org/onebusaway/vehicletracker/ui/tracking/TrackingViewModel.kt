@@ -9,14 +9,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
-import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
-import org.onebusaway.vehicletracker.service.ServiceController
 import javax.inject.Inject
 
 data class TrackingUiState(
@@ -28,46 +25,29 @@ data class TrackingUiState(
 
 @HiltViewModel
 class TrackingViewModel @Inject constructor(
-    private val trackingRepository: TrackingRepository,
-    private val tripStateStore: TripStateStore,
-    private val tripRepository: TripRepository,
-    private val serviceController: ServiceController,
+    trackingRepository: TrackingRepository,
+    tripStateStore: TripStateStore,
+    private val tripEnder: TripEnder,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TrackingUiState())
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
     init {
-        combine(trackingRepository.state, tripStateStore.activeTrip) { tracking, trip -> tracking to trip }
-            .onEach { (tracking, trip) -> _uiState.update { it.copy(tracking = tracking, activeTrip = trip) } }
+        combine(trackingRepository.state, tripStateStore.activeTrip, tripEnder.state) { tracking, trip, end ->
+            TrackingUiState(tracking = tracking, activeTrip = trip, ending = end.ending, endTripError = end.failed)
+        }
+            .onEach { _uiState.value = it }
             .launchIn(viewModelScope)
     }
 
     fun onEndTrip(onEnded: () -> Unit) {
         val trip = _uiState.value.activeTrip ?: return
-        _uiState.update { it.copy(ending = true, endTripError = false) }
-        viewModelScope.launch {
-            val result = tripRepository.end(trip.tripDbId)
-            result.fold(
-                onSuccess = {
-                    serviceController.stopTracking()
-                    _uiState.update { it.copy(ending = false, endTripError = false) }
-                    onEnded()
-                },
-                onFailure = {
-                    _uiState.update { it.copy(ending = false, endTripError = true) }
-                },
-            )
-        }
+        viewModelScope.launch { tripEnder.end(trip, onEnded) }
     }
 
     fun onEndTripLocally(onEnded: () -> Unit) {
-        viewModelScope.launch {
-            tripStateStore.clearActiveTrip()
-            serviceController.stopTracking()
-            _uiState.update { it.copy(ending = false, endTripError = false) }
-            onEnded()
-        }
+        viewModelScope.launch { tripEnder.endLocally(onEnded) }
     }
 
-    fun dismissEndTripError() = _uiState.update { it.copy(endTripError = false) }
+    fun dismissEndTripError() = tripEnder.dismissError()
 }
