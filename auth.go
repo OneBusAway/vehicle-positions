@@ -176,13 +176,23 @@ func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret 
 
 // sessionLifetime is how long the admin UI's browser session JWT stays valid.
 // The browser has no refresh flow — the cookie is the whole session — so it
-// keeps the 24 hours it has always had rather than following the much shorter
-// API access token TTL. It also bounds how long a revocation row has to be
-// honoured (see revoked_tokens.expires_at).
+// keeps the 24 hours it has always had rather than following the API access
+// token TTL. It also bounds how long a revocation row has to be honoured (see
+// revoked_tokens.expires_at).
 const sessionLifetime = 24 * time.Hour
 
 const (
-	defaultAccessTokenTTL  = 15 * time.Minute
+	// defaultAccessTokenTTL stays at the 24 hours main already issued. The
+	// refresh endpoint ships in this change, but the Android app cannot use
+	// it yet: TripReporter treats a 401 as AUTH_EXPIRED and stops reporting
+	// until the driver signs in again, so a short default would end every
+	// driver's location reports a few minutes into a shift. Deployments that
+	// have a client able to refresh can set ACCESS_TOKEN_TTL=15m today.
+	//
+	// TODO: drop this to 15 * time.Minute in the PR that teaches the Android
+	// client to refresh on 401 — that is the change that makes a short
+	// access token safe to default to.
+	defaultAccessTokenTTL  = 24 * time.Hour
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
 )
 

@@ -494,21 +494,25 @@ func TestAccessTokenTTL_Boundary(t *testing.T) {
 	}
 }
 
+// TestGenerateJWT_UsesGivenTTL pins that the lifetime comes from the argument
+// rather than a constant inside generateJWT. The two defaults happen to agree
+// today — the access TTL stays at 24h until the Android client can refresh —
+// so the test uses TTLs that differ, which is the property that has to hold
+// when ACCESS_TOKEN_TTL is lowered.
 func TestGenerateJWT_UsesGivenTTL(t *testing.T) {
 	user := &User{ID: 1, Email: "driver@test.com", Role: "driver"}
 
-	access, err := generateJWT(user, testSecret, defaultAccessTokenTTL)
+	short, err := generateJWT(user, testSecret, 15*time.Minute)
 	require.NoError(t, err)
-	session, err := generateJWT(user, testSecret, sessionLifetime)
+	long, err := generateJWT(user, testSecret, sessionLifetime)
 	require.NoError(t, err)
 
-	accessExp := expiryOf(t, access)
-	sessionExp := expiryOf(t, session)
+	shortExp := expiryOf(t, short)
+	longExp := expiryOf(t, long)
 
-	assert.WithinDuration(t, time.Now().Add(defaultAccessTokenTTL), accessExp, time.Minute)
-	assert.WithinDuration(t, time.Now().Add(sessionLifetime), sessionExp, time.Minute)
-	assert.True(t, sessionExp.After(accessExp),
-		"the admin UI session must outlive an API access token, or the browser gets logged out every 15 minutes")
+	assert.WithinDuration(t, time.Now().Add(15*time.Minute), shortExp, time.Minute)
+	assert.WithinDuration(t, time.Now().Add(sessionLifetime), longExp, time.Minute)
+	assert.True(t, longExp.After(shortExp), "a longer TTL must produce a later expiry")
 }
 
 // expiryOf returns a signed token's exp claim.
