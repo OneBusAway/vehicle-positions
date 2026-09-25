@@ -42,6 +42,7 @@ import org.onebusaway.vehicletracker.ui.tracking.TripEnder
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 import java.io.IOException
+import java.time.Duration
 import java.time.OffsetDateTime
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -109,6 +110,83 @@ class ViewModelsTest {
             assertEquals("https://saved.example.com", state.serverUrl)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    // --- Launch: where the app lands, and whether a stored trip is still being reported ---
+
+    private val launchNow = 100_000L
+    private val freshSession = Session("https://tracker.example.com", "jwt", launchNow - 3600)
+
+    /** The production value. The dispatcher's clock is virtual, so no test here waits it out. */
+    private val serviceAnnounceGrace = Duration.ofSeconds(2)
+
+    private fun appNavViewModel(
+        trip: ActiveTrip? = null,
+        session: Session = freshSession,
+        tracking: TrackingRepository = TrackingRepository(),
+    ) = AppNavViewModel(
+        FakeSessionStore().apply { state.value = session },
+        FakeTripStateStore().apply { tripState.value = trip },
+        tracking,
+        clock = { launchNow },
+        serviceAnnounceGrace = serviceAnnounceGrace,
+    )
+
+    @Test fun noTrip_andFreshToken_goesToVehicles() = runTest(dispatcher) {
+        val vm = appNavViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("vehicles", vm.startDestination.value)
+    }
+
+    @Test fun noTrip_andStaleToken_goesToLogin() = runTest(dispatcher) {
+        val vm = appNavViewModel(session = freshSession.copy(issuedAtEpochSec = launchNow - 25 * 3600))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("login", vm.startDestination.value)
+    }
+
+    @Test fun storedTrip_withServiceActive_goesStraightToTracking() = runTest(dispatcher) {
+        // The shift is still reporting — the task was swiped away, or START_STICKY restarted the
+        // service. Prompting here would interrupt a healthy shift every time the app is opened.
+        val tracking = TrackingRepository().apply { update { it.copy(active = true) } }
+        val vm = appNavViewModel(trip = t1Trip, tracking = tracking)
+        // No virtual time passes: a running service is taken at its word, with no wait.
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("tracking", vm.startDestination.value)
+    }
+
+    @Test fun storedTrip_withNoService_goesToResume() = runTest(dispatcher) {
+        val vm = appNavViewModel(trip = t1Trip)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("resume", vm.startDestination.value)
+    }
+
+    @Test fun storedTrip_serviceAnnouncesLate_goesToTracking() = runTest(dispatcher) {
+        val tracking = TrackingRepository()
+        val vm = appNavViewModel(trip = t1Trip, tracking = tracking)
+        dispatcher.scheduler.advanceTimeBy(serviceAnnounceGrace.toMillis() - 1)
+        dispatcher.scheduler.runCurrent()
+        assertNull("still waiting on the service", vm.startDestination.value)
+
+        tracking.update { it.copy(active = true) }
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("tracking", vm.startDestination.value)
+    }
+
+    @Test fun storedTrip_serviceNeverAnnounces_goesToResume() = runTest(dispatcher) {
+        val vm = appNavViewModel(trip = t1Trip)
+        dispatcher.scheduler.advanceTimeBy(serviceAnnounceGrace.toMillis() - 1)
+        dispatcher.scheduler.runCurrent()
+        assertNull("the prompt waits out the whole grace window", vm.startDestination.value)
+
+        dispatcher.scheduler.advanceTimeBy(1)
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("resume", vm.startDestination.value)
     }
 
     // --- Vehicle picker: search, favorites and recents (#36) ---

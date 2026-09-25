@@ -24,14 +24,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.onebusaway.vehicletracker.data.SessionStore
+import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
+import org.onebusaway.vehicletracker.di.ServiceAnnounceGrace
 import org.onebusaway.vehicletracker.ui.login.LoginScreen
+import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreen
 import org.onebusaway.vehicletracker.ui.routes.RoutesScreen
 import org.onebusaway.vehicletracker.ui.runs.RunsScreen
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreen
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleScreen
+import java.time.Duration
 import javax.inject.Inject
 
 private const val ROUTE_LOGIN = "login"
@@ -43,6 +48,7 @@ private const val ROUTE_VEHICLES = "vehicles"
 private const val ROUTE_ROUTES = "trip/{vehicleId}"
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}"
 private const val ROUTE_TRACKING = "tracking"
+private const val ROUTE_RESUME = "resume"
 // Not private: RunsViewModel reads both out of its SavedStateHandle, and the names have to
 // be the ones the nav graph wrote.
 internal const val ARG_VEHICLE_ID = "vehicleId"
@@ -64,7 +70,9 @@ private fun NavBackStackEntry.pathArg(name: String): String = arguments?.getStri
 class AppNavViewModel @Inject constructor(
     private val sessionStore: SessionStore,
     private val tripStateStore: TripStateStore,
+    private val trackingRepository: TrackingRepository,
     @param:EpochSecondsClock private val clock: () -> Long,
+    @param:ServiceAnnounceGrace private val serviceAnnounceGrace: Duration,
 ) : ViewModel() {
     private val _startDestination = MutableStateFlow<String?>(null)
     val startDestination: StateFlow<String?> = _startDestination.asStateFlow()
@@ -74,12 +82,26 @@ class AppNavViewModel @Inject constructor(
             val session = sessionStore.session.first()
             val activeTrip = tripStateStore.activeTrip.first()
             _startDestination.value = when {
-                activeTrip != null -> ROUTE_TRACKING
+                activeTrip != null && serviceIsRunning() -> ROUTE_TRACKING
+                activeTrip != null -> ROUTE_RESUME
                 session.hasFreshToken(clock()) -> ROUTE_VEHICLES
                 else -> ROUTE_LOGIN
             }
         }
     }
+
+    /**
+     * Read off [TrackingRepository] rather than asked of the system: the service runs in this
+     * process and marks the repository active when it starts, so a process with no service in it
+     * reads inactive. That tells a trip still reporting in the background — task swiped away, or
+     * restarted by `START_STICKY` — from one that was interrupted by a force-stop, crash or reboot.
+     *
+     * The app can open just as the system restarts the service, before its `onStartCommand` has
+     * run, so the service gets [serviceAnnounceGrace] to show up before the trip counts as
+     * interrupted.
+     */
+    private suspend fun serviceIsRunning(): Boolean =
+        withTimeoutOrNull(serviceAnnounceGrace.toMillis()) { trackingRepository.state.first { it.active } } != null
 }
 
 @Composable
@@ -140,6 +162,20 @@ fun AppNav(navViewModel: AppNavViewModel = hiltViewModel()) {
             RunsScreen(
                 onTripStarted = {
                     navController.navigate(ROUTE_TRACKING) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(ROUTE_RESUME) {
+            ResumeShiftScreen(
+                onResumed = {
+                    navController.navigate(ROUTE_TRACKING) {
+                        popUpTo(ROUTE_RESUME) { inclusive = true }
+                    }
+                },
+                onEnded = {
+                    navController.navigate(ROUTE_VEHICLES) {
                         popUpTo(0) { inclusive = true }
                     }
                 },
