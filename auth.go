@@ -69,9 +69,24 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// LoginResponse is returned on a successful login.
+// LoginResponse is returned by a successful login and by the refresh
+// endpoint, so a client can parse both with one model.
+//
+// Token repeats AccessToken verbatim. It is the field the original
+// single-token response returned and the field every current client reads:
+// the Android app declares it non-nullable (`LoginResponse(val token:
+// String)`), so dropping it would not degrade to an empty string, it would
+// raise MissingFieldException on the next login. It is deprecated, not
+// supported — new clients should read access_token and refresh before
+// expires_in elapses.
+//
+// TODO: remove the deprecated "token" alias once the Android app and the
+// simulator read access_token (target: the Milestone 3 release).
 type LoginResponse struct {
-	Token string `json:"token"`
+	Token        string `json:"token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
 // UserFetcher is the store interface needed by the login handler.
@@ -83,7 +98,7 @@ type UserFetcher interface {
 // tests that don't exercise rate limiting); trustProxy controls which IP
 // clientIP() reports to the limiter. When present, the rate-limit check runs
 // before the store is touched.
-func handleLogin(fetcher UserFetcher, secret []byte, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
+func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret []byte, ttls tokenTTLs, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
 
@@ -137,20 +152,70 @@ func handleLogin(fetcher UserFetcher, secret []byte, limiter *LoginRateLimiter, 
 			limiter.ResetEmail(req.Email)
 		}
 
-		tokenStr, err := generateJWT(user, secret)
+		accessToken, err := generateJWT(user, secret, ttls.access)
 		if err != nil {
 			slog.Error("token generation failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
-		writeJSON(w, http.StatusOK, LoginResponse{Token: tokenStr})
+		// A login that returned an access token but no refresh token would
+		// leave the client with a credential it cannot renew, and it would
+		// find that out only once the access token expired. Fail the login
+		// instead.
+		refreshToken, err := issueRefreshToken(r.Context(), refreshTokens, user.ID, ttls.refresh)
+		if err != nil {
+			slog.Error("login: failed to issue refresh token", "sub", user.ID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, newLoginResponse(accessToken, refreshToken, ttls.access))
 	}
 }
 
-// tokenLifetime is how long an issued session JWT stays valid. It also bounds
-// how long a revocation row has to be honoured (see revoked_tokens.expires_at).
-const tokenLifetime = 24 * time.Hour
+// sessionLifetime is how long the admin UI's browser session JWT stays valid.
+// The browser has no refresh flow — the cookie is the whole session — so it
+// keeps the 24 hours it has always had rather than following the API access
+// token TTL. It also bounds how long a revocation row has to be honoured (see
+// revoked_tokens.expires_at).
+const sessionLifetime = 24 * time.Hour
+
+const (
+	// defaultAccessTokenTTL stays at the 24 hours main already issued. The
+	// refresh endpoint ships in this change, but the Android app cannot use
+	// it yet: TripReporter treats a 401 as AUTH_EXPIRED and stops reporting
+	// until the driver signs in again, so a short default would end every
+	// driver's location reports a few minutes into a shift. Deployments that
+	// have a client able to refresh can set ACCESS_TOKEN_TTL=15m today.
+	//
+	// TODO: drop this to 15 * time.Minute in the PR that teaches the Android
+	// client to refresh on 401 — that is the change that makes a short
+	// access token safe to default to.
+	defaultAccessTokenTTL  = 24 * time.Hour
+	defaultRefreshTokenTTL = 7 * 24 * time.Hour
+)
+
+// tokenTTLs carries the two configurable lifetimes together. Passing one
+// value rather than two positional durations makes them impossible to swap at
+// a call site.
+type tokenTTLs struct {
+	access  time.Duration
+	refresh time.Duration
+}
+
+// validateTokenTTLs rejects configurations that cannot work: a non-positive
+// access TTL issues tokens that are already expired, and a refresh TTL no
+// longer than the access TTL leaves nothing to refresh with.
+func validateTokenTTLs(ttls tokenTTLs) error {
+	if ttls.access <= 0 {
+		return fmt.Errorf("ACCESS_TOKEN_TTL must be positive, got %s", ttls.access)
+	}
+	if ttls.refresh <= ttls.access {
+		return fmt.Errorf("REFRESH_TOKEN_TTL (%s) must be longer than ACCESS_TOKEN_TTL (%s)", ttls.refresh, ttls.access)
+	}
+	return nil
+}
 
 // newJTI returns a random 128-bit token identifier, hex-encoded. It must come
 // from crypto/rand rather than math/rand or a counter: a guessable jti would
@@ -163,10 +228,13 @@ func newJTI() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// generateJWT creates a signed JWT valid for tokenLifetime. It is the only
-// path that issues session tokens — both the JSON API login and the admin
-// UI's form login call it — so every token carries a jti and can be revoked.
-func generateJWT(user *User, secret []byte) (string, error) {
+// generateJWT creates a signed JWT valid for ttl. It is the only path that
+// issues session tokens — the JSON API login, the refresh endpoint, and the
+// admin UI's form login all call it — so every token carries a jti and can be
+// revoked. The TTL is a parameter because those callers no longer agree on
+// one: API access tokens are short and renewable, the admin UI's cookie
+// session is not (see sessionLifetime).
+func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
 	now := time.Now()
 
 	jti, err := newJTI()
@@ -179,7 +247,7 @@ func generateJWT(user *User, secret []byte) (string, error) {
 		"email": user.Email,
 		"role":  user.Role,
 		"jti":   jti,
-		"exp":   now.Add(tokenLifetime).Unix(),
+		"exp":   now.Add(ttl).Unix(),
 		"iat":   now.Unix(),
 		"iss":   "vehicle-positions-api",
 	}
@@ -260,10 +328,10 @@ func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecke
 		// existed carry no identifier to revoke, so they are accepted rather
 		// than logging every existing session out on deploy. They are also
 		// permanently unrevokable, which is why this is a warning — every
-		// token issued from here on has a jti and tokens live tokenLifetime,
+		// token issued from here on has a jti and tokens live sessionLifetime,
 		// so this should stop appearing within a day of deploying.
 		// TODO: drop this shim and reject tokens without a jti once all
-		// pre-revocation tokens have expired (tokenLifetime after deploy).
+		// pre-revocation tokens have expired (sessionLifetime after deploy).
 		// generateRiderJWT issues no jti, so a rider token reaching here is
 		// the normal case rather than a leftover — warning per request would
 		// bury the staff signal under the rider API's upload volume. Rider
@@ -367,29 +435,25 @@ func validUserRole(role string) bool { return slices.Contains(staffRoles, role) 
 // users admin page.
 func validUserRoleFilter(role string) bool { return role == "" || validUserRole(role) }
 
-// handleLogout revokes the caller's own token, ending the session server-side
-// rather than relying on the client to discard it. It must be wrapped in
-// requireAuth, which puts the validated claims on the context.
+// handleLogout revokes the caller's own token and deletes their refresh
+// tokens, ending the session server-side rather than relying on the client to
+// discard it. It must be wrapped in requireAuth, which puts the validated
+// claims on the context.
 //
 // Every user may log themselves out, so this is authenticated but not
 // admin-gated. Because the admin UI's vp_session cookie carries the same JWT,
 // logging out through the API also ends that browser session.
-func handleLogout(revoker TokenRevoker) http.HandlerFunc {
+//
+// Refresh tokens are not per-device, so logging out on one device invalidates
+// refresh on all of them. That is the safe direction — the alternative is a
+// logout the client can undo by refreshing — and per-device sessions would
+// need a device identifier on refresh_tokens, which is a follow-up.
+func handleLogout(revoker TokenRevoker, refreshTokens RefreshTokenDeleter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
 		if !ok {
 			slog.Warn("logout: claims missing from context")
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-			return
-		}
-
-		jti, _ := claims["jti"].(string)
-		if jti == "" {
-			// A pre-revocation token (see checkRevoked) has nothing to record.
-			// Report the same 204 so old and new clients see one contract; the
-			// warning marks a session that outlives its logout.
-			slog.Warn("logout: token has no jti, nothing to revoke", "sub", claims["sub"])
-			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
@@ -405,6 +469,28 @@ func handleLogout(revoker TokenRevoker) http.HandlerFunc {
 		if err != nil {
 			slog.Warn("logout: sub claim is not a user ID", "sub", sub, "error", err)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			return
+		}
+
+		// Refresh tokens go first. If this succeeds and the revocation below
+		// fails, the caller keeps a working access token until it expires but
+		// cannot mint another; the reverse order would leave a revoked access
+		// token that a surviving refresh token trades straight back in for a
+		// new one, which is a logout that did not log anyone out.
+		if err := refreshTokens.DeleteRefreshTokensForUser(r.Context(), userID); err != nil {
+			slog.Error("logout: failed to delete refresh tokens", "sub", sub, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			return
+		}
+
+		jti, _ := claims["jti"].(string)
+		if jti == "" {
+			// A pre-revocation token (see checkRevoked) has nothing to record.
+			// Report the same 204 so old and new clients see one contract; the
+			// warning marks a session that outlives its logout. The refresh
+			// tokens above are gone either way.
+			slog.Warn("logout: token has no jti, nothing to revoke", "sub", sub)
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 

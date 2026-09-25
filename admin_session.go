@@ -31,7 +31,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trus
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(tokenLifetime.Seconds()),
+		MaxAge:   int(sessionLifetime.Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   requestIsSecure(r, trustProxy),

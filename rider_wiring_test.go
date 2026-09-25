@@ -107,12 +107,12 @@ func TestNewRiderRuntime_EndsStaleRidesAndSharesTheIndex(t *testing.T) {
 }
 
 func TestRiderRoutes_NotRegisteredWhenDisabled(t *testing.T) {
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/v1/rider/register", nil))
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	adminTok, _ := generateJWT(&User{ID: 1, Email: "a@test.com", Role: "admin"}, testSecret)
+	adminTok, _ := generateJWT(&User{ID: 1, Email: "a@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 	req := httptest.NewRequest("GET", "/api/v1/admin/rider/status", nil)
 	req.Header.Set("Authorization", "Bearer "+adminTok)
 	w = httptest.NewRecorder()
@@ -125,10 +125,10 @@ func TestRiderRoutes_RoleIsolation(t *testing.T) {
 	env := newRiderTestEnv(t)
 	tracker := NewTracker(time.Minute)
 	defer tracker.Stop()
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, env.svc, nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, false, false, env.svc, nil)
 	_, riderTok := env.register(t)
-	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret)
-	adminTok, _ := generateJWT(&User{ID: 2, Email: "a@test.com", Role: "admin"}, testSecret)
+	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
+	adminTok, _ := generateJWT(&User{ID: 2, Email: "a@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 
 	call := func(method, path, tok string) int {
 		req := httptest.NewRequest(method, path, nil)

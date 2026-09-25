@@ -64,7 +64,7 @@ func TestRequireAdminPage(t *testing.T) {
 
 func cookieFor(t *testing.T, role string) *http.Cookie {
 	t.Helper()
-	tok, err := generateJWT(&User{ID: 9, Email: role + "@test.com", Role: role, Active: true}, testSecret)
+	tok, err := generateJWT(&User{ID: 9, Email: role + "@test.com", Role: role, Active: true}, testSecret, sessionLifetime)
 	require.NoError(t, err)
 	return &http.Cookie{Name: sessionCookieName, Value: tok}
 }

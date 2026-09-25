@@ -64,21 +64,26 @@ type appStore interface {
 	APIKeyManager
 	TokenRevoker
 	TokenChecker
+	RefreshTokenCreator
+	RefreshTokenGetter
+	RefreshTokenRotator
+	RefreshTokenDeleter
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
 	adminMiddleware := requireAdmin()
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
-	mux.Handle("POST /api/v1/auth/login", handleLogin(store, jwtSecret, loginLimiter, trustProxy))
-	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store)))
+	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, jwtSecret, ttls, loginLimiter, trustProxy))
+	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, ttls, loginLimiter, trustProxy))
+	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store, store)))
 	feed := handleGetFeed(tracker, riderEstimates)
 	if feedAuthEnabled {
 		mux.Handle("GET /gtfs-rt/vehicle-positions", requireAPIKey(store, trustProxy)(feed))
@@ -109,7 +114,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))
 	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleGetUser(store))))
 	mux.Handle("POST /api/v1/admin/users", authMiddleware(adminMiddleware(handleCreateUser(store))))
-	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleUpdateUser(store))))
+	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleUpdateUser(store, store))))
 	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleDeleteUser(store))))
 
 	// Admin user-vehicle assignments
@@ -146,10 +151,10 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // CSRF protection wrapping the whole thing. It is the single place routes
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
-	loginLimiter *LoginRateLimiter, jwtSecret []byte, startTime time.Time,
+	loginLimiter *LoginRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
 	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
@@ -205,6 +210,15 @@ func main() {
 	}
 	if feedAuthEnabled {
 		slog.Info("GTFS-RT feed authentication enabled; consumers must send an X-API-Key header")
+	}
+
+	ttls := tokenTTLs{
+		access:  envDurationOrDefault("ACCESS_TOKEN_TTL", defaultAccessTokenTTL),
+		refresh: envDurationOrDefault("REFRESH_TOKEN_TTL", defaultRefreshTokenTTL),
+	}
+	if err := validateTokenTTLs(ttls); err != nil {
+		slog.Error("invalid token lifetime configuration", "error", err)
+		os.Exit(1)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -310,7 +324,7 @@ func main() {
 
 	startTime := time.Now()
 
-	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, startTime,
+	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, ttls, startTime,
 		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)

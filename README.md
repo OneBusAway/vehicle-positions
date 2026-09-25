@@ -54,13 +54,17 @@ Signing out of the admin UI revokes that session's token server-side, so the
 cookie is dead even if someone copied its value — the same revocation
 `POST /api/v1/auth/logout` performs for API clients.
 
-Deactivating a user still blocks new logins immediately without revoking
-sessions already issued: an existing session cookie or JWT for that user stays
-valid until it expires (up to 24 hours) or until that session is logged out.
-Changing a user's password (from the admin UI's edit form, or by sending
-`password` in `PUT /api/v1/admin/users/{id}`) has the same limit. Forcing a
-deactivated user's sessions to end is a follow-up — it needs a per-user cutoff
-rather than the per-token blocklist added here.
+Deactivating a user blocks new logins immediately and deletes that user's
+refresh tokens, so nothing can be renewed. Changing a user's password (from
+the admin UI's edit form, or by sending `password` in
+`PUT /api/v1/admin/users/{id}`) does the same — that is what makes a password
+reset an effective response to a stolen phone.
+
+Neither ends an access token that has already been issued: it stays valid
+until it expires or until that session is logged out, which is up to
+`ACCESS_TOKEN_TTL` for API clients and up to 24 hours for the admin UI's
+session cookie. Forcing those already-issued sessions to end is a follow-up —
+it needs a per-user cutoff rather than the per-token blocklist added here.
 
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
@@ -279,7 +283,8 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 
 |Endpoint                            |Method|Purpose                                             |
 |------------------------------------|------|----------------------------------------------------|
-|`POST /api/v1/auth/login`           |POST  |Driver login → returns JWT                          |
+|`POST /api/v1/auth/login`           |POST  |Driver login → access token + refresh token         |
+|`POST /api/v1/auth/refresh`         |POST  |Exchange a refresh token for a new access token     |
 |`POST /api/v1/auth/logout`          |POST  |Revoke the caller's own JWT → 204 No Content        |
 |`POST /api/v1/locations`            |POST  |Single location report from driver app              |
 |`GET /gtfs-rt/vehicle-positions`    |GET   |GTFS-RT feed (protobuf or JSON) — see Feed API Keys |
@@ -479,6 +484,9 @@ lifetime.
 - Authenticated (`Authorization: Bearer <token>`), but not admin-only — every
   user can log themselves out.
 - Revokes the caller's own token; there is no way to revoke someone else's.
+- Also deletes every refresh token belonging to the caller, so a revoked
+  access token cannot be traded straight back in for a new one. Refresh tokens
+  are not per-device, so this signs the user out everywhere.
 - Returns `204 No Content` on success, `401 Unauthorized` without a valid
   token, and `500 Internal Server Error` if the revocation can't be recorded.
 - The revocation check fails closed: if the database is unreachable,
@@ -506,6 +514,96 @@ appearing within a day of deploying.
 
 Revocation rows are never deleted — the table grows one row per logout. A
 periodic cleanup job keyed on `expires_at` is a planned follow-up.
+
+**`POST /api/v1/auth/refresh` — renewable access tokens**
+
+A 24-hour bearer token is 24 hours of damage if a driver's phone is lost, but
+an access token short enough to limit that used to mean drivers
+re-authenticating mid-shift. Refresh tokens separate the two lifetimes: a
+renewable access token plus a long-lived, revocable, hashed-at-rest refresh
+token.
+
+`ACCESS_TOKEN_TTL` still defaults to **24h**, unchanged from before, because
+the Android driver app cannot refresh yet — `TripReporter` treats a 401 as
+`AUTH_EXPIRED` and stops reporting until the driver signs in again, so a short
+default would cut every driver's reports off mid-shift. Once a client can
+refresh on 401, lowering it is a one-variable change; `15m` is the intended
+destination.
+
+Login returns both tokens:
+
+```json
+{
+  "token": "<deprecated alias for access_token>",
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "3f9a...c1",
+  "expires_in": 86400
+}
+```
+
+- `token` is **deprecated** and repeats `access_token` verbatim. It is kept so
+  existing clients keep working; new clients should read `access_token`. It
+  will be removed once the Android app and the simulator have migrated.
+- `expires_in` is the access token's lifetime in seconds.
+- `refresh_token` is an opaque 32-byte random value, not a JWT. Only its
+  SHA-256 hash is stored, so a database disclosure yields no usable tokens.
+
+When an access token expires, exchange the refresh token for a new pair:
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"3f9a...c1"}'
+```
+
+The response has the same shape as login, so one client-side model parses both.
+
+**Refresh tokens are single-use.** Every refresh consumes the token presented
+and returns a replacement; clients must store the new `refresh_token` from each
+response. A consumed token stops working, which means a stolen one stops
+working as soon as the legitimate client next refreshes. Revoking the whole
+token family when a consumed token is replayed is a planned follow-up — today
+the replay is rejected and logged.
+
+Response codes:
+
+- `200 OK` — new access and refresh tokens issued.
+- `400 Bad Request` — invalid JSON, unknown field, trailing data, or a missing
+  `refresh_token`.
+- `401 Unauthorized` — the token is unknown, expired, already used, or its
+  owner has been deleted or deactivated. All five return an identical
+  `{"error":"invalid or expired refresh token"}` body: which one it is would
+  tell an attacker something.
+- `415 Unsupported Media Type` — non-JSON `Content-Type`.
+- `429 Too Many Requests` — per-IP rate limit. The endpoint is unauthenticated,
+  so it shares the login rate limiter's per-IP budget.
+- `500 Internal Server Error` — the token could not be read or rotated.
+
+**Upgrading:** nothing breaks on deploy — the default access token lifetime is
+unchanged and `token` is still in the login response. Before lowering
+`ACCESS_TOKEN_TTL`, a client must handle `401 → refresh → retry`; the
+deprecated `token` field keeps it compiling and parsing, but does **not**
+protect it from a shorter lifetime. The Android app needs a paired change (an
+interceptor that refreshes on 401); `TripReporter.kt` already detects the
+expired-token state and surfaces it as `AUTH_EXPIRED`.
+
+Both lifetimes are configurable:
+
+|Variable            |Default|Purpose                                   |
+|--------------------|-------|------------------------------------------|
+|`ACCESS_TOKEN_TTL`  |`24h`  |How long an API access token stays valid  |
+|`REFRESH_TOKEN_TTL` |`168h` |How long a refresh token stays valid (7d) |
+
+The server refuses to start if `ACCESS_TOKEN_TTL` is not positive or
+`REFRESH_TOKEN_TTL` is not longer than it — a refresh token that expires before
+the access token it renews has nothing to renew.
+
+The admin UI's browser session is unaffected and still lasts 24 hours: the
+`vp_session` cookie is the whole session and the browser has no refresh flow.
+
+Expired and consumed rows are never deleted — `refresh_tokens` grows one row
+per login and per refresh. A periodic cleanup keyed on `expires_at` is a
+planned follow-up, alongside the same job for `revoked_tokens`.
 
 **Technology Stack:**
 
@@ -644,7 +742,7 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
   - `POST /api/v1/auth/login` — email + password → JWT token
   - `POST /api/v1/auth/logout` — revoke the caller's token server-side
   - JWT middleware for all authenticated endpoints
-  - Token refresh flow
+  - `POST /api/v1/auth/refresh` — refresh token flow with rotation
 - Implement API key authentication for feed consumers (separate from user auth)
 - Implement admin CRUD endpoints:
   - Vehicles: create, read, update, deactivate

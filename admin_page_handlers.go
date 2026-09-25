@@ -80,6 +80,7 @@ type adminUI struct {
 	assignments    assignmentManager
 	tokenChecker   TokenChecker
 	tokenRevoker   TokenRevoker
+	refreshTokens  RefreshTokenDeleter
 	jwtSecret      []byte
 	loginLimiter   *LoginRateLimiter
 	cfg            adminUIConfig
@@ -111,6 +112,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		assignments:    store,
 		tokenChecker:   store,
 		tokenRevoker:   store,
+		refreshTokens:  store,
 		jwtSecret:      jwtSecret,
 		loginLimiter:   limiter,
 		cfg:            cfg,
@@ -213,7 +215,7 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email)
 		return
 	}
-	token, err := generateJWT(user, ui.jwtSecret)
+	token, err := generateJWT(user, ui.jwtSecret, sessionLifetime)
 	if err != nil {
 		slog.Error("admin login: token generation failed", "error", err)
 		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email)
@@ -1092,6 +1094,14 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
+
+		// Mirrors handleUpdateUser: a password reset must end the sessions
+		// the old password left behind, or a stolen refresh token outlives it.
+		if err := ui.refreshTokens.DeleteRefreshTokensForUser(r.Context(), id); err != nil {
+			slog.Error("user update: delete refresh tokens after password change", "user_id", id, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	setFlash(w, "user_updated")
@@ -1151,6 +1161,18 @@ func (ui *adminUI) setUserActive(w http.ResponseWriter, r *http.Request, active 
 		slog.Error("user set active", "user_id", id, "active", active, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
+	}
+
+	// Deactivation drops the user's refresh tokens as well. handleRefreshToken
+	// already refuses an inactive user, so this is not what blocks them today
+	// — it matters on reactivation, which would otherwise hand a months-old
+	// token back its original seven-day window.
+	if !active {
+		if err := ui.refreshTokens.DeleteRefreshTokensForUser(r.Context(), id); err != nil {
+			slog.Error("user set active: delete refresh tokens", "user_id", id, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 	setFlash(w, flashCode)
 	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
