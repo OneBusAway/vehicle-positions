@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -132,8 +133,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 		registerRiderRoutes(mux, riderSvc, store)
 	}
 
-	// The GTFS catalog exists whenever a schedule is loaded, rider mode or
-	// not; without one its routes are not registered (404).
+	// The GTFS catalog is served whether or not rider mode is on. newMux
+	// registers its routes only when given one (404 otherwise); main always
+	// passes one, because the server refuses to start without a schedule.
 	if catalog != nil {
 		registerGTFSRoutes(mux, authMiddleware, catalog)
 	}
@@ -191,6 +193,14 @@ func main() {
 		os.Exit(1)
 	}
 	jwtSecret := []byte(jwtSecretStr)
+
+	// Checked here, before the database is touched, so a missing schedule
+	// fails immediately rather than after migrations.
+	gtfsSource, err := gtfsSourceFromEnv()
+	if err != nil {
+		slog.Error("refusing to start: drivers pick their route and run from a GTFS schedule, and none is configured", "error", err)
+		os.Exit(1)
+	}
 
 	// Feed auth is opt-in: enabling it rejects every existing consumer that
 	// does not yet send a key, so an upgrade must not turn it on silently.
@@ -271,17 +281,14 @@ func main() {
 		slog.Error("invalid rider mode configuration", "error", err)
 		os.Exit(1)
 	}
-	// The schedule loads whenever there is one to load: the driver catalog
-	// serves it on its own, and rider mode verifies against it when enabled.
-	var schedule *gtfsRuntime
-	if riderCfg.GTFSSource != "" {
-		schedule, err = newGTFSRuntime(ctx, riderCfg.GTFSSource, riderCfg.GTFSRefresh)
-		if err != nil {
-			slog.Error("failed to load GTFS", "source", riderCfg.GTFSSource, "error", err)
-			os.Exit(1)
-		}
-		defer schedule.Stop()
+	// The driver catalog serves the schedule, and rider mode verifies against
+	// it when enabled. An empty source was already refused above.
+	schedule, err := newGTFSRuntime(ctx, gtfsSource, riderCfg.GTFSRefresh)
+	if err != nil {
+		slog.Error("failed to load GTFS", "source", gtfsSource, "error", err)
+		os.Exit(1)
 	}
+	defer schedule.Stop()
 	var riderSvc *riderService
 	if riderCfg.Enabled {
 		rt, err := newRiderRuntime(ctx, riderCfg, schedule.Index, store, jwtSecret, trustProxyHeaders(), tracker)
@@ -292,10 +299,7 @@ func main() {
 		defer rt.Stop()
 		riderSvc = rt.svc
 	}
-	var catalog *gtfsCatalog
-	if schedule != nil {
-		catalog = newGTFSCatalog(schedule.Index, riderCfg.Thresholds)
-	}
+	catalog := newGTFSCatalog(schedule.Index, riderCfg.Thresholds)
 
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)
@@ -407,6 +411,17 @@ func envBool(key string, fallback bool) (bool, error) {
 		return false, fmt.Errorf("%s must be true or false, got %q", key, v)
 	}
 	return b, nil
+}
+
+// gtfsSourceFromEnv reads GTFS_STATIC_URL, which the server cannot start
+// without. A value of only whitespace counts as unset rather than being tried
+// as a file path.
+func gtfsSourceFromEnv() (string, error) {
+	v := os.Getenv("GTFS_STATIC_URL")
+	if strings.TrimSpace(v) == "" {
+		return "", errors.New("GTFS_STATIC_URL must be set to a GTFS static zip, as an http(s):// URL or a local file path")
+	}
+	return v, nil
 }
 
 type statusRecorder struct {

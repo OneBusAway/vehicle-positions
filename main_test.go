@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -149,6 +150,50 @@ func TestEnvBool(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestGTFSSourceFromEnv covers the check that refuses to start the server
+// without a schedule: anything that is not a usable source must be reported
+// rather than passed on to fail later, after migrations have run.
+func TestGTFSSourceFromEnv(t *testing.T) {
+	const key = "GTFS_STATIC_URL"
+
+	tests := []struct {
+		name    string
+		value   string
+		set     bool
+		wantErr bool
+	}{
+		{name: "unset", wantErr: true},
+		{name: "empty", value: "", set: true, wantErr: true},
+		{name: "spaces only", value: "   ", set: true, wantErr: true},
+		{name: "tabs and newlines only", value: "\t\n", set: true, wantErr: true},
+		{name: "local path", value: "rider/testdata/fixture.zip", set: true},
+		{name: "URL", value: "https://agency.example.org/gtfs.zip", set: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// t.Setenv restores the developer's own value afterwards, which is
+			// what makes it safe to unset the variable outright below.
+			t.Setenv(key, tc.value)
+			if !tc.set {
+				require.NoError(t, os.Unsetenv(key))
+			}
+
+			got, err := gtfsSourceFromEnv()
+
+			if tc.wantErr {
+				require.Error(t, err, "a missing schedule must refuse to start the server")
+				assert.Contains(t, err.Error(), key, "the error must name the variable")
+				assert.Empty(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.value, got, "a usable source is passed on unchanged")
 		})
 	}
 }
