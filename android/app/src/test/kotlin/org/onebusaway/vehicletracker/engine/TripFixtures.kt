@@ -55,4 +55,25 @@ object TripFixtures {
 
     fun fix(lat: Double, lon: Double, at: Instant, accuracy: Double? = 5.0, speed: Double? = 8.0) =
         LocationFix(latitude = lat, longitude = lon, bearing = 0.0, speed = speed, accuracy = accuracy, timeEpochSec = at.epochSecond)
+
+    /** iOS's two T1 stops: ST3's 25:10 is written as 01:10 on the next calendar day. */
+    const val T1_STOPS_JSON =
+        """[{"id":"ST1","name":"Stop ST1","sequence":1,"lat":47.6,"lon":-122.33,"along_shape_m":0,""" +
+            """"arrival_at":"2026-09-02T08:00:00-07:00","departure_at":"2026-09-02T08:00:00-07:00"},""" +
+            """{"id":"ST3","name":"Stop ST3","sequence":3,"lat":47.609,"lon":-122.33,"along_shape_m":1001.2,""" +
+            """"arrival_at":"2026-09-03T01:10:00-07:00","departure_at":"2026-09-03T01:10:00-07:00"}]"""
+
+    /** The catalog's trip payload as the server renders it (spec §4.3), after iOS's `tripJSON`. */
+    fun tripJson(
+        id: String = "T1",
+        serviceDate: String = "20260902",
+        directionId: String = "0",
+        points: String = "[[47.6,-122.33],[47.6045,-122.33],[47.609,-122.33]]",
+        stops: String = T1_STOPS_JSON,
+    ): String =
+        """{"id":"$id","route_id":"R1","headsign":"North","direction_id":$directionId,""" +
+            """"service_date":"$serviceDate","timezone":"America/Los_Angeles",""" +
+            """"route":{"short_name":"1","long_name":"Straight","color":"0077C0","text_color":"FFFFFF"},""" +
+            """"shape":{"length_m":1001.2,"points":$points},"stops":$stops,""" +
+            """"thresholds":{"max_shape_distance_m":60,"schedule_early_s":900,"schedule_late_s":5400}}"""
 }
