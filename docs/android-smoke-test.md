@@ -6,7 +6,8 @@ end. It complements the automated test suites (`make test` for the server,
 `./gradlew :app:testDebugUnitTest` for the app) — those check units of
 behavior in isolation; this checks that the whole system actually works
 together: login, the vehicle/route/run pickers, permissions, GPS capture,
-network loss, task removal, and trip lifecycle, as seen through both the app UI
+network loss, task removal, an interrupted shift, and trip lifecycle, as seen
+through both the app UI
 and the GTFS-RT feed.
 
 Run this before cutting an APK for a pilot deployment, and after any change
@@ -412,7 +413,49 @@ resume climbing from wherever it left off, not "catch up".
 task removal (this is the point of running as a foreground service), and
 location fixes keep arriving at the server the whole time. Relaunching the
 app should rehydrate directly to the Tracking screen (active trip state is
-persisted).
+persisted), with **no** Resume Shift prompt: the service never stopped, so there
+is nothing to resume. A prompt here is a bug — it would interrupt every healthy
+shift whose driver reopens the app.
+
+### Check 4b — A force-stopped trip asks before resuming
+
+Unlike swiping the app away, a force-stop kills the service too, and Android
+does not restart a force-stopped app's services. The trip is still stored on
+the phone and still open on the server, but nothing is reporting it, so the app
+asks the driver instead of carrying on as if it were.
+
+1. Force-stop the app and confirm the service is gone:
+
+   ```bash
+   adb shell am force-stop org.onebusaway.vehicletracker
+   adb shell dumpsys activity services LocationTrackingService   # should be empty
+   ```
+
+2. Relaunch the app from the launcher.
+
+**Expected outcome:** a spinner for about two seconds — the app gives a service
+that the system is restarting that long to announce itself — then **Resume
+Shift?**: "An incomplete shift with Vehicle bus-1 was detected. The app was
+closed while tracking was active.", the route, how long ago the trip started,
+and a blue **Resume** and a red **End Shift** button. The service stays stopped
+while the prompt is up.
+
+3. Tap **Resume**.
+
+**Expected outcome:** the Tracking screen, with the trip duration still counted
+from the original start and the adherence panel back. Location reports reach the
+server again, and there is **no** second `POST /api/v1/trips/start`: the trip
+was never ended on the server, so resuming does not start it again (a second
+start would be refused with a 409). Only the start from Check 1 is listed:
+
+```bash
+grep -o '"path":"/api/v1/trips/[a-z]*"' /tmp/vt-server.log
+# "path":"/api/v1/trips/start"
+```
+
+**End Shift** on the same prompt is the other way out. It takes the same path as
+**End Trip** in Check 5, so Check 5 covers it: to run it from here instead,
+force-stop and relaunch again and tap **End Shift**.
 
 ### Check 5 — Ending the trip stops everything and the vehicle drops from the feed
 
@@ -420,7 +463,9 @@ persisted).
 2. Confirm in the dialog ("End this trip? This will stop location tracking
    and mark the trip as complete.").
 
-**Expected outcome, immediately:**
+**Expected outcome, immediately** (the same from **End Shift** on the resume
+prompt):
+- `POST /api/v1/trips/end` in the server log, answered `200`.
 - The app navigates back to the start of the picker (the session token is
   still fresh, so there's no need to log in again) — the route list, since a
   driver with one assigned vehicle skips the vehicle list.
