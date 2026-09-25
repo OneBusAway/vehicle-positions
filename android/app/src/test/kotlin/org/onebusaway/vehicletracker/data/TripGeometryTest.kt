@@ -8,7 +8,9 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.engine.AdherenceThresholds
@@ -16,12 +18,15 @@ import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripFixtures.at
 import org.onebusaway.vehicletracker.engine.TripFixtures.tripJson
+import java.io.File
 
 /**
  * `GET /api/v1/gtfs/trips/{trip_id}` through [CatalogRepository.trip], as the app reads it: the
  * cases of iOS's `TripGeometryTests`, and how each refusal maps.
  */
 class TripGeometryTest {
+    @get:Rule val tempFolder = TemporaryFolder()
+
     private lateinit var server: MockWebServer
     private lateinit var catalog: CatalogRepository
 
@@ -78,6 +83,16 @@ class TripGeometryTest {
 
         assertEquals(at(8, 0), trip.stops[0].arrivalAt)
         assertEquals(trip.stops[0].arrivalAt, trip.stops[0].departureAt)
+    }
+
+    @Test fun `a fetched run round-trips through the file store unchanged`() = runTest {
+        server.enqueue(MockResponse().setBody(tripJson()))
+        val fetched = catalog.trip("T1").getOrThrow()
+        val store = FileTripGeometryStore(File(tempFolder.newFolder(), "active_trip_geometry.json"))
+
+        store.save(fetched)
+
+        assertEquals(fetched, store.load())
     }
 
     @Test fun `a zone this platform cannot read is a failed fetch, not a crash`() = runTest {

@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.CatalogRepository
+import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripRepository
+import org.onebusaway.vehicletracker.data.recordLocally
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.service.ServiceController
@@ -52,6 +54,7 @@ class RunsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val catalogRepository: CatalogRepository,
     private val tripRepository: TripRepository,
+    private val tripGeometryStore: TripGeometryStore,
     private val serviceController: ServiceController,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) : ViewModel() {
@@ -143,6 +146,10 @@ class RunsViewModel @Inject constructor(
         // carry one day's start_date against the other day's schedule.
         if (geometry.serviceDate != serviceDate) return TripError.TRIP_NOT_ACTIVE
         if (AdherenceEvaluator.of(geometry) == null) return TripError.NO_GEOMETRY
-        return tripRepository.start(vehicleId, routeId, runId, serviceDate).exceptionOrNull()?.toTripError()
+        tripRepository.start(vehicleId, routeId, runId, serviceDate).onFailure { return it.toTripError() }
+        // Best-effort, as the other writes after a start are: without it the trip still reports,
+        // and the tracking screen says the schedule is unavailable.
+        recordLocally("trip geometry") { tripGeometryStore.save(geometry) }
+        return null
     }
 }
