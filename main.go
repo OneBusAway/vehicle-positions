@@ -114,7 +114,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))
 	mux.Handle("GET /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleGetUser(store))))
 	mux.Handle("POST /api/v1/admin/users", authMiddleware(adminMiddleware(handleCreateUser(store))))
-	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleUpdateUser(store))))
+	mux.Handle("PUT /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleUpdateUser(store, store))))
 	mux.Handle("DELETE /api/v1/admin/users/{id}", authMiddleware(adminMiddleware(handleDeleteUser(store))))
 
 	// Admin user-vehicle assignments
