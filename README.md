@@ -54,15 +54,17 @@ Signing out of the admin UI revokes that session's token server-side, so the
 cookie is dead even if someone copied its value — the same revocation
 `POST /api/v1/auth/logout` performs for API clients.
 
-Deactivating a user blocks new logins immediately without revoking sessions
-already issued: an existing token for that user stays valid until it expires
-or until that session is logged out. Changing a user's password (from the
-admin UI's edit form, or by sending `password` in
-`PUT /api/v1/admin/users/{id}`) has the same limit. In practice that window is
-now short for API clients — an access token lasts 15 minutes and a deactivated
-user cannot refresh — but the admin UI's session cookie still lasts up to 24
-hours. Forcing a deactivated user's browser session to end is a follow-up — it
-needs a per-user cutoff rather than the per-token blocklist added here.
+Deactivating a user blocks new logins immediately and deletes that user's
+refresh tokens, so nothing can be renewed. Changing a user's password (from
+the admin UI's edit form, or by sending `password` in
+`PUT /api/v1/admin/users/{id}`) does the same — that is what makes a password
+reset an effective response to a stolen phone.
+
+Neither ends an access token that has already been issued: it stays valid
+until it expires or until that session is logged out, which is up to
+`ACCESS_TOKEN_TTL` for API clients and up to 24 hours for the admin UI's
+session cookie. Forcing those already-issued sessions to end is a follow-up —
+it needs a per-user cutoff rather than the per-token blocklist added here.
 
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
@@ -513,13 +515,20 @@ appearing within a day of deploying.
 Revocation rows are never deleted — the table grows one row per logout. A
 periodic cleanup job keyed on `expires_at` is a planned follow-up.
 
-**`POST /api/v1/auth/refresh` — short-lived access tokens**
+**`POST /api/v1/auth/refresh` — renewable access tokens**
 
-Access tokens now expire after **15 minutes** instead of 24 hours, and a
-long-lived refresh token renews them. A 24-hour bearer token is 24 hours of
-damage if a driver's phone is lost; an access token short enough to limit that
-would previously have forced drivers to re-authenticate mid-shift. Refresh
-tokens separate the two lifetimes.
+A 24-hour bearer token is 24 hours of damage if a driver's phone is lost, but
+an access token short enough to limit that used to mean drivers
+re-authenticating mid-shift. Refresh tokens separate the two lifetimes: a
+renewable access token plus a long-lived, revocable, hashed-at-rest refresh
+token.
+
+`ACCESS_TOKEN_TTL` still defaults to **24h**, unchanged from before, because
+the Android driver app cannot refresh yet — `TripReporter` treats a 401 as
+`AUTH_EXPIRED` and stops reporting until the driver signs in again, so a short
+default would cut every driver's reports off mid-shift. Once a client can
+refresh on 401, lowering it is a one-variable change; `15m` is the intended
+destination.
 
 Login returns both tokens:
 
@@ -528,7 +537,7 @@ Login returns both tokens:
   "token": "<deprecated alias for access_token>",
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "refresh_token": "3f9a...c1",
-  "expires_in": 900
+  "expires_in": 86400
 }
 ```
 
@@ -570,18 +579,19 @@ Response codes:
   so it shares the login rate limiter's per-IP budget.
 - `500 Internal Server Error` — the token could not be read or rotated.
 
-**Upgrading:** clients must handle `401 → refresh → retry`. The deprecated
-`token` field keeps a client compiling and parsing, but it does **not** protect
-it from the shorter lifetime — a client that ignores refresh will have to
-re-login every 15 minutes instead of every 24 hours. The Android app needs a
-paired change (an interceptor that refreshes on 401); `TripReporter.kt` already
-detects the expired-token state and surfaces it as `AUTH_EXPIRED`.
+**Upgrading:** nothing breaks on deploy — the default access token lifetime is
+unchanged and `token` is still in the login response. Before lowering
+`ACCESS_TOKEN_TTL`, a client must handle `401 → refresh → retry`; the
+deprecated `token` field keeps it compiling and parsing, but does **not**
+protect it from a shorter lifetime. The Android app needs a paired change (an
+interceptor that refreshes on 401); `TripReporter.kt` already detects the
+expired-token state and surfaces it as `AUTH_EXPIRED`.
 
 Both lifetimes are configurable:
 
 |Variable            |Default|Purpose                                   |
 |--------------------|-------|------------------------------------------|
-|`ACCESS_TOKEN_TTL`  |`15m`  |How long an API access token stays valid  |
+|`ACCESS_TOKEN_TTL`  |`24h`  |How long an API access token stays valid  |
 |`REFRESH_TOKEN_TTL` |`168h` |How long a refresh token stays valid (7d) |
 
 The server refuses to start if `ACCESS_TOKEN_TTL` is not positive or
