@@ -72,3 +72,51 @@ import kotlinx.serialization.Serializable
     val timezone: String,
     val trips: List<TripSummaryDto>,
 )
+
+/**
+ * One run as `GET /api/v1/gtfs/trips/{trip_id}` serves it: its shape, its stops with absolute
+ * scheduled times, and the adherence thresholds the server applies. The times stay as they
+ * arrived, for the reason [TripSummaryDto] gives; `CatalogRepository.trip` resolves them.
+ */
+@Serializable data class TripGeometryDto(
+    val id: String,
+    @SerialName("route_id") val routeId: String,
+    val headsign: String,
+    @SerialName("direction_id") val directionId: Int? = null,
+    @SerialName("service_date") val serviceDate: String,
+    val timezone: String,
+    val route: TripRouteDto,
+    val shape: ShapeDto,
+    val stops: List<TripStopDto>,
+    val thresholds: AdherenceThresholdsDto,
+)
+
+@Serializable data class TripRouteDto(
+    @SerialName("short_name") val shortName: String,
+    @SerialName("long_name") val longName: String,
+    val color: String,
+    @SerialName("text_color") val textColor: String,
+)
+
+@Serializable data class ShapeDto(
+    @SerialName("length_m") val lengthM: Double,
+    /** `[lat, lon]` pairs in shape order. */
+    val points: List<List<Double>>,
+)
+
+@Serializable data class TripStopDto(
+    val id: String,
+    val name: String,
+    val sequence: Int,
+    val lat: Double,
+    val lon: Double,
+    @SerialName("along_shape_m") val alongShapeM: Double,
+    @SerialName("arrival_at") val arrivalAt: String,
+    @SerialName("departure_at") val departureAt: String,
+)
+
+@Serializable data class AdherenceThresholdsDto(
+    @SerialName("max_shape_distance_m") val maxShapeDistanceM: Double,
+    @SerialName("schedule_early_s") val scheduleEarlyS: Int,
+    @SerialName("schedule_late_s") val scheduleLateS: Int,
+)
