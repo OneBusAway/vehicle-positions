@@ -293,11 +293,7 @@ func main() {
 		}
 	}
 
-	riderCfg, err := riderConfigFromEnv()
-	if err != nil {
-		slog.Error("invalid rider mode configuration", "error", err)
-		os.Exit(1)
-	}
+	riderCfg := riderConfigFromEnv()
 	// The driver catalog serves the schedule, and rider mode verifies against
 	// it when enabled. An empty source was already refused above.
 	schedule, err := newGTFSRuntime(ctx, gtfsSource, riderCfg.GTFSRefresh)

@@ -52,7 +52,7 @@ type riderConfig struct {
 // back to its default, logging when what was supplied could not be parsed. A
 // missing GTFS schedule is fatal for the whole server, so main refuses it
 // before this runs (see gtfsSourceFromEnv).
-func riderConfigFromEnv() (riderConfig, error) {
+func riderConfigFromEnv() riderConfig {
 	defaults := rider.DefaultThresholds()
 	th := defaults
 	// A non-positive distance or speed is not a stricter setting, it is a
@@ -82,7 +82,7 @@ func riderConfigFromEnv() (riderConfig, error) {
 		PointRetention: envPositiveDurationOrDefault("RIDER_POINT_RETENTION", defaultPointRetention),
 		Thresholds:     th,
 	}
-	return cfg, nil
+	return cfg
 }
 
 // envFloatOrDefault reads a float setting, falling back to the default when it
