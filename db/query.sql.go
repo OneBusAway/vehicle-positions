@@ -299,6 +299,23 @@ func (q *Queries) DeactivateAPIKey(ctx context.Context, id int64) (int64, error)
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :execrows
+DELETE FROM refresh_tokens WHERE expires_at < $1
+`
+
+// Garbage collection, not retention policy: the refresh handler rejects a
+// token past expires_at whether or not its row exists, so deleting it cannot
+// make any token usable or unusable. Used rows need no rule of their own: a
+// consumed row is worth keeping only so a replay reads as reuse rather than
+// as unknown, and this predicate already keeps it until expires_at.
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredRefreshTokens, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteLocationPointsBefore = `-- name: DeleteLocationPointsBefore :execrows
 DELETE FROM location_points
 WHERE ctid IN (

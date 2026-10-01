@@ -335,3 +335,11 @@ WHERE id = $1 AND used_at IS NULL;
 
 -- name: DeleteRefreshTokensForUser :exec
 DELETE FROM refresh_tokens WHERE user_id = $1;
+
+-- name: DeleteExpiredRefreshTokens :execrows
+-- Garbage collection, not retention policy: the refresh handler rejects a
+-- token past expires_at whether or not its row exists, so deleting it cannot
+-- make any token usable or unusable. Used rows need no rule of their own: a
+-- consumed row is worth keeping only so a replay reads as reuse rather than
+-- as unknown, and this predicate already keeps it until expires_at.
+DELETE FROM refresh_tokens WHERE expires_at < sqlc.arg('cutoff');
