@@ -109,8 +109,10 @@ class AdherenceEvaluatorTest {
     }
 
     @Test fun `off-route previous does not hint`() {
-        // On a straight shape a hint cannot change the answer, so this uses the loop, where the
-        // shared start/end point is told apart by the hint alone.
+        // Keeping the on-route judgement from before it is AdherenceTracker's job: see
+        // `an off-route fix keeps the last on-route hint`. On a straight shape a hint cannot
+        // change the answer, so this uses the loop, where the shared start/end point is told apart
+        // by the hint alone.
         val ev = requireNotNull(AdherenceEvaluator.of(TripFixtures.loop))
         val off = ev.evaluate(fix(47.5990, -122.3292, at(9, 15)), previous = null) // 111 m south of the last leg
         assertFalse(off.isOnRoute)

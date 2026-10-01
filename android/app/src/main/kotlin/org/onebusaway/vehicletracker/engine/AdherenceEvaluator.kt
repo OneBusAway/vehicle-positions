@@ -35,9 +35,9 @@ class AdherenceEvaluator private constructor(
     val shape: ShapeGeometry,
 ) {
     fun evaluate(fix: LocationFix, previous: Adherence?): Adherence {
-        // The previous match keeps loops and out-and-backs from snapping to the wrong pass; an
-        // off-route fix says nothing about where on the shape the vehicle is, so it does not
-        // advance the hint.
+        // The previous match keeps loops and out-and-backs from snapping to the wrong pass. An
+        // off-route fix says nothing about where on the shape the vehicle is, so it is never the
+        // hint; AdherenceTracker keeps the latest on-route judgement to hand in instead.
         val hint = previous?.takeIf { it.isOnRoute }?.projection?.alongShape
         val projection = shape.project(GeoPoint(fix.latitude, fix.longitude), hint)
 
