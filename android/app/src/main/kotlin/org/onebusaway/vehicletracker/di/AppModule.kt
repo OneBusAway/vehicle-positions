@@ -13,12 +13,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
-import org.onebusaway.vehicletracker.data.DataStoreSessionStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
+import org.onebusaway.vehicletracker.data.EncryptedSessionStore
+import org.onebusaway.vehicletracker.data.KeystoreCryptor
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
+import org.onebusaway.vehicletracker.data.sessionDataStore
 import org.onebusaway.vehicletracker.data.tripStateDataStore
 import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
@@ -114,7 +116,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideSessionStore(@ApplicationContext context: Context): SessionStore =
-        DataStoreSessionStore(context)
+        EncryptedSessionStore(context.sessionDataStore, KeystoreCryptor())
 
     @Provides
     @Singleton

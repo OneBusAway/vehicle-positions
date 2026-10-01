@@ -2,6 +2,43 @@ package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.onebusaway.vehicletracker.service.ServiceController
+import java.security.GeneralSecurityException
+
+/**
+ * Stands in for [KeystoreCryptor] so session and migration logic runs on the JVM, where CI
+ * actually executes it.
+ *
+ * It reverses the value rather than just tagging it, so a test can assert that the plaintext
+ * token never appears in the bytes on disk, and [decrypt] rejects anything it did not produce,
+ * so a token written in the clear cannot read back as if it had been encrypted.
+ */
+class FakeCryptor : Cryptor {
+    var failEncrypt = false
+    var failDecrypt = false
+
+    /**
+     * Thrown from [encrypt] when [failEncrypt] is set. Set it to a `ProviderException` to stand in
+     * for a device whose Keystore reports failures as an unchecked exception.
+     */
+    var encryptFailure: Exception = GeneralSecurityException("keystore unavailable")
+
+    // Thrown raw, the way the Keystore itself does. Normalising here instead would make the store
+    // tests pass whether or not KeystoreCryptor converts anything, which is no test at all.
+    override fun encrypt(plaintext: String): String {
+        if (failEncrypt) throw encryptFailure
+        return PREFIX + plaintext.reversed()
+    }
+
+    override fun decrypt(ciphertext: String): String {
+        if (failDecrypt) throw GeneralSecurityException("key no longer usable")
+        if (!ciphertext.startsWith(PREFIX)) throw GeneralSecurityException("not ciphertext")
+        return ciphertext.removePrefix(PREFIX).reversed()
+    }
+
+    private companion object {
+        const val PREFIX = "enc:"
+    }
+}
 
 class FakeSessionStore : SessionStore {
     val state = MutableStateFlow(Session(null, null, null))
