@@ -606,9 +606,13 @@ the access token it renews has nothing to renew.
 The admin UI's browser session is unaffected and still lasts 24 hours: the
 `vp_session` cookie is the whole session and the browser has no refresh flow.
 
-Expired and consumed rows are never deleted — `refresh_tokens` grows one row
-per login and per refresh. A periodic cleanup keyed on `expires_at` is a
-planned follow-up, alongside the same job for `revoked_tokens`.
+Every login and every refresh adds a row to `refresh_tokens`. Rows past their
+`expires_at` are deleted every `REFRESH_TOKEN_PRUNE_INTERVAL` (default `1h`), so
+the table holds the tokens issued within the last `REFRESH_TOKEN_TTL`, plus at
+most one interval's worth that have since expired. Consumed tokens are kept
+until they expire, so a replay before then is still recognised as reuse rather
+than as an unknown token. The same cleanup for `revoked_tokens` is still a
+planned follow-up.
 
 **Technology Stack:**
 
