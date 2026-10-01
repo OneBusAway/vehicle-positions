@@ -294,6 +294,150 @@ func TestStore_RotateRefreshToken_ConcurrentRotationsIssueOneToken(t *testing.T)
 	assert.Equal(t, 2, issued, "the original token plus exactly one replacement")
 }
 
+// clearRefreshTokens empties the table so a prune's returned count reflects
+// only the rows the calling test created.
+func clearRefreshTokens(t *testing.T, store *Store) {
+	t.Helper()
+	_, err := store.pool.Exec(context.Background(), "DELETE FROM refresh_tokens")
+	require.NoError(t, err)
+}
+
+// markRefreshTokenUsed consumes a stored token without the replacement row
+// RotateRefreshToken would add, so prune tests control exactly what is stored.
+func markRefreshTokenUsed(t *testing.T, store *Store, tokenHash string, usedAt time.Time) {
+	t.Helper()
+	tag, err := store.pool.Exec(context.Background(),
+		"UPDATE refresh_tokens SET used_at = $1 WHERE token_hash = $2", usedAt, tokenHash)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "the token to mark used must exist")
+}
+
+func TestStore_PruneExpiredRefreshTokens_DeletesExpired(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearRefreshTokens(t, store)
+	userID := insertRefreshTestUser(t, store)
+
+	// The common case: a token consumed by rotation and later left to expire.
+	now := time.Now()
+	_, expired := newStoredRefreshToken(t, store, userID, now.Add(-time.Hour))
+	markRefreshTokenUsed(t, store, expired, now.Add(-2*time.Hour))
+	_, live := newStoredRefreshToken(t, store, userID, now.Add(time.Hour))
+
+	deleted, err := store.PruneExpiredRefreshTokens(ctx, now)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), deleted)
+	assert.Equal(t, 0, countRefreshRows(t, store, expired), "an expired token must be removed")
+	assert.Equal(t, 1, countRefreshRows(t, store, live), "a token that can still be refreshed must survive")
+}
+
+// TestStore_PruneExpiredRefreshTokens_DeletesExpiredEvenIfUnused pins that the
+// predicate does not hinge on used_at: the refresh handler rejects an expired
+// token whether or not it was ever used, so both rows are equally dead.
+func TestStore_PruneExpiredRefreshTokens_DeletesExpiredEvenIfUnused(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearRefreshTokens(t, store)
+	userID := insertRefreshTestUser(t, store)
+
+	now := time.Now()
+	_, expired := newStoredRefreshToken(t, store, userID, now.Add(-time.Hour))
+
+	deleted, err := store.PruneExpiredRefreshTokens(ctx, now)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), deleted)
+	assert.Equal(t, 0, countRefreshRows(t, store, expired), "an expired token must go even if it was never used")
+}
+
+// TestStore_PruneExpiredRefreshTokens_KeepsUsedButUnexpired guards reuse
+// detection. A consumed token that has not yet expired is the row the refresh
+// handler reads to tell a replayed token ("already used") from a guessed one
+// ("unknown"). A predicate that also swept used rows would turn every replay
+// into an unknown token, and revoking the token family on replay — the planned
+// follow-up — would have nothing left to detect.
+func TestStore_PruneExpiredRefreshTokens_KeepsUsedButUnexpired(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearRefreshTokens(t, store)
+	userID := insertRefreshTestUser(t, store)
+
+	now := time.Now()
+	_, consumed := newStoredRefreshToken(t, store, userID, now.Add(time.Hour))
+	markRefreshTokenUsed(t, store, consumed, now.Add(-time.Minute))
+	// An expired row in the same pass proves the delete ran, so the survivor
+	// is not explained by a prune that matched nothing.
+	_, expired := newStoredRefreshToken(t, store, userID, now.Add(-time.Hour))
+
+	deleted, err := store.PruneExpiredRefreshTokens(ctx, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), deleted)
+	assert.Equal(t, 0, countRefreshRows(t, store, expired))
+
+	stored, err := store.GetRefreshToken(ctx, consumed)
+	require.NoError(t, err, "a consumed but unexpired token must still be stored")
+	assert.NotNil(t, stored.UsedAt, "it must still read as used, or a replay would look like an unknown token")
+}
+
+func TestStore_PruneExpiredRefreshTokens_NoRowsIsNotAnError(t *testing.T) {
+	store := newTestStore(t)
+	clearRefreshTokens(t, store)
+
+	deleted, err := store.PruneExpiredRefreshTokens(context.Background(), time.Now())
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), deleted)
+}
+
+func TestStore_PruneExpiredRefreshTokens_OtherUsersUntouched(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearRefreshTokens(t, store)
+	staleUser := insertRefreshTestUser(t, store)
+	activeUser := insertRefreshTestUser(t, store)
+
+	now := time.Now()
+	_, staleFirst := newStoredRefreshToken(t, store, staleUser, now.Add(-time.Hour))
+	_, staleSecond := newStoredRefreshToken(t, store, staleUser, now.Add(-48*time.Hour))
+	_, activeFirst := newStoredRefreshToken(t, store, activeUser, now.Add(time.Hour))
+	_, activeSecond := newStoredRefreshToken(t, store, activeUser, now.Add(168*time.Hour))
+
+	deleted, err := store.PruneExpiredRefreshTokens(ctx, now)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(2), deleted)
+	assert.Equal(t, 0, countRefreshRows(t, store, staleFirst))
+	assert.Equal(t, 0, countRefreshRows(t, store, staleSecond))
+	assert.Equal(t, 1, countRefreshRows(t, store, activeFirst), "another user's live tokens must survive")
+	assert.Equal(t, 1, countRefreshRows(t, store, activeSecond))
+}
+
+// TestStore_PruneExpiredRefreshTokens_BoundaryExact pins the strict predicate.
+// A token at exactly the cutoff is already rejected by the handler, so keeping
+// it until the next pass is harmless; nothing after the cutoff may be touched.
+func TestStore_PruneExpiredRefreshTokens_BoundaryExact(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearRefreshTokens(t, store)
+	userID := insertRefreshTestUser(t, store)
+
+	// Postgres stores timestamptz at microsecond precision, so truncating here
+	// keeps the boundary row exactly equal to the cutoff after the round trip.
+	cutoff := time.Now().Truncate(time.Microsecond)
+	_, before := newStoredRefreshToken(t, store, userID, cutoff.Add(-time.Microsecond))
+	_, at := newStoredRefreshToken(t, store, userID, cutoff)
+	_, after := newStoredRefreshToken(t, store, userID, cutoff.Add(time.Microsecond))
+
+	deleted, err := store.PruneExpiredRefreshTokens(ctx, cutoff)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), deleted, "the predicate is < cutoff, so only the earlier row goes")
+	assert.Equal(t, 0, countRefreshRows(t, store, before))
+	assert.Equal(t, 1, countRefreshRows(t, store, at), "the row exactly at the cutoff is kept")
+	assert.Equal(t, 1, countRefreshRows(t, store, after), "a row expiring after the cutoff must never be touched")
+}
+
 // TestHashRefreshToken covers the value actually written to token_hash: the
 // column is looked up by exact match, so a non-deterministic hash would make
 // every refresh fail, and a hash that leaked the token would defeat storing

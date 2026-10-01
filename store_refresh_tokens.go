@@ -68,6 +68,12 @@ type RefreshTokenDeleter interface {
 	DeleteRefreshTokensForUser(ctx context.Context, userID int64) error
 }
 
+// RefreshTokenPruneStore is the store behavior needed by the refresh-token
+// pruner.
+type RefreshTokenPruneStore interface {
+	PruneExpiredRefreshTokens(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
 // CreateRefreshToken persists the hash of a new refresh token.
 func (s *Store) CreateRefreshToken(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
 	err := s.queries.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
@@ -154,7 +160,18 @@ func (s *Store) DeleteRefreshTokensForUser(ctx context.Context, userID int64) er
 	return nil
 }
 
+// PruneExpiredRefreshTokens deletes every refresh token whose expires_at is
+// before cutoff, used or not, and returns the number of rows removed.
+func (s *Store) PruneExpiredRefreshTokens(ctx context.Context, cutoff time.Time) (int64, error) {
+	rows, err := s.queries.DeleteExpiredRefreshTokens(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
+	if err != nil {
+		return 0, fmt.Errorf("prune expired refresh tokens: %w", err)
+	}
+	return rows, nil
+}
+
 var _ RefreshTokenCreator = (*Store)(nil)
 var _ RefreshTokenGetter = (*Store)(nil)
 var _ RefreshTokenRotator = (*Store)(nil)
 var _ RefreshTokenDeleter = (*Store)(nil)
+var _ RefreshTokenPruneStore = (*Store)(nil)

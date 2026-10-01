@@ -266,6 +266,20 @@ func main() {
 	loginLimiter := NewLoginRateLimiter()
 	defer loginLimiter.Stop()
 
+	// Expired refresh tokens are unusable by every path that reads them, so
+	// pruning them is garbage collection rather than a retention policy — it
+	// runs by default and has no "keep forever" setting. A bad interval only
+	// turns the job off: an optional cleanup is not worth refusing to serve
+	// vehicles over.
+	refreshPruneInterval := envDurationOrDefault("REFRESH_TOKEN_PRUNE_INTERVAL", time.Hour)
+	refreshPruner, err := NewRefreshTokenPruner(store, refreshPruneInterval)
+	if err != nil {
+		slog.Error("refresh token pruning disabled: invalid configuration", "error", err)
+	} else {
+		defer refreshPruner.Stop()
+		slog.Info("refresh token pruning enabled", "interval", refreshPruneInterval.String())
+	}
+
 	// Retention is opt-in: a zero period means keep location history forever,
 	// which is the behavior every existing deployment has today. Any other value
 	// is a deliberate request to delete data, so a bad one is reported rather
