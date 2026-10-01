@@ -271,8 +271,8 @@ takes about ten minutes. Before you start, make sure the driver has an account
 1. Get the app file (an APK) from your IT contact, along with the exact server
    web address the drivers should use. Both come out of
    [`deployment.md` §12](deployment.md#12-distributing-the-android-app).
-2. Have the driver's email address, their password, and the **route id** they
-   will be driving ready.
+2. Have the driver's email address and password ready, and know which route
+   and run they will be driving.
 
 **On the driver's phone:**
 
@@ -289,21 +289,25 @@ takes about ten minutes. Before you start, make sure the driver has an account
 4. Next is **Select a Vehicle**, listing exactly the vehicles you assigned. If
    there is only one, the app skips this screen and selects it automatically. If
    it says **No vehicles are assigned to you.**, go back to section 6.
-5. Next is **Start a Trip**:
-   - **Route ID** — required. Type the route id exactly as it appears in the
-     `route_id` column of your agency's GTFS `routes.txt`. This is often *not*
-     the number painted on the bus. If your published route "12" has the GTFS
-     `route_id` `RT-012`, the driver must type `RT-012`. Get this wrong and the
-     vehicle still shows up in the feed, but OneBusAway cannot match it to a
-     route, so riders will not see it on the route they are waiting for.
-   - **GTFS Trip ID (optional)** — leave it blank unless your agency works from
-     a schedule and knows the exact `trip_id` for this run. A route id alone is
-     enough for the feed. Filling it in lets OneBusAway tie the bus to a
-     specific scheduled trip.
-   - **Recent routes** — after the first few trips, the last route ids used on
-     that phone appear as buttons here. Tapping one fills in **Route ID**. This
-     is what most drivers will use day to day.
-   - Tap **Start Trip**.
+5. Next the driver picks the route, then the run, from your agency's GTFS
+   schedule. There is nothing to type:
+   - **Select a Route** lists the routes in the schedule, each with its number
+     on its colour. Typing in **Route number or name** narrows the list. After
+     the first trip, the routes that phone has driven appear at the top under
+     **Recent**; this is what most drivers will use day to day. If a route the
+     driver needs is missing, tell your IT contact: a route is listed only if
+     the GTFS feed gives at least one of its trips a shape (the line drawn on
+     the map).
+   - **Select a Run** lists that route's runs for today: the start time, where
+     the run is headed, and its first and last stop. The times are your
+     agency's local time, whatever time zone the phone is set to. The run under
+     way is marked **Now**; otherwise the next one to start is marked **Next**.
+     Tap the run the driver is about to drive. **No runs on this route today.**
+     means the schedule has no service on that route today.
+
+   The route and trip the app reports both come from the schedule, so as long
+   as OneBusAway uses the same GTFS feed (your IT contact sets this up), it can
+   place the bus on the exact scheduled trip.
 6. The permission prompts appear next, once per phone. Work through them with
    the driver — this is the step drivers get wrong on their own:
    - Location: choose the **precise** option. If only approximate location is
@@ -523,7 +527,7 @@ points are.
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| Driver sees **You are not assigned to this vehicle.** when tapping **Start Trip** | The vehicle is not assigned to that driver, or the assignment was removed. | **Users** → **Edit** the driver → **Assigned vehicles** → pick the vehicle → **Assign**. Then have them tap **Start Trip** again. |
+| Driver sees **You are not assigned to this vehicle.** after tapping a run on **Select a Run** | The vehicle is not assigned to that driver, or the assignment was removed. | **Users** → **Edit** the driver → **Assigned vehicles** → pick the vehicle → **Assign**. Then have them tap the run again. |
 | Driver sees **You already have an active trip.** | An earlier trip was never ended — usually **End Locally** after a network problem, or the app was reinstalled. | Have the driver reopen the app; it returns to the tracking screen for the old trip, where **End Trip** ends it. Confirm on **Trips** → **Active** that it is gone. If the app no longer knows about the trip, ask your IT contact — there is no button in the admin UI to end another person's trip. |
 | Driver sees **No vehicles are assigned to you.** | No active vehicle is assigned to that account. | Check the vehicle is not deactivated (**Vehicles** → **Show deactivated**), then assign it (section 6). |
 | One vehicle missing from the feed and the map, others fine | That phone has stopped reporting for longer than the staleness threshold: no signal, app closed, trip never started, phone battery dead, or Android killed the app in the background. | Ask the driver what the status banner says. **No connection** is a coverage problem and clears itself. If the app is not on the tracking screen at all, the trip was never started or was ended. If it keeps dying when the screen locks, the background-location permission is not **"Allow all the time"** — redo step 6 of section 7. |
@@ -532,7 +536,7 @@ points are.
 | A driver or admin cannot sign in and insists the password is right | The account is deactivated. Deactivation is deliberately indistinguishable from a wrong password on the sign-in screen. | **Users** → find the row → if **Status** reads **Deactivated**, click **Activate** and confirm **Reactivate this user?** |
 | Someone you deactivated is still reporting, or their phone still works | Deactivation blocks new sign-ins; it does not end a session already in progress, and that session can last up to 24 hours. | Confirm the row shows **Deactivated** on **Users** — that is enough to stop them signing in again. If they must be cut off this minute, tell your IT contact; only a server-side change ends live sessions. |
 | Driver phone shows **Check device clock** | The phone's clock is wrong, so the server is rejecting its reports. | On the phone, turn on automatic date and time in Android settings, then restart the app. The banner goes green once reports are accepted again. |
-| Vehicles show on your **Live Map** but not in OneBusAway | Almost always the route id. The driver typed the public route number instead of the GTFS `route_id`, so OBA cannot match it to a route. | Check **Trips** → the **Route** column against your GTFS `routes.txt`. Correct it with the driver (section 7, step 5) and have them end and restart the trip. If the ids are right, check with IT that OBA is pointed at the feed address and using the same GTFS static file. |
+| Vehicles show on your **Live Map** but not in OneBusAway | The server and OneBusAway are using different GTFS schedules. Drivers pick their route and run from the server's schedule, so the ids they send are that schedule's, and OBA can only match ids from its own. | Ask your IT contact to check that the server's `GTFS_STATIC_URL` and OneBusAway use the same GTFS static feed, and that OBA is pointed at the feed address. |
 | **Deactivate** on a user returns a plain page saying **cannot deactivate the last active admin** | It is the only active admin account left. | Use your browser's Back button, create or reactivate another admin, then try again. |
 | Vehicle form rejects an id | The id has spaces or other characters, or is over 50 characters, or already exists. | Use only letters, digits, dots, hyphens and underscores; keep it to at most 50 characters; check **Show deactivated** in case the id belongs to a deactivated vehicle. |
 | `/admin` returns "not found" | The admin UI was switched off at install time (`ADMIN_UI_ENABLED=false`). | Ask your IT contact to enable it — see [`deployment.md` §3](deployment.md#3-configuration-reference). |

@@ -31,15 +31,13 @@ All server-side commands below were verified live against the actual server
 ### 1. Start the server with a GTFS fixture
 
 The route and run pickers read the driver catalog (`GET /api/v1/gtfs/routes`
-and `.../routes/{route_id}/trips`), which the server registers only when
-`GTFS_STATIC_URL` points at a feed. Without one there is nothing to pick and
-the app says so (Check 6).
+and `.../routes/{route_id}/trips`), served from the schedule `GTFS_STATIC_URL`
+points at. The server does not start without one (Check 6).
 
 The repo's own fixture is the easiest feed to use, but the Docker image does
 not carry it — the Dockerfile's final stage copies only the binary — so run the
-server from source and keep Postgres in Docker. (`make up` still works for
-everything except the catalog, or with `GTFS_STATIC_URL` pointing at a real
-GTFS zip URL.)
+server from source and keep Postgres in Docker. (`make up` works only with
+`GTFS_STATIC_URL` pointing at a real GTFS zip URL the container can download.)
 
 The obvious ports are often already taken on a development machine, so this
 uses **5433** for Postgres and **8081** for the server, as
@@ -152,9 +150,7 @@ curl -s $BASE/api/v1/gtfs/routes -H "Authorization: Bearer $DRIVER_TOKEN"
 ```
 
 Both must come back: the vehicle is what the driver picks first, and the routes
-are what the picker offers next. A `404` with a `text/plain` body from the
-routes call means `GTFS_STATIC_URL` never reached the server — that is Check 6's
-setup, not this one's.
+are what the picker offers next.
 
 If you'd rather use the driver seeded by `seed_dev.sql` (`driver@test.com` /
 `password`) instead of creating a new one, apply it and skip straight to
@@ -203,8 +199,8 @@ a route or set points interactively.)
 
 ## The 6 checks
 
-Run checks 1-5 in order against a single trip; check 5 ends it. Check 6
-restarts the server without a schedule and needs no trip at all.
+Run checks 1-5 in order against a single trip; check 5 ends it. Check 6 tries
+to restart the server without a schedule and needs no trip at all.
 
 ### Check 1 — Login → vehicle → route → run → permissions → tracking starts
 
@@ -336,12 +332,11 @@ curl -s '$BASE/gtfs-rt/vehicle-positions?format=json'
 The vehicle's entity should disappear from `entity[]` once its last report
 ages past the threshold (around 5 minutes with the default configuration).
 
-### Check 6 — A server with no schedule offers no routes
+### Check 6 — The server refuses to start without a schedule
 
-The catalog endpoints are registered only when `GTFS_STATIC_URL` is set, so a
-server without one answers the routes call with `net/http`'s own 404 — a
-`text/plain` "404 page not found", not JSON. The app has to read that as "there
-is no schedule here" rather than as a failed request.
+Drivers pick their route and run from the schedule, so the server does not run
+without one. It checks before it touches the database, so the failure is
+immediate: no migration runs and nothing listens on `$PORT`.
 
 1. Stop the server from step 1 and start it again with everything the same
    **except** the fixture:
@@ -349,23 +344,36 @@ is no schedule here" rather than as a failed request.
    ```bash
    kill $(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t)
    unset GTFS_STATIC_URL
-   go run . > /tmp/vt-server-noschedule.log 2>&1 &
-   curl -s -i $BASE/api/v1/gtfs/routes -H "Authorization: Bearer $DRIVER_TOKEN" | head -2
-   # HTTP/1.1 404 Not Found
-   # Content-Type: text/plain; charset=utf-8
+   go run . > /tmp/vt-server-noschedule.log 2>&1; echo "exit $?"
+   # exit 1
+   cat /tmp/vt-server-noschedule.log
+   # {"time":"...","level":"ERROR","msg":"refusing to start: drivers pick their route and run from a GTFS schedule, and none is configured","error":"GTFS_STATIC_URL must be set to a GTFS static zip, as an http(s):// URL or a local file path"}
+   # exit status 1
+   curl -s $BASE/health || echo "nothing listening"
+   # nothing listening
    ```
 
-2. Force-stop and relaunch the app, and let it reach the route picker.
+   That `ERROR` line is the only thing the server logs (`exit status 1` is
+   `go run` reporting it). There is no `gtfs: loaded schedule`, because the
+   server stopped before opening the database.
 
-**Expected outcome:** **Select a Route** shows "This server has no schedule
-loaded, so there are no routes to start a trip on." — no route rows, no search
-box, and **no Retry button**, because retrying cannot conjure a schedule. There
-is no manual route/trip entry to fall back to: a trip needs a real GTFS trip id,
-as on iOS.
+2. Force-stop and relaunch the app.
 
-A genuine failure looks different on purpose. Kill the server outright and
-relaunch the app: the same screen reads "Could not load the routes." *with* a
-Retry button, because that one is worth retrying.
+**Expected outcome:** to the app, a server that refused to start is simply a
+server that is down. **Select a Vehicle** reads "Could not load your vehicles."
+with a **Retry** button. The route picker's "This server has no schedule
+loaded" message does not appear: only a server that is running without a
+catalog (a build from before the schedule was required) can produce it.
+
+3. Put the fixture back and start the server again, then tap **Retry**:
+
+   ```bash
+   export GTFS_STATIC_URL=rider/testdata/fixture.zip
+   go run . > /tmp/vt-server.log 2>&1 &
+   ```
+
+   The vehicle list loads again, and from there **Select a Route** lists
+   `1 Straight` and `2 Loop` as in Check 1.
 
 ## Cleanup
 

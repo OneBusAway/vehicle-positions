@@ -71,11 +71,11 @@ Two environment notes for the commands below:
 
 ### 1. Start the server with the GTFS fixture
 
-The driver catalog (`/api/v1/gtfs/...`) is served whenever `GTFS_STATIC_URL`
-points at a feed — rider mode does not have to be on. Use the repo's test
-fixture, which contains route `R1` ("1 Straight") and trip `T1`: a straight
-1 km run due north with stops `ST1`/`ST2`/`ST3` at 0 / 500 / 1001 m, scheduled
-08:00 / 08:05 / 08:10 America/Los_Angeles.
+The server does not start without a schedule in `GTFS_STATIC_URL`, and serves
+the driver catalog (`/api/v1/gtfs/...`) from it — rider mode does not have to
+be on. Use the repo's test fixture, which contains route `R1` ("1 Straight")
+and trip `T1`: a straight 1 km run due north with stops `ST1`/`ST2`/`ST3` at
+0 / 500 / 1001 m, scheduled 08:00 / 08:05 / 08:10 America/Los_Angeles.
 
 From the repo root (see [`docs/development.md`](development.md#local-server-run-without-docker-server-container)
 for the full "Local Server Run" recipe):

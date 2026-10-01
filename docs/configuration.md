@@ -40,10 +40,14 @@ A bad value fails in one of three ways, noted per variable below:
 
 [`docker-compose.yml`](../docker-compose.yml) passes only the variables listed
 in its `environment:` block into the container — today `PORT`, `DATABASE_URL`,
-`STALENESS_THRESHOLD`, `JWT_SECRET` and `RIDER_MODE_ENABLED`. Exporting any
-other variable in your shell has **no effect** on a Compose-run server; add it
-to that block (or an `env_file`) instead. Compose itself refuses to start
-without `JWT_SECRET`; the 32-byte minimum is the server's own check.
+`STALENESS_THRESHOLD`, `JWT_SECRET`, `GTFS_STATIC_URL` and `RIDER_MODE_ENABLED`.
+Exporting any other variable in your shell has **no effect** on a Compose-run
+server; add it to that block (or an `env_file`) instead. Compose itself refuses
+every command without `JWT_SECRET` and `GTFS_STATIC_URL` — even ones that only
+touch the database, like `docker compose up -d db` — so keep both in a `.env`
+file next to `docker-compose.yml`. The 32-byte minimum is the server's own
+check. The image carries no GTFS file, so under Compose `GTFS_STATIC_URL` must
+be a URL the container can download.
 
 ## Core server
 
@@ -60,6 +64,17 @@ without `JWT_SECRET`; the 32-byte minimum is the server's own check.
 `STALENESS_THRESHOLD` is not the same as the ±5 minute skew check applied to the
 `timestamp` in a location report; that one is request validation and is not
 configurable.
+
+## GTFS schedule
+
+Required. Drivers pick their route and run from the schedule, through the
+driver catalog (`/api/v1/gtfs/...`), so the server does not start without one.
+Rider mode, when on, verifies riders against the same schedule.
+
+| Variable | Default | Status | Purpose |
+|---|---|---|---|
+| `GTFS_STATIC_URL` | — | **Required** | GTFS static zip — an `http(s)://` URL or a local file path. The server **refuses to start** when it is unset, empty or only whitespace; that check runs before the database is opened, so it fails immediately. A feed that is set but cannot be downloaded or parsed at startup also **refuses to start**, after migrations have run. |
+| `GTFS_STATIC_REFRESH` | `24h` | Optional | How often to re-download the zip and rebuild the index. A failed refresh keeps the previous index and logs. Must be positive; zero, negative or unparseable warns and defaults. |
 
 ## Admin UI and first-admin bootstrap
 
@@ -102,13 +117,12 @@ the period by up to one interval, and the server logs a `WARN` saying so.
 Off by default. The narrative introduction — what rider mode does, the API, and
 how rider tokens differ from driver and admin tokens — is in the
 [Rider mode section of the README](../README.md#rider-mode-crowdsourced-positions),
-which carries the same defaults in the context they are read.
+which carries the same defaults in the context they are read. Riders are
+verified against the schedule configured under [GTFS schedule](#gtfs-schedule).
 
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
 | `RIDER_MODE_ENABLED` | `false` | Optional | Register the rider routes, start the engine, and merge rider positions into the feed. When off, rider routes are not registered at all. Unparseable: warn and default. |
-| `GTFS_STATIC_URL` | — | **Required when rider mode is on** | GTFS static zip to verify rider reports against — an `http(s)://` URL or a local file path. The server **refuses to start** if rider mode is on and this is missing, or if the feed cannot be downloaded or parsed at startup. Ignored when rider mode is off. |
-| `GTFS_STATIC_REFRESH` | `24h` | Optional | How often to re-download the zip and rebuild the index. A failed refresh keeps the previous index and logs. Must be positive; zero, negative or unparseable warns and defaults. |
 | `TRUSTED_GTFS_RT_URLS` | empty | Optional | Comma-separated external GTFS-RT VehiclePositions feeds used to corroborate rider reports. Surrounding spaces and empty entries are dropped, so a trailing comma is not a feed. URLs are not validated at startup: an unreachable one fails per poll, is recorded in the feed health, and leaves that feed's last-known entities in place. The server's own driver-reported positions are always trusted; with no external feed, a trip no driver reports has corroboration `unavailable`. |
 | `TRUSTED_FEED_POLL` | `30s` | Optional | How often each trusted feed is polled. Must be positive; zero, negative or unparseable warns and defaults. |
 | `TRUSTED_FEED_MAX_AGE` | `5m` | Optional | Trusted entities older than this are dropped from the snapshot. Must be positive; zero, negative or unparseable warns and defaults. |

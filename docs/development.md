@@ -22,14 +22,20 @@ The current implementation focuses on:
 
 From the repository root:
 
-1. Start the stack. Compose refuses to start without a `JWT_SECRET` of 32+
-   bytes, so export one first (or put it in a `.env` file next to
-   `docker-compose.yml`):
+1. Start the stack. Compose refuses to start without `JWT_SECRET` (32+ bytes)
+   and `GTFS_STATIC_URL`, the GTFS static zip drivers pick their routes from,
+   so export both first (or put them in a `.env` file next to
+   `docker-compose.yml`). The image carries no GTFS file, so under Compose
+   `GTFS_STATIC_URL` must be a URL the container can download:
 
    ```bash
    export JWT_SECRET=$(openssl rand -hex 32)
+   export GTFS_STATIC_URL=https://agency.example.org/gtfs.zip
    make up
    ```
+
+   No feed to hand? The [local server run](#local-server-run-without-docker-server-container)
+   below uses the repo's test feed, `rider/testdata/fixture.zip`, instead.
 
 2. Verify server health:
 
@@ -53,18 +59,14 @@ From the repository root:
 
 You can run Postgres in Docker and run the Go server directly:
 
-1. Start only database:
-
-   ```bash
-   docker compose up -d db
-   ```
-
-2. Export environment variables:
+1. Export environment variables. Compose reads `JWT_SECRET` and
+   `GTFS_STATIC_URL` even to start only the database, so do this first:
 
    ```bash
    export PORT=8080
    export DATABASE_URL='postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable'
    export JWT_SECRET=$(openssl rand -hex 32)   # required; the server exits without 32+ bytes
+   export GTFS_STATIC_URL=rider/testdata/fixture.zip   # required; the repo's test feed, or your agency's zip
    export STALENESS_THRESHOLD=5m
    export FEED_AUTH_ENABLED=false   # true requires an X-API-Key on the GTFS-RT feed
                                     # only true/false/1/0 parse; anything else exits at startup
@@ -76,6 +78,12 @@ You can run Postgres in Docker and run the Go server directly:
    export LOCATION_RETENTION_PERIOD=720h   # keep 30 days; 0 or unset keeps forever
    export LOCATION_PRUNE_INTERVAL=1h       # how often the pruner sweeps
    export LOCATION_PRUNE_BATCH_SIZE=10000  # rows deleted per statement
+   ```
+
+2. Start only database:
+
+   ```bash
+   docker compose up -d db
    ```
 
 3. Run server:
@@ -257,7 +265,6 @@ machine that is not on an untrusted network. Step 2 needs the generated
 password, so echo it once and copy it into that terminal.
 
 ```bash
-docker compose up -d db
 export PORT=18080
 export DATABASE_URL='postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable'
 export JWT_SECRET=$(openssl rand -hex 32)
@@ -265,6 +272,7 @@ export ADMIN_BOOTSTRAP_EMAIL=admin@test.com ADMIN_BOOTSTRAP_PASSWORD=$(openssl r
 export RIDER_MODE_ENABLED=true GTFS_STATIC_URL=rider/testdata/fixture.zip
 export RIDER_SCHEDULE_EARLY=24h RIDER_SCHEDULE_LATE=24h
 export STALENESS_THRESHOLD=30s
+docker compose up -d db
 go run .
 ```
 
@@ -479,6 +487,9 @@ curl -s -H "Authorization: Bearer $TOKEN" 'http://localhost:8080/api/v1/gtfs/tri
 
 - `connection refused` when posting locations:
   - confirm server is running on `localhost:8080`
+- server exits at startup with `refusing to start: drivers pick their route and run from a GTFS schedule`,
+  or Compose reports `required variable GTFS_STATIC_URL is missing a value`:
+  - set `GTFS_STATIC_URL` — see Quick Start or Local Server Run above
 - DB connection/migration errors:
   - check `DATABASE_URL`
   - verify Postgres container is healthy (`docker compose ps`)
