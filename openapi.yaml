@@ -67,9 +67,12 @@ paths:
       tags: [auth]
       summary: Log in with email and password
       description: |
-        Exchanges an email and password for a JWT bearer token valid for 24
-        hours. The returned token must be supplied as
-        `Authorization: Bearer <token>` on protected endpoints.
+        Exchanges an email and password for an access token plus a refresh
+        token. The access token must be supplied as
+        `Authorization: Bearer <access_token>` on protected endpoints; its
+        lifetime is `ACCESS_TOKEN_TTL` (default 24h) and is reported as
+        `expires_in`. Renew it with `POST /api/v1/auth/refresh` rather than
+        re-sending credentials.
       security: []
       requestBody:
         required: true
@@ -100,6 +103,67 @@ paths:
           description: |
             Too many login attempts. The limiter keys on client IP and the
             submitted email; a successful login clears the email's counter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Exchange a refresh token for a new access token
+      description: |
+        Returns a new access token and a new refresh token. Deliberately
+        unauthenticated: the access token is expired by definition when a
+        client needs this, so the refresh token is the credential.
+
+        Refresh tokens are single-use. Each call consumes the token presented
+        and returns its replacement, so a client must store the new
+        `refresh_token` from every response. Presenting a consumed token is
+        rejected and logged.
+
+        Only the SHA-256 hash of a refresh token is stored, and lookup is by
+        digest, so a database disclosure yields nothing a caller could send.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: A new access token and refresh token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: |
+            Invalid JSON, an unknown field, trailing data, or a missing
+            `refresh_token`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: |
+            The refresh token is unknown, expired, already used, or its owner
+            has been deleted or deactivated. All of these return an identical
+            body — which one it is would tell an attacker something.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: |
+            Too many attempts from this IP. The endpoint shares the login
+            limiter's per-IP budget, so attempts spread across both auth
+            endpoints draw on one allowance.
           content:
             application/json:
               schema:
@@ -1801,11 +1865,42 @@ components:
 
     LoginResponse:
       type: object
-      required: [token]
+      required: [token, access_token, refresh_token, expires_in]
+      description: |
+        Returned by both `POST /api/v1/auth/login` and
+        `POST /api/v1/auth/refresh`, so one client model parses both.
       properties:
         token:
           type: string
-          description: JWT bearer token (HS256, 24-hour TTL).
+          deprecated: true
+          description: |
+            Deprecated alias repeating `access_token` verbatim. Kept so clients
+            written against the original single-token response keep working;
+            new clients should read `access_token`.
+        access_token:
+          type: string
+          description: JWT bearer token (HS256), valid for `expires_in` seconds.
+        refresh_token:
+          type: string
+          description: |
+            Opaque single-use token used to obtain the next access token. Not a
+            JWT; 32 random bytes, hex-encoded.
+        expires_in:
+          type: integer
+          description: |
+            Access token lifetime in seconds, from `ACCESS_TOKEN_TTL`
+            (default 86400).
+
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          description: |
+            The `refresh_token` from the most recent login or refresh response.
+            Each one works once.
 
     LocationReport:
       type: object

@@ -119,6 +119,11 @@ var schemaStructs = map[string]string{
 	"CatalogShape":       "catalogShape",
 	"CatalogStop":        "catalogStop",
 	"CatalogThresholds":  "catalogThresholds",
+
+	// Refresh tokens. LoginResponse is pinned here so the deprecated `token`
+	// alias cannot quietly disappear from the spec while the server still
+	// sends it.
+	"LoginResponse": "LoginResponse",
 }
 
 // requestSchemaStructs pairs a request schema with the Go struct the handler
@@ -145,6 +150,7 @@ var requestSchemaStructs = map[string]string{
 	"CreateUserRequest":       "CreateUserRequest",
 	"UpdateUserRequest":       "UpdateUserRequest",
 	"LoginRequest":            "LoginRequest",
+	"RefreshRequest":          "RefreshRequest",
 }
 
 // operationMethods are the path-item fields that describe an operation. Every
