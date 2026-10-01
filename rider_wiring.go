@@ -39,7 +39,6 @@ const (
 // with are parsed here and handed to it.
 type riderConfig struct {
 	Enabled        bool
-	GTFSSource     string // http(s) URL or local path to a GTFS static zip
 	GTFSRefresh    time.Duration
 	TrustedURLs    []string
 	TrustedPoll    time.Duration
@@ -49,11 +48,11 @@ type riderConfig struct {
 	Thresholds     rider.Thresholds
 }
 
-// riderConfigFromEnv reads the rider-mode configuration. The only fatal
-// misconfiguration is enabling rider mode without a schedule to match against;
-// every other value falls back to its default, logging when what was supplied
-// could not be parsed.
-func riderConfigFromEnv() (riderConfig, error) {
+// riderConfigFromEnv reads the rider-mode configuration. Every value falls
+// back to its default, logging when what was supplied could not be parsed. A
+// missing GTFS schedule is fatal for the whole server, so main refuses it
+// before this runs (see gtfsSourceFromEnv).
+func riderConfigFromEnv() riderConfig {
 	defaults := rider.DefaultThresholds()
 	th := defaults
 	// A non-positive distance or speed is not a stricter setting, it is a
@@ -75,7 +74,6 @@ func riderConfigFromEnv() (riderConfig, error) {
 	// takes every ride point with it.
 	cfg := riderConfig{
 		Enabled:        envBoolOrDefault("RIDER_MODE_ENABLED", false),
-		GTFSSource:     os.Getenv("GTFS_STATIC_URL"),
 		GTFSRefresh:    envPositiveDurationOrDefault("GTFS_STATIC_REFRESH", defaultGTFSRefresh),
 		TrustedURLs:    splitURLs(os.Getenv("TRUSTED_GTFS_RT_URLS")),
 		TrustedPoll:    envPositiveDurationOrDefault("TRUSTED_FEED_POLL", defaultTrustedPoll),
@@ -84,10 +82,7 @@ func riderConfigFromEnv() (riderConfig, error) {
 		PointRetention: envPositiveDurationOrDefault("RIDER_POINT_RETENTION", defaultPointRetention),
 		Thresholds:     th,
 	}
-	if cfg.Enabled && cfg.GTFSSource == "" {
-		return riderConfig{}, errors.New("GTFS_STATIC_URL is required when RIDER_MODE_ENABLED is true")
-	}
-	return cfg, nil
+	return cfg
 }
 
 // envFloatOrDefault reads a float setting, falling back to the default when it

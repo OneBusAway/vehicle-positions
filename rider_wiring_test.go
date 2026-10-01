@@ -19,7 +19,7 @@ import (
 // config test clears them all first so an ambient value in the developer's
 // shell cannot make an assertion pass or fail by accident.
 var riderEnvKeys = []string{
-	"RIDER_MODE_ENABLED", "GTFS_STATIC_URL", "GTFS_STATIC_REFRESH", "TRUSTED_GTFS_RT_URLS",
+	"RIDER_MODE_ENABLED", "GTFS_STATIC_REFRESH", "TRUSTED_GTFS_RT_URLS",
 	"TRUSTED_FEED_POLL", "TRUSTED_FEED_MAX_AGE", "RIDER_JWT_TTL", "RIDER_POINT_RETENTION",
 	"RIDER_MAX_SHAPE_DISTANCE", "RIDER_MAX_SPEED", "RIDER_SCHEDULE_EARLY", "RIDER_SCHEDULE_LATE",
 	"RIDER_POINT_MAX_AGE",
@@ -31,22 +31,15 @@ func TestRiderConfigFromEnv(t *testing.T) {
 	}
 
 	t.Setenv("RIDER_MODE_ENABLED", "false")
-	cfg, err := riderConfigFromEnv()
-	require.NoError(t, err)
+	cfg := riderConfigFromEnv()
 	assert.False(t, cfg.Enabled)
 
 	t.Setenv("RIDER_MODE_ENABLED", "true")
-	t.Setenv("GTFS_STATIC_URL", "")
-	_, err = riderConfigFromEnv()
-	assert.Error(t, err, "GTFS_STATIC_URL required when enabled")
-
-	t.Setenv("GTFS_STATIC_URL", "rider/testdata/fixture.zip")
 	t.Setenv("TRUSTED_GTFS_RT_URLS", "http://a/vp.pb, http://b/vp.pb")
 	t.Setenv("RIDER_MAX_SHAPE_DISTANCE", "80")
 	t.Setenv("RIDER_MAX_SPEED", "garbage")
 	t.Setenv("RIDER_SCHEDULE_LATE", "2h")
-	cfg, err = riderConfigFromEnv()
-	require.NoError(t, err)
+	cfg = riderConfigFromEnv()
 	assert.True(t, cfg.Enabled)
 	assert.Equal(t, []string{"http://a/vp.pb", "http://b/vp.pb"}, cfg.TrustedURLs)
 	assert.Equal(t, 80.0, cfg.Thresholds.MaxShapeDistance)
@@ -66,7 +59,6 @@ func TestRiderConfigFromEnv_RejectsNonPositiveValues(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	t.Setenv("RIDER_MODE_ENABLED", "true")
-	t.Setenv("GTFS_STATIC_URL", "rider/testdata/fixture.zip")
 	// Every one of these would disable the check it configures rather than
 	// tighten it, so each falls back to its default.
 	t.Setenv("RIDER_MAX_SHAPE_DISTANCE", "0")
@@ -75,8 +67,7 @@ func TestRiderConfigFromEnv_RejectsNonPositiveValues(t *testing.T) {
 	t.Setenv("TRUSTED_FEED_MAX_AGE", "-1m")
 	t.Setenv("RIDER_JWT_TTL", "0")
 
-	cfg, err := riderConfigFromEnv()
-	require.NoError(t, err)
+	cfg := riderConfigFromEnv()
 	assert.Equal(t, 60.0, cfg.Thresholds.MaxShapeDistance)
 	assert.Equal(t, 35.0, cfg.Thresholds.MaxSpeed)
 	assert.Equal(t, 90*time.Second, cfg.Thresholds.PointMaxAge)
@@ -95,7 +86,7 @@ func TestNewRiderRuntime_EndsStaleRidesAndSharesTheIndex(t *testing.T) {
 	require.NoError(t, err)
 	defer gt.Stop()
 
-	cfg := riderConfig{Enabled: true, GTFSSource: "rider/testdata/fixture.zip", GTFSRefresh: time.Hour, TrustedPoll: time.Hour,
+	cfg := riderConfig{Enabled: true, GTFSRefresh: time.Hour, TrustedPoll: time.Hour,
 		TrustedMaxAge: 5 * time.Minute, JWTTTL: time.Hour, PointRetention: time.Hour, Thresholds: rider.DefaultThresholds()}
 	rt, err := newRiderRuntime(ctx, cfg, gt.Index, store, testSecret, false, nil)
 	require.NoError(t, err)
