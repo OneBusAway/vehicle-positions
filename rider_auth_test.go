@@ -24,8 +24,8 @@ func TestGenerateRiderJWT_ClaimsAndTTL(t *testing.T) {
 
 func TestRequireRider(t *testing.T) {
 	riderTok, _ := generateRiderJWT("rider-1", testSecret, time.Hour)
-	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret)
-	adminTok, _ := generateJWT(&User{ID: 2, Email: "a@test.com", Role: "admin"}, testSecret)
+	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
+	adminTok, _ := generateJWT(&User{ID: 2, Email: "a@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 
 	var gotID string
 	h := requireRider(testSecret, newFakeRevocations())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

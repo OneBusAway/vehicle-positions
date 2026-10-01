@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +150,22 @@ func (n *noopStore) RevokeToken(_ context.Context, _ string, _ int64, _ time.Tim
 func (n *noopStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
+func (n *noopStore) CreateRefreshToken(_ context.Context, _ string, _ int64, _ time.Time) error {
+	return nil
+}
+
+// GetRefreshToken reports every token as unknown. That is the safe stub for
+// wiring assertions: the refresh handler answers 401 instead of dereferencing
+// a nil token.
+func (n *noopStore) GetRefreshToken(_ context.Context, _ string) (*RefreshToken, error) {
+	return nil, ErrRefreshTokenNotFound
+}
+func (n *noopStore) RotateRefreshToken(_ context.Context, _ int64, _ string, _ int64, _ time.Time) (bool, error) {
+	return false, nil
+}
+func (n *noopStore) DeleteRefreshTokensForUser(_ context.Context, _ int64) error {
+	return nil
+}
 
 // Rider-mode store methods. Rider routes are not registered on a mux built
 // with a nil rider service, so only the two admin rider endpoints reach these;
@@ -186,12 +203,12 @@ func (n *noopStore) DeleteRidePointsBefore(_ context.Context, _ time.Time) (int6
 // all admin routes — not 200, 401, or 404 — proving the middleware is wired.
 // Add new admin routes to the table so this test catches future wiring gaps.
 func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
-	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	// nil tracker and rateLimiter are safe: adminMiddleware rejects driver
 	// tokens before any handler body runs, so neither is dereferenced.
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		method string
@@ -244,13 +261,13 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 // blocked by adminMiddleware. Handler errors (nil store) are expected and
 // irrelevant — we only assert the middleware itself does not return 403.
 func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
-	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret)
+	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
 
 	// Same routes as the driver-rejection table — every admin route must
 	// let a valid admin token through both middleware layers.
@@ -306,13 +323,13 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 // object with "count" and "vehicles" keys, so decoding into that shape is
 // enough to distinguish the two handlers.
 func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
-	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret)
+	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/vehicles/live", nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -392,10 +409,10 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 // but not admin-gated: any logged-in user must be able to log themselves out,
 // and an unauthenticated caller must not reach the handler.
 func TestLogoutRoute_Wiring(t *testing.T) {
-	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		name       string
@@ -425,10 +442,10 @@ func TestLogoutRoute_Wiring(t *testing.T) {
 // (200 with a driver-role token) — no admin role required, unlike the
 // /api/v1/admin/* routes above.
 func TestDriverVehiclesRoute_Wiring(t *testing.T) {
-	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret)
+	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
 
 	tests := []struct {
 		name       string
@@ -494,7 +511,7 @@ func TestFeedRoute_Wiring(t *testing.T) {
 			tracker := NewTracker(5 * time.Minute)
 			defer tracker.Stop()
 
-			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, time.Time{}, nil, false, tc.feedAuthEnabled, nil, nil)
+			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, false, tc.feedAuthEnabled, nil, nil)
 
 			req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
 			if tc.apiKey != "" {
@@ -512,7 +529,7 @@ func TestFeedRoute_Wiring(t *testing.T) {
 }
 
 func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
-	without := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, nil)
+	without := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
 	rec := httptest.NewRecorder()
 	without.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/gtfs/routes", nil))
 	assert.Equal(t, http.StatusNotFound, rec.Code)
@@ -524,9 +541,9 @@ func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
 	// this test never depends on the day of the week it happens to run on, or
 	// on the year still being 2026.
 	catalog.now = func() time.Time { return catalogNow }
-	with := newMux(&noopStore{}, nil, nil, testSecret, time.Time{}, nil, false, false, nil, catalog)
+	with := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, catalog)
 
-	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret)
+	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	riderTok, _ := generateRiderJWT("rider-1", testSecret, time.Hour)
 	cases := []struct {
 		name  string
@@ -548,4 +565,26 @@ func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
 			assert.Equal(t, tc.want, rec.Code, "%s %s", tc.name, path)
 		}
 	}
+}
+
+// TestRefreshRoute_Wiring verifies POST /api/v1/auth/refresh is registered and
+// reachable WITHOUT an Authorization header — a client needs it precisely
+// when its access token has expired. The assertion is on the body, not just
+// the status: requireAuth and the handler both answer 401, and only the
+// handler's message proves the request reached it.
+func TestRefreshRoute_Wiring(t *testing.T) {
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+		strings.NewReader(`{"refresh_token":"nosuchtoken"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var resp map[string]string
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, invalidRefreshTokenMessage, resp["error"],
+		"the route must reach handleRefreshToken rather than being gated by requireAuth")
 }

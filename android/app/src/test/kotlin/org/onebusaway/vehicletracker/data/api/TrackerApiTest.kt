@@ -10,6 +10,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 
@@ -33,6 +34,37 @@ class TrackerApiTest {
         assertEquals("/api/v1/auth/login", recorded.path)
         val sent = Json.parseToJsonElement(recorded.body.readUtf8()).jsonObject
         assertEquals(setOf("email", "password"), sent.keys)
+    }
+
+    // The server now returns access_token, refresh_token and expires_in
+    // alongside `token`. This body is the shape captured from
+    // POST /api/v1/auth/login on a server running the refresh-token change:
+    // the extra fields must not disturb parsing (ApiFactory sets
+    // ignoreUnknownKeys), and `token` must still come through.
+    @Test fun `login parses the refresh-token response and still reads token`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"token":"jwt-abc","access_token":"jwt-abc","refresh_token":"a1b2c3","expires_in":900}"""))
+        val resp = api.login(LoginRequest("d@example.com", "pw"))
+        assertEquals("jwt-abc", resp.token)
+    }
+
+    // Why the deprecated `token` alias has to stay on the server for now:
+    // LoginResponse.token is non-nullable with no default, so a response that
+    // carries only access_token does not degrade to an empty string — parsing
+    // throws, and every build of this app already in the field fails to log
+    // in. Delete this test when LoginResponse migrates to access_token.
+    @Test fun `login without the token field fails to parse`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"access_token":"jwt-abc","refresh_token":"a1b2c3","expires_in":900}"""))
+        try {
+            api.login(LoginRequest("d@example.com", "pw"))
+            fail("removing the token field must be a hard failure, not an empty string")
+        } catch (e: Exception) {
+            val message = generateSequence<Throwable>(e) { it.cause }
+                .mapNotNull { it.message }
+                .joinToString(" ")
+            assertTrue("expected a missing-field failure, got: $message", message.contains("token"))
+        }
     }
 
     @Test fun `auth interceptor adds bearer token when present`() = runTest {

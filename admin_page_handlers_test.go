@@ -1910,3 +1910,102 @@ func TestValidatePassword(t *testing.T) {
 		})
 	}
 }
+
+// fakeUserManagerForRevocation records the calls the revocation tests care
+// about while satisfying the parts of the user-manager surface userUpdate and
+// userDeactivate touch.
+type fakeUserManagerForRevocation struct {
+	noopStore
+	passwordUpdated bool
+	activeSet       *bool
+}
+
+func (f *fakeUserManagerForRevocation) UpdateUser(_ context.Context, id int64, _, _, _ string) (*UserResponse, error) {
+	return &UserResponse{ID: id, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true}, nil
+}
+
+func (f *fakeUserManagerForRevocation) UpdateUserPassword(_ context.Context, _ int64, _ string) error {
+	f.passwordUpdated = true
+	return nil
+}
+
+func (f *fakeUserManagerForRevocation) SetUserActive(_ context.Context, _ int64, active bool) error {
+	f.activeSet = &active
+	return nil
+}
+
+func (f *fakeUserManagerForRevocation) GetUser(_ context.Context, id int64) (*UserResponse, error) {
+	return &UserResponse{ID: id, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true}, nil
+}
+
+// adminUIForRevocation wires an adminUI whose user manager and refresh-token
+// deleter are both observable.
+func adminUIForRevocation(t *testing.T) (*adminUI, *fakeUserManagerForRevocation, *fakeRefreshTokens) {
+	t.Helper()
+	ui := newTestAdminUI(t)
+	users := &fakeUserManagerForRevocation{}
+	refreshTokens := newFakeRefreshTokens()
+	ui.userManager = users
+	ui.refreshTokens = refreshTokens
+	return ui, users, refreshTokens
+}
+
+// TestAdminUI_PasswordChangeDeletesRefreshTokens is the admin UI half of the
+// stolen-phone case: the edit form must invalidate refresh tokens exactly as
+// the JSON endpoint does, or the two paths disagree about what a password
+// reset means.
+func TestAdminUI_PasswordChangeDeletesRefreshTokens(t *testing.T) {
+	ui, users, refreshTokens := adminUIForRevocation(t)
+	storeRefreshToken(t, refreshTokens, 1, time.Now().Add(defaultRefreshTokenTTL))
+
+	form := url.Values{
+		"name": {"Alice"}, "email": {"alice@example.com"},
+		"role": {"driver"}, "password": {"new-password"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	ui.userUpdate(w, req)
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.True(t, users.passwordUpdated, "the password must actually have been changed")
+	assert.Equal(t, []int64{1}, refreshTokens.deletedUsers,
+		"the admin UI password change must delete refresh tokens too")
+}
+
+// TestAdminUI_DeactivateDeletesRefreshTokens guards reactivation: refresh
+// already refuses an inactive user, so the tokens only matter if the account
+// comes back — at which point a months-old token would otherwise still work.
+func TestAdminUI_DeactivateDeletesRefreshTokens(t *testing.T) {
+	ui, users, refreshTokens := adminUIForRevocation(t)
+	storeRefreshToken(t, refreshTokens, 1, time.Now().Add(defaultRefreshTokenTTL))
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/deactivate", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	ui.userDeactivate(w, req)
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.NotNil(t, users.activeSet)
+	require.False(t, *users.activeSet, "the user must have been deactivated")
+	assert.Equal(t, []int64{1}, refreshTokens.deletedUsers,
+		"deactivation must delete refresh tokens so reactivation does not revive them")
+}
+
+// TestAdminUI_ActivateKeepsRefreshTokens pins the asymmetry: only
+// deactivation clears tokens. Reactivating a user must not delete the tokens
+// they legitimately obtained after coming back.
+func TestAdminUI_ActivateKeepsRefreshTokens(t *testing.T) {
+	ui, users, refreshTokens := adminUIForRevocation(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/activate", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	ui.userActivate(w, req)
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.NotNil(t, users.activeSet)
+	require.True(t, *users.activeSet)
+	assert.Empty(t, refreshTokens.deletedUsers, "reactivation must not clear refresh tokens")
+}

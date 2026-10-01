@@ -58,6 +58,17 @@ func (l *LoginRateLimiter) Allow(ip, email string) bool {
 	return allowInWindow(l.byEmail, email, loginEmailLimit, now, "login")
 }
 
+// AllowIP applies only the per-IP window. The refresh endpoint uses it
+// because a caller presenting a refresh token has no email to key the second
+// dimension on. Sharing this limiter's per-IP budget with login is
+// deliberate: an address gets one attempt allowance across both auth
+// endpoints, not one each.
+func (l *LoginRateLimiter) AllowIP(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return allowInWindow(l.byIP, ip, loginIPLimit, time.Now(), "login")
+}
+
 // ResetEmail clears the per-email window after a successful authentication,
 // so an account legitimately signing in several times a minute (a shared
 // account, or the driver app plus the admin form) isn't 429'd despite zero

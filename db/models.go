@@ -32,6 +32,15 @@ type LocationPoint struct {
 	DriverID   string
 }
 
+type RefreshToken struct {
+	ID        int64
+	TokenHash string
+	UserID    int64
+	ExpiresAt pgtype.Timestamptz
+	UsedAt    pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
 type RevokedToken struct {
 	Jti       string
 	UserID    pgtype.Int8
