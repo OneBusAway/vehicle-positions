@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.service.ServiceController
 import java.security.GeneralSecurityException
 
@@ -73,6 +74,13 @@ class FakeVehiclePrefsStore : VehiclePrefsStore {
     override suspend fun recordUse(vehicleId: String) {
         recentsState.value = (listOf(vehicleId) + recentsState.value.filter { it != vehicleId }).take(5)
     }
+}
+
+class FakeTripGeometryStore : TripGeometryStore {
+    var stored: TripGeometry? = null
+    override suspend fun save(geometry: TripGeometry) { stored = geometry }
+    override suspend fun load() = stored
+    override suspend fun clear() { stored = null }
 }
 
 class FakeServiceController : ServiceController {
