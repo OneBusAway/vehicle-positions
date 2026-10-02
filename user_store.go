@@ -67,9 +67,10 @@ type UserDeleter interface {
 	DeleteUser(ctx context.Context, id int64) error
 }
 
-// UserActivator toggles a user's active flag.
+// UserActivator toggles a user's active flag, ending their sessions when it
+// deactivates them.
 type UserActivator interface {
-	SetUserActive(ctx context.Context, id int64, active bool) error
+	SetUserActiveAndRevokeSessions(ctx context.Context, id int64, active bool) error
 }
 
 // UserPasswordUpdater changes a user's password and ends every session the old
@@ -250,18 +251,6 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 		return fmt.Errorf("delete user: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
-}
-
-// SetUserActive flips a user's active flag. Deactivated users cannot log in.
-func (s *Store) SetUserActive(ctx context.Context, id int64, active bool) error {
-	rows, err := s.queries.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active})
-	if err != nil {
-		return fmt.Errorf("set user active: %w", err)
-	}
-	if rows == 0 {
 		return ErrUserNotFound
 	}
 	return nil

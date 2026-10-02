@@ -436,6 +436,19 @@ func TestStore_PasswordResetBeatsAConcurrentRotation(t *testing.T) {
 	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("newpassword123")))
 }
 
+func TestStore_DeactivationBeatsAConcurrentRotation(t *testing.T) {
+	store := newTestStore(t)
+	userID := insertRefreshTestUser(t, store)
+
+	revokeDuringRotation(t, store, userID, func(ctx context.Context) error {
+		return store.SetUserActiveAndRevokeSessions(ctx, userID, false)
+	})
+
+	user, err := store.GetUser(context.Background(), userID)
+	require.NoError(t, err)
+	assert.False(t, user.Active)
+}
+
 // TestStore_LogoutBeatsAConcurrentRotation covers logout. Unlike a password
 // reset it writes nothing to the users row before its DELETE, so LockUser is
 // the only statement that makes it wait for the rotation to commit. Waiting
@@ -550,6 +563,67 @@ func TestStore_SetUserPasswordAndRevokeSessions_RollsBackOnRevokeFailure(t *test
 	require.Error(t, err)
 
 	assert.Equal(t, before, storedPasswordHash(t, store, u.ID), "the password must be unchanged")
+	assert.Equal(t, 1, countRefreshRows(t, store, token))
+}
+
+func TestStore_SetUserActiveAndRevokeSessions_Deactivate(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	otherID := insertRefreshTestUser(t, store)
+
+	_, first := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	_, second := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, userID, false))
+
+	user, err := store.GetUser(ctx, userID)
+	require.NoError(t, err)
+	assert.False(t, user.Active)
+	assert.Equal(t, 0, countRefreshRows(t, store, first))
+	assert.Equal(t, 0, countRefreshRows(t, store, second))
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "another user's tokens must survive")
+}
+
+// TestStore_SetUserActiveAndRevokeSessions_Reactivate pins the asymmetry:
+// only deactivation revokes, so the way back up leaves tokens alone.
+func TestStore_SetUserActiveAndRevokeSessions_Reactivate(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	_, err := store.pool.Exec(ctx, "UPDATE users SET active = false WHERE id = $1", userID)
+	require.NoError(t, err)
+	_, token := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, userID, true))
+
+	user, err := store.GetUser(ctx, userID)
+	require.NoError(t, err)
+	assert.True(t, user.Active)
+	assert.Equal(t, 1, countRefreshRows(t, store, token), "reactivation must not clear refresh tokens")
+}
+
+func TestStore_SetUserActiveAndRevokeSessions_UnknownUser(t *testing.T) {
+	store := newTestStore(t)
+	for _, active := range []bool{false, true} {
+		err := store.SetUserActiveAndRevokeSessions(context.Background(), -1, active)
+		assert.ErrorIs(t, err, ErrUserNotFound, "active=%v", active)
+	}
+}
+
+func TestStore_SetUserActiveAndRevokeSessions_RollsBackOnRevokeFailure(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	_, token := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	refuseRefreshTokenDeletes(t, store, userID)
+
+	require.Error(t, store.SetUserActiveAndRevokeSessions(ctx, userID, false))
+
+	user, err := store.GetUser(ctx, userID)
+	require.NoError(t, err)
+	assert.True(t, user.Active, "the user must still be active")
 	assert.Equal(t, 1, countRefreshRows(t, store, token))
 }
 

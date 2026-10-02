@@ -250,6 +250,48 @@ func (s *Store) SetUserPasswordAndRevokeSessions(ctx context.Context, id int64, 
 	return nil
 }
 
+// SetUserActiveAndRevokeSessions flips a user's active flag in one
+// transaction under the user lock, deleting every refresh token the user
+// holds when active is false. Deactivated users cannot log in. Returns
+// ErrUserNotFound if no user matches id.
+func (s *Store) SetUserActiveAndRevokeSessions(ctx context.Context, id int64, active bool) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := s.queries.WithTx(tx)
+
+	// Locked first for the same reason as SetUserPasswordAndRevokeSessions.
+	if _, err := qtx.LockUser(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("lock user: %w", err)
+	}
+
+	// The lock holds the row, so the update cannot miss it.
+	if _, err := qtx.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active}); err != nil {
+		return fmt.Errorf("set user active: %w", err)
+	}
+
+	// Only deactivation revokes. handleRefreshToken already refuses an
+	// inactive user, so this is not what blocks them today. It matters on
+	// reactivation, which would otherwise hand a months-old token back its
+	// original seven-day window.
+	if !active {
+		if err := qtx.DeleteRefreshTokensForUser(ctx, id); err != nil {
+			return fmt.Errorf("delete refresh tokens for user: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit user active change: %w", err)
+	}
+	return nil
+}
+
 // PruneExpiredRefreshTokens deletes every refresh token whose expires_at is
 // before cutoff, used or not, and returns the number of rows removed.
 func (s *Store) PruneExpiredRefreshTokens(ctx context.Context, cutoff time.Time) (int64, error) {

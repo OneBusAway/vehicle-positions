@@ -240,31 +240,12 @@ func TestStore_DeleteUser_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUserNotFound)
 }
 
-func TestSetUserActive(t *testing.T) {
-	store := newTestStore(t)
-	u, err := store.CreateUser(context.Background(), "Deact Me", uniqueEmail(t), "password123", "driver")
-	require.NoError(t, err)
-	require.True(t, u.Active)
-
-	require.NoError(t, store.SetUserActive(context.Background(), u.ID, false))
-	got, err := store.GetUser(context.Background(), u.ID)
-	require.NoError(t, err)
-	assert.False(t, got.Active)
-
-	require.NoError(t, store.SetUserActive(context.Background(), u.ID, true))
-	got, err = store.GetUser(context.Background(), u.ID)
-	require.NoError(t, err)
-	assert.True(t, got.Active)
-
-	assert.ErrorIs(t, store.SetUserActive(context.Background(), 999999999, false), ErrUserNotFound)
-}
-
 func TestGetUserByEmailIncludesActive(t *testing.T) {
 	store := newTestStore(t)
 	email := uniqueEmail(t)
 	u, err := store.CreateUser(context.Background(), "Flag Check", email, "password123", "driver")
 	require.NoError(t, err)
-	require.NoError(t, store.SetUserActive(context.Background(), u.ID, false))
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(context.Background(), u.ID, false))
 
 	fetched, err := store.GetUserByEmail(context.Background(), email)
 	require.NoError(t, err)
@@ -283,7 +264,7 @@ func TestCountUsersByRole(t *testing.T) {
 	assert.GreaterOrEqual(t, total, 1)
 	assert.GreaterOrEqual(t, active, 1)
 
-	require.NoError(t, store.SetUserActive(context.Background(), u.ID, false))
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(context.Background(), u.ID, false))
 	active2, err := store.CountActiveUsersByRole(context.Background(), "driver")
 	require.NoError(t, err)
 	assert.Equal(t, active-1, active2)
@@ -405,7 +386,7 @@ func seedFilterUsers(t *testing.T, store *Store) map[string]*UserResponse {
 		u, err := store.CreateUser(ctx, s.name, s.email, "securepass", s.role)
 		require.NoError(t, err)
 		if s.deactivate {
-			require.NoError(t, store.SetUserActive(ctx, u.ID, false))
+			require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, u.ID, false))
 			u.Active = false
 		}
 		byEmail[s.email] = u
