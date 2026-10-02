@@ -57,8 +57,9 @@ func (m *mockUserCreator) CreateUser(ctx context.Context, name, email, password,
 }
 
 type mockUserUpdater struct {
-	user *UserResponse
-	err  error
+	user        *UserResponse
+	err         error
+	passwordErr error
 
 	passwordUpdates map[int64]string
 	updateUserCalls int
@@ -71,10 +72,10 @@ func (m *mockUserUpdater) UpdateUser(ctx context.Context, id int64, name, email,
 	return m.user, m.err
 }
 
-func (m *mockUserUpdater) UpdateUserPassword(_ context.Context, id int64, password string) error {
+func (m *mockUserUpdater) SetUserPasswordAndRevokeSessions(_ context.Context, id int64, password string) error {
 	m.calls = append(m.calls, "password")
-	if m.err != nil {
-		return m.err
+	if m.passwordErr != nil {
+		return m.passwordErr
 	}
 	if m.passwordUpdates == nil {
 		m.passwordUpdates = map[int64]string{}
@@ -105,7 +106,7 @@ func decodeErrorResponse(t *testing.T, w *httptest.ResponseRecorder) string {
 // handleUpdateUser, returning the recorder for assertions.
 func putUser(t *testing.T, store UserUpdater, id int64, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	handler := handleUpdateUser(store, newFakeRefreshTokens())
+	handler := handleUpdateUser(store)
 	idStr := strconv.FormatInt(id, 10)
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/"+idStr, bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -561,7 +562,7 @@ func TestHandleCreateUser_BodyTooLarge(t *testing.T) {
 
 func TestHandleUpdateUser_HappyPath(t *testing.T) {
 	updated := &UserResponse{ID: 1, Name: "Alice Updated", Email: "alice2@example.com", Role: "driver"}
-	handler := handleUpdateUser(&mockUserUpdater{user: updated}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{user: updated})
 	body := `{"name":"Alice Updated","email":"alice2@example.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -580,7 +581,7 @@ func TestHandleUpdateUser_HappyPath(t *testing.T) {
 }
 
 func TestHandleUpdateUser_NotFound(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{err: ErrUserNotFound}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{err: ErrUserNotFound})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/999", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -593,7 +594,7 @@ func TestHandleUpdateUser_NotFound(t *testing.T) {
 }
 
 func TestHandleUpdateUser_DuplicateEmail(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{err: ErrDuplicateEmail}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{err: ErrDuplicateEmail})
 	body := `{"name":"Alice","email":"taken@example.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -606,7 +607,7 @@ func TestHandleUpdateUser_DuplicateEmail(t *testing.T) {
 }
 
 func TestHandleUpdateUser_InvalidRole(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"name":"Alice","email":"a@b.com","role":"superadmin"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -619,7 +620,7 @@ func TestHandleUpdateUser_InvalidRole(t *testing.T) {
 }
 
 func TestHandleUpdateUser_WrongContentType(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "text/plain")
@@ -632,7 +633,7 @@ func TestHandleUpdateUser_WrongContentType(t *testing.T) {
 }
 
 func TestHandleUpdateUser_InvalidID(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/abc", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -645,7 +646,7 @@ func TestHandleUpdateUser_InvalidID(t *testing.T) {
 }
 
 func TestHandleUpdateUser_MissingName(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -658,7 +659,7 @@ func TestHandleUpdateUser_MissingName(t *testing.T) {
 }
 
 func TestHandleUpdateUser_MissingEmail(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"name":"Alice","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -671,7 +672,7 @@ func TestHandleUpdateUser_MissingEmail(t *testing.T) {
 }
 
 func TestHandleUpdateUser_TrailingJSONRejected(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver"}{"extra":true}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -684,7 +685,7 @@ func TestHandleUpdateUser_TrailingJSONRejected(t *testing.T) {
 }
 
 func TestHandleUpdateUser_UnknownFieldRejected(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver","sneaky":"field"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -697,7 +698,7 @@ func TestHandleUpdateUser_UnknownFieldRejected(t *testing.T) {
 }
 
 func TestHandleUpdateUser_DBError(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{err: errors.New("database down")}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{err: errors.New("database down")})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -710,7 +711,7 @@ func TestHandleUpdateUser_DBError(t *testing.T) {
 }
 
 func TestHandleUpdateUser_BodyTooLarge(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{}, newFakeRefreshTokens())
+	handler := handleUpdateUser(&mockUserUpdater{})
 	body := `{"name":"` + strings.Repeat("A", 1100) + `","email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -880,66 +881,25 @@ func TestHandleListUsers_IncludesInactive(t *testing.T) {
 	assert.Len(t, users, 2)
 }
 
-// TestHandleUpdateUser_PasswordChangeDeletesRefreshTokens covers the reason an
-// admin resets a password in the first place: the old credential is in someone
-// else's hands. Without this the thief's refresh token keeps minting access
-// tokens on a rolling seven-day window, so the reset would secure nothing.
-func TestHandleUpdateUser_PasswordChangeDeletesRefreshTokens(t *testing.T) {
-	store := &mockUserUpdater{user: newSampleUser()}
-	refreshTokens := newFakeRefreshTokens()
-	storeRefreshToken(t, refreshTokens, 1, time.Now().Add(defaultRefreshTokenTTL))
+// TestHandleUpdateUser_PasswordResetFailureIs500 makes the failure loud. An
+// admin told the reset succeeded, while the stolen token still refreshes, is
+// worse off than one told it failed. That the password and the revocation
+// land together or not at all is the store's job, tested against Postgres in
+// TestStore_SetUserPasswordAndRevokeSessions_RollsBackOnRevokeFailure.
+func TestHandleUpdateUser_PasswordResetFailureIs500(t *testing.T) {
+	store := &mockUserUpdater{user: newSampleUser(), passwordErr: errors.New("database unavailable")}
+	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","password":"new-password"}`)
 
-	handler := handleUpdateUser(store, refreshTokens)
-	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1",
-		bytes.NewReader([]byte(`{"name":"Alice","email":"alice@example.com","role":"admin","password":"new-password"}`)))
-	req.Header.Set("Content-Type", "application/json")
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	handler(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, []int64{1}, refreshTokens.deletedUsers,
-		"changing a password must delete that user's refresh tokens")
-	assert.Empty(t, refreshTokens.byHash, "no refresh token may survive the reset")
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "internal server error", decodeErrorResponse(t, rr))
 }
 
-// TestHandleUpdateUser_NoPasswordKeepsRefreshTokens is the other half: an edit
-// that does not touch the password must not sign the user out everywhere.
-func TestHandleUpdateUser_NoPasswordKeepsRefreshTokens(t *testing.T) {
-	store := &mockUserUpdater{user: newSampleUser()}
-	refreshTokens := newFakeRefreshTokens()
-	token := storeRefreshToken(t, refreshTokens, 1, time.Now().Add(defaultRefreshTokenTTL))
+// TestHandleUpdateUser_PasswordResetUnknownUserIs404 covers a user deleted
+// between the profile update and the password reset.
+func TestHandleUpdateUser_PasswordResetUnknownUserIs404(t *testing.T) {
+	store := &mockUserUpdater{user: newSampleUser(), passwordErr: ErrUserNotFound}
+	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","password":"new-password"}`)
 
-	handler := handleUpdateUser(store, refreshTokens)
-	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1",
-		bytes.NewReader([]byte(`{"name":"Alice Renamed","email":"alice@example.com","role":"admin"}`)))
-	req.Header.Set("Content-Type", "application/json")
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	handler(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Empty(t, refreshTokens.deletedUsers, "a rename must not end the user's sessions")
-	_, err := refreshTokens.GetRefreshToken(context.Background(), hashRefreshToken(token))
-	assert.NoError(t, err)
-}
-
-// TestHandleUpdateUser_RefreshTokenDeleteFailureIs500 makes the failure loud.
-// An admin told the reset succeeded, while the stolen token still refreshes,
-// is worse off than one told it failed.
-func TestHandleUpdateUser_RefreshTokenDeleteFailureIs500(t *testing.T) {
-	store := &mockUserUpdater{user: newSampleUser()}
-	refreshTokens := newFakeRefreshTokens()
-	refreshTokens.deleteErr = errors.New("database unavailable")
-
-	handler := handleUpdateUser(store, refreshTokens)
-	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1",
-		bytes.NewReader([]byte(`{"name":"Alice","email":"alice@example.com","role":"admin","password":"new-password"}`)))
-	req.Header.Set("Content-Type", "application/json")
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	handler(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "internal server error", decodeErrorResponse(t, w))
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, "user not found", decodeErrorResponse(t, rr))
 }

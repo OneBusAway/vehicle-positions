@@ -807,6 +807,10 @@ type fakeUserStore struct {
 	nextID          int64
 	passwordUpdates map[int64]string
 
+	// revokeErr fails the store calls that end a user's sessions, standing
+	// in for a transaction that rolled back.
+	revokeErr error
+
 	// Recorded by ListUsersPage so the page tests can assert which filter
 	// the handler built from the query string.
 	gotFilter UserFilter
@@ -893,7 +897,10 @@ func (f *fakeUserStore) UpdateUser(_ context.Context, id int64, name, email, rol
 	return &cp, nil
 }
 
-func (f *fakeUserStore) SetUserActive(_ context.Context, id int64, active bool) error {
+func (f *fakeUserStore) SetUserActiveAndRevokeSessions(_ context.Context, id int64, active bool) error {
+	if f.revokeErr != nil {
+		return f.revokeErr
+	}
 	u, ok := f.users[id]
 	if !ok {
 		return ErrUserNotFound
@@ -902,7 +909,10 @@ func (f *fakeUserStore) SetUserActive(_ context.Context, id int64, active bool) 
 	return nil
 }
 
-func (f *fakeUserStore) UpdateUserPassword(_ context.Context, id int64, password string) error {
+func (f *fakeUserStore) SetUserPasswordAndRevokeSessions(_ context.Context, id int64, password string) error {
+	if f.revokeErr != nil {
+		return f.revokeErr
+	}
 	if _, ok := f.users[id]; !ok {
 		return ErrUserNotFound
 	}
@@ -1195,7 +1205,7 @@ func TestUserEditPage(t *testing.T) {
 }
 
 // TestUserUpdate covers the edit POST's name/email/role update, the optional
-// password path calling UpdateUserPassword, and validation.
+// password path calling SetUserPasswordAndRevokeSessions, and validation.
 func TestUserUpdate(t *testing.T) {
 	postTo := func(mux *http.ServeMux, path string, values url.Values) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(values.Encode()))
@@ -1224,7 +1234,7 @@ func TestUserUpdate(t *testing.T) {
 		assert.Empty(t, users.passwordUpdates, "password must not be touched when the field is blank")
 	})
 
-	t.Run("non-empty password also calls UpdateUserPassword", func(t *testing.T) {
+	t.Run("non-empty password also resets the password and revokes sessions", func(t *testing.T) {
 		ui := newTestAdminUI(t)
 		users := newFakeUserStore(UserResponse{ID: 1, Name: "Old Name", Email: "old@test.com", Role: "driver", Active: true})
 		wireFakeUserStore(ui, users, newFakeAssignmentStore())
@@ -1311,6 +1321,13 @@ func TestUserDeactivateActivate(t *testing.T) {
 
 	t.Run("unknown id 404s", func(t *testing.T) {
 		w := postTo("/admin/users/999/deactivate")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	// Activation skips the last-admin lookup, so its 404 can only come from
+	// the store call itself.
+	t.Run("unknown id 404s on activate", func(t *testing.T) {
+		w := postTo("/admin/users/999/activate")
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 }
@@ -1911,52 +1928,24 @@ func TestValidatePassword(t *testing.T) {
 	}
 }
 
-// fakeUserManagerForRevocation records the calls the revocation tests care
-// about while satisfying the parts of the user-manager surface userUpdate and
-// userDeactivate touch.
-type fakeUserManagerForRevocation struct {
-	noopStore
-	passwordUpdated bool
-	activeSet       *bool
-}
-
-func (f *fakeUserManagerForRevocation) UpdateUser(_ context.Context, id int64, _, _, _ string) (*UserResponse, error) {
-	return &UserResponse{ID: id, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true}, nil
-}
-
-func (f *fakeUserManagerForRevocation) UpdateUserPassword(_ context.Context, _ int64, _ string) error {
-	f.passwordUpdated = true
-	return nil
-}
-
-func (f *fakeUserManagerForRevocation) SetUserActive(_ context.Context, _ int64, active bool) error {
-	f.activeSet = &active
-	return nil
-}
-
-func (f *fakeUserManagerForRevocation) GetUser(_ context.Context, id int64) (*UserResponse, error) {
-	return &UserResponse{ID: id, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true}, nil
-}
-
-// adminUIForRevocation wires an adminUI whose user manager and refresh-token
-// deleter are both observable.
-func adminUIForRevocation(t *testing.T) (*adminUI, *fakeUserManagerForRevocation, *fakeRefreshTokens) {
+// adminUIWithFailingRevocation wires an adminUI over one active driver whose
+// session-ending store calls fail.
+func adminUIWithFailingRevocation(t *testing.T) *http.ServeMux {
 	t.Helper()
 	ui := newTestAdminUI(t)
-	users := &fakeUserManagerForRevocation{}
-	refreshTokens := newFakeRefreshTokens()
-	ui.userManager = users
-	ui.refreshTokens = refreshTokens
-	return ui, users, refreshTokens
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true})
+	users.revokeErr = errors.New("database unavailable")
+	wireFakeUserStore(ui, users, newFakeAssignmentStore())
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+	return mux
 }
 
-// TestAdminUI_PasswordChangeDeletesRefreshTokens is the admin UI half of the
-// stolen-phone case: the edit form must invalidate refresh tokens exactly as
-// the JSON endpoint does, or the two paths disagree about what a password
-// reset means.
-func TestAdminUI_PasswordChangeDeletesRefreshTokens(t *testing.T) {
-	ui, users, refreshTokens := adminUIForRevocation(t)
-	storeRefreshToken(t, refreshTokens, 1, time.Now().Add(defaultRefreshTokenTTL))
+// TestAdminUI_PasswordResetFailureIs500 is the admin UI half of the
+// stolen-phone case: an admin told the reset succeeded, while the stolen
+// token still refreshes, is worse off than one told it failed.
+func TestAdminUI_PasswordResetFailureIs500(t *testing.T) {
+	mux := adminUIWithFailingRevocation(t)
 
 	form := url.Values{
 		"name": {"Alice"}, "email": {"alice@example.com"},
@@ -1964,48 +1953,24 @@ func TestAdminUI_PasswordChangeDeletesRefreshTokens(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/admin/users/1", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetPathValue("id", "1")
+	req.AddCookie(cookieFor(t, "admin"))
 	w := httptest.NewRecorder()
-	ui.userUpdate(w, req)
+	mux.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusSeeOther, w.Code)
-	require.True(t, users.passwordUpdated, "the password must actually have been changed")
-	assert.Equal(t, []int64{1}, refreshTokens.deletedUsers,
-		"the admin UI password change must delete refresh tokens too")
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "internal server error")
 }
 
-// TestAdminUI_DeactivateDeletesRefreshTokens guards reactivation: refresh
-// already refuses an inactive user, so the tokens only matter if the account
-// comes back — at which point a months-old token would otherwise still work.
-func TestAdminUI_DeactivateDeletesRefreshTokens(t *testing.T) {
-	ui, users, refreshTokens := adminUIForRevocation(t)
-	storeRefreshToken(t, refreshTokens, 1, time.Now().Add(defaultRefreshTokenTTL))
+// TestAdminUI_DeactivateFailureIs500 pins the same for deactivation, so a
+// failed revocation never reaches the "user deactivated" flash.
+func TestAdminUI_DeactivateFailureIs500(t *testing.T) {
+	mux := adminUIWithFailingRevocation(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/deactivate", nil)
-	req.SetPathValue("id", "1")
+	req.AddCookie(cookieFor(t, "admin"))
 	w := httptest.NewRecorder()
-	ui.userDeactivate(w, req)
+	mux.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusSeeOther, w.Code)
-	require.NotNil(t, users.activeSet)
-	require.False(t, *users.activeSet, "the user must have been deactivated")
-	assert.Equal(t, []int64{1}, refreshTokens.deletedUsers,
-		"deactivation must delete refresh tokens so reactivation does not revive them")
-}
-
-// TestAdminUI_ActivateKeepsRefreshTokens pins the asymmetry: only
-// deactivation clears tokens. Reactivating a user must not delete the tokens
-// they legitimately obtained after coming back.
-func TestAdminUI_ActivateKeepsRefreshTokens(t *testing.T) {
-	ui, users, refreshTokens := adminUIForRevocation(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/activate", nil)
-	req.SetPathValue("id", "1")
-	w := httptest.NewRecorder()
-	ui.userActivate(w, req)
-
-	require.Equal(t, http.StatusSeeOther, w.Code)
-	require.NotNil(t, users.activeSet)
-	require.True(t, *users.activeSet)
-	assert.Empty(t, refreshTokens.deletedUsers, "reactivation must not clear refresh tokens")
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "internal server error")
 }

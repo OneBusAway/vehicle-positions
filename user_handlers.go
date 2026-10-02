@@ -149,7 +149,7 @@ func handleCreateUser(store UserCreator) http.HandlerFunc {
 	}
 }
 
-func handleUpdateUser(store UserUpdater, refreshTokens RefreshTokenDeleter) http.HandlerFunc {
+func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		contentType := r.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -216,16 +216,6 @@ func handleUpdateUser(store UserUpdater, refreshTokens RefreshTokenDeleter) http
 		}
 
 		if req.Password != "" {
-			if err := store.UpdateUserPassword(r.Context(), id, req.Password); err != nil {
-				if errors.Is(err, ErrUserNotFound) {
-					writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
-					return
-				}
-				slog.Error("failed to update user password", "id", id, "error", err)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-				return
-			}
-
 			// A password reset is how an admin responds to a stolen phone, so
 			// it has to end the sessions that phone holds. The access token
 			// still runs out its own clock, but without this the thief's
@@ -233,8 +223,12 @@ func handleUpdateUser(store UserUpdater, refreshTokens RefreshTokenDeleter) http
 			// nothing. Reported as a failure rather than logged and ignored:
 			// an admin who sees success must not be left believing the
 			// account is secured when it is not.
-			if err := refreshTokens.DeleteRefreshTokensForUser(r.Context(), id); err != nil {
-				slog.Error("failed to delete refresh tokens after password change", "id", id, "error", err)
+			if err := store.SetUserPasswordAndRevokeSessions(r.Context(), id, req.Password); err != nil {
+				if errors.Is(err, ErrUserNotFound) {
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+					return
+				}
+				slog.Error("failed to change user password and revoke refresh tokens", "id", id, "error", err)
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 				return
 			}

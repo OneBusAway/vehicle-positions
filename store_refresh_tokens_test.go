@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // insertRefreshTestUser creates a user the refresh-token rows can reference
@@ -165,6 +167,29 @@ func TestStore_RotateRefreshToken_RollsBackOnDuplicate(t *testing.T) {
 	assert.Equal(t, 1, countRefreshRows(t, store, existingHash), "no partial row may be left behind")
 }
 
+// TestStore_RotateRefreshToken_DeletedUser covers a user deleted between the
+// refresh handler reading the token and rotating it. The rotation must lose
+// cleanly, as if a concurrent refresh had won, and mint nothing.
+func TestStore_RotateRefreshToken_DeletedUser(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+
+	_, oldHash := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	old, err := store.GetRefreshToken(ctx, oldHash)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	require.NoError(t, err)
+
+	newToken, err := newRefreshTokenValue()
+	require.NoError(t, err)
+	rotated, err := store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(newToken), userID, time.Now().Add(time.Hour))
+
+	require.NoError(t, err)
+	assert.False(t, rotated)
+	assert.Equal(t, 0, countRefreshRows(t, store, hashRefreshToken(newToken)))
+}
+
 func TestStore_CreateRefreshToken_DuplicateHashRejected(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -217,6 +242,18 @@ func TestStore_DeleteRefreshTokensForUser(t *testing.T) {
 
 	assert.NoError(t, store.DeleteRefreshTokensForUser(ctx, userID),
 		"deleting again must not error: logout has to be retryable")
+}
+
+// TestStore_DeleteRefreshTokensForUser_UnknownUser covers logout by a user
+// deleted since their access token was issued: their tokens went with the
+// row, so there is nothing to lock and nothing to revoke.
+func TestStore_DeleteRefreshTokensForUser_UnknownUser(t *testing.T) {
+	store := newTestStore(t)
+	otherID := insertRefreshTestUser(t, store)
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	assert.NoError(t, store.DeleteRefreshTokensForUser(context.Background(), -1))
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "no one else's tokens may be touched")
 }
 
 // TestStore_RefreshToken_ExpiredIsStillReadable pins the division of labour:
@@ -292,6 +329,303 @@ func TestStore_RotateRefreshToken_ConcurrentRotationsIssueOneToken(t *testing.T)
 		"SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1", userID).Scan(&issued)
 	require.NoError(t, err)
 	assert.Equal(t, 2, issued, "the original token plus exactly one replacement")
+}
+
+// countUserRefreshRows returns how many refresh-token rows a user holds.
+func countUserRefreshRows(t *testing.T, store *Store, userID int64) int {
+	t.Helper()
+	var n int
+	err := store.pool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1", userID).Scan(&n)
+	require.NoError(t, err)
+	return n
+}
+
+// revokeDuringRotation runs revoke while a rotation of userID's token is
+// stopped partway through, after it has marked the old token used and while
+// its insert is waiting. That is the window issue #117 describes, held open
+// on purpose rather than hit by luck.
+//
+// The rotation is parked on a uniqueness conflict: blocker holds an
+// uncommitted row, owned by another user, with the replacement's token_hash,
+// so the rotation's insert waits for blocker to finish. Only once revoke is
+// itself seen waiting behind the rotation does blocker roll back and let
+// both run to completion. Without a shared lock, the revoker's DELETE takes
+// its snapshot while the replacement is still uncommitted, never sees it, and
+// the replacement survives.
+func revokeDuringRotation(t *testing.T, store *Store, userID int64, revoke func(context.Context) error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, oldHash := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	old, err := store.GetRefreshToken(ctx, oldHash)
+	require.NoError(t, err)
+	newToken, err := newRefreshTokenValue()
+	require.NoError(t, err)
+	newHash := hashRefreshToken(newToken)
+
+	blocker, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer blocker.Rollback(context.Background())
+	_, err = blocker.Exec(ctx,
+		"INSERT INTO refresh_tokens (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+		newHash, insertRefreshTestUser(t, store), time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	var blockerPID int
+	require.NoError(t, blocker.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&blockerPID))
+
+	// waitingOnBlocker reports whether some backend is blocked depth hops
+	// away from blocker: 1 is the rotation, 2 is whatever waits behind it. It
+	// polls through the pool, not blocker, because pg_stat_activity is
+	// snapshotted once per transaction and blocker's would never update.
+	waitingOnBlocker := func(depth int) func() bool {
+		query := "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))"
+		if depth == 2 {
+			query = `SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity waiter, unnest(pg_blocking_pids(waiter.pid)) AS holder(pid)
+				WHERE $1 = ANY(pg_blocking_pids(holder.pid)))`
+		}
+		return func() bool {
+			var waiting bool
+			err := store.pool.QueryRow(ctx, query, blockerPID).Scan(&waiting)
+			return err == nil && waiting
+		}
+	}
+
+	type rotation struct {
+		rotated bool
+		err     error
+	}
+	rotated := make(chan rotation, 1)
+	go func() {
+		ok, err := store.RotateRefreshToken(ctx, old.ID, newHash, userID, time.Now().Add(time.Hour))
+		rotated <- rotation{ok, err}
+	}()
+	require.Eventually(t, waitingOnBlocker(1), 5*time.Second, 10*time.Millisecond,
+		"the rotation never reached its insert")
+
+	revoked := make(chan error, 1)
+	go func() { revoked <- revoke(ctx) }()
+	require.Eventually(t, waitingOnBlocker(2), 5*time.Second, 10*time.Millisecond,
+		"the revocation never queued behind the open rotation")
+
+	require.NoError(t, blocker.Rollback(ctx))
+
+	r := <-rotated
+	require.NoError(t, r.err)
+	require.True(t, r.rotated, "the rotation started first, so it must win and commit")
+	require.NoError(t, <-revoked)
+
+	assert.Equal(t, 0, countUserRefreshRows(t, store, userID),
+		"the replacement minted while the revocation ran must not survive it")
+}
+
+// TestStore_PasswordResetBeatsAConcurrentRotation is issue #117: a password
+// reset that lands while a stolen token is mid-rotation must still end that
+// token's line, or the thief keeps rotating after the admin was told the
+// account is secured.
+func TestStore_PasswordResetBeatsAConcurrentRotation(t *testing.T) {
+	store := newTestStore(t)
+	userID := insertRefreshTestUser(t, store)
+
+	revokeDuringRotation(t, store, userID, func(ctx context.Context) error {
+		return store.SetUserPasswordAndRevokeSessions(ctx, userID, "newpassword123")
+	})
+
+	hash := storedPasswordHash(t, store, userID)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("newpassword123")))
+}
+
+func TestStore_DeactivationBeatsAConcurrentRotation(t *testing.T) {
+	store := newTestStore(t)
+	userID := insertRefreshTestUser(t, store)
+
+	revokeDuringRotation(t, store, userID, func(ctx context.Context) error {
+		return store.SetUserActiveAndRevokeSessions(ctx, userID, false)
+	})
+
+	user, err := store.GetUser(context.Background(), userID)
+	require.NoError(t, err)
+	assert.False(t, user.Active)
+}
+
+// TestStore_LogoutBeatsAConcurrentRotation covers logout. Unlike a password
+// reset it writes nothing to the users row before its DELETE, so LockUser is
+// the only statement that makes it wait for the rotation to commit. Waiting
+// inside the DELETE itself is too late: its snapshot is already taken.
+func TestStore_LogoutBeatsAConcurrentRotation(t *testing.T) {
+	store := newTestStore(t)
+	userID := insertRefreshTestUser(t, store)
+
+	revokeDuringRotation(t, store, userID, func(ctx context.Context) error {
+		return store.DeleteRefreshTokensForUser(ctx, userID)
+	})
+}
+
+// refuseRefreshTokenDeletes makes deleting any of userID's refresh tokens
+// fail until the test ends, so a revocation can be made to fail after its
+// transaction has already written the users row.
+func refuseRefreshTokenDeletes(t *testing.T, store *Store, userID int64) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := store.pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_refuse_refresh_token_delete() RETURNS trigger AS $$
+		BEGIN
+			IF OLD.user_id = TG_ARGV[0]::bigint THEN
+				RAISE EXCEPTION 'refresh token delete refused by test';
+			END IF;
+			RETURN OLD;
+		END;
+		$$ LANGUAGE plpgsql`)
+	require.NoError(t, err)
+	// Trigger arguments are literals, so the id cannot be a bind parameter.
+	_, err = store.pool.Exec(ctx, fmt.Sprintf(`
+		CREATE OR REPLACE TRIGGER test_refuse_refresh_token_delete
+		BEFORE DELETE ON refresh_tokens
+		FOR EACH ROW EXECUTE FUNCTION test_refuse_refresh_token_delete('%d')`, userID))
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, err := store.pool.Exec(context.Background(),
+			"DROP TRIGGER IF EXISTS test_refuse_refresh_token_delete ON refresh_tokens")
+		require.NoError(t, err)
+		_, err = store.pool.Exec(context.Background(),
+			"DROP FUNCTION IF EXISTS test_refuse_refresh_token_delete()")
+		require.NoError(t, err)
+	})
+}
+
+// createPasswordTestUser creates a user through the store, so the stored hash
+// is a real bcrypt of password.
+func createPasswordTestUser(t *testing.T, store *Store, password string) *UserResponse {
+	t.Helper()
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+	u, err := store.CreateUser(context.Background(), "Password Test User", email, password, "driver")
+	require.NoError(t, err)
+	return u
+}
+
+// storedPasswordHash reads a user's password_hash straight from the table.
+func storedPasswordHash(t *testing.T, store *Store, userID int64) string {
+	t.Helper()
+	var hash string
+	err := store.pool.QueryRow(context.Background(),
+		"SELECT password_hash FROM users WHERE id = $1", userID).Scan(&hash)
+	require.NoError(t, err)
+	return hash
+}
+
+func TestStore_SetUserPasswordAndRevokeSessions(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u := createPasswordTestUser(t, store, "originalpass")
+	otherID := insertRefreshTestUser(t, store)
+
+	_, first := newStoredRefreshToken(t, store, u.ID, time.Now().Add(time.Hour))
+	_, second := newStoredRefreshToken(t, store, u.ID, time.Now().Add(time.Hour))
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	require.NoError(t, store.SetUserPasswordAndRevokeSessions(ctx, u.ID, "newpassword123"))
+
+	hash := storedPasswordHash(t, store, u.ID)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("newpassword123")))
+	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("originalpass")))
+	assert.Equal(t, 0, countRefreshRows(t, store, first))
+	assert.Equal(t, 0, countRefreshRows(t, store, second), "every token for the user must go, not just one")
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "another user's tokens must survive")
+}
+
+func TestStore_SetUserPasswordAndRevokeSessions_UnknownUser(t *testing.T) {
+	store := newTestStore(t)
+	otherID := insertRefreshTestUser(t, store)
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	// -1 can never be a users.id (the column is a positive-only sequence).
+	err := store.SetUserPasswordAndRevokeSessions(context.Background(), -1, "newpassword123")
+
+	assert.ErrorIs(t, err, ErrUserNotFound)
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "no one else's tokens may be touched")
+}
+
+// TestStore_SetUserPasswordAndRevokeSessions_RollsBackOnRevokeFailure is the
+// atomicity half of issue #117. When the revocation fails, the password must
+// still be the old one: a changed password with live sessions is exactly the
+// state an admin cannot see and must never be left in.
+func TestStore_SetUserPasswordAndRevokeSessions_RollsBackOnRevokeFailure(t *testing.T) {
+	store := newTestStore(t)
+	u := createPasswordTestUser(t, store, "originalpass")
+	_, token := newStoredRefreshToken(t, store, u.ID, time.Now().Add(time.Hour))
+	before := storedPasswordHash(t, store, u.ID)
+	refuseRefreshTokenDeletes(t, store, u.ID)
+
+	err := store.SetUserPasswordAndRevokeSessions(context.Background(), u.ID, "newpassword123")
+	require.Error(t, err)
+
+	assert.Equal(t, before, storedPasswordHash(t, store, u.ID), "the password must be unchanged")
+	assert.Equal(t, 1, countRefreshRows(t, store, token))
+}
+
+func TestStore_SetUserActiveAndRevokeSessions_Deactivate(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	otherID := insertRefreshTestUser(t, store)
+
+	_, first := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	_, second := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, userID, false))
+
+	user, err := store.GetUser(ctx, userID)
+	require.NoError(t, err)
+	assert.False(t, user.Active)
+	assert.Equal(t, 0, countRefreshRows(t, store, first))
+	assert.Equal(t, 0, countRefreshRows(t, store, second))
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "another user's tokens must survive")
+}
+
+// TestStore_SetUserActiveAndRevokeSessions_Reactivate pins the asymmetry:
+// only deactivation revokes, so the way back up leaves tokens alone.
+func TestStore_SetUserActiveAndRevokeSessions_Reactivate(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	_, err := store.pool.Exec(ctx, "UPDATE users SET active = false WHERE id = $1", userID)
+	require.NoError(t, err)
+	_, token := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, userID, true))
+
+	user, err := store.GetUser(ctx, userID)
+	require.NoError(t, err)
+	assert.True(t, user.Active)
+	assert.Equal(t, 1, countRefreshRows(t, store, token), "reactivation must not clear refresh tokens")
+}
+
+func TestStore_SetUserActiveAndRevokeSessions_UnknownUser(t *testing.T) {
+	store := newTestStore(t)
+	for _, active := range []bool{false, true} {
+		err := store.SetUserActiveAndRevokeSessions(context.Background(), -1, active)
+		assert.ErrorIs(t, err, ErrUserNotFound, "active=%v", active)
+	}
+}
+
+func TestStore_SetUserActiveAndRevokeSessions_RollsBackOnRevokeFailure(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	_, token := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	refuseRefreshTokenDeletes(t, store, userID)
+
+	require.Error(t, store.SetUserActiveAndRevokeSessions(ctx, userID, false))
+
+	user, err := store.GetUser(ctx, userID)
+	require.NoError(t, err)
+	assert.True(t, user.Active, "the user must still be active")
+	assert.Equal(t, 1, countRefreshRows(t, store, token))
 }
 
 // clearRefreshTokens empties the table so a prune's returned count reflects
