@@ -736,6 +736,7 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		riderBatch    = "#/components/schemas/PositionsRequest/properties/positions"
 		riderRegister = "#/components/schemas/RiderRegisterResponse/properties"
 		password      = "#/components/schemas/Password"
+		expiresIn     = "#/components/schemas/LoginResponse/properties/expires_in"
 	)
 
 	constraints := []struct {
@@ -759,6 +760,7 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		{riderLimit, "default", defaultRiderRideListLimit, "defaultRiderRideListLimit"},
 		{riderBatch, "maxItems", riderMaxBatchSize, "riderMaxBatchSize"},
 		{password, "minLength", minPasswordLength, "minPasswordLength"},
+		{expiresIn, "example", int(defaultAccessTokenTTL.Seconds()), "defaultAccessTokenTTL"},
 	}
 
 	for _, constraint := range constraints {
