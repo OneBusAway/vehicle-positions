@@ -164,6 +164,41 @@ import VehiclePositionsKit
         #expect(s.fixesSent == 2)
     }
 
+    @Test func anOffRouteFixKeepsTheLastOnRouteHint() async throws {
+        // The evaluator already ignores an off-route `previous`
+        // (`offRoutePreviousDoesNotHint`). What this pins is what the session
+        // hands it: storing the off-route judgement as the hint would erase the
+        // one before it, and on a loop the next fix would then snap to the wrong
+        // pass. A straight shape cannot show this, so the trip is the loop, whose
+        // shared start/end point is told apart by the hint alone.
+        api.geometry = TripFixtures.loop
+        let shapeLength = AdherenceEvaluator(trip: TripFixtures.loop)!.shape.length
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "L")
+
+        locations.emitFix(lat: 47.6001, lon: -122.3292, at: TripFixtures.at(9, 15))
+        #expect(await eventually { s.latest != nil })
+        #expect(s.latest?.isOnRoute == true)
+
+        // A detour 112 m west of the first leg. Off route, and its own
+        // projection is back on the first pass: the position the next fix must
+        // not be judged against.
+        clock.advance(120)
+        locations.emitFix(lat: 47.6040, lon: -122.3315, at: TripFixtures.at(9, 17))
+        #expect(await eventually { s.latest?.isOnRoute == false })
+        #expect(s.latest?.projection.alongShape ?? 0 < 600)
+
+        clock.advance(180)
+        locations.emitFix(lat: 47.6000, lon: -122.3300, at: TripFixtures.at(9, 20))
+        #expect(await eventually { s.latest?.fix.timestamp == TripFixtures.at(9, 20) })
+        #expect(s.latest?.projection.alongShape ?? 0 > shapeLength - 60,
+                "the hint from before the detour still picks the last pass")
+        // On the first pass the bus would read 20 minutes late for the rest of
+        // the trip.
+        #expect(s.latest?.status == .onTime)
+    }
+
     @Test func reportingStatusReflectsProblems() async throws {
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")

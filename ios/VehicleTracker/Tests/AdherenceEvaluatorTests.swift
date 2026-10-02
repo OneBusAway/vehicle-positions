@@ -61,16 +61,7 @@ import Testing
 
     @Test func previousOnRouteFixSuppliesTheHint() {
         // A loop where only the hint separates the first and last pass.
-        let loop = TripGeometry(
-            id: "L", routeID: "R2", headsign: "Loop", directionID: nil, serviceDate: "20260902", timezone: "America/Los_Angeles",
-            route: RouteSummary(shortName: "2", longName: "Loop", color: "", textColor: ""),
-            shape: ShapePayload(lengthM: 2000, points: [[47.6000, -122.3300], [47.6045, -122.3300], [47.6045, -122.3234], [47.6000, -122.3234], [47.6000, -122.3300]]),
-            stops: [
-                TripStop(id: "A", name: "A", sequence: 1, lat: 47.6000, lon: -122.3300, alongShapeM: 0, arrivalAt: TripFixtures.at(9, 0), departureAt: TripFixtures.at(9, 0)),
-                TripStop(id: "B", name: "B", sequence: 2, lat: 47.6000, lon: -122.3300, alongShapeM: 1995, arrivalAt: TripFixtures.at(9, 20), departureAt: TripFixtures.at(9, 20)),
-            ],
-            thresholds: TripFixtures.t1.thresholds)
-        let ev = AdherenceEvaluator(trip: loop)!
+        let ev = AdherenceEvaluator(trip: TripFixtures.loop)!
         let lateInLoop = ev.evaluate(TripFixtures.fix(lat: 47.6001, lon: -122.3292, at: TripFixtures.at(9, 15)), previous: nil) // ~435 m along the south leg
         #expect(lateInLoop.projection.alongShape > 1400)
         let atShared = ev.evaluate(TripFixtures.fix(lat: 47.6000, lon: -122.3300, at: TripFixtures.at(9, 20)), previous: lateInLoop)
