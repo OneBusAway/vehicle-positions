@@ -49,6 +49,14 @@ UPDATE users SET active = $2 WHERE id = $1;
 -- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2 WHERE id = $1;
 
+-- name: LockUser :one
+-- Serializes everything that touches one user's sessions. Rotation and
+-- revocation both take this before reading or writing refresh_tokens, so a
+-- revocation can never run between a rotation's insert and its commit. The
+-- users row is the mutex because the refresh_tokens row a revoker would need
+-- to block on does not exist yet, which is the race being closed.
+SELECT id FROM users WHERE id = $1 FOR UPDATE;
+
 -- name: CountUsersByRole :one
 SELECT COUNT(*) FROM users WHERE role = $1;
 

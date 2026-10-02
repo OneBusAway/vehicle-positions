@@ -120,6 +120,9 @@ func (s *Store) GetRefreshToken(ctx context.Context, tokenHash string) (*Refresh
 // filters on used_at IS NULL, which makes consumption a compare-and-set: of
 // two concurrent refreshes presenting the same token, exactly one wins and
 // the loser is told to re-authenticate rather than both being issued tokens.
+//
+// It also reports false when the user no longer exists: deleting a user
+// cascades to their tokens, so there is nothing left to rotate.
 func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (bool, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -128,6 +131,19 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 	defer tx.Rollback(ctx)
 
 	qtx := s.queries.WithTx(tx)
+
+	// Rotation and every revocation take this lock before touching
+	// refresh_tokens, so a revocation that arrives mid-rotation waits for
+	// the replacement to commit and then deletes it too. Without it here the
+	// revokers' lock contends with nothing. Each path locks one users row
+	// before any other row, so no two of them can wait on each other in a
+	// cycle.
+	if _, err := qtx.LockUser(ctx, userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("lock user: %w", err)
+	}
 
 	rows, err := qtx.MarkRefreshTokenUsed(ctx, usedID)
 	if err != nil {
@@ -152,10 +168,33 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 	return true, nil
 }
 
-// DeleteRefreshTokensForUser removes all of a user's refresh tokens.
+// DeleteRefreshTokensForUser removes all of a user's refresh tokens, under the
+// same user lock RotateRefreshToken takes, so a rotation already in flight
+// cannot leave its replacement behind. A user that no longer exists has no
+// tokens to remove (they cascaded with the row), which is not an error:
+// logout has to stay retryable.
 func (s *Store) DeleteRefreshTokensForUser(ctx context.Context, userID int64) error {
-	if err := s.queries.DeleteRefreshTokensForUser(ctx, userID); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := s.queries.WithTx(tx)
+
+	if _, err := qtx.LockUser(ctx, userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("lock user: %w", err)
+	}
+
+	if err := qtx.DeleteRefreshTokensForUser(ctx, userID); err != nil {
 		return fmt.Errorf("delete refresh tokens for user: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit refresh token deletion: %w", err)
 	}
 	return nil
 }

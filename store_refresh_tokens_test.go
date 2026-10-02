@@ -165,6 +165,29 @@ func TestStore_RotateRefreshToken_RollsBackOnDuplicate(t *testing.T) {
 	assert.Equal(t, 1, countRefreshRows(t, store, existingHash), "no partial row may be left behind")
 }
 
+// TestStore_RotateRefreshToken_DeletedUser covers a user deleted between the
+// refresh handler reading the token and rotating it. The rotation must lose
+// cleanly, as if a concurrent refresh had won, and mint nothing.
+func TestStore_RotateRefreshToken_DeletedUser(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+
+	_, oldHash := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	old, err := store.GetRefreshToken(ctx, oldHash)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	require.NoError(t, err)
+
+	newToken, err := newRefreshTokenValue()
+	require.NoError(t, err)
+	rotated, err := store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(newToken), userID, time.Now().Add(time.Hour))
+
+	require.NoError(t, err)
+	assert.False(t, rotated)
+	assert.Equal(t, 0, countRefreshRows(t, store, hashRefreshToken(newToken)))
+}
+
 func TestStore_CreateRefreshToken_DuplicateHashRejected(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -217,6 +240,18 @@ func TestStore_DeleteRefreshTokensForUser(t *testing.T) {
 
 	assert.NoError(t, store.DeleteRefreshTokensForUser(ctx, userID),
 		"deleting again must not error: logout has to be retryable")
+}
+
+// TestStore_DeleteRefreshTokensForUser_UnknownUser covers logout by a user
+// deleted since their access token was issued: their tokens went with the
+// row, so there is nothing to lock and nothing to revoke.
+func TestStore_DeleteRefreshTokensForUser_UnknownUser(t *testing.T) {
+	store := newTestStore(t)
+	otherID := insertRefreshTestUser(t, store)
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	assert.NoError(t, store.DeleteRefreshTokensForUser(context.Background(), -1))
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "no one else's tokens may be touched")
 }
 
 // TestStore_RefreshToken_ExpiredIsStillReadable pins the division of labour:
@@ -292,6 +327,108 @@ func TestStore_RotateRefreshToken_ConcurrentRotationsIssueOneToken(t *testing.T)
 		"SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1", userID).Scan(&issued)
 	require.NoError(t, err)
 	assert.Equal(t, 2, issued, "the original token plus exactly one replacement")
+}
+
+// countUserRefreshRows returns how many refresh-token rows a user holds.
+func countUserRefreshRows(t *testing.T, store *Store, userID int64) int {
+	t.Helper()
+	var n int
+	err := store.pool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM refresh_tokens WHERE user_id = $1", userID).Scan(&n)
+	require.NoError(t, err)
+	return n
+}
+
+// revokeDuringRotation runs revoke while a rotation of userID's token is
+// stopped between its insert and its commit, which is the window issue #117
+// describes, held open on purpose rather than hit by luck.
+//
+// The rotation is parked on a uniqueness conflict: blocker holds an
+// uncommitted row, owned by another user, with the replacement's token_hash,
+// so the rotation's insert waits for blocker to finish. Only once revoke is
+// itself seen waiting behind the rotation does blocker roll back and let
+// both run to completion. Without a shared lock, the revoker's DELETE takes
+// its snapshot while the replacement is still uncommitted, never sees it, and
+// the replacement survives.
+func revokeDuringRotation(t *testing.T, store *Store, userID int64, revoke func(context.Context) error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, oldHash := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	old, err := store.GetRefreshToken(ctx, oldHash)
+	require.NoError(t, err)
+	newToken, err := newRefreshTokenValue()
+	require.NoError(t, err)
+	newHash := hashRefreshToken(newToken)
+
+	blocker, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer blocker.Rollback(context.Background())
+	_, err = blocker.Exec(ctx,
+		"INSERT INTO refresh_tokens (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+		newHash, insertRefreshTestUser(t, store), time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	var blockerPID int
+	require.NoError(t, blocker.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&blockerPID))
+
+	// waitingOnBlocker reports whether some backend is blocked depth hops
+	// away from blocker: 1 is the rotation, 2 is whatever waits behind it. It
+	// polls through the pool, not blocker, because pg_stat_activity is
+	// snapshotted once per transaction and blocker's would never update.
+	waitingOnBlocker := func(depth int) func() bool {
+		query := "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))"
+		if depth == 2 {
+			query = `SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity waiter, unnest(pg_blocking_pids(waiter.pid)) AS holder(pid)
+				WHERE $1 = ANY(pg_blocking_pids(holder.pid)))`
+		}
+		return func() bool {
+			var waiting bool
+			err := store.pool.QueryRow(ctx, query, blockerPID).Scan(&waiting)
+			return err == nil && waiting
+		}
+	}
+
+	type rotation struct {
+		rotated bool
+		err     error
+	}
+	rotated := make(chan rotation, 1)
+	go func() {
+		ok, err := store.RotateRefreshToken(ctx, old.ID, newHash, userID, time.Now().Add(time.Hour))
+		rotated <- rotation{ok, err}
+	}()
+	require.Eventually(t, waitingOnBlocker(1), 5*time.Second, 10*time.Millisecond,
+		"the rotation never reached its insert")
+
+	revoked := make(chan error, 1)
+	go func() { revoked <- revoke(ctx) }()
+	require.Eventually(t, waitingOnBlocker(2), 5*time.Second, 10*time.Millisecond,
+		"the revocation never queued behind the open rotation")
+
+	require.NoError(t, blocker.Rollback(ctx))
+
+	r := <-rotated
+	require.NoError(t, r.err)
+	require.True(t, r.rotated, "the rotation started first, so it must win and commit")
+	require.NoError(t, <-revoked)
+
+	assert.Equal(t, 0, countUserRefreshRows(t, store, userID),
+		"the replacement minted while the revocation ran must not survive it")
+}
+
+// TestStore_LogoutBeatsAConcurrentRotation covers logout. Unlike a password
+// reset it writes nothing to the users row before its DELETE, so LockUser is
+// the only statement that makes it wait for the rotation to commit. Waiting
+// inside the DELETE itself is too late: its snapshot is already taken.
+func TestStore_LogoutBeatsAConcurrentRotation(t *testing.T) {
+	store := newTestStore(t)
+	userID := insertRefreshTestUser(t, store)
+
+	revokeDuringRotation(t, store, userID, func(ctx context.Context) error {
+		return store.DeleteRefreshTokensForUser(ctx, userID)
+	})
 }
 
 // clearRefreshTokens empties the table so a prune's returned count reflects
