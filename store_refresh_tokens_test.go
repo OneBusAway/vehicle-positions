@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // insertRefreshTestUser creates a user the refresh-token rows can reference
@@ -418,6 +420,22 @@ func revokeDuringRotation(t *testing.T, store *Store, userID int64, revoke func(
 		"the replacement minted while the revocation ran must not survive it")
 }
 
+// TestStore_PasswordResetBeatsAConcurrentRotation is issue #117: a password
+// reset that lands while a stolen token is mid-rotation must still end that
+// token's line, or the thief keeps rotating after the admin was told the
+// account is secured.
+func TestStore_PasswordResetBeatsAConcurrentRotation(t *testing.T) {
+	store := newTestStore(t)
+	userID := insertRefreshTestUser(t, store)
+
+	revokeDuringRotation(t, store, userID, func(ctx context.Context) error {
+		return store.SetUserPasswordAndRevokeSessions(ctx, userID, "newpassword123")
+	})
+
+	hash := storedPasswordHash(t, store, userID)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("newpassword123")))
+}
+
 // TestStore_LogoutBeatsAConcurrentRotation covers logout. Unlike a password
 // reset it writes nothing to the users row before its DELETE, so LockUser is
 // the only statement that makes it wait for the rotation to commit. Waiting
@@ -429,6 +447,110 @@ func TestStore_LogoutBeatsAConcurrentRotation(t *testing.T) {
 	revokeDuringRotation(t, store, userID, func(ctx context.Context) error {
 		return store.DeleteRefreshTokensForUser(ctx, userID)
 	})
+}
+
+// refuseRefreshTokenDeletes makes deleting any of userID's refresh tokens
+// fail until the test ends, so a revocation can be made to fail after its
+// transaction has already written the users row.
+func refuseRefreshTokenDeletes(t *testing.T, store *Store, userID int64) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := store.pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_refuse_refresh_token_delete() RETURNS trigger AS $$
+		BEGIN
+			IF OLD.user_id = TG_ARGV[0]::bigint THEN
+				RAISE EXCEPTION 'refresh token delete refused by test';
+			END IF;
+			RETURN OLD;
+		END;
+		$$ LANGUAGE plpgsql`)
+	require.NoError(t, err)
+	// Trigger arguments are literals, so the id cannot be a bind parameter.
+	_, err = store.pool.Exec(ctx, fmt.Sprintf(`
+		CREATE OR REPLACE TRIGGER test_refuse_refresh_token_delete
+		BEFORE DELETE ON refresh_tokens
+		FOR EACH ROW EXECUTE FUNCTION test_refuse_refresh_token_delete('%d')`, userID))
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, err := store.pool.Exec(context.Background(),
+			"DROP TRIGGER IF EXISTS test_refuse_refresh_token_delete ON refresh_tokens")
+		require.NoError(t, err)
+		_, err = store.pool.Exec(context.Background(),
+			"DROP FUNCTION IF EXISTS test_refuse_refresh_token_delete()")
+		require.NoError(t, err)
+	})
+}
+
+// createPasswordTestUser creates a user through the store, so the stored hash
+// is a real bcrypt of password.
+func createPasswordTestUser(t *testing.T, store *Store, password string) *UserResponse {
+	t.Helper()
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+	u, err := store.CreateUser(context.Background(), "Password Test User", email, password, "driver")
+	require.NoError(t, err)
+	return u
+}
+
+// storedPasswordHash reads a user's password_hash straight from the table.
+func storedPasswordHash(t *testing.T, store *Store, userID int64) string {
+	t.Helper()
+	var hash string
+	err := store.pool.QueryRow(context.Background(),
+		"SELECT password_hash FROM users WHERE id = $1", userID).Scan(&hash)
+	require.NoError(t, err)
+	return hash
+}
+
+func TestStore_SetUserPasswordAndRevokeSessions(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u := createPasswordTestUser(t, store, "originalpass")
+	otherID := insertRefreshTestUser(t, store)
+
+	_, first := newStoredRefreshToken(t, store, u.ID, time.Now().Add(time.Hour))
+	_, second := newStoredRefreshToken(t, store, u.ID, time.Now().Add(time.Hour))
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	require.NoError(t, store.SetUserPasswordAndRevokeSessions(ctx, u.ID, "newpassword123"))
+
+	hash := storedPasswordHash(t, store, u.ID)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("newpassword123")))
+	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("originalpass")))
+	assert.Equal(t, 0, countRefreshRows(t, store, first))
+	assert.Equal(t, 0, countRefreshRows(t, store, second), "every token for the user must go, not just one")
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "another user's tokens must survive")
+}
+
+func TestStore_SetUserPasswordAndRevokeSessions_UnknownUser(t *testing.T) {
+	store := newTestStore(t)
+	otherID := insertRefreshTestUser(t, store)
+	_, othersToken := newStoredRefreshToken(t, store, otherID, time.Now().Add(time.Hour))
+
+	// -1 can never be a users.id (the column is a positive-only sequence).
+	err := store.SetUserPasswordAndRevokeSessions(context.Background(), -1, "newpassword123")
+
+	assert.ErrorIs(t, err, ErrUserNotFound)
+	assert.Equal(t, 1, countRefreshRows(t, store, othersToken), "no one else's tokens may be touched")
+}
+
+// TestStore_SetUserPasswordAndRevokeSessions_RollsBackOnRevokeFailure is the
+// atomicity half of issue #117. When the revocation fails, the password must
+// still be the old one: a changed password with live sessions is exactly the
+// state an admin cannot see and must never be left in.
+func TestStore_SetUserPasswordAndRevokeSessions_RollsBackOnRevokeFailure(t *testing.T) {
+	store := newTestStore(t)
+	u := createPasswordTestUser(t, store, "originalpass")
+	_, token := newStoredRefreshToken(t, store, u.ID, time.Now().Add(time.Hour))
+	before := storedPasswordHash(t, store, u.ID)
+	refuseRefreshTokenDeletes(t, store, u.ID)
+
+	err := store.SetUserPasswordAndRevokeSessions(context.Background(), u.ID, "newpassword123")
+	require.Error(t, err)
+
+	assert.Equal(t, before, storedPasswordHash(t, store, u.ID), "the password must be unchanged")
+	assert.Equal(t, 1, countRefreshRows(t, store, token))
 }
 
 // clearRefreshTokens empties the table so a prune's returned count reflects

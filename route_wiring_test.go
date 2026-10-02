@@ -96,7 +96,7 @@ func (n *noopStore) ListActiveVehiclesByUser(_ context.Context, _ int64) ([]Vehi
 func (n *noopStore) SetUserActive(_ context.Context, _ int64, _ bool) error {
 	return nil
 }
-func (n *noopStore) UpdateUserPassword(_ context.Context, _ int64, _ string) error {
+func (n *noopStore) SetUserPasswordAndRevokeSessions(_ context.Context, _ int64, _ string) error {
 	return nil
 }
 func (n *noopStore) CountUsersByRole(_ context.Context, _ string) (int, error) {

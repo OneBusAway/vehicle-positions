@@ -1004,8 +1004,8 @@ func (ui *adminUI) renderUserEditError(w http.ResponseWriter, r *http.Request, s
 
 // userUpdate saves name/email/role edits for an existing user. If the
 // password field is non-empty, it's validated the same way as the create
-// form and, on success, also written via UpdateUserPassword — leaving it
-// blank keeps the current password untouched.
+// form and, on success, also written via SetUserPasswordAndRevokeSessions.
+// Leaving it blank keeps the current password untouched.
 func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -1085,20 +1085,14 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if password != "" {
-		if err := ui.userManager.UpdateUserPassword(r.Context(), id, password); err != nil {
+		// Mirrors handleUpdateUser: a password reset must end the sessions
+		// the old password left behind, or a stolen refresh token outlives it.
+		if err := ui.userManager.SetUserPasswordAndRevokeSessions(r.Context(), id, password); err != nil {
 			if errors.Is(err, ErrUserNotFound) {
 				http.NotFound(w, r)
 				return
 			}
-			slog.Error("user update: update password", "user_id", id, "error", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		// Mirrors handleUpdateUser: a password reset must end the sessions
-		// the old password left behind, or a stolen refresh token outlives it.
-		if err := ui.refreshTokens.DeleteRefreshTokensForUser(r.Context(), id); err != nil {
-			slog.Error("user update: delete refresh tokens after password change", "user_id", id, "error", err)
+			slog.Error("user update: change password and revoke refresh tokens", "user_id", id, "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
