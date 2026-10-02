@@ -342,8 +342,9 @@ func countUserRefreshRows(t *testing.T, store *Store, userID int64) int {
 }
 
 // revokeDuringRotation runs revoke while a rotation of userID's token is
-// stopped between its insert and its commit, which is the window issue #117
-// describes, held open on purpose rather than hit by luck.
+// stopped partway through, after it has marked the old token used and while
+// its insert is waiting. That is the window issue #117 describes, held open
+// on purpose rather than hit by luck.
 //
 // The rotation is parked on a uniqueness conflict: blocker holds an
 // uncommitted row, owned by another user, with the replacement's token_hash,

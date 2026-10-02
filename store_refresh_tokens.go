@@ -133,12 +133,13 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 
 	qtx := s.queries.WithTx(tx)
 
-	// Rotation and every revocation take this lock before touching
+	// Rotation and each revocation below take this lock before touching
 	// refresh_tokens, so a revocation that arrives mid-rotation waits for
-	// the replacement to commit and then deletes it too. Without it here the
-	// revokers' lock contends with nothing. Each path locks one users row
-	// before any other row, so no two of them can wait on each other in a
-	// cycle.
+	// the replacement to commit and then deletes it too. Taking it here, and
+	// first, is also what stops the two deadlocking. Without it, a revoker
+	// holding the lock waits on the old token row this transaction holds,
+	// while this transaction's foreign key check on the replacement waits on
+	// the users row the revoker holds.
 	if _, err := qtx.LockUser(ctx, userID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
