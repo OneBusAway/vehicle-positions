@@ -357,8 +357,8 @@ then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
   the server's window. Under it, `Next: Stop ST2` with ST2's time on the
   agency's clock (`$ST2`, whatever zone the phone is set to) and the distance
   to it.
-- **On the route:** `On time` in green. The distance to ST2 counts down every
-  location update (about 10 s).
+- **On the route:** `On time` in green. The distance to ST2 counts down with
+  every fix: every second while the Tracking screen is open (Check 2c).
 - **The detour:** within a location update, `Off route · 150 m from the route`
   in grey. It flips back to `On time` once the fixes are back on the line.
 - **Past ST2:** the next stop becomes `Stop ST3` with `$ST3`.
@@ -372,6 +372,53 @@ then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
   reporting does not depend on it.
 - **Ending a trip:** `active_trip_geometry.json` is listed while the second
   trip runs, and gone once it has ended.
+
+### Check 2c: The map draws the trip and follows the vehicle
+
+The Tracking screen draws the run on a map between the adherence panel and the
+trip counters: spec §6.3 of the iOS design, with the iOS map's sizes. There is
+no street map under it yet, only a plain background. Run this with `T1` started
+and the drive loop from Check 2b going.
+
+1. Watch the map from the moment the trip starts, through the detour, to ST3.
+2. Partway along, drag the map sideways with one finger, then leave it alone.
+3. Count the reports the server has taken, wait a minute with the Tracking
+   screen open, and count again. Then press Home, wait another minute, and count
+   a third time:
+
+   ```bash
+   grep -c '"path":"/api/v1/locations"' /tmp/vt-server.log
+   ```
+
+4. Switch the emulator to the dark theme and back:
+
+   ```bash
+   adb shell cmd uimode night yes
+   adb shell cmd uimode night no
+   ```
+
+**Expected outcome:**
+
+- **Before the first fix:** the whole route, in the route's colour over a darker
+  edge, with its three stops as small ringed circles.
+- **From the first fix:** the map closes in on the vehicle, a blue arrowhead
+  that sits a third of the way up the map with the route ahead above it, and
+  moves with it between fixes without jumping. The next stop is drawn larger
+  with its name beside it, and that moves on to ST3 once ST2 is passed.
+- **The detour:** the route fades, the arrowhead turns grey, and a dot marks
+  where on the route the vehicle was matched. All three are undone once the
+  fixes are back on the line.
+- **Dragging:** the map stops following and a **Re-center** button appears.
+  Tapping it, or leaving the map alone for 10 seconds, takes it back to the
+  vehicle.
+- **Reports:** the count grows by 6 or 7 in each minute, with the screen open
+  and with the app in the background alike. The screen takes a fix every second
+  to draw; the server still gets one about every 10 seconds.
+- **Dark theme:** the map background turns dark and the stop name light.
+
+On the emulator the map stays north-up: `adb emu geo fix` sends a position with
+no course. On a phone it turns to keep the direction of travel pointing up, and
+holds the last direction while the vehicle stands still.
 
 ### Check 3 — Network loss flips the status red, recovery flips it back green
 
