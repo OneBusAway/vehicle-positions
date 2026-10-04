@@ -98,6 +98,19 @@
     <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
     <string name="tracking_adherence_no_schedule">Schedule unavailable</string>
 
+    <!-- Resume prompt: a trip was stored but its tracking service was not running at launch -->
+    <string name="resume_title">Resume Shift?</string>
+    <string name="resume_message">An incomplete shift with Vehicle %1$s was detected. The app was closed while tracking was active.</string>
+    <string name="resume_route">Route %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Started %1$d min ago</item>
+        <item quantity="other">Started %1$d min ago</item>
+    </plurals>
+    <!-- Hours, then minutes past the hour, e.g. "Started 2 h 5 min ago". -->
+    <string name="resume_started_hours_ago">Started %1$d h %2$d min ago</string>
+    <string name="resume_button">Resume</string>
+    <string name="resume_end_shift_button">End Shift</string>
+
     <!-- Tracking notification -->
     <string name="tracking_notification_channel_name">Trip Tracking</string>
     <string name="tracking_notification_title">OBA Tracker is active</string>
