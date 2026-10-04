@@ -1261,6 +1261,22 @@ func (q *Queries) ListVehiclesByUser(ctx context.Context, userID int64) ([]UserV
 	return items, nil
 }
 
+const lockUser = `-- name: LockUser :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+// Serializes rotation and revocation of one user's refresh tokens. Both take
+// this before reading or writing refresh_tokens, so a revocation cannot run
+// while a rotation is mid-transaction. The users row is the mutex because the
+// row a revoker has to see, the rotation's replacement, does not exist yet.
+// Login does not take it.
+func (q *Queries) LockUser(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockUser, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :execrows
 UPDATE refresh_tokens
 SET used_at = NOW()

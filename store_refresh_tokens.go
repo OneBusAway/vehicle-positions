@@ -9,6 +9,7 @@ import (
 	"github.com/OneBusAway/vehicle-positions/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // A refresh token is the same kind of value as a feed API key: 32 random
@@ -120,6 +121,9 @@ func (s *Store) GetRefreshToken(ctx context.Context, tokenHash string) (*Refresh
 // filters on used_at IS NULL, which makes consumption a compare-and-set: of
 // two concurrent refreshes presenting the same token, exactly one wins and
 // the loser is told to re-authenticate rather than both being issued tokens.
+//
+// It also reports false when the user no longer exists: deleting a user
+// cascades to their tokens, so there is nothing left to rotate.
 func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (bool, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -128,6 +132,20 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 	defer tx.Rollback(ctx)
 
 	qtx := s.queries.WithTx(tx)
+
+	// Rotation and each revocation below take this lock before touching
+	// refresh_tokens, so a revocation that arrives mid-rotation waits for
+	// the replacement to commit and then deletes it too. Taking it here, and
+	// first, is also what stops the two deadlocking. Without it, a revoker
+	// holding the lock waits on the old token row this transaction holds,
+	// while this transaction's foreign key check on the replacement waits on
+	// the users row the revoker holds.
+	if _, err := qtx.LockUser(ctx, userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("lock user: %w", err)
+	}
 
 	rows, err := qtx.MarkRefreshTokenUsed(ctx, usedID)
 	if err != nil {
@@ -152,10 +170,125 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 	return true, nil
 }
 
-// DeleteRefreshTokensForUser removes all of a user's refresh tokens.
+// DeleteRefreshTokensForUser removes all of a user's refresh tokens, under the
+// same user lock RotateRefreshToken takes, so a rotation already in flight
+// cannot leave its replacement behind. A user that no longer exists has no
+// tokens to remove (they cascaded with the row), which is not an error:
+// logout has to stay retryable.
 func (s *Store) DeleteRefreshTokensForUser(ctx context.Context, userID int64) error {
-	if err := s.queries.DeleteRefreshTokensForUser(ctx, userID); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := s.queries.WithTx(tx)
+
+	if _, err := qtx.LockUser(ctx, userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("lock user: %w", err)
+	}
+
+	if err := qtx.DeleteRefreshTokensForUser(ctx, userID); err != nil {
 		return fmt.Errorf("delete refresh tokens for user: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit refresh token deletion: %w", err)
+	}
+	return nil
+}
+
+// SetUserPasswordAndRevokeSessions bcrypt-hashes password, stores it, and
+// deletes every refresh token the user holds, in one transaction under the
+// user lock. Either both land or neither does: a new password with the old
+// sessions still live would tell the admin the account is secured when it is
+// not. Returns ErrUserNotFound if no user matches id.
+func (s *Store) SetUserPasswordAndRevokeSessions(ctx context.Context, id int64, password string) error {
+	// Hashed before the transaction opens, so the user lock is never held
+	// across bcrypt.
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := s.queries.WithTx(tx)
+
+	// The UPDATE below would also queue behind an open rotation, since it
+	// writes the users row the rotation holds, but only because it runs
+	// before the DELETE. Locking first keeps that from depending on
+	// statement order.
+	if _, err := qtx.LockUser(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("lock user: %w", err)
+	}
+
+	// The lock holds the row, so the update cannot miss it.
+	if _, err := qtx.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		ID:           id,
+		PasswordHash: string(hash),
+	}); err != nil {
+		return fmt.Errorf("update user password: %w", err)
+	}
+
+	if err := qtx.DeleteRefreshTokensForUser(ctx, id); err != nil {
+		return fmt.Errorf("delete refresh tokens for user: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit password change: %w", err)
+	}
+	return nil
+}
+
+// SetUserActiveAndRevokeSessions flips a user's active flag in one
+// transaction under the user lock, deleting every refresh token the user
+// holds when active is false. Deactivated users cannot log in. Returns
+// ErrUserNotFound if no user matches id.
+func (s *Store) SetUserActiveAndRevokeSessions(ctx context.Context, id int64, active bool) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := s.queries.WithTx(tx)
+
+	// Locked first for the same reason as SetUserPasswordAndRevokeSessions.
+	if _, err := qtx.LockUser(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("lock user: %w", err)
+	}
+
+	// The lock holds the row, so the update cannot miss it.
+	if _, err := qtx.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active}); err != nil {
+		return fmt.Errorf("set user active: %w", err)
+	}
+
+	// Only deactivation revokes. handleRefreshToken already refuses an
+	// inactive user, so this is not what blocks them today. It matters on
+	// reactivation, which would otherwise hand a months-old token back its
+	// original seven-day window.
+	if !active {
+		if err := qtx.DeleteRefreshTokensForUser(ctx, id); err != nil {
+			return fmt.Errorf("delete refresh tokens for user: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit user active change: %w", err)
 	}
 	return nil
 }

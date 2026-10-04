@@ -60,22 +60,24 @@ type UserCreator interface {
 
 type UserUpdater interface {
 	UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error)
-	UpdateUserPassword(ctx context.Context, id int64, password string) error
+	SetUserPasswordAndRevokeSessions(ctx context.Context, id int64, password string) error
 }
 
 type UserDeleter interface {
 	DeleteUser(ctx context.Context, id int64) error
 }
 
-// UserActivator toggles a user's active flag.
+// UserActivator toggles a user's active flag, ending their sessions when it
+// deactivates them.
 type UserActivator interface {
-	SetUserActive(ctx context.Context, id int64, active bool) error
+	SetUserActiveAndRevokeSessions(ctx context.Context, id int64, active bool) error
 }
 
-// UserPasswordUpdater updates a user's password. The plaintext password is
+// UserPasswordUpdater changes a user's password and ends every session the old
+// one left behind, in one transaction. The plaintext password is
 // bcrypt-hashed inside the implementation before it ever reaches storage.
 type UserPasswordUpdater interface {
-	UpdateUserPassword(ctx context.Context, id int64, password string) error
+	SetUserPasswordAndRevokeSessions(ctx context.Context, id int64, password string) error
 }
 
 // UserRoleCounter provides role-based user counts, used by the admin
@@ -249,39 +251,6 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 		return fmt.Errorf("delete user: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
-}
-
-// SetUserActive flips a user's active flag. Deactivated users cannot log in.
-func (s *Store) SetUserActive(ctx context.Context, id int64, active bool) error {
-	rows, err := s.queries.SetUserActive(ctx, db.SetUserActiveParams{ID: id, Active: active})
-	if err != nil {
-		return fmt.Errorf("set user active: %w", err)
-	}
-	if rows == 0 {
-		return ErrUserNotFound
-	}
-	return nil
-}
-
-// UpdateUserPassword bcrypt-hashes password and replaces the stored hash for
-// the given user. Returns ErrUserNotFound if no user matches id.
-func (s *Store) UpdateUserPassword(ctx context.Context, id int64, password string) error {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
-	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
-	}
-
-	rows, err := s.queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
-		ID:           id,
-		PasswordHash: string(hash),
-	})
-	if err != nil {
-		return fmt.Errorf("update user password: %w", err)
-	}
-	if rows == 0 {
 		return ErrUserNotFound
 	}
 	return nil

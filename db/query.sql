@@ -49,6 +49,14 @@ UPDATE users SET active = $2 WHERE id = $1;
 -- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2 WHERE id = $1;
 
+-- name: LockUser :one
+-- Serializes rotation and revocation of one user's refresh tokens. Both take
+-- this before reading or writing refresh_tokens, so a revocation cannot run
+-- while a rotation is mid-transaction. The users row is the mutex because the
+-- row a revoker has to see, the rotation's replacement, does not exist yet.
+-- Login does not take it.
+SELECT id FROM users WHERE id = $1 FOR UPDATE;
+
 -- name: CountUsersByRole :one
 SELECT COUNT(*) FROM users WHERE role = $1;
 
