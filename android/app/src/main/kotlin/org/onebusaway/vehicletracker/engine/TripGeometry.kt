@@ -26,6 +26,12 @@ data class TripGeometry(
     val shapePoints: List<GeoPoint>,
     val stops: List<TripStop>,
     val thresholds: AdherenceThresholds,
+    /**
+     * The route's GTFS colour, six hex digits, or "" when the feed gives none. It has a default so
+     * that a trip stored before this field existed still reads: without one the file would not
+     * decode, and a driver updating the app mid-trip would lose adherence until the trip ended.
+     */
+    val routeColor: String = "",
 )
 
 @Serializable
