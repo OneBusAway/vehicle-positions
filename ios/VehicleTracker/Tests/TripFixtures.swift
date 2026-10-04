@@ -28,6 +28,22 @@ nonisolated enum TripFixtures {
         thresholds: AdherenceThresholds(maxShapeDistanceM: 60, scheduleEarlyS: 900, scheduleLateS: 5400)
     )
 
+    /// A square loop: north, east, south, then back west to where it started.
+    /// Its first and last pass over that shared point are told apart by the
+    /// projection hint alone, which is what makes it the fixture for hint
+    /// behaviour. Mirrors `TripFixtures.loop` on Android.
+    static let loop = TripGeometry(
+        id: "L", routeID: "R2", headsign: "Loop", directionID: nil,
+        serviceDate: "20260902", timezone: "America/Los_Angeles",
+        route: RouteSummary(shortName: "2", longName: "Loop", color: "", textColor: ""),
+        shape: ShapePayload(lengthM: 2000, points: [[47.6000, -122.3300], [47.6045, -122.3300], [47.6045, -122.3234], [47.6000, -122.3234], [47.6000, -122.3300]]),
+        stops: [
+            TripStop(id: "A", name: "A", sequence: 1, lat: 47.6000, lon: -122.3300, alongShapeM: 0, arrivalAt: at(9, 0), departureAt: at(9, 0)),
+            TripStop(id: "B", name: "B", sequence: 2, lat: 47.6000, lon: -122.3300, alongShapeM: 1995, arrivalAt: at(9, 20), departureAt: at(9, 20)),
+        ],
+        thresholds: t1.thresholds
+    )
+
     static func fix(lat: Double, lon: Double, at time: Date, accuracy: Double = 5, speed: Double = 8, course: Double = 0) -> LocationFix {
         LocationFix(latitude: lat, longitude: lon, horizontalAccuracy: accuracy, speed: speed, course: course, timestamp: time)
     }

@@ -71,6 +71,13 @@ final class TripSession {
 
     private(set) var phase: Phase
     private(set) var latest: Adherence?
+    /// The latest *on-route* judgement, which is what the next fix is projected
+    /// against. An off-route fix is judged and shown like any other, but it never
+    /// becomes that baseline: as the server's `Session.LatestMatched` puts it, an
+    /// off-route point is exactly the position the next point must not be judged
+    /// against. Keeping it apart from `latest` is what stops a bus rejoining the
+    /// route after a detour from snapping to the wrong pass of a loop.
+    private var latestOnRoute: Adherence?
     private(set) var reporting: ReportingStatus = .connected
     /// Fixes accepted by the server on this trip. The banner carries the
     /// status, so the footer's counter must survive a problem rather than be
@@ -360,6 +367,7 @@ final class TripSession {
         reporter = nil
         evaluator = nil
         latest = nil
+        latestOnRoute = nil
         gpsAvailable = true
         needsForeground = false
         streamEnded = false
@@ -392,7 +400,9 @@ final class TripSession {
         if !dropsFix, let fix = sample.fix, let evaluator, let reporter {
             gpsAvailable = true
             needsForeground = false
-            latest = evaluator.evaluate(fix, previous: latest)
+            let judged = evaluator.evaluate(fix, previous: latestOnRoute)
+            latest = judged
+            if judged.isOnRoute { latestOnRoute = judged }
             // Not awaited: the send runs on its own so the fixes behind it
             // keep reaching the map (spec §8).
             reporter.report(fix, vehicleID: active.vehicle.id, gtfsTripID: active.trip.id)
