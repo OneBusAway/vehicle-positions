@@ -64,3 +64,27 @@ func TestNewHandlerCSRFAllowsHeaderlessClients(t *testing.T) {
 	h.ServeHTTP(w, req)
 	assert.NotEqual(t, http.StatusForbidden, w.Code, "non-browser clients (no Sec-Fetch-Site/Origin) pass CSRF")
 }
+
+// TestAdminMapScriptFollowsOSMTilePolicy pins what the map script owes
+// OpenStreetMap's tile usage policy
+// (https://operations.osmfoundation.org/policies/tiles/), read through the
+// production handler so it also covers that the script is served: the one tile
+// URL the policy allows, a credit that links to the licence, and a Referer on
+// every tile request.
+func TestAdminMapScriptFollowsOSMTilePolicy(t *testing.T) {
+	h := newTestHandler(t, true)
+	req := httptest.NewRequest(http.MethodGet, "/static/js/admin.js", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	script := w.Body.String()
+
+	for _, want := range []string{
+		`L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png"`,
+		`<a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>`,
+		`referrerPolicy: "strict-origin-when-cross-origin"`,
+	} {
+		// Not assert.Contains: on failure it prints the whole script.
+		assert.True(t, strings.Contains(script, want), "admin.js is missing %s", want)
+	}
+}

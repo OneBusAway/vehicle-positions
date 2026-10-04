@@ -3,9 +3,17 @@
   if (!el || typeof L === "undefined") return;
 
   const map = L.map("main-map", { zoomControl: false }).setView([0, 0], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+  // OpenStreetMap's own tiles, which need no API key. Their usage policy
+  // (https://operations.osmfoundation.org/policies/tiles/) allows only this
+  // exact URL, with no {s} subdomain, and a credit that names the licence,
+  // which the link to /copyright does.
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
+    // The policy also requires a Referer on tile requests. Setting it on the
+    // tiles themselves keeps the Referer even if the admin pages are later
+    // given a stricter Referrer-Policy.
+    referrerPolicy: "strict-origin-when-cross-origin",
   }).addTo(map);
   L.control.zoom({ position: "bottomright" }).addTo(map);
 
