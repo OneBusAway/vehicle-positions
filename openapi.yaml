@@ -70,7 +70,7 @@ paths:
         Exchanges an email and password for an access token plus a refresh
         token. The access token must be supplied as
         `Authorization: Bearer <access_token>` on protected endpoints; its
-        lifetime is `ACCESS_TOKEN_TTL` (default 24h) and is reported as
+        lifetime is set by `ACCESS_TOKEN_TTL` and is reported as
         `expires_in`. Renew it with `POST /api/v1/auth/refresh` rather than
         re-sending credentials.
       security: []
@@ -1651,7 +1651,9 @@ components:
       bearerFormat: JWT
       description: |
         JWT bearer token issued by `POST /api/v1/auth/login`. Signed HS256,
-        24-hour TTL, `iss: vehicle-positions-api`.
+        `iss: vehicle-positions-api`. Its lifetime is whatever the server's
+        `ACCESS_TOKEN_TTL` is set to, so read `expires_in` from the login or
+        refresh response rather than assuming a fixed window.
 
     apiKey:
       type: apiKey
@@ -1887,9 +1889,12 @@ components:
             JWT; 32 random bytes, hex-encoded.
         expires_in:
           type: integer
+          # The example is the server's own default, pinned to
+          # defaultAccessTokenTTL by TestOpenAPI_ConstraintsMatchCode. It is the
+          # only place this spec states that number.
+          example: 86400
           description: |
-            Access token lifetime in seconds, from `ACCESS_TOKEN_TTL`
-            (default 86400).
+            Access token lifetime in seconds, from `ACCESS_TOKEN_TTL`.
 
     RefreshRequest:
       type: object
