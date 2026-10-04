@@ -1,18 +1,26 @@
 package org.onebusaway.vehicletracker.service
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class TripReporterTest {
     private val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L)
@@ -261,6 +269,41 @@ class TripReporterTest {
         assertEquals(1, server.requestCount)
         assertEquals(afterFirst, tracking.state.value)
         assertEquals(TrackingProblem.AUTH_EXPIRED, tracking.state.value.problem)
+        server.shutdown()
+    }
+
+    /**
+     * A slow network can hold a report up for longer than the gap between two of them. The second
+     * must not set off after it: the two could arrive in the wrong order and leave the server with
+     * the older position.
+     */
+    @Test fun `a fix that arrives while a report is still on its way is dropped`() = runBlocking {
+        val server = MockWebServer()
+        val release = CountDownLatch(1)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                release.await(10, TimeUnit.SECONDS)
+                return MockResponse().setResponseCode(201).setBody("""{"status":"ok"}""")
+            }
+        }
+        server.start()
+        var now = 0L
+        val (reporter, tracking) = reporterWith(server) { now }
+
+        val first = async(Dispatchers.IO) { reporter.report(trip, fix()) }
+        assertNotNull("the first report reached the server", server.takeRequest(5, TimeUnit.SECONDS))
+        now = 9_000L
+        reporter.report(trip, fix())
+
+        assertEquals(1, server.requestCount)
+        release.countDown()
+        first.await()
+        assertEquals(1, tracking.state.value.fixesSent)
+
+        // The dropped fix did not use up a turn: the next one goes as soon as the way is clear.
+        now = 9_100L
+        reporter.report(trip, fix())
+        assertEquals(2, server.requestCount)
         server.shutdown()
     }
 }

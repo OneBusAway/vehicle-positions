@@ -9,6 +9,7 @@ import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ElapsedMillisClock
 import retrofit2.HttpException
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
@@ -47,6 +48,7 @@ class TripReporter @Inject constructor(
     @param:ElapsedMillisClock private val elapsedMs: () -> Long,
 ) {
     private val lastReportAt = AtomicLong(NEVER_REPORTED)
+    private val reportInFlight = AtomicBoolean(false)
     private var gpsAvailable = true
     private var consecutiveTimestampRejects = 0
     private var currentSendProblem = TrackingProblem.NONE
@@ -61,8 +63,22 @@ class TripReporter @Inject constructor(
      * screen is open the service takes a fix every second for the display; the server still hears
      * from the vehicle as often as it does with the screen off, and no oftener. A fix held back
      * changes nothing the driver sees.
+     *
+     * Only one report is ever on its way, as on iOS. On a slow network a second one could
+     * otherwise overtake the first, and the server, which keeps whatever arrived last, would be
+     * left with the older position. A fix that arrives meanwhile is dropped rather than queued:
+     * by the time it could go it would be stale, and the next one is seconds behind it.
      */
     suspend fun report(trip: ActiveTrip, fix: LocationFix) {
+        if (!reportInFlight.compareAndSet(false, true)) return
+        try {
+            send(trip, fix)
+        } finally {
+            reportInFlight.set(false)
+        }
+    }
+
+    private suspend fun send(trip: ActiveTrip, fix: LocationFix) {
         if (!reportIsDue()) return
         val dto = LocationReportDto(
             vehicleId = trip.vehicleId,
@@ -103,12 +119,13 @@ class TripReporter @Inject constructor(
         }
     }
 
-    /** Claims the next report slot. Atomic, because the service launches each report on its own. */
+    /** Claims the next report slot. */
     private fun reportIsDue(): Boolean {
         val now = elapsedMs()
         val last = lastReportAt.get()
         if (last != NEVER_REPORTED && now - last < MIN_REPORT_GAP_MS) return false
-        return lastReportAt.compareAndSet(last, now)
+        lastReportAt.set(now)
+        return true
     }
 
     private fun refreshProblem(sendProblem: TrackingProblem) {
