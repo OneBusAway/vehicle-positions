@@ -97,6 +97,8 @@
     <string name="tracking_adherence_waiting_for_gps">Waiting for GPS…</string>
     <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
     <string name="tracking_adherence_no_schedule">Schedule unavailable</string>
+    <!-- On the tracking screen's map, once the driver has dragged it away from the vehicle. -->
+    <string name="tracking_map_recenter">Re-center</string>
 
     <!-- Resume prompt: a trip was stored but its tracking service was not running at launch -->
     <string name="resume_title">Resume Shift?</string>
