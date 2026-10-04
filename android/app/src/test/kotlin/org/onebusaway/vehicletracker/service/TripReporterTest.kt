@@ -18,10 +18,19 @@ class TripReporterTest {
     private val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L)
     private fun fix(ts: Long = 1000L) = LocationFix(-1.29, 36.82, bearing = 180.0, speed = 8.5, accuracy = 12.0, timeEpochSec = ts)
 
-    private fun reporterWith(server: MockWebServer): Pair<TripReporter, TrackingRepository> {
+    /** A clock that has moved on a whole report interval at every reading, so no report is held back. */
+    private fun steppingClock(): () -> Long {
+        var now = 0L
+        return { now += REPORT_INTERVAL_MS; now }
+    }
+
+    private fun reporterWith(
+        server: MockWebServer,
+        elapsedMs: () -> Long = steppingClock(),
+    ): Pair<TripReporter, TrackingRepository> {
         val tracking = TrackingRepository()
         val api = ApiFactory { "jwt" }.create(server.url("/").toString())
-        return TripReporter(TrackerApiProvider { api }, tracking) to tracking
+        return TripReporter(TrackerApiProvider { api }, tracking, elapsedMs) to tracking
     }
 
     @Test fun `successful send increments counter and clears problem`() = runTest {
@@ -47,7 +56,7 @@ class TripReporterTest {
         val server2 = MockWebServer().apply { start() }
         server2.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
         val api2 = ApiFactory { "jwt" }.create(server2.url("/").toString())
-        val reporter2 = TripReporter(TrackerApiProvider { api2 }, tracking)
+        val reporter2 = TripReporter(TrackerApiProvider { api2 }, tracking, steppingClock())
         reporter2.report(trip, fix())
         assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
         server2.shutdown()
@@ -180,6 +189,78 @@ class TripReporterTest {
         val routeOnly = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
         assertEquals(false, routeOnly.containsKey("trip_id"))
         assertEquals("5", routeOnly["route_id"]!!.jsonPrimitive.content)
+        server.shutdown()
+    }
+
+    @Test fun `fixes a second apart are reported about as often as fixes ten seconds apart`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}""")) }
+        var now = 0L
+        val (reporter, tracking) = reporterWith(server) { now }
+
+        repeat(21) { second ->
+            now = second * 1_000L
+            reporter.report(trip, fix())
+        }
+
+        // The fixes at 0 s, 9 s and 18 s: the pace at which fixes asked for ten seconds apart arrive.
+        assertEquals(3, server.requestCount)
+        assertEquals(3, tracking.state.value.fixesSent)
+        server.shutdown()
+    }
+
+    /**
+     * With no screen open the service asks for a fix every ten seconds, and Android hands each one
+     * over about nine seconds after the last. Every one of them is a report: a threshold that held
+     * back the early ones would halve the rate.
+     */
+    @Test fun `fixes asked for ten seconds apart are all reported, as early as they arrive`() = runTest {
+        val server = MockWebServer().apply { start() }
+        val arrivals = listOf(0L, 9_050L, 18_000L, 27_100L, 37_100L, 46_000L)
+        repeat(arrivals.size) { server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}""")) }
+        var now = 0L
+        val (reporter, tracking) = reporterWith(server) { now }
+
+        for (arrival in arrivals) {
+            now = arrival
+            reporter.report(trip, fix())
+        }
+
+        assertEquals(arrivals.size, tracking.state.value.fixesSent)
+        server.shutdown()
+    }
+
+    @Test fun `a fix one millisecond short of due is held back`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(2) { server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}""")) }
+        var now = 0L
+        val (reporter, _) = reporterWith(server) { now }
+
+        reporter.report(trip, fix())
+        now = 8_499L
+        reporter.report(trip, fix())
+        assertEquals(1, server.requestCount)
+
+        now = 8_500L
+        reporter.report(trip, fix())
+        assertEquals(2, server.requestCount)
+        server.shutdown()
+    }
+
+    @Test fun `a fix held back changes nothing the driver sees`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid token"}"""))
+        var now = 0L
+        val (reporter, tracking) = reporterWith(server) { now }
+        reporter.report(trip, fix())
+        val afterFirst = tracking.state.value
+
+        now = 1_000L
+        reporter.report(trip, fix())
+
+        assertEquals(1, server.requestCount)
+        assertEquals(afterFirst, tracking.state.value)
+        assertEquals(TrackingProblem.AUTH_EXPIRED, tracking.state.value.problem)
         server.shutdown()
     }
 }

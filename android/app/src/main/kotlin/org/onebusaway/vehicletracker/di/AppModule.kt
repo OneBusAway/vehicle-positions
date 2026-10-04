@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.di
 
 import android.content.Context
+import android.os.SystemClock
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -40,6 +41,14 @@ import javax.inject.Singleton
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class EpochSecondsClock
+
+/**
+ * Qualifies the injected `() -> Long` clock that counts milliseconds since boot. Unlike the wall
+ * clock it never jumps, so it is the one to measure intervals with.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ElapsedMillisClock
 
 /** Qualifies how long launch waits for a restarting tracking service to announce itself. */
 @Qualifier
@@ -165,6 +174,10 @@ object AppModule {
     @Provides
     @EpochSecondsClock
     fun provideClock(): () -> Long = { System.currentTimeMillis() / 1000 }
+
+    @Provides
+    @ElapsedMillisClock
+    fun provideElapsedClock(): () -> Long = SystemClock::elapsedRealtime
 
     @Provides
     fun provideZoneId(): ZoneId = ZoneId.systemDefault()

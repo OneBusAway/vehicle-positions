@@ -787,6 +787,18 @@ class ViewModelsTest {
         }
     }
 
+    @Test fun `the tracking service is told while the screen is visible`() = runTest(dispatcher) {
+        withTrackingViewModel { vm, tracking, _ ->
+            assertEquals(false, tracking.liveView.value)
+
+            vm.onScreenVisible(true)
+            assertEquals(true, tracking.liveView.value)
+
+            vm.onScreenVisible(false)
+            assertEquals(false, tracking.liveView.value)
+        }
+    }
+
     @Test fun `ending a trip clears its stored geometry`() = runTest(dispatcher) {
         withTrackingViewModel { vm, _, geometryStore ->
             var ended = false
