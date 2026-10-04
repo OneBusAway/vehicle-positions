@@ -234,15 +234,92 @@ func TestHandleRefresh_RotatesToken(t *testing.T) {
 	assert.Equal(t, http.StatusOK, second.Code)
 }
 
+// TestHandleRefresh_RejectsReusedToken replays a token after it has been
+// rotated. The replay is refused like any other spent token, and the
+// replacement the first refresh handed out stops working too: whoever holds
+// it, the thief's copy dies.
 func TestHandleRefresh_RejectsReusedToken(t *testing.T) {
 	f, token := refreshStoreWithUser(t)
 	handler := handleRefreshToken(f, testSecret, testTTLs, nil, false)
 
-	require.Equal(t, http.StatusOK, postRefresh(handler, token).Code)
+	first := postRefresh(handler, token)
+	require.Equal(t, http.StatusOK, first.Code)
+	replacement := decodeTokens(t, first).RefreshToken
+	require.NotEmpty(t, replacement)
 
 	w := postRefresh(handler, token)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Equal(t, invalidRefreshTokenMessage, errorBody(t, w))
+	assert.Equal(t, []int64{42}, f.deletedUsers, "a replay must revoke the user's refresh tokens")
+
+	after := postRefresh(handler, replacement)
+	assert.Equal(t, http.StatusUnauthorized, after.Code, "the replacement must not survive a replay of its predecessor")
+	assert.Equal(t, invalidRefreshTokenMessage, errorBody(t, after))
+}
+
+// TestHandleRefresh_ReuseRevokeFailureIs500 covers both places a spent token
+// is found. If the revocation fails the account is not secured, so the answer
+// must not be the 401 that sends the client off to log in again; and the
+// retry a 500 invites must attempt the revocation again.
+func TestHandleRefresh_ReuseRevokeFailureIs500(t *testing.T) {
+	tests := []struct {
+		name  string
+		spend func(t *testing.T, f *fakeRefreshTokens, handler http.HandlerFunc, token string)
+	}{
+		{"already used", func(t *testing.T, _ *fakeRefreshTokens, handler http.HandlerFunc, token string) {
+			require.Equal(t, http.StatusOK, postRefresh(handler, token).Code)
+		}},
+		{"consumed concurrently", func(_ *testing.T, f *fakeRefreshTokens, _ http.HandlerFunc, _ string) {
+			f.rotateLoses = true
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f, token := refreshStoreWithUser(t)
+			handler := handleRefreshToken(f, testSecret, testTTLs, nil, false)
+			tc.spend(t, f, handler, token)
+			f.deleteErr = errors.New("database unavailable")
+
+			w := postRefresh(handler, token)
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+			assert.Equal(t, "internal server error", errorBody(t, w))
+			assert.Empty(t, f.deletedUsers)
+
+			f.deleteErr = nil
+			retry := postRefresh(handler, token)
+			assert.Equal(t, http.StatusUnauthorized, retry.Code)
+			assert.Equal(t, []int64{42}, f.deletedUsers, "retrying with the spent token must revoke")
+		})
+	}
+}
+
+// TestHandleRefresh_SuccessDoesNotRevoke pins that revocation is reserved for
+// spent tokens. A normal rotation must leave the user's other sessions alone.
+func TestHandleRefresh_SuccessDoesNotRevoke(t *testing.T) {
+	f, token := refreshStoreWithUser(t)
+	other := storeRefreshToken(t, f, 42, time.Now().Add(defaultRefreshTokenTTL))
+	handler := handleRefreshToken(f, testSecret, testTTLs, nil, false)
+
+	require.Equal(t, http.StatusOK, postRefresh(handler, token).Code)
+
+	assert.Empty(t, f.deletedUsers)
+	assert.Equal(t, http.StatusOK, postRefresh(handler, other).Code, "another session's token must still work")
+}
+
+// TestHandleRefresh_UnknownTokenDoesNotRevoke: an unknown token names no user,
+// so there is nobody to revoke.
+func TestHandleRefresh_UnknownTokenDoesNotRevoke(t *testing.T) {
+	f, token := refreshStoreWithUser(t)
+	unknown, err := newRefreshTokenValue()
+	require.NoError(t, err)
+	handler := handleRefreshToken(f, testSecret, testTTLs, nil, false)
+
+	w := postRefresh(handler, unknown)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	assert.Empty(t, f.deletedUsers)
+	assert.Equal(t, http.StatusOK, postRefresh(handler, token).Code, "the user's real token must still work")
 }
 
 func TestHandleRefresh_RejectsExpiredToken(t *testing.T) {
@@ -254,6 +331,7 @@ func TestHandleRefresh_RejectsExpiredToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Equal(t, invalidRefreshTokenMessage, errorBody(t, w))
+	assert.Empty(t, f.deletedUsers, "an expired token that was never used is not a replay")
 }
 
 func TestHandleRefresh_RejectsUnknownToken(t *testing.T) {
@@ -366,16 +444,26 @@ func TestHandleRefresh_RotationError(t *testing.T) {
 	assert.Equal(t, "internal server error", errorBody(t, w))
 }
 
-// TestHandleRefresh_LosesRotationRace covers the compare-and-set path: the
-// row was consumed between the read and the update, so no token is issued.
-func TestHandleRefresh_LosesRotationRace(t *testing.T) {
+// TestHandleRefresh_ConcurrentLossRevokes covers the compare-and-set path: the
+// row was consumed between the read and the update, so no token is issued and
+// the user's tokens are revoked. winner stands in for the replacement the
+// concurrent request was handed. If that request was a thief's, nobody will
+// ever replay winner, so this is the only chance to revoke it.
+func TestHandleRefresh_ConcurrentLossRevokes(t *testing.T) {
 	f, token := refreshStoreWithUser(t)
+	winner := storeRefreshToken(t, f, 42, time.Now().Add(defaultRefreshTokenTTL))
+	handler := handleRefreshToken(f, testSecret, testTTLs, nil, false)
 	f.rotateLoses = true
 
-	w := postRefresh(handleRefreshToken(f, testSecret, testTTLs, nil, false), token)
+	w := postRefresh(handler, token)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Equal(t, invalidRefreshTokenMessage, errorBody(t, w))
+	assert.Equal(t, []int64{42}, f.deletedUsers, "losing the rotation race must revoke the user's refresh tokens")
+
+	f.rotateLoses = false
+	assert.Equal(t, http.StatusUnauthorized, postRefresh(handler, winner).Code,
+		"the race winner's token must not survive")
 }
 
 func TestHandleRefresh_RateLimited(t *testing.T) {

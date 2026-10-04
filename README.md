@@ -566,9 +566,11 @@ The response has the same shape as login, so one client-side model parses both.
 **Refresh tokens are single-use.** Every refresh consumes the token presented
 and returns a replacement; clients must store the new `refresh_token` from each
 response. A consumed token stops working, which means a stolen one stops
-working as soon as the legitimate client next refreshes. Revoking the whole
-token family when a consumed token is replayed is a planned follow-up — today
-the replay is rejected and logged.
+working as soon as the legitimate client next refreshes. Presenting a consumed
+token is rejected, logged, and revokes every refresh token the user holds: the
+server cannot tell a client retrying a lost response from a thief replaying a
+stolen token, so both have to log in again. An access token already issued
+keeps working until it expires.
 
 Response codes:
 
@@ -582,7 +584,8 @@ Response codes:
 - `415 Unsupported Media Type` — non-JSON `Content-Type`.
 - `429 Too Many Requests` — per-IP rate limit. The endpoint is unauthenticated,
   so it shares the login rate limiter's per-IP budget.
-- `500 Internal Server Error` — the token could not be read or rotated.
+- `500 Internal Server Error` — the token could not be read or rotated, or
+  revoking the user's tokens after a replay failed.
 
 **Upgrading:** nothing breaks on deploy — the default access token lifetime is
 unchanged and `token` is still in the login response. Before lowering

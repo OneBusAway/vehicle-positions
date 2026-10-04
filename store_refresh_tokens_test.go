@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -463,6 +464,34 @@ func TestStore_LogoutBeatsAConcurrentRotation(t *testing.T) {
 	})
 }
 
+// TestRefresh_ReplayRevokesEveryToken drives the refresh handler against the
+// real store: rotate A to B, replay A, and find no refresh token left for the
+// user, including one from a separate login. Another user's token must
+// survive, so the revocation is scoped to the replayed token's owner.
+func TestRefresh_ReplayRevokesEveryToken(t *testing.T) {
+	store := newTestStore(t)
+	userID := insertRefreshTestUser(t, store)
+	otherUserID := insertRefreshTestUser(t, store)
+	original, _ := newStoredRefreshToken(t, store, userID, time.Now().Add(defaultRefreshTokenTTL))
+	newStoredRefreshToken(t, store, userID, time.Now().Add(defaultRefreshTokenTTL))
+	_, otherUsersHash := newStoredRefreshToken(t, store, otherUserID, time.Now().Add(defaultRefreshTokenTTL))
+	handler := handleRefreshToken(store, testSecret, testTTLs, nil, false)
+
+	first := postRefresh(handler, original)
+	require.Equal(t, http.StatusOK, first.Code)
+	replacement := decodeTokens(t, first).RefreshToken
+	require.Equal(t, 3, countUserRefreshRows(t, store, userID),
+		"the used original, its replacement, and the second login's token")
+
+	replay := postRefresh(handler, original)
+	assert.Equal(t, http.StatusUnauthorized, replay.Code)
+	assert.Equal(t, invalidRefreshTokenMessage, errorBody(t, replay))
+	assert.Equal(t, 0, countUserRefreshRows(t, store, userID), "a replay must revoke every refresh token the user holds")
+	assert.Equal(t, 1, countRefreshRows(t, store, otherUsersHash), "another user's token must survive")
+
+	assert.Equal(t, http.StatusUnauthorized, postRefresh(handler, replacement).Code)
+}
+
 // refuseRefreshTokenDeletes makes deleting any of userID's refresh tokens
 // fail until the test ends, so a revocation can be made to fail after its
 // transaction has already written the users row.
@@ -689,8 +718,8 @@ func TestStore_PruneExpiredRefreshTokens_DeletesExpiredEvenIfUnused(t *testing.T
 // detection. A consumed token that has not yet expired is the row the refresh
 // handler reads to tell a replayed token ("already used") from a guessed one
 // ("unknown"). A predicate that also swept used rows would turn every replay
-// into an unknown token, and revoking the token family on replay — the planned
-// follow-up — would have nothing left to detect.
+// into an unknown token, and the revocation a replay triggers would never
+// run.
 func TestStore_PruneExpiredRefreshTokens_KeepsUsedButUnexpired(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()

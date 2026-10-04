@@ -153,6 +153,9 @@ paths:
             The refresh token is unknown, expired, already used, or its owner
             has been deleted or deactivated. All of these return an identical
             body — which one it is would tell an attacker something.
+            Presenting a token that was already used also revokes every
+            refresh token the user holds, so each of their sessions must log
+            in again once its access token expires.
           content:
             application/json:
               schema:
