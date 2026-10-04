@@ -14,6 +14,11 @@ func testDatabaseURL(t *testing.T) string {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
+		// CI runs a Postgres service, so an unset URL there means the service
+		// went missing, and skipping would let every database test pass unrun.
+		if os.Getenv("CI") == "true" {
+			t.Fatal("DATABASE_URL not set on CI, so the database tests would skip instead of running")
+		}
 		t.Skip("DATABASE_URL not set, skipping database test")
 	}
 	return url
@@ -39,10 +44,7 @@ func newTestStore(t *testing.T) *Store {
 }
 
 func TestStore_NewStore(t *testing.T) {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set")
-	}
+	url := testDatabaseURL(t)
 
 	store, err := NewStore(context.Background(), url)
 	assert.NoError(t, err)
