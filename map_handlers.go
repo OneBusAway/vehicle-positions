@@ -44,7 +44,7 @@ func parseMapPMTilesURL(raw string) (*string, error) {
 	}
 	// Hostname, not Host: "https://:8080/agency.pmtiles" has a port but no host.
 	if (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" {
-		return nil, fmt.Errorf("MAP_PMTILES_URL must be an http or https URL with a host, got %q", u.Redacted())
+		return nil, fmt.Errorf("MAP_PMTILES_URL must be an http or https URL with a host, got %q", mapURLForLog(u))
 	}
 	if u.User != nil {
 		return nil, errors.New("MAP_PMTILES_URL must not carry a username or password: it is sent to every driver's phone")
@@ -52,15 +52,29 @@ func parseMapPMTilesURL(raw string) (*string, error) {
 	return &v, nil
 }
 
+// mapURLForLog is u as it may be logged: the password masked, and the query
+// string, which can carry a download token, left out.
+func mapURLForLog(u *url.URL) string {
+	logged := *u
+	logged.RawQuery = ""
+	logged.ForceQuery = false
+	return logged.Redacted()
+}
+
 // logMapPMTilesURL records the map file setting at startup, and warns when it
-// is plain http, which Android release builds refuse to download over.
+// is plain http, which Android release builds refuse to download over. It
+// takes a value parseMapPMTilesURL has accepted, so the parse cannot fail.
 func logMapPMTilesURL(mapPMTilesURL *string) {
 	if mapPMTilesURL == nil {
 		return
 	}
-	slog.Info("serving the driver map file URL", "url", *mapPMTilesURL)
+	u, err := url.Parse(*mapPMTilesURL)
+	if err != nil {
+		return
+	}
+	slog.Info("serving the driver map file URL", "url", mapURLForLog(u))
 	// url.Parse lowercases the scheme, so this catches "HTTP://" too.
-	if u, err := url.Parse(*mapPMTilesURL); err == nil && u.Scheme == "http" {
+	if u.Scheme == "http" {
 		slog.Warn("MAP_PMTILES_URL is plain http; Android blocks cleartext downloads in release builds, so use https in production")
 	}
 }

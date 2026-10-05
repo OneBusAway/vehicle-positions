@@ -82,9 +82,9 @@ func TestParseMapPMTilesURL(t *testing.T) {
 	}
 }
 
-// The error goes into the startup log, so a password in a URL refused for some
-// other reason must not go with it, whichever check refuses it.
-func TestParseMapPMTilesURL_KeepsAPasswordOutOfTheError(t *testing.T) {
+// The error goes into the startup log, so neither a password nor a token in the
+// query string may go with it, whichever check refuses the value.
+func TestParseMapPMTilesURL_KeepsCredentialsOutOfTheError(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
@@ -93,6 +93,7 @@ func TestParseMapPMTilesURL_KeepsAPasswordOutOfTheError(t *testing.T) {
 		{"a bad escape in the path", "https://agency:hunter2@maps.example.org/%zz"},
 		{"a bad port", "https://agency:hunter2@maps.example.org:abc/agency.pmtiles"},
 		{"a bad escape in the password", "https://agency:hunter2%zz@maps.example.org/agency.pmtiles"},
+		{"a token in the query", "ftp://maps.example.org/agency.pmtiles?sig=hunter2"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -208,13 +209,16 @@ func TestNewHandler_PassesTheMapURLOn(t *testing.T) {
 
 func TestLogMapPMTilesURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		raw      string
-		wantWarn bool
+		name       string
+		raw        string
+		wantLogged string
+		wantWarn   bool
 	}{
-		{"https", testMapURL, false},
-		{"plain http", "http://10.0.2.2:8090/agency.pmtiles", true},
-		{"plain http in capitals", "HTTP://maps.example.org/agency.pmtiles", true},
+		{"https", testMapURL, testMapURL, false},
+		{"plain http", "http://10.0.2.2:8090/agency.pmtiles", "http://10.0.2.2:8090/agency.pmtiles", true},
+		{"plain http in capitals", "HTTP://maps.example.org/agency.pmtiles", "http://maps.example.org/agency.pmtiles", true},
+		// Drivers still get the query; only the log leaves it out.
+		{"a token in the query", testMapURL + "?sig=hunter2", testMapURL, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -228,7 +232,8 @@ func TestLogMapPMTilesURL(t *testing.T) {
 			logMapPMTilesURL(mapURL)
 
 			logged := buf.String()
-			assert.Contains(t, logged, `"url":"`+tc.raw+`"`, "the operator must see which URL drivers are given")
+			assert.Contains(t, logged, `"url":"`+tc.wantLogged+`"`, "the operator must see which file drivers are sent to")
+			assert.NotContains(t, logged, "hunter2")
 			if tc.wantWarn {
 				assert.Contains(t, logged, `"level":"WARN"`)
 				assert.Contains(t, logged, "Android blocks cleartext downloads")
