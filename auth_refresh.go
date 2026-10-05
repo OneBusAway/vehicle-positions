@@ -65,14 +65,15 @@ type RefreshStore interface {
 // The route is unauthenticated by necessity — the access token is expired by
 // definition at the moment a client needs this, so the refresh token is the
 // credential. That makes it as exposed as login, and it gets login's
-// defenses: a 1KB body cap, strict JSON decoding, and the same rate limiter.
+// defenses: a 1KB body cap, strict JSON decoding, and a per-IP rate limit,
+// though from its own RefreshRateLimiter rather than login's.
 //
 // Tokens are single-use. Each refresh consumes the presented token and
 // returns its replacement, so a stolen token stops working as soon as the
 // legitimate client refreshes. Presenting a token that is already spent
 // revokes every refresh token its user holds, because the server cannot tell
 // a client retrying a lost response from a thief replaying a stolen token.
-func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
+func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limiter *RefreshRateLimiter, trustProxy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err != nil || !strings.EqualFold(mediaType, "application/json") {
@@ -106,10 +107,10 @@ func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limit
 
 		// Only the IP dimension applies: the caller presents a token, not an
 		// email, and there is nothing to key a per-account window on until
-		// the lookup below. This shares the login limiter's per-IP budget by
-		// design — one address cannot buy itself extra attempts by spreading
-		// them across the two auth endpoints.
-		if limiter != nil && !limiter.AllowIP(ip) {
+		// the lookup below. The budget is refresh's own, not login's, so a
+		// depot whose drivers refresh together cannot lock itself out of
+		// logging in.
+		if limiter != nil && !limiter.Allow(ip) {
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts"})
 			return
 		}

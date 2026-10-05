@@ -81,8 +81,9 @@ func (l *LoginRateLimiter) ResetEmail(email string) {
 	delete(l.byEmail, email)
 }
 
-// allowInWindow is the fixed-window admission shared by the login and rider
-// registration limiters; name says which one is speaking when it fails closed.
+// allowInWindow is the fixed-window admission shared by the login, refresh and
+// rider registration limiters; name says which one is speaking when it fails
+// closed.
 func allowInWindow(m map[string]*loginWindowEntry, key string, limit int, now time.Time, name string) bool {
 	e, ok := m[key]
 	if !ok {

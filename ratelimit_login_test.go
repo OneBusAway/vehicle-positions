@@ -96,21 +96,6 @@ func TestLoginRateLimiterAllowIP(t *testing.T) {
 	assert.True(t, l.AllowIP("5.6.7.8"), "other IPs are unaffected")
 }
 
-// TestLoginRateLimiterAllowIPSharesBudgetWithLogin pins the decision to reuse
-// this limiter for the refresh endpoint rather than adding a second one: an
-// address gets one allowance across both auth endpoints, so it cannot double
-// its attempts by alternating between them.
-func TestLoginRateLimiterAllowIPSharesBudgetWithLogin(t *testing.T) {
-	l := NewLoginRateLimiter()
-	defer l.Stop()
-
-	for i := range loginIPLimit {
-		assert.True(t, l.AllowIP("1.2.3.4"), "refresh attempt %d", i)
-	}
-	assert.False(t, l.Allow("1.2.3.4", "driver@test.com"),
-		"refresh attempts must consume the same per-IP budget login uses")
-}
-
 // TestLoginRateLimiterAllowIPLeavesEmailBudget verifies AllowIP touches only
 // the IP dimension: a refresh from one address must not spend an unrelated
 // account's per-email allowance.

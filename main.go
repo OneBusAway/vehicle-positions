@@ -78,7 +78,7 @@ type appStore interface {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
@@ -86,7 +86,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, jwtSecret, ttls, loginLimiter, trustProxy))
-	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, ttls, loginLimiter, trustProxy))
+	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, ttls, refreshLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store, store)))
 	feed := handleGetFeed(tracker, riderEstimates)
 	if feedAuthEnabled {
@@ -159,10 +159,10 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // CSRF protection wrapping the whole thing. It is the single place routes
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
-	loginLimiter *LoginRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
+	loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
 	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
@@ -278,6 +278,9 @@ func main() {
 	loginLimiter := NewLoginRateLimiter()
 	defer loginLimiter.Stop()
 
+	refreshLimiter := NewRefreshRateLimiter()
+	defer refreshLimiter.Stop()
+
 	// Expired refresh tokens are unusable by every path that reads them, so
 	// pruning them is garbage collection rather than a retention policy — it
 	// runs by default and has no "keep forever" setting. A bad interval only
@@ -353,7 +356,7 @@ func main() {
 
 	startTime := time.Now()
 
-	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, ttls, startTime,
+	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
 		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)

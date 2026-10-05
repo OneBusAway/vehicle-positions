@@ -166,9 +166,9 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           description: |
-            Too many attempts from this IP. The endpoint shares the login
-            limiter's per-IP budget, so attempts spread across both auth
-            endpoints draw on one allowance.
+            Too many attempts from this IP. The endpoint has its own per-IP
+            budget, separate from login's, so a burst of refreshes does not
+            block logins from the same address.
           content:
             application/json:
               schema:

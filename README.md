@@ -583,7 +583,8 @@ Response codes:
   tell an attacker something.
 - `415 Unsupported Media Type` — non-JSON `Content-Type`.
 - `429 Too Many Requests` — per-IP rate limit. The endpoint is unauthenticated,
-  so it shares the login rate limiter's per-IP budget.
+  so it is limited like login, but on a separate budget of 60 a minute: a
+  burst of refreshes from one address never blocks logins from it.
 - `500 Internal Server Error` — the token could not be read or rotated, or
   revoking the user's tokens after a replay failed.
 

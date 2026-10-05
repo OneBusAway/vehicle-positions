@@ -18,7 +18,7 @@ func newTestHandler(t *testing.T, enabled bool) http.Handler {
 	t.Cleanup(tracker.Stop)
 	ll := NewLoginRateLimiter()
 	t.Cleanup(ll.Stop)
-	h, err := newHandler(&noopStore{}, tracker, nil, ll, testSecret, testTTLs, time.Now(), adminUIConfig{enabled: enabled, stalenessThreshold: 5 * time.Minute}, false, nil, nil, nil)
+	h, err := newHandler(&noopStore{}, tracker, nil, ll, nil, testSecret, testTTLs, time.Now(), adminUIConfig{enabled: enabled, stalenessThreshold: 5 * time.Minute}, false, nil, nil, nil)
 	require.NoError(t, err)
 	return h
 }
