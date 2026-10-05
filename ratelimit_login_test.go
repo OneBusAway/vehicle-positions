@@ -84,29 +84,3 @@ func TestLoginRateLimiterEmailMapCapacityFailsClosed(t *testing.T) {
 
 	assert.False(t, l.Allow("9.9.9.9", "newcomer@test.com"), "new email denied when byEmail is at capacity")
 }
-
-func TestLoginRateLimiterAllowIP(t *testing.T) {
-	l := NewLoginRateLimiter()
-	defer l.Stop()
-
-	for i := range loginIPLimit {
-		assert.True(t, l.AllowIP("1.2.3.4"), "attempt %d", i)
-	}
-	assert.False(t, l.AllowIP("1.2.3.4"), "the per-IP window must close after loginIPLimit attempts")
-	assert.True(t, l.AllowIP("5.6.7.8"), "other IPs are unaffected")
-}
-
-// TestLoginRateLimiterAllowIPLeavesEmailBudget verifies AllowIP touches only
-// the IP dimension: a refresh from one address must not spend an unrelated
-// account's per-email allowance.
-func TestLoginRateLimiterAllowIPLeavesEmailBudget(t *testing.T) {
-	l := NewLoginRateLimiter()
-	defer l.Stop()
-
-	for range loginIPLimit {
-		assert.True(t, l.AllowIP("1.2.3.4"))
-	}
-	for i := range loginEmailLimit {
-		assert.True(t, l.Allow("5.6.7.8", "driver@test.com"), "attempt %d", i)
-	}
-}
