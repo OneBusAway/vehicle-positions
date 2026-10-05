@@ -78,7 +78,7 @@ type appStore interface {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
@@ -113,6 +113,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
 	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
 	mux.Handle("GET /api/v1/vehicles", authMiddleware(handleListMyVehicles(store)))
+	// Registered whether or not a map file is configured: an unconfigured server
+	// answers with a null URL, so a 404 only ever means one older than this route.
+	mux.Handle("GET /api/v1/map", authMiddleware(handleMapConfig(mapPMTilesURL)))
 
 	// Admin user management
 	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))
@@ -157,9 +160,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter *LoginRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
-	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, jwtSecret, loginLimiter, cfg)
@@ -224,6 +227,15 @@ func main() {
 	if feedAuthEnabled {
 		slog.Info("GTFS-RT feed authentication enabled; consumers must send an X-API-Key header")
 	}
+
+	// Checked before the database is touched, like the settings above, so a
+	// typo fails at once rather than being handed to every driver.
+	mapPMTilesURL, err := parseMapPMTilesURL(os.Getenv("MAP_PMTILES_URL"))
+	if err != nil {
+		slog.Error("refusing to start: invalid driver map file URL", "error", err)
+		os.Exit(1)
+	}
+	logMapPMTilesURL(mapPMTilesURL)
 
 	ttls := tokenTTLs{
 		access:  envDurationOrDefault("ACCESS_TOKEN_TTL", defaultAccessTokenTTL),
@@ -342,7 +354,7 @@ func main() {
 	startTime := time.Now()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, jwtSecret, ttls, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)

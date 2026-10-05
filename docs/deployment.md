@@ -53,9 +53,11 @@ Rules that apply to the whole table:
   There is no "days" unit.
 - An unset or empty variable takes the default. A value that cannot be parsed
   is **ignored**, logged as a warning, and the default is used instead — so
-  check the logs after a change rather than assuming it took effect. The one
-  exception is `FEED_AUTH_ENABLED` (see [Feed access](#feed-access)), where an
-  unparseable value stops the server at startup.
+  check the logs after a change rather than assuming it took effect.
+  `FEED_AUTH_ENABLED` (see [Feed access](#feed-access)) and `MAP_PMTILES_URL`
+  (see [Driver app map](#driver-app-map)) are stricter on purpose: a value
+  they cannot use stops the server at startup. So does a `DATABASE_URL` or
+  `PORT` the server cannot use.
 - Booleans accept anything Go's `strconv.ParseBool` accepts: `true`, `false`,
   `1`, `0`, `t`, `f`, `TRUE`, `FALSE`.
 
@@ -77,6 +79,12 @@ Rules that apply to the whole table:
 |---|---|---|
 | `GTFS_STATIC_URL` | — (required) | Your agency's GTFS static zip, as an `http(s)://` URL or a local file path. Drivers pick their route and run from it. The server logs an error and exits 1 if it is unset, before touching the database, or if the feed cannot be downloaded or parsed at startup. |
 | `GTFS_STATIC_REFRESH` | `24h` | How often the schedule is re-downloaded. A failed refresh keeps the previous index and logs. Must be positive; a zero or negative value is rejected with a warning and the default is used. |
+
+### Driver app map
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MAP_PMTILES_URL` | unset | Not used yet: the Android app does not download the file, so for now this only sets what `GET /api/v1/map` returns. Set it to an `https` URL of a PMTiles map file covering your service area, hosted wherever you like; the server never fetches the file. A value that is not an `http(s)` URL with a host, or that contains a username or password, stops the server at startup. Plain `http` is accepted with a warning, but Android release builds refuse to download over it. |
 
 ### Admin UI and proxying
 
