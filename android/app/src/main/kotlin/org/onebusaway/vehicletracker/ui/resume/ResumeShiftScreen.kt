@@ -48,6 +48,9 @@ fun ResumeShiftScreenContent(
     onEndShiftLocallyClick: () -> Unit,
     onDismissError: () -> Unit,
 ) {
+    // Until the stored trip loads, the prompt shows no shift to decide on and End Shift has
+    // nothing to end.
+    val actionsEnabled = state.trip != null && !state.ending
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -76,7 +79,7 @@ fun ResumeShiftScreenContent(
         Spacer(Modifier.height(32.dp))
         Button(
             onClick = onResumeClick,
-            enabled = !state.ending,
+            enabled = actionsEnabled,
             modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
         ) {
             Text(stringResource(R.string.resume_button))
@@ -84,7 +87,7 @@ fun ResumeShiftScreenContent(
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = onEndShiftClick,
-            enabled = !state.ending,
+            enabled = actionsEnabled,
             colors = ButtonDefaults.buttonColors(containerColor = StatusRed),
             modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
         ) {

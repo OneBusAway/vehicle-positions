@@ -121,6 +121,22 @@ class ScreenFlowTest {
         assertTrue(ended)
     }
 
+    @Test
+    fun resumeScreen_disablesBothActionsUntilTheTripLoads() {
+        compose.setContent {
+            ResumeShiftScreenContent(
+                state = ResumeShiftUiState(trip = null),
+                onResumeClick = {},
+                onEndShiftClick = {},
+                onEndShiftLocallyClick = {},
+                onDismissError = {},
+            )
+        }
+
+        compose.onNodeWithText(getString(R.string.resume_button)).assertIsNotEnabled()
+        compose.onNodeWithText(getString(R.string.resume_end_shift_button)).assertIsNotEnabled()
+    }
+
     // --- The adherence panel, against the server fixture's trip T1 ---
 
     private val resources get() = InstrumentationRegistry.getInstrumentation().targetContext.resources
