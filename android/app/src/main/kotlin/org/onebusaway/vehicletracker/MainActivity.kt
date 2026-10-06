@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 launch { rearmWhenActive(trackingRepository.state, serviceController::startTracking) }
                 // Fetches the agency's street map, or checks it is current, whenever the app comes
-                // to the front signed in, and when the driver signs in.
+                // to the front signed in, when the driver signs in, and each day it stays in front.
                 refreshWhenSignedIn(sessionStore.session, mapRepository::refresh)
             }
         }

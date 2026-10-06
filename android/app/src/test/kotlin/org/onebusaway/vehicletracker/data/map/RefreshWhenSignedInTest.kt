@@ -3,6 +3,7 @@ package org.onebusaway.vehicletracker.data.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -54,6 +55,31 @@ class RefreshWhenSignedInTest {
         startCollecting()
 
         emit(signedIn.copy(token = "jwt-2", issuedAtEpochSec = 200L))
+
+        assertEquals(1, refreshes)
+    }
+
+    // Without this, a driver who keeps the app in front would never get the daily check.
+    @Test fun `staying signed in with the app in front refreshes again each day`() = runTest {
+        session.value = signedIn
+        startCollecting()
+
+        advanceTimeBy(CHECK_EVERY_S * 1000 - 1)
+        assertEquals(1, refreshes)
+
+        advanceTimeBy(2)
+        assertEquals(2, refreshes)
+
+        advanceTimeBy(CHECK_EVERY_S * 1000)
+        assertEquals(3, refreshes)
+    }
+
+    @Test fun `signing out stops the daily refresh`() = runTest {
+        session.value = signedIn
+        startCollecting()
+
+        emit(signedOut)
+        advanceTimeBy(3 * CHECK_EVERY_S * 1000)
 
         assertEquals(1, refreshes)
     }
