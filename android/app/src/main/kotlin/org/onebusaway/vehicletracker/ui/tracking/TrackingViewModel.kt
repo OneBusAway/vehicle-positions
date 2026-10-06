@@ -14,6 +14,8 @@ import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.map.MapFileSource
+import org.onebusaway.vehicletracker.data.map.MapFileState
 import javax.inject.Inject
 
 data class TrackingUiState(
@@ -21,6 +23,7 @@ data class TrackingUiState(
     val activeTrip: ActiveTrip? = null,
     val ending: Boolean = false,
     val endTripError: Boolean = false,
+    val mapFile: MapFileState = MapFileState.None,
 )
 
 @HiltViewModel
@@ -28,13 +31,14 @@ class TrackingViewModel @Inject constructor(
     private val trackingRepository: TrackingRepository,
     tripStateStore: TripStateStore,
     private val tripEnder: TripEnder,
+    mapFiles: MapFileSource,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TrackingUiState())
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
     init {
-        combine(trackingRepository.state, tripStateStore.activeTrip, tripEnder.state) { tracking, trip, end ->
-            TrackingUiState(tracking = tracking, activeTrip = trip, ending = end.ending, endTripError = end.failed)
+        combine(trackingRepository.state, tripStateStore.activeTrip, tripEnder.state, mapFiles.state) { tracking, trip, end, mapFile ->
+            TrackingUiState(tracking = tracking, activeTrip = trip, ending = end.ending, endTripError = end.failed, mapFile = mapFile)
         }
             .onEach { _uiState.value = it }
             .launchIn(viewModelScope)

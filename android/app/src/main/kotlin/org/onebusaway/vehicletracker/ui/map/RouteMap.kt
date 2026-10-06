@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -56,6 +57,7 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.circleColor
@@ -77,9 +79,14 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.map.MapFailure
+import org.onebusaway.vehicletracker.data.map.MapFileState
+import org.onebusaway.vehicletracker.data.map.downloadPercent
 import org.onebusaway.vehicletracker.engine.Adherence
+import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.ShapeGeometry
 import org.onebusaway.vehicletracker.engine.TripGeometry
+import java.io.File
 import kotlin.math.roundToInt
 
 // The sizes and the off-route look are iOS's, from RouteMapViewController and MapGlyphs
@@ -124,10 +131,11 @@ fun Context.glEsVersion(): Int = getSystemService(ActivityManager::class.java).d
  * The trip on a map, as spec §6.3 has it: the shape in the route colour over a darker casing,
  * the stops with the next one enlarged and named, the vehicle pointed along its course, and the
  * matched position while it is off the route. The camera follows heading-up with the vehicle a
- * third of the way up. There is no street map under it yet, only a plain background.
+ * third of the way up. Under it is the agency's street map once the file is on the phone, and a
+ * plain background until then, with a note while the first copy downloads.
  */
 @Composable
-fun RouteMap(geometry: TripGeometry, adherence: Adherence?, modifier: Modifier = Modifier) {
+fun RouteMap(geometry: TripGeometry, adherence: Adherence?, mapFile: MapFileState, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val dark = isSystemInDarkTheme()
     val labelColor = MaterialTheme.colorScheme.onSurface.toArgb()
@@ -143,6 +151,8 @@ fun RouteMap(geometry: TripGeometry, adherence: Adherence?, modifier: Modifier =
         onDispose { lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(geometry, adherence) { controller.show(geometry, adherence) }
+    val streetFile = (mapFile as? MapFileState.Ready)?.file
+    LaunchedEffect(streetFile) { controller.useStreets(streetFile) }
     // Restarted by every drag, so the map goes back only once the driver has left it alone.
     LaunchedEffect(controller.following, controller.drags) {
         if (!controller.following) {
@@ -157,6 +167,7 @@ fun RouteMap(geometry: TripGeometry, adherence: Adherence?, modifier: Modifier =
             modifier = Modifier.fillMaxSize(),
             onRelease = { controller.destroy() },
         )
+        MapFileNote(mapFile, Modifier.align(Alignment.TopStart).padding(8.dp))
         if (!controller.following) {
             FilledTonalButton(
                 onClick = controller::follow,
@@ -168,6 +179,26 @@ fun RouteMap(geometry: TripGeometry, adherence: Adherence?, modifier: Modifier =
     }
 }
 
+/** A line over the map while it has no streets to show yet. Nothing once it has, or when the agency has no map. */
+@Composable
+private fun MapFileNote(state: MapFileState, modifier: Modifier = Modifier) {
+    val text = when (state) {
+        is MapFileState.Downloading -> stringResource(R.string.tracking_map_downloading, downloadPercent(state.bytes, state.total))
+        is MapFileState.Failed -> stringResource(
+            if (state.reason == MapFailure.NO_SPACE) R.string.tracking_map_no_space else R.string.tracking_map_retrying,
+        )
+        MapFileState.None, is MapFileState.Ready -> return
+    }
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        shadowElevation = 2.dp,
+    ) {
+        Text(text, Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
 /**
  * Owns the [MapView] and pushes the trip and each fix into it: a port of iOS's
  * `RouteMapViewController`. It touches the map only for what changed since the fix before, which
@@ -175,7 +206,7 @@ fun RouteMap(geometry: TripGeometry, adherence: Adherence?, modifier: Modifier =
  */
 private class RouteMapController(
     private val context: Context,
-    dark: Boolean,
+    private val dark: Boolean,
     private val labelColor: Int,
     private val haloColor: Int,
 ) {
@@ -195,6 +226,14 @@ private class RouteMapController(
     private var started = false
     private var resumed = false
     private var destroyed = false
+    private var vehicleActive = false
+
+    /**
+     * The street map file the map reads, from the first one it is given. It never changes after
+     * that: MapLibre crashes if the file under an open map is replaced (maplibre-native #3658), so
+     * a newer file waits until the screen opens again.
+     */
+    private var streetFile: File? = null
 
     private var latestGeometry: TripGeometry? = null
     private var latestAdherence: Adherence? = null
@@ -231,21 +270,44 @@ private class RouteMapController(
                 isRotateGesturesEnabled = false
                 isTiltGesturesEnabled = false
                 isCompassEnabled = false
-                // Nothing on the plain background needs crediting.
                 isLogoEnabled = false
-                isAttributionEnabled = false
             }
             map.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) drags++
             }
-            map.setStyle(Style.Builder().fromJson(plainStyle(dark))) { style ->
-                if (destroyed) return@setStyle
-                this.style = style
-                addLayers(style)
-                activateVehicle(map, style)
-                render()
-            }
+            loadStyle(map)
         }
+    }
+
+    /** Puts the streets in [file] under the trip, unless the map already has a file. */
+    fun useStreets(file: File?) {
+        if (file == null || streetFile != null || destroyed) return
+        streetFile = file
+        map?.let(::loadStyle)
+    }
+
+    private fun loadStyle(map: MapLibreMap) {
+        val file = streetFile
+        val json = if (file != null) streetStyle(context, dark, file) else plainStyle(dark)
+        map.setStyle(Style.Builder().fromJson(json)) { style ->
+            // A plain style that finishes after the streets were asked for is already being replaced.
+            if (destroyed || (file == null) != (streetFile == null)) return@setStyle
+            onStyleLoaded(map, style, streets = file != null)
+        }
+    }
+
+    private fun onStyleLoaded(map: MapLibreMap, style: Style, streets: Boolean) {
+        this.style = style
+        // Above every road but below the street names, so they stay readable over the route.
+        addLayers(style, below = if (streets) style.layers.firstOrNull { it is SymbolLayer }?.id else null)
+        // OpenStreetMap's licence asks for its credit wherever its data is on screen.
+        map.uiSettings.isAttributionEnabled = streets
+        if (!vehicleActive) {
+            activateVehicle(map, style)
+            vehicleActive = true
+        }
+        repaint(style)
+        render()
     }
 
     fun show(geometry: TripGeometry, adherence: Adherence?) {
@@ -327,21 +389,27 @@ private class RouteMapController(
         state = next
     }
 
-    private fun addLayers(style: Style) {
+    /**
+     * The trip's layers. The line, its casing and the stops go below the layer called [below] when
+     * there is one; the next stop's name and the matched position always go on top.
+     */
+    private fun addLayers(style: Style, below: String?) {
+        fun addRouteLayer(layer: Layer) = if (below != null) style.addLayerBelow(layer, below) else style.addLayer(layer)
+
         style.addSource(GeoJsonSource(ROUTE_SOURCE))
         style.addSource(GeoJsonSource(STOPS_SOURCE))
         style.addSource(GeoJsonSource(NEXT_STOP_SOURCE))
         style.addSource(GeoJsonSource(SNAPPED_SOURCE))
         // Casing first: layers draw in the order they are added, so the line sits centred on the
         // wider one underneath it.
-        style.addLayer(
+        addRouteLayer(
             LineLayer(CASING_LAYER, ROUTE_SOURCE).withProperties(
                 lineWidth(CASING_WIDTH),
                 lineCap(Property.LINE_CAP_ROUND),
                 lineJoin(Property.LINE_JOIN_ROUND),
             ),
         )
-        style.addLayer(
+        addRouteLayer(
             LineLayer(ROUTE_LAYER, ROUTE_SOURCE).withProperties(
                 lineWidth(ROUTE_WIDTH),
                 lineCap(Property.LINE_CAP_ROUND),
@@ -349,7 +417,7 @@ private class RouteMapController(
             ),
         )
         val isNext = Expression.eq(Expression.get(NEXT_STOP_PROPERTY), Expression.literal(true))
-        style.addLayer(
+        addRouteLayer(
             CircleLayer(STOPS_LAYER, STOPS_SOURCE).withProperties(
                 circleRadius(Expression.switchCase(isNext, Expression.literal(NEXT_STOP_RADIUS), Expression.literal(STOP_RADIUS))),
                 circleStrokeColor(Color.WHITE),
@@ -430,11 +498,7 @@ private class RouteMapController(
         heading = FollowHeading()
         shape = ShapeGeometry.of(geometry.shapePoints)
 
-        val routeColor = routeLineColor(geometry.routeColor)
-        style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE)?.setGeoJson(routeLineString(geometry.shapePoints))
-        style.getLayer(CASING_LAYER)?.setProperties(lineColor(casingColor(routeColor)), lineOpacity(1f))
-        style.getLayer(ROUTE_LAYER)?.setProperties(lineColor(routeColor), lineOpacity(1f))
-        style.getLayer(STOPS_LAYER)?.setProperties(circleColor(routeColor))
+        paintRoute(style, geometry)
         drawStops(style, geometry, nextStopIndex = -1)
         setSnappedVisible(style, visible = false)
 
@@ -465,19 +529,8 @@ private class RouteMapController(
 
         // The line is only ever drawn two ways, so it is restyled only when it crosses between
         // them, or on the first fix, which decides which.
-        if (previous?.isOnRoute != next.isOnRoute) {
-            val opacity = if (next.isOnRoute) 1f else OFF_ROUTE_OPACITY
-            style.getLayer(CASING_LAYER)?.setProperties(lineOpacity(opacity))
-            style.getLayer(ROUTE_LAYER)?.setProperties(lineOpacity(opacity))
-            component.applyStyle(vehicleOptions(next.isOnRoute))
-            // applyStyle also sets the map's padding to the options' own, none, which would drop the
-            // vehicle to the middle. Put the follow padding straight back, in the same frame.
-            if (following && state != null) applyFollowPadding(animationMs = 0)
-            setSnappedVisible(style, visible = !next.isOnRoute)
-        }
-        next.snapped?.let { snapped ->
-            style.getSourceAs<GeoJsonSource>(SNAPPED_SOURCE)?.setGeoJson(Point.fromLngLat(snapped.lon, snapped.lat))
-        }
+        if (previous?.isOnRoute != next.isOnRoute) paintOnRoute(style, next.isOnRoute)
+        next.snapped?.let { drawSnapped(style, it) }
         if (previous?.nextStopIndex != next.nextStopIndex) drawStops(style, geometry, next.nextStopIndex)
 
         if (previous == null) {
@@ -485,6 +538,44 @@ private class RouteMapController(
             val aheadDp = mapView.height / density * 2 / 3
             startFollowing(map, followZoom(next.vehicle.lat, aheadDp.toDouble()))
         }
+    }
+
+    /**
+     * Draws the trip on a style that has just replaced another, as it was on the old one: a new
+     * style starts with none of the trip's data. The camera stays where it is.
+     */
+    private fun repaint(style: Style) {
+        val geometry = drawnGeometry ?: return
+        val current = state
+        paintRoute(style, geometry)
+        drawStops(style, geometry, current?.nextStopIndex ?: -1)
+        paintOnRoute(style, current?.isOnRoute ?: true)
+        current?.snapped?.let { drawSnapped(style, it) }
+    }
+
+    /** The shape in the route colour over its darker casing, and the stops in the same colour. */
+    private fun paintRoute(style: Style, geometry: TripGeometry) {
+        val routeColor = routeLineColor(geometry.routeColor)
+        style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE)?.setGeoJson(routeLineString(geometry.shapePoints))
+        style.getLayer(CASING_LAYER)?.setProperties(lineColor(casingColor(routeColor)), lineOpacity(1f))
+        style.getLayer(ROUTE_LAYER)?.setProperties(lineColor(routeColor), lineOpacity(1f))
+        style.getLayer(STOPS_LAYER)?.setProperties(circleColor(routeColor))
+    }
+
+    /** Off the route the line fades, the vehicle turns grey and the matched position shows, as on iOS. */
+    private fun paintOnRoute(style: Style, onRoute: Boolean) {
+        val opacity = if (onRoute) 1f else OFF_ROUTE_OPACITY
+        style.getLayer(CASING_LAYER)?.setProperties(lineOpacity(opacity))
+        style.getLayer(ROUTE_LAYER)?.setProperties(lineOpacity(opacity))
+        map?.locationComponent?.applyStyle(vehicleOptions(onRoute))
+        // applyStyle also sets the map's padding to the options' own, none, which would drop the
+        // vehicle to the middle. Put the follow padding straight back, in the same frame.
+        if (following && state != null) applyFollowPadding(animationMs = 0)
+        setSnappedVisible(style, visible = !onRoute)
+    }
+
+    private fun drawSnapped(style: Style, snapped: GeoPoint) {
+        style.getSourceAs<GeoJsonSource>(SNAPPED_SOURCE)?.setGeoJson(Point.fromLngLat(snapped.lon, snapped.lat))
     }
 
     private fun drawStops(style: Style, geometry: TripGeometry, nextStopIndex: Int) {

@@ -25,6 +25,7 @@ import org.junit.Test
 import org.onebusaway.vehicletracker.data.*
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripGeometry
@@ -41,6 +42,7 @@ import org.onebusaway.vehicletracker.ui.tracking.TrackingViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TripEnder
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
+import java.io.File
 import java.io.IOException
 import java.time.Duration
 import java.time.OffsetDateTime
@@ -755,6 +757,7 @@ class ViewModelsTest {
     /** Builds a [TrackingViewModel] on an active T1 whose server answers each end with [endResponse]. */
     private fun withTrackingViewModel(
         endResponse: MockResponse = MockResponse().setBody("""{"status":"trip ended"}"""),
+        mapFiles: FakeMapFileSource = FakeMapFileSource(),
         block: (TrackingViewModel, TrackingRepository, FakeTripGeometryStore) -> Unit,
     ) {
         val server = MockWebServer().apply { start() }
@@ -766,7 +769,7 @@ class ViewModelsTest {
             val geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1 }
             val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), clock = { 0L })
             val tripEnder = TripEnder(tripRepository, tripState, geometryStore, FakeServiceController())
-            val vm = TrackingViewModel(tracking, tripState, tripEnder)
+            val vm = TrackingViewModel(tracking, tripState, tripEnder, mapFiles)
             awaitCondition(description = "active trip loaded") { vm.uiState.value.activeTrip != null }
             block(vm, tracking, geometryStore)
         } finally {
@@ -784,6 +787,22 @@ class ViewModelsTest {
 
             assertEquals(adherence, vm.uiState.value.tracking.adherence)
             assertEquals(TripFixtures.t1, vm.uiState.value.tracking.geometry)
+        }
+    }
+
+    @Test fun `the map file's state reaches the tracking screen`() = runTest(dispatcher) {
+        val mapFiles = FakeMapFileSource()
+        withTrackingViewModel(mapFiles = mapFiles) { vm, _, _ ->
+            assertEquals(MapFileState.None, vm.uiState.value.mapFile)
+
+            mapFiles.state.value = MapFileState.Downloading(40, 100)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MapFileState.Downloading(40, 100), vm.uiState.value.mapFile)
+
+            val file = File("/data/map/map-1.pmtiles")
+            mapFiles.state.value = MapFileState.Ready(file)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(MapFileState.Ready(file), vm.uiState.value.mapFile)
         }
     }
 
