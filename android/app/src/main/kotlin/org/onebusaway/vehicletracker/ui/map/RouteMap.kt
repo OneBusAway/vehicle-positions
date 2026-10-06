@@ -283,10 +283,10 @@ private class RouteMapController(
         following = true
     }
 
-    private fun applyFollowPadding() {
+    private fun applyFollowPadding(animationMs: Long = FOLLOW_ANIMATION_MS) {
         val map = map ?: return
         if (destroyed) return
-        map.locationComponent.paddingWhileTracking(doubleArrayOf(0.0, mapView.height / 3.0, 0.0, 0.0), FOLLOW_ANIMATION_MS)
+        map.locationComponent.paddingWhileTracking(doubleArrayOf(0.0, mapView.height / 3.0, 0.0, 0.0), animationMs)
     }
 
     fun onLifecycleEvent(event: Lifecycle.Event) {
@@ -470,6 +470,9 @@ private class RouteMapController(
             style.getLayer(CASING_LAYER)?.setProperties(lineOpacity(opacity))
             style.getLayer(ROUTE_LAYER)?.setProperties(lineOpacity(opacity))
             component.applyStyle(vehicleOptions(next.isOnRoute))
+            // applyStyle also sets the map's padding to the options' own, none, which would drop the
+            // vehicle to the middle. Put the follow padding straight back, in the same frame.
+            if (following && state != null) applyFollowPadding(animationMs = 0)
             setSnappedVisible(style, visible = !next.isOnRoute)
         }
         next.snapped?.let { snapped ->
