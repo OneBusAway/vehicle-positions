@@ -69,7 +69,7 @@ fun TrackingScreen(
             // With no geometry there is no route to draw, and the panel already says so.
             val geometry = state.tracking.geometry
             if (mapSupported && geometry != null) {
-                RouteMap(geometry, state.tracking.adherence, modifier)
+                RouteMap(geometry, state.tracking.adherence, state.mapFile, modifier)
             } else {
                 Spacer(modifier)
             }

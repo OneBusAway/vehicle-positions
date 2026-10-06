@@ -1,6 +1,8 @@
 package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.onebusaway.vehicletracker.data.map.MapFileSource
+import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.service.ServiceController
 import java.security.GeneralSecurityException
@@ -39,6 +41,10 @@ class FakeCryptor : Cryptor {
     private companion object {
         const val PREFIX = "enc:"
     }
+}
+
+class FakeMapFileSource : MapFileSource {
+    override val state = MutableStateFlow<MapFileState>(MapFileState.None)
 }
 
 class FakeSessionStore : SessionStore {

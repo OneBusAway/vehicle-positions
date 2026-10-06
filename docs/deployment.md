@@ -84,7 +84,7 @@ Rules that apply to the whole table:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `MAP_PMTILES_URL` | unset | Not used yet: the Android app does not download the file, so for now this only sets what `GET /api/v1/map` returns. Set it to an `https` URL of a PMTiles map file covering your service area, hosted wherever you like; the server never fetches the file. A value that is not an `http(s)` URL with a host, or that contains a username or password, stops the server at startup. Plain `http` is accepted with a warning, but Android release builds refuse to download over it. |
+| `MAP_PMTILES_URL` | unset | The street map the driver app shows under the route: an `https` URL of a PMTiles file covering your service area, hosted wherever you like. Section [12.6](#126-offline-street-map) says how to make and host one. The server never fetches the file; it hands the URL to drivers at `GET /api/v1/map`. Unset, the app draws the route on a plain background. A value that is not an `http(s)` URL with a host, or that contains a username or password, stops the server at startup. Plain `http` is accepted with a warning, but Android release builds refuse to download over it. |
 
 ### Admin UI and proxying
 
@@ -819,7 +819,8 @@ targets Java 17, so build with a JDK 17 toolchain. The output is
 but defines no `signingConfig`, so signing is the agency's job. Android will not
 install an unsigned APK.
 
-The APK is about 20 MB, nearly all of it the map library. The release build
+The APK is about 21 MB, nearly all of it the map library. The street map is not
+in it: each phone downloads your map file (section 12.6). The release build
 carries that library for ARM phones only (`arm64-v8a` and `armeabi-v7a`), which
 halves the download; it will not install on an x86 emulator, where the debug
 build is the one to use. The map needs OpenGL ES 3.0. On a phone without it the
@@ -929,3 +930,47 @@ which build a driver is running when you are debugging a report from the field.
 Then tell drivers three things: the server URL, their email, and their password.
 The app's [smoke-test walkthrough](android-smoke-test.md) is a useful script for
 verifying a new build end to end before you distribute it.
+
+### 12.6 Offline street map
+
+The Tracking screen can draw the trip over a street map that works with no
+signal: the app downloads one map file of your service area and reads it from
+the phone. Without one it draws the route on a plain background. You host the
+file; the server only tells the app where it is (`MAP_PMTILES_URL`, section 3).
+
+**Make the file.** Cut your area out of a [Protomaps](https://protomaps.com)
+daily build with the [`pmtiles`](https://github.com/protomaps/go-pmtiles) tool:
+
+```bash
+pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles agency.pmtiles \
+  --bbox=<west>,<south>,<east>,<north> --maxzoom=15
+```
+
+Builds are listed at [maps.protomaps.com/builds](https://maps.protomaps.com/builds)
+and each is kept for about a week. It has to be a Protomaps build: the app's
+style is made for its layers, and any other file draws a blank map. In October
+2026 a city like Seattle came to about 22 MB and all of King County Metro's
+service area to 93 MB. `--maxzoom=14` makes the file about 60% smaller, with a
+little less detail when fully zoomed in: worth it when drivers use mobile data.
+
+**Host it.** Any HTTPS host that serves a static file works: your own web
+server, object storage, a release asset. It has to send an `ETag` or
+`Last-Modified` header and answer byte-range requests, as common hosts do; then
+a download cut off part-way carries on where it stopped. Set `MAP_PMTILES_URL`
+to the file's URL and restart the server.
+
+**What phones do.** Once the driver has signed in, the app downloads the file
+in the background, on any connection, and shows "Downloading map" on the
+Tracking screen until it is done. It needs the file's size plus 50 MB free, and
+says so when the phone is too full. Once a day it asks your host whether the
+file has changed. To update the map, replace the file at the same URL: within a
+day phones fetch the new version quietly and show it the next time the Tracking
+screen opens. To drop the map, unset `MAP_PMTILES_URL`: within a day phones
+learn it is gone, the Tracking screen goes back to the plain background the next
+time it opens, and the file is deleted the next time the app starts. A Tracking
+screen that is open at the time keeps what it shows until then.
+
+Street names are drawn in Latin letters only: the English name where
+OpenStreetMap has one, or else the local name when it is written in Latin
+letters. A place named only in another script, such as Devanagari, has no label
+for now.

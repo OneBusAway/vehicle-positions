@@ -29,6 +29,13 @@ import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.data.map.MapFileDownloader
+import org.onebusaway.vehicletracker.data.map.MapFileFetcher
+import org.onebusaway.vehicletracker.data.map.MapFileSource
+import org.onebusaway.vehicletracker.data.map.MapFileStore
+import org.onebusaway.vehicletracker.data.map.MapRepository
+import org.onebusaway.vehicletracker.data.map.MapServer
+import org.onebusaway.vehicletracker.data.map.TrackerMapServer
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
 import java.io.File
@@ -170,6 +177,22 @@ object AppModule {
      */
     @Provides
     fun provideTrackerApiProvider(holder: ApiHolder): TrackerApiProvider = TrackerApiProvider(holder::api)
+
+    /** The agency's map files: in `noBackupFilesDir`, because tens of megabytes would push the app past its backup limit. */
+    @Provides
+    @Singleton
+    fun provideMapFileStore(@ApplicationContext context: Context): MapFileStore =
+        MapFileStore(File(context.noBackupFilesDir, "map"))
+
+    @Provides
+    @Singleton
+    fun provideMapFileFetcher(): MapFileFetcher = MapFileDownloader(MapFileDownloader.client())
+
+    @Provides
+    fun provideMapServer(apiProvider: TrackerApiProvider): MapServer = TrackerMapServer(apiProvider)
+
+    @Provides
+    fun provideMapFileSource(repository: MapRepository): MapFileSource = repository
 
     @Provides
     @EpochSecondsClock

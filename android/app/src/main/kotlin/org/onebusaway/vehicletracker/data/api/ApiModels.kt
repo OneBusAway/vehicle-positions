@@ -24,6 +24,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class EndTripRequest(@SerialName("trip_id") val tripId: Long)
 
+/** Where the agency's offline street map is; [pmtilesUrl] is null when the agency has none. */
+@Serializable data class MapConfigDto(@SerialName("pmtiles_url") val pmtilesUrl: String? = null)
+
 @Serializable data class LocationReportDto(
     @SerialName("vehicle_id") val vehicleId: String,
     /** GTFS trip_id; null (omitted on the wire) when the driver only knows the route. */

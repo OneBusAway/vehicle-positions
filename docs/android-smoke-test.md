@@ -376,9 +376,10 @@ then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
 ### Check 2c: The map draws the trip and follows the vehicle
 
 The Tracking screen draws the run on a map between the adherence panel and the
-trip counters: spec §6.3 of the iOS design, with the iOS map's sizes. There is
-no street map under it yet, only a plain background. Run this with `T1` started
-and the drive loop from Check 2b going.
+trip counters: spec §6.3 of the iOS design, with the iOS map's sizes. With
+`MAP_PMTILES_URL` unset, as in step 1, it draws on a plain background; Check 2d
+adds the street map. Run this with `T1` started and the drive loop from Check 2b
+going.
 
 1. Watch the map from the moment the trip starts, through the detour, to ST3.
 2. Partway along, drag the map sideways with one finger, then leave it alone.
@@ -419,6 +420,39 @@ and the drive loop from Check 2b going.
 On the emulator the map stays north-up: `adb emu geo fix` sends a position with
 no course. On a phone it turns to keep the direction of travel pointing up, and
 holds the last direction while the vehicle stands still.
+
+### Check 2d: The street map downloads, and works offline
+
+This needs the [`pmtiles`](https://github.com/protomaps/go-pmtiles) tool. Cut a
+small map around the fixture's route from a Protomaps build (pick a date listed
+at [maps.protomaps.com/builds](https://maps.protomaps.com/builds)), serve it from
+your machine, and restart the server from step 1 pointing at it. The debug build
+may fetch it over plain `http` from `10.0.2.2`; a release build needs `https`.
+
+```bash
+pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles /tmp/smoke.pmtiles \
+  --bbox=-122.36,47.59,-122.30,47.62 --maxzoom=15
+(cd /tmp && python3 -m http.server 8092 &)
+export MAP_PMTILES_URL=http://10.0.2.2:8092/smoke.pmtiles
+# stop the server from step 1, then start it again the same way
+```
+
+With `T1` started and the drive loop from Check 2b going, switch to another app
+and back, so the app asks the server for the map. Then turn on airplane mode,
+force-stop the app, open it again and resume the shift.
+
+**Expected outcome:**
+
+- **While it downloads:** "Downloading map" and a percentage at the top left of
+  the map, over the plain background.
+- **Once it is done:** streets, road names and places appear under the route
+  without the map jumping, and the vehicle stays a third of the way up. Street
+  names are drawn over the route line; the stops, the next stop's name and the
+  vehicle are drawn over the street names. An ⓘ at the bottom left opens
+  "© OpenStreetMap contributors".
+- **Offline:** after the restart in airplane mode the banner says "No
+  connection", and the streets are all still there.
+- **Dark theme** (Check 2c, step 4): the streets turn dark too.
 
 ### Check 3 — Network loss flips the status red, recovery flips it back green
 

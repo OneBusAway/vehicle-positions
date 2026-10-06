@@ -81,10 +81,10 @@ Rider mode, when on, verifies riders against the same schedule.
 
 ## Driver app map
 
-Optional, and not used yet: the Android app does not download the map file, so
-for now this only sets what `GET /api/v1/map` returns. The file is a PMTiles
-map of the agency's service area, hosted wherever the agency likes; the server
-never downloads it.
+Optional. The PMTiles file the driver app downloads for its offline street
+map, hosted wherever the agency likes; the server never downloads it.
+[Deployment §12.6](deployment.md#126-offline-street-map) covers making and
+hosting one. Unset, the app draws the route on a plain background.
 
 | Variable | Default | Status | Purpose |
 |---|---|---|---|

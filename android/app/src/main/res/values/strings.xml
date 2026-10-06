@@ -99,6 +99,9 @@
     <string name="tracking_adherence_no_schedule">Schedule unavailable</string>
     <!-- On the tracking screen's map, once the driver has dragged it away from the vehicle. -->
     <string name="tracking_map_recenter">Re-center</string>
+    <string name="tracking_map_downloading">Downloading map, %1$d%%</string>
+    <string name="tracking_map_no_space">Not enough space for the map</string>
+    <string name="tracking_map_retrying">Map not downloaded yet, will retry</string>
 
     <!-- Resume prompt: a trip was stored but its tracking service was not running at launch -->
     <string name="resume_title">Resume Shift?</string>
