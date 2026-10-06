@@ -50,6 +50,8 @@ tags:
     description: Driver-facing vehicle access.
   - name: gtfs
     description: Read-only access to the loaded GTFS schedule.
+  - name: map
+    description: Where the driver app gets its offline street map.
   - name: rider
     description: |
       Crowd-sourced positioning from rider devices. These five routes are
@@ -259,6 +261,31 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Vehicle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/map:
+    get:
+      tags: [map]
+      summary: Where the driver app downloads its offline street map
+      description: |
+        Requires a driver or admin bearer token. `pmtiles_url` is the URL of
+        the PMTiles map file the agency set with `MAP_PMTILES_URL`, or null
+        when it has not set one. The server hands out only the URL: the agency
+        hosts the file, and clients download it from there. A server older
+        than this route answers 404, which a client should read the same as
+        null.
+      responses:
+        '200':
+          description: Where the map file is, if there is one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapConfig'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2402,6 +2429,17 @@ components:
           type: integer
         schedule_late_s:
           type: integer
+
+    MapConfig:
+      type: object
+      required: [pmtiles_url]
+      properties:
+        pmtiles_url:
+          type: [string, 'null']
+          format: uri
+          description: |
+            An http or https URL of a PMTiles map file covering the agency's
+            service area, or null when the agency has not configured one.
 
     RiderRegisterRequest:
       type: object

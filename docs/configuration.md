@@ -79,6 +79,17 @@ Rider mode, when on, verifies riders against the same schedule.
 | `GTFS_STATIC_URL` | — | **Required** | GTFS static zip — an `http(s)://` URL or a local file path. The server **refuses to start** when it is unset, empty or only whitespace; that check runs before the database is opened, so it fails immediately. A feed that is set but cannot be downloaded or parsed at startup also **refuses to start**, after migrations have run. |
 | `GTFS_STATIC_REFRESH` | `24h` | Optional | How often to re-download the zip and rebuild the index. A failed refresh keeps the previous index and logs. Must be positive; zero, negative or unparseable warns and defaults. |
 
+## Driver app map
+
+Optional, and not used yet: the Android app does not download the map file, so
+for now this only sets what `GET /api/v1/map` returns. The file is a PMTiles
+map of the agency's service area, hosted wherever the agency likes; the server
+never downloads it.
+
+| Variable | Default | Status | Purpose |
+|---|---|---|---|
+| `MAP_PMTILES_URL` | unset | Optional | `http` or `https` URL of the PMTiles map file, handed as is to drivers at `GET /api/v1/map`. When it is unset, empty or only whitespace, `pmtiles_url` is `null`. A value that is not an `http` or `https` URL with a host, or that carries a username or password (the URL goes to every driver's phone), **refuses to start**; the check runs before the database is opened. Plain `http` starts with a `WARN`: Android blocks cleartext downloads in release builds, so use `https` in production. |
+
 ## Admin UI and first-admin bootstrap
 
 | Variable | Default | Status | Purpose |

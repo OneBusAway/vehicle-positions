@@ -124,6 +124,9 @@ var schemaStructs = map[string]string{
 	// alias cannot quietly disappear from the spec while the server still
 	// sends it.
 	"LoginResponse": "LoginResponse",
+
+	// Where the driver app downloads its offline street map.
+	"MapConfig": "mapConfigResponse",
 }
 
 // requestSchemaStructs pairs a request schema with the Go struct the handler
