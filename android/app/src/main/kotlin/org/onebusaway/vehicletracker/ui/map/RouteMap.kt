@@ -289,6 +289,10 @@ private class RouteMapController(
     private fun loadStyle(map: MapLibreMap) {
         val file = streetFile
         val json = if (file != null) streetStyle(context, dark, file) else plainStyle(dark)
+        // setStyle retires the current style at once, and MapLibre throws on any later use of it.
+        // Until the new one has loaded there is nothing to draw on: render() waits, and
+        // onStyleLoaded puts the trip back.
+        style = null
         map.setStyle(Style.Builder().fromJson(json)) { style ->
             // A plain style that finishes after the streets were asked for is already being replaced.
             if (destroyed || (file == null) != (streetFile == null)) return@setStyle
