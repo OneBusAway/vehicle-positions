@@ -50,10 +50,12 @@ func newLoginResponse(accessToken, refreshToken string, accessTTL time.Duration)
 }
 
 // RefreshStore is what the refresh handler needs: read the presented token,
-// look up its owner, and rotate it.
+// look up its owner, rotate it, and revoke the owner's tokens when a spent one
+// is presented.
 type RefreshStore interface {
 	RefreshTokenGetter
 	RefreshTokenRotator
+	RefreshTokenDeleter
 	UserGetter
 }
 
@@ -67,9 +69,9 @@ type RefreshStore interface {
 //
 // Tokens are single-use. Each refresh consumes the presented token and
 // returns its replacement, so a stolen token stops working as soon as the
-// legitimate client refreshes, and presenting a consumed token is a signal
-// worth logging. Revoking the whole token family on such a reuse is a
-// documented follow-up, not part of this change.
+// legitimate client refreshes. Presenting a token that is already spent
+// revokes every refresh token its user holds, because the server cannot tell
+// a client retrying a lost response from a thief replaying a stolen token.
 func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -126,9 +128,23 @@ func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limit
 
 		if stored.UsedAt != nil {
 			// Either a client retrying a refresh whose response it lost, or a
-			// stolen token being replayed. Neither is servable, and the two
-			// are indistinguishable from here — hence the warning.
-			slog.Warn("refresh: reuse of an already-consumed token",
+			// stolen token being replayed. The two are indistinguishable from
+			// here, so every refresh token the user holds is revoked: the
+			// thief's copy dies along with the client's, and the client logs
+			// in again. The caller still gets the same 401 as any other spent
+			// token, so a thief cannot tell the replay was noticed.
+			//
+			// A failed revocation is a 500, not a 401. A 401 would send the
+			// legitimate client to log in again while the thief's copy
+			// survived. A 500 invites a retry, and retrying with this same
+			// spent token attempts the revocation again.
+			if err := store.DeleteRefreshTokensForUser(r.Context(), stored.UserID); err != nil {
+				slog.Error("refresh: revoking refresh tokens after reuse failed",
+					"sub", stored.UserID, "ip", ip, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				return
+			}
+			slog.Warn("refresh: reuse of an already-consumed token, revoked the user's refresh tokens",
 				"sub", stored.UserID, "used_at", *stored.UsedAt, "ip", ip)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": invalidRefreshTokenMessage})
 			return
@@ -176,8 +192,20 @@ func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limit
 		}
 		if !rotated {
 			// Another request consumed this token between the read above and
-			// the update. Same answer as any other spent token.
-			slog.Warn("refresh: token consumed concurrently", "sub", stored.UserID)
+			// the update, so this is a spent token too and gets the same
+			// revocation. Without it, a thief racing the legitimate client
+			// could win the rotation: the client lands here and logs in again,
+			// nobody ever replays the thief's new token, and it is never
+			// revoked. RotateRefreshToken waited on the winner's user lock, so
+			// the winner's replacement is committed and this delete removes it.
+			if err := store.DeleteRefreshTokensForUser(r.Context(), stored.UserID); err != nil {
+				slog.Error("refresh: revoking refresh tokens after a concurrent consume failed",
+					"sub", stored.UserID, "ip", ip, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				return
+			}
+			slog.Warn("refresh: token consumed concurrently, revoked the user's refresh tokens",
+				"sub", stored.UserID, "ip", ip)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": invalidRefreshTokenMessage})
 			return
 		}
