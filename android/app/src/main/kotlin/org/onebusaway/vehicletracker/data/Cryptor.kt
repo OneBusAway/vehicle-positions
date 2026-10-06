@@ -19,8 +19,7 @@ import javax.crypto.spec.GCMParameterSpec
  * This is a seam rather than an abstraction for its own sake: [EncryptedSessionStore] holds all
  * of the session, migration and recovery logic and is exercised on the JVM against a fake, while
  * [KeystoreCryptor] — the only part that needs a real device — is covered by instrumented tests.
- * CI runs `testDebugUnitTest` and no emulator, so the logic that has to gate a change sits on
- * this side of the seam.
+ * The logic sits on this side of the seam so the JVM tests reach it without an emulator.
  */
 interface Cryptor {
     /** @throws GeneralSecurityException if the key cannot be created or used. */

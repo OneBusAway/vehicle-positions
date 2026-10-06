@@ -33,8 +33,7 @@ import java.security.ProviderException
 /**
  * Exercises [EncryptedSessionStore] against a real file-backed DataStore and a [FakeCryptor],
  * covering the upgrade from the build that stored the driver's JWT in the clear. These run on the
- * JVM, which is the only thing CI executes — see `KeystoreCryptorTest` for the parts that need a
- * device.
+ * JVM; `KeystoreCryptorTest` covers the parts that need a device.
  */
 class SessionStoreTest {
     @get:Rule val tempFolder = TemporaryFolder()

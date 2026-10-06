@@ -1,6 +1,6 @@
 package org.onebusaway.vehicletracker.ui.resume
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -48,47 +51,53 @@ fun ResumeShiftScreenContent(
     onEndShiftLocallyClick: () -> Unit,
     onDismissError: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = stringResource(R.string.resume_title),
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        state.trip?.let { trip ->
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.resume_message, trip.vehicleId),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.resume_route, trip.routeId),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = startedAgoText(state.startedAgoSec),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        Spacer(Modifier.height(32.dp))
-        Button(
-            onClick = onResumeClick,
-            enabled = !state.ending,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+    // Until the stored trip loads, the prompt shows no shift to decide on and End Shift has
+    // nothing to end.
+    val actionsEnabled = state.trip != null && !state.ending
+    // The Box centres the prompt: Arrangement.Center cannot, as verticalScroll measures the Column
+    // with unbounded height. It scrolls once a large font scale pushes the buttons off the screen.
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
         ) {
-            Text(stringResource(R.string.resume_button))
-        }
-        Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = onEndShiftClick,
-            enabled = !state.ending,
-            colors = ButtonDefaults.buttonColors(containerColor = StatusRed),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-        ) {
-            Text(stringResource(R.string.resume_end_shift_button))
+            Text(
+                text = stringResource(R.string.resume_title),
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            state.trip?.let { trip ->
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.resume_message, trip.vehicleId),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.resume_route, trip.routeId),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = startedAgoText(state.startedAgoSec),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            Spacer(Modifier.height(32.dp))
+            Button(
+                onClick = onResumeClick,
+                enabled = actionsEnabled,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+            ) {
+                Text(stringResource(R.string.resume_button))
+            }
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = onEndShiftClick,
+                enabled = actionsEnabled,
+                colors = ButtonDefaults.buttonColors(containerColor = StatusRed),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+            ) {
+                Text(stringResource(R.string.resume_end_shift_button))
+            }
         }
     }
 

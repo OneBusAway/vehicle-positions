@@ -17,8 +17,8 @@ import java.io.File
 
 /**
  * Exercises [DataStoreVehiclePrefsStore] against a real file-backed DataStore. That is why the
- * store takes a `DataStore<Preferences>` rather than a `Context` — Android CI runs
- * `testDebugUnitTest` with no emulator, so a Context-bound store could not be covered here.
+ * store takes a `DataStore<Preferences>` rather than a `Context`: this runs on the JVM, where a
+ * Context-bound store could not be covered.
  */
 class VehiclePrefsStoreTest {
     @get:Rule val tempFolder = TemporaryFolder()

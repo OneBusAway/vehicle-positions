@@ -18,8 +18,7 @@ import java.io.File
 
 /**
  * Covers the one piece [SessionStoreTest] cannot reach on the JVM: the real Android Keystore
- * binding. CI runs no instrumented tests (`.github/workflows/android.yml` runs `assembleDebug`,
- * `testDebugUnitTest`, `assembleRelease` and starts no emulator), so run these with
+ * binding. CI runs these on an emulator in the `instrumented` job; locally, run
  * `./gradlew :app:connectedDebugAndroidTest` on a device or emulator.
  */
 @RunWith(AndroidJUnit4::class)

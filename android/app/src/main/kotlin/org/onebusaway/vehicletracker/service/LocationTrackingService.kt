@@ -159,7 +159,7 @@ class LocationTrackingService : Service() {
         } catch (e: SecurityException) {
             // Background restart without ACCESS_BACKGROUND_LOCATION granted — the spec's degraded
             // path. Drop out of foreground state but keep the service (and its notification) alive;
-            // MainActivity.onResume calls ServiceController.startTracking() again on next foreground.
+            // MainActivity calls ServiceController.startTracking() again while it is in the foreground.
             Log.w(TAG, "Missing location permission for background restart; entering degraded mode", e)
             locationUpdatesActive = false
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)

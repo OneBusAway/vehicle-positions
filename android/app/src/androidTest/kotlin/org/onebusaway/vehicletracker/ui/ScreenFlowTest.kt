@@ -1,10 +1,19 @@
 package org.onebusaway.vehicletracker.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
@@ -119,6 +128,44 @@ class ScreenFlowTest {
         compose.onNodeWithText(getString(R.string.resume_end_shift_button)).performClick()
         assertTrue(resumed)
         assertTrue(ended)
+    }
+
+    @Test
+    fun resumeScreen_disablesBothActionsUntilTheTripLoads() {
+        compose.setContent {
+            ResumeShiftScreenContent(
+                state = ResumeShiftUiState(trip = null),
+                onResumeClick = {},
+                onEndShiftClick = {},
+                onEndShiftLocallyClick = {},
+                onDismissError = {},
+            )
+        }
+
+        compose.onNodeWithText(getString(R.string.resume_button)).assertIsNotEnabled()
+        compose.onNodeWithText(getString(R.string.resume_end_shift_button)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun resumeScreen_scrollsToEndShiftAtALargeFontScale() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                // A short screen, so End Shift starts below the fold whatever the test device.
+                Box(Modifier.height(360.dp)) {
+                    ResumeShiftScreenContent(
+                        state = ResumeShiftUiState(trip = ActiveTrip(7L, "T1", "bus-1", "R1", "20260902", 100L)),
+                        onResumeClick = {},
+                        onEndShiftClick = {},
+                        onEndShiftLocallyClick = {},
+                        onDismissError = {},
+                    )
+                }
+            }
+        }
+
+        val endShift = compose.onNodeWithText(getString(R.string.resume_end_shift_button))
+        endShift.assertIsNotDisplayed()
+        endShift.performScrollTo().assertIsDisplayed()
     }
 
     // --- The adherence panel, against the server fixture's trip T1 ---
