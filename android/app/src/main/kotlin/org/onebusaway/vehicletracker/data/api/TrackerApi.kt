@@ -21,6 +21,8 @@ interface TrackerApi {
     // A GTFS trip_id is arbitrary text too, so it is Retrofit's to percent-encode as well.
     @GET("api/v1/gtfs/trips/{trip_id}")
     suspend fun trip(@Path("trip_id") tripId: String): TripGeometryDto
+
+    @GET("api/v1/map") suspend fun mapConfig(): MapConfigDto
 }
 
 /**
