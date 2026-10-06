@@ -27,4 +27,12 @@ class TrackingRepository @Inject constructor() {
     private val _state = MutableStateFlow(TrackingState())
     val state: StateFlow<TrackingState> = _state.asStateFlow()
     fun update(transform: (TrackingState) -> TrackingState) = _state.update(transform)
+
+    private val _liveView = MutableStateFlow(false)
+
+    /** Whether the tracking screen is on screen, and so wants a fix every second to draw. */
+    val liveView: StateFlow<Boolean> = _liveView.asStateFlow()
+    fun setLiveView(live: Boolean) {
+        _liveView.value = live
+    }
 }

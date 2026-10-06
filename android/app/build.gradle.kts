@@ -22,6 +22,9 @@ android {
 
     buildTypes {
         release {
+            // MapLibre's native library is about 10 MB for each ABI. Phones are ARM; the x86 ones are
+            // for emulators, which run the debug build.
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -60,6 +63,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.play.services)
+    implementation(libs.maplibre.android)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

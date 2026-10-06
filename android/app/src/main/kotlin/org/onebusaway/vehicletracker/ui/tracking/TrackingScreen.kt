@@ -28,17 +28,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
+import org.onebusaway.vehicletracker.ui.map.RouteMap
+import org.onebusaway.vehicletracker.ui.map.glEsVersion
+import org.onebusaway.vehicletracker.ui.map.supportsMap
 import org.onebusaway.vehicletracker.ui.theme.StatusGreen
 import org.onebusaway.vehicletracker.ui.theme.StatusRed
 
@@ -49,12 +53,27 @@ fun TrackingScreen(
     viewModel: TrackingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LifecycleStartEffect(viewModel) {
+        viewModel.onScreenVisible(true)
+        onStopOrDispose { viewModel.onScreenVisible(false) }
+    }
+    val context = LocalContext.current
+    val mapSupported = remember { supportsMap(context.glEsVersion()) }
     TrackingScreenContent(
         state = state,
         onEndTripClick = { viewModel.onEndTrip(onTripEnded) },
         onEndTripLocallyClick = { viewModel.onEndTripLocally(onTripEnded) },
         onDismissError = viewModel::dismissEndTripError,
         onReauthClick = onReauthRequired,
+        map = { modifier ->
+            // With no geometry there is no route to draw, and the panel already says so.
+            val geometry = state.tracking.geometry
+            if (mapSupported && geometry != null) {
+                RouteMap(geometry, state.tracking.adherence, modifier)
+            } else {
+                Spacer(modifier)
+            }
+        },
     )
 }
 
@@ -65,6 +84,9 @@ fun TrackingScreenContent(
     onEndTripLocallyClick: () -> Unit,
     onDismissError: () -> Unit,
     onReauthClick: () -> Unit,
+    // The map is handed in so that this screen can be shown, in tests and previews, with no
+    // OpenGL behind it. It is given the space between the panel and the footer.
+    map: @Composable (Modifier) -> Unit = { modifier -> Spacer(modifier) },
 ) {
     var showConfirmDialog by remember { mutableStateOf(false) }
     var elapsedSeconds by remember { mutableLongStateOf(0L) }
@@ -79,13 +101,14 @@ fun TrackingScreenContent(
         }
     }
 
+    // The order of iOS's TrackingView: banner, panel, the map taking what height is left, footer.
     Column(modifier = Modifier.fillMaxSize()) {
         StatusBanner(
             problem = state.tracking.problem,
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
         )
         Column(
-            modifier = Modifier.weight(2f).fillMaxWidth().padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             if (state.tracking.problem == TrackingProblem.AUTH_EXPIRED) {
                 Button(
@@ -98,14 +121,18 @@ fun TrackingScreenContent(
                 Spacer(Modifier.height(16.dp))
             }
             AdherencePanel(state.tracking)
-            Spacer(Modifier.height(16.dp))
             state.activeTrip?.let { trip ->
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.tracking_route_label, trip.routeId),
                     style = MaterialTheme.typography.titleLarge,
                 )
-                Spacer(Modifier.height(8.dp))
             }
+        }
+        map(Modifier.weight(1f).fillMaxWidth())
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
             Text(
                 text = stringResource(R.string.tracking_duration_label, formatDuration(elapsedSeconds)),
                 style = MaterialTheme.typography.bodyLarge,
@@ -115,7 +142,7 @@ fun TrackingScreenContent(
                 text = stringResource(R.string.tracking_fixes_sent_label, state.tracking.fixesSent),
                 style = MaterialTheme.typography.bodyLarge,
             )
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(12.dp))
             Button(
                 onClick = { showConfirmDialog = true },
                 enabled = !state.ending,
@@ -189,9 +216,10 @@ private fun StatusBanner(problem: TrackingProblem, modifier: Modifier = Modifier
         Text(
             text = stringResource(textRes),
             color = Color.White,
-            fontSize = 32.sp,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         )
     }
 }

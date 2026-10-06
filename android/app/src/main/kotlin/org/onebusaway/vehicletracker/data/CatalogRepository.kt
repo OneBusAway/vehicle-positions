@@ -105,4 +105,5 @@ private fun TripGeometryDto.toTripGeometry() = TripGeometry(
         scheduleEarlyS = thresholds.scheduleEarlyS,
         scheduleLateS = thresholds.scheduleLateS,
     ),
+    routeColor = route.color,
 )

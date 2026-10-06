@@ -53,6 +53,7 @@ class TripGeometryTest {
         assertEquals(at(8, 0), trip.stops[0].departureAt)
         assertEquals("an after-midnight time lands on the next calendar day", at(1, 10, day = 3), trip.stops[1].arrivalAt)
         assertEquals(AdherenceThresholds(maxShapeDistanceM = 60.0, scheduleEarlyS = 900, scheduleLateS = 5400), trip.thresholds)
+        assertEquals("0077C0", trip.routeColor)
         assertEquals("/api/v1/gtfs/trips/T1", server.takeRequest().path)
     }
 

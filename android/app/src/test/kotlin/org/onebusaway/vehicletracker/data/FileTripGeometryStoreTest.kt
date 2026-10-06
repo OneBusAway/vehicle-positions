@@ -69,6 +69,18 @@ class FileTripGeometryStoreTest {
         assertNull(storeIn(dir).load())
     }
 
+    /** A trip in progress when the app is updated was stored by the build before, which wrote no colour. */
+    @Test fun `a geometry stored before the route colour existed still loads`() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "active_trip_geometry.json")
+        storeIn(dir).save(TripFixtures.t1.copy(routeColor = "0077C0"))
+        val stored = file.readText()
+        require(""","routeColor":"0077C0"""" in stored) { "the fixture no longer writes the colour where this test strips it" }
+        file.writeText(stored.replace(""","routeColor":"0077C0"""", ""))
+
+        assertEquals(TripFixtures.t1, storeIn(dir).load())
+    }
+
     @Test fun `a geometry is loaded only for the trip it was saved for`() = runTest {
         val store = storeIn(tempFolder.newFolder())
         store.save(TripFixtures.t1)

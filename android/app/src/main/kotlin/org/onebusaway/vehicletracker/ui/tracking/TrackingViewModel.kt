@@ -25,7 +25,7 @@ data class TrackingUiState(
 
 @HiltViewModel
 class TrackingViewModel @Inject constructor(
-    trackingRepository: TrackingRepository,
+    private val trackingRepository: TrackingRepository,
     tripStateStore: TripStateStore,
     private val tripEnder: TripEnder,
 ) : ViewModel() {
@@ -50,4 +50,7 @@ class TrackingViewModel @Inject constructor(
     }
 
     fun dismissEndTripError() = tripEnder.dismissError()
+
+    /** The tracking service takes a fix every second only while this screen is there to show it. */
+    fun onScreenVisible(visible: Boolean) = trackingRepository.setLiveView(visible)
 }

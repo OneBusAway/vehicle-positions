@@ -819,6 +819,12 @@ targets Java 17, so build with a JDK 17 toolchain. The output is
 but defines no `signingConfig`, so signing is the agency's job. Android will not
 install an unsigned APK.
 
+The APK is about 20 MB, nearly all of it the map library. The release build
+carries that library for ARM phones only (`arm64-v8a` and `armeabi-v7a`), which
+halves the download; it will not install on an x86 emulator, where the debug
+build is the one to use. The map needs OpenGL ES 3.0. On a phone without it the
+app works as before, with no map on the Tracking screen.
+
 ### 12.2 Create a signing key
 
 Do this once, and keep the keystore forever: an update can only install over an

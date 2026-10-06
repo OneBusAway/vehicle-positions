@@ -40,13 +40,16 @@ import org.onebusaway.vehicletracker.engine.AdherenceTracker
 import javax.inject.Inject
 
 private const val TAG = "LocationTrackingService"
-private const val LOCATION_INTERVAL_MS = 10_000L
+private const val LIVE_FIX_INTERVAL_MS = 1_000L
 
 /**
  * Foreground service that owns the fused-location request and hands each fix to [TripReporter]
  * and [AdherenceTracker]. Framework-glue shell only — the send loop / status machine lives in
  * [TripReporter] (Task 6) and the per-fix judgement in [AdherenceTracker], both covered by JVM
  * tests; nothing here is separately unit tested.
+ *
+ * It asks for a fix every second while the tracking screen is open, so the map and the panel
+ * move with the vehicle, and every [REPORT_INTERVAL_MS] otherwise.
  */
 @AndroidEntryPoint
 class LocationTrackingService : Service() {
@@ -151,7 +154,9 @@ class LocationTrackingService : Service() {
     }
 
     private fun startLocationUpdates() {
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS).build()
+        val intervalMs = if (trackingRepository.liveView.value) LIVE_FIX_INTERVAL_MS else REPORT_INTERVAL_MS
+        // Asking again with the same callback replaces the request in place.
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs).build()
         try {
             fusedClient.requestLocationUpdates(request, locationCallback, mainLooper)
             locationUpdatesActive = true
@@ -173,6 +178,10 @@ class LocationTrackingService : Service() {
             .distinctUntilChanged()
             .onEach { postNotification() }
             .launchIn(scope)
+        // On the main thread, like every other call to startLocationUpdates.
+        scope.launch(Dispatchers.Main) {
+            trackingRepository.liveView.collect { if (locationUpdatesActive) startLocationUpdates() }
+        }
     }
 
     private fun postNotification() {
