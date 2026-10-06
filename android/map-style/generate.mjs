@@ -79,21 +79,22 @@ async function save(path, bytes) {
   console.log(`${path} (${bytes.length} bytes)`);
 }
 
-await rm(OUT, { recursive: true, force: true });
-
+// Everything is built and fetched first, so a failed download leaves the committed assets as they were.
+const files = [];
 for (const flavor of ['light', 'dark']) {
-  await save(`style-${flavor}.json`, Buffer.from(streetStyle(flavor) + '\n'));
+  files.push([`style-${flavor}.json`, Buffer.from(streetStyle(flavor) + '\n')]);
   for (const sheet of [flavor, `${flavor}@2x`]) {
     for (const extension of ['json', 'png']) {
-      await save(`sprites/${sheet}.${extension}`, await fetchBytes(`${BASEMAPS_ASSETS}/sprites/v4/${sheet}.${extension}`));
+      files.push([`sprites/${sheet}.${extension}`, await fetchBytes(`${BASEMAPS_ASSETS}/sprites/v4/${sheet}.${extension}`)]);
     }
   }
 }
-
 for (const start of GLYPH_RANGES) {
   const range = `${start}-${start + 255}.pbf`;
-  await save(`fonts/${FONT}/${range}`, await fetchBytes(`${BASEMAPS_ASSETS}/fonts/${encodeURIComponent(FONT)}/${range}`));
+  files.push([`fonts/${FONT}/${range}`, await fetchBytes(`${BASEMAPS_ASSETS}/fonts/${encodeURIComponent(FONT)}/${range}`)]);
 }
+files.push(['fonts/OFL.txt', await fetchBytes(`${BASEMAPS_ASSETS}/fonts/OFL.txt`)]);
+files.push(['LICENSE.md', await fetchBytes(BASEMAPS_LICENSE)]);
 
-await save('fonts/OFL.txt', await fetchBytes(`${BASEMAPS_ASSETS}/fonts/OFL.txt`));
-await save('LICENSE.md', await fetchBytes(BASEMAPS_LICENSE));
+await rm(OUT, { recursive: true, force: true });
+for (const [path, bytes] of files) await save(path, bytes);
