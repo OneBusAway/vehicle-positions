@@ -41,6 +41,7 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
+android/map-style/node_modules/
 
 # Pinned tool binaries (downloaded by `make css`; see Makefile)
 .tools/

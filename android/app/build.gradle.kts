@@ -39,6 +39,8 @@ android {
     sourceSets["test"].kotlin.srcDir("src/test/kotlin")
     sourceSets["androidTest"].kotlin.srcDir("src/androidTest/kotlin")
     testOptions.unitTests.isReturnDefaultValues = true
+    // MapAssetsTest reads the committed map assets from disk, so a change to them has to rerun it.
+    testOptions.unitTests.all { it.inputs.dir("src/main/assets/map") }
 }
 
 dependencies {
