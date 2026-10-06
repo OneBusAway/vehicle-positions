@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.data.map
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -47,7 +48,7 @@ class MapRepository @Inject constructor(
     private val _state = MutableStateFlow<MapFileState>(MapFileState.None)
     override val state: StateFlow<MapFileState> = _state.asStateFlow()
 
-    private val started: Job = scope.launch { start() }
+    private val started: Job = scope.launch { orLogged("Reading the map record", otherwise = {}) { start() } }
     private val lock = Any()
     private var running: Job? = null
 
@@ -78,7 +79,7 @@ class MapRepository @Inject constructor(
 
     private suspend fun keepTrying() {
         var wait = FIRST_RETRY_MS
-        while (check() == Outcome.RETRY) {
+        while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false) }) { check() } == Outcome.RETRY) {
             delay(wait)
             wait = (wait * 2).coerceAtMost(LAST_RETRY_MS)
         }
@@ -148,7 +149,7 @@ class MapRepository @Inject constructor(
                         store.save(store.load().copy(pending = null, rejected = RejectedMap(url, result.version ?: FileVersion(), now())))
                         failed(MapFailure.INVALID_FILE, retry = false)
                     }
-                    MapFailure.NO_SPACE -> failed(MapFailure.NO_SPACE, retry = false)
+                    MapFailure.NO_SPACE, MapFailure.UNEXPECTED -> failed(result.reason, retry = false)
                     MapFailure.NETWORK -> failed(MapFailure.NETWORK)
                 }
             }
@@ -166,4 +167,18 @@ class MapRepository @Inject constructor(
     }
 
     private fun isRecent(epochSec: Long): Boolean = now() - epochSec in 0 until CHECK_EVERY_S
+
+    /**
+     * Runs [block], logging what it throws, such as an IOException from a save on a full phone,
+     * and answering [otherwise] instead. Nothing above this catches it, and an exception that
+     * leaves the app's scope crashes the app. Cancellation passes through.
+     */
+    private inline fun <T> orLogged(what: String, otherwise: () -> T, block: () -> T): T = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "$what failed", e)
+        otherwise()
+    }
 }

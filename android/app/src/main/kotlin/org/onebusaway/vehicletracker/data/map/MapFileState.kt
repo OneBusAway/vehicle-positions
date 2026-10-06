@@ -26,6 +26,9 @@ enum class MapFailure {
 
     /** What the host sent is not a complete vector map file. */
     INVALID_FILE,
+
+    /** Anything else, such as `map.json` failing to save. It is logged, and the next refresh tries again. */
+    UNEXPECTED,
 }
 
 /** The street map's state, as the tracking screen reads it. */

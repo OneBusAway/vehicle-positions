@@ -383,6 +383,43 @@ class MapRepositoryTest {
         assertTrue(repository.state.value is MapFileState.Ready)
     }
 
+    // A directory where the record's temporary file goes makes every save fail, as a full phone
+    // would. The failure must end the check, not escape the app's scope and crash the app: runTest
+    // fails a test whose background coroutine throws.
+    @Test fun `a record that cannot be saved fails the check instead of crashing the app`() = runTest {
+        setUp()
+        val repository = started()
+        val blocker = File(dir, "map.json.tmp").apply { mkdir() }
+        fetcher.steps += fetcher.complete(v1)
+
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+
+        assertEquals(MapFileState.Failed(MapFailure.UNEXPECTED), repository.state.value)
+        assertEquals("not retried on a timer", 1, fetcher.requests.size)
+
+        blocker.delete()
+        fetcher.steps += fetcher.complete(v1)
+        repository.refresh()
+        settle()
+
+        assertTrue(repository.state.value is MapFileState.Ready)
+    }
+
+    // A read-only directory, because start-up cleaning would remove a blocking file before the save.
+    @Test fun `a record that cannot be rewritten at start does not crash the app`() = runTest {
+        setUp()
+        store.save(MapRecord(current = StoredMap(url, "map-gone.pmtiles", v1, clock)))
+        dir.setWritable(false)
+        try {
+            val repository = started()
+
+            assertEquals(MapFileState.None, repository.state.value)
+        } finally {
+            dir.setWritable(true)
+        }
+    }
+
     private inner class FakeMapServer : MapServer {
         val answers = ArrayDeque<MapServerAnswer>()
         var default: MapServerAnswer = MapServerAnswer.File(url)
