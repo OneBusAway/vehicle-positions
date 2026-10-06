@@ -13,7 +13,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TrackingRepository
+import org.onebusaway.vehicletracker.data.map.MapRepository
+import org.onebusaway.vehicletracker.data.map.refreshWhenSignedIn
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.rearmWhenActive
 import org.onebusaway.vehicletracker.ui.AppNav
@@ -25,6 +28,8 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var serviceController: ServiceController
     @Inject lateinit var trackingRepository: TrackingRepository
+    @Inject lateinit var sessionStore: SessionStore
+    @Inject lateinit var mapRepository: MapRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +51,10 @@ class MainActivity : ComponentActivity() {
         // resume prompt asks the driver.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                rearmWhenActive(trackingRepository.state, serviceController::startTracking)
+                launch { rearmWhenActive(trackingRepository.state, serviceController::startTracking) }
+                // Fetches the agency's street map, or checks it is current, whenever the app comes
+                // to the front signed in, and when the driver signs in.
+                refreshWhenSignedIn(sessionStore.session, mapRepository::refresh)
             }
         }
     }
