@@ -12,6 +12,21 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # Matches the db service in docker-compose.yml.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vehicle_positions
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +38,8 @@ jobs:
         run: go vet ./...
 
       - name: Test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable
         run: go test ./...
 
       - name: Build Docker image
