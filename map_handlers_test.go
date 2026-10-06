@@ -138,7 +138,7 @@ func TestMapRoute_Wiring(t *testing.T) {
 	riderToken, err := generateRiderJWT("rider-1", testSecret, time.Hour)
 	require.NoError(t, err)
 	mapURL := testMapURL
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil, &mapURL)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, &mapURL)
 
 	tests := []struct {
 		name       string
@@ -173,7 +173,7 @@ func TestMapRoute_Wiring(t *testing.T) {
 func TestMapRoute_RegisteredWithoutAMapFile(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, false, false, nil, nil, nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/map", nil)
 	req.Header.Set("Authorization", "Bearer "+driverToken)
@@ -194,7 +194,7 @@ func TestNewHandler_PassesTheMapURLOn(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 	mapURL := testMapURL
-	h, err := newHandler(&noopStore{}, tracker, nil, loginLimiter, testSecret, testTTLs, time.Now(),
+	h, err := newHandler(&noopStore{}, tracker, nil, loginLimiter, nil, testSecret, testTTLs, time.Now(),
 		adminUIConfig{stalenessThreshold: 5 * time.Minute}, false, nil, nil, &mapURL)
 	require.NoError(t, err)
 

@@ -468,7 +468,7 @@ func TestHandleRefresh_ConcurrentLossRevokes(t *testing.T) {
 
 func TestHandleRefresh_RateLimited(t *testing.T) {
 	f, token := refreshStoreWithUser(t)
-	limiter := NewLoginRateLimiter()
+	limiter := NewRefreshRateLimiter()
 	defer limiter.Stop()
 
 	handler := handleRefreshToken(f, testSecret, testTTLs, limiter, false)
@@ -476,7 +476,7 @@ func TestHandleRefresh_RateLimited(t *testing.T) {
 	// Each refresh rotates, so present the token the previous call returned
 	// and stay on the success path until the limiter itself trips.
 	current := token
-	for range loginIPLimit {
+	for range refreshIPLimit {
 		w := postRefresh(handler, current)
 		require.Equal(t, http.StatusOK, w.Code)
 		current = decodeTokens(t, w).RefreshToken
@@ -492,16 +492,61 @@ func TestHandleRefresh_RateLimited(t *testing.T) {
 func TestHandleRefresh_RateLimitedBeforeStore(t *testing.T) {
 	f, token := refreshStoreWithUser(t)
 	f.getErr = errors.New("the store must not be reached")
-	limiter := NewLoginRateLimiter()
+	limiter := NewRefreshRateLimiter()
 	defer limiter.Stop()
 
 	handler := handleRefreshToken(f, testSecret, testTTLs, limiter, false)
-	for range loginIPLimit {
+	for range refreshIPLimit {
 		require.Equal(t, http.StatusInternalServerError, postRefresh(handler, token).Code)
 	}
 
 	w := postRefresh(handler, token)
 	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+}
+
+// loginStubStore lets a login through the real mux succeed for one user.
+// Refresh tokens are all unknown, as noopStore reports them.
+type loginStubStore struct {
+	noopStore
+	user *User
+}
+
+func (s *loginStubStore) GetUserByEmail(_ context.Context, email string) (*User, error) {
+	if email != s.user.Email {
+		return nil, ErrUserNotFound
+	}
+	return s.user, nil
+}
+
+// TestRefresh_DoesNotSpendLoginBudget drives the real mux, so it pins which
+// limiter the refresh route is wired to: an address that has used up its
+// refresh allowance must still be able to log in. With login's limiter on the
+// refresh route, the login below would get a 429.
+func TestRefresh_DoesNotSpendLoginBudget(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcryptCost)
+	require.NoError(t, err)
+	store := &loginStubStore{user: &User{
+		ID:           7,
+		Email:        "driver@test.com",
+		PasswordHash: string(hash),
+		Role:         "driver",
+		Active:       true,
+	}}
+	loginLimiter := NewLoginRateLimiter()
+	defer loginLimiter.Stop()
+	refreshLimiter := NewRefreshRateLimiter()
+	defer refreshLimiter.Stop()
+	mux := newMux(store, nil, nil, testSecret, testTTLs, time.Time{}, loginLimiter, refreshLimiter, false, false, nil, nil, nil)
+
+	var w *httptest.ResponseRecorder
+	for range refreshIPLimit + 1 {
+		w = postRefresh(mux.ServeHTTP, "unknown-token")
+	}
+	require.Equal(t, http.StatusTooManyRequests, w.Code, "the refresh budget must be spent before login is tried")
+
+	login := postLogin(mux.ServeHTTP, "driver@test.com", "password")
+	assert.Equal(t, http.StatusOK, login.Code, "spending the refresh budget must not spend login's")
+	assert.NotEmpty(t, decodeTokens(t, login).AccessToken)
 }
 
 func TestHandleRefresh_MalformedBody(t *testing.T) {
