@@ -966,7 +966,9 @@ says so when the phone is too full. Once a day it asks your host whether the
 file has changed. To update the map, replace the file at the same URL: within a
 day phones fetch the new version quietly and show it the next time the Tracking
 screen opens. To drop the map, unset `MAP_PMTILES_URL`: within a day phones
-stop using it, and they delete their copy the next time the app starts.
+learn it is gone, the Tracking screen goes back to the plain background the next
+time it opens, and the file is deleted the next time the app starts. A Tracking
+screen that is open at the time keeps what it shows until then.
 
 Street names are drawn in Latin letters only: the English name where
 OpenStreetMap has one, or else the local name when it is written in Latin
