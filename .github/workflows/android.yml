@@ -46,6 +46,25 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      # The emulator action downloads the emulator and the system image on every run, so a
+      # snapshot cached under an older version of either would be restored against a newer one.
+      # Installing them here first lets the cache key carry their versions.
+      - name: Install the emulator and system image
+        # `|| true` keeps yes's SIGPIPE exit (141) from failing this step if pipefail is ever on.
+        run: (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator "system-images;android-${API_LEVEL};${TARGET};${ARCH}" > /dev/null
+      - name: Emulator and system image versions
+        id: versions
+        run: |
+          rev() { grep '^Pkg.Revision=' "$1/source.properties" | cut -d= -f2; }
+          emulator=$(rev "$ANDROID_HOME/emulator")
+          image=$(rev "$ANDROID_HOME/system-images/android-${API_LEVEL}/${TARGET}/${ARCH}")
+          # An empty version would quietly bring back the stale-snapshot problem.
+          if [ -z "$emulator" ] || [ -z "$image" ]; then
+            echo "could not read the emulator or system image version" >&2
+            exit 1
+          fi
+          echo "emulator=$emulator" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
       - name: AVD cache
         uses: actions/cache@v5
         id: avd-cache
@@ -53,7 +72,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-${{ env.ARCH }}
+          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-${{ env.ARCH }}-emulator-${{ steps.versions.outputs.emulator }}-image-${{ steps.versions.outputs.image }}
       - name: Create AVD and snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
