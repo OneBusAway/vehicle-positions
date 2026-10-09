@@ -572,6 +572,17 @@ server cannot tell a client retrying a lost response from a thief replaying a
 stolen token, so both have to log in again. An access token already issued
 keeps working until it expires.
 
+**Refresh one request at a time.** Because a spent token revokes everything, a
+client that sends two refreshes with the same token ends its own user's
+sessions: one request wins, the other counts as a replay, and the replacement
+the winner was just given is revoked with the rest. Make refresh single-flight.
+When a request gets a `401`, start one refresh, and have any request that fails
+while it is running wait for its result instead of starting another. A lost
+response is different: if the server processed the refresh and the reply never
+arrived, the retry presents a spent token and the user has to log in again. The
+Android app's refresh-on-`401` interceptor, when it is added, has to work this
+way.
+
 Response codes:
 
 - `200 OK` — new access and refresh tokens issued.
