@@ -126,6 +126,13 @@ paths:
         `refresh_token` from every response. Presenting a consumed token is
         rejected, logged, and revokes every refresh token the user holds.
 
+        So refresh single-flight. Two refreshes sent with the same token end
+        the user's sessions: one wins, the other counts as a replay, and the
+        winner's new refresh token is revoked with the rest. Run one refresh
+        at a time, and have requests that fail while it is running wait for
+        its result. If a refresh response is lost after the server processed
+        it, the retry presents a spent token and the user has to log in again.
+
         Only the SHA-256 hash of a refresh token is stored, and lookup is by
         digest, so a database disclosure yields nothing a caller could send.
       security: []
