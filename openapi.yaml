@@ -124,7 +124,7 @@ paths:
         Refresh tokens are single-use. Each call consumes the token presented
         and returns its replacement, so a client must store the new
         `refresh_token` from every response. Presenting a consumed token is
-        rejected and logged.
+        rejected, logged, and revokes every refresh token the user holds.
 
         Only the SHA-256 hash of a refresh token is stored, and lookup is by
         digest, so a database disclosure yields nothing a caller could send.
