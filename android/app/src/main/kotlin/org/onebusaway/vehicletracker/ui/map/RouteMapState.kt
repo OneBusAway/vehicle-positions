@@ -1,5 +1,7 @@
 package org.onebusaway.vehicletracker.ui.map
 
+import org.maplibre.geojson.LineString
+import org.maplibre.geojson.Point
 import org.onebusaway.vehicletracker.engine.Adherence
 import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.ShapeGeometry
@@ -37,3 +39,14 @@ fun routeMapState(
     snapped = if (adherence.isOnRoute) null else shape.pointAt(adherence.projection.alongShape),
     nextStopIndex = geometry.stops.indexOf(adherence.nextStop),
 )
+
+/**
+ * The dotted line from a vehicle off the route to where it was matched on it, for the driver to
+ * find the way back by; null while it is on the route. Longitude first, as GeoJSON has it.
+ */
+fun offRouteLink(state: RouteMapState): LineString? {
+    val snapped = state.snapped ?: return null
+    return LineString.fromLngLats(
+        listOf(Point.fromLngLat(state.vehicle.lon, state.vehicle.lat), Point.fromLngLat(snapped.lon, snapped.lat)),
+    )
+}

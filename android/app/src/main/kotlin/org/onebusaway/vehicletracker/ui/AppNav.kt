@@ -1,6 +1,8 @@
 package org.onebusaway.vehicletracker.ui
 
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -100,6 +102,15 @@ class AppNavViewModel @Inject constructor(
         withTimeoutOrNull(serviceAnnounceGrace.toMillis()) { trackingRepository.state.first { it.active } } != null
 }
 
+/**
+ * Keeps a screen clear of the system bars and the keyboard. Every screen but Tracking sits in one:
+ * Tracking draws its map under the bars and keeps its own cards clear of them.
+ */
+@Composable
+private fun ClearOfSystemBars(content: @Composable () -> Unit) {
+    Box(Modifier.safeDrawingPadding()) { content() }
+}
+
 @Composable
 fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltViewModel()) {
     val startDestination by navViewModel.startDestination.collectAsStateWithLifecycle()
@@ -110,37 +121,45 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = destination, modifier = modifier) {
         composable(ROUTE_LOGIN) {
-            LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate(ROUTE_VEHICLES) {
-                        popUpTo(ROUTE_LOGIN) { inclusive = true }
-                    }
-                },
-            )
+            ClearOfSystemBars {
+                LoginScreen(
+                    onLoginSuccess = {
+                        navController.navigate(ROUTE_VEHICLES) {
+                            popUpTo(ROUTE_LOGIN) { inclusive = true }
+                        }
+                    },
+                )
+            }
         }
         composable(ROUTE_LOGIN_REAUTH) {
-            LoginScreen(
-                onLoginSuccess = {
-                    // Trip state was never cleared; just return to the still-active Tracking screen.
-                    navController.popBackStack(ROUTE_TRACKING, /* inclusive = */ false)
-                },
-            )
+            ClearOfSystemBars {
+                LoginScreen(
+                    onLoginSuccess = {
+                        // Trip state was never cleared; just return to the still-active Tracking screen.
+                        navController.popBackStack(ROUTE_TRACKING, /* inclusive = */ false)
+                    },
+                )
+            }
         }
         composable(ROUTE_VEHICLES) {
-            VehicleScreen(
-                onVehicleSelected = { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") },
-            )
+            ClearOfSystemBars {
+                VehicleScreen(
+                    onVehicleSelected = { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") },
+                )
+            }
         }
         composable(
             route = ROUTE_ROUTES,
             arguments = listOf(navArgument(ARG_VEHICLE_ID) { type = NavType.StringType }),
         ) { backStackEntry ->
             val vehicleId = backStackEntry.pathArg(ARG_VEHICLE_ID)
-            RoutesScreen(
-                onRouteSelected = { routeId ->
-                    navController.navigate("trip/${arg(vehicleId)}/routes/${arg(routeId)}")
-                },
-            )
+            ClearOfSystemBars {
+                RoutesScreen(
+                    onRouteSelected = { routeId ->
+                        navController.navigate("trip/${arg(vehicleId)}/routes/${arg(routeId)}")
+                    },
+                )
+            }
         }
         composable(
             route = ROUTE_RUNS,
@@ -149,28 +168,32 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 navArgument(ARG_ROUTE_ID) { type = NavType.StringType },
             ),
         ) {
-            // vehicleId and routeId reach RunsViewModel through its SavedStateHandle.
-            RunsScreen(
-                onTripStarted = {
-                    navController.navigate(ROUTE_TRACKING) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-            )
+            ClearOfSystemBars {
+                // vehicleId and routeId reach RunsViewModel through its SavedStateHandle.
+                RunsScreen(
+                    onTripStarted = {
+                        navController.navigate(ROUTE_TRACKING) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                )
+            }
         }
         composable(ROUTE_RESUME) {
-            ResumeShiftScreen(
-                onResumed = {
-                    navController.navigate(ROUTE_TRACKING) {
-                        popUpTo(ROUTE_RESUME) { inclusive = true }
-                    }
-                },
-                onEnded = {
-                    navController.navigate(ROUTE_VEHICLES) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-            )
+            ClearOfSystemBars {
+                ResumeShiftScreen(
+                    onResumed = {
+                        navController.navigate(ROUTE_TRACKING) {
+                            popUpTo(ROUTE_RESUME) { inclusive = true }
+                        }
+                    },
+                    onEnded = {
+                        navController.navigate(ROUTE_VEHICLES) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                )
+            }
         }
         composable(ROUTE_TRACKING) {
             TrackingScreen(

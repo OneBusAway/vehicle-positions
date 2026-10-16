@@ -57,26 +57,69 @@
     <string name="runs_error_other">Could not start the trip.</string>
 
     <!-- Tracking screen -->
+    <!-- The tracking notification's text. The screen says the same things in its own words, below. -->
     <string name="tracking_status_connected">Tracking – Connected</string>
     <string name="tracking_status_no_network">No connection</string>
     <string name="tracking_status_no_gps">GPS unavailable</string>
     <string name="tracking_status_clock_skew">Check device clock</string>
     <string name="tracking_status_auth_expired">Session expired – log in again</string>
-    <string name="tracking_route_label">Route %1$s</string>
-    <string name="tracking_duration_label">Trip duration: %1$s</string>
-    <string name="tracking_fixes_sent_label">Location updates sent: %1$d</string>
-    <string name="tracking_end_trip_button">End Trip</string>
+    <!-- The trip bar: the trip's running time, then how many reports have reached the server. -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d sent</item>
+        <item quantity="other">%1$d sent</item>
+    </plurals>
+    <!-- What tapping the trip bar does, for TalkBack. -->
+    <string name="tracking_bar_click_label">Show trip details</string>
+    <string name="tracking_end_trip_button">End trip</string>
+    <string name="tracking_end_trip_ending">Ending…</string>
+    <!-- The rows at the top of the panel the trip bar pulls up into. -->
+    <string name="tracking_fact_run">Run</string>
+    <!-- The run's start time in the agency's zone, then the vehicle, e.g. "6:58 AM · 4317". -->
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Reports</string>
+    <string name="tracking_reports_reporting">Reporting</string>
+    <string name="tracking_reports_not_reporting">Not reporting</string>
+    <string name="tracking_reports_no_gps">No GPS</string>
+    <string name="tracking_reports_stopped">Reports stopped</string>
+    <string name="tracking_fact_street_map">Street map</string>
+    <string name="tracking_street_map_ready">Ready</string>
+    <string name="tracking_street_map_downloading">Downloading · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Not downloaded yet</string>
+    <string name="tracking_street_map_no_space">Not enough space</string>
+    <string name="tracking_street_map_unusable">Not usable</string>
     <string name="tracking_end_trip_dialog_title">End this trip?</string>
-    <string name="tracking_end_trip_dialog_message">This will stop location tracking and mark the trip as complete.</string>
-    <string name="tracking_end_trip_dialog_confirm">End Trip</string>
-    <string name="tracking_end_trip_dialog_cancel">Cancel</string>
-    <string name="tracking_end_trip_error_title">Could not end trip</string>
-    <string name="tracking_end_trip_error_message">The server did not confirm the trip ended. You can retry, or end tracking on this device only.</string>
-    <string name="tracking_end_trip_error_retry">Retry</string>
-    <string name="tracking_end_trip_error_end_locally">End Locally</string>
-    <string name="tracking_reauth_button">Log in</string>
+    <!-- The route's short name, the run's start time in the agency's zone, then how many reports reached the server. -->
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Reports stop, and route %1$s\'s %2$s run is marked complete. %3$d report was sent.</item>
+        <item quantity="other">Reports stop, and route %1$s\'s %2$s run is marked complete. %3$d reports were sent.</item>
+    </plurals>
+    <!-- The same, for a trip whose route name or schedule the phone does not have. -->
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Reports stop, and this run is marked complete. %1$d report was sent.</item>
+        <item quantity="other">Reports stop, and this run is marked complete. %1$d reports were sent.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">End trip</string>
+    <string name="tracking_end_trip_dialog_cancel">Keep going</string>
+    <!-- The server did not confirm the end. Also on the resume prompt, after End Shift. -->
+    <string name="tracking_end_trip_error_title">Trip not ended yet</string>
+    <string name="tracking_end_trip_error_message">The server didn\'t confirm the end. Check your signal and try again, or stop reporting on this phone now.</string>
+    <string name="tracking_end_trip_error_retry">Try again</string>
+    <string name="tracking_end_trip_error_end_locally">End on this phone</string>
+    <string name="tracking_reauth_button">Sign in</string>
+    <!-- Between two parts of one line, e.g. "No connection · Riders can't see you". -->
+    <string name="tracking_separator" translatable="false">·</string>
+    <!-- Under the status card while reports are not getting through: what is wrong, then what it means. -->
+    <string name="tracking_problem_no_network">No connection</string>
+    <string name="tracking_problem_no_network_detail">Riders can\'t see you</string>
+    <string name="tracking_problem_no_gps">No GPS signal</string>
+    <string name="tracking_problem_no_gps_detail">Position paused</string>
+    <string name="tracking_problem_clock_skew">Phone clock is wrong</string>
+    <string name="tracking_problem_clock_skew_detail">Set automatic time</string>
+    <!-- In the status card's place once the driver's sign-in has expired. -->
+    <string name="tracking_signed_out_title">Signed out</string>
+    <string name="tracking_signed_out_message">Reports have stopped. Your trip is still open.</string>
 
-    <!-- Adherence panel: how the driver is keeping to the route and the schedule -->
+    <!-- Status card: how the driver is keeping to the route and the schedule -->
     <string name="tracking_adherence_on_time">On time</string>
     <plurals name="tracking_adherence_minutes_late">
         <item quantity="one">%1$d min late</item>
@@ -86,18 +129,31 @@
         <item quantity="one">%1$d min early</item>
         <item quantity="other">%1$d min early</item>
     </plurals>
-    <!-- Beyond the server's schedule window, then how far off it, e.g. "Off schedule · 20 min late". -->
-    <string name="tracking_adherence_off_schedule">Off schedule · %1$s</string>
-    <!-- How far from the route, e.g. "Off route · 120 m from the route". -->
-    <string name="tracking_adherence_off_route">Off route · %1$s from the route</string>
-    <string name="tracking_adherence_next_stop">Next: %1$s</string>
+    <!-- Beyond the server's schedule window. The card's answer above it says how far off, e.g. "20 min late". -->
+    <string name="tracking_adherence_off_schedule">Off schedule</string>
+    <string name="tracking_adherence_right_run">Is this the right run?</string>
+    <!-- The next stop's name, then its scheduled time in the agency's zone. -->
+    <string name="tracking_adherence_off_schedule_next">Next %1$s · %2$s</string>
+    <!-- How far from the route, e.g. "Off route · 120 m". -->
+    <string name="tracking_adherence_off_route">Off route · %1$s</string>
+    <!-- What TalkBack announces when the vehicle leaves the route: the distance changes with every fix, so it is left out. -->
+    <string name="tracking_adherence_off_route_short">Off route</string>
+    <!-- Beside the next stop's name. -->
+    <string name="tracking_adherence_next_stop">Next</string>
     <!-- The next stop's scheduled time in the agency's zone, then the distance to it. -->
     <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
     <string name="tracking_adherence_distance_m">%1$d m</string>
     <string name="tracking_adherence_distance_km">%1$.1f km</string>
-    <string name="tracking_adherence_waiting_for_gps">Waiting for GPS…</string>
+    <string name="tracking_adherence_waiting_for_gps">Waiting for GPS</string>
+    <!-- Beside the trip's first stop while waiting for the first fix. -->
+    <string name="tracking_adherence_from">From</string>
+    <!-- The run's start time in the agency's zone, then the vehicle, e.g. "6:58 AM run · 4317". -->
+    <string name="tracking_adherence_run">%1$s run</string>
+    <string name="tracking_adherence_run_vehicle">%1$s run · %2$s</string>
     <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
-    <string name="tracking_adherence_no_schedule">Schedule unavailable</string>
+    <string name="tracking_adherence_no_schedule">No schedule</string>
+    <string name="tracking_adherence_no_schedule_riders">Riders still see the bus</string>
+    <string name="tracking_adherence_no_schedule_detail">This run has no timetable</string>
     <!-- On the tracking screen's map, once the driver has dragged it away from the vehicle. -->
     <string name="tracking_map_recenter">Re-center</string>
     <string name="tracking_map_downloading">Downloading map, %1$d%%</string>

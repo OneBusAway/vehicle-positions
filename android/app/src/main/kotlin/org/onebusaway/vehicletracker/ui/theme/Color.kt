@@ -152,9 +152,40 @@ internal val DarkStatusColors = StatusColors(
     neutral = LightStatusColors.neutral.copy(text = Color(0xFF8E8E93)),
 )
 
-/** A reporting problem (no network, no GPS): a calm dark line, because red already means early. */
+/**
+ * A reporting problem (no network, no GPS): a calm dark line with an amber [icon], because red already means
+ * early. [iconOnSurface] is the same warning on the trip bar and in a dialog, and [signedOut] is the card that
+ * takes the status card's place once reports have stopped.
+ */
 @Immutable
-data class ProblemColors(val container: Color, val content: Color)
+data class ProblemColors(
+    val container: Color,
+    val content: Color,
+    val icon: Color,
+    val iconOnSurface: Color,
+    val signedOut: SignedOutColors,
+)
 
-internal val LightProblemColors = ProblemColors(container = Color(0xFF303134), content = Color(0xFFF1F3F4))
-internal val DarkProblemColors = ProblemColors(container = Color(0xFF3C3D40), content = Color(0xFFF1F3F4))
+/** [content] on [container], and the icon disc and Sign in button in [accent] with [onAccent] on them. */
+@Immutable
+data class SignedOutColors(val container: Color, val content: Color, val accent: Color, val onAccent: Color)
+
+private val Amber = Color(0xFFFDD663)
+private val Ink = Color(0xFF1F1F1F)
+
+internal val LightProblemColors = ProblemColors(
+    container = Color(0xFF303134),
+    content = Color(0xFFF1F3F4),
+    icon = Amber,
+    iconOnSurface = Color(0xFFB06000),
+    signedOut = SignedOutColors(container = Ink, content = Color(0xFFF1F3F4), accent = Amber, onAccent = Ink),
+)
+
+// An ink card would sink into the dark map, so in the dark theme Signed out turns amber with ink on it.
+internal val DarkProblemColors = ProblemColors(
+    container = Color(0xFF3C3D40),
+    content = Color(0xFFF1F3F4),
+    icon = Amber,
+    iconOnSurface = Amber,
+    signedOut = SignedOutColors(container = Amber, content = Ink, accent = Ink, onAccent = Amber),
+)

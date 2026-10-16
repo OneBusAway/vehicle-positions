@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The ring round the vehicle: a disc under ic_map_vehicle_puck, tinted in the status colour at run time. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="52dp"
+    android:height="52dp"
+    android:viewportWidth="52"
+    android:viewportHeight="52">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M26,2 A24,24 0 1,1 26,50 A24,24 0 1,1 26,2 Z" />
+</vector>

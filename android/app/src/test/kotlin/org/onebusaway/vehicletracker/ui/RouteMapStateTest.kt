@@ -16,6 +16,7 @@ import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.engine.TripStop
 import org.onebusaway.vehicletracker.service.LocationFix
 import org.onebusaway.vehicletracker.ui.map.FollowHeading
+import org.onebusaway.vehicletracker.ui.map.offRouteLink
 import org.onebusaway.vehicletracker.ui.map.routeMapState
 
 class RouteMapStateTest {
@@ -47,6 +48,15 @@ class RouteMapStateTest {
         val snapped = requireNotNull(state.snapped)
         assertEquals(47.6045, snapped.lat, 1e-4)
         assertEquals(-122.3300, snapped.lon, 1e-4)
+    }
+
+    @Test fun `off the route a dotted line joins the vehicle to where it was matched, and on it there is none`() {
+        val off = routeMapState(t1, t1Shape, judge(t1, fix(47.6045, -122.3270, at(8, 5))), FollowHeading())
+        val on = routeMapState(t1, t1Shape, judge(t1, fix(47.6020, -122.3300, at(8, 2))), FollowHeading())
+
+        val link = requireNotNull(offRouteLink(off))
+        assertEquals(listOf(off.vehicle, off.snapped), link.coordinates().map { GeoPoint(it.latitude(), it.longitude()) })
+        assertNull(offRouteLink(on))
     }
 
     @Test fun `a fix with no course keeps the heading of the one before`() {

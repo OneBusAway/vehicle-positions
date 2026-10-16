@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -46,11 +45,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTheme {
                 // enableEdgeToEdge() makes the system bars transparent, so whatever is behind them shows
-                // through: the Surface fills the whole window to put the theme's background there, and
-                // the padding goes inside it to keep the screens (the status banner, End Trip) clear of
-                // the bars and the keyboard.
+                // through: the Surface fills the whole window to put the theme's background there. Each
+                // screen keeps clear of the bars and the keyboard itself (see AppNav), because Tracking
+                // draws its map under them.
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppNav(modifier = Modifier.safeDrawingPadding(), navViewModel = navViewModel)
+                    AppNav(navViewModel = navViewModel)
                 }
             }
         }

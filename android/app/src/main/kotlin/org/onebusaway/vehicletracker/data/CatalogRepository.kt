@@ -106,4 +106,7 @@ private fun TripGeometryDto.toTripGeometry() = TripGeometry(
         scheduleLateS = thresholds.scheduleLateS,
     ),
     routeColor = route.color,
+    routeShortName = route.shortName,
+    routeTextColor = route.textColor,
+    headsign = headsign,
 )

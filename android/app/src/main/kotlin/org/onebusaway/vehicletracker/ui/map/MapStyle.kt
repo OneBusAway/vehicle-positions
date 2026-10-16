@@ -4,6 +4,10 @@ import android.content.Context
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 
+/** What the route is drawn on until the street map is on the phone: the design's map grey, light and dark. */
+const val PLAIN_BACKGROUND_LIGHT = 0xFFE3E5E8.toInt()
+const val PLAIN_BACKGROUND_DARK = 0xFF26272A.toInt()
+
 /**
  * Where the street style names the map file. `android/map-style/generate.mjs` writes it into the
  * styles under `assets/map/`, once each.

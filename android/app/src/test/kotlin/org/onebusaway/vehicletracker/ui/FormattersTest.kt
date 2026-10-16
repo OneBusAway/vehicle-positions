@@ -13,6 +13,7 @@ import org.onebusaway.vehicletracker.ui.tracking.adherenceTone
 import org.onebusaway.vehicletracker.ui.tracking.deviationMinutes
 import org.onebusaway.vehicletracker.ui.tracking.formatClock
 import org.onebusaway.vehicletracker.ui.tracking.formatDuration
+import org.onebusaway.vehicletracker.ui.tracking.vehicleTone
 import java.time.ZoneId
 import java.util.Locale
 
@@ -59,6 +60,14 @@ class FormattersTest {
         val offRoute = evaluator.evaluate(fix(47.6045, -122.3200, at(8, 5)), previous = null)
         assertEquals(AdherenceStatus.OFF_ROUTE, offRoute.status)
         assertEquals(StatusTone.NEUTRAL, adherenceTone(offRoute))
+    }
+
+    @Test fun `the vehicle's ring takes its tone, and is grey before the first fix`() {
+        assertEquals(StatusTone.NEUTRAL, vehicleTone(null))
+        assertEquals(StatusTone.ON_TIME, vehicleTone(atStop1(0)))
+        assertEquals(StatusTone.LATE, vehicleTone(atStop1(400)))
+        assertEquals(StatusTone.EARLY, vehicleTone(atStop1(-1000)))
+        assertEquals(StatusTone.NEUTRAL, vehicleTone(evaluator.evaluate(fix(47.6045, -122.3200, at(8, 5)), previous = null)))
     }
 
     @Test fun `off schedule keeps the tone of its direction`() {

@@ -32,6 +32,13 @@ data class TripGeometry(
      * decode, and a driver updating the app mid-trip would lose adherence until the trip ended.
      */
     val routeColor: String = "",
+    /**
+     * What the trip bar shows: the route's short name on its GTFS text colour, and where the run
+     * is headed. Each defaults to "" for the reason [routeColor] gives.
+     */
+    val routeShortName: String = "",
+    val routeTextColor: String = "",
+    val headsign: String = "",
 )
 
 @Serializable

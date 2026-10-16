@@ -142,7 +142,7 @@ private fun RouteRow(route: RouteDto, onClick: () -> Unit) {
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RouteBadge(route)
+        RouteBadge(route.shortName, route.color, route.textColor)
         Spacer(Modifier.width(12.dp))
         Text(
             text = route.longName,

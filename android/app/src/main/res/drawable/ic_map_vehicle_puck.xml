@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The vehicle: an ink disc with a white arrow pointing north, so the map can turn it to the course,
+  inside a thin white edge that keeps the status ring under it clear of the map.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="52dp"
+    android:height="52dp"
+    android:viewportWidth="52"
+    android:viewportHeight="52">
+    <path
+        android:pathData="M26,1 A25,25 0 1,1 26,51 A25,25 0 1,1 26,1 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="#FF1F1F1F"
+        android:pathData="M26,9 A17,17 0 1,1 26,43 A17,17 0 1,1 26,9 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M26,15 L34.5,35 L26,30.5 L17.5,35 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+</vector>

@@ -46,3 +46,17 @@ internal val AppTypography = Typography(
     labelMedium = base.labelMedium.inAppFont(),
     labelSmall = base.labelSmall.inAppFont(),
 )
+
+// The design's three sizes that Material has no role for, read like the others: MaterialTheme.typography.statusHero.
+
+/** The status card's answer, "On time" or "6 min late". The card shrinks it to 28 sp rather than wrap it. */
+internal val Typography.statusHero: TextStyle
+    get() = headlineLarge.copy(fontSize = 40.sp, lineHeight = 46.sp, fontWeight = FontWeight.Medium)
+
+/** The status card's two lines under the answer. */
+internal val Typography.statusLine: TextStyle
+    get() = bodyLarge.copy(fontSize = 18.sp, lineHeight = 24.sp)
+
+/** The trip's headsign on the trip bar, and the next stop's name on the status card. */
+internal val Typography.tripTitle: TextStyle
+    get() = titleMedium.copy(fontSize = 18.sp, lineHeight = 24.sp)

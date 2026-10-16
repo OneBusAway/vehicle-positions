@@ -800,8 +800,8 @@ agency and every server — there is nothing to rebuild per deployment.
 report, so it requires a server built from this repository at or after the
 commit that added those fields to `POST /api/v1/locations`. Against an older
 server, every location report is rejected with `400` as an unknown field: the
-app logs the failure and drops the report, but the driver still sees the
-green "connected" banner, since the app has no way to tell a rejected report
+app logs the failure and drops the report, but the driver sees no problem
+line under the status card, since the app has no way to tell a rejected report
 from a slow one. Upgrade the server before distributing this APK.
 
 ### 12.1 Build a release APK

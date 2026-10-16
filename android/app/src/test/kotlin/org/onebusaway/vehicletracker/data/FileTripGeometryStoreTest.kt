@@ -81,6 +81,22 @@ class FileTripGeometryStoreTest {
         assertEquals(TripFixtures.t1, storeIn(dir).load())
     }
 
+    /** The same for the trip bar's route name, text colour and headsign, which came after the colour. */
+    @Test fun `a geometry stored before the route name and headsign existed still loads`() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "active_trip_geometry.json")
+        storeIn(dir).save(TripFixtures.t1.copy(routeShortName = "7", routeTextColor = "000000", headsign = "Downtown"))
+        val newFields = listOf(""","routeShortName":"7"""", ""","routeTextColor":"000000"""", ""","headsign":"Downtown"""")
+        var stored = file.readText()
+        for (field in newFields) {
+            require(field in stored) { "the fixture no longer writes $field where this test strips it" }
+            stored = stored.replace(field, "")
+        }
+        file.writeText(stored)
+
+        assertEquals(TripFixtures.t1, storeIn(dir).load())
+    }
+
     @Test fun `a geometry is loaded only for the trip it was saved for`() = runTest {
         val store = storeIn(tempFolder.newFolder())
         store.save(TripFixtures.t1)
