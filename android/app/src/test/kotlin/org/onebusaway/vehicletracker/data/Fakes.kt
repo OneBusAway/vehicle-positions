@@ -69,17 +69,25 @@ fun signedInAs(sub: String) = FakeSessionStore().apply { state.value = Session("
 class FakeTripStateStore : TripStateStore {
     val tripState = MutableStateFlow<ActiveTrip?>(null)
     val routesState = MutableStateFlow<List<String>>(emptyList())
-    val unconfirmedEndState = MutableStateFlow<UnconfirmedEnd?>(null)
+    val unconfirmedEndsState = MutableStateFlow<List<UnconfirmedEnd>>(emptyList())
     override val activeTrip = tripState
-    override val unconfirmedEnd = unconfirmedEndState
+    override val unconfirmedEnds = unconfirmedEndsState
     override val recentRoutes = routesState
     override suspend fun saveActiveTrip(trip: ActiveTrip) { tripState.value = trip }
     override suspend fun clearActiveTrip() { tripState.value = null }
-    override suspend fun endActiveTripLocally(driverId: String?) {
-        tripState.value?.let { unconfirmedEndState.value = UnconfirmedEnd(it.tripDbId, driverId) }
+
+    /** Keeps the end under the trip's own driver, as [DataStoreTripStateStore] does. */
+    override suspend fun endActiveTripLocally(signedInDriverId: String?) {
+        tripState.value?.let { trip ->
+            if (unconfirmedEndsState.value.none { it.tripDbId == trip.tripDbId }) {
+                unconfirmedEndsState.value += UnconfirmedEnd(trip.tripDbId, trip.driverId ?: signedInDriverId)
+            }
+        }
         tripState.value = null
     }
-    override suspend fun clearUnconfirmedEnd() { unconfirmedEndState.value = null }
+    override suspend fun clearUnconfirmedEnd(tripDbId: Long) {
+        unconfirmedEndsState.value = unconfirmedEndsState.value.filter { it.tripDbId != tripDbId }
+    }
     override suspend fun addRecentRoute(routeId: String) {
         routesState.value = (listOf(routeId) + routesState.value.filter { it != routeId }).take(5)
     }

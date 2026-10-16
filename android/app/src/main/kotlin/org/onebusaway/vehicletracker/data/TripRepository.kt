@@ -35,8 +35,9 @@ class TripRepository @Inject constructor(
         gtfsTripId: String,
         serviceDate: String,
     ): Result<ActiveTrip> {
-        endUnconfirmedTrip().onFailure { return Result.failure(it) }
-        return startTrip(vehicleId, routeId, gtfsTripId, serviceDate)
+        val driverId = sessionStore.session.first().driverId
+        endUnconfirmedTrips(driverId).onFailure { return Result.failure(it) }
+        return startTrip(vehicleId, routeId, gtfsTripId, serviceDate, driverId)
     }
 
     private suspend fun startTrip(
@@ -44,6 +45,7 @@ class TripRepository @Inject constructor(
         routeId: String,
         gtfsTripId: String,
         serviceDate: String,
+        driverId: String?,
     ): Result<ActiveTrip> = try {
         val cleanedTripId = gtfsTripId.trim()
         val cleanedRouteId = routeId.trim()
@@ -56,6 +58,7 @@ class TripRepository @Inject constructor(
             routeId = cleanedRouteId,
             startDate = serviceDate,
             startedAtEpochSec = startedAt,
+            driverId = driverId,
         )
         tripStateStore.saveActiveTrip(activeTrip)
         recordLocally("recent route") { tripStateStore.addRecentRoute(cleanedRouteId) }
@@ -80,23 +83,26 @@ class TripRepository @Inject constructor(
     }
 
     /**
-     * Sends the end of a trip the driver ended on this phone only: the server still has it open,
-     * and refuses every start until it hears. If this fails the start fails too, as it would have
-     * been refused anyway, with [ApiError.PreviousTripNotEnded] so the driver is told which trip
-     * is stuck. Another driver's end is left for them ([UnconfirmedEnd.belongsTo]): their open
-     * trip does not block this driver's start.
+     * Sends the end of every trip this driver ended on this phone only, in the order they were
+     * stored: the server still has the driver's trip open, and refuses every start until it hears.
+     * Each is cleared as soon as its own end is confirmed. If one fails the start fails too, as it
+     * would have been refused anyway, with [ApiError.PreviousTripNotEnded] so the driver is told
+     * which trip is stuck, and the ends not yet confirmed are kept for the next start. Other
+     * drivers' ends are left for them ([UnconfirmedEnd.belongsTo]): their open trips do not block
+     * this driver's start.
      */
-    private suspend fun endUnconfirmedTrip(): Result<Unit> = try {
-        val pending = tripStateStore.unconfirmedEnd.first()
-        if (pending != null && pending.belongsTo(sessionStore.session.first().driverId)) {
-            sendEnd(pending.tripDbId)
-            tripStateStore.clearUnconfirmedEnd()
-        }
+    private suspend fun endUnconfirmedTrips(signedInDriverId: String?): Result<Unit> = try {
+        tripStateStore.unconfirmedEnds.first()
+            .filter { it.belongsTo(signedInDriverId) }
+            .forEach { pending ->
+                sendEnd(pending.tripDbId)
+                tripStateStore.clearUnconfirmedEnd(pending.tripDbId)
+            }
         Result.success(Unit)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "Could not end the trip ended on this phone only", e)
+        Log.w(TAG, "Could not end a trip ended on this phone only", e)
         Result.failure(ApiError.PreviousTripNotEnded)
     }
 

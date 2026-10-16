@@ -48,7 +48,11 @@ class TripEnder @Inject constructor(
         )
     }
 
-    /** The server still has the trip open; [TripRepository.start] sends its end before the next start. */
+    /**
+     * The server still has the trip open; [TripRepository.start] sends its end before its driver's
+     * next start. The store keeps the end under the driver who started the trip, and under the
+     * driver signed in now only for a trip saved before drivers were recorded.
+     */
     suspend fun endLocally(onEnded: () -> Unit) {
         tripStateStore.endActiveTripLocally(sessionStore.session.first().driverId)
         tripGeometryStore.clear()

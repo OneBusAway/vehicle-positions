@@ -620,7 +620,7 @@ class ViewModelsTest {
     @Test fun `a leftover end that fails is reported as the previous trip, not this one`() = runTest(dispatcher) {
         val refused = { MockResponse().setResponseCode(500).setBody("""{"error":"failed to end trip"}""") }
         withRunsViewModel(endResponse = refused) { vm, server, serviceController, tripState ->
-            tripState.unconfirmedEndState.value = UnconfirmedEnd(7L, null)
+            tripState.unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, null))
             vm.onStartRun("T1") { fail("nothing may start while the previous trip is open") }
             awaitCondition(description = "start failure surfaced") { loadedRuns(vm).error != null }
 
@@ -768,21 +768,25 @@ class ViewModelsTest {
 
     private val t1Trip = ActiveTrip(7L, "T1", "bus-1", "R1", "20260902", 100L)
 
-    /** Builds a [TrackingViewModel] on an active T1 whose server answers each end with [endResponse]. */
+    /**
+     * Builds a [TrackingViewModel] on [tripState], an active T1 unless given, with [sessions]
+     * signed in, whose server answers each end with [endResponse].
+     */
     private fun withTrackingViewModel(
         endResponse: MockResponse = MockResponse().setBody("""{"status":"trip ended"}"""),
         mapFiles: FakeMapFileSource = FakeMapFileSource(),
+        tripState: FakeTripStateStore = FakeTripStateStore().apply { this.tripState.value = t1Trip },
+        sessions: SessionStore = FakeSessionStore(),
         block: (TrackingViewModel, TrackingRepository, FakeTripGeometryStore) -> Unit,
     ) {
         val server = MockWebServer().apply { start() }
         server.enqueue(endResponse)
         try {
             val provider = TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }
-            val tripState = FakeTripStateStore().apply { tripState.value = t1Trip }
             val tracking = TrackingRepository()
             val geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1 }
-            val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), FakeSessionStore(), clock = { 0L })
-            val tripEnder = TripEnder(tripRepository, tripState, geometryStore, FakeServiceController(), FakeSessionStore())
+            val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), sessions, clock = { 0L })
+            val tripEnder = TripEnder(tripRepository, tripState, geometryStore, FakeServiceController(), sessions)
             val vm = TrackingViewModel(tracking, tripState, tripEnder, mapFiles)
             awaitCondition(description = "active trip loaded") { vm.uiState.value.activeTrip != null }
             block(vm, tracking, geometryStore)
@@ -859,6 +863,17 @@ class ViewModelsTest {
             awaitCondition(description = "trip ended locally") { ended }
 
             assertNull(geometryStore.stored)
+        }
+    }
+
+    @Test fun `a trip ended on this device only after another driver signs in is kept for its own driver`() = runTest(dispatcher) {
+        val tripState = FakeTripStateStore().apply { tripState.value = t1Trip.copy(driverId = "1") }
+        withTrackingViewModel(tripState = tripState, sessions = signedInAs("2")) { vm, _, _ ->
+            var ended = false
+            vm.onEndTripLocally { ended = true }
+            awaitCondition(description = "trip ended locally") { ended }
+
+            assertEquals(listOf(UnconfirmedEnd(t1Trip.tripDbId, "1")), tripState.unconfirmedEndsState.value)
         }
     }
 
@@ -965,7 +980,7 @@ class ViewModelsTest {
             assertNull(f.tripState.tripState.value)
             // The server still has it open, so its id is kept for the next start to end it, with
             // the driver it belongs to.
-            assertEquals(UnconfirmedEnd(t1Trip.tripDbId, "2"), f.tripState.unconfirmedEndState.value)
+            assertEquals(listOf(UnconfirmedEnd(t1Trip.tripDbId, "2")), f.tripState.unconfirmedEndsState.value)
             assertNull(f.geometryStore.stored)
             assertEquals(1, f.serviceController.stopCount)
         }
