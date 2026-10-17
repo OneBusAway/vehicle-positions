@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -231,6 +233,28 @@ class ScreenFlowTest {
 
         loginField(R.string.login_server_url_label).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.login_change_server)).assertDoesNotExist()
+    }
+
+    @Test
+    fun loginScreen_signingInAgainShowsTheOpenTripAndAsksOnlyForThePassword() {
+        showLogin(
+            LoginUiState(
+                again = true,
+                openTrip = RouteBadgeModel("7", Color(0xFFFDB71A), Color.Black),
+                savedEmail = "maria@metro.example",
+                savedServer = "https://tracker.example.org/",
+            ),
+            LoginFields(server = TextFieldState("https://tracker.example.org/"), email = TextFieldState("maria@metro.example")),
+        )
+
+        compose.onNodeWithText(getString(R.string.login_trip_open_title)).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.login_trip_open_message, "7")).assertIsDisplayed()
+        compose.onNode(hasText(getString(R.string.login_again_title)) and isHeading()).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.login_again_subtitle, "maria@metro.example")).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_again_button)).assertIsDisplayed()
+        compose.onNodeWithText("tracker.example.org").assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_change_server)).assertDoesNotExist()
+        loginField(R.string.login_password_label).assertIsFocused()
     }
 
     @Test

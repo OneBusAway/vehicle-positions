@@ -25,6 +25,13 @@
     <string name="login_error_unreachable">Can\'t reach %1$s. Check your connection, or the server address.</string>
     <!-- The server answered, but not with a sign-in, such as a server error. -->
     <string name="login_error_server">Couldn\'t sign in. Try again.</string>
+    <!-- Signing in again after the session ended during a trip. The email the driver signed in with last. -->
+    <string name="login_again_title">Sign in again</string>
+    <string name="login_again_subtitle">As %1$s</string>
+    <string name="login_again_button">Sign in and keep reporting</string>
+    <string name="login_trip_open_title">Your trip is still open</string>
+    <!-- The open trip's route, e.g. "7". -->
+    <string name="login_trip_open_message">Reports stopped when your session ended. Sign in to keep reporting on route %1$s.</string>
 
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>

@@ -73,6 +73,8 @@ internal const val ARG_ROUTE_ID = "routeId"
 internal const val ARG_ROUTE_NAME = "routeName"
 internal const val ARG_ROUTE_COLOR = "routeColor"
 internal const val ARG_ROUTE_TEXT_COLOR = "routeTextColor"
+// Not private, for LoginViewModel, as above.
+internal const val ARG_SIGN_IN_AGAIN = "again"
 
 /**
  * A path argument for a string route. A GTFS `route_id` is arbitrary text — spaces, slashes
@@ -242,7 +244,11 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 )
             }
         }
-        composable(ROUTE_LOGIN_REAUTH) {
+        composable(
+            route = ROUTE_LOGIN_REAUTH,
+            // Read by LoginViewModel, which shows the trip that is still open and asks only for the password.
+            arguments = listOf(navArgument(ARG_SIGN_IN_AGAIN) { type = NavType.BoolType; defaultValue = true }),
+        ) {
             ClearOfSystemBars {
                 LoginScreen(
                     onLoginSuccess = {

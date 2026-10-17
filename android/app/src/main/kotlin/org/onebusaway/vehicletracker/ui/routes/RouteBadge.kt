@@ -18,6 +18,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.engine.TripGeometry
 
 private const val HEX_DIGITS = 6
 private const val OPAQUE_ALPHA = 0xFF000000L
@@ -51,6 +53,16 @@ data class RouteBadgeModel(val shortName: String, val color: Color?, val textCol
             shortName = shortName,
             color = routeColorArgb(color)?.let { Color(it) },
             textColor = routeColorArgb(textColor)?.let { Color(it) },
+        )
+
+        /**
+         * The route of the trip the phone has open, from its stored [geometry]; its route id on the theme's colours
+         * when there is no geometry, as for a trip started by an older build, or the geometry names no route.
+         */
+        fun forTrip(trip: ActiveTrip, geometry: TripGeometry?) = of(
+            shortName = geometry?.routeShortName?.ifEmpty { null } ?: trip.routeId,
+            color = geometry?.routeColor.orEmpty(),
+            textColor = geometry?.routeTextColor.orEmpty(),
         )
     }
 }

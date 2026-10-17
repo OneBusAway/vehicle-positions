@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -79,9 +80,13 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.merge
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.AttentionBanner
+import org.onebusaway.vehicletracker.ui.routes.RouteBadge
+import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
+import org.onebusaway.vehicletracker.ui.theme.AppTheme
 
 private val LogoShape = RoundedCornerShape(14.dp)
+private val TripStillOpenShape = RoundedCornerShape(20.dp)
 private val LogoSize = 52.dp
 
 // An adaptive icon's foreground is drawn on 108 dp, of which a launcher shows the middle 72.
@@ -107,6 +112,9 @@ fun LoginScreen(
 /**
  * The app's icon, a title and three fields, each saying under it what is wrong with it, then the button. The whole
  * form scrolls as one, so the keyboard pushes it up rather than hiding the button, and nothing on it jumps.
+ *
+ * Signing in [LoginUiState.again], during a trip, the trip that is still open takes the icon's place and only the
+ * password is left to type.
  */
 @Composable
 fun LoginScreenContent(
@@ -122,6 +130,9 @@ fun LoginScreenContent(
     val error = state.error
     LaunchedEffect(error) {
         if (error is LoginError.MissingField) focus.getValue(error.field).requestFocus()
+    }
+    LaunchedEffect(state.again) {
+        if (state.again) focus.getValue(LoginField.PASSWORD).requestFocus()
     }
     // Change opens the field to type in; an unreachable server opens it too, but only to show the error under it.
     LaunchedEffect(state.changingServer) {
@@ -148,16 +159,25 @@ fun LoginScreenContent(
             .verticalScroll(rememberScrollState())
             .padding(start = 24.dp, top = 56.dp, end = 24.dp, bottom = 24.dp),
     ) {
-        AppIcon()
-        Spacer(Modifier.height(24.dp))
+        if (!state.again) {
+            AppIcon()
+            Spacer(Modifier.height(24.dp))
+        } else if (state.openTrip != null) {
+            TripStillOpen(state.openTrip)
+            Spacer(Modifier.height(28.dp))
+        }
         Text(
-            text = stringResource(R.string.login_title),
+            text = stringResource(if (state.again) R.string.login_again_title else R.string.login_title),
             style = MaterialTheme.typography.displaySmall,
             modifier = Modifier.semantics { heading() },
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.login_subtitle),
+            text = if (state.again && state.savedEmail != null) {
+                stringResource(R.string.login_again_subtitle, state.savedEmail)
+            } else {
+                stringResource(R.string.login_subtitle)
+            },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -182,7 +202,8 @@ fun LoginScreenContent(
                     modifier = Modifier.focusRequester(focus.getValue(LoginField.SERVER)),
                 )
             } else if (state.savedServer != null) {
-                SavedServer(state.savedServer, enabled, onChangeServer)
+                // During a trip the server is the trip's, so it is not for changing here.
+                SavedServer(state.savedServer, enabled, onChange = if (state.again) null else onChangeServer)
             }
             LoginTextField(
                 state = email,
@@ -216,7 +237,12 @@ fun LoginScreenContent(
             }
             Spacer(Modifier.height(8.dp))
         }
-        SignInButton(state.loading, onSignIn, Modifier.bringIntoViewRequester(buttonInView))
+        SignInButton(
+            label = stringResource(if (state.again) R.string.login_again_button else R.string.login_button),
+            loading = state.loading,
+            onSignIn = onSignIn,
+            modifier = Modifier.bringIntoViewRequester(buttonInView),
+        )
     }
 }
 
@@ -239,9 +265,41 @@ private fun AppIcon() {
     }
 }
 
-/** The server the phone signed in to last, as one quiet line: most drivers never need to change it. */
+/** The trip that was reporting when the session ended, which signing in again picks up. */
 @Composable
-private fun SavedServer(server: String, enabled: Boolean, onChange: () -> Unit) {
+private fun TripStillOpen(route: RouteBadgeModel) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppTheme.problemColors.attentionContainer, TripStillOpenShape)
+            .padding(16.dp)
+            .semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // The message names the route, so the badge is not read out as well.
+        RouteBadge(
+            route = route,
+            modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp).clearAndSetSemantics {},
+            style = MaterialTheme.typography.titleLarge,
+            shape = RoundedCornerShape(10.dp),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(stringResource(R.string.login_trip_open_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = stringResource(R.string.login_trip_open_message, route.shortName),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * The server the phone signed in to last, as one quiet line: most drivers never need to change it. [onChange] is null
+ * where it is not for changing.
+ */
+@Composable
+private fun SavedServer(server: String, enabled: Boolean, onChange: (() -> Unit)?) {
     Row(
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -265,8 +323,10 @@ private fun SavedServer(server: String, enabled: Boolean, onChange: () -> Unit) 
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onChange, enabled = enabled) {
-            Text(stringResource(R.string.login_change_server))
+        if (onChange != null) {
+            TextButton(onClick = onChange, enabled = enabled) {
+                Text(stringResource(R.string.login_change_server))
+            }
         }
     }
 }
@@ -346,7 +406,7 @@ private fun FieldError(message: String) {
 
 /** Full width, so "Signing in" and its spinner change only what is inside it, never its size. */
 @Composable
-private fun SignInButton(loading: Boolean, onSignIn: () -> Unit, modifier: Modifier) {
+private fun SignInButton(label: String, loading: Boolean, onSignIn: () -> Unit, modifier: Modifier) {
     Button(
         onClick = onSignIn,
         enabled = !loading,
@@ -369,7 +429,7 @@ private fun SignInButton(loading: Boolean, onSignIn: () -> Unit, modifier: Modif
             Spacer(Modifier.width(10.dp))
         }
         Text(
-            text = stringResource(if (loading) R.string.login_signing_in else R.string.login_button),
+            text = if (loading) stringResource(R.string.login_signing_in) else label,
             style = MaterialTheme.typography.titleMedium,
         )
     }
