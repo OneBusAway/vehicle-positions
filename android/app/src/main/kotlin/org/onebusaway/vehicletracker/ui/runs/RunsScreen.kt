@@ -3,6 +3,8 @@ package org.onebusaway.vehicletracker.ui.runs
 import android.text.format.DateFormat
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,10 +67,13 @@ import org.onebusaway.vehicletracker.ui.components.DelayedSpinner
 import org.onebusaway.vehicletracker.ui.components.EmptyState
 import org.onebusaway.vehicletracker.ui.components.ScrolledUnderDivider
 import org.onebusaway.vehicletracker.ui.components.SetupHeader
+import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
 import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFlow
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.departureTime
+import org.onebusaway.vehicletracker.ui.theme.fadeThroughIn
+import org.onebusaway.vehicletracker.ui.theme.fadeThroughOut
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -97,23 +102,40 @@ fun RunsScreen(
     val permissionFlow = rememberPermissionFlow(
         onReady = { pendingRunId?.let { viewModel.onStartRun(it, onTripStarted) } },
     )
+    BackHandler(enabled = permissionFlow.visible) { permissionFlow.cancel() }
 
-    RunsScreenContent(
-        state = state,
-        route = viewModel.route,
-        vehicleId = viewModel.vehicleId,
-        onBack = onBack,
-        onBusClick = onBusClick,
-        onRouteClick = onRouteClick,
-        onRunClick = { runId ->
-            pendingRunId = runId
-            permissionFlow.begin()
-        },
-        onReload = viewModel::retry,
-        onTryAgain = { pendingRunId?.let { viewModel.onStartRun(it, onTripStarted) } },
-        onChangeBus = onChangeBus,
-        onChooseAnotherRoute = onChooseAnotherRoute,
-    )
+    Box {
+        // The board stays under the checklist, so its direction and place are as the driver left them, but TalkBack
+        // does not reach it there.
+        Box(if (permissionFlow.visible) Modifier.clearAndSetSemantics {} else Modifier) {
+            RunsScreenContent(
+                state = state,
+                route = viewModel.route,
+                vehicleId = viewModel.vehicleId,
+                onBack = onBack,
+                onBusClick = onBusClick,
+                onRouteClick = onRouteClick,
+                onRunClick = { runId ->
+                    pendingRunId = runId
+                    permissionFlow.start()
+                },
+                onReload = viewModel::retry,
+                onTryAgain = { pendingRunId?.let { viewModel.onStartRun(it, onTripStarted) } },
+                onChangeBus = onChangeBus,
+                onChooseAnotherRoute = onChooseAnotherRoute,
+            )
+        }
+        AnimatedVisibility(visible = permissionFlow.visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
+            PreflightContent(
+                vehicleId = viewModel.vehicleId,
+                rows = permissionFlow.checklist,
+                canContinue = permissionFlow.canContinue,
+                onBack = permissionFlow::cancel,
+                onContinue = permissionFlow::onContinue,
+                onRowAction = permissionFlow::onRowAction,
+            )
+        }
+    }
 }
 
 /**
