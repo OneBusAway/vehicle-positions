@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -42,6 +44,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -73,6 +76,8 @@ import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.engine.TripStop
 import org.onebusaway.vehicletracker.service.LocationFix
 import org.onebusaway.vehicletracker.ui.components.SPINNER_DELAY_MS
+import org.onebusaway.vehicletracker.ui.login.LoginError
+import org.onebusaway.vehicletracker.ui.login.LoginField
 import org.onebusaway.vehicletracker.ui.login.LoginScreenContent
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreenContent
@@ -117,19 +122,138 @@ class ScreenFlowTest {
     private fun getString(resId: Int): String =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(resId)
 
-    @Test
-    fun loginScreen_disablesButtonWhileLoading() {
+    // --- Sign in ---
+
+    private class LoginFields(
+        val server: TextFieldState = TextFieldState(),
+        val email: TextFieldState = TextFieldState(),
+        val password: TextFieldState = TextFieldState(),
+    )
+
+    private fun showLogin(
+        state: LoginUiState,
+        fields: LoginFields = LoginFields(),
+        onChangeServer: () -> Unit = {},
+        onSignIn: () -> Unit = {},
+    ) {
         compose.setContent {
-            LoginScreenContent(
-                state = LoginUiState(loading = true),
-                onServerUrlChange = {},
-                onEmailChange = {},
-                onPasswordChange = {},
-                onLoginClick = {},
-            )
+            LoginScreenContent(state, fields.server, fields.email, fields.password, onChangeServer, onEdited = {}, onSignIn = onSignIn)
+        }
+    }
+
+    // By its label, and whether or not it is enabled: a disabled field has no SetText action.
+    private fun loginField(label: Int) =
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText) and hasText(getString(label)))
+
+    private fun hasError(message: String?) =
+        SemanticsMatcher("error is $message") { it.config.getOrNull(SemanticsProperties.Error) == message }
+
+    @Test
+    fun loginScreen_saysEachErrorUnderItsFieldAndAnnouncesIt() {
+        var state by mutableStateOf(LoginUiState(error = LoginError.MissingField(LoginField.EMAIL)))
+        compose.setContent {
+            LoginScreenContent(state, TextFieldState(), TextFieldState(), TextFieldState(), {}, {}, {})
         }
 
-        compose.onNodeWithText(getString(R.string.login_button)).assertIsNotEnabled()
+        loginField(R.string.login_email_label).assert(hasError(getString(R.string.login_error_missing_email)))
+        loginField(R.string.login_server_url_label).assert(hasError(null))
+        loginField(R.string.login_password_label).assert(hasError(null))
+
+        state = LoginUiState(error = LoginError.InvalidCredentials)
+        loginField(R.string.login_password_label).assert(hasError(getString(R.string.login_error_invalid_credentials)))
+        loginField(R.string.login_email_label).assert(hasError(null))
+
+        state = LoginUiState(error = LoginError.Unreachable("https://tracker.example.org/"))
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_check_address)))
+        compose.onNode(hasText(resources.getString(R.string.login_error_unreachable, "tracker.example.org")) and announcedPolitely)
+            .assertIsDisplayed()
+
+        state = LoginUiState(error = LoginError.ServerError)
+        compose.onNodeWithText(getString(R.string.login_error_server)).assertIsDisplayed()
+        for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
+            loginField(field).assert(hasError(null))
+        }
+    }
+
+    @Test
+    fun loginScreen_whileSigningInDisablesTheFieldsAndSaysSo() {
+        showLogin(LoginUiState(loading = true))
+
+        compose.onNode(hasText(getString(R.string.login_signing_in)) and announcedPolitely).assertIsNotEnabled()
+        compose.onNode(hasText(getString(R.string.login_button)) and hasClickAction()).assertDoesNotExist()
+        for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
+            loginField(field).assertIsNotEnabled()
+        }
+    }
+
+    /** What a field draws, which for a password is not what it holds: TalkBack gets the text, marked as a password. */
+    private fun drawnText(node: SemanticsNodeInteraction): String {
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.first().layoutInput.text.text
+    }
+
+    @Test
+    fun loginScreen_eyeShowsAndHidesThePassword() {
+        showLogin(LoginUiState(), LoginFields(password = TextFieldState("secret")))
+        val password = loginField(R.string.login_password_label)
+
+        assertEquals("\u2022".repeat(6), drawnText(password))
+        compose.onNodeWithContentDescription(getString(R.string.login_show_password)).performClick()
+        assertEquals("secret", drawnText(password))
+        compose.onNodeWithContentDescription(getString(R.string.login_hide_password)).performClick()
+        assertEquals("\u2022".repeat(6), drawnText(password))
+    }
+
+    @Test
+    fun loginScreen_signsInFromTheButtonAndFromTheKeyboard() {
+        var signIns = 0
+        showLogin(LoginUiState(), onSignIn = { signIns++ })
+
+        compose.onNode(hasText(getString(R.string.login_button)) and hasClickAction()).performClick()
+        loginField(R.string.login_password_label).performImeAction()
+
+        assertEquals(2, signIns)
+    }
+
+    @Test
+    fun loginScreen_showsAKnownServerAsALineUntilChangeIsTapped() {
+        var state by mutableStateOf(LoginUiState(savedServer = "https://tracker.example.org/"))
+        val server = TextFieldState("https://tracker.example.org/")
+        compose.setContent {
+            LoginScreenContent(state, server, TextFieldState(), TextFieldState(), { state = state.copy(changingServer = true) }, {}, {})
+        }
+
+        compose.onNodeWithText("tracker.example.org").assertIsDisplayed()
+        loginField(R.string.login_server_url_label).assertDoesNotExist()
+
+        compose.onNodeWithText(getString(R.string.login_change_server)).performClick()
+
+        loginField(R.string.login_server_url_label).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_change_server)).assertDoesNotExist()
+    }
+
+    @Test
+    fun loginScreen_titleIsAHeading() {
+        showLogin(LoginUiState())
+
+        compose.onNode(hasText(getString(R.string.login_title)) and isHeading()).assertIsDisplayed()
+    }
+
+    @Test
+    fun loginScreen_scrollsToSignInAtALargeFontScale() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                // A short screen, so Sign in starts below the fold whatever the test device.
+                Box(Modifier.height(360.dp)) {
+                    LoginScreenContent(LoginUiState(), TextFieldState(), TextFieldState(), TextFieldState(), {}, {}, {})
+                }
+            }
+        }
+
+        val signIn = compose.onNode(hasText(getString(R.string.login_button)) and hasClickAction())
+        signIn.assertIsNotDisplayed()
+        signIn.performScrollTo().assertIsDisplayed()
     }
 
     @Test
