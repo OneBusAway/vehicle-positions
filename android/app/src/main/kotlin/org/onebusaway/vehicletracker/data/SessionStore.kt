@@ -27,6 +27,10 @@ import java.util.Base64
 /**
  * The driver's session. [refreshToken] and [accessExpiresAtEpochSec] are null for a session saved
  * by a build that did not keep them.
+ *
+ * [email] is the one the driver last signed in with. It stays when the tokens are cleared, so
+ * signing in again after a session ends asks only for the password; null before the first sign-in,
+ * or when an older build stored the session.
  */
 data class Session(
     val serverUrl: String?,
@@ -34,6 +38,7 @@ data class Session(
     val issuedAtEpochSec: Long?,
     val refreshToken: String? = null,
     val accessExpiresAtEpochSec: Long? = null,
+    val email: String? = null,
 ) {
     /**
      * Whether requests can go out without the driver signing in again: there is an access token,
@@ -110,9 +115,9 @@ fun LoginResponse.issuedAt(nowEpochSec: Long) = IssuedTokens(
 
 interface SessionStore {
     val session: Flow<Session>
-    suspend fun saveLogin(serverUrl: String, tokens: IssuedTokens)
+    suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens)
 
-    /** Saves the pair a refresh handed out, keeping the server URL. */
+    /** Saves the pair a refresh handed out, keeping the server URL and the email. */
     suspend fun saveRefreshed(tokens: IssuedTokens)
 
     /** Forgets the refresh token and keeps the access token, which works until it expires. */
@@ -132,8 +137,8 @@ private const val LOG_TAG = "SessionStore"
  * [DataStoreTripStateStore] makes — so the upgrade path from the previous build can be
  * unit-tested without an emulator.
  *
- * Only the tokens are encrypted. The server URL and the two timestamps are not credentials,
- * and leaving them in the clear keeps the upgrade to a single key.
+ * Only the tokens are encrypted. The server URL, the email and the two timestamps are not
+ * credentials, and leaving them in the clear keeps the upgrade to a single key.
  */
 class EncryptedSessionStore(
     private val dataStore: DataStore<Preferences>,
@@ -141,6 +146,7 @@ class EncryptedSessionStore(
 ) : SessionStore {
     private object Keys {
         val SERVER_URL = stringPreferencesKey("server_url")
+        val EMAIL = stringPreferencesKey("email")
         val TOKEN = stringPreferencesKey("token_enc")
         val TOKEN_ISSUED_AT = longPreferencesKey("token_issued_at")
         val TOKEN_EXPIRES_AT = longPreferencesKey("token_expires_at")
@@ -172,6 +178,7 @@ class EncryptedSessionStore(
                         issuedAtEpochSec = prefs[Keys.TOKEN_ISSUED_AT],
                         refreshToken = readRefreshToken(prefs),
                         accessExpiresAtEpochSec = prefs[Keys.TOKEN_EXPIRES_AT],
+                        email = prefs[Keys.EMAIL],
                     )
                 },
         )
@@ -238,12 +245,13 @@ class EncryptedSessionStore(
         }
     }
 
-    override suspend fun saveLogin(serverUrl: String, tokens: IssuedTokens) = save(serverUrl, tokens)
+    override suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens) =
+        save(serverUrl, email, tokens)
 
-    override suspend fun saveRefreshed(tokens: IssuedTokens) = save(serverUrl = null, tokens)
+    override suspend fun saveRefreshed(tokens: IssuedTokens) = save(serverUrl = null, email = null, tokens)
 
-    /** Saves [tokens], and [serverUrl] unless it is null. */
-    private suspend fun save(serverUrl: String?, tokens: IssuedTokens) {
+    /** Saves [tokens], and [serverUrl] and [email] unless they are null. */
+    private suspend fun save(serverUrl: String?, email: String?, tokens: IssuedTokens) {
         // Encrypt before opening the transaction, so a Keystore failure reaches the caller without
         // half-writing a session: AuthRepository.login turns it into Result.failure, and
         // TokenRefresher drops the refresh token the server has just spent.
@@ -251,6 +259,7 @@ class EncryptedSessionStore(
         val refresh = cryptor.encrypt(tokens.refreshToken)
         dataStore.edit { prefs ->
             if (serverUrl != null) prefs[Keys.SERVER_URL] = serverUrl
+            if (email != null) prefs[Keys.EMAIL] = email
             prefs[Keys.TOKEN] = access
             prefs[Keys.REFRESH_TOKEN] = refresh
             prefs[Keys.TOKEN_ISSUED_AT] = tokens.issuedAtEpochSec
