@@ -1,15 +1,30 @@
 <resources>
     <string name="app_name">Vehicle Tracker</string>
 
-    <!-- Login screen -->
-    <string name="login_title">Driver Login</string>
-    <string name="login_server_url_label">Server URL</string>
+    <!-- Sign-in screen -->
+    <string name="login_title">Sign in</string>
+    <string name="login_subtitle">Use your driver account for this agency.</string>
+    <string name="login_server_url_label">Server address</string>
     <string name="login_email_label">Email</string>
     <string name="login_password_label">Password</string>
-    <string name="login_button">Log In</string>
-    <string name="login_error_other">Enter a server URL, email, and password.</string>
-    <string name="login_error_invalid_credentials">Invalid email or password.</string>
-    <string name="login_error_network">Could not reach the server. Check your connection.</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
+    <!-- Once the phone has signed in before: the server it used, which the driver rarely needs to change. -->
+    <string name="login_server">Server</string>
+    <string name="login_change_server">Change</string>
+    <string name="login_button">Sign in</string>
+    <string name="login_signing_in">Signing in</string>
+    <!-- Under the first field left empty. -->
+    <string name="login_error_missing_server">Enter the server address</string>
+    <string name="login_error_missing_email">Enter your email</string>
+    <string name="login_error_missing_password">Enter your password</string>
+    <string name="login_error_invalid_credentials">Wrong email or password. Try again.</string>
+    <!-- Under the server field when nothing answered at that address, beside the banner below. -->
+    <string name="login_error_check_address">Check the address</string>
+    <!-- The server's address as typed, e.g. "tracker.example.org". -->
+    <string name="login_error_unreachable">Can\'t reach %1$s. Check your connection, or the server address.</string>
+    <!-- The server answered, but not with a sign-in, such as a server error. -->
+    <string name="login_error_server">Couldn\'t sign in. Try again.</string>
 
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>

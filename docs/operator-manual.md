@@ -306,14 +306,18 @@ takes about ten minutes. Before you start, make sure the driver has an account
 
 1. Install the app. The driver will have to allow installation from your source
    the first time; your IT contact's distribution instructions cover this.
-2. Open **Vehicle Tracker**. The first screen is **Driver Login**.
-3. Enter the **Server URL** you were given. It is stored on the phone, so the
-   driver only ever types it once. Enter **Email** and **Password**, then tap
-   **Log In**.
-   - **Invalid email or password.** means the account or password is wrong, or
-     the account is deactivated.
-   - **Could not reach the server. Check your connection.** means the phone
-     cannot reach the server — check the network and the server URL.
+2. Open **Vehicle Tracker**. The first screen is **Sign in**.
+3. Enter the **Server address** you were given, starting with `https://`. It is
+   stored on the phone, so the driver only ever types it once: after the first
+   sign-in it shows as one line, with **Change** beside it. Enter **Email** and
+   **Password**, then tap **Sign in**. Each problem shows under the field it is
+   about:
+   - **Wrong email or password. Try again.** means the account or password is
+     wrong, or the account is deactivated.
+   - **Check the address**, with **Can't reach** the server above the button,
+     means the phone cannot reach the server: check the network and the server
+     address.
+   - **Couldn't sign in. Try again.** means the server answered with an error.
 4. Next is **Choose your bus**, showing exactly the vehicles you assigned as
    tiles, with the buses the driver starred under **Favorites** and the ones
    they drove last under **Recent**. If there is only one, the app skips this

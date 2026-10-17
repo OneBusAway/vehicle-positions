@@ -99,6 +99,10 @@ private val SETUP_STEPS = setOf(ROUTE_VEHICLES, ROUTE_ROUTES, ROUTE_RUNS)
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenSetupSteps(): Boolean =
     initialState.destination.route in SETUP_STEPS && targetState.destination.route in SETUP_STEPS
 
+/** Signing in is the step before choosing the bus, so it goes forward along the same axis. */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.fromSignInToBuses(): Boolean =
+    initialState.destination.route == ROUTE_LOGIN && targetState.destination.route == ROUTE_VEHICLES
+
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
 
@@ -197,22 +201,23 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
 
     val navController = rememberNavController()
     val slidePx = with(LocalDensity.current) { SharedAxisSlide.roundToPx() }
-    // The steps of choosing a trip slide along one axis; starting the trip and leaving it fade through instead,
-    // because they change the task. The rest keep the defaults. The back gesture previews the same pop it ends in.
+    // Signing in and the steps of choosing a trip slide along one axis; starting the trip and leaving it fade through
+    // instead, because they change the task. The rest keep the defaults. The back gesture previews the same pop it
+    // ends in.
     NavHost(
         navController = navController,
         startDestination = destination,
         modifier = modifier,
         enterTransition = {
             when {
-                betweenSetupSteps() -> sharedAxisIn(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || fromSignInToBuses() -> sharedAxisIn(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughIn()
                 else -> DefaultNavTransitions.enterTransition(this)
             }
         },
         exitTransition = {
             when {
-                betweenSetupSteps() -> sharedAxisOut(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || fromSignInToBuses() -> sharedAxisOut(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughOut()
                 else -> DefaultNavTransitions.exitTransition(this)
             }
