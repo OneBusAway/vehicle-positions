@@ -325,11 +325,12 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
         composable(ROUTE_RESUME) {
             ClearOfSystemBars {
                 ResumeShiftScreen(
-                    onResumed = {
+                    onResumed = dropUnlessResumed {
                         navController.navigate(ROUTE_TRACKING) {
                             popUpTo(ROUTE_RESUME) { inclusive = true }
                         }
                     },
+                    // Not a tap: the server confirms the end, perhaps after the driver has locked the phone.
                     onEnded = {
                         navController.navigate(ROUTE_VEHICLES) {
                             popUpTo(0) { inclusive = true }

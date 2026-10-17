@@ -1,5 +1,7 @@
 package org.onebusaway.vehicletracker.ui.tracking
 
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,6 +14,8 @@ import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.service.ServiceController
 import javax.inject.Inject
+
+private const val TAG = "TripEnder"
 
 data class EndTripState(val ending: Boolean = false, val failed: Boolean = false)
 
@@ -54,9 +58,22 @@ class TripEnder @Inject constructor(
      * driver signed in now only for a trip saved before drivers were recorded.
      */
     suspend fun endLocally(onEnded: () -> Unit) {
-        tripStateStore.endActiveTripLocally(sessionStore.session.first().driverId)
-        tripGeometryStore.clear()
-        serviceController.stopTracking()
+        // As for [end]: a second tap while the first is still writing would leave the screen twice.
+        if (_state.value.ending) return
+        _state.update { it.copy(ending = true) }
+        try {
+            tripStateStore.endActiveTripLocally(sessionStore.session.first().driverId)
+            tripGeometryStore.clear()
+            serviceController.stopTracking()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Nothing above this catches it, so thrown on it would crash the app. The buttons come back, with the
+            // failed end shown.
+            Log.w(TAG, "Could not end the trip on this phone", e)
+            _state.value = EndTripState(failed = true)
+            return
+        }
         _state.value = EndTripState()
         onEnded()
     }
