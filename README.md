@@ -670,7 +670,7 @@ In v1, the app sends location reports directly to the server as they are capture
 
 **Location Reporting:**
 
-- **Location capture:** Android `FusedLocationProviderClient` running as a foreground service with a persistent notification (“OBA Tracker is active”). Location updates every 10 seconds (configurable).
+- **Location capture:** Android `FusedLocationProviderClient` running as a foreground service with a persistent notification that names the route, its schedule status and the next stop. Location updates every 10 seconds (configurable).
 - **Direct send:** Each location fix is immediately POSTed to the server via Retrofit/OkHttp. Failed requests are logged but not retried (v1 simplification).
 - **Connection status:** The app monitors network availability and displays a clear visual indicator to the driver. When the network is unavailable, the app continues capturing GPS fixes (in case connectivity returns quickly) but does not attempt to send them.
 - **Battery optimization:** The app must request exemption from battery optimization (Doze mode) during active tracking. The foreground service notification ensures Android doesn’t kill the process. GPS polling interval is configurable to balance accuracy vs. battery drain.

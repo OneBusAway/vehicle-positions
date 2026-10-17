@@ -373,8 +373,9 @@ takes about ten minutes. Before you start, make sure the driver has an account
    is headed, how long the trip has run and how many reports have been sent,
    and an **End trip** button. Swipe the bar up, or tap it, to see the run, how
    reporting is going, the street map, and the stops from the last one passed
-   to the end of the line. A notification, **OBA Tracker is active**, stays in
-   the status bar for the whole trip.
+   to the end of the line. A notification stays in the status bar for the whole
+   trip, saying what the card says: the route and its status, such as **Route 7
+   · On time**, over the next stop or what is wrong.
 
 **What the status card means.** The card at the top says how the trip is
 keeping to its schedule, judged against the next stop: green **On time**, blue
