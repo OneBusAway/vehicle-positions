@@ -92,8 +92,19 @@ class ViewModelsTest {
 
     // --- Sign in ---
 
-    private fun loginViewModel(sessionStore: SessionStore = FakeSessionStore()) =
-        LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
+    private fun loginViewModel(
+        sessionStore: SessionStore = FakeSessionStore(),
+        tripState: FakeTripStateStore = FakeTripStateStore(),
+        geometryStore: FakeTripGeometryStore = FakeTripGeometryStore(),
+        again: Boolean = false,
+    ) = LoginViewModel(
+        AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }),
+        sessionStore,
+        tripState,
+        geometryStore,
+        // As the nav graph writes it: only the route Tracking opens sets it.
+        SavedStateHandle(if (again) mapOf(ARG_SIGN_IN_AGAIN to true) else emptyMap()),
+    )
 
     private fun LoginViewModel.fill(server: String, email: String, password: String) {
         this.server.setTextAndPlaceCursorAtEnd(server)
@@ -259,6 +270,62 @@ class ViewModelsTest {
 
         assertEquals("https://typed.example.com", vm.server.text.toString())
         assertEquals("typed@example.com", vm.email.text.toString())
+    }
+
+    @Test fun `signing in again shows the open trip's route and who signed in last`() = runTest(dispatcher) {
+        val vm = loginViewModel(
+            sessionStore = FakeSessionStore().apply { state.value = Session(serverUrl = "https://saved.example.com", token = null, issuedAtEpochSec = null, email = "maria@metro.example") },
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip },
+            geometryStore = FakeTripGeometryStore().apply {
+                stored = TripFixtures.t1.copy(routeShortName = "7", routeColor = "FDB71A", routeTextColor = "000000")
+            },
+            again = true,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue(state.again)
+        assertEquals(RouteBadgeModel.of("7", "FDB71A", "000000"), state.openTrip)
+        assertEquals("maria@metro.example", state.savedEmail)
+        assertEquals("maria@metro.example", vm.email.text.toString())
+    }
+
+    @Test fun `signing in again with no schedule on the phone names the route by its id`() = runTest(dispatcher) {
+        val vm = loginViewModel(tripState = FakeTripStateStore().apply { tripState.value = t1Trip }, again = true)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(RouteBadgeModel("R1", null, null), vm.uiState.value.openTrip)
+    }
+
+    @Test fun `signing in again keeps the server closed when it cannot be reached`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        val url = server.url("/").toString()
+        val vm = loginViewModel(
+            sessionStore = FakeSessionStore().apply { state.value = Session(serverUrl = url, token = null, issuedAtEpochSec = null, email = "d@example.com") },
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip },
+            again = true,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.password.setTextAndPlaceCursorAtEnd("pw")
+
+        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+        assertEquals(LoginError.Unreachable(url), vm.uiState.value.error)
+        assertFalse("the open trip is on this server, so it cannot be changed here", vm.uiState.value.showsServerField)
+        server.shutdown()
+    }
+
+    @Test fun `a first sign-in looks for no trip`() = runTest(dispatcher) {
+        val vm = loginViewModel(
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip },
+            geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1.copy(routeShortName = "7") },
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.again)
+        assertNull(vm.uiState.value.openTrip)
     }
 
     @Test fun `the server reads as its host, with a port only when it is not the usual one`() {

@@ -2,6 +2,7 @@ package org.onebusaway.vehicletracker.ui.login
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,6 +17,11 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.SessionStore
+import org.onebusaway.vehicletracker.data.TripGeometryStore
+import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.loadFor
+import org.onebusaway.vehicletracker.ui.ARG_SIGN_IN_AGAIN
+import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import javax.inject.Inject
 
 enum class LoginField { SERVER, EMAIL, PASSWORD }
@@ -33,6 +39,12 @@ sealed interface LoginError {
 }
 
 data class LoginUiState(
+    /** Signing in again after the session ended during a trip, which is still open. */
+    val again: Boolean = false,
+    /** The open trip's route, once read off the phone; only when signing in [again]. */
+    val openTrip: RouteBadgeModel? = null,
+    /** The email this phone last signed in with; null before its first sign-in, or when an older build signed in. */
+    val savedEmail: String? = null,
     /** The server this phone last signed in to; null before its first sign-in. */
     val savedServer: String? = null,
     val changingServer: Boolean = false,
@@ -52,16 +64,20 @@ internal fun serverLabel(server: String): String {
     return if (url.port == HttpUrl.defaultPort(url.scheme)) url.host else "${url.host}:${url.port}"
 }
 
+/** [ARG_SIGN_IN_AGAIN] is set on the route Tracking opens once the session has ended; the first sign-in has none. */
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     sessionStore: SessionStore,
+    tripStateStore: TripStateStore,
+    tripGeometryStore: TripGeometryStore,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val server = TextFieldState()
     val email = TextFieldState()
     val password = TextFieldState()
 
-    private val _uiState = MutableStateFlow(LoginUiState())
+    private val _uiState = MutableStateFlow(LoginUiState(again = savedStateHandle[ARG_SIGN_IN_AGAIN] ?: false))
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     init {
@@ -74,6 +90,14 @@ class LoginViewModel @Inject constructor(
             }
             session.email?.takeIf { it.isNotBlank() }?.let { saved ->
                 if (email.text.isEmpty()) email.setTextAndPlaceCursorAtEnd(saved)
+                _uiState.update { it.copy(savedEmail = saved) }
+            }
+        }
+        if (_uiState.value.again) {
+            viewModelScope.launch {
+                val trip = tripStateStore.activeTrip.first() ?: return@launch
+                val route = RouteBadgeModel.forTrip(trip, tripGeometryStore.loadFor(trip))
+                _uiState.update { it.copy(openTrip = route) }
             }
         }
     }
@@ -124,8 +148,13 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    // The server field is opened for an unreachable server, so its error has a field to sit under.
+    // The server field is opened for an unreachable server, so its error has a field to sit under. Not when signing
+    // in again: the open trip is on that server, so the banner alone names it.
     private fun failed(error: LoginError) = _uiState.update {
-        it.copy(loading = false, error = error, changingServer = it.changingServer || error is LoginError.Unreachable)
+        it.copy(
+            loading = false,
+            error = error,
+            changingServer = it.changingServer || (error is LoginError.Unreachable && !it.again),
+        )
     }
 }
