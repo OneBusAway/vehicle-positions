@@ -14,32 +14,78 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.Priority
-import org.onebusaway.vehicletracker.R
 
 private const val LOCATION_INTERVAL_MS = 10_000L
 
-/** Handle returned by [rememberPermissionFlow]; call [begin] to kick off the staged sequence. */
-class PermissionFlowController internal constructor(private val start: () -> Unit) {
-    fun begin() = start()
+/**
+ * The checklist before a trip, as [rememberPermissionFlow] runs it: whether it is on screen, where the sequence is, and
+ * what the phone has granted. The board under it calls [start] when a run is tapped.
+ */
+@Stable
+class PermissionFlowController internal constructor(private val readGrants: () -> Grants) {
+    internal var flow by mutableStateOf(PermissionFlowState())
+        private set
+    internal var grants by mutableStateOf(readGrants())
+        private set
+    var visible by mutableStateOf(false)
+        private set
+
+    internal val checklist: List<ChecklistRow> get() = flow.checklist(grants)
+    internal val canContinue: Boolean get() = flow.continueEvent != null
+
+    internal fun dispatch(event: PermissionEvent) {
+        grants = readGrants()
+        flow = flow.next(event, grants)
+        // A run that started without the checklist shows it once a step needs the driver.
+        if (flow.waitsForDriver) visible = true
+    }
+
+    /** A run was tapped: with nothing missing the run starts straight away, as it did before; otherwise it explains first. */
+    fun start() {
+        grants = readGrants()
+        flow = PermissionFlowState()
+        visible = !grants.hasEverything
+        if (!visible) dispatch(PermissionEvent.Begin)
+    }
+
+    internal fun onContinue() {
+        flow.continueEvent?.let(::dispatch)
+    }
+
+    internal fun onRowAction() = dispatch(PermissionEvent.AskAgain)
+
+    /** Back leaves the checklist and the run with it. */
+    fun cancel() {
+        visible = false
+        dispatch(PermissionEvent.Cancel)
+    }
+
+    internal fun started() {
+        visible = false
+        dispatch(PermissionEvent.Started)
+    }
+
+    /** Something may have been changed in Android's settings while the app was away. */
+    internal fun refresh() {
+        grants = readGrants()
+    }
 }
 
 private fun Context.granted(permission: String): Boolean =
@@ -56,176 +102,109 @@ private fun grantsOf(context: Context): Grants = Grants(
 )
 
 /**
- * Drives the sequence in [next] that must run before a trip can start, launching Android's prompts as the steps
- * reach them and showing the explanation and warning dialogs in between. [onReady] fires once every step has been
- * granted or declined where declining is allowed; [onCancelled] once the driver gives up at a step that is not.
+ * Runs the sequence in [next] that must pass before a trip can start, launching Android's prompts as the steps reach
+ * them while the checklist stays on screen beneath. [onReady] fires once every step has been granted, or declined where
+ * declining is allowed.
  */
 @Composable
-fun rememberPermissionFlow(
-    onReady: () -> Unit,
-    onCancelled: () -> Unit = {},
-): PermissionFlowController {
+fun rememberPermissionFlow(onReady: () -> Unit): PermissionFlowController {
     val context = LocalContext.current
     val activity = LocalActivity.current
-    var state by remember { mutableStateOf(PermissionFlowState()) }
+    val controller = remember { PermissionFlowController { grantsOf(context) } }
     val latestOnReady by rememberUpdatedState(onReady)
-    val latestOnCancelled by rememberUpdatedState(onCancelled)
-    fun dispatch(event: PermissionEvent) {
-        state = state.next(event, grantsOf(context))
-    }
 
     val locationRequest = remember {
         LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS).build()
     }
     val settingsClient = remember { LocationServices.getSettingsClient(context) }
 
+    // Read as each ask goes out: with the one read after the answer, it tells a refusal for good from a dismissed prompt.
+    var rationaleBeforeAsk by remember { mutableStateOf(false) }
     val locationPermsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
-        // Refused with no rationale to show is refused for good: Android will not ask again.
-        val canAskAgain = activity != null && LOCATION_PERMISSIONS.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
-        dispatch(
+        controller.dispatch(
             PermissionEvent.LocationAnswered(
                 fine = results[Manifest.permission.ACCESS_FINE_LOCATION] == true,
                 coarse = results[Manifest.permission.ACCESS_COARSE_LOCATION] == true,
-                canAskAgain = canAskAgain,
+                rationaleBefore = rationaleBeforeAsk,
+                rationaleAfter = activity.showsLocationRationale(),
             ),
         )
     }
 
+    val appSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { controller.dispatch(PermissionEvent.SettingsClosed) }
+
     val backgroundLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { dispatch(PermissionEvent.BackgroundAnswered) }
+    ) { controller.dispatch(PermissionEvent.BackgroundAnswered) }
 
     val notificationsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted -> dispatch(PermissionEvent.NotificationsAnswered(granted)) }
+    ) { controller.dispatch(PermissionEvent.NotificationsAnswered) }
 
     val batteryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { dispatch(PermissionEvent.BatteryAnswered) }
+    ) { controller.dispatch(PermissionEvent.BatteryAnswered) }
 
     val settingsResolutionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
-    ) { result -> dispatch(PermissionEvent.LocationServicesChecked(on = result.resultCode == Activity.RESULT_OK)) }
+    ) { result -> controller.dispatch(PermissionEvent.LocationServicesChecked(on = result.resultCode == Activity.RESULT_OK)) }
 
-    LaunchedEffect(state.step) {
-        when (state.step) {
-            PermissionStep.REQUEST_LOCATION -> locationPermsLauncher.launch(LOCATION_PERMISSIONS)
+    LifecycleResumeEffect(controller) {
+        controller.refresh()
+        onPauseOrDispose {}
+    }
+
+    LaunchedEffect(controller.flow.step) {
+        when (controller.flow.step) {
+            PermissionStep.REQUEST_LOCATION -> {
+                rationaleBeforeAsk = activity.showsLocationRationale()
+                locationPermsLauncher.launch(LOCATION_PERMISSIONS)
+            }
+            PermissionStep.OPEN_APP_SETTINGS -> appSettingsLauncher.launch(appDetailsIntent(context))
             PermissionStep.REQUEST_BACKGROUND -> backgroundLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             PermissionStep.REQUEST_NOTIFICATIONS -> notificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             PermissionStep.REQUEST_BATTERY -> batteryLauncher.launch(batteryOptimizationIntent(context))
             PermissionStep.CHECK_LOCATION_SETTINGS -> {
                 val request = LocationSettingsRequest.Builder().addLocationRequest(locationRequest).build()
                 settingsClient.checkLocationSettings(request)
-                    .addOnSuccessListener { dispatch(PermissionEvent.LocationServicesChecked(on = true)) }
+                    .addOnSuccessListener { controller.dispatch(PermissionEvent.LocationServicesChecked(on = true)) }
                     .addOnFailureListener { exception ->
                         if (exception is ResolvableApiException) {
                             try {
                                 settingsResolutionLauncher.launch(IntentSenderRequest.Builder(exception.resolution).build())
                             } catch (e: IntentSender.SendIntentException) {
-                                dispatch(PermissionEvent.LocationServicesChecked(on = false))
+                                controller.dispatch(PermissionEvent.LocationServicesChecked(on = false))
                             }
                         } else {
-                            dispatch(PermissionEvent.LocationServicesChecked(on = false))
+                            controller.dispatch(PermissionEvent.LocationServicesChecked(on = false))
                         }
                     }
             }
             PermissionStep.READY -> {
                 latestOnReady()
-                dispatch(PermissionEvent.Started)
+                controller.started()
             }
             else -> Unit
         }
     }
 
-    when (state.step) {
-        PermissionStep.APPROX_WARNING -> PermissionDialog(
-            title = stringResource(R.string.permission_location_approx_title),
-            message = stringResource(R.string.permission_location_approx_message),
-            confirmText = stringResource(R.string.permission_grant_precise_button),
-            onConfirm = { dispatch(PermissionEvent.AskAgain) },
-            dismissText = stringResource(R.string.permission_continue_button),
-            onDismiss = { dispatch(PermissionEvent.ContinueApproximate) },
-        )
-        PermissionStep.LOCATION_DENIED -> PermissionDialog(
-            title = stringResource(R.string.permission_location_denied_title),
-            message = stringResource(R.string.permission_location_denied_message),
-            confirmText = stringResource(R.string.permission_retry_button),
-            onConfirm = { dispatch(PermissionEvent.AskAgain) },
-            dismissText = stringResource(R.string.permission_cancel_button),
-            onDismiss = {
-                dispatch(PermissionEvent.Cancel)
-                latestOnCancelled()
-            },
-        )
-        PermissionStep.BACKGROUND_EXPLAIN -> PermissionDialog(
-            title = stringResource(R.string.permission_background_title),
-            message = stringResource(R.string.permission_background_message),
-            confirmText = stringResource(R.string.permission_continue_button),
-            onConfirm = { dispatch(PermissionEvent.Explained) },
-            dismissText = stringResource(R.string.permission_skip_button),
-            onDismiss = { dispatch(PermissionEvent.NotNow) },
-        )
-        PermissionStep.NOTIFICATIONS_DENIED_INFO -> PermissionDialog(
-            title = null,
-            message = stringResource(R.string.permission_notifications_denied_message),
-            confirmText = stringResource(R.string.permission_ok_button),
-            onConfirm = { dispatch(PermissionEvent.Acknowledged) },
-            dismissText = null,
-            onDismiss = { dispatch(PermissionEvent.Acknowledged) },
-        )
-        PermissionStep.BATTERY_EXPLAIN -> PermissionDialog(
-            title = stringResource(R.string.permission_battery_title),
-            message = stringResource(R.string.permission_battery_message),
-            confirmText = stringResource(R.string.permission_continue_button),
-            onConfirm = { dispatch(PermissionEvent.Explained) },
-            dismissText = stringResource(R.string.permission_skip_button),
-            onDismiss = { dispatch(PermissionEvent.NotNow) },
-        )
-        PermissionStep.LOCATION_SETTINGS_OFF -> PermissionDialog(
-            title = stringResource(R.string.permission_location_services_off_title),
-            message = stringResource(R.string.permission_location_services_off_message),
-            confirmText = stringResource(R.string.permission_retry_button),
-            onConfirm = { dispatch(PermissionEvent.AskAgain) },
-            dismissText = stringResource(R.string.permission_cancel_button),
-            onDismiss = {
-                dispatch(PermissionEvent.Cancel)
-                latestOnCancelled()
-            },
-        )
-        else -> Unit
-    }
-
-    return remember { PermissionFlowController { dispatch(PermissionEvent.Begin) } }
+    return controller
 }
 
 // Fine and coarse are asked together, as Android 12 and later require.
 private val LOCATION_PERMISSIONS = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
 
+private fun Activity?.showsLocationRationale(): Boolean =
+    this != null && LOCATION_PERMISSIONS.any { ActivityCompat.shouldShowRequestPermissionRationale(this, it) }
+
+private fun appDetailsIntent(context: Context) =
+    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+
 private fun batteryOptimizationIntent(context: Context) =
     Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
         data = Uri.parse("package:${context.packageName}")
     }
-
-@Composable
-private fun PermissionDialog(
-    title: String?,
-    message: String,
-    confirmText: String,
-    onConfirm: () -> Unit,
-    dismissText: String?,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = title?.let { { Text(it) } },
-        text = { Text(message) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(confirmText) }
-        },
-        dismissButton = dismissText?.let {
-            { TextButton(onClick = onDismiss) { Text(it) } }
-        },
-    )
-}

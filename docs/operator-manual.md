@@ -319,21 +319,27 @@ takes about ten minutes. Before you start, make sure the driver has an account
    The route and trip the app reports both come from the schedule, so as long
    as OneBusAway uses the same GTFS feed (your IT contact sets this up), it can
    place the bus on the exact scheduled trip.
-6. The permission prompts appear next, once per phone. Work through them with
-   the driver — this is the step drivers get wrong on their own:
-   - Location: choose the **precise** option. If only approximate location is
-     granted, the app warns **Approximate Location Only** and offers **Grant
-     Precise Location**; take it.
-   - Background location: the app shows **Keep Tracking in the Background**.
-     Tap **Continue**, then choose **"Allow all the time"** on the Android
-     screen that appears. Anything less — or tapping **Not Now** — and tracking
-     stops the moment the screen locks.
-   - Notifications: allow them. If they are refused the app says so and carries
-     on, but the driver loses the ongoing tracking notification.
-   - Battery: the app shows **Prevent Battery Optimization**. Tap **Continue**
-     and allow it. This is what keeps long trips reporting reliably.
-   - If the phone's location services are switched off entirely, the app says
-     **Turn On Location Services** and will not start until they are on.
+6. If the phone has not yet allowed everything the app needs, tapping a run
+   opens **Before you start**: six rows, each saying why the app needs it. Work
+   through it with the driver; this is the step drivers get wrong on their
+   own. Tap **Continue** and Android asks about each in turn, and each row then
+   says **Allowed** or **Skipped**:
+   - Location: choose **Precise** and **While using the app**. If only
+     approximate location is allowed, the row says so and offers **Try
+     again**; take it. Location cannot be skipped: a refusal shows **Try
+     again**, and a second refusal **Open settings**, where it has to be
+     allowed.
+   - All the time: Android opens its location settings for the app. **Allow all
+     the time** lets the app restart reporting by itself if Android closes it.
+     Reports carry on with the screen locked either way.
+   - Notifications: allow them, so the driver can see that reporting is on.
+     Refused, reports still work.
+   - Battery: allow it. This is what keeps long trips reporting reliably.
+   - If the phone's location services are switched off, Android offers to turn
+     them on, and the trip does not start until they are on.
+
+   The checklist comes back before a later trip only while something on it is
+   still missing.
 7. Tracking starts. A map of the trip fills the screen, with the status card
    over its top and the trip bar along its bottom: the route and where the run
    is headed, how long the trip has run and how many reports have been sent,
