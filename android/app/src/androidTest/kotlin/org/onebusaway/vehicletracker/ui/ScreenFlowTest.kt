@@ -82,6 +82,16 @@ import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginField
 import org.onebusaway.vehicletracker.ui.login.LoginScreenContent
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
+import org.onebusaway.vehicletracker.ui.permissions.ChecklistRow
+import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
+import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
+import org.onebusaway.vehicletracker.ui.permissions.RowState
+import org.onebusaway.vehicletracker.ui.permissions.RowState.ALLOWED
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NEEDED
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NEEDED_IN_SETTINGS
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NEXT
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NOT_REACHED
+import org.onebusaway.vehicletracker.ui.permissions.RowState.SKIPPED
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreenContent
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftUiState
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
@@ -278,6 +288,76 @@ class ScreenFlowTest {
         val signIn = compose.onNode(hasText(getString(R.string.login_button)) and hasClickAction())
         signIn.assertIsNotDisplayed()
         signIn.performScrollTo().assertIsDisplayed()
+    }
+
+    // --- The checklist before a trip ---
+
+    private fun checklist(vararg states: RowState) = PermissionRow.entries.zip(states.toList()) { row, state -> ChecklistRow(row, state) }
+
+    private fun showChecklist(
+        rows: List<ChecklistRow>,
+        canContinue: Boolean = true,
+        onBack: () -> Unit = {},
+        onContinue: () -> Unit = {},
+        onRowAction: () -> Unit = {},
+    ) {
+        compose.setContent { PreflightContent("4317", rows, canContinue, onBack, onContinue, onRowAction) }
+    }
+
+    @Test
+    fun preflight_saysEachRowsStateInWords() {
+        showChecklist(checklist(ALLOWED, ALLOWED, ALLOWED, SKIPPED, NEXT, NOT_REACHED))
+
+        compose.onNode(hasText(getString(R.string.preflight_title)) and isHeading()).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.preflight_message, "4317")).assertIsDisplayed()
+        assertEquals(3, compose.onAllNodes(hasText(getString(R.string.preflight_allowed)) and announcedPolitely).fetchSemanticsNodes().size)
+        compose.onNode(hasText(getString(R.string.preflight_skipped)) and announcedPolitely).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_skipped_why)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_notifications_why)).assertDoesNotExist()
+        compose.onNode(hasText(getString(R.string.preflight_next)) and announcedPolitely).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_battery_why)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_location_services_why)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun preflight_continueWalksTheStepsAndWaitsWhileAndroidAsks() {
+        var continued = 0
+        var canContinue by mutableStateOf(true)
+        compose.setContent {
+            PreflightContent("4317", checklist(NEXT, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED), canContinue, {}, { continued++ }, {})
+        }
+
+        compose.onNodeWithText(getString(R.string.preflight_continue)).performClick()
+        assertEquals(1, continued)
+        canContinue = false
+        compose.onNodeWithText(getString(R.string.preflight_continue)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun preflight_offersTryAgainOrOpenSettingsWhenLocationIsRefused() {
+        var actions = 0
+        var rows by mutableStateOf(checklist(NEEDED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED))
+        compose.setContent { PreflightContent("4317", rows, false, {}, {}, { actions++ }) }
+
+        compose.onNodeWithText(getString(R.string.preflight_location_needed)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_open_settings)).assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.preflight_try_again)).performClick()
+
+        rows = checklist(NEEDED_IN_SETTINGS, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED)
+        compose.onNodeWithText(getString(R.string.preflight_try_again)).assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.preflight_open_settings)).performClick()
+
+        assertEquals(2, actions)
+    }
+
+    @Test
+    fun preflight_backLeavesTheChecklist() {
+        var back = false
+        showChecklist(checklist(NEXT, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED), onBack = { back = true })
+
+        compose.onNodeWithContentDescription(getString(R.string.setup_navigate_up)).performClick()
+
+        assertTrue(back)
     }
 
     @Test

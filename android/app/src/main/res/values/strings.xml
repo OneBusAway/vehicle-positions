@@ -256,22 +256,31 @@
     <string name="tracking_notification_resume_title">Tap to resume tracking</string>
     <string name="tracking_notification_resume_text">Location tracking paused. Open the app to resume.</string>
 
-    <!-- Permission flow -->
-    <string name="permission_location_approx_title">Approximate Location Only</string>
-    <string name="permission_location_approx_message">Precise location wasn\'t granted, so tracking will be less accurate. You can grant precise location or continue with approximate location.</string>
-    <string name="permission_grant_precise_button">Grant Precise Location</string>
-    <string name="permission_continue_button">Continue</string>
-    <string name="permission_location_denied_title">Location Access Needed</string>
-    <string name="permission_location_denied_message">Location permission is required to start tracking a trip.</string>
-    <string name="permission_retry_button">Try Again</string>
-    <string name="permission_cancel_button">Cancel</string>
-    <string name="permission_background_title">Keep Tracking in the Background</string>
-    <string name="permission_background_message">To keep sending your location when the app isn\'t on screen, choose \"Allow all the time\" on the next screen.</string>
-    <string name="permission_skip_button">Not Now</string>
-    <string name="permission_notifications_denied_message">Notifications were not granted. You won\'t see the tracking status notification, but tracking will still run.</string>
-    <string name="permission_ok_button">OK</string>
-    <string name="permission_battery_title">Prevent Battery Optimization</string>
-    <string name="permission_battery_message">To keep tracking reliably in the background, allow this app to ignore battery optimizations.</string>
-    <string name="permission_location_services_off_title">Turn On Location Services</string>
-    <string name="permission_location_services_off_message">Device location services must be turned on to start tracking.</string>
+    <!-- The checklist before a trip, shown when the app is missing something it needs. The bus's fleet number. -->
+    <string name="preflight_title">Before you start</string>
+    <string name="preflight_message">The app needs these to report bus %1$s. Android asks about each one next.</string>
+    <string name="preflight_location">Location</string>
+    <string name="preflight_location_why">So the app knows where the bus is</string>
+    <string name="preflight_precise">Precise location</string>
+    <string name="preflight_precise_why">So riders see the bus at the right stop</string>
+    <string name="preflight_background">All the time</string>
+    <!-- Reports go on with the screen off without it; it lets the app restart reporting by itself. -->
+    <string name="preflight_background_why">So reporting can restart if Android closes the app</string>
+    <string name="preflight_notifications">Notifications</string>
+    <string name="preflight_notifications_why">So you can see that reporting is on</string>
+    <string name="preflight_battery">Battery</string>
+    <string name="preflight_battery_why">So Android doesn\'t stop reports mid-trip</string>
+    <string name="preflight_location_services">Location services</string>
+    <string name="preflight_location_services_why">Location must be on for the whole phone</string>
+    <!-- At the end of a row, once Android has asked about it, or before it asks next. -->
+    <string name="preflight_allowed">Allowed</string>
+    <string name="preflight_skipped">Skipped</string>
+    <string name="preflight_next">Next</string>
+    <!-- In place of a row's reason once the driver has said no to something the app can do without. -->
+    <string name="preflight_skipped_why">Not allowed. Reports still work.</string>
+    <string name="preflight_location_needed">Location is needed to report</string>
+    <string name="preflight_approximate">Only approximate was allowed</string>
+    <string name="preflight_try_again">Try again</string>
+    <string name="preflight_open_settings">Open settings</string>
+    <string name="preflight_continue">Continue</string>
 </resources>

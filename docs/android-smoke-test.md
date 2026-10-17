@@ -221,12 +221,14 @@ it on its own, before or after the rest.
    row per run: the start time over the headsign. The clock times are the
    agency's, not the phone's: with the fixture's `America/Los_Angeles` schedule,
    `8:00 AM` over `North` reads the same on a phone set to any timezone. Tap it.
-5. Work through the permission sequence as it appears: fine+coarse location
-   (grant precise), background location explanation → OS settings redirect
-   (choose "Allow all the time"), notifications (allow), battery-optimization
-   exemption (continue or not-now — either is fine).
+5. On a fresh install the run opens **Before you start**, a checklist of what
+   the app needs. Tap **Continue** and answer Android's prompts as they come:
+   location (precise, while using the app), the location settings page for
+   "Allow all the time", notifications (allow), the battery exemption (allow or
+   deny, either is fine). Each row turns **Allowed** or **Skipped** as its
+   answer comes in.
 
-**Expected outcome:** after the permission sequence completes and device
+**Expected outcome:** after the checklist completes and device
 location services are confirmed on, the app navigates to the Tracking screen
 showing the status card above `Route R1`, with no dark problem line under it.
 The card reads **Waiting for GPS**, from the run's first stop, until the first
