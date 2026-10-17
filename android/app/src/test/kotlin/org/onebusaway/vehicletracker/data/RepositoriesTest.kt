@@ -27,7 +27,7 @@ class RepositoriesTest {
     private fun apiFor(server: MockWebServer) =
         ApiFactory { "jwt" }.create(server.url("/").toString())
 
-    @Test fun `login success stores url, both tokens, issue time and expiry`() = runTest {
+    @Test fun `login success stores url, email, both tokens, issue time and expiry`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody(
             """{"token":"jwt-1","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
@@ -37,7 +37,17 @@ class RepositoriesTest {
         val result = repo.login(server.url("/").toString(), "d@example.com", "pw")
 
         assertTrue(result.isSuccess)
-        assertEquals(Session(server.url("/").toString(), "jwt-1", 1000L, "r1", 1900L), sessions.session.first())
+        assertEquals(
+            Session(
+                serverUrl = server.url("/").toString(),
+                token = "jwt-1",
+                issuedAtEpochSec = 1000L,
+                refreshToken = "r1",
+                accessExpiresAtEpochSec = 1900L,
+                email = "d@example.com",
+            ),
+            sessions.session.first(),
+        )
         server.shutdown()
     }
 

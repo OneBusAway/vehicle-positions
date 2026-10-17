@@ -63,16 +63,16 @@ class SessionStoreTest {
     @Test fun `a saved login reads back unchanged`() = runTest {
         val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
 
-        store.saveLogin(SERVER, TOKENS)
+        store.saveLogin(SERVER, EMAIL, TOKENS)
 
-        assertEquals(Session(SERVER, TOKEN, ISSUED_AT, REFRESH_TOKEN, EXPIRES_AT), store.session.first())
+        assertEquals(SIGNED_IN, store.session.first())
     }
 
     @Test fun `neither token reaches the file in the clear`() = runTest {
         val file = File(tempFolder.newFolder(), "session.preferences_pb")
         val dataStore = newDataStore(file)
 
-        EncryptedSessionStore(dataStore, FakeCryptor()).saveLogin(SERVER, TOKENS)
+        EncryptedSessionStore(dataStore, FakeCryptor()).saveLogin(SERVER, EMAIL, TOKENS)
 
         val prefs = dataStore.data.first()
         assertNull("the plaintext key must not survive a save", prefs[LEGACY_TOKEN_KEY])
@@ -83,33 +83,50 @@ class SessionStoreTest {
         assertFalse("the refresh token appears verbatim in $file", onDisk.contains(REFRESH_TOKEN))
     }
 
-    @Test fun `a refreshed pair replaces the old one and keeps the server url`() = runTest {
+    @Test fun `a refreshed pair replaces the old one and keeps the server url and the email`() = runTest {
         val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
-        store.saveLogin(SERVER, TOKENS)
+        store.saveLogin(SERVER, EMAIL, TOKENS)
 
         store.saveRefreshed(IssuedTokens("a2", "r2", ISSUED_AT + 1000, ISSUED_AT + 100))
 
-        assertEquals(Session(SERVER, "a2", ISSUED_AT + 100, "r2", ISSUED_AT + 1000), store.session.first())
+        assertEquals(
+            SIGNED_IN.copy(token = "a2", issuedAtEpochSec = ISSUED_AT + 100, refreshToken = "r2", accessExpiresAtEpochSec = ISSUED_AT + 1000),
+            store.session.first(),
+        )
     }
 
-    @Test fun `dropping the refresh token keeps the access token and its expiry`() = runTest {
+    @Test fun `dropping the refresh token keeps the access token, its expiry and the email`() = runTest {
         val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
-        store.saveLogin(SERVER, TOKENS)
+        store.saveLogin(SERVER, EMAIL, TOKENS)
 
         store.dropRefreshToken()
 
-        assertEquals(Session(SERVER, TOKEN, ISSUED_AT, refreshToken = null, accessExpiresAtEpochSec = EXPIRES_AT), store.session.first())
+        assertEquals(SIGNED_IN.copy(refreshToken = null), store.session.first())
     }
 
-    @Test fun `clearing the token removes both tokens and their times, and keeps the server url`() = runTest {
+    @Test fun `clearing the token removes both tokens and their times, and keeps the server url and the email`() = runTest {
         val dataStore = newDataStore()
         val store = EncryptedSessionStore(dataStore, FakeCryptor())
-        store.saveLogin(SERVER, TOKENS)
+        store.saveLogin(SERVER, EMAIL, TOKENS)
 
         store.clearToken()
 
-        assertEquals(Session(SERVER, null, null), store.session.first())
-        assertEquals(setOf("server_url"), dataStore.data.first().asMap().keys.map { it.name }.toSet())
+        assertEquals(SIGNED_OUT, store.session.first())
+        assertEquals(setOf("server_url", "email"), dataStore.data.first().asMap().keys.map { it.name }.toSet())
+    }
+
+    @Test fun `a session saved before the email was kept still reads, with no email`() = runTest {
+        val dataStore = newDataStore()
+        // The keys exactly as the build before this one wrote them.
+        dataStore.edit { prefs ->
+            prefs[stringPreferencesKey("server_url")] = SERVER
+            prefs[TOKEN_KEY] = FakeCryptor().encrypt(TOKEN)
+            prefs[longPreferencesKey("token_issued_at")] = ISSUED_AT
+            prefs[REFRESH_TOKEN_KEY] = FakeCryptor().encrypt(REFRESH_TOKEN)
+            prefs[longPreferencesKey("token_expires_at")] = EXPIRES_AT
+        }
+
+        assertEquals(SIGNED_IN.copy(email = null), EncryptedSessionStore(dataStore, FakeCryptor()).session.first())
     }
 
     @Test fun `the session flow re-emits after each write`() = runTest {
@@ -117,10 +134,10 @@ class SessionStoreTest {
 
         store.session.test {
             assertEquals(Session(null, null, null), awaitItem())
-            store.saveLogin(SERVER, TOKENS)
-            assertEquals(Session(SERVER, TOKEN, ISSUED_AT, REFRESH_TOKEN, EXPIRES_AT), awaitItem())
+            store.saveLogin(SERVER, EMAIL, TOKENS)
+            assertEquals(SIGNED_IN, awaitItem())
             store.clearToken()
-            assertEquals(Session(SERVER, null, null), awaitItem())
+            assertEquals(SIGNED_OUT, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -178,7 +195,7 @@ class SessionStoreTest {
     @Test fun `an undecryptable token reads as logged out`() = runTest {
         val dataStore = newDataStore()
         val cryptor = FakeCryptor()
-        EncryptedSessionStore(dataStore, cryptor).saveLogin(SERVER, TOKENS)
+        EncryptedSessionStore(dataStore, cryptor).saveLogin(SERVER, EMAIL, TOKENS)
 
         cryptor.failDecrypt = true
         val session = EncryptedSessionStore(dataStore, cryptor).session.first()
@@ -193,7 +210,7 @@ class SessionStoreTest {
 
     @Test fun `an undecryptable refresh token reads as none and leaves the access token readable`() = runTest {
         val dataStore = newDataStore()
-        EncryptedSessionStore(dataStore, FakeCryptor()).saveLogin(SERVER, TOKENS)
+        EncryptedSessionStore(dataStore, FakeCryptor()).saveLogin(SERVER, EMAIL, TOKENS)
         dataStore.edit { prefs -> prefs[REFRESH_TOKEN_KEY] = "written under a key that is gone" }
 
         val session = EncryptedSessionStore(dataStore, FakeCryptor()).session.first()
@@ -220,7 +237,7 @@ class SessionStoreTest {
         val dataStore = newDataStore()
         val store = EncryptedSessionStore(dataStore, FakeCryptor().apply { failEncrypt = true })
 
-        val failure = runCatching { store.saveLogin(SERVER, TOKENS) }.exceptionOrNull()
+        val failure = runCatching { store.saveLogin(SERVER, EMAIL, TOKENS) }.exceptionOrNull()
 
         assertTrue("expected a GeneralSecurityException, got $failure", failure is GeneralSecurityException)
         assertTrue("a half-written session is worse than none", dataStore.data.first().asMap().isEmpty())
@@ -323,11 +340,23 @@ class SessionStoreTest {
 
     private companion object {
         const val SERVER = "https://transit.example.org/"
+        const val EMAIL = "maria@metro.example"
         const val TOKEN = "eyJhbGciOiJIUzI1NiJ9.driver42.signature"
         const val ISSUED_AT = 1_785_886_200L
         const val REFRESH_TOKEN = "3f9a17c0d2e84b65a1f0c9e7b3d24a68"
         const val EXPIRES_AT = ISSUED_AT + 24 * 3600
         val TOKENS = IssuedTokens(TOKEN, REFRESH_TOKEN, EXPIRES_AT, ISSUED_AT)
+
+        // Named, as the email is a String? like the fields before it, so a field out of place would still compile.
+        val SIGNED_IN = Session(
+            serverUrl = SERVER,
+            token = TOKEN,
+            issuedAtEpochSec = ISSUED_AT,
+            refreshToken = REFRESH_TOKEN,
+            accessExpiresAtEpochSec = EXPIRES_AT,
+            email = EMAIL,
+        )
+        val SIGNED_OUT = Session(serverUrl = SERVER, token = null, issuedAtEpochSec = null, email = EMAIL)
 
         val TOKEN_KEY = stringPreferencesKey("token_enc")
         val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token_enc")
