@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui
 
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
@@ -31,8 +32,14 @@ import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripGeometry
+import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.login.LoginError
+import org.onebusaway.vehicletracker.ui.login.LoginField
+import org.onebusaway.vehicletracker.ui.login.LoginUiState
 import org.onebusaway.vehicletracker.ui.login.LoginViewModel
+import org.onebusaway.vehicletracker.ui.login.bannerOf
+import org.onebusaway.vehicletracker.ui.login.fieldErrorRes
+import org.onebusaway.vehicletracker.ui.login.serverLabel
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import org.onebusaway.vehicletracker.ui.routes.RouteItem
 import org.onebusaway.vehicletracker.ui.routes.RoutesUiState
@@ -83,42 +90,203 @@ class ViewModelsTest {
         if (!condition()) fail("Timed out after ${timeoutMs}ms waiting for: $description")
     }
 
-    @Test fun `login rejects blank fields without calling network`() = runTest(dispatcher) {
-        val sessionStore = FakeSessionStore()
-        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
-        vm.onServerUrlChange(""); vm.onEmailChange(""); vm.onPasswordChange("")
-        var succeeded = false
-        vm.onLogin { succeeded = true }
-        dispatcher.scheduler.advanceUntilIdle()
-        assertTrue(!succeeded)
-        assertEquals(LoginError.OTHER, vm.uiState.value.error)
+    // --- Sign in ---
+
+    private fun loginViewModel(sessionStore: SessionStore = FakeSessionStore()) =
+        LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
+
+    private fun LoginViewModel.fill(server: String, email: String, password: String) {
+        this.server.setTextAndPlaceCursorAtEnd(server)
+        this.email.setTextAndPlaceCursorAtEnd(email)
+        this.password.setTextAndPlaceCursorAtEnd(password)
     }
 
-    @Test fun `login success invokes callback`() = runTest(dispatcher) {
+    @Test fun `sign in names the first empty field and calls no server`() = runTest(dispatcher) {
+        val cases = listOf(
+            Triple("", "", "") to LoginField.SERVER,
+            Triple("http://localhost/", "", "pw") to LoginField.EMAIL,
+            Triple("http://localhost/", "d@example.com", " ") to LoginField.PASSWORD,
+        )
+        for ((fields, missing) in cases) {
+            val vm = loginViewModel()
+            dispatcher.scheduler.advanceUntilIdle()
+            vm.fill(fields.first, fields.second, fields.third)
+            var succeeded = false
+            vm.onSignIn { succeeded = true }
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertFalse(succeeded)
+            assertEquals("for $fields", LoginError.MissingField(missing), vm.uiState.value.error)
+            assertFalse(vm.uiState.value.loading)
+        }
+    }
+
+    @Test fun `sign in succeeds and calls back`() = runTest(dispatcher) {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
-        val sessionStore = FakeSessionStore()
-        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
-        vm.onServerUrlChange(server.url("/").toString())
-        vm.onEmailChange("d@example.com"); vm.onPasswordChange("pw")
+        val vm = loginViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill(server.url("/").toString(), "d@example.com", "pw")
         var succeeded = false
-        vm.onLogin { succeeded = true }
-        awaitCondition(description = "login onSuccess callback invoked") { succeeded }
-        assertTrue(succeeded)
+        vm.onSignIn { succeeded = true }
+        assertTrue("signing in while the request is out", vm.uiState.value.loading)
+        awaitCondition(description = "sign-in callback invoked") { succeeded }
+        assertFalse(vm.uiState.value.loading)
+        assertNull(vm.uiState.value.error)
         server.shutdown()
     }
 
-    @Test fun `login prefills server url from session store`() = runTest(dispatcher) {
+    @Test fun `a second press while signing in sends nothing more`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
+        val vm = loginViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill(server.url("/").toString(), "d@example.com", "pw")
+        var successes = 0
+        vm.onSignIn { successes++ }
+        vm.onSignIn { successes++ }
+        awaitCondition(description = "sign-in callback invoked") { successes > 0 }
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, successes)
+        assertEquals(1, server.requestCount)
+        server.shutdown()
+    }
+
+    private fun failedSignIn(response: MockResponse): LoginUiState {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(response)
+        try {
+            val vm = loginViewModel()
+            dispatcher.scheduler.advanceUntilIdle()
+            vm.fill(server.url("/").toString(), "d@example.com", "pw")
+            vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+            awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+            assertFalse(vm.uiState.value.loading)
+            return vm.uiState.value
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test fun `a refused password is the password's error`() = runTest(dispatcher) {
+        val state = failedSignIn(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
+        assertEquals(LoginError.InvalidCredentials, state.error)
+    }
+
+    @Test fun `a server error is not blamed on the fields`() = runTest(dispatcher) {
+        // Before, a 500 said "Enter a server URL, email, and password." with every field filled in.
+        val state = failedSignIn(MockResponse().setResponseCode(500))
+        assertEquals(LoginError.ServerError, state.error)
+    }
+
+    @Test fun `no answer is unreachable and opens the server field`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        val url = server.url("/").toString()
+        // A returning driver, whose server is a quiet line until something is wrong with it.
+        val vm = loginViewModel(FakeSessionStore().apply { state.value = Session(serverUrl = url, token = null, issuedAtEpochSec = null, email = "d@example.com") })
+        dispatcher.scheduler.advanceUntilIdle()
+        require(!vm.uiState.value.showsServerField)
+        vm.password.setTextAndPlaceCursorAtEnd("pw")
+
+        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+        assertEquals(LoginError.Unreachable(url), vm.uiState.value.error)
+        assertTrue("the error goes under the server field, so it shows", vm.uiState.value.showsServerField)
+        server.shutdown()
+    }
+
+    @Test fun `an address that is not http is unreachable without asking anyone`() = runTest(dispatcher) {
+        val vm = loginViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill("tracker.example.org", "d@example.com", "pw")
+        vm.onSignIn { fail("there is no server to sign in to") }
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(LoginError.Unreachable("tracker.example.org"), vm.uiState.value.error)
+        assertFalse(vm.uiState.value.loading)
+    }
+
+    @Test fun `typing clears the error`() = runTest(dispatcher) {
+        val vm = loginViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.onSignIn { }
+        assertEquals(LoginError.MissingField(LoginField.SERVER), vm.uiState.value.error)
+
+        vm.onEdited()
+
+        assertNull(vm.uiState.value.error)
+    }
+
+    @Test fun `a first sign-in shows the server field`() = runTest(dispatcher) {
+        val vm = loginViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(vm.uiState.value.savedServer)
+        assertTrue(vm.uiState.value.showsServerField)
+        assertEquals("", vm.server.text.toString())
+        assertEquals("", vm.email.text.toString())
+    }
+
+    @Test fun `a returning driver gets the server as a line and the email filled in`() = runTest(dispatcher) {
         val sessionStore = FakeSessionStore().apply {
-            state.value = Session("https://saved.example.com", null, null)
+            state.value = Session(serverUrl = "https://saved.example.com", token = null, issuedAtEpochSec = null, email = "maria@metro.example")
         }
-        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
-        vm.uiState.test {
-            var state = awaitItem()
-            while (state.serverUrl.isEmpty()) state = awaitItem()
-            assertEquals("https://saved.example.com", state.serverUrl)
-            cancelAndIgnoreRemainingEvents()
+        val vm = loginViewModel(sessionStore)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://saved.example.com", vm.uiState.value.savedServer)
+        assertFalse(vm.uiState.value.showsServerField)
+        assertEquals("https://saved.example.com", vm.server.text.toString())
+        assertEquals("maria@metro.example", vm.email.text.toString())
+        assertEquals("", vm.password.text.toString())
+
+        vm.onChangeServer()
+
+        assertTrue(vm.uiState.value.showsServerField)
+    }
+
+    @Test fun `filling in from the last sign-in keeps what the driver already typed`() = runTest(dispatcher) {
+        val sessionStore = FakeSessionStore().apply {
+            state.value = Session(serverUrl = "https://saved.example.com", token = null, issuedAtEpochSec = null, email = "maria@metro.example")
         }
+        val vm = loginViewModel(sessionStore)
+        vm.fill("https://typed.example.com", "typed@example.com", "")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://typed.example.com", vm.server.text.toString())
+        assertEquals("typed@example.com", vm.email.text.toString())
+    }
+
+    @Test fun `the server reads as its host, with a port only when it is not the usual one`() {
+        assertEquals("tracker.example.org", serverLabel("https://tracker.example.org/"))
+        assertEquals("tracker.example.org", serverLabel("http://tracker.example.org:80"))
+        assertEquals("10.0.2.2:8081", serverLabel("http://10.0.2.2:8081"))
+        assertEquals("tracker.example.org", serverLabel(" tracker.example.org "))
+    }
+
+    @Test fun `each error shows under the field it is about, or above the button`() {
+        for (field in LoginField.entries) {
+            assertNull(fieldErrorRes(null, field))
+            assertNull(fieldErrorRes(LoginError.ServerError, field))
+        }
+        assertEquals(R.string.login_error_missing_server, fieldErrorRes(LoginError.MissingField(LoginField.SERVER), LoginField.SERVER))
+        assertEquals(R.string.login_error_missing_email, fieldErrorRes(LoginError.MissingField(LoginField.EMAIL), LoginField.EMAIL))
+        assertEquals(R.string.login_error_missing_password, fieldErrorRes(LoginError.MissingField(LoginField.PASSWORD), LoginField.PASSWORD))
+        assertNull(fieldErrorRes(LoginError.MissingField(LoginField.EMAIL), LoginField.PASSWORD))
+        assertEquals(R.string.login_error_invalid_credentials, fieldErrorRes(LoginError.InvalidCredentials, LoginField.PASSWORD))
+        assertNull(fieldErrorRes(LoginError.InvalidCredentials, LoginField.EMAIL))
+        assertEquals(R.string.login_error_check_address, fieldErrorRes(LoginError.Unreachable("x"), LoginField.SERVER))
+        assertNull(fieldErrorRes(LoginError.Unreachable("x"), LoginField.PASSWORD))
+
+        assertEquals(R.string.login_error_unreachable, bannerOf(LoginError.Unreachable("x"))?.text)
+        assertEquals(R.string.login_error_server, bannerOf(LoginError.ServerError)?.text)
+        assertNull(bannerOf(LoginError.InvalidCredentials))
+        assertNull(bannerOf(LoginError.MissingField(LoginField.EMAIL)))
+        assertNull(bannerOf(null))
     }
 
     // --- Launch: where the app lands, and whether a stored trip is still being reported ---
