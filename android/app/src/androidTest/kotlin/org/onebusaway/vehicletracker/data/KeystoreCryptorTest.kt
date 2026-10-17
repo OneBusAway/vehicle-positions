@@ -66,7 +66,7 @@ class KeystoreCryptorTest {
         val dataStore = PreferenceDataStoreFactory.create(scope = scope, produceFile = { file })
         val store = EncryptedSessionStore(dataStore, KeystoreCryptor())
 
-        store.saveLogin(SERVER, IssuedTokens(TOKEN, REFRESH_TOKEN, ISSUED_AT + 900, ISSUED_AT))
+        store.saveLogin(SERVER, "driver@transit.example.org", IssuedTokens(TOKEN, REFRESH_TOKEN, ISSUED_AT + 900, ISSUED_AT))
 
         val onDisk = file.readText(Charsets.ISO_8859_1)
         assertFalse("the token appears verbatim in $file", onDisk.contains(TOKEN))

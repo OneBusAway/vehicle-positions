@@ -49,13 +49,25 @@ class FakeMapFileSource : MapFileSource {
 }
 
 class FakeSessionStore : SessionStore {
-    val state = MutableStateFlow(Session(null, null, null))
+    val state = MutableStateFlow(Session(serverUrl = null, token = null, issuedAtEpochSec = null))
     override val session = state
-    override suspend fun saveLogin(serverUrl: String, tokens: IssuedTokens) {
-        state.value = Session(serverUrl, tokens.accessToken, tokens.issuedAtEpochSec, tokens.refreshToken, tokens.accessExpiresAtEpochSec)
+    override suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens) {
+        state.value = Session(
+            serverUrl = serverUrl,
+            token = tokens.accessToken,
+            issuedAtEpochSec = tokens.issuedAtEpochSec,
+            refreshToken = tokens.refreshToken,
+            accessExpiresAtEpochSec = tokens.accessExpiresAtEpochSec,
+            email = email,
+        )
     }
     override suspend fun saveRefreshed(tokens: IssuedTokens) {
-        state.value = Session(state.value.serverUrl, tokens.accessToken, tokens.issuedAtEpochSec, tokens.refreshToken, tokens.accessExpiresAtEpochSec)
+        state.value = state.value.copy(
+            token = tokens.accessToken,
+            issuedAtEpochSec = tokens.issuedAtEpochSec,
+            refreshToken = tokens.refreshToken,
+            accessExpiresAtEpochSec = tokens.accessExpiresAtEpochSec,
+        )
     }
     override suspend fun dropRefreshToken() { state.value = state.value.copy(refreshToken = null) }
     override suspend fun clearToken() {
