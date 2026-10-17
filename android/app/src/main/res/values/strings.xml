@@ -168,7 +168,7 @@
     </plurals>
     <string name="tracking_end_trip_dialog_confirm">End trip</string>
     <string name="tracking_end_trip_dialog_cancel">Keep going</string>
-    <!-- The server did not confirm the end. Also on the resume prompt, after End Shift. -->
+    <!-- The server did not confirm the end. The last two are the resume prompt's buttons then, too. -->
     <string name="tracking_end_trip_error_title">Trip not ended yet</string>
     <string name="tracking_end_trip_error_message">The server didn\'t confirm the end. Check your signal and try again, or stop reporting on this phone now.</string>
     <string name="tracking_end_trip_error_retry">Try again</string>
@@ -235,17 +235,28 @@
     <string name="tracking_map_needs_https">Map link must use https, tell your agency</string>
 
     <!-- Resume prompt: a trip was stored but its tracking service was not running at launch -->
-    <string name="resume_title">Resume Shift?</string>
-    <string name="resume_message">An incomplete shift with Vehicle %1$s was detected. The app was closed while tracking was active.</string>
+    <string name="resume_title">Resume your trip?</string>
+    <string name="resume_message">The app closed while this trip was running. Reports are paused until you choose.</string>
+    <!-- In place of where the run goes, for a trip the phone has no schedule for. The route's id. -->
     <string name="resume_route">Route %1$s</string>
+    <!-- The run's first departure in the agency's zone, e.g. "6:58 AM run". -->
+    <string name="resume_run">%1$s run</string>
+    <string name="resume_bus">Bus %1$s</string>
+    <!-- Whole minutes since the trip began, then the time it began, e.g. "Started 23 min ago, at 6:58 AM". -->
     <plurals name="resume_started_minutes_ago">
-        <item quantity="one">Started %1$d min ago</item>
-        <item quantity="other">Started %1$d min ago</item>
+        <item quantity="one">Started %1$d min ago, at %2$s</item>
+        <item quantity="other">Started %1$d min ago, at %2$s</item>
     </plurals>
-    <!-- Hours, then minutes past the hour, e.g. "Started 2 h 5 min ago". -->
-    <string name="resume_started_hours_ago">Started %1$d h %2$d min ago</string>
-    <string name="resume_button">Resume</string>
-    <string name="resume_end_shift_button">End Shift</string>
+    <!-- Hours, then minutes past the hour, then the time it began, e.g. "Started 2 h 5 min ago, at 6:58 AM". -->
+    <string name="resume_started_hours_ago">Started %1$d h %2$d min ago, at %3$s</string>
+    <string name="resume_button">Resume trip</string>
+    <string name="resume_end_trip_button">End trip</string>
+    <string name="resume_ending">Ending trip</string>
+    <string name="resume_loading">Loading your trip</string>
+    <!-- Above the buttons once the server did not confirm the end; they then say Try again and End on this phone. -->
+    <string name="resume_end_failed">The server didn\'t confirm the trip ended. Try again, or end it on this phone only.</string>
+    <!-- Goes back from a failed end to Resume and End trip, for a driver who tapped End trip by mistake. -->
+    <string name="resume_end_failed_back">Don\'t end the trip</string>
 
     <!-- Tracking notification -->
     <string name="tracking_notification_channel_name">Trip Tracking</string>

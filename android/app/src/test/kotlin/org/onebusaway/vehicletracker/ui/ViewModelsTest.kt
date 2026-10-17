@@ -50,6 +50,7 @@ import org.onebusaway.vehicletracker.ui.runs.RunHighlight
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.RunsViewModel
 import org.onebusaway.vehicletracker.ui.runs.TripError
+import org.onebusaway.vehicletracker.ui.resume.ResumeCard
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TrackingViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TripEnder
@@ -59,7 +60,9 @@ import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 import java.io.File
 import java.io.IOException
 import java.time.Duration
+import java.time.Instant
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -1283,6 +1286,7 @@ class ViewModelsTest {
      */
     private fun withResumeShiftViewModel(
         endResponses: List<MockResponse> = listOf(MockResponse().setBody("""{"status":"trip ended"}""")),
+        geometry: TripGeometry? = TripFixtures.t1,
         block: (ResumeFixture) -> Unit,
     ) {
         val server = MockWebServer().apply { start() }
@@ -1294,25 +1298,54 @@ class ViewModelsTest {
                 ApiFactory { "jwt" }.create(server.url("/").toString())
             }
             val tripState = FakeTripStateStore().apply { tripState.value = t1Trip }
-            val geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1 }
+            val geometryStore = FakeTripGeometryStore().apply { stored = geometry }
             val serviceController = FakeServiceController()
             val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), FakeSessionStore(), clock = { 0L })
             val tripEnder = TripEnder(tripRepository, tripState, geometryStore, serviceController, signedInAs("2"))
             val now = t1Trip.startedAtEpochSec + 2 * 3600 + 5 * 60
-            val vm = ResumeShiftViewModel(tripState, serviceController, tripEnder, clock = { now })
-            awaitCondition(description = "stored trip loaded") { vm.uiState.value.trip != null }
+            val vm = ResumeShiftViewModel(tripState, geometryStore, serviceController, tripEnder, clock = { now }, phoneZone = ZoneOffset.UTC)
+            awaitCondition(description = "stored trip loaded") { vm.uiState.value.card != null }
             block(ResumeFixture(vm, server, apiCalls, tripState, geometryStore, serviceController))
         } finally {
             server.shutdown()
         }
     }
 
-    @Test fun exposesVehicleRouteAndElapsed() = runTest(dispatcher) {
-        withResumeShiftViewModel { f ->
-            val state = f.vm.uiState.value
-            assertEquals("bus-1", state.trip?.vehicleId)
-            assertEquals("R1", state.trip?.routeId)
-            assertEquals(2 * 3600L + 5 * 60, state.startedAgoSec)
+    @Test fun showsTheTripAsTheDriverKnowsIt() = runTest(dispatcher) {
+        val geometry = TripFixtures.t1.copy(routeShortName = "7", routeColor = "FDB71A", routeTextColor = "000000", headsign = "North")
+        withResumeShiftViewModel(geometry = geometry) { f ->
+            assertEquals(
+                ResumeCard(
+                    route = RouteBadgeModel.of("7", "FDB71A", "000000"),
+                    headsign = "North",
+                    runStartsAt = TripFixtures.t1.stops.first().departureAt,
+                    vehicleId = "bus-1",
+                    startedAt = Instant.ofEpochSecond(t1Trip.startedAtEpochSec),
+                    zone = TripFixtures.t1.timezone,
+                ),
+                f.vm.uiState.value.card,
+            )
+            assertEquals(t1Trip.startedAtEpochSec + 2 * 3600 + 5 * 60, f.vm.nowEpochSec())
+        }
+    }
+
+    @Test fun aTripStoredWithoutItsRouteNameOrHeadsignIsNamedByItsRouteId() = runTest(dispatcher) {
+        // As a build before the trip bar stored it: the schedule, but "" for the route's name and the headsign.
+        withResumeShiftViewModel(geometry = TripFixtures.t1) { f ->
+            val card = f.vm.uiState.value.card
+            assertEquals(RouteBadgeModel("R1", null, null), card?.route)
+            assertNull(card?.headsign)
+            assertEquals(TripFixtures.t1.stops.first().departureAt, card?.runStartsAt)
+        }
+    }
+
+    @Test fun aTripWithNoScheduleOnThePhoneIsNamedByItsRouteId() = runTest(dispatcher) {
+        withResumeShiftViewModel(geometry = null) { f ->
+            val card = f.vm.uiState.value.card
+            assertEquals(RouteBadgeModel("R1", null, null), card?.route)
+            assertNull(card?.headsign)
+            assertNull(card?.runStartsAt)
+            assertEquals("its times are read on the phone's clock", ZoneOffset.UTC, card?.zone)
         }
     }
 
@@ -1371,6 +1404,22 @@ class ViewModelsTest {
             assertEquals(listOf(UnconfirmedEnd(t1Trip.tripDbId, "2")), f.tripState.unconfirmedEndsState.value)
             assertNull(f.geometryStore.stored)
             assertEquals(1, f.serviceController.stopCount)
+        }
+    }
+
+    @Test fun `a driver who did not mean to end goes back to Resume with the trip as it was`() = runTest(dispatcher) {
+        val refused = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)
+        withResumeShiftViewModel(endResponses = listOf(refused)) { f ->
+            f.vm.onEndShift { fail("an unconfirmed end must not leave the prompt") }
+            awaitCondition(description = "end failure surfaced") { f.vm.uiState.value.endTripError }
+
+            f.vm.dismissEndShiftError()
+            awaitCondition(description = "back to Resume") { !f.vm.uiState.value.endTripError }
+
+            assertEquals(t1Trip, f.tripState.tripState.value)
+            assertEquals(TripFixtures.t1, f.geometryStore.stored)
+            assertEquals(emptyList<UnconfirmedEnd>(), f.tripState.unconfirmedEndsState.value)
+            assertEquals(0, f.serviceController.stopCount)
         }
     }
 

@@ -329,9 +329,9 @@ then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
    adb shell am start -n org.onebusaway.vehicletracker/.MainActivity
    ```
 
-   The force-stop stopped the service too, so the app opens on the Resume Shift
-   prompt (Check 4b). Tap **Resume**, which needs no server. Then start the
-   server again as in step 1.
+   The force-stop stopped the service too, so the app opens on the **Resume
+   your trip?** prompt (Check 4b). Tap **Resume trip**, which needs no server.
+   Then start the server again as in step 1.
 
 4. With the loop still running, delete the stored geometry to stand in for a
    trip started by an older build, and relaunch:
@@ -342,7 +342,8 @@ then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
    adb shell am start -n org.onebusaway.vehicletracker/.MainActivity
    ```
 
-   Tap **Resume** on the prompt again.
+   Tap **Resume trip** on the prompt again. With no stored geometry, its card
+   names the route by its id, with no run time.
 
 5. End the trip, start `T1` again, and end that one too, listing the app's
    files while the second trip runs and after it ends:
@@ -363,7 +364,7 @@ then start `T1` as in Check 1 (it is badged **Next** until `$ST1`).
 - **The detour:** within a location update, `Off route · 150 m` in grey. It
   flips back to `On time` once the fixes are back on the line.
 - **Past ST2:** the next stop becomes `Stop ST3` with `$ST3`.
-- **Relaunched with the server down:** after **Resume**, the app is back on the
+- **Relaunched with the server down:** after **Resume trip**, the app is back on the
   Tracking screen with a dark "No connection" line under the status card. The
   card still judges every fix, and the distance to ST3 keeps counting down: the
   shape and schedule are on the phone, not refetched. Once the server is back
@@ -447,7 +448,7 @@ export MAP_PMTILES_URL=http://10.0.2.2:8092/smoke.pmtiles
 
 With `T1` started and the drive loop from Check 2b going, switch to another app
 and back, so the app asks the server for the map. Then turn on airplane mode,
-force-stop the app, open it again and resume the shift.
+force-stop the app, open it again and resume the trip.
 
 **Expected outcome:**
 
@@ -556,7 +557,7 @@ two-minute tokens, so leave `ACCESS_TOKEN_TTL` set.
 task removal (this is the point of running as a foreground service), and
 location fixes keep arriving at the server the whole time. Relaunching the
 app should rehydrate directly to the Tracking screen (active trip state is
-persisted), with **no** Resume Shift prompt: the service never stopped, so there
+persisted), with **no** Resume prompt: the service never stopped, so there
 is nothing to resume. A prompt here is a bug: it would interrupt every healthy
 shift whose driver reopens the app.
 
@@ -577,28 +578,32 @@ asks the driver instead of carrying on as if it were.
 2. Relaunch the app from the launcher.
 
 **Expected outcome:** a spinner for about two seconds (the app gives a service
-that the system is restarting that long to announce itself), then **Resume
-Shift?**: "An incomplete shift with Vehicle bus-1 was detected. The app was
-closed while tracking was active.", the route, how long ago the trip started,
-and a blue **Resume** and a red **End Shift** button. The service stays stopped
-while the prompt is up.
+that the system is restarting that long to announce itself), then **Resume your
+trip?**: "The app closed while this trip was running. Reports are paused until
+you choose.", and a card with the route's badge, where the run is headed, the
+run's start time, `Bus bus-1`, and how long ago the trip started and at what
+time. Under it, a green **Resume trip** button and an outlined **End trip**. The
+service stays stopped while the prompt is up.
 
-3. Tap **Resume**.
+3. Tap **Resume trip**.
 
 **Expected outcome:** the Tracking screen, with the trip duration still counted
 from the original start and the status card back. Location reports reach the
 server again, and there is **no** second `POST /api/v1/trips/start`: the trip
 was never ended on the server, so resuming does not start it again (a second
 start would be refused with a 409). Count the starts in the server log before
-tapping **Resume** and again after; the number does not change:
+tapping **Resume trip** and again after; the number does not change:
 
 ```bash
 grep -c '"path":"/api/v1/trips/start"' /tmp/vt-server.log
 ```
 
-**End Shift** on the same prompt is the other way out. It takes the same path as
+**End trip** on the same prompt is the other way out. It takes the same path as
 **End trip** in Check 5, so Check 5 covers it: to run it from here instead,
-force-stop and relaunch again and tap **End Shift**.
+force-stop and relaunch again and tap **End trip**. If the server does not
+confirm the end, the prompt says so above its buttons, which become **Try
+again** and **End on this phone**, with **Don't end the trip** (or Back) under
+them to go back to **Resume**.
 
 ### Check 5 — Ending the trip stops everything and the vehicle drops from the feed
 
@@ -606,7 +611,7 @@ force-stop and relaunch again and tap **End Shift**.
 2. Confirm in the dialog: **End this trip?**, which names route 1 and the run's
    start time and says how many reports were sent.
 
-**Expected outcome, immediately** (the same from **End Shift** on the resume
+**Expected outcome, immediately** (the same from **End trip** on the resume
 prompt):
 - `POST /api/v1/trips/end` in the server log, answered `200`.
 - The app navigates back to the start of the picker (the session token is
