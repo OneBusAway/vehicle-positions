@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
@@ -42,6 +41,7 @@ import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.loadFor
 import org.onebusaway.vehicletracker.engine.AdherenceTracker
+import org.onebusaway.vehicletracker.ui.routes.routeColorArgb
 import javax.inject.Inject
 
 private const val TAG = "LocationTrackingService"
@@ -129,7 +129,7 @@ class LocationTrackingService : Service() {
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
-            notification.buildActiveNotification(statusText(trackingRepository.state.value.problem)),
+            activeNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
 
@@ -178,8 +178,9 @@ class LocationTrackingService : Service() {
     }
 
     private fun observeTrackingState() {
+        // Posted when what it says changes, at most once a fix: not for each report sent.
         trackingRepository.state
-            .map { it.problem }
+            .map { notificationText(it, activeTrip) }
             .distinctUntilChanged()
             .onEach { postNotification() }
             .launchIn(scope)
@@ -191,8 +192,7 @@ class LocationTrackingService : Service() {
 
     private fun postNotification() {
         if (!locationUpdatesActive) return
-        val text = statusText(trackingRepository.state.value.problem)
-        notifyIfPermitted(notification.buildActiveNotification(text))
+        notifyIfPermitted(activeNotification())
     }
 
     /**
@@ -210,16 +210,11 @@ class LocationTrackingService : Service() {
         NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, update)
     }
 
-    private fun statusText(problem: TrackingProblem): String = getString(
-        when (problem) {
-            TrackingProblem.NONE -> R.string.tracking_status_connected
-            TrackingProblem.NO_NETWORK -> R.string.tracking_status_no_network
-            TrackingProblem.NO_GPS -> R.string.tracking_status_no_gps
-            TrackingProblem.AUTH_EXPIRED -> R.string.tracking_status_auth_expired
-            TrackingProblem.CLOCK_SKEW -> R.string.tracking_status_clock_skew
-            TrackingProblem.REPORTS_REFUSED -> R.string.tracking_status_reports_refused
-        },
-    )
+    private fun activeNotification(): Notification {
+        val state = trackingRepository.state.value
+        val routeColor = state.geometry?.routeColor?.let(::routeColorArgb)?.toInt()
+        return notification.buildActiveNotification(notificationText(state, activeTrip), routeColor)
+    }
 
     private fun stopTrackingWork() {
         if (locationUpdatesActive) {

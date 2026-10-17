@@ -125,13 +125,6 @@
     <string name="runs_error_other">Couldn\'t start the trip.</string>
 
     <!-- Tracking screen -->
-    <!-- The tracking notification's text. The screen says the same things in its own words, below. -->
-    <string name="tracking_status_connected">Tracking – Connected</string>
-    <string name="tracking_status_no_network">No connection</string>
-    <string name="tracking_status_no_gps">GPS unavailable</string>
-    <string name="tracking_status_clock_skew">Check device clock</string>
-    <string name="tracking_status_auth_expired">Session expired – log in again</string>
-    <string name="tracking_status_reports_refused">Reports refused – ask your dispatcher</string>
     <!-- The trip bar: the trip's running time, then how many reports have reached the server. -->
     <plurals name="tracking_bar_sent">
         <item quantity="one">%1$d sent</item>
@@ -261,11 +254,16 @@
     <!-- Goes back from a failed end to Resume and End trip, for a driver who tapped End trip by mistake. -->
     <string name="resume_end_failed_back">Don\'t end the trip</string>
 
-    <!-- Tracking notification -->
-    <string name="tracking_notification_channel_name">Trip Tracking</string>
-    <string name="tracking_notification_title">OBA Tracker is active</string>
-    <string name="tracking_notification_resume_title">Tap to resume tracking</string>
-    <string name="tracking_notification_resume_text">Location tracking paused. Open the app to resume.</string>
+    <!-- Tracking notification: the status card's words, with the route's short name, e.g. "Route 7 · On time". -->
+    <string name="tracking_notification_channel_name">Trip reporting</string>
+    <string name="tracking_notification_title">Route %1$s · %2$s</string>
+    <!-- The next stop, its time in the agency's zone, then the Reports row's word, e.g. "Next 3rd Ave & Seneca St · 7:18 AM · Reporting". -->
+    <string name="tracking_notification_next">Next %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Signed out. Open the app to sign in.</string>
+    <!-- The status card's problem line, "Reports refused" over "Ask your dispatcher", as one line. -->
+    <string name="tracking_notification_reports_refused">Reports refused. Ask your dispatcher.</string>
+    <string name="tracking_notification_resume_title">Reports paused</string>
+    <string name="tracking_notification_resume_text">Open the app to keep reporting.</string>
 
     <!-- The checklist before a trip, shown when the app is missing something it needs. The bus's fleet number. -->
     <string name="preflight_title">Before you start</string>
