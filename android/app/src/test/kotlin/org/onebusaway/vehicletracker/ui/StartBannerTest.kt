@@ -12,6 +12,8 @@ class StartBannerTest {
         val expected = mapOf(
             TripError.NOT_ASSIGNED to (R.string.runs_error_not_assigned to BannerAction.CHANGE_BUS),
             TripError.TRIP_ACTIVE to (R.string.runs_error_trip_active to null),
+            TripError.VEHICLE_BUSY to (R.string.runs_error_vehicle_busy to BannerAction.CHANGE_BUS),
+            TripError.VEHICLE_INACTIVE to (R.string.runs_error_vehicle_inactive to BannerAction.CHANGE_BUS),
             TripError.PREVIOUS_TRIP_NOT_ENDED to (R.string.runs_error_previous_trip_not_ended to BannerAction.TRY_AGAIN),
             TripError.NETWORK to (R.string.runs_error_network to BannerAction.TRY_AGAIN),
             TripError.NO_GEOMETRY to (R.string.runs_error_no_geometry to null),

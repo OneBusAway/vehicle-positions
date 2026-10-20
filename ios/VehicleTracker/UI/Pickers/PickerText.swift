@@ -262,6 +262,14 @@ nonisolated enum PickerText {
         String(localized: "You already have a trip running. End it before starting another.", comment: "Banner when the server refused a start because the driver already has a trip running.")
     }
 
+    static func vehicleBusy(_ vehicleID: String) -> String {
+        String(localized: "Another driver has a trip running on vehicle \(vehicleID). Pick another vehicle or ask your dispatcher.", comment: "Banner when the server refused a start because another driver has a trip running on the vehicle; the argument is the fleet number.")
+    }
+
+    static func vehicleInactive(_ vehicleID: String) -> String {
+        String(localized: "Vehicle \(vehicleID) is out of service. Pick another vehicle.", comment: "Banner when the server refused a start because the vehicle was taken out of service; the argument is the fleet number.")
+    }
+
     static var cannotReachServer: String {
         String(localized: "Can't reach the server. Check your connection.", comment: "Banner when a start could not reach the server.")
     }

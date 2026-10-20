@@ -461,6 +461,8 @@ data class StartBanner(@DrawableRes val icon: Int, @StringRes val text: Int, val
 internal fun startBannerOf(error: TripError): StartBanner = when (error) {
     TripError.NOT_ASSIGNED -> StartBanner(R.drawable.ic_no_transfer, R.string.runs_error_not_assigned, BannerAction.CHANGE_BUS)
     TripError.TRIP_ACTIVE -> StartBanner(R.drawable.ic_info, R.string.runs_error_trip_active, null)
+    TripError.VEHICLE_BUSY -> StartBanner(R.drawable.ic_directions_bus, R.string.runs_error_vehicle_busy, BannerAction.CHANGE_BUS)
+    TripError.VEHICLE_INACTIVE -> StartBanner(R.drawable.ic_no_transfer, R.string.runs_error_vehicle_inactive, BannerAction.CHANGE_BUS)
     TripError.PREVIOUS_TRIP_NOT_ENDED -> StartBanner(R.drawable.ic_sync_problem, R.string.runs_error_previous_trip_not_ended, BannerAction.TRY_AGAIN)
     TripError.NETWORK -> StartBanner(R.drawable.ic_cloud_off, R.string.runs_error_network, BannerAction.TRY_AGAIN)
     TripError.NO_GEOMETRY -> StartBanner(R.drawable.ic_wrong_location, R.string.runs_error_no_geometry, null)

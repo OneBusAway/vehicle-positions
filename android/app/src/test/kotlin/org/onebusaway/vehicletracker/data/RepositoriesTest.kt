@@ -207,6 +207,24 @@ class RepositoriesTest {
         server.shutdown()
     }
 
+    @Test fun `trip start 409 is told apart by the server's error text`() = runTest {
+        val cases = listOf(
+            """{"error":"driver already has an active trip"}""" to ApiError.TripAlreadyActive,
+            """{"error":"vehicle already has an active trip"}""" to ApiError.VehicleBusy,
+            """{"error":"vehicle is inactive"}""" to ApiError.VehicleInactive,
+            "not json" to ApiError.TripAlreadyActive,
+            "" to ApiError.TripAlreadyActive,
+        )
+        val server = MockWebServer().apply { start() }
+        cases.forEach { (body, _) -> server.enqueue(MockResponse().setResponseCode(409).setBody(body)) }
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, FakeTripStateStore(), FakeVehiclePrefsStore(), FakeSessionStore(), clock = { 0L })
+
+        for ((body, expected) in cases) {
+            assertEquals("409 $body", expected, repo.start("bus-1", "5", "", "20260804").exceptionOrNull())
+        }
+        server.shutdown()
+    }
+
     @Test fun `trip end clears active trip`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody("""{"status":"trip ended"}"""))

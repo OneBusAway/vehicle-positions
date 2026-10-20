@@ -163,6 +163,8 @@
     <string name="runs_error_not_assigned">You\'re not assigned to vehicle %1$s.</string>
     <string name="runs_change_bus">Change vehicle</string>
     <string name="runs_error_trip_active">You already have a trip running. End it before starting another.</string>
+    <string name="runs_error_vehicle_busy">Another driver has a trip running on vehicle %1$s. Pick another vehicle or ask your dispatcher.</string>
+    <string name="runs_error_vehicle_inactive">Vehicle %1$s is out of service. Pick another vehicle.</string>
     <string name="runs_error_previous_trip_not_ended">Your previous trip could not be ended yet. Check your connection and try again.</string>
     <string name="runs_error_network">Can\'t reach the server. Check your connection.</string>
     <string name="runs_error_no_geometry">This run has no route or stops to follow. Pick another run.</string>

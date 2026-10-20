@@ -71,7 +71,7 @@ class TripRepository @Inject constructor(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Result.failure(mapHttpError(e))
+        Result.failure(mapStartTripError(e))
     }
 
     /** Sends this driver's pending ends while the token still works: sign-out is the last chance to. */
