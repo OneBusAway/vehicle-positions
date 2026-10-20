@@ -71,6 +71,10 @@ func handleCreateAssignment(store AssignmentCreator) http.HandlerFunc {
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "vehicle not found"})
 				return
 			}
+			if errors.Is(err, ErrVehicleInactive) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "vehicle is inactive"})
+				return
+			}
 			slog.Error("failed to create assignment", "user_id", req.UserID, "vehicle_id", req.VehicleID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return

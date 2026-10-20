@@ -1562,7 +1562,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: This driver is already assigned to this vehicle.
+          description: This driver is already assigned to this vehicle, or the vehicle is inactive.
           content:
             application/json:
               schema:
@@ -1700,7 +1700,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Driver already has an active trip.
+          description: |
+            The driver already has an active trip, another driver has an
+            active trip on this vehicle, or the vehicle is inactive.
           content:
             application/json:
               schema:

@@ -188,7 +188,7 @@ func main() {
 	var wg sync.WaitGroup
 	for i := 0; i < *numVehicles; i++ {
 		wg.Add(1)
-		vehicleID, routeID := simVehicle(i, scheduleRoutes)
+		vehicleID, routeID := simVehicle(runID, i, scheduleRoutes)
 		route := routes[i%len(routes)]
 		go func() {
 			defer wg.Done()
@@ -285,13 +285,15 @@ type createUserRequest struct {
 	Role     string `json:"role"`
 }
 
-// simVehicle names the i-th (0-based) simulated vehicle and the route it
-// drives, taken in turn from the schedule's route ids. The server refuses a
-// trip on a route its GTFS schedule does not have, and then every report whose
-// route is not the trip's, so the route is a real one; none at all when the
-// schedule has no routes.
-func simVehicle(i int, scheduleRoutes []string) (vehicleID, routeID string) {
-	vehicleID = fmt.Sprintf("sim-vehicle-%03d", i+1)
+// simVehicle names the i-th (0-based) simulated vehicle of a run and the route
+// it drives, taken in turn from the schedule's route ids. The run id is in the
+// vehicle id because a vehicle runs one trip at a time, and an earlier run's
+// trips are still active on its vehicles. The server refuses a trip on a route
+// its GTFS schedule does not have, and then every report whose route is not
+// the trip's, so the route is a real one; none at all when the schedule has
+// no routes.
+func simVehicle(runID string, i int, scheduleRoutes []string) (vehicleID, routeID string) {
+	vehicleID = fmt.Sprintf("sim-%s-%03d", runID, i+1)
 	if len(scheduleRoutes) > 0 {
 		routeID = scheduleRoutes[i%len(scheduleRoutes)]
 	}
@@ -342,7 +344,7 @@ func endTrips(client *http.Client, baseURL string, drivers []simDriver) {
 func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int, scheduleRoutes []string) ([]simDriver, error) {
 	drivers := make([]simDriver, 0, n)
 	for i := 0; i < n; i++ {
-		vehicleID, routeID := simVehicle(i, scheduleRoutes)
+		vehicleID, routeID := simVehicle(runID, i, scheduleRoutes)
 		email := fmt.Sprintf("sim-driver-%03d-%s@simulator.invalid", i+1, runID)
 		password, err := randomSecret()
 		if err != nil {
