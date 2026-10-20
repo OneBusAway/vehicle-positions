@@ -183,7 +183,7 @@ func main() {
 	var wg sync.WaitGroup
 	for i := 0; i < *numVehicles; i++ {
 		wg.Add(1)
-		vehicleID, routeID := simVehicle(i)
+		vehicleID, routeID := simVehicle(runID, i)
 		route := routes[i%len(routes)]
 		go func() {
 			defer wg.Done()
@@ -280,9 +280,11 @@ type createUserRequest struct {
 	Role     string `json:"role"`
 }
 
-// simVehicle names the i-th (0-based) simulated vehicle and the route it drives.
-func simVehicle(i int) (vehicleID, routeID string) {
-	return fmt.Sprintf("sim-vehicle-%03d", i+1), fmt.Sprintf("sim-route-%d", i%len(routes)+1)
+// simVehicle names the i-th (0-based) simulated vehicle of a run and the route
+// it drives. The run id is in the vehicle id because a vehicle runs one trip
+// at a time, and an earlier run's trips are still active on its vehicles.
+func simVehicle(runID string, i int) (vehicleID, routeID string) {
+	return fmt.Sprintf("sim-%s-%03d", runID, i+1), fmt.Sprintf("sim-route-%d", i%len(routes)+1)
 }
 
 // simDriver is one provisioned driver: the token its vehicle reports with, and
@@ -329,7 +331,7 @@ func endTrips(client *http.Client, baseURL string, drivers []simDriver) {
 func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]simDriver, error) {
 	drivers := make([]simDriver, 0, n)
 	for i := 0; i < n; i++ {
-		vehicleID, routeID := simVehicle(i)
+		vehicleID, routeID := simVehicle(runID, i)
 		email := fmt.Sprintf("sim-driver-%03d-%s@simulator.invalid", i+1, runID)
 		password, err := randomSecret()
 		if err != nil {

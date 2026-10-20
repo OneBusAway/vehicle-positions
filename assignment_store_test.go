@@ -449,3 +449,22 @@ func TestClassifyAssignmentError(t *testing.T) {
 		})
 	}
 }
+
+func TestStore_CreateAssignment_InactiveVehicle(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	t.Cleanup(func() { cleanupAssignmentTestData(t, store) })
+	cleanupAssignmentTestData(t, store)
+
+	userID := createTestUserForAssignment(t, store, "inactive-vehicle@test.com")
+	createTestVehicleForAssignment(t, store, "bus-retired")
+	require.NoError(t, store.DeactivateVehicle(ctx, "bus-retired"))
+
+	_, err := store.CreateAssignment(ctx, userID, "bus-retired")
+	assert.ErrorIs(t, err, ErrVehicleInactive)
+
+	var count int
+	require.NoError(t, store.pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM user_vehicles WHERE vehicle_id = $1", "bus-retired").Scan(&count))
+	assert.Zero(t, count)
+}

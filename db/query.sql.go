@@ -489,6 +489,22 @@ func (q *Queries) GetActiveTripByUser(ctx context.Context, userID int64) (Trip, 
 	return i, err
 }
 
+const getActiveTripByVehicle = `-- name: GetActiveTripByVehicle :one
+SELECT id, user_id FROM trips WHERE vehicle_id = $1 AND status = 'active'
+`
+
+type GetActiveTripByVehicleRow struct {
+	ID     int64
+	UserID int64
+}
+
+func (q *Queries) GetActiveTripByVehicle(ctx context.Context, vehicleID string) (GetActiveTripByVehicleRow, error) {
+	row := q.db.QueryRow(ctx, getActiveTripByVehicle, vehicleID)
+	var i GetActiveTripByVehicleRow
+	err := row.Scan(&i.ID, &i.UserID)
+	return i, err
+}
+
 const getGTFSFeedCache = `-- name: GetGTFSFeedCache :one
 SELECT source, body, fetched_at FROM gtfs_feed_cache WHERE id = 1
 `
@@ -837,6 +853,20 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+const getVehicleActiveForShare = `-- name: GetVehicleActiveForShare :one
+SELECT active FROM vehicles WHERE id = $1 FOR SHARE
+`
+
+// FOR SHARE holds off a concurrent deactivation until the caller's
+// transaction commits, so a trip or assignment never lands on a vehicle that
+// was deactivated while it was being checked.
+func (q *Queries) GetVehicleActiveForShare(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, getVehicleActiveForShare, id)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
+}
+
 const getVehicleByID = `-- name: GetVehicleByID :one
 SELECT id, label, agency_tag, active, created_at, updated_at
 FROM vehicles
@@ -1020,8 +1050,8 @@ type ListActiveTripsByVehicleRow struct {
 	DriverName string
 }
 
-// Schema guarantees one active trip per USER, not per vehicle; newest active
-// trip per vehicle is the defined tiebreak (spec §4.8).
+// idx_trips_one_active_per_vehicle allows one active trip per vehicle; the
+// DISTINCT ON keeps the answer to one row per vehicle regardless.
 func (q *Queries) ListActiveTripsByVehicle(ctx context.Context) ([]ListActiveTripsByVehicleRow, error) {
 	rows, err := q.db.Query(ctx, listActiveTripsByVehicle)
 	if err != nil {

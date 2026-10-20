@@ -118,6 +118,15 @@ LEFT JOIN trips t
     ON t.vehicle_id = v.id AND t.user_id = sqlc.arg(user_id) AND t.status = 'active'
 WHERE v.id = sqlc.arg(vehicle_id);
 
+-- name: GetVehicleActiveForShare :one
+-- FOR SHARE holds off a concurrent deactivation until the caller's
+-- transaction commits, so a trip or assignment never lands on a vehicle that
+-- was deactivated while it was being checked.
+SELECT active FROM vehicles WHERE id = $1 FOR SHARE;
+
+-- name: GetActiveTripByVehicle :one
+SELECT id, user_id FROM trips WHERE vehicle_id = $1 AND status = 'active';
+
 -- name: GetActiveTripByUser :one
 SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
 FROM trips
@@ -214,8 +223,8 @@ ORDER BY lp.received_at ASC
 LIMIT 10000;
 
 -- name: ListActiveTripsByVehicle :many
--- Schema guarantees one active trip per USER, not per vehicle; newest active
--- trip per vehicle is the defined tiebreak (spec §4.8).
+-- idx_trips_one_active_per_vehicle allows one active trip per vehicle; the
+-- DISTINCT ON keeps the answer to one row per vehicle regardless.
 SELECT DISTINCT ON (t.vehicle_id)
        t.vehicle_id, t.id, t.route_id, t.gtfs_trip_id, t.user_id, u.name AS driver_name
 FROM trips t

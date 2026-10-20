@@ -503,7 +503,7 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 		t.Errorf("created %d vehicles and %d assignments, want 3 each", len(vehicles), len(assigned))
 	}
 	for i, tk := range tokens {
-		want, _ := simVehicle(i)
+		want, _ := simVehicle("runid123", i)
 		if trips[tk] != want {
 			t.Errorf("driver %d started a trip on %q, want %q", i+1, trips[tk], want)
 		}

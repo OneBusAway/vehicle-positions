@@ -415,3 +415,14 @@ func TestHandleEndTrip_InternalServerError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, decodeError(t, w), "failed to end trip")
 }
+
+func TestHandleStartTrip_VehicleBusyOrInactive(t *testing.T) {
+	for err, message := range map[error]string{
+		ErrVehicleBusy:     "vehicle already has an active trip",
+		ErrVehicleInactive: "vehicle is inactive",
+	} {
+		w := tripRequest(t, handleStartTrip(&mockTripStarter{err: err}), "42", StartTripRequest{VehicleID: "bus-1"})
+		assert.Equal(t, http.StatusConflict, w.Code)
+		assert.Equal(t, message, decodeError(t, w))
+	}
+}
