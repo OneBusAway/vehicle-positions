@@ -15,7 +15,10 @@ ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING;
 -- documented to carry what the driver sent: a seeded vehicle that came back
 -- without them would publish a narrower descriptor than it did before the
 -- restart, and a route-only vehicle would publish none at all. A deactivated
--- vehicle is left out, so a restart cannot put it back in the feed. The latest
+-- vehicle, or one with no active trip, is left out, so a restart cannot put it
+-- back in the feed: the tracker's record of a just-ended trip is in memory only,
+-- and seeding would otherwise republish its last report for a full staleness
+-- threshold. The latest
 -- is by the fix's own timestamp: a backlog a phone uploads after a dead zone
 -- (POST /api/v1/locations/history) is received after the live reports, and
 -- must not pass for the vehicle's latest position.
@@ -24,6 +27,7 @@ SELECT DISTINCT ON (vehicle_id)
 FROM location_points
 WHERE received_at > $1
   AND vehicle_id IN (SELECT id FROM vehicles WHERE active)
+  AND vehicle_id IN (SELECT vehicle_id FROM trips WHERE status = 'active')
 ORDER BY vehicle_id, timestamp DESC, received_at DESC;
 
 -- name: ListUsers :many
@@ -143,10 +147,11 @@ INSERT INTO trips (user_id, vehicle_id, route_id, gtfs_trip_id)
 VALUES ($1, $2, $3, $4)
 RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at;
 
--- name: EndTrip :execrows
+-- name: EndTrip :one
 UPDATE trips
 SET status = 'completed', end_time = NOW()
-WHERE id = $1 AND user_id = $2 AND status = 'active';
+WHERE id = $1 AND user_id = $2 AND status = 'active'
+RETURNING vehicle_id;
 
 -- name: EndTripByID :execrows
 UPDATE trips

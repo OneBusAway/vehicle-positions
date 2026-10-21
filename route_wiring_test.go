@@ -81,8 +81,8 @@ func (n *noopStore) ListAssignmentsByVehicle(_ context.Context, _ string) ([]Ass
 func (n *noopStore) StartTrip(_ context.Context, _ int64, _, _, _ string) (*TripResponse, error) {
 	return nil, nil
 }
-func (n *noopStore) EndTrip(_ context.Context, _, _ int64) error {
-	return nil
+func (n *noopStore) EndTrip(_ context.Context, _, _ int64) (string, error) {
+	return "", nil
 }
 
 // EndTripByID reports no such trip, so TestAdminEndTripRoute_Registered can
