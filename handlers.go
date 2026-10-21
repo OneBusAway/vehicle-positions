@@ -53,6 +53,13 @@ var vehicleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 const maxTimestampSkew = 5 * time.Minute
 
 func (r *LocationReport) validate() error {
+	return r.validateWithin(maxTimestampSkew)
+}
+
+// validateWithin is validate with the timestamp allowed up to maxAge in the
+// past. A realtime report gets maxTimestampSkew either way; a history upload
+// (handlePostLocationHistory) is allowed to be older.
+func (r *LocationReport) validateWithin(maxAge time.Duration) error {
 	if r.VehicleID == "" {
 		return fmt.Errorf("vehicle_id is required")
 	}
@@ -75,8 +82,14 @@ func (r *LocationReport) validate() error {
 		return fmt.Errorf("timestamp must be positive")
 	}
 	now := time.Now().Unix()
-	if r.Timestamp < now-int64(maxTimestampSkew.Seconds()) || r.Timestamp > now+int64(maxTimestampSkew.Seconds()) {
+	if r.Timestamp > now+int64(maxTimestampSkew.Seconds()) {
 		return fmt.Errorf("timestamp must be within %d minutes of server time", int(maxTimestampSkew.Minutes()))
+	}
+	if r.Timestamp < now-int64(maxAge.Seconds()) {
+		if maxAge == maxTimestampSkew {
+			return fmt.Errorf("timestamp must be within %d minutes of server time", int(maxTimestampSkew.Minutes()))
+		}
+		return fmt.Errorf("timestamp must be within %s of server time", maxAge)
 	}
 	if r.Bearing != nil && (*r.Bearing < 0 || *r.Bearing > 360) {
 		return fmt.Errorf("bearing must be between 0 and 360 (inclusive)")

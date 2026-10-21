@@ -227,6 +227,68 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/locations/history:
+    post:
+      tags: [locations]
+      summary: Upload fixes recorded while offline
+      description: |
+        Stores up to 500 fixes a driver's phone recorded while it could not
+        reach the server, in location history only: they appear in trip
+        playback and location history, never in the GTFS-RT feed. A fix may be
+        up to 24 hours old; every other field is validated as in
+        `POST /api/v1/locations`. A fix that fails validation is skipped and
+        counted in `invalid` rather than refusing the batch. A fix already
+        stored (the same vehicle, driver and timestamp), as when an upload is
+        retried after its reply was lost, is not stored again and is counted in
+        neither. The driver must be assigned to `vehicle_id`. Uploads are
+        rate-limited per driver (a burst of 3, then one per 5 seconds). Request
+        bodies are capped at 1 MiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationHistoryRequest'
+      responses:
+        '201':
+          description: The batch was processed. The client can discard it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [saved, invalid]
+                properties:
+                  saved:
+                    type: integer
+                    description: Fixes newly stored.
+                  invalid:
+                    type: integer
+                    description: Fixes that failed validation and were skipped.
+        '400':
+          description: Invalid JSON, an empty or oversized batch, or an invalid `vehicle_id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Caller lacks the driver role, or is not assigned to this vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          description: Too many history uploads from this driver.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/auth/logout:
     post:
       tags: [auth]
@@ -1944,6 +2006,46 @@ components:
           description: |
             The `refresh_token` from the most recent login or refresh response.
             Each one works once.
+
+    LocationHistoryRequest:
+      type: object
+      additionalProperties: false
+      required: [vehicle_id, points]
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        points:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/HistoryPoint'
+
+    HistoryPoint:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude, timestamp]
+      description: One fix in a history upload; the fields mean what they mean in LocationReport.
+      properties:
+        trip_id:
+          type: string
+        route_id:
+          type: string
+        start_date:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        bearing:
+          type: number
+        speed:
+          type: number
+        accuracy:
+          type: number
+        timestamp:
+          type: integer
+          format: int64
 
     LocationReport:
       type: object

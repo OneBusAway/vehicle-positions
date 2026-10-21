@@ -34,6 +34,7 @@ import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.EncryptedSessionStore
 import org.onebusaway.vehicletracker.data.FakeCryptor
+import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FakeSessionStore
 import org.onebusaway.vehicletracker.data.IssuedTokens
 import org.onebusaway.vehicletracker.data.Session
@@ -195,7 +196,7 @@ class TokenRefresherTest {
     @Test fun `a wrong password with a session stored sends no token and refreshes nothing`() = runTest {
         val holder = holder()
         holder.api() // seeds the cached copy with a1, the token AuthInterceptor would otherwise send
-        val auth = AuthRepository(sessions, holder.apiFactory, clock = { NOW })
+        val auth = AuthRepository(sessions, holder.apiFactory, FakeOfflineFixQueue(), clock = { NOW })
 
         val result = auth.login(serverUrl, "d@example.com", "wrong")
 
