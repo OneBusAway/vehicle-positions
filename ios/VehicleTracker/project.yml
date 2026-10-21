@@ -47,14 +47,16 @@ targets:
             "" | https://*) ;;
             *) echo "error: DEFAULT_SERVER_URL must be an https:// address, or empty for no default (got \"$DEFAULT_SERVER_URL\")"; exit 1 ;;
           esac
-    entitlements:
-      path: VehicleTracker.entitlements
-      properties:
-        com.apple.developer.carplay-maps: true
+    # Team, bundle id, display name and CarPlay come from here, so an agency can
+    # set them without editing this file (docs/deployment.md §14). The
+    # entitlements file is chosen there too: it carries only the CarPlay one.
+    configFiles:
+      Debug: Config/Agency.xcconfig
+      Release: Config/Agency.xcconfig
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: OBA Vehicle Tracker
+        CFBundleDisplayName: $(APP_DISPLAY_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:
@@ -78,7 +80,6 @@ targets:
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.onebusaway.vehicletracker
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

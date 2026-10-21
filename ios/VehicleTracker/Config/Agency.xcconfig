@@ -1,0 +1,35 @@
+// The settings an agency changes to build and sign its own copy of the app
+// (docs/deployment.md §14). Do not edit them here: put your values in
+// Agency.local.xcconfig beside this file. It is git-ignored, so `git pull` and
+// `xcodegen generate` never overwrite it. For example:
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   PRODUCT_BUNDLE_IDENTIFIER = org.example.transit.tracker
+//   APP_DISPLAY_NAME = Example Transit Tracker
+//   CARPLAY_ENABLED = NO
+//   DEFAULT_SERVER_URL = https:/$()/tracker.example.org
+
+// Your Apple Developer team ID (developer.apple.com → Membership). Empty
+// builds for the simulator only.
+DEVELOPMENT_TEAM =
+
+// Must be unique to your team on the App Store.
+PRODUCT_BUNDLE_IDENTIFIER = org.onebusaway.vehicletracker
+
+// The name under the icon on the home screen.
+APP_DISPLAY_NAME = OBA Vehicle Tracker
+
+// The server the sign-in screen starts on (docs/deployment.md, "Setting the
+// server for drivers"). Empty for none; anything but https:// fails the build.
+// In an xcconfig, write "//" as "/$()/", or the rest of the line is a comment.
+DEFAULT_SERVER_URL =
+
+// YES signs the app with Apple's CarPlay navigation entitlement, which Apple
+// grants to each team on request; a team without it cannot sign a device build
+// or an archive. NO builds without CarPlay: the phone app is unchanged.
+CARPLAY_ENABLED = YES
+CARPLAY_ENTITLEMENTS_YES = VehicleTracker.entitlements
+CARPLAY_ENTITLEMENTS_NO =
+CODE_SIGN_ENTITLEMENTS = $(CARPLAY_ENTITLEMENTS_$(CARPLAY_ENABLED))
+
+#include? "Agency.local.xcconfig"

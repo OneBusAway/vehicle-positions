@@ -841,11 +841,14 @@ ls app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 JDK 17 is what CI uses (`.github/workflows/android.yml`), and the Gradle build
-targets Java 17, so build with a JDK 17 toolchain. The output is
-**unsigned**: `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
-`android/app/build.gradle.kts` enables minification for the release build type
-but defines no `signingConfig`, so signing is the agency's job. Android will not
-install an unsigned APK.
+targets Java 17, so build with a JDK 17 toolchain. Without a keystore the output
+is **unsigned**: `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
+Android will not install an unsigned APK; sign it by hand (12.3), let Gradle sign
+it (12.4), or let CI publish a signed build (12.4).
+
+Every CI run on `main` also uploads that unsigned APK as the
+`app-release-unsigned` artifact of the **Android CI** workflow run, so you can
+download a build without a local toolchain and sign it yourself.
 
 The APK is about 21 MB, nearly all of it the map library. The street map is not
 in it: each phone downloads your map file (section 12.6). The release build
@@ -894,42 +897,41 @@ export BT="$ANDROID_HOME/build-tools/36.0.0"
 Align before signing, not after: rewriting the archive afterwards invalidates
 the signature.
 
-### 12.4 Or let Gradle sign it
+### 12.4 Or let Gradle, or CI, sign it
 
-If you build releases often, add a signing config that is used only when the
-keystore is available, so the repository's CI (which has no keystore) keeps
-building as it does today. In `android/app/build.gradle.kts`:
+`android/app/build.gradle.kts` signs the release build when it is given a
+keystore through four environment variables, and builds it unsigned otherwise:
 
-```kotlin
-android {
-    val keystorePath = System.getenv("ANDROID_KEYSTORE")
-
-    signingConfigs {
-        if (keystorePath != null) {
-            create("release") {
-                storeFile = file(keystorePath)
-                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-            }
-        }
-    }
-
-    buildTypes {
-        release {
-            isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release")
-        }
-    }
-}
+```bash
+export ANDROID_KEYSTORE=~/vehicle-tracker-release.jks
+export ANDROID_KEYSTORE_PASSWORD=...
+export ANDROID_KEY_ALIAS=vehicle-tracker
+export ANDROID_KEY_PASSWORD=...
+./gradlew :app:assembleRelease -PversionCode=12 -PversionName=1.2.0
 ```
 
-With the four `ANDROID_*` variables exported, `./gradlew :app:assembleRelease`
-writes a signed `app-release.apk` to the same directory; without them the build
-still produces `app-release-unsigned.apk`. Never commit the keystore or its
+That writes a signed `app-release.apk`. Never commit the keystore or its
 passwords — pass them through the environment or a secrets store. Verify the
 result with `apksigner verify --print-certs` before you hand the APK out.
+
+**Publishing from CI.** In your fork or copy of the repository, add four
+repository secrets (**Settings → Secrets and variables → Actions**):
+`ANDROID_KEYSTORE_BASE64` (the output of `base64 -i vehicle-tracker-release.jks`),
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`.
+Then push a tag:
+
+```bash
+git tag android-v1.2.0
+git push origin android-v1.2.0
+```
+
+The **Android release** workflow (`.github/workflows/android-release.yml`)
+builds the APK signed with your key, versioned `1.2.0` with the workflow's run
+number as its `versionCode`, checks the signature, and attaches
+`vehicle-tracker-1.2.0.apk` to a GitHub Release named after the tag. To build
+your server's address into it (section 13.2), add a repository variable (the
+**Variables** tab beside the secrets) named `DEFAULT_SERVER_URL`, such as
+`https://tracker.example.org`. Without it, Sign in starts empty.
 
 ### 12.5 Get it onto driver phones
 
@@ -950,10 +952,13 @@ Most agencies deploying this have no Play Store presence, so sideload:
   install unknown apps; the driver grants it once under
   **Settings → Apps → Special app access → Install unknown apps**.
 
-Bump `versionCode` in `android/app/build.gradle.kts` for every build you hand
-out (it is `1` today). Android refuses to install an APK whose `versionCode` is
-lower than the installed one, and identical codes make it impossible to tell
-which build a driver is running when you are debugging a report from the field.
+Give every build you hand out a higher `versionCode`: pass
+`-PversionCode=<n>` (and `-PversionName=<x.y.z>`) to Gradle, or put the same
+keys in `~/.gradle/gradle.properties`; without them it is `1`. The release
+workflow uses its run number, which only goes up. Android refuses to install an
+APK whose `versionCode` is lower than the installed one, and identical codes
+make it impossible to tell which build a driver is running when you are
+debugging a report from the field.
 
 Then tell drivers three things: the server URL, their email, and their password.
 Section 13 covers giving them the server URL without typing it.
@@ -1087,8 +1092,8 @@ command you build or archive with:
 xcodebuild ... DEFAULT_SERVER_URL=https://tracker.example.org
 ```
 
-or set it under `settings.base` in `ios/VehicleTracker/project.yml` and run
-`xcodegen generate`. Anything but `https://` fails with "DEFAULT_SERVER_URL must
+or set it in `Agency.local.xcconfig` (section 14.1) and run `xcodegen
+generate`. Anything but `https://` fails with "DEFAULT_SERVER_URL must
 be an https:// address, or empty for no default". To check a build, `plutil
 -extract OBADefaultServerURL raw VehicleTracker.app/Info.plist` prints the
 address it carries.
@@ -1165,3 +1170,95 @@ The app doesn't use the link, and says why, when:
   `obavehicletracker` scheme, and the phone then picks which one opens the link,
   or on Android may ask the driver. The link carries only your public server
   address, so the worst case is a missed setup, not a leak.
+## 14. Distributing the iOS app
+
+The iOS driver app lives in [`ios/VehicleTracker`](../ios/VehicleTracker/) and,
+like the Android one, takes the server URL on its login screen, so one build
+serves any server (section 13 sets or builds in the address for drivers).
+Unlike Android there is no sideloading: every copy on a
+driver's iPhone has to be signed by an Apple Developer team, which means the
+agency needs its own team (the Apple Developer Program, or Apple Developer
+Enterprise Program for in-house apps), a Mac with Xcode 27 and
+`brew install xcodegen`.
+
+### 14.1 Make it your app
+
+The team, bundle identifier, app name and CarPlay switch are build settings in
+`ios/VehicleTracker/Config/Agency.xcconfig`. Do not edit that file: create
+`ios/VehicleTracker/Config/Agency.local.xcconfig` beside it with your values.
+It is git-ignored, so updates and `xcodegen generate` never overwrite it.
+
+```
+DEVELOPMENT_TEAM = ABCDE12345
+PRODUCT_BUNDLE_IDENTIFIER = org.example.transit.tracker
+APP_DISPLAY_NAME = Example Transit Tracker
+CARPLAY_ENABLED = NO
+DEFAULT_SERVER_URL = https:/$()/tracker.example.org
+```
+
+- `DEVELOPMENT_TEAM` is your team ID, under **Membership** on
+  developer.apple.com.
+- `PRODUCT_BUNDLE_IDENTIFIER` must be unique to your team; register it as an
+  App ID (Certificates, Identifiers & Profiles) if Xcode does not do it for
+  you.
+- `CARPLAY_ENABLED = YES` signs the app with Apple's CarPlay navigation
+  entitlement, which Apple grants per team on request
+  (developer.apple.com/carplay). Without the grant, signing a device build or
+  an archive fails; set it to `NO` and the app builds without CarPlay, with the
+  phone app unchanged. The CarPlay screens are covered in
+  [`docs/ios-smoke-test.md`](ios-smoke-test.md).
+- `DEFAULT_SERVER_URL` is optional: the address built into the app
+  (section 13.2). In an xcconfig file `//` starts a comment, so write it as
+  `/$()/`, as above. Leave it out for no built-in address.
+- `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` can be set in the same
+  file. App Store Connect needs `CURRENT_PROJECT_VERSION` to go up for every
+  upload.
+
+Then generate the project:
+
+```bash
+cd ios/VehicleTracker
+xcodegen generate
+open VehicleTracker.xcodeproj
+```
+
+### 14.2 Build and upload
+
+In Xcode choose **Any iOS Device** as the destination, then **Product →
+Archive**. When it finishes the Organizer opens; **Distribute App** offers the
+routes below. From the command line the archive is:
+
+```bash
+xcodebuild archive -project VehicleTracker.xcodeproj -scheme VehicleTracker \
+  -configuration Release -destination 'generic/platform=iOS' \
+  -archivePath build/VehicleTracker.xcarchive
+```
+
+followed by `xcodebuild -exportArchive -archivePath build/VehicleTracker.xcarchive
+-exportOptionsPlist ExportOptions.plist -exportPath build/` with an
+`ExportOptions.plist` whose `method` is `app-store-connect`, `release-testing`
+(ad hoc) or `enterprise`.
+
+### 14.3 Get it onto driver phones
+
+- **TestFlight** (App Store Connect): upload the archive, add drivers as
+  internal or external testers, and they install it from the TestFlight app.
+  Builds expire after 90 days, so this suits pilots more than a fleet.
+- **Apple Business Manager, Custom App**: submit the app for App Store review
+  as a custom app available only to your organization's Apple Business Manager
+  account, then assign it to managed iPhones through your MDM. This is the
+  usual route for a fleet of agency-owned phones.
+- **Unlisted App Store app**: an App Store app reachable only by its link, for
+  drivers' own phones.
+- **Ad hoc**: sign for up to 100 registered devices per device type and install
+  from Xcode, Apple Configurator or your MDM. Suitable for testing on a few
+  phones.
+- **Enterprise**: with an Apple Developer Enterprise Program membership, sign
+  for in-house distribution to your own employees through your MDM.
+
+Whichever you use, tell drivers to answer the location prompt, shown when
+their first trip starts, with **Allow While Using App** and to leave **Precise
+Location** on. That is all the app needs to keep reporting with the screen off:
+it holds a background location session for the length of the trip. Without
+precise location every fix is too coarse to report.
+
