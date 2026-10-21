@@ -62,6 +62,26 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     }
 }
 
+/// Tells the driver, outside the app, that the trip has stopped reporting and
+/// needs them. iOS can relaunch the app in the background mid-trip, where
+/// nothing on screen would reach them.
+@MainActor
+protocol DriverAlerting: AnyObject {
+    /// Asks once for permission to alert. Called when a trip starts, which the
+    /// driver does from the foreground.
+    func requestPermission()
+    /// The trip is not reporting, and only the driver opening the app can fix
+    /// it: `status` is `.needsForeground` or `.locationLost`.
+    func reportingStopped(_ status: TripSession.ReportingStatus)
+    /// A background relaunch found a trip it could not carry on by itself,
+    /// such as one open on another server than the one signed in to.
+    func tripNeedsResume()
+    /// Withdraws any alert above: reporting recovered, the trip started,
+    /// resumed or ended, or the driver signed out. An alert left on the lock
+    /// screen would say the bus isn't reporting while it is.
+    func reportingRecovered()
+}
+
 /// The one source of truth for the driver's trip (spec §5.3): sign-in state,
 /// the active trip, the location stream, adherence, and reporting status. The
 /// phone screens and the CarPlay scene both observe it and nothing else.
@@ -157,6 +177,7 @@ final class TripSession {
     private let makeAPI: (URL, any TokenStoring) throws -> any TrackerAPI
     private let now: () -> Date
     private let sleep: (Duration) async throws -> Void
+    private let alerts: (any DriverAlerting)?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "trip-session")
 
     private var api: (any TrackerAPI)?
@@ -184,7 +205,8 @@ final class TripSession {
         access: any LocationAccess,
         makeAPI: @escaping (URL, any TokenStoring) throws -> any TrackerAPI,
         now: @escaping () -> Date = Date.init,
-        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        alerts: (any DriverAlerting)? = nil
     ) {
         self.settings = settings
         self.tokens = tokens
@@ -194,11 +216,12 @@ final class TripSession {
         self.makeAPI = makeAPI
         self.now = now
         self.sleep = sleep
+        self.alerts = alerts
 
         // A token that can still be used or renewed and a known server mean
         // the driver stays signed in; a stored trip on top of that is one iOS
         // interrupted, shown paused until the driver resumes it from the
-        // foreground.
+        // foreground, or until `resumeAfterBackgroundLaunch()` takes it up.
         if let token = try? tokens.load(), token.isSignedIn(now: now()),
            let url = settings.serverURL, let api = try? makeAPI(url, tokens) {
             self.api = api
@@ -381,6 +404,7 @@ final class TripSession {
             api = nil
             vehicles = []
             phase = .signedOut
+            alerts?.reportingRecovered()
         default:
             return
         }
@@ -424,6 +448,7 @@ final class TripSession {
         guard !isSigningOut else { throw TripSessionError.notSignedIn }
         guard case .idle = phase else { throw TripSessionError.busy }
         let api = try requireAPI()
+        alerts?.requestPermission()
         phase = .starting
         do {
             // Before the server hears anything: a trip started without
@@ -515,8 +540,10 @@ final class TripSession {
 
     /// Restarts location delivery: for a trip a relaunch found in the store
     /// (`.paused`), or after the location stream itself ended (`.active`
-    /// with `streamEnded`). Neither case makes a server call. Must be called
-    /// from the foreground, as any (re)start must. A paused trip that
+    /// with `streamEnded`). Neither case makes a server call. Called from the
+    /// foreground, or from a background relaunch through
+    /// `resumeAfterBackgroundLaunch()`, which is the one time iOS lets the
+    /// session be recreated without the app on screen. A paused trip that
     /// `resumeNeedsSignIn` stays paused.
     func resume() {
         guard !isSigningOut else { return }
@@ -538,6 +565,30 @@ final class TripSession {
             resume(active, evaluator: evaluator)
         default:
             return
+        }
+    }
+
+    /// Carries on the stored trip when iOS relaunched the app in the background
+    /// after terminating it mid-trip (memory pressure or a crash). No one can
+    /// see Resume your trip? then, and waiting for the driver to open the app
+    /// would drop the bus from the feed. Core Location lets an app that had a
+    /// background session recreate it at such a launch; if it refuses, the
+    /// status turns `.needsForeground` and the driver is alerted. A trip that
+    /// can't be carried on here (open on another server, say) stays paused,
+    /// and the driver is alerted to open the app. One `resume()` drops as
+    /// unusable is gone, so there is nothing to ask them to resume. A launch
+    /// the driver makes still asks, so this is never called for one.
+    func resumeAfterBackgroundLaunch() {
+        guard case .paused = phase else { return }
+        resume()
+        switch phase {
+        case .active:
+            return
+        case .paused:
+            log.notice("a background relaunch could not carry on the stored trip; asking the driver to open the app")
+            alerts?.tripNeedsResume()
+        default:
+            log.notice("a background relaunch found a stored trip it could not carry on, and it is no longer open on this phone")
         }
     }
 
@@ -655,6 +706,7 @@ final class TripSession {
             }
         }
         phase = .active(active)
+        alerts?.reportingRecovered()
         refreshReporting()
     }
 
@@ -677,6 +729,7 @@ final class TripSession {
             log.error("failed to clear the stored active trip: \(String(describing: error), privacy: .public)")
         }
         phase = .idle
+        alerts?.reportingRecovered()
         refreshReporting()
     }
 
@@ -729,6 +782,24 @@ final class TripSession {
     }
 
     private func refreshReporting() {
+        let before = reporting
+        updateReporting()
+        guard reporting != before else { return }
+        // Only the statuses the driver must open the app for, and only on
+        // the change: one alert per stop, not one per fix. Leaving them takes
+        // the alert back down.
+        if case .active = phase, Self.needsTheDriver(reporting) {
+            alerts?.reportingStopped(reporting)
+        } else if Self.needsTheDriver(before) {
+            alerts?.reportingRecovered()
+        }
+    }
+
+    private static func needsTheDriver(_ status: ReportingStatus) -> Bool {
+        status == .needsForeground || status == .locationLost
+    }
+
+    private func updateReporting() {
         if let reporter, reporter.fixesSent != fixesSent {
             fixesSent = reporter.fixesSent
             keepSent()

@@ -29,8 +29,13 @@ final class AppContainer {
             access: CoreLocationAccess(),
             makeAPI: { url, tokens in
                 try TrackerClient(baseURL: url, tokens: tokens, refresher: refresher)
-            }
+            },
+            alerts: NotificationDriverAlerts()
         )
+        // The container is built at launch, including a background relaunch
+        // by iOS mid-trip, which is when Core Location lets the session be
+        // recreated.
+        BackgroundRelaunch.resumeIfInBackground(session)
         serverSetup = ServerSetup(session: session)
         screenAwake = ScreenAwakeCoordinator(power: DevicePowerSource(), idleTimer: ApplicationIdleTimer())
     }
