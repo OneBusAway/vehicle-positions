@@ -137,10 +137,11 @@ INSERT INTO trips (user_id, vehicle_id, route_id, gtfs_trip_id)
 VALUES ($1, $2, $3, $4)
 RETURNING id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at;
 
--- name: EndTrip :execrows
+-- name: EndTrip :one
 UPDATE trips
 SET status = 'completed', end_time = NOW()
-WHERE id = $1 AND user_id = $2 AND status = 'active';
+WHERE id = $1 AND user_id = $2 AND status = 'active'
+RETURNING vehicle_id;
 
 -- name: AssignUserVehicle :one
 INSERT INTO user_vehicles (user_id, vehicle_id)

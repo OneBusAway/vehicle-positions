@@ -129,7 +129,10 @@ func handleStartTrip(store TripStarter) http.HandlerFunc {
 	}
 }
 
-func handleEndTrip(store TripEnder) http.HandlerFunc {
+// handleEndTrip also drops the trip's vehicle from the tracker, so the feed
+// stops publishing a bus that is out of service now rather than when its last
+// report goes stale.
+func handleEndTrip(store TripEnder, tracker *Tracker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		contentType := r.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -172,7 +175,7 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 			return
 		}
 
-		err = store.EndTrip(r.Context(), req.TripID, userID)
+		vehicleID, err := store.EndTrip(r.Context(), req.TripID, userID)
 		if err != nil {
 			if errors.Is(err, ErrTripNotFound) {
 				slog.Warn("end trip: no matching active trip", "trip_id", req.TripID, "user_id", userID)
@@ -184,6 +187,7 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 			return
 		}
 
+		tracker.Remove(vehicleID)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "trip ended"})
 	}
 }

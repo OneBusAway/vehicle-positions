@@ -1669,7 +1669,10 @@ paths:
     post:
       tags: [trips]
       summary: End an active trip
-      description: Request bodies are capped at 1 KiB.
+      description: |
+        Ends the trip and removes its vehicle from the GTFS-RT feed at once;
+        later reports for the vehicle are refused until a new trip starts.
+        Request bodies are capped at 1 KiB.
       requestBody:
         required: true
         content:

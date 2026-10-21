@@ -423,10 +423,11 @@ func (q *Queries) EndRide(ctx context.Context, arg EndRideParams) (string, error
 	return rider_id, err
 }
 
-const endTrip = `-- name: EndTrip :execrows
+const endTrip = `-- name: EndTrip :one
 UPDATE trips
 SET status = 'completed', end_time = NOW()
 WHERE id = $1 AND user_id = $2 AND status = 'active'
+RETURNING vehicle_id
 `
 
 type EndTripParams struct {
@@ -434,12 +435,11 @@ type EndTripParams struct {
 	UserID int64
 }
 
-func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (int64, error) {
-	result, err := q.db.Exec(ctx, endTrip, arg.ID, arg.UserID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (string, error) {
+	row := q.db.QueryRow(ctx, endTrip, arg.ID, arg.UserID)
+	var vehicle_id string
+	err := row.Scan(&vehicle_id)
+	return vehicle_id, err
 }
 
 const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one

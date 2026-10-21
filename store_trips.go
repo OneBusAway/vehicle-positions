@@ -79,7 +79,7 @@ type TripStarter interface {
 
 // TripEnder is the store interface for ending trips.
 type TripEnder interface {
-	EndTrip(ctx context.Context, tripID, userID int64) error
+	EndTrip(ctx context.Context, tripID, userID int64) (vehicleID string, err error)
 }
 
 // TripLister lists trip summaries with optional filters, for the admin trips page.
@@ -206,19 +206,19 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 	return resp, nil
 }
 
-// EndTrip marks an active trip as completed.
-func (s *Store) EndTrip(ctx context.Context, tripID, userID int64) error {
-	rowsAffected, err := s.queries.EndTrip(ctx, db.EndTripParams{
+// EndTrip marks an active trip as completed and returns the vehicle it ran on.
+func (s *Store) EndTrip(ctx context.Context, tripID, userID int64) (string, error) {
+	vehicleID, err := s.queries.EndTrip(ctx, db.EndTripParams{
 		ID:     tripID,
 		UserID: userID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrTripNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("end trip: %w", err)
+		return "", fmt.Errorf("end trip: %w", err)
 	}
-	if rowsAffected == 0 {
-		return ErrTripNotFound
-	}
-	return nil
+	return vehicleID, nil
 }
 
 // ListTrips returns trip summaries newest-first with optional filters.
