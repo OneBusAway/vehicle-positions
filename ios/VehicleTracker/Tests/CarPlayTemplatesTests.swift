@@ -172,7 +172,7 @@ import Testing
     /// fixes with a tap names the iPhone, as "Sign in on iPhone" does.
     @Test func theCarNeverOffersATapItCantDo() throws {
         let everyReporting: [TripSession.ReportingStatus] = [.connected, .noNetwork, .noGPS, .authExpired, .clockSkew,
-                                                              .refused, .needsForeground, .locationLost, .locationDenied, .preciseLocationOff]
+                                                              .refused, .serverError, .needsForeground, .locationLost, .locationDenied, .preciseLocationOff]
         for reporting in everyReporting {
             let row = try reportsRow(reporting)
             #expect(row?.contains("Tap") == false, "\(reporting) reads \(row ?? "nothing")")

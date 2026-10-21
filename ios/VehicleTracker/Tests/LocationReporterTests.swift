@@ -106,6 +106,28 @@ import VehiclePositionsKit
         #expect(r.fixesSent == 1)
     }
 
+    @Test func serverErrorsTurnTheBannerRed() async {
+        let r = reporter()
+        r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        await r.waitForInFlightSend()
+        #expect(r.problem == .none)
+
+        for (code, message) in [(500, "failed to save location"), (503, "service unavailable"), (400, "latitude must be between -90 and 90"), (404, "not found")] {
+            clock.advance(5)
+            api.postError = APIError.status(code, message: message)
+            r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+            await r.waitForInFlightSend()
+            #expect(r.problem == .serverError, "HTTP \(code)")
+        }
+        #expect(r.fixesSent == 1, "a refused report is not counted as sent")
+
+        clock.advance(5)
+        api.postError = nil
+        r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        await r.waitForInFlightSend()
+        #expect(r.problem == .none, "the next accepted report clears it")
+    }
+
     @Test func threeTimestampRejectsMeanClockSkew() async {
         let r = reporter()
         api.postError = APIError.status(400, message: "timestamp must be within 5 minutes of server time")
@@ -129,7 +151,7 @@ import VehiclePositionsKit
             await r.waitForInFlightSend()
             clock.advance(5)
         }
-        #expect(r.problem == .none, "only two consecutive timestamp rejects since the 500 broke the run")
+        #expect(r.problem == .serverError, "only two consecutive timestamp rejects since the 500 broke the run")
 
         r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
         await r.waitForInFlightSend()

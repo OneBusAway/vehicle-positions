@@ -157,6 +157,10 @@ enum TripStatusText {
         String(localized: "Ask your dispatcher", comment: "Problem line, after 'Reports refused': only dispatch can fix the assignment.")
     }
 
+    static var serverError: String {
+        String(localized: "Server error", comment: "Problem line: the server fails or refuses the reports for a reason the driver cannot fix (a server error), so they are not in the feed.")
+    }
+
     static var phoneClockWrong: String {
         String(localized: "Phone clock is wrong", comment: "Problem line: the server rejects the reports' timestamps.")
     }

@@ -29,7 +29,7 @@ struct TripStatus: Equatable {
     /// session has (DESIGN-iOS §4.7.2).
     struct Problem: Equatable {
         enum Kind: Equatable {
-            case locationStopped, needsForeground, locationDenied, preciseLocationOff, noGPS, refused, clockSkew, noNetwork
+            case locationStopped, needsForeground, locationDenied, preciseLocationOff, noGPS, refused, serverError, clockSkew, noNetwork
         }
 
         enum Action: Equatable {
@@ -251,6 +251,7 @@ struct TripStatus: Equatable {
         case .preciseLocationOff: return .preciseLocationOff
         case .noGPS: return .noGPS
         case .refused: return .refused
+        case .serverError: return .serverError
         case .clockSkew: return .clockSkew
         case .noNetwork: return .noNetwork
         }
@@ -270,6 +271,8 @@ struct TripStatus: Equatable {
             Problem(kind: kind, symbol: "location.slash.fill", what: TripStatusText.noGPSSignal, meaning: TripStatusText.positionPaused, action: nil)
         case .refused:
             Problem(kind: kind, symbol: "hand.raised.fill", what: TripStatusText.reportsRefused, meaning: TripStatusText.askYourDispatcher, action: nil)
+        case .serverError:
+            Problem(kind: kind, symbol: "exclamationmark.icloud.fill", what: TripStatusText.serverError, meaning: TripStatusText.ridersCantSeeYou, action: nil)
         case .clockSkew:
             Problem(kind: kind, symbol: "clock.badge.exclamationmark", what: TripStatusText.phoneClockWrong, meaning: TripStatusText.setAutomaticTime, action: nil)
         case .noNetwork:
@@ -282,7 +285,7 @@ struct TripStatus: Equatable {
     private static func pausesThePosition(_ kind: Problem.Kind) -> Bool {
         switch kind {
         case .locationStopped, .locationDenied, .preciseLocationOff, .noGPS: true
-        case .needsForeground, .refused, .clockSkew, .noNetwork: false
+        case .needsForeground, .refused, .serverError, .clockSkew, .noNetwork: false
         }
     }
 

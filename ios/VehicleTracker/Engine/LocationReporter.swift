@@ -9,7 +9,10 @@ nonisolated enum ReportingProblem: Sendable, Equatable {
     /// `refused` is the server turning reports down with a 403 (not assigned,
     /// vehicle deactivated) or a 409 (no active trip, or a trip mismatch).
     /// The driver cannot fix it from the phone; dispatch can.
-    case none, noNetwork, authExpired, clockSkew, refused
+    /// `serverError` is any other refusal the driver cannot fix: a 5xx, or a
+    /// 4xx other than those, an expired sign-in, the rate limit or the clock.
+    /// The bus is not in the feed either way, so the banner must not stay green.
+    case none, noNetwork, authExpired, clockSkew, refused, serverError
 }
 
 /// Sends fixes to `POST /api/v1/locations`, one at a time, no more often than
@@ -115,6 +118,7 @@ final class LocationReporter {
                 problem = .refused
             default:
                 log.warning("dropping location report after HTTP \(code): \(message, privacy: .public)")
+                problem = .serverError
             }
         } catch {
             consecutiveTimestampRejects = 0
