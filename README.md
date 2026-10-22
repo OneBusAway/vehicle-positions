@@ -545,8 +545,8 @@ Login returns both tokens:
 }
 ```
 
-- `token` is **deprecated** and repeats `access_token` verbatim. It is kept so
-  existing clients keep working; new clients should read `access_token`. It
+- `token` is **deprecated** and repeats `access_token` verbatim. It is kept for
+  compatibility with third-party clients; new clients should read `access_token`. It
   will be removed once the iOS app and the simulator read `access_token`, as
   the Android app already does.
 - `expires_in` is the access token's lifetime in seconds.
