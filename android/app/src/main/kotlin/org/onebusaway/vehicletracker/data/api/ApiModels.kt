@@ -52,6 +52,31 @@ import kotlinx.serialization.Serializable
     val timestamp: Long,
 )
 
+/** One fix in a history upload: a [LocationReportDto] without the vehicle, which the batch names once. */
+@Serializable data class HistoryPointDto(
+    @SerialName("trip_id") val tripId: String? = null,
+    @SerialName("route_id") val routeId: String,
+    @SerialName("start_date") val startDate: String,
+    val latitude: Double,
+    val longitude: Double,
+    val bearing: Double? = null,
+    val speed: Double? = null,
+    val accuracy: Double? = null,
+    val timestamp: Long,
+)
+
+/** `POST /api/v1/locations/history`: fixes recorded offline, stored for history only. */
+@Serializable data class LocationHistoryDto(
+    @SerialName("vehicle_id") val vehicleId: String,
+    val points: List<HistoryPointDto>,
+)
+
+fun LocationReportDto.toHistoryPoint() = HistoryPointDto(
+    tripId = tripId, routeId = routeId, startDate = startDate,
+    latitude = latitude, longitude = longitude, bearing = bearing, speed = speed, accuracy = accuracy,
+    timestamp = timestamp,
+)
+
 /** One route from the schedule catalog (`GET /api/v1/gtfs/routes`). */
 @Serializable data class RouteDto(
     val id: String,

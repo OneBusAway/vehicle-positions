@@ -589,7 +589,7 @@ SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
 FROM location_points
 WHERE received_at > $1
-ORDER BY vehicle_id, received_at DESC
+ORDER BY vehicle_id, timestamp DESC, received_at DESC
 `
 
 type GetRecentLocationsRow struct {
@@ -609,7 +609,10 @@ type GetRecentLocationsRow struct {
 // route_id and start_date are selected because the feed's TripDescriptor is
 // documented to carry what the driver sent: a seeded vehicle that came back
 // without them would publish a narrower descriptor than it did before the
-// restart, and a route-only vehicle would publish none at all.
+// restart, and a route-only vehicle would publish none at all. The latest is
+// by the fix's own timestamp: a backlog a phone uploads after a dead zone
+// (POST /api/v1/locations/history) is received after the live reports, and
+// must not pass for the vehicle's latest position.
 func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Timestamptz) ([]GetRecentLocationsRow, error) {
 	rows, err := q.db.Query(ctx, getRecentLocations, receivedAt)
 	if err != nil {
@@ -818,9 +821,10 @@ func (q *Queries) GetVehicleByID(ctx context.Context, id string) (GetVehicleByID
 	return i, err
 }
 
-const insertLocationPoint = `-- name: InsertLocationPoint :exec
+const insertLocationPoint = `-- name: InsertLocationPoint :execrows
 INSERT INTO location_points (vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING
 `
 
 type InsertLocationPointParams struct {
@@ -837,8 +841,10 @@ type InsertLocationPointParams struct {
 	DriverID  string
 }
 
-func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPointParams) error {
-	_, err := q.db.Exec(ctx, insertLocationPoint,
+// A fix already stored (the same vehicle, driver and timestamp) is not stored
+// again: a phone retries an upload or report whose reply it never got.
+func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPointParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertLocationPoint,
 		arg.VehicleID,
 		arg.TripID,
 		arg.RouteID,
@@ -851,7 +857,10 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 		arg.Timestamp,
 		arg.DriverID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertRide = `-- name: InsertRide :one
@@ -1106,9 +1115,14 @@ FROM location_points lp
 JOIN trips t ON t.id = $1
 WHERE lp.vehicle_id = t.vehicle_id
   AND lp.driver_id = t.user_id::text
-  AND lp.received_at >= t.start_time
-  AND lp.received_at <= COALESCE(t.end_time, NOW())
-ORDER BY lp.received_at ASC
+  AND (
+    (lp.received_at >= t.start_time AND lp.received_at <= COALESCE(t.end_time, NOW())
+        AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes')
+    OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
+        AND lp.timestamp >= EXTRACT(EPOCH FROM t.start_time)
+        AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
+  )
+ORDER BY lp.timestamp ASC, lp.received_at ASC
 LIMIT 10000
 `
 
@@ -1125,6 +1139,12 @@ type ListTripLocationsRow struct {
 
 // Trail derivation per spec §4.5: location_points.trip_id is a client string,
 // not trips.id, so trail points are matched by vehicle + driver + time window.
+// A live point is in the window when it was received during the trip. A
+// backlog point, one received more than five minutes after the phone recorded
+// it (maxTimestampSkew: a live report that late is refused, so only
+// POST /api/v1/locations/history stores one), is placed only by when it was
+// recorded, so a dead zone uploaded later, even during the next trip, lands in
+// the trail where it was driven and in no other.
 func (q *Queries) ListTripLocations(ctx context.Context, id int64) ([]ListTripLocationsRow, error) {
 	rows, err := q.db.Query(ctx, listTripLocations, id)
 	if err != nil {

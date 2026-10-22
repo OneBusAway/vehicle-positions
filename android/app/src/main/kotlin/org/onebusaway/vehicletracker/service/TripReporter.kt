@@ -2,10 +2,13 @@ package org.onebusaway.vehicletracker.service
 
 import android.util.Log
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
+import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.data.api.toHistoryPoint
 import org.onebusaway.vehicletracker.di.ElapsedMillisClock
 import retrofit2.HttpException
 import java.io.IOException
@@ -42,10 +45,23 @@ private const val MIN_REPORT_GAP_MS = 8_500L
 
 private const val NEVER_REPORTED = Long.MIN_VALUE
 
+/** The most fixes one history upload carries; the server takes at most 500. */
+private const val HISTORY_BATCH = 500
+
+/**
+ * How old a queued fix may be and still be uploaded: the server takes a day, less a margin for the
+ * phone's clock and the time the upload takes.
+ */
+private const val MAX_HISTORY_AGE_SEC = 24 * 3600L - 600L
+
+/** Refusals a history upload would get again however often it were retried. */
+private val PERMANENT_HISTORY_REFUSALS = setOf(400, 403, 404)
+
 class TripReporter @Inject constructor(
     private val apiProvider: TrackerApiProvider,
     private val tracking: TrackingRepository,
     @param:ElapsedMillisClock private val elapsedMs: () -> Long,
+    private val offlineQueue: OfflineFixQueue,
 ) {
     private val lastReportAt = AtomicLong(NEVER_REPORTED)
     private val reportInFlight = AtomicBoolean(false)
@@ -113,9 +129,47 @@ class TripReporter @Inject constructor(
                 }
                 else -> Log.w(TAG, "Dropping location report after HTTP ${e.code()}", e) // other 4xx/5xx: log-and-drop per spec, keep current status
             }
+            return
         } catch (e: IOException) {
-            Log.w(TAG, "Dropping location report after network failure", e)
+            // Too late for the realtime feed by the time it could go, but it is still where the bus
+            // was: kept for location history.
+            Log.w(TAG, "Queueing location report for history after network failure", e)
+            offlineQueue.add(dto)
             refreshProblem(sendProblem = TrackingProblem.NO_NETWORK)
+            return
+        }
+        // The connection works again, and this report has gone: send one batch of what queued up
+        // while it did not. One per report keeps within the server's limit on history uploads.
+        uploadOneHistoryBatch(nowEpochSec = fix.timeEpochSec)
+    }
+
+    /**
+     * Uploads the oldest queued fixes for one vehicle. A batch the server refuses for good (bad
+     * data, a vehicle no longer assigned, a server without the endpoint) is dropped; one that
+     * fails for now (no connection, an expired sign-in, the rate limit, a server error) stays for
+     * the next report to try.
+     */
+    private suspend fun uploadOneHistoryBatch(nowEpochSec: Long) {
+        var batch = offlineQueue.oldest(HISTORY_BATCH)
+        val expired = batch.takeWhile { nowEpochSec - it.timestamp > MAX_HISTORY_AGE_SEC }.size
+        if (expired > 0) {
+            offlineQueue.removeOldest(expired)
+            batch = offlineQueue.oldest(HISTORY_BATCH)
+        }
+        val vehicleId = batch.firstOrNull()?.vehicleId ?: return
+        val points = batch.takeWhile { it.vehicleId == vehicleId }
+        try {
+            apiProvider.get().postLocationHistory(LocationHistoryDto(vehicleId, points.map { it.toHistoryPoint() }))
+            offlineQueue.removeOldest(points.size)
+        } catch (e: HttpException) {
+            if (e.code() in PERMANENT_HISTORY_REFUSALS) {
+                Log.w(TAG, "Dropping ${points.size} queued fixes after HTTP ${e.code()}", e)
+                offlineQueue.removeOldest(points.size)
+            } else {
+                Log.w(TAG, "Keeping queued fixes after HTTP ${e.code()}", e)
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "Keeping queued fixes after network failure", e)
         }
     }
 
