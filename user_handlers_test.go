@@ -60,10 +60,12 @@ type mockUserUpdater struct {
 	user        *UserResponse
 	err         error
 	passwordErr error
+	activeErr   error
 
 	passwordUpdates map[int64]string
+	activeUpdates   map[int64]bool
 	updateUserCalls int
-	calls           []string // "profile" / "password", in call order
+	calls           []string // "profile" / "password" / "active", in call order
 }
 
 func (m *mockUserUpdater) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
@@ -81,6 +83,18 @@ func (m *mockUserUpdater) SetUserPasswordAndRevokeSessions(_ context.Context, id
 		m.passwordUpdates = map[int64]string{}
 	}
 	m.passwordUpdates[id] = password
+	return nil
+}
+
+func (m *mockUserUpdater) SetUserActiveAndRevokeSessions(_ context.Context, id int64, active bool) error {
+	m.calls = append(m.calls, "active")
+	if m.activeErr != nil {
+		return m.activeErr
+	}
+	if m.activeUpdates == nil {
+		m.activeUpdates = map[int64]bool{}
+	}
+	m.activeUpdates[id] = active
 	return nil
 }
 
@@ -802,6 +816,17 @@ func TestHandleDeleteUser_DBError(t *testing.T) {
 	assert.Equal(t, "internal server error", decodeErrorResponse(t, w))
 }
 
+func TestHandleDeleteUser_UserHasTrips(t *testing.T) {
+	handler := handleDeleteUser(&mockUserDeleter{err: ErrUserHasTrips})
+	req := httptest.NewRequest("DELETE", "/api/v1/admin/users/1", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Equal(t, "cannot delete a user who has trips; deactivate the user instead", decodeErrorResponse(t, w))
+}
+
 // TestHandleListUsers_FilterParams is the validation table for the search and
 // role filters. Every case asserts the filter the handler handed the store,
 // or the exact error message, so a case can't pass for the wrong reason. The
@@ -902,4 +927,54 @@ func TestHandleUpdateUser_PasswordResetUnknownUserIs404(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Equal(t, "user not found", decodeErrorResponse(t, rr))
+}
+
+// --- Update User: active field ---
+
+func TestHandleUpdateUser_ActiveDeactivate(t *testing.T) {
+	store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true}}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","active":false}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, false, store.activeUpdates[1])
+	var resp UserResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	assert.False(t, resp.Active)
+}
+
+func TestHandleUpdateUser_ActiveReactivate(t *testing.T) {
+	store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: false}}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","active":true}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, true, store.activeUpdates[1])
+	var resp UserResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	assert.True(t, resp.Active)
+}
+
+func TestHandleUpdateUser_ActiveOmittedLeavesUnchanged(t *testing.T) {
+	store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true}}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver"}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Nil(t, store.activeUpdates, "active must not be toggled when the field is absent")
+}
+
+func TestHandleUpdateUser_ActiveErrorIs500(t *testing.T) {
+	store := &mockUserUpdater{user: newSampleUser(), activeErr: errors.New("db unavailable")}
+	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","active":false}`)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "internal server error", decodeErrorResponse(t, rr))
+}
+
+func TestHandleUpdateUser_ActiveUnknownUserIs404(t *testing.T) {
+	store := &mockUserUpdater{user: newSampleUser(), activeErr: ErrUserNotFound}
+	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","active":false}`)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, "user not found", decodeErrorResponse(t, rr))
+}
+
+func TestHandleUpdateUser_ActiveWithPasswordOrdering(t *testing.T) {
+	store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true}}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","password":"newlongpassword","active":false}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, []string{"profile", "password", "active"}, store.calls, "profile → password → active ordering")
 }
