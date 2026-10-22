@@ -56,18 +56,31 @@ run:
 	go run .
 
 smoke:
-	@echo "Posting sample location..."
-	curl --silent --show-error --fail \
-		-X POST http://localhost:8080/api/v1/locations \
-		-H 'Content-Type: application/json' \
-		-d '{"vehicle_id":"demo-vehicle-1","trip_id":"demo-trip-1","latitude":-1.2864,"longitude":36.8172,"bearing":120,"speed":8.5,"accuracy":5.0,"timestamp":'"$$(date +%s)"'}' >/dev/null
+	@echo "Fetching health check..."
+	curl --silent --show-error --fail http://localhost:$(PORT)/health | cat
 	@echo "OK"
-	@echo "Fetching admin status..."
-	curl --silent --show-error --fail http://localhost:8080/api/v1/admin/status | cat
 	@echo
-	@echo "Fetching GTFS-RT JSON feed..."
-	curl --silent --show-error --fail 'http://localhost:8080/gtfs-rt/vehicle-positions?format=json' | cat
-	@echo
+	@if [ -z "$(ADMIN_BOOTSTRAP_EMAIL)" ] || [ -z "$(ADMIN_BOOTSTRAP_PASSWORD)" ]; then \
+		echo "ERROR: ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD are required for authentication" >&2; \
+		echo "Set them in your environment or in a .env file" >&2; \
+		exit 1; \
+	fi
+	@echo "Authenticating as admin..."
+	@ACCESS_TOKEN=$$(curl --silent --show-error --fail -X POST http://localhost:$(PORT)/api/v1/auth/login -H "Content-Type: application/json" -d "{\"email\":\"$(ADMIN_BOOTSTRAP_EMAIL)\",\"password\":\"$(ADMIN_BOOTSTRAP_PASSWORD)\"}" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4); \
+	if [ -z "$$ACCESS_TOKEN" ]; then \
+		echo "ERROR: login response missing access_token" >&2; \
+		exit 1; \
+	fi; \
+	echo "OK"; \
+	echo; \
+	echo "Fetching admin status..."; \
+	curl --silent --show-error --fail -H "Authorization: Bearer $$ACCESS_TOKEN" http://localhost:$(PORT)/api/v1/admin/status | cat; \
+	echo "OK"; \
+	echo; \
+	echo "Fetching GTFS-RT JSON feed..."; \
+	curl --silent --show-error --fail 'http://localhost:$(PORT)/gtfs-rt/vehicle-positions?format=json' | cat; \
+	echo "OK"; \
+	echo
 
 simulate:
 	go run ./cmd/simulator -url http://localhost:$(PORT) -vehicles 5 -interval 6s -duration 30s

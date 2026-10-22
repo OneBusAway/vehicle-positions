@@ -43,7 +43,7 @@ From the repository root:
    curl http://localhost:8080/health
    ```
 
-3. Run a smoke test (posts one location, then fetches status + feed JSON):
+3. Run a smoke test (checks health, authenticates as admin, verifies admin status, and fetches the GTFS-RT vehicle positions feed as JSON):
 
    ```bash
    make smoke
