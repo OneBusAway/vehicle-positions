@@ -316,7 +316,7 @@ func TestLoginReturnsToken(t *testing.T) {
 		assert.Equal(t, "sim@example.com", body["email"])
 		assert.Equal(t, "hunter2", body["password"])
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"token":"tok-123"}`))
+		_, _ = w.Write([]byte(`{"access_token":"tok-123"}`))
 	}))
 	defer server.Close()
 
@@ -345,7 +345,19 @@ func TestLoginRejectsEmptyToken(t *testing.T) {
 
 	_, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no token")
+	assert.Contains(t, err.Error(), "no access_token")
+}
+
+func TestLoginRejectsDeprecatedTokenField(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"token":"old-style-token"}`))
+	}))
+	defer server.Close()
+
+	_, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no access_token")
 }
 
 // The regression this fixes: reports must carry the session token, because
@@ -444,7 +456,7 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]string{"token": "token-for-" + body["email"]})
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "token-for-" + body["email"]})
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
