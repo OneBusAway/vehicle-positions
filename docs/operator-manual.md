@@ -232,6 +232,33 @@ active admin account is left:
 Create the second admin first, then make the change. Keeping at least two admin
 accounts is good practice anyway.
 
+### Locked out: no admin can sign in
+
+If the only admin has lost their password, or there is no active admin at all
+(the server logs **no active admin account** at startup), IT can restore access
+from the server host. `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD` do
+not help here: they only act on a database with no admin in it.
+
+Put the new password on the first line of a file, then run `reset-admin` with
+the email of the account to restore. With Docker Compose:
+
+```bash
+docker compose exec -T server vehicle-positions reset-admin -email ops@example.org < new-password.txt
+```
+
+On a host install, run the binary the same way, with the server's
+`DATABASE_URL` set. The account is created if it does not exist; otherwise it
+becomes an active admin with the new password. Delete the password file
+afterwards.
+
+The account can no longer renew a session it already had, so it has to sign in
+with the new password once that session expires. But a session that is already
+open, in a browser or an app, keeps working until then, which can be up to 24
+hours: the same limit as [deactivating an account](#deactivate-an-account). If
+the reset is because someone else had the account and they must be out right
+now, also have your IT contact rotate the token-signing key and restart the
+server, which signs everyone out.
+
 ---
 
 ## 6. Assigning vehicles to drivers

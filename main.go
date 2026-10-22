@@ -183,11 +183,16 @@ func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimite
 	return csrf.Handler(mux), nil
 }
 
+// defaultDatabaseURL is the database the server and its subcommands use when
+// DATABASE_URL is unset.
+const defaultDatabaseURL = "postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable"
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	subcommand()
 
 	port := envOrDefault("PORT", "8080")
-	databaseURL := envOrDefault("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/vehicle_positions?sslmode=disable")
+	databaseURL := envOrDefault("DATABASE_URL", defaultDatabaseURL)
 	maxAge := envDurationOrDefault("STALENESS_THRESHOLD", 5*time.Minute)
 
 	readTimeout := envDurationOrDefault("READ_TIMEOUT", 15*time.Second)
@@ -268,6 +273,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	warnIfNoActiveAdmin(ctx, store)
 
 	tracker := NewTracker(maxAge)
 	defer tracker.Stop()
