@@ -315,12 +315,37 @@ func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error)
 	return claims, nil
 }
 
-// checkRevoked reports whether the token behind claims has been logged out.
+// checkRevoked reports whether the token behind claims can no longer be used:
+// it was logged out, or it is a staff token whose user has since been
+// deactivated or deleted. Deactivation and deletion stop new logins, but an
+// access token already issued would otherwise keep working until it expires.
 // It is the second half of validation, kept out of parseSessionToken so that
 // function stays pure; both token paths (the API's Authorization header and
 // the admin UI's vp_session cookie) must call it, and
 // TestAdminCookiePath_RejectsRevokedToken pins that they do.
 func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecker) (bool, error) {
+	revoked, err := checkJTIRevoked(ctx, claims, checker)
+	if err != nil || revoked {
+		return revoked, err
+	}
+	// A rider's sub names a rider, not a users row.
+	if role, _ := claims["role"].(string); role == roleRider {
+		return false, nil
+	}
+	sub, _ := claims["sub"].(string)
+	userID, err := strconv.ParseInt(sub, 10, 64)
+	if err != nil {
+		return true, nil
+	}
+	active, err := checker.IsUserActive(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return !active, nil
+}
+
+// checkJTIRevoked reports whether the token's jti is on the revocation list.
+func checkJTIRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecker) (bool, error) {
 	jti, _ := claims["jti"].(string)
 	if jti == "" {
 		// Intentional backwards compatibility: tokens issued before jti

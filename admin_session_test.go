@@ -180,3 +180,21 @@ func TestRevokeSessionCookie(t *testing.T) {
 		assert.NotPanics(t, func() { revokeSessionCookie(req, testSecret, revocations) })
 	})
 }
+
+// TestAdminCookiePath_RejectsDeactivatedAdmin: a deactivated admin's browser
+// session ends at once, the same as their API token.
+func TestAdminCookiePath_RejectsDeactivatedAdmin(t *testing.T) {
+	revocations := newFakeRevocations()
+	revocations.inactive = map[int64]bool{9: true} // cookieFor issues for user 9
+
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true })
+	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	assert.False(t, reached)
+}

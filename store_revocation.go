@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -16,21 +18,22 @@ type TokenRevoker interface {
 	RevokeToken(ctx context.Context, jti string, userID int64, expiresAt time.Time) error
 }
 
-// TokenChecker reports whether a token's jti has been revoked.
+// TokenChecker reports whether a token's jti has been revoked, and whether
+// the user a staff token was issued to may still use it.
 type TokenChecker interface {
 	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
+	IsUserActive(ctx context.Context, userID int64) (bool, error)
 }
 
 // RevokeToken adds a jti to the revocation list. It is idempotent, so logging
 // out twice with the same token succeeds both times.
 //
 // A revocation row deliberately outlives the user it belongs to. user_id is
-// ON DELETE SET NULL rather than CASCADE because nothing in the request path
-// consults the users table — requireAuth and adminClaimsFromCookie decide on
-// the blocklist alone — so cascading the row away on a hard user delete would
-// make an already-revoked token valid again for the rest of its lifetime,
-// carrying its original role claim. The row's job is to block a jti until it
-// expires, and that job does not end when the account does.
+// ON DELETE SET NULL rather than CASCADE so a revoked jti stays revoked on
+// its own terms, whatever happens to the account: checkRevoked also refuses
+// a deleted user's tokens, but the blocklist must not depend on that. The
+// row's job is to block a jti until it expires, and that job does not end
+// when the account does.
 //
 // expires_at is recorded so revocation rows can be aged out, but nothing
 // deletes them yet: this table grows one row per logout. A periodic cleanup
@@ -59,3 +62,16 @@ func (s *Store) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
 
 var _ TokenRevoker = (*Store)(nil)
 var _ TokenChecker = (*Store)(nil)
+
+// IsUserActive reports whether the user exists and is active. A deleted user
+// is not active: the access tokens they were issued outlive the row.
+func (s *Store) IsUserActive(ctx context.Context, userID int64) (bool, error) {
+	active, err := s.queries.GetUserActive(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check user active: %w", err)
+	}
+	return active, nil
+}

@@ -758,6 +758,17 @@ func (q *Queries) GetTripSummary(ctx context.Context, id int64) (GetTripSummaryR
 	return i, err
 }
 
+const getUserActive = `-- name: GetUserActive :one
+SELECT active FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserActive(ctx context.Context, id int64) (bool, error) {
+	row := q.db.QueryRow(ctx, getUserActive, id)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, name, email, role, active, created_at, updated_at
 FROM users

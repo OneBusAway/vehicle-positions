@@ -594,6 +594,8 @@ type fakeRevocations struct {
 	lastUserID    int64
 	lastExpiresAt time.Time
 	revokeCalls   int
+	inactive      map[int64]bool
+	userErr       error // fails only IsUserActive
 }
 
 func newFakeRevocations() *fakeRevocations {
@@ -606,6 +608,17 @@ func (f *fakeRevocations) IsTokenRevoked(_ context.Context, jti string) (bool, e
 	}
 	_, ok := f.revoked[jti]
 	return ok, nil
+}
+
+// IsUserActive treats every user as active unless listed in inactive.
+func (f *fakeRevocations) IsUserActive(_ context.Context, userID int64) (bool, error) {
+	if f.userErr != nil {
+		return false, f.userErr
+	}
+	if f.err != nil {
+		return false, f.err
+	}
+	return !f.inactive[userID], nil
 }
 
 func (f *fakeRevocations) RevokeToken(_ context.Context, jti string, userID int64, expiresAt time.Time) error {
@@ -1059,4 +1072,38 @@ func TestHandleLogin_SuccessesDoNotUseIPBudget(t *testing.T) {
 		limiter.Allow("192.0.2.1", "nobody-"+strconv.Itoa(i)+"@test.com")
 	}
 	assert.False(t, limiter.Allow("192.0.2.1", "next@test.com"))
+}
+
+// TestRequireAuth_RejectsTokenOfDeactivatedOrDeletedUser: deactivating or
+// deleting a driver stops their existing access token at once, not when it
+// expires up to a day later.
+func TestRequireAuth_RejectsTokenOfDeactivatedOrDeletedUser(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "dismissed@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+	revocations := newFakeRevocations()
+	revocations.inactive = map[int64]bool{5: true} // the fake's view of both cases
+
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true })
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, revocations)(next).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "invalid token", errorBody(t, w))
+	assert.False(t, reached)
+}
+
+func TestRequireAuth_UserCheckErrorFailsClosed(t *testing.T) {
+	token, err := generateJWT(&User{ID: 5, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+	revocations := newFakeRevocations()
+	revocations.userErr = errors.New("database unavailable")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, revocations)(dummyHandler()).ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

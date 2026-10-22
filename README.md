@@ -60,11 +60,12 @@ the admin UI's edit form, or by sending `password` in
 `PUT /api/v1/admin/users/{id}`) does the same — that is what makes a password
 reset an effective response to a stolen phone.
 
-Neither ends an access token that has already been issued: it stays valid
-until it expires or until that session is logged out, which is up to
-`ACCESS_TOKEN_TTL` for API clients and up to 24 hours for the admin UI's
-session cookie. Forcing those already-issued sessions to end is a follow-up —
-it needs a per-user cutoff rather than the per-token blocklist added here.
+Deactivating or deleting a user also ends the access tokens and admin UI
+session cookies already issued to them: every authenticated request checks
+that the user still exists and is active. A password change does not end an
+access token that has already been issued: it stays valid until it expires or
+until that session is logged out, which is up to `ACCESS_TOKEN_TTL` for API
+clients and up to 24 hours for the admin UI's session cookie.
 
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /

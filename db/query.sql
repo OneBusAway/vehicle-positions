@@ -367,3 +367,6 @@ INSERT INTO gtfs_feed_cache (id, source, body, sha256, fetched_at)
 VALUES (1, $1, $2, $3, NOW())
 ON CONFLICT (id) DO UPDATE
 SET source = EXCLUDED.source, body = EXCLUDED.body, sha256 = EXCLUDED.sha256, fetched_at = NOW();
+
+-- name: GetUserActive :one
+SELECT active FROM users WHERE id = $1;
