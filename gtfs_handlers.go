@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -209,6 +210,39 @@ func (c *gtfsCatalog) handleTrip() http.HandlerFunc {
 			},
 		})
 	}
+}
+
+// checkScheduleIDs reports why a trip_id and route_id a driver sent cannot be
+// published against the schedule in force: an id the schedule does not have,
+// or a route that is not the trip's. Either id may be empty; tripField names
+// the trip id in the caller's request, for the message. Consumers match
+// vehicles on these ids, so one that is not in the static feed is a vehicle
+// they drop or misplace. It runs when a trip starts; a location report must
+// then carry the ids of the driver's active trip, so reports need no check of
+// their own. A nil catalog, or a moment with no index loaded, checks nothing.
+func (c *gtfsCatalog) checkScheduleIDs(tripField, tripID, routeID string) error {
+	if c == nil {
+		return nil
+	}
+	ix := c.index()
+	if ix == nil {
+		return nil
+	}
+	if routeID != "" {
+		if _, ok := ix.Route(routeID); !ok {
+			return fmt.Errorf("route_id %q is not in the GTFS schedule", routeID)
+		}
+	}
+	if tripID != "" {
+		trip, ok := ix.Trip(tripID)
+		if !ok {
+			return fmt.Errorf("%s %q is not in the GTFS schedule", tripField, tripID)
+		}
+		if routeID != "" && trip.RouteID != routeID {
+			return fmt.Errorf("%s %q runs on route_id %q, not %q", tripField, tripID, trip.RouteID, routeID)
+		}
+	}
+	return nil
 }
 
 // currentIndex answers 503 when there is no schedule to serve, which can only

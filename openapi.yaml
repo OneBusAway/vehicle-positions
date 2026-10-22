@@ -193,6 +193,10 @@ paths:
         rate-limited to one report per driver per 5 seconds on average, with a
         burst of 2 so a report that network delay brings in early is not
         refused; additional reports receive HTTP 429. Request bodies are capped at 1 MiB.
+
+        The driver must be assigned to `vehicle_id`, the vehicle must exist
+        and be active, and the driver must have an active trip on it. A report
+        never creates a vehicle.
       requestBody:
         required: true
         content:
@@ -215,7 +219,22 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: |
+            Caller lacks the driver role, is not assigned to this vehicle (an
+            unknown vehicle counts as not assigned), or the vehicle is inactive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            The driver has no active trip on this vehicle (start one with
+            `POST /api/v1/trips/start` first), or a `trip_id` or `route_id` the
+            report carries differs from the active trip's.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
         '429':
@@ -1607,7 +1626,9 @@ paths:
       description: |
         Creates a new active trip for the authenticated driver. The driver
         must be assigned to the vehicle and must not already have an active
-        trip. Request bodies are capped at 1 KiB.
+        trip. A non-empty `route_id` or `gtfs_trip_id` must be in the loaded
+        GTFS schedule, and the trip must run on the route; otherwise 400.
+        Request bodies are capped at 1 KiB.
       requestBody:
         required: true
         content:

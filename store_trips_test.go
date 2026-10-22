@@ -529,3 +529,64 @@ func TestStore_EndTrip_UpdatedAtChanges(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, afterUpdated.After(beforeUpdated), "updated_at should advance after ending trip")
 }
+
+// TestStore_AuthorizeLocation walks the reported attack: a driver may
+// publish only for a vehicle they are assigned to, that is active, and that
+// they have an active trip on whose trip_id and route_id the report matches.
+func TestStore_AuthorizeLocation(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	driver2 := setupTripUser(t, store, "Driver Two", "driver2-auth@test.com", "bus-102", "Bus 102")
+	_, err := store.pool.Exec(ctx, "INSERT INTO vehicles (id, label) VALUES ('bus-101', 'Bus 101')")
+	require.NoError(t, err)
+	driverID := strconv.FormatInt(driver2, 10)
+	report := func(vehicleID, tripID, routeID string) *LocationReport {
+		return &LocationReport{DriverID: driverID, VehicleID: vehicleID, TripID: tripID, RouteID: routeID}
+	}
+
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, report("bus-101", "", "")), ErrNotAssigned, "vehicle assigned to someone else")
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, report("ghost-999", "", "")), ErrNotAssigned, "unknown vehicle")
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, &LocationReport{DriverID: "driver-1", VehicleID: "bus-102"}), ErrNotAssigned, "non-numeric subject")
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, report("bus-102", "", "")), ErrNoActiveTrip, "assigned but no trip")
+
+	trip, err := store.StartTrip(ctx, driver2, "bus-102", "route-1", "gtfs-1")
+	require.NoError(t, err)
+	assert.NoError(t, store.AuthorizeLocation(ctx, report("bus-102", "gtfs-1", "route-1")))
+	assert.NoError(t, store.AuthorizeLocation(ctx, report("bus-102", "", "")), "trip fields are optional")
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, report("bus-102", "FAKE-TRIP", "route-1")), ErrTripMismatch)
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, report("bus-102", "gtfs-1", "NOPE")), ErrTripMismatch)
+
+	require.NoError(t, store.DeactivateVehicle(ctx, "bus-102"))
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, report("bus-102", "", "")), ErrVehicleInactive)
+
+	_, err = store.pool.Exec(ctx, "UPDATE vehicles SET active = true WHERE id = 'bus-102'")
+	require.NoError(t, err)
+	require.NoError(t, store.EndTrip(ctx, trip.ID, driver2))
+	assert.ErrorIs(t, store.AuthorizeLocation(ctx, report("bus-102", "", "")), ErrNoActiveTrip, "trip ended")
+
+	var ghosts int
+	require.NoError(t, store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM vehicles WHERE id = 'ghost-999'").Scan(&ghosts))
+	assert.Zero(t, ghosts, "authorizing must never create a vehicle")
+}
+
+// TestStore_GetRecentLocations_SkipsInactiveVehicles keeps a restart from
+// putting a deactivated vehicle back in the feed.
+func TestStore_GetRecentLocations_SkipsInactiveVehicles(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	for _, id := range []string{"bus-on", "bus-off"} {
+		require.NoError(t, store.SaveLocation(ctx, &LocationReport{VehicleID: id, Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()}))
+	}
+	require.NoError(t, store.DeactivateVehicle(ctx, "bus-off"))
+
+	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-time.Minute))
+	require.NoError(t, err)
+	require.Len(t, locs, 1)
+	assert.Equal(t, "bus-on", locs[0].VehicleID)
+}

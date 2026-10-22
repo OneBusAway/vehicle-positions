@@ -56,5 +56,8 @@ import Testing
 
         #expect(TrackingBanner.text(phase: .active(active), reporting: .noNetwork) == "No connection")
         #expect(TrackingBanner.color(phase: .active(active), reporting: .noNetwork) == .red)
+
+        #expect(TrackingBanner.text(phase: .active(active), reporting: .refused) == "Reports refused — ask your dispatcher")
+        #expect(TrackingBanner.color(phase: .active(active), reporting: .refused) == .red)
     }
 }

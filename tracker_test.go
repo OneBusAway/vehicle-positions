@@ -346,3 +346,37 @@ func TestTracker_UpdateStoresTripFields(t *testing.T) {
 	assert.Equal(t, "5", v[0].RouteID)
 	assert.Equal(t, "20260906", v[0].StartDate)
 }
+
+// TestTracker_UpdateAuthorized_RemovalWins: a vehicle deactivated while a report
+// for it was being authorized and saved must stay out of the feed.
+func TestTracker_UpdateAuthorized_RemovalWins(t *testing.T) {
+	tr := NewTracker(5 * time.Minute)
+	defer tr.Stop()
+	loc := &LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()}
+
+	authorizedAt := time.Now()
+	tr.Remove("bus-1") // deactivated mid-report
+	if tr.UpdateAuthorized(loc, authorizedAt) {
+		t.Fatal("a report authorized before the removal was published")
+	}
+	if n := len(tr.ActiveVehicles()); n != 0 {
+		t.Fatalf("the removed vehicle is back in the feed (%d active)", n)
+	}
+
+	// Reactivated since: a report authorized after the removal is published.
+	if !tr.UpdateAuthorized(loc, time.Now()) {
+		t.Fatal("a report authorized after the removal was dropped")
+	}
+	if n := len(tr.ActiveVehicles()); n != 1 {
+		t.Fatalf("want 1 active vehicle, got %d", n)
+	}
+}
+
+func TestTracker_UpdateAuthorized_NoRemoval(t *testing.T) {
+	tr := NewTracker(5 * time.Minute)
+	defer tr.Stop()
+	loc := &LocationReport{VehicleID: "bus-2", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()}
+	if !tr.UpdateAuthorized(loc, time.Now()) {
+		t.Fatal("a report for a vehicle never removed was dropped")
+	}
+}

@@ -109,6 +109,7 @@
     <string name="tracking_status_no_gps">GPS unavailable</string>
     <string name="tracking_status_clock_skew">Check device clock</string>
     <string name="tracking_status_auth_expired">Session expired – log in again</string>
+    <string name="tracking_status_reports_refused">Reports refused – ask your dispatcher</string>
     <!-- The trip bar: the trip's running time, then how many reports have reached the server. -->
     <plurals name="tracking_bar_sent">
         <item quantity="one">%1$d sent</item>
@@ -161,6 +162,8 @@
     <string name="tracking_problem_no_gps_detail">Position paused</string>
     <string name="tracking_problem_clock_skew">Phone clock is wrong</string>
     <string name="tracking_problem_clock_skew_detail">Set automatic time</string>
+    <string name="tracking_problem_reports_refused">Reports refused</string>
+    <string name="tracking_problem_reports_refused_detail">Ask your dispatcher</string>
     <!-- In the status card's place once the driver's sign-in has expired. -->
     <string name="tracking_signed_out_title">Signed out</string>
     <string name="tracking_signed_out_message">Reports have stopped. Your trip is still open.</string>

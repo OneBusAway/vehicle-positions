@@ -675,6 +675,10 @@ func (ui *adminUI) setVehicleActive(w http.ResponseWriter, r *http.Request, acti
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	if !active {
+		// Leave the feed now, not when the last report goes stale.
+		ui.tracker.Remove(id)
+	}
 	setFlash(w, flashCode)
 	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
 }

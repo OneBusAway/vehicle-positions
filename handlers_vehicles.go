@@ -151,7 +151,9 @@ func handleUpsertVehicle(store VehicleManager) http.HandlerFunc {
 	}
 }
 
-func handleDeactivateVehicle(store VehicleManager) http.HandlerFunc {
+// handleDeactivateVehicle also drops the vehicle from the tracker, so the feed
+// stops publishing it now rather than when its last report goes stale.
+func handleDeactivateVehicle(store VehicleManager, tracker *Tracker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if err := validateVehicleID(id); err != nil {
@@ -169,6 +171,7 @@ func handleDeactivateVehicle(store VehicleManager) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to deactivate vehicle"})
 			return
 		}
+		tracker.Remove(id)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

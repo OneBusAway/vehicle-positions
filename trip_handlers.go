@@ -43,7 +43,7 @@ type EndTripRequest struct {
 	TripID int64 `json:"trip_id"`
 }
 
-func handleStartTrip(store TripStarter) http.HandlerFunc {
+func handleStartTrip(store TripStarter, catalog *gtfsCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		contentType := r.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -99,6 +99,10 @@ func handleStartTrip(store TripStarter) http.HandlerFunc {
 		}
 		if len(req.GtfsTripID) > 100 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "gtfs_trip_id must be at most 100 characters"})
+			return
+		}
+		if err := catalog.checkScheduleIDs("gtfs_trip_id", req.GtfsTripID, req.RouteID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 

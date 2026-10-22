@@ -40,7 +40,7 @@ type appStore interface {
 	VehicleInfoUpdater
 	VehicleActivator
 	VehicleCreator
-	LocationSaver
+	LocationStore
 	AssignmentCreator
 	AssignmentDeleter
 	AssignmentListerByUser
@@ -99,7 +99,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/vehicles/live", authMiddleware(adminMiddleware(handleLiveVehicles(tracker, store, store))))
 	mux.Handle("GET /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleGetVehicle(store))))
 	mux.Handle("POST /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleUpsertVehicle(store))))
-	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store))))
+	mux.Handle("DELETE /api/v1/admin/vehicles/{id}", authMiddleware(adminMiddleware(handleDeactivateVehicle(store, tracker))))
 	mux.Handle("GET /api/v1/admin/vehicles/{vehicleID}/locations", authMiddleware(adminMiddleware(handleGetLocationHistory(store, store))))
 	mux.Handle("GET /api/v1/admin/trips", authMiddleware(adminMiddleware(handleListTrips(store))))
 	mux.Handle("GET /api/v1/admin/trips/{id}", authMiddleware(adminMiddleware(handleGetTrip(store))))
@@ -110,7 +110,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.HandleFunc("GET /ready", handleReadiness(store))
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
-	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store)))
+	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store, catalog)))
 	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
 	mux.Handle("GET /api/v1/vehicles", authMiddleware(handleListMyVehicles(store)))
 	// Registered whether or not a map file is configured: an unconfigured server

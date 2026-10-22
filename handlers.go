@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -108,7 +109,21 @@ type LocationSaver interface {
 	SaveLocation(ctx context.Context, loc *LocationReport) error
 }
 
-func handlePostLocation(store LocationSaver, tracker *Tracker, rl *VehicleRateLimiter) http.HandlerFunc {
+// LocationAuthorizer decides whether a driver may publish a report. It returns
+// ErrNotAssigned, ErrVehicleInactive, ErrNoActiveTrip or ErrTripMismatch when
+// they may not.
+type LocationAuthorizer interface {
+	AuthorizeLocation(ctx context.Context, loc *LocationReport) error
+}
+
+// LocationStore is what the location ingest needs: a report is authorized
+// before it is saved, so no driver can move a vehicle they are not driving.
+type LocationStore interface {
+	LocationAuthorizer
+	LocationSaver
+}
+
+func handlePostLocation(store LocationStore, tracker *Tracker, rl *VehicleRateLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		contentType := r.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -164,13 +179,35 @@ func handlePostLocation(store LocationSaver, tracker *Tracker, rl *VehicleRateLi
 			return
 		}
 
+		// Taken before the check, so a deactivation that lands while this
+		// report is being authorized and saved still keeps it out of the feed.
+		authorizedAt := time.Now()
+		if err := store.AuthorizeLocation(r.Context(), &loc); err != nil {
+			switch {
+			case errors.Is(err, ErrNotAssigned):
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "driver is not assigned to this vehicle"})
+			case errors.Is(err, ErrVehicleInactive):
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "vehicle is inactive"})
+			case errors.Is(err, ErrNoActiveTrip):
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "driver has no active trip on this vehicle"})
+			case errors.Is(err, ErrTripMismatch):
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "trip_id or route_id does not match the driver's active trip"})
+			default:
+				slog.Error("failed to authorize location", "vehicle_id", loc.VehicleID, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to authorize location"})
+			}
+			return
+		}
+
 		if err := store.SaveLocation(r.Context(), &loc); err != nil {
 			slog.Error("failed to save location", "vehicle_id", loc.VehicleID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save location"})
 			return
 		}
 
-		tracker.Update(&loc)
+		if !tracker.UpdateAuthorized(&loc, authorizedAt) {
+			slog.Info("vehicle removed while its report was processed; not publishing it", "vehicle_id", loc.VehicleID)
+		}
 
 		writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
 	}

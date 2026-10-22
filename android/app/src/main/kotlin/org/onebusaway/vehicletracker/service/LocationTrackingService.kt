@@ -217,6 +217,7 @@ class LocationTrackingService : Service() {
             TrackingProblem.NO_GPS -> R.string.tracking_status_no_gps
             TrackingProblem.AUTH_EXPIRED -> R.string.tracking_status_auth_expired
             TrackingProblem.CLOCK_SKEW -> R.string.tracking_status_clock_skew
+            TrackingProblem.REPORTS_REFUSED -> R.string.tracking_status_reports_refused
         },
     )
 
