@@ -6,7 +6,10 @@ import VehiclePositionsKit
 /// A send-side problem the driver should see (spec §5.4). GPS availability is
 /// the session's to judge; this is only about reaching the server.
 nonisolated enum ReportingProblem: Sendable, Equatable {
-    case none, noNetwork, authExpired, clockSkew
+    /// `refused` is the server turning reports down with a 403 (not assigned,
+    /// vehicle deactivated) or a 409 (no active trip, or a trip mismatch).
+    /// The driver cannot fix it from the phone; dispatch can.
+    case none, noNetwork, authExpired, clockSkew, refused
 }
 
 /// Sends fixes to `POST /api/v1/locations`, one at a time, no more often than
@@ -102,6 +105,11 @@ final class LocationReporter {
                 problem = .authExpired
             case 429:
                 break // rate-limited: drop silently, keep the current status
+            case 403, 409:
+                // Every report is refused until dispatch fixes the vehicle or
+                // the trip, so say so rather than stay green.
+                log.warning("location report refused with HTTP \(code): \(message)")
+                problem = .refused
             default:
                 log.warning("dropping location report after HTTP \(code): \(message)")
             }

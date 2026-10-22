@@ -105,6 +105,12 @@ class TripReporter @Inject constructor(
             when {
                 e.code() == 401 -> refreshProblem(sendProblem = TrackingProblem.AUTH_EXPIRED)
                 e.code() == 429 -> Unit // rate-limited: drop silently, keep current status
+                // Not assigned, vehicle deactivated (403), or no active trip / a trip mismatch (409):
+                // every report until dispatch fixes it is refused, so say so rather than look healthy.
+                e.code() == 403 || e.code() == 409 -> {
+                    Log.w(TAG, "Location report refused with HTTP ${e.code()}", e)
+                    refreshProblem(sendProblem = TrackingProblem.REPORTS_REFUSED)
+                }
                 is400WithTimestamp -> {
                     consecutiveTimestampRejects++
                     if (consecutiveTimestampRejects >= CLOCK_SKEW_THRESHOLD) {

@@ -640,7 +640,7 @@ func TestHandleDeactivateVehicle_HappyPath(t *testing.T) {
 	now := time.Now()
 	store.vehicles["bus-1"] = &VehicleResponse{ID: "bus-1", Active: true, CreatedAt: now, UpdatedAt: now}
 
-	handler := handleDeactivateVehicle(store)
+	handler := handleDeactivateVehicle(store, NewTracker(5*time.Minute))
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/vehicles/bus-1", nil)
 	req.SetPathValue("id", "bus-1")
 	w := httptest.NewRecorder()
@@ -650,10 +650,31 @@ func TestHandleDeactivateVehicle_HappyPath(t *testing.T) {
 	assert.False(t, store.vehicles["bus-1"].Active)
 }
 
+func TestHandleDeactivateVehicle_RemovesFromFeed(t *testing.T) {
+	store := newMockVehicleStore()
+	now := time.Now()
+	store.vehicles["bus-1"] = &VehicleResponse{ID: "bus-1", Active: true, CreatedAt: now, UpdatedAt: now}
+	tracker := NewTracker(5 * time.Minute)
+	t.Cleanup(tracker.Stop)
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now.Unix()})
+	tracker.Update(&LocationReport{VehicleID: "bus-2", Latitude: 1, Longitude: 2, Timestamp: now.Unix()})
+
+	handler := handleDeactivateVehicle(store, tracker)
+	req := httptest.NewRequest("DELETE", "/api/v1/admin/vehicles/bus-1", nil)
+	req.SetPathValue("id", "bus-1")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1, "a deactivated vehicle must leave the feed immediately")
+	assert.Equal(t, "bus-2", active[0].VehicleID)
+}
+
 func TestHandleDeactivateVehicle_NotFound(t *testing.T) {
 	store := newMockVehicleStore()
 
-	handler := handleDeactivateVehicle(store)
+	handler := handleDeactivateVehicle(store, NewTracker(5*time.Minute))
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/vehicles/unknown", nil)
 	req.SetPathValue("id", "unknown")
 	w := httptest.NewRecorder()
@@ -670,7 +691,7 @@ func TestHandleDeactivateVehicle_StoreError(t *testing.T) {
 	store := newMockVehicleStore()
 	store.err = errors.New("database down")
 
-	handler := handleDeactivateVehicle(store)
+	handler := handleDeactivateVehicle(store, NewTracker(5*time.Minute))
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/vehicles/bus-1", nil)
 	req.SetPathValue("id", "bus-1")
 	w := httptest.NewRecorder()
@@ -685,7 +706,7 @@ func TestHandleDeactivateVehicle_StoreError(t *testing.T) {
 
 func TestHandleDeactivateVehicle_InvalidID(t *testing.T) {
 	store := newMockVehicleStore()
-	handler := handleDeactivateVehicle(store)
+	handler := handleDeactivateVehicle(store, NewTracker(5*time.Minute))
 
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/vehicles/test", nil)
 	req.SetPathValue("id", "bus@1!")

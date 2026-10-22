@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -46,12 +47,34 @@ type AssignmentListerByVehicle interface {
 
 // CreateAssignment inserts a user-vehicle assignment and returns the DB-generated created_at.
 func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID string) (*AssignmentResponse, error) {
-	row, err := s.queries.AssignUserVehicle(ctx, db.AssignUserVehicleParams{
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer rollbackTx(tx)
+	qtx := s.queries.WithTx(tx)
+
+	// A driver assigned to a deactivated vehicle could do nothing with it.
+	active, err := qtx.GetVehicleActiveForShare(ctx, vehicleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrVehicleNotFoundFK
+	}
+	if err != nil {
+		return nil, fmt.Errorf("check vehicle active: %w", err)
+	}
+	if !active {
+		return nil, ErrVehicleInactive
+	}
+
+	row, err := qtx.AssignUserVehicle(ctx, db.AssignUserVehicleParams{
 		UserID:    userID,
 		VehicleID: vehicleID,
 	})
 	if err != nil {
 		return nil, classifyAssignmentError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 
 	return &AssignmentResponse{

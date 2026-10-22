@@ -86,6 +86,8 @@ class TripPanelModelTest {
         assertEquals(Reporting.NOT_REPORTING, reporting(TrackingProblem.CLOCK_SKEW))
         assertEquals(Reporting.NO_GPS, reporting(TrackingProblem.NO_GPS))
         assertEquals(Reporting.STOPPED, reporting(TrackingProblem.AUTH_EXPIRED))
+        // Refused reports reach no rider either, until dispatch fixes the vehicle or the trip.
+        assertEquals(Reporting.NOT_REPORTING, reporting(TrackingProblem.REPORTS_REFUSED))
         assertFalse(Reporting.REPORTING.isProblem)
         assertTrue(Reporting.entries.filter { it != Reporting.REPORTING }.all { it.isProblem })
     }

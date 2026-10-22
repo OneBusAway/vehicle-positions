@@ -112,6 +112,14 @@ func handleStartTrip(store TripStarter) http.HandlerFunc {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": "driver already has an active trip"})
 				return
 			}
+			if errors.Is(err, ErrVehicleBusy) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "vehicle already has an active trip"})
+				return
+			}
+			if errors.Is(err, ErrVehicleInactive) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "vehicle is inactive"})
+				return
+			}
 			slog.Error("failed to start trip", "user_id", userID, "vehicle_id", req.VehicleID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start trip"})
 			return
@@ -121,7 +129,10 @@ func handleStartTrip(store TripStarter) http.HandlerFunc {
 	}
 }
 
-func handleEndTrip(store TripEnder) http.HandlerFunc {
+// handleEndTrip also drops the trip's vehicle from the tracker, so the feed
+// stops publishing a bus that is out of service now rather than when its last
+// report goes stale.
+func handleEndTrip(store TripEnder, tracker *Tracker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		contentType := r.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -164,7 +175,7 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 			return
 		}
 
-		err = store.EndTrip(r.Context(), req.TripID, userID)
+		vehicleID, err := store.EndTrip(r.Context(), req.TripID, userID)
 		if err != nil {
 			if errors.Is(err, ErrTripNotFound) {
 				slog.Warn("end trip: no matching active trip", "trip_id", req.TripID, "user_id", userID)
@@ -176,6 +187,7 @@ func handleEndTrip(store TripEnder) http.HandlerFunc {
 			return
 		}
 
+		tracker.Remove(vehicleID)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "trip ended"})
 	}
 }

@@ -57,6 +57,9 @@ func (n *noopStore) UpsertVehicle(_ context.Context, _, _, _ string) (*VehicleRe
 func (n *noopStore) DeactivateVehicle(_ context.Context, _ string) error {
 	return nil
 }
+func (n *noopStore) AuthorizeLocation(_ context.Context, _ *LocationReport) error {
+	return nil
+}
 func (n *noopStore) SaveLocation(_ context.Context, _ *LocationReport) error {
 	return nil
 }
@@ -75,8 +78,8 @@ func (n *noopStore) ListAssignmentsByVehicle(_ context.Context, _ string) ([]Ass
 func (n *noopStore) StartTrip(_ context.Context, _ int64, _, _, _ string) (*TripResponse, error) {
 	return nil, nil
 }
-func (n *noopStore) EndTrip(_ context.Context, _, _ int64) error {
-	return nil
+func (n *noopStore) EndTrip(_ context.Context, _, _ int64) (string, error) {
+	return "", nil
 }
 func (n *noopStore) Ping(_ context.Context) error {
 	return nil

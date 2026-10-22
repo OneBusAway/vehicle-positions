@@ -423,10 +423,11 @@ func (q *Queries) EndRide(ctx context.Context, arg EndRideParams) (string, error
 	return rider_id, err
 }
 
-const endTrip = `-- name: EndTrip :execrows
+const endTrip = `-- name: EndTrip :one
 UPDATE trips
 SET status = 'completed', end_time = NOW()
 WHERE id = $1 AND user_id = $2 AND status = 'active'
+RETURNING vehicle_id
 `
 
 type EndTripParams struct {
@@ -434,12 +435,11 @@ type EndTripParams struct {
 	UserID int64
 }
 
-func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (int64, error) {
-	result, err := q.db.Exec(ctx, endTrip, arg.ID, arg.UserID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (string, error) {
+	row := q.db.QueryRow(ctx, endTrip, arg.ID, arg.UserID)
+	var vehicle_id string
+	err := row.Scan(&vehicle_id)
+	return vehicle_id, err
 }
 
 const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
@@ -489,6 +489,22 @@ func (q *Queries) GetActiveTripByUser(ctx context.Context, userID int64) (Trip, 
 	return i, err
 }
 
+const getActiveTripByVehicle = `-- name: GetActiveTripByVehicle :one
+SELECT id, user_id FROM trips WHERE vehicle_id = $1 AND status = 'active'
+`
+
+type GetActiveTripByVehicleRow struct {
+	ID     int64
+	UserID int64
+}
+
+func (q *Queries) GetActiveTripByVehicle(ctx context.Context, vehicleID string) (GetActiveTripByVehicleRow, error) {
+	row := q.db.QueryRow(ctx, getActiveTripByVehicle, vehicleID)
+	var i GetActiveTripByVehicleRow
+	err := row.Scan(&i.ID, &i.UserID)
+	return i, err
+}
+
 const getGTFSFeedCache = `-- name: GetGTFSFeedCache :one
 SELECT source, body, fetched_at FROM gtfs_feed_cache WHERE id = 1
 `
@@ -519,6 +535,52 @@ func (q *Queries) GetGTFSFeedCacheDigest(ctx context.Context) (GetGTFSFeedCacheD
 	row := q.db.QueryRow(ctx, getGTFSFeedCacheDigest)
 	var i GetGTFSFeedCacheDigestRow
 	err := row.Scan(&i.Source, &i.Sha256)
+	return i, err
+}
+
+const getLocationAuthorization = `-- name: GetLocationAuthorization :one
+SELECT
+    v.active AS vehicle_active,
+    EXISTS (
+        SELECT 1 FROM user_vehicles uv
+        WHERE uv.user_id = $1 AND uv.vehicle_id = v.id
+    )::boolean AS assigned,
+    (t.id IS NOT NULL)::boolean AS has_active_trip,
+    COALESCE(t.route_id, '')::text AS trip_route_id,
+    COALESCE(t.gtfs_trip_id, '')::text AS trip_gtfs_trip_id
+FROM vehicles v
+LEFT JOIN trips t
+    ON t.vehicle_id = v.id AND t.user_id = $1 AND t.status = 'active'
+WHERE v.id = $2
+`
+
+type GetLocationAuthorizationParams struct {
+	UserID    int64
+	VehicleID string
+}
+
+type GetLocationAuthorizationRow struct {
+	VehicleActive  bool
+	Assigned       bool
+	HasActiveTrip  bool
+	TripRouteID    string
+	TripGtfsTripID string
+}
+
+// One round trip answers every question the location ingest asks before it
+// accepts a report. No row means the vehicle does not exist. A driver has at
+// most one active trip (idx_trips_one_active_per_user), so the join adds at
+// most one row.
+func (q *Queries) GetLocationAuthorization(ctx context.Context, arg GetLocationAuthorizationParams) (GetLocationAuthorizationRow, error) {
+	row := q.db.QueryRow(ctx, getLocationAuthorization, arg.UserID, arg.VehicleID)
+	var i GetLocationAuthorizationRow
+	err := row.Scan(
+		&i.VehicleActive,
+		&i.Assigned,
+		&i.HasActiveTrip,
+		&i.TripRouteID,
+		&i.TripGtfsTripID,
+	)
 	return i, err
 }
 
@@ -589,6 +651,7 @@ SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
 FROM location_points
 WHERE received_at > $1
+  AND vehicle_id IN (SELECT id FROM vehicles WHERE active)
 ORDER BY vehicle_id, received_at DESC
 `
 
@@ -609,7 +672,8 @@ type GetRecentLocationsRow struct {
 // route_id and start_date are selected because the feed's TripDescriptor is
 // documented to carry what the driver sent: a seeded vehicle that came back
 // without them would publish a narrower descriptor than it did before the
-// restart, and a route-only vehicle would publish none at all.
+// restart, and a route-only vehicle would publish none at all. A deactivated
+// vehicle is left out, so a restart cannot put it back in the feed.
 func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Timestamptz) ([]GetRecentLocationsRow, error) {
 	rows, err := q.db.Query(ctx, getRecentLocations, receivedAt)
 	if err != nil {
@@ -787,6 +851,20 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getVehicleActiveForShare = `-- name: GetVehicleActiveForShare :one
+SELECT active FROM vehicles WHERE id = $1 FOR SHARE
+`
+
+// FOR SHARE holds off a concurrent deactivation until the caller's
+// transaction commits, so a trip or assignment never lands on a vehicle that
+// was deactivated while it was being checked.
+func (q *Queries) GetVehicleActiveForShare(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, getVehicleActiveForShare, id)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
 }
 
 const getVehicleByID = `-- name: GetVehicleByID :one
@@ -972,8 +1050,8 @@ type ListActiveTripsByVehicleRow struct {
 	DriverName string
 }
 
-// Schema guarantees one active trip per USER, not per vehicle; newest active
-// trip per vehicle is the defined tiebreak (spec §4.8).
+// idx_trips_one_active_per_vehicle allows one active trip per vehicle; the
+// DISTINCT ON keeps the answer to one row per vehicle regardless.
 func (q *Queries) ListActiveTripsByVehicle(ctx context.Context) ([]ListActiveTripsByVehicleRow, error) {
 	rows, err := q.db.Query(ctx, listActiveTripsByVehicle)
 	if err != nil {

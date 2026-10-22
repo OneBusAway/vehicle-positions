@@ -31,6 +31,10 @@ var ErrNotAssigned = errors.New("driver is not assigned to this vehicle")
 // ErrActiveTripExists is returned when the driver already has an active trip.
 var ErrActiveTripExists = errors.New("driver already has an active trip")
 
+// ErrVehicleBusy is returned when another driver already has an active trip
+// on the vehicle.
+var ErrVehicleBusy = errors.New("vehicle already has an active trip")
+
 // ErrTripNotFound is returned when no matching active trip is found to end,
 // or when GetTripSummary is given an id that doesn't exist.
 var ErrTripNotFound = errors.New("active trip not found")
@@ -75,7 +79,7 @@ type TripStarter interface {
 
 // TripEnder is the store interface for ending trips.
 type TripEnder interface {
-	EndTrip(ctx context.Context, tripID, userID int64) error
+	EndTrip(ctx context.Context, tripID, userID int64) (vehicleID string, err error)
 }
 
 // TripLister lists trip summaries with optional filters, for the admin trips page.
@@ -99,8 +103,9 @@ type ActiveTripsByVehicleLister interface {
 	ListActiveTripsByVehicle(ctx context.Context) (map[string]ActiveTripInfo, error)
 }
 
-// StartTrip validates the driver-vehicle assignment, checks for an existing active trip,
-// and creates a new trip.
+// StartTrip validates the driver-vehicle assignment, checks that the vehicle
+// is active and that neither the driver nor the vehicle already has an active
+// trip, and creates a new trip.
 func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID, gtfsTripID string) (*TripResponse, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -122,6 +127,15 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 		return nil, fmt.Errorf("check assignment: %w", err)
 	}
 
+	// The assignment's foreign key guarantees the vehicle row exists.
+	active, err := qtx.GetVehicleActiveForShare(ctx, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("check vehicle active: %w", err)
+	}
+	if !active {
+		return nil, ErrVehicleInactive
+	}
+
 	// Check driver doesn't already have an active trip.
 	_, err = qtx.GetActiveTripByUser(ctx, userID)
 	if err == nil {
@@ -131,6 +145,21 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 		return nil, fmt.Errorf("check active trip: %w", err)
 	}
 
+	// A vehicle runs one trip at a time: two would make its feed entity flip
+	// between trips on every request.
+	busy, err := qtx.GetActiveTripByVehicle(ctx, vehicleID)
+	if err == nil {
+		// The driver's own trip, committed since the check above: a driver
+		// racing themselves, whose answer is that they already have one.
+		if busy.UserID == userID {
+			return nil, ErrActiveTripExists
+		}
+		return nil, ErrVehicleBusy
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("check vehicle active trip: %w", err)
+	}
+
 	trip, err := qtx.StartTrip(ctx, db.StartTripParams{
 		UserID:     userID,
 		VehicleID:  vehicleID,
@@ -138,12 +167,22 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 		GtfsTripID: gtfsTripID,
 	})
 	if err != nil {
-		// The unique partial index idx_trips_one_active_per_user catches
-		// concurrent inserts that pass the SELECT check above.
+		// The unique partial indexes catch concurrent inserts that pass the
+		// SELECT checks above.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" &&
-			pgErr.ConstraintName == "idx_trips_one_active_per_user" {
-			return nil, ErrActiveTripExists
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case "idx_trips_one_active_per_user":
+				return nil, ErrActiveTripExists
+			case "idx_trips_one_active_per_vehicle":
+				// A driver racing themselves onto one vehicle can trip this
+				// index before the per-user one. The transaction is aborted,
+				// so ask outside it which answer is the driver's.
+				if _, err := s.queries.GetActiveTripByUser(ctx, userID); err == nil {
+					return nil, ErrActiveTripExists
+				}
+				return nil, ErrVehicleBusy
+			}
 		}
 		return nil, fmt.Errorf("insert trip: %w", err)
 	}
@@ -167,19 +206,19 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 	return resp, nil
 }
 
-// EndTrip marks an active trip as completed.
-func (s *Store) EndTrip(ctx context.Context, tripID, userID int64) error {
-	rowsAffected, err := s.queries.EndTrip(ctx, db.EndTripParams{
+// EndTrip marks an active trip as completed and returns the vehicle it ran on.
+func (s *Store) EndTrip(ctx context.Context, tripID, userID int64) (string, error) {
+	vehicleID, err := s.queries.EndTrip(ctx, db.EndTripParams{
 		ID:     tripID,
 		UserID: userID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrTripNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("end trip: %w", err)
+		return "", fmt.Errorf("end trip: %w", err)
 	}
-	if rowsAffected == 0 {
-		return ErrTripNotFound
-	}
-	return nil
+	return vehicleID, nil
 }
 
 // ListTrips returns trip summaries newest-first with optional filters.
@@ -291,9 +330,8 @@ func (s *Store) ListTripLocations(ctx context.Context, tripID int64) ([]Location
 }
 
 // ListActiveTripsByVehicle returns the current active trip for each vehicle
-// that has one, keyed by vehicle ID. The schema only guarantees one active
-// trip per user (not per vehicle); when multiple drivers have active trips
-// on the same vehicle, the most recently started trip wins (spec §4.8).
+// that has one, keyed by vehicle ID. idx_trips_one_active_per_vehicle allows
+// at most one per vehicle.
 func (s *Store) ListActiveTripsByVehicle(ctx context.Context) (map[string]ActiveTripInfo, error) {
 	rows, err := s.queries.ListActiveTripsByVehicle(ctx)
 	if err != nil {

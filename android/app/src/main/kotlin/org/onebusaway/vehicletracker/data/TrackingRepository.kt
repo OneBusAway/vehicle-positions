@@ -9,7 +9,12 @@ import org.onebusaway.vehicletracker.engine.TripGeometry
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class TrackingProblem { NONE, NO_NETWORK, NO_GPS, AUTH_EXPIRED, CLOCK_SKEW }
+/**
+ * What is keeping the trip's reports from riders, if anything. [REPORTS_REFUSED] is the server
+ * turning reports down (403/409): the vehicle was deactivated or unassigned, or the trip is no
+ * longer active on the server. The driver cannot fix that from the phone; dispatch can.
+ */
+enum class TrackingProblem { NONE, NO_NETWORK, NO_GPS, AUTH_EXPIRED, CLOCK_SKEW, REPORTS_REFUSED }
 
 data class TrackingState(
     val active: Boolean = false,

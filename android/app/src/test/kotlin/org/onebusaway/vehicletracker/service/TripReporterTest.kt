@@ -193,6 +193,25 @@ class TripReporterTest {
         server.shutdown()
     }
 
+    // A vehicle deactivated or unassigned mid-shift, or a trip no longer active on the server:
+    // every report is refused, and the driver must see that rather than a healthy status.
+    @Test fun `403 and 409 set REPORTS_REFUSED until a report is accepted`() = runTest {
+        for (code in listOf(403, 409)) {
+            val server = MockWebServer().apply { start() }
+            server.enqueue(MockResponse().setResponseCode(code).setBody("""{"error":"refused"}"""))
+            server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+            val (reporter, tracking) = reporterWith(server)
+
+            reporter.report(trip, fix())
+            assertEquals("HTTP $code", TrackingProblem.REPORTS_REFUSED, tracking.state.value.problem)
+            assertEquals(0, tracking.state.value.fixesSent)
+
+            reporter.report(trip, fix())
+            assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
+            server.shutdown()
+        }
+    }
+
     @Test fun `400 without timestamp in body leaves status unchanged and does not increment counter`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":"invalid vehicle_id"}"""))
