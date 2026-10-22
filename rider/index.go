@@ -55,7 +55,11 @@ type TripInfo struct {
 	Headsign    string
 	DirectionID int // 0 or 1 as in trips.txt; -1 when the feed gives none
 	Shape       *ShapeGeom
-	StopTimes   []StopTimeInfo // sorted by Sequence
+	// ShapeFromStops is set when the feed gives the trip no shape and Shape
+	// was drawn through its stops. Those straight lines cut every curve
+	// between stops, so a vehicle on the route can be far from them.
+	ShapeFromStops bool
+	StopTimes      []StopTimeInfo // sorted by Sequence
 }
 
 // RouteInfo is one GTFS route as the driver catalog lists it. Only routes
@@ -72,11 +76,14 @@ type RouteInfo struct {
 
 // IndexStats summarises a loaded index.
 type IndexStats struct {
-	Routes   int
-	Trips    int
-	Shapes   int
-	LoadedAt time.Time
-	Source   string
+	Routes int
+	Trips  int
+	Shapes int
+	// StopShapes counts trips with no shape in shapes.txt whose shape was
+	// drawn through their stops instead.
+	StopShapes int
+	LoadedAt   time.Time
+	Source     string
 }
 
 // Index is an immutable snapshot of the schedule data the rider engine and
@@ -102,9 +109,11 @@ type serviceCalendar struct {
 	removed    map[int]bool
 }
 
-// BuildIndex indexes the trips of a parsed GTFS feed. Trips without a usable
-// shape, and trips with no stop times, are skipped: neither can be verified
-// against a schedule. The static feed is not retained.
+// BuildIndex indexes the trips of a parsed GTFS feed. shapes.txt is optional
+// in GTFS, so a trip without a usable shape gets one drawn through its stops in
+// sequence. Trips with no stop times, and shapeless trips with fewer than two
+// distinct located stops, are skipped: neither can be verified against a
+// schedule. The static feed is not retained.
 func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index, error) {
 	tz, err := feedTimezone(static)
 	if err != nil {
@@ -124,13 +133,18 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 	}
 
 	shapes := make(map[string]*ShapeGeom)
-	skippedShapeless, skippedNoStopTimes := 0, 0
+	skippedShapeless, skippedNoStopTimes, stopShapes := 0, 0, 0
 	for i := range static.Trips {
 		trip := &static.Trips[i]
 		shape := shapeFor(shapes, trip.Shape)
-		if shape == nil {
-			skippedShapeless++
-			continue
+		fromStops := false
+		if shape == nil && len(trip.StopTimes) > 0 {
+			shape = shapeFromStops(trip.StopTimes)
+			if shape == nil {
+				skippedShapeless++
+				continue
+			}
+			fromStops = true
 		}
 		if len(trip.StopTimes) == 0 {
 			// Verify interpolates a scheduled time at the point's position, and
@@ -140,11 +154,15 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 			continue
 		}
 		info := &TripInfo{
-			ID:          trip.ID,
-			Headsign:    trip.Headsign,
-			DirectionID: directionID(trip.DirectionId),
-			Shape:       shape,
-			StopTimes:   stopTimesAlong(trip.StopTimes, shape),
+			ID:             trip.ID,
+			Headsign:       trip.Headsign,
+			DirectionID:    directionID(trip.DirectionId),
+			Shape:          shape,
+			ShapeFromStops: fromStops,
+			StopTimes:      stopTimesAlong(trip.StopTimes, shape, !fromStops),
+		}
+		if fromStops {
+			stopShapes++
 		}
 		if trip.Route != nil {
 			info.RouteID = trip.Route.Id
@@ -181,15 +199,18 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 	slices.SortStableFunc(ix.routeList, compareRoutes)
 
 	ix.stats = IndexStats{
-		Routes:   len(ix.routeList),
-		Trips:    len(ix.trips),
-		Shapes:   len(shapes),
-		LoadedAt: loadedAt,
-		Source:   source,
+		Routes:     len(ix.routeList),
+		Trips:      len(ix.trips),
+		Shapes:     len(shapes),
+		StopShapes: stopShapes,
+		LoadedAt:   loadedAt,
+		Source:     source,
 	}
 	if skippedShapeless > 0 || skippedNoStopTimes > 0 {
-		slog.Info("rider: skipped unusable GTFS trips", "source", source,
-			"no_shape", skippedShapeless, "no_stop_times", skippedNoStopTimes, "indexed", ix.stats.Trips)
+		// A skipped trip is one no driver can pick, so this is worth an
+		// operator's attention, not just a line in the INFO stream.
+		slog.Warn("rider: skipped unusable GTFS trips", "source", source,
+			"no_usable_shape", skippedShapeless, "no_stop_times", skippedNoStopTimes, "indexed", ix.stats.Trips)
 	}
 	return ix, nil
 }
@@ -419,15 +440,42 @@ func shapeFor(cache map[string]*ShapeGeom, shape *gtfs.Shape) *ShapeGeom {
 	return geom
 }
 
-// stopTimesAlong positions a trip's stop times along its shape, in stop
-// sequence order.
-func stopTimesAlong(stopTimes []gtfs.ScheduledStopTime, shape *ShapeGeom) []StopTimeInfo {
+// shapeFromStops draws a shape through a trip's located stops in sequence
+// order, for a trip the feed gives no shape. It returns nil when fewer than
+// two distinct positions remain, since a shape needs a length.
+func shapeFromStops(stopTimes []gtfs.ScheduledStopTime) *ShapeGeom {
+	var points []LatLon
+	for _, st := range sortedBySequence(stopTimes) {
+		pos, located := stopPos(st.Stop)
+		if !located || (len(points) > 0 && points[len(points)-1] == pos) {
+			continue
+		}
+		points = append(points, pos)
+	}
+	if len(points) < 2 {
+		return nil
+	}
+	return NewShapeGeom(points)
+}
+
+// sortedBySequence returns a copy of stopTimes in stop_sequence order.
+func sortedBySequence(stopTimes []gtfs.ScheduledStopTime) []gtfs.ScheduledStopTime {
 	sorted := slices.Clone(stopTimes)
 	slices.SortStableFunc(sorted, func(a, b gtfs.ScheduledStopTime) int {
 		return cmp.Compare(a.StopSequence, b.StopSequence)
 	})
+	return sorted
+}
+
+// stopTimesAlong positions a trip's stop times along its shape, in stop
+// sequence order. shape_dist_traveled is honoured only when shapeDist is set:
+// it is measured along the feed's shape, so it means nothing on a shape drawn
+// through the stops.
+func stopTimesAlong(stopTimes []gtfs.ScheduledStopTime, shape *ShapeGeom, shapeDist bool) []StopTimeInfo {
+	sorted := sortedBySequence(stopTimes)
 
 	scale, useDist := shapeDistScale(sorted, shape.Length)
+	useDist = useDist && shapeDist
 	out := make([]StopTimeInfo, 0, len(sorted))
 	for i, st := range sorted {
 		pos, located := stopPos(st.Stop)

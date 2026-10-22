@@ -70,6 +70,35 @@ func TestVerify_OffRoute_AccuracyWidensTolerance(t *testing.T) {
 	assert.Equal(t, OffRoute, Verify(in).Outcome, "absent accuracy adds nothing")
 }
 
+// TestVerify_StopShapeSkipsOnRouteCheck: fixture trip T4 has no shapes.txt
+// shape, so its shape is the straight line ST1 -> ST3. A vehicle 500 m from
+// that line can be on the route where it curves, so the point is not
+// OffRoute; the schedule still decides it.
+func TestVerify_StopShapeSkipsOnRouteCheck(t *testing.T) {
+	ix := fixtureIndex(t)
+	trip, ok := ix.Trip("T4")
+	require.True(t, ok)
+	require.True(t, trip.ShapeFromStops)
+	now := time.Date(2026, 9, 2, 10, 5, 0, 0, ix.Timezone())
+	mid := trip.Shape.PointAt(trip.Shape.Length / 2)
+	in := VerifyInput{
+		Trip: trip, Timezone: ix.Timezone(), StartDate: "20260902",
+		Point:      Point{Pos: LatLon{mid.Lat, mid.Lon + 0.0067}, Accuracy: 8, Speed: -1, Bearing: -1, Timestamp: now},
+		Thresholds: DefaultThresholds(), Now: now,
+	}
+	v := Verify(in)
+	assert.Greater(t, v.DistanceToShape, 400.0, "still measured and recorded")
+	assert.Equal(t, Matched, v.Outcome, "halfway along at the halfway time")
+
+	in.Now = in.Now.Add(-30 * time.Minute)
+	in.Point.Timestamp = in.Now
+	assert.Equal(t, OffSchedule, Verify(in).Outcome)
+
+	t1, ok := ix.Trip("T1")
+	require.True(t, ok)
+	assert.False(t, t1.ShapeFromStops, "a shapes.txt shape keeps the on-route check")
+}
+
 func TestVerify_Implausible(t *testing.T) {
 	in := t1Input(t)
 	in.Prev = &AcceptedPoint{Point: Point{Timestamp: in.Now.Add(-5 * time.Second)}, AlongShape: 20}

@@ -37,6 +37,17 @@ few seconds of feed continuity.
 | Build tooling | Either Docker (option A) **or** Go 1.25 or newer (option B, `go.mod` declares `go 1.25.0`). There is no published container image — agencies build from this repository. |
 | Ports | 80 and 443 open to the internet. Port 8080 (the app) and 5432 (PostgreSQL) must **not** be reachable from the internet. |
 
+`shapes.txt` is optional in the feed. A trip with no shape gets one drawn as
+straight lines through its stops, so drivers can still pick it. The trip
+catalog marks that shape (`shape.from_stops` in `GET /api/v1/gtfs/trips/{id}`),
+and rider verification skips its on-route distance check for it, since the
+route curves away from those lines between stops. A trip is left out only when
+it has no stop times, or fewer than two stops with a location; the server logs
+a `skipped unusable GTFS trips` warning with the counts. A feed with no usable
+trip at all is refused like one that cannot be downloaded: at startup the
+server falls back on the last copy it loaded, and does not start if it has
+none; on a refresh it keeps the schedule it already has.
+
 By default the GTFS-RT feed endpoint is unauthenticated: anyone who can reach the
 server can read the current positions of your fleet. That is normally what you
 want (a public realtime feed); if it isn't, [Feed access](#feed-access) explains

@@ -14,13 +14,14 @@ func ptr[T any](v T) *T { return &v }
 func TestBuildIndex_TripsAndShapes(t *testing.T) {
 	ix := fixtureIndex(t)
 	st := ix.Stats()
-	assert.Equal(t, 3, st.Trips, "T4 has no shape and must be excluded")
+	assert.Equal(t, 4, st.Trips, "T4 has no shape but is kept with one drawn through its stops")
 	assert.Equal(t, 2, st.Shapes)
+	assert.Equal(t, 1, st.StopShapes)
 	assert.Equal(t, "fixture", st.Source)
 	assert.Equal(t, fixtureLoadedAt, st.LoadedAt)
-	assert.Equal(t, []string{"T1", "T2", "T3"}, ix.TripIDs())
+	assert.Equal(t, []string{"T1", "T2", "T3", "T4"}, ix.TripIDs())
 	_, ok := ix.Trip("T4")
-	assert.False(t, ok)
+	assert.True(t, ok)
 	assert.Equal(t, "America/Los_Angeles", ix.Timezone().String())
 }
 
@@ -78,7 +79,7 @@ func TestBuildIndex_ProjectsWhenShapeDistIsAllZero(t *testing.T) {
 
 func TestBuildIndex_SkipsTripsWithoutStopTimes(t *testing.T) {
 	// T5 has a perfectly good shape but no stop_times rows: nothing can be
-	// interpolated for it, so it is skipped alongside the shapeless T4.
+	// interpolated for it, so it is skipped. The shapeless T4 is kept.
 	ix := fixtureIndexEdited(t, "trips.txt", "route_id,service_id,trip_id,shape_id\n"+
 		"R1,WEEKDAY,T1,S1\n"+
 		"R1,SAT,T2,S1\n"+
@@ -88,8 +89,48 @@ func TestBuildIndex_SkipsTripsWithoutStopTimes(t *testing.T) {
 
 	_, ok := ix.Trip("T5")
 	assert.False(t, ok, "a trip with no stop times is not indexed")
-	assert.Equal(t, []string{"T1", "T2", "T3"}, ix.TripIDs())
-	assert.Equal(t, 3, ix.Stats().Trips)
+	assert.Equal(t, []string{"T1", "T2", "T3", "T4"}, ix.TripIDs())
+	assert.Equal(t, 4, ix.Stats().Trips)
+}
+
+func TestBuildIndex_ShapelessTripGetsShapeThroughItsStops(t *testing.T) {
+	ix := fixtureIndex(t)
+	trip, ok := ix.Trip("T4") // ST1 -> ST3, no shape_id
+	require.True(t, ok)
+	require.NotNil(t, trip.Shape)
+	assert.True(t, trip.ShapeFromStops)
+	assert.Equal(t, []LatLon{{47.6000, -122.3300}, {47.6090, -122.3300}}, trip.Shape.Points)
+	require.Len(t, trip.StopTimes, 2)
+	assert.InDelta(t, 0, trip.StopTimes[0].AlongShape, 1)
+	assert.InDelta(t, trip.Shape.Length, trip.StopTimes[1].AlongShape, 1)
+}
+
+func TestBuildIndex_StopShapeIgnoresShapeDist(t *testing.T) {
+	// shape_dist_traveled is measured along a shapes.txt shape; on a shape
+	// drawn through the stops it would misplace them, so stops are projected.
+	ix := fixtureIndexEdited(t, "stop_times.txt",
+		"trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n"+
+			stopTimeRow("T1", "08:00:00", "ST1", 1, "0")+
+			stopTimeRow("T1", "08:10:00", "ST3", 2, "1001")+
+			stopTimeRow("T4", "10:00:00", "ST1", 1, "0")+
+			stopTimeRow("T4", "10:05:00", "ST2", 2, "9")+
+			stopTimeRow("T4", "10:10:00", "ST3", 3, "10"))
+	trip, ok := ix.Trip("T4")
+	require.True(t, ok)
+	assert.InDelta(t, 500, trip.StopTimes[1].AlongShape, 5, "projected, not read from shape_dist_traveled")
+}
+
+func TestBuildIndex_SkipsShapelessTripWithOneLocatedStop(t *testing.T) {
+	// Both of T4's stop times are at ST1: no length, so no shape can be drawn.
+	ix := fixtureIndexEdited(t, "stop_times.txt",
+		"trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n"+
+			stopTimeRow("T1", "08:00:00", "ST1", 1, "")+
+			stopTimeRow("T1", "08:10:00", "ST3", 2, "")+
+			stopTimeRow("T4", "10:00:00", "ST1", 1, "")+
+			stopTimeRow("T4", "10:10:00", "ST1", 2, ""))
+	_, ok := ix.Trip("T4")
+	assert.False(t, ok)
+	assert.Zero(t, ix.Stats().StopShapes)
 }
 
 func TestActiveOn(t *testing.T) {
@@ -235,8 +276,9 @@ func TestBuildIndex_HeadsignDirectionAndStopNames(t *testing.T) {
 func TestTripsOnRoute(t *testing.T) {
 	ix := fixtureIndex(t)
 	weekday := ix.TripsOnRoute("R1", "20260902") // Wednesday
-	require.Len(t, weekday, 1)
+	require.Len(t, weekday, 2)
 	assert.Equal(t, "T1", weekday[0].ID)
+	assert.Equal(t, "T4", weekday[1].ID, "the shapeless T4 is offered too")
 	sat := ix.TripsOnRoute("R1", "20260905")
 	require.Len(t, sat, 1)
 	assert.Equal(t, "T2", sat[0].ID)

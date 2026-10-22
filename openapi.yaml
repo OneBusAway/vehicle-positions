@@ -2382,8 +2382,18 @@ components:
 
     CatalogShape:
       type: object
-      required: [length_m, points]
+      required: [length_m, points, from_stops]
       properties:
+        from_stops:
+          type: boolean
+          description: |
+            True when the feed gives the trip no shape (`shapes.txt` is
+            optional in GTFS) and this one was drawn as straight lines through
+            the trip's stops. The route curves away from those lines between
+            stops, so a client should not show the vehicle as off route by its
+            distance from this shape. Progress along it and the schedule are
+            still meaningful. Rider verification skips its on-route check for
+            these trips.
         length_m:
           type: number
           format: double

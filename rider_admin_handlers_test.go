@@ -35,7 +35,7 @@ func TestRiderAdminStatus_Enabled(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&st))
 	assert.True(t, st.Enabled)
 	require.NotNil(t, st.GTFS)
-	assert.Equal(t, 3, st.GTFS.Trips)
+	assert.Equal(t, 4, st.GTFS.Trips)
 	assert.Equal(t, "America/Los_Angeles", st.GTFS.Timezone)
 	require.Len(t, st.TrustedFeeds, 1)
 	assert.Equal(t, 3, st.TrustedFeeds[0].Entities)

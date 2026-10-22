@@ -46,11 +46,36 @@ func TestLoadIndex(t *testing.T) {
 
 	ix, err := LoadIndex(context.Background(), path, http.DefaultClient, fixtureLoadedAt)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"T1", "T2", "T3"}, ix.TripIDs())
+	assert.Equal(t, []string{"T1", "T2", "T3", "T4"}, ix.TripIDs())
 	assert.Equal(t, path, ix.Stats().Source)
 
 	_, err = LoadIndex(context.Background(), filepath.Join(t.TempDir(), "missing.zip"), http.DefaultClient, fixtureLoadedAt)
 	assert.Error(t, err)
+}
+
+// TestLoadIndex_RejectsFeedWithNoUsableTrips keeps an empty schedule from
+// reaching drivers: at startup it fails the load, and on a refresh the
+// Refresher keeps the index it had.
+func TestLoadIndex_RejectsFeedWithNoUsableTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gtfs.zip")
+	files := fixtureFiles(fixtureTimezone, 1)
+	for i := range files {
+		if files[i].name == "stop_times.txt" {
+			files[i].body = "trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n"
+		}
+	}
+	require.NoError(t, os.WriteFile(path, zipFixtureFiles(t, files), 0o644))
+
+	_, err := LoadIndex(context.Background(), path, http.DefaultClient, fixtureLoadedAt)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no usable trips")
+
+	first := fixtureIndex(t)
+	r := NewRefresher(first, func(ctx context.Context) (*Index, error) {
+		return LoadIndex(ctx, path, http.DefaultClient, time.Now())
+	})
+	assert.Error(t, r.RefreshNow(context.Background()))
+	assert.Same(t, first, r.Current(), "an empty schedule never replaces a populated one")
 }
 
 func TestRefresher_SwapsOnSuccessKeepsOnFailure(t *testing.T) {

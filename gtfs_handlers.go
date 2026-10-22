@@ -68,6 +68,9 @@ type catalogTripRoute struct {
 type catalogShape struct {
 	LengthM float64      `json:"length_m"`
 	Points  [][2]float64 `json:"points"` // [lat, lon]
+	// FromStops marks a shape drawn through the stops because the feed has
+	// none for the trip; clients should not judge on-route against it.
+	FromStops bool `json:"from_stops"`
 }
 
 type catalogStop struct {
@@ -200,7 +203,7 @@ func (c *gtfsCatalog) handleTrip() http.HandlerFunc {
 			ID: trip.ID, RouteID: trip.RouteID, Headsign: trip.Headsign, DirectionID: directionJSON(trip.DirectionID),
 			ServiceDate: date, Timezone: ix.Timezone().String(),
 			Route: catalogTripRoute{ShortName: route.ShortName, LongName: route.LongName, Color: route.Color, TextColor: route.TextColor},
-			Shape: catalogShape{LengthM: trip.Shape.Length, Points: points},
+			Shape: catalogShape{LengthM: trip.Shape.Length, Points: points, FromStops: trip.ShapeFromStops},
 			Stops: stops,
 			Thresholds: catalogThresholds{
 				MaxShapeDistanceM: c.thresholds.MaxShapeDistance,

@@ -56,12 +56,14 @@ func TestCatalogRouteTrips_DefaultsToTodaysServiceDate(t *testing.T) {
 	assert.Equal(t, "20260902", body["service_date"])
 	assert.Equal(t, "America/Los_Angeles", body["timezone"])
 	trips := body["trips"].([]any)
-	require.Len(t, trips, 1)
+	require.Len(t, trips, 2)
 	assert.Equal(t, map[string]any{
 		"id": "T1", "headsign": "North", "direction_id": float64(0),
 		"starts_at": "2026-09-02T08:00:00-07:00", "ends_at": "2026-09-02T08:10:00-07:00",
 		"first_stop": "Stop ST1", "last_stop": "Stop ST3",
 	}, trips[0])
+	// T4 has no shape in the feed; drivers can still pick it.
+	assert.Equal(t, "T4", trips[1].(map[string]any)["id"])
 }
 
 func TestCatalogRouteTrips_ExplicitDateAndNullDirection(t *testing.T) {
@@ -106,6 +108,7 @@ func TestCatalogTrip_AfterMidnightLoop(t *testing.T) {
 
 	shape := body["shape"].(map[string]any)
 	assert.InDelta(t, 2000, shape["length_m"], 30)
+	assert.Equal(t, false, shape["from_stops"])
 	points := shape["points"].([]any)
 	require.Len(t, points, 5)
 	assert.Equal(t, []any{47.6, -122.33}, points[0])
@@ -123,6 +126,17 @@ func TestCatalogTrip_AfterMidnightLoop(t *testing.T) {
 	assert.InDelta(t, shape["length_m"].(float64), last["along_shape_m"].(float64), 5)
 
 	assert.Equal(t, map[string]any{"max_shape_distance_m": float64(60), "schedule_early_s": float64(900), "schedule_late_s": float64(5400)}, body["thresholds"])
+}
+
+// TestCatalogTrip_MarksShapeDrawnThroughStops: T4 has no shape in the feed, and
+// the response says its shape is drawn through the stops so clients do not
+// judge on-route against it.
+func TestCatalogTrip_MarksShapeDrawnThroughStops(t *testing.T) {
+	code, body := catalogGet(t, testCatalog(t).handleTrip(), "/api/v1/gtfs/trips/T4?date=20260902", map[string]string{"trip_id": "T4"})
+	require.Equal(t, http.StatusOK, code)
+	shape := body["shape"].(map[string]any)
+	assert.Equal(t, true, shape["from_stops"])
+	assert.Len(t, shape["points"].([]any), 2)
 }
 
 func TestCatalogTrip_DefaultsToTheTripsServiceDate(t *testing.T) {

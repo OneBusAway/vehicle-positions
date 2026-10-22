@@ -75,7 +75,7 @@ func newGTFSRuntime(ctx context.Context, source string, refresh time.Duration, c
 	}
 	stats := index.Stats()
 	slog.Info("gtfs: loaded schedule", "source", source, "routes", stats.Routes, "trips", stats.Trips,
-		"shapes", stats.Shapes, "timezone", index.Timezone().String())
+		"shapes", stats.Shapes, "stop_shapes", stats.StopShapes, "timezone", index.Timezone().String())
 
 	refresher := rider.NewRefresher(index, load)
 

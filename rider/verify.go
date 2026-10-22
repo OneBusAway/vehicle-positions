@@ -175,8 +175,11 @@ func Verify(in VerifyInput) Verdict {
 	v := Verdict{AlongShape: proj.AlongShape, DistanceToShape: proj.DistanceToShape}
 
 	// A coarse fix is allowed to sit correspondingly further from the shape.
+	// A shape drawn through the stops says nothing about how far from it the
+	// route runs, so it gets no distance test; progress along it and the
+	// schedule are still checked.
 	tolerance := in.Thresholds.MaxShapeDistance + math.Max(in.Point.Accuracy, 0)
-	if proj.DistanceToShape > tolerance {
+	if !in.Trip.ShapeFromStops && proj.DistanceToShape > tolerance {
 		v.Outcome = OffRoute
 		v.Reason = fmt.Sprintf("%.0f m from the shape, tolerance %.0f m", proj.DistanceToShape, tolerance)
 		return v

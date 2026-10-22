@@ -48,7 +48,17 @@ func IndexFromBytes(body []byte, source string, now time.Time) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	return BuildIndex(static, source, now)
+	ix, err := BuildIndex(static, source, now)
+	if err != nil {
+		return nil, err
+	}
+	// A feed with no usable trip would leave drivers an empty picker at
+	// startup. On a refresh it is refused like any bad feed, so the previous
+	// index stays in force and the cached copy is not overwritten.
+	if ix.Stats().Trips == 0 {
+		return nil, fmt.Errorf("rider: GTFS from %q has no usable trips (%d in trips.txt)", source, len(static.Trips))
+	}
+	return ix, nil
 }
 
 func parseStatic(body []byte, source string) (*gtfs.Static, error) {
