@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,6 +69,53 @@ func (s *Store) Migrate(databaseURL string) error {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
+	return nil
+}
+
+// ErrVehicleInactive is returned when a driver reports a position for a
+// vehicle an admin has deactivated.
+var ErrVehicleInactive = errors.New("vehicle is inactive")
+
+// ErrNoActiveTrip is returned when a driver reports a position for a vehicle
+// they have no active trip on.
+var ErrNoActiveTrip = errors.New("driver has no active trip on this vehicle")
+
+// ErrTripMismatch is returned when a report names a trip_id or route_id other
+// than the one the driver's active trip was started with.
+var ErrTripMismatch = errors.New("trip_id or route_id does not match the driver's active trip")
+
+// AuthorizeLocation reports whether loc.DriverID may publish loc: the vehicle
+// must exist and be active, the driver must be assigned to it, and the driver
+// must have an active trip on it whose trip_id and route_id the report does
+// not contradict. A report may leave either field empty. An unknown vehicle is
+// ErrNotAssigned, since no driver can be assigned to it, and so is a DriverID
+// that is not a user id: the JWT sub of every real driver is one.
+func (s *Store) AuthorizeLocation(ctx context.Context, loc *LocationReport) error {
+	userID, err := strconv.ParseInt(loc.DriverID, 10, 64)
+	if err != nil {
+		return ErrNotAssigned
+	}
+	auth, err := s.queries.GetLocationAuthorization(ctx, db.GetLocationAuthorizationParams{
+		UserID:    userID,
+		VehicleID: loc.VehicleID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotAssigned
+	}
+	if err != nil {
+		return fmt.Errorf("get location authorization: %w", err)
+	}
+	switch {
+	case !auth.Assigned:
+		return ErrNotAssigned
+	case !auth.VehicleActive:
+		return ErrVehicleInactive
+	case !auth.HasActiveTrip:
+		return ErrNoActiveTrip
+	case loc.TripID != "" && loc.TripID != strings.TrimSpace(auth.TripGtfsTripID),
+		loc.RouteID != "" && loc.RouteID != strings.TrimSpace(auth.TripRouteID):
+		return ErrTripMismatch
+	}
 	return nil
 }
 

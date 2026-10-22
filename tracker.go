@@ -25,9 +25,12 @@ type Tracker struct {
 	mu       sync.RWMutex
 	vehicles map[string]*VehicleState
 	seen     map[string]struct{}
-	maxAge   time.Duration
-	done     chan struct{}
-	stopOnce sync.Once
+	// removedAt is when Remove last dropped each vehicle, so UpdateAuthorized
+	// can tell a report that raced a removal from one that came after it.
+	removedAt map[string]time.Time
+	maxAge    time.Duration
+	done      chan struct{}
+	stopOnce  sync.Once
 }
 
 // NewTracker creates a Tracker with the given staleness threshold.
@@ -37,10 +40,11 @@ func NewTracker(maxAge time.Duration) *Tracker {
 	}
 
 	t := &Tracker{
-		vehicles: make(map[string]*VehicleState),
-		seen:     make(map[string]struct{}),
-		maxAge:   maxAge,
-		done:     make(chan struct{}),
+		vehicles:  make(map[string]*VehicleState),
+		seen:      make(map[string]struct{}),
+		removedAt: make(map[string]time.Time),
+		maxAge:    maxAge,
+		done:      make(chan struct{}),
 	}
 
 	go func() {
@@ -69,6 +73,27 @@ func (t *Tracker) Stop() {
 func (t *Tracker) Update(loc *LocationReport) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.update(loc)
+}
+
+// UpdateAuthorized is Update for a report whose authorization began at
+// authorizedAt. A Remove since then wins and the report is not applied: the
+// vehicle was deactivated while the report was being authorized and saved, and
+// publishing it would put the vehicle back in the feed until it went stale. A
+// vehicle removed before authorizedAt and reactivated since is updated as
+// usual. It reports whether the update was applied.
+func (t *Tracker) UpdateAuthorized(loc *LocationReport, authorizedAt time.Time) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if removed, ok := t.removedAt[loc.VehicleID]; ok && !removed.Before(authorizedAt) {
+		return false
+	}
+	t.update(loc)
+	return true
+}
+
+// update is Update with t.mu already held.
+func (t *Tracker) update(loc *LocationReport) {
 	t.seen[loc.VehicleID] = struct{}{}
 
 	var bearing *float64
@@ -102,6 +127,15 @@ func (t *Tracker) Update(loc *LocationReport) {
 		Timestamp: loc.Timestamp,
 		UpdatedAt: time.Now(),
 	}
+}
+
+// Remove drops a vehicle's latest position, so it leaves the feed now rather
+// than when it goes stale. Used when an admin deactivates the vehicle.
+func (t *Tracker) Remove(vehicleID string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.vehicles, vehicleID)
+	t.removedAt[vehicleID] = time.Now()
 }
 
 // ActiveVehicles returns vehicles that have reported within the staleness threshold.
@@ -195,6 +229,13 @@ func (t *Tracker) cleanup() {
 	for id, v := range t.vehicles {
 		if v.UpdatedAt.Before(cutoff) {
 			delete(t.vehicles, id)
+		}
+	}
+	// No report takes the staleness window to authorize and save, so an older
+	// removal can no longer race one.
+	for id, at := range t.removedAt {
+		if at.Before(cutoff) {
+			delete(t.removedAt, id)
 		}
 	}
 }

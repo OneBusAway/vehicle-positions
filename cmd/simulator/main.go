@@ -153,19 +153,20 @@ func main() {
 	runID = runID[:8]
 
 	log.Printf("provisioning %d driver accounts", *numVehicles)
-	tokens, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles)
+	drivers, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles)
 	if err != nil {
+		endTrips(bootstrap, *baseURL, drivers)
 		log.Fatalf("provisioning drivers: %v", err)
 	}
 
 	// One client per vehicle, each carrying its own driver's token. The tokens
 	// are good for 24h and are never refreshed, so a -duration 0 run left going
 	// for longer than that will start seeing 401s.
-	clients := make([]*http.Client, len(tokens))
-	for i, t := range tokens {
+	clients := make([]*http.Client, len(drivers))
+	for i, d := range drivers {
 		clients[i] = &http.Client{
 			Timeout:       10 * time.Second,
-			Transport:     bearerTransport{token: t, base: http.DefaultTransport},
+			Transport:     bearerTransport{token: d.token, base: http.DefaultTransport},
 			CheckRedirect: sameOriginOnly(*baseURL),
 		}
 	}
@@ -182,15 +183,15 @@ func main() {
 	var wg sync.WaitGroup
 	for i := 0; i < *numVehicles; i++ {
 		wg.Add(1)
-		vehicleID := fmt.Sprintf("sim-vehicle-%03d", i+1)
+		vehicleID, routeID := simVehicle(runID, i)
 		route := routes[i%len(routes)]
-		routeID := fmt.Sprintf("sim-route-%d", i%len(routes)+1)
 		go func() {
 			defer wg.Done()
 			simulateVehicle(ctx, clients[i], *baseURL, vehicleID, route, routeID, *interval, s)
 		}()
 	}
 	wg.Wait()
+	endTrips(bootstrap, *baseURL, drivers)
 
 	ok := s.succeeded.Load()
 	fail := s.failed.Load()
@@ -279,62 +280,140 @@ type createUserRequest struct {
 	Role     string `json:"role"`
 }
 
+// simVehicle names the i-th (0-based) simulated vehicle of a run and the route
+// it drives. The run id is in the vehicle id because a vehicle runs one trip
+// at a time, and an earlier run's trips are still active on its vehicles.
+func simVehicle(runID string, i int) (vehicleID, routeID string) {
+	return fmt.Sprintf("sim-%s-%03d", runID, i+1), fmt.Sprintf("sim-route-%d", i%len(routes)+1)
+}
+
+// simDriver is one provisioned driver: the token its vehicle reports with, and
+// the trip it started, which endTrips ends when the run stops.
+type simDriver struct {
+	token  string
+	tripID int64
+}
+
+// endTrips ends the trips a run started. Without it every run left its
+// drivers' trips active on the server, and repeated runs piled them up. It has
+// its own deadline, since the run's context is usually done by now (the
+// -duration ran out, or Ctrl+C).
+func endTrips(client *http.Client, baseURL string, drivers []simDriver) {
+	if len(drivers) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	ended := 0
+	for _, d := range drivers {
+		if err := postJSON(ctx, client, baseURL+"/api/v1/trips/end", d.token, map[string]int64{"trip_id": d.tripID}, nil); err != nil {
+			log.Printf("ending trip %d: %v", d.tripID, err)
+			continue
+		}
+		ended++
+	}
+	log.Printf("ended %d of %d trips", ended, len(drivers))
+}
+
 // provisionDrivers creates one driver account per vehicle and logs each in, so
 // every vehicle reports under its own JWT sub. The server rate-limits location
 // reports per driver, so a shared login would put every vehicle in one bucket
 // and turn most reports into 429s.
 //
+// The server accepts a report only from a driver assigned to an active
+// vehicle with an active trip on it, so each driver also gets their vehicle,
+// an assignment to it, and a started trip, the same way a driver app does.
+//
 // runID keeps the accounts of concurrent or repeated runs from colliding.
-func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]string, error) {
-	tokens := make([]string, 0, n)
+//
+// On an error it returns the drivers provisioned so far with it, so their
+// trips can still be ended.
+func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]simDriver, error) {
+	drivers := make([]simDriver, 0, n)
 	for i := 0; i < n; i++ {
+		vehicleID, routeID := simVehicle(runID, i)
 		email := fmt.Sprintf("sim-driver-%03d-%s@simulator.invalid", i+1, runID)
 		password, err := randomSecret()
 		if err != nil {
-			return nil, err
+			return drivers, err
 		}
-		if err := createDriver(ctx, client, baseURL, adminToken, email, password, i+1); err != nil {
-			return nil, err
+		if err := postJSON(ctx, client, baseURL+"/api/v1/admin/vehicles", adminToken,
+			map[string]string{"id": vehicleID, "label": fmt.Sprintf("Simulated Vehicle %03d", i+1)}, nil); err != nil {
+			return drivers, fmt.Errorf("creating vehicle %s: %w", vehicleID, err)
+		}
+		userID, err := createDriver(ctx, client, baseURL, adminToken, email, password, i+1)
+		if err != nil {
+			return drivers, err
+		}
+		if err := postJSON(ctx, client, baseURL+"/api/v1/admin/assignments", adminToken,
+			map[string]any{"user_id": userID, "vehicle_id": vehicleID}, nil); err != nil {
+			return drivers, fmt.Errorf("assigning driver %d to %s: %w", i+1, vehicleID, err)
 		}
 		token, err := loginWithRetry(ctx, client, baseURL, email, password)
 		if err != nil {
-			return nil, fmt.Errorf("driver %d: %w", i+1, err)
+			return drivers, fmt.Errorf("driver %d: %w", i+1, err)
 		}
-		tokens = append(tokens, token)
+		var trip struct {
+			ID int64 `json:"id"`
+		}
+		if err := postJSON(ctx, client, baseURL+"/api/v1/trips/start", token,
+			map[string]string{"vehicle_id": vehicleID, "route_id": routeID}, &trip); err != nil {
+			return drivers, fmt.Errorf("starting a trip for driver %d on %s: %w", i+1, vehicleID, err)
+		}
+		drivers = append(drivers, simDriver{token: token, tripID: trip.ID})
 		if i < n-1 && !sleepCtx(ctx, provisionStagger) {
-			return nil, ctx.Err()
+			return drivers, ctx.Err()
 		}
 	}
-	return tokens, nil
+	return drivers, nil
 }
 
-func createDriver(ctx context.Context, client *http.Client, baseURL, adminToken, email, password string, n int) error {
-	body, err := json.Marshal(createUserRequest{
+// createDriver creates a driver account and returns its user id.
+func createDriver(ctx context.Context, client *http.Client, baseURL, adminToken, email, password string, n int) (int64, error) {
+	var user struct {
+		ID int64 `json:"id"`
+	}
+	err := postJSON(ctx, client, baseURL+"/api/v1/admin/users", adminToken, createUserRequest{
 		Name:     fmt.Sprintf("Simulated Driver %03d", n),
 		Email:    email,
 		Password: password,
 		Role:     "driver",
-	})
+	}, &user)
+	if err != nil {
+		return 0, fmt.Errorf("creating driver %d: %w. "+
+			"The account this simulator logs in with must have the admin role", n, err)
+	}
+	return user.ID, nil
+}
+
+// postJSON POSTs body as JSON with the bearer token and, when out is non-nil,
+// decodes the response into it. Any status other than 200 or 201 is an error
+// carrying the server's message.
+func postJSON(ctx context.Context, client *http.Client, url, token string, body, out any) error {
+	data, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/admin/users", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("creating driver %d: %w", n, err)
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-		return fmt.Errorf("POST /api/v1/admin/users for driver %d returned %d: %s. "+
-			"The account this simulator logs in with must have the admin role",
-			n, resp.StatusCode, bytes.TrimSpace(msg))
+		return fmt.Errorf("POST %s returned %d: %s", req.URL.Path, resp.StatusCode, bytes.TrimSpace(msg))
+	}
+	if out != nil {
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return fmt.Errorf("decoding POST %s response: %w", req.URL.Path, err)
+		}
 	}
 	return nil
 }

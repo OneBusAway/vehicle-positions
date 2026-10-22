@@ -274,6 +274,8 @@ private fun problemLine(problem: TrackingProblem): ProblemLineText? = when (prob
         ProblemLineText(R.drawable.ic_location_disabled, R.string.tracking_problem_no_gps, R.string.tracking_problem_no_gps_detail)
     TrackingProblem.CLOCK_SKEW ->
         ProblemLineText(R.drawable.ic_schedule, R.string.tracking_problem_clock_skew, R.string.tracking_problem_clock_skew_detail)
+    TrackingProblem.REPORTS_REFUSED ->
+        ProblemLineText(R.drawable.ic_no_transfer, R.string.tracking_problem_reports_refused, R.string.tracking_problem_reports_refused_detail)
     // No line when all is well, and none for an expired sign-in: the Signed out card takes the status card's place.
     TrackingProblem.NONE, TrackingProblem.AUTH_EXPIRED -> null
 }

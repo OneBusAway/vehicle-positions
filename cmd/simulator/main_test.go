@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -423,40 +424,68 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 	var mu sync.Mutex
 	created := map[string]string{} // email -> password
 	roles := map[string]string{}
+	vehicles := map[string]bool{}
+	assigned := map[float64]string{} // user id -> vehicle id
+	trips := map[string]string{}     // token -> vehicle id
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]string
+		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("decoding %s: %v", r.URL.Path, err)
 		}
+		str := func(k string) string { s, _ := body[k].(string); return s }
 		mu.Lock()
 		defer mu.Unlock()
-		switch r.URL.Path {
-		case "/api/v1/admin/users":
+		if r.URL.Path != "/api/v1/auth/login" && r.URL.Path != "/api/v1/trips/start" {
 			if got := r.Header.Get("Authorization"); got != "Bearer admin-token" {
-				t.Errorf("create user Authorization = %q, want the admin token", got)
+				t.Errorf("%s Authorization = %q, want the admin token", r.URL.Path, got)
 			}
-			created[body["email"]] = body["password"]
-			roles[body["email"]] = body["role"]
+		}
+		switch r.URL.Path {
+		case "/api/v1/admin/vehicles":
+			vehicles[str("id")] = true
+			w.WriteHeader(http.StatusCreated)
+		case "/api/v1/admin/users":
+			created[str("email")] = str("password")
+			roles[str("email")] = str("role")
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]any{"id": len(created)})
+		case "/api/v1/admin/assignments":
+			id, _ := body["user_id"].(float64)
+			if !vehicles[str("vehicle_id")] {
+				t.Errorf("assigned to %s before it was created", str("vehicle_id"))
+			}
+			assigned[id] = str("vehicle_id")
 			w.WriteHeader(http.StatusCreated)
 		case "/api/v1/auth/login":
-			if created[body["email"]] != body["password"] {
+			if created[str("email")] != str("password") {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]string{"token": "token-for-" + body["email"]})
+			json.NewEncoder(w).Encode(map[string]string{"token": "token-for-" + str("email")})
+		case "/api/v1/trips/start":
+			trips[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")] = str("vehicle_id")
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]any{"id": len(trips)})
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
 	}))
 	defer srv.Close()
 
-	tokens, err := provisionDrivers(t.Context(), srv.Client(), srv.URL, "admin-token", "runid123", 3)
+	drivers, err := provisionDrivers(t.Context(), srv.Client(), srv.URL, "admin-token", "runid123", 3)
 	if err != nil {
 		t.Fatalf("provisionDrivers: %v", err)
 	}
-	if len(tokens) != 3 {
-		t.Fatalf("got %d tokens, want 3", len(tokens))
+	if len(drivers) != 3 {
+		t.Fatalf("got %d drivers, want 3", len(drivers))
+	}
+	tokens := make([]string, len(drivers))
+	for i, d := range drivers {
+		tokens[i] = d.token
+		if d.tripID != int64(i+1) {
+			t.Errorf("driver %d kept trip %d, want %d", i+1, d.tripID, i+1)
+		}
 	}
 	seen := map[string]bool{}
 	for _, tk := range tokens {
@@ -467,6 +496,17 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 	}
 	if len(created) != 3 {
 		t.Errorf("created %d accounts, want 3", len(created))
+	}
+	// The server only accepts reports from an assigned driver with an active
+	// trip, so every driver needs both before its first report.
+	if len(vehicles) != 3 || len(assigned) != 3 {
+		t.Errorf("created %d vehicles and %d assignments, want 3 each", len(vehicles), len(assigned))
+	}
+	for i, tk := range tokens {
+		want, _ := simVehicle("runid123", i)
+		if trips[tk] != want {
+			t.Errorf("driver %d started a trip on %q, want %q", i+1, trips[tk], want)
+		}
 	}
 	for email, role := range roles {
 		if role != "driver" {
@@ -550,4 +590,31 @@ func mustParse(t *testing.T, raw string) *url.URL {
 		t.Fatalf("parsing %s: %v", raw, err)
 	}
 	return u
+}
+
+// TestEndTripsEndsEveryTrip: a run must not leave its drivers' trips active,
+// or repeated runs pile them up on the server.
+func TestEndTripsEndsEveryTrip(t *testing.T) {
+	var mu sync.Mutex
+	ended := map[string]float64{} // token -> trip id
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/trips/end" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+			return
+		}
+		var body map[string]float64
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decoding trips/end: %v", err)
+		}
+		mu.Lock()
+		ended[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")] = body["trip_id"]
+		mu.Unlock()
+		w.Write([]byte(`{"status":"trip ended"}`))
+	}))
+	defer srv.Close()
+
+	endTrips(srv.Client(), srv.URL, []simDriver{{token: "a", tripID: 7}, {token: "b", tripID: 8}})
+	if ended["a"] != 7 || ended["b"] != 8 {
+		t.Errorf("ended %v, want trip 7 by a and 8 by b", ended)
+	}
 }

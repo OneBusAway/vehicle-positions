@@ -60,6 +60,9 @@ final class TripSession {
         case noGPS
         case authExpired
         case clockSkew
+        /// The server refuses the reports: the vehicle was deactivated or
+        /// unassigned, or the trip is no longer active on the server.
+        case refused
         /// Core Location refused a background session because the app was not
         /// in the foreground; the driver must open the app on the phone.
         case needsForeground
@@ -437,6 +440,7 @@ final class TripSession {
             case .noNetwork: reporting = .noNetwork
             case .authExpired: reporting = .authExpired
             case .clockSkew: reporting = .clockSkew
+            case .refused: reporting = .refused
             }
         }
     }
