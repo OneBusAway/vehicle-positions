@@ -50,7 +50,7 @@ internal enum class Reporting {
 internal fun reporting(problem: TrackingProblem): Reporting = when (problem) {
     TrackingProblem.NONE -> Reporting.REPORTING
     // The server refuses the reports of a phone whose clock is wrong, so they reach no rider either.
-    TrackingProblem.NO_NETWORK, TrackingProblem.CLOCK_SKEW -> Reporting.NOT_REPORTING
+    TrackingProblem.NO_NETWORK, TrackingProblem.CLOCK_SKEW, TrackingProblem.REPORTS_REFUSED -> Reporting.NOT_REPORTING
     TrackingProblem.NO_GPS -> Reporting.NO_GPS
     TrackingProblem.AUTH_EXPIRED -> Reporting.STOPPED
 }

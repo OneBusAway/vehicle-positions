@@ -578,6 +578,7 @@ func TestHandlePostLocation_ValidVehicleIDBoundary(t *testing.T) {
 
 type mockStore struct {
 	err          error
+	authErr      error
 	saved        bool
 	saveCount    int
 	lastDriverID string
@@ -589,6 +590,10 @@ type mockHealthChecker struct {
 
 func (m mockHealthChecker) Ping(ctx context.Context) error {
 	return m.err
+}
+
+func (m *mockStore) AuthorizeLocation(_ context.Context, _ *LocationReport) error {
+	return m.authErr
 }
 
 func (m *mockStore) SaveLocation(ctx context.Context, loc *LocationReport) error {
@@ -666,6 +671,38 @@ func TestHandlePostLocation_StoreFailure(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Len(t, tracker.ActiveVehicles(), 0, "tracker should NOT be updated on DB failure")
+}
+
+func TestHandlePostLocation_AuthorizationRejected(t *testing.T) {
+	tests := []struct {
+		name    string
+		authErr error
+		status  int
+		message string
+	}{
+		{"not assigned", ErrNotAssigned, http.StatusForbidden, "driver is not assigned to this vehicle"},
+		{"vehicle inactive", ErrVehicleInactive, http.StatusForbidden, "vehicle is inactive"},
+		{"no active trip", ErrNoActiveTrip, http.StatusConflict, "driver has no active trip on this vehicle"},
+		{"trip mismatch", ErrTripMismatch, http.StatusConflict, "trip_id or route_id does not match the driver's active trip"},
+		{"store error", fmt.Errorf("database down"), http.StatusInternalServerError, "failed to authorize location"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker := NewTracker(5 * time.Minute)
+			mStore := &mockStore{authErr: tc.authErr}
+			handler := handlePostLocation(mStore, tracker, NewVehicleRateLimiter())
+
+			loc := LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()}
+			w := postLocationWithClaims(handler, loc, jwt.MapClaims{"sub": "42"})
+
+			assert.Equal(t, tc.status, w.Code)
+			var resp map[string]string
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+			assert.Equal(t, tc.message, resp["error"])
+			assert.False(t, mStore.saved, "a rejected report must not be saved")
+			assert.Len(t, tracker.ActiveVehicles(), 0, "a rejected report must not reach the feed")
+		})
+	}
 }
 
 func TestHandlePostLocation_InvalidJSON(t *testing.T) {
@@ -1112,4 +1149,33 @@ func TestVehicleRateLimiter_ToleratesJitter(t *testing.T) {
 		at = at.Add(gap)
 		assert.True(t, limiter.AllowN(at, 1), "report %d after a %s gap was refused", i, gap)
 	}
+}
+
+// raceStore deactivates the vehicle (as the admin endpoint does: Tracker.Remove
+// after its write) while the report is being authorized.
+type raceStore struct {
+	mockStore
+	tracker *Tracker
+}
+
+func (s *raceStore) AuthorizeLocation(_ context.Context, loc *LocationReport) error {
+	s.tracker.Remove(loc.VehicleID)
+	return nil
+}
+
+// TestHandlePostLocation_DeactivationDuringReportKeepsVehicleOut is the race
+// a review found: authorization passes, the vehicle is deactivated, and the
+// report must not then put the vehicle back in the feed.
+func TestHandlePostLocation_DeactivationDuringReportKeepsVehicleOut(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	store := &raceStore{tracker: tracker}
+	handler := handlePostLocation(store, tracker, NewVehicleRateLimiter())
+
+	loc := LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()}
+	w := postLocationWithClaims(handler, loc, jwt.MapClaims{"sub": "42"})
+
+	assert.Equal(t, http.StatusCreated, w.Code, "the report is still stored")
+	assert.True(t, store.saved)
+	assert.Empty(t, tracker.ActiveVehicles(), "but the deactivated vehicle stays out of the feed")
 }

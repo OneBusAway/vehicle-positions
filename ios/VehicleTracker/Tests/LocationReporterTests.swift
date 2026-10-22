@@ -51,6 +51,25 @@ import VehiclePositionsKit
         #expect(api.posted.count == 2)
     }
 
+    /// A vehicle deactivated or unassigned mid-shift, or a trip no longer active
+    /// on the server: every report is refused, and the banner must say so.
+    @Test func refusedReportsTurnTheBannerRed() async {
+        let r = reporter()
+        for (code, message) in [(403, "vehicle is inactive"), (409, "driver has no active trip on this vehicle")] {
+            api.postError = APIError.status(code, message: message)
+            r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+            await r.waitForInFlightSend()
+            #expect(r.problem == .refused, "HTTP \(code)")
+            clock.advance(5)
+        }
+        #expect(r.fixesSent == 0)
+
+        api.postError = nil
+        r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        await r.waitForInFlightSend()
+        #expect(r.problem == .none, "the next accepted report clears it")
+    }
+
     @Test func mapsServerErrors() async {
         let r = reporter()
         api.postError = APIError.status(401, message: "invalid token")

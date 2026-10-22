@@ -57,6 +57,9 @@ func (n *noopStore) UpsertVehicle(_ context.Context, _, _, _ string) (*VehicleRe
 func (n *noopStore) DeactivateVehicle(_ context.Context, _ string) error {
 	return nil
 }
+func (n *noopStore) AuthorizeLocation(_ context.Context, _ *LocationReport) error {
+	return nil
+}
 func (n *noopStore) SaveLocation(_ context.Context, _ *LocationReport) error {
 	return nil
 }

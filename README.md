@@ -338,13 +338,20 @@ and performs strict request validation before writing data:
 - Standard payload validation still applies (`vehicle_id`, coordinates, timestamp).
 - `trip_id` and `route_id` are capped at 100 characters; `start_date` must be a real `YYYYMMDD` date.
 - Reports are rate limited to one per five seconds per driver.
+- The driver must be assigned to `vehicle_id`, the vehicle must be active, and
+  the driver must have an active trip on it.
 
 Response codes:
 
 - `201 Created` — location accepted and persisted.
 - `400 Bad Request` — invalid JSON or payload validation failure.
 - `401 Unauthorized` — missing, malformed, or expired bearer token.
-- `403 Forbidden` — valid token whose role cannot use the driver API (e.g. a rider token).
+- `403 Forbidden` — valid token whose role cannot use the driver API (e.g. a rider token),
+  a driver not assigned to `vehicle_id` (including a `vehicle_id` that does not exist),
+  or a vehicle an admin has deactivated. The server never creates a vehicle from a report.
+- `409 Conflict` — the driver has no active trip on `vehicle_id` (start one with
+  `POST /api/v1/trips/start` first), or a `trip_id` or `route_id` the report
+  carries differs from the active trip's.
 - `415 Unsupported Media Type` — non-JSON `Content-Type`.
 - `429 Too Many Requests` — driver exceeded the ingest rate limit.
 - `500 Internal Server Error` — the location could not be persisted. The

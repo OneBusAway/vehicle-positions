@@ -11,11 +11,13 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
 -- route_id and start_date are selected because the feed's TripDescriptor is
 -- documented to carry what the driver sent: a seeded vehicle that came back
 -- without them would publish a narrower descriptor than it did before the
--- restart, and a route-only vehicle would publish none at all.
+-- restart, and a route-only vehicle would publish none at all. A deactivated
+-- vehicle is left out, so a restart cannot put it back in the feed.
 SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
 FROM location_points
 WHERE received_at > $1
+  AND vehicle_id IN (SELECT id FROM vehicles WHERE active)
 ORDER BY vehicle_id, received_at DESC;
 
 -- name: ListUsers :many
@@ -96,6 +98,25 @@ RETURNING id, label, agency_tag, active, created_at, updated_at;
 SELECT user_id, vehicle_id
 FROM user_vehicles
 WHERE user_id = $1 AND vehicle_id = $2;
+
+-- name: GetLocationAuthorization :one
+-- One round trip answers every question the location ingest asks before it
+-- accepts a report. No row means the vehicle does not exist. A driver has at
+-- most one active trip (idx_trips_one_active_per_user), so the join adds at
+-- most one row.
+SELECT
+    v.active AS vehicle_active,
+    EXISTS (
+        SELECT 1 FROM user_vehicles uv
+        WHERE uv.user_id = sqlc.arg(user_id) AND uv.vehicle_id = v.id
+    )::boolean AS assigned,
+    (t.id IS NOT NULL)::boolean AS has_active_trip,
+    COALESCE(t.route_id, '')::text AS trip_route_id,
+    COALESCE(t.gtfs_trip_id, '')::text AS trip_gtfs_trip_id
+FROM vehicles v
+LEFT JOIN trips t
+    ON t.vehicle_id = v.id AND t.user_id = sqlc.arg(user_id) AND t.status = 'active'
+WHERE v.id = sqlc.arg(vehicle_id);
 
 -- name: GetActiveTripByUser :one
 SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at

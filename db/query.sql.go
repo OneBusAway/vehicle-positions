@@ -522,6 +522,52 @@ func (q *Queries) GetGTFSFeedCacheDigest(ctx context.Context) (GetGTFSFeedCacheD
 	return i, err
 }
 
+const getLocationAuthorization = `-- name: GetLocationAuthorization :one
+SELECT
+    v.active AS vehicle_active,
+    EXISTS (
+        SELECT 1 FROM user_vehicles uv
+        WHERE uv.user_id = $1 AND uv.vehicle_id = v.id
+    )::boolean AS assigned,
+    (t.id IS NOT NULL)::boolean AS has_active_trip,
+    COALESCE(t.route_id, '')::text AS trip_route_id,
+    COALESCE(t.gtfs_trip_id, '')::text AS trip_gtfs_trip_id
+FROM vehicles v
+LEFT JOIN trips t
+    ON t.vehicle_id = v.id AND t.user_id = $1 AND t.status = 'active'
+WHERE v.id = $2
+`
+
+type GetLocationAuthorizationParams struct {
+	UserID    int64
+	VehicleID string
+}
+
+type GetLocationAuthorizationRow struct {
+	VehicleActive  bool
+	Assigned       bool
+	HasActiveTrip  bool
+	TripRouteID    string
+	TripGtfsTripID string
+}
+
+// One round trip answers every question the location ingest asks before it
+// accepts a report. No row means the vehicle does not exist. A driver has at
+// most one active trip (idx_trips_one_active_per_user), so the join adds at
+// most one row.
+func (q *Queries) GetLocationAuthorization(ctx context.Context, arg GetLocationAuthorizationParams) (GetLocationAuthorizationRow, error) {
+	row := q.db.QueryRow(ctx, getLocationAuthorization, arg.UserID, arg.VehicleID)
+	var i GetLocationAuthorizationRow
+	err := row.Scan(
+		&i.VehicleActive,
+		&i.Assigned,
+		&i.HasActiveTrip,
+		&i.TripRouteID,
+		&i.TripGtfsTripID,
+	)
+	return i, err
+}
+
 const getLocationHistory = `-- name: GetLocationHistory :many
 SELECT latitude, longitude, bearing, speed, accuracy, timestamp, trip_id, received_at
 FROM location_points
@@ -589,6 +635,7 @@ SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
 FROM location_points
 WHERE received_at > $1
+  AND vehicle_id IN (SELECT id FROM vehicles WHERE active)
 ORDER BY vehicle_id, received_at DESC
 `
 
@@ -609,7 +656,8 @@ type GetRecentLocationsRow struct {
 // route_id and start_date are selected because the feed's TripDescriptor is
 // documented to carry what the driver sent: a seeded vehicle that came back
 // without them would publish a narrower descriptor than it did before the
-// restart, and a route-only vehicle would publish none at all.
+// restart, and a route-only vehicle would publish none at all. A deactivated
+// vehicle is left out, so a restart cannot put it back in the feed.
 func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Timestamptz) ([]GetRecentLocationsRow, error) {
 	rows, err := q.db.Query(ctx, getRecentLocations, receivedAt)
 	if err != nil {

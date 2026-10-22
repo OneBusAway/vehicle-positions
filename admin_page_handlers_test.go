@@ -775,10 +775,13 @@ func TestVehicleDeactivateActivate(t *testing.T) {
 		return w
 	}
 
+	ui.tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
+
 	w := postTo("/admin/vehicles/bus-1/deactivate")
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/admin/vehicles", w.Header().Get("Location"))
 	assert.False(t, fake.vehicles["bus-1"].Active)
+	assert.Empty(t, ui.tracker.ActiveVehicles(), "a deactivated vehicle must leave the feed immediately")
 	var flashed bool
 	for _, c := range w.Result().Cookies() {
 		if c.Name == flashCookieName && c.Value == "vehicle_deactivated" {
