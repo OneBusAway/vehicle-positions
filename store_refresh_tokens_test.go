@@ -801,6 +801,21 @@ func TestStore_PruneExpiredRefreshTokens_BoundaryExact(t *testing.T) {
 	assert.Equal(t, 1, countRefreshRows(t, store, after), "a row expiring after the cutoff must never be touched")
 }
 
+// TestStore_RefreshTokensExpiryIndexExists guards the index the pruner relies
+// on. The prune tests above pass without it, since a sequential scan deletes
+// the same rows, so only this test notices the migration going missing.
+func TestStore_RefreshTokensExpiryIndexExists(t *testing.T) {
+	store := newTestStore(t)
+
+	var indexDef string
+	err := store.pool.QueryRow(context.Background(),
+		`SELECT indexdef FROM pg_indexes
+		 WHERE schemaname = current_schema() AND tablename = 'refresh_tokens' AND indexname = 'idx_refresh_tokens_expires_at'`,
+	).Scan(&indexDef)
+	require.NoError(t, err, "migrations must create idx_refresh_tokens_expires_at on refresh_tokens")
+	assert.Contains(t, indexDef, "USING btree (expires_at)")
+}
+
 // TestHashRefreshToken covers the value actually written to token_hash: the
 // column is looked up by exact match, so a non-deterministic hash would make
 // every refresh fail, and a hash that leaked the token would defeat storing
