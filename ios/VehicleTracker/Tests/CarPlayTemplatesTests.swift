@@ -160,6 +160,14 @@ import Testing
         #expect(items[1].detailText == "Now · A → B")
     }
 
+    @Test func tripItemsMarkTheRunStartingNearestNowOnAFrequentRoute() throws {
+        let page = RouteTripsPage(routeID: "R1", serviceDate: "20260902", timezone: "America/Los_Angeles", trips: TripFixtures.frequentService)
+        let items = CarPlayTemplates.tripItems(page, now: TripFixtures.at(14, 3), onSelect: { _ in })
+        let fourteenHundred = try #require(page.trips.firstIndex { $0.id == "14:00" })
+        #expect(items[fourteenHundred].detailText == "Now · A → B")
+        #expect(items.indices.filter { items[$0].detailText != "A → B" } == [fourteenHundred])
+    }
+
     @Test func listTruncatesToTheCap() {
         let items = (0..<12).map { CPListItem(text: "Route \($0)", detailText: nil) }
         let list = CarPlayTemplates.list(title: "Routes", sections: [(header: nil, items: items)], maxItems: 10, maxSections: 4)

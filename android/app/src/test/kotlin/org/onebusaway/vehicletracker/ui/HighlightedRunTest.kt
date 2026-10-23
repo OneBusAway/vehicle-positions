@@ -29,6 +29,16 @@ class HighlightedRunTest {
     private fun run(id: String, start: Instant, end: Instant) =
         TripRun(id = id, headsign = "North", directionId = 0, firstStop = "A", lastStop = "B", startsAt = start, endsAt = end)
 
+    /**
+     * A frequent route, like the 1 Line in #185: a run every 10 minutes from 13:00 to 15:00, each an hour long, so six
+     * are under way at once. Each run's id is its start time, "13:00" to "15:00". The same table as iOS's
+     * `TripFixtures.frequentService`.
+     */
+    private val frequentService = (0..120 step 10).map { minutes ->
+        val start = at(13 + minutes / 60, minutes % 60)
+        run("${13 + minutes / 60}:${(minutes % 60).toString().padStart(2, '0')}", start, start.plusSeconds(3600))
+    }
+
     private fun trip(id: String, startsAt: String, endsAt: String) = TripSummaryDto(
         id = id,
         headsign = "North",
@@ -60,13 +70,43 @@ class HighlightedRunTest {
         assertNull(highlightedRun(emptyList(), at(8, 10)))
     }
 
-    @Test fun `the window is inclusive at both ends`() {
+    @Test fun `a tie goes to the later start`() {
         val runs = listOf(run("a", at(8, 0), at(8, 30)), run("b", at(9, 0), at(9, 30)))
 
-        assertEquals("a", highlightedRun(runs, at(8, 0))?.id)
+        assertEquals("a", highlightedRun(runs, at(8, 29))?.id)
+        // a started 30 minutes ago and b starts in 30. a is already under way, so the driver is about to drive b.
+        assertEquals("b", highlightedRun(runs, at(8, 30))?.id)
+    }
+
+    @Test fun `a run ending exactly now still counts`() {
+        val runs = listOf(run("a", at(8, 0), at(8, 30)))
+
         assertEquals("a", highlightedRun(runs, at(8, 30))?.id)
-        // One second past the end and the run is over, so the next one takes the badge.
-        assertEquals("b", highlightedRun(runs, at(8, 30).plusSeconds(1))?.id)
+        // One second past the end and the run is over.
+        assertNull(highlightedRun(runs, at(8, 30).plusSeconds(1)))
+    }
+
+    @Test fun `on a frequent route, picks the run starting nearest now`() {
+        // Six runs are under way at 14:03; the earliest of them, 13:10, is nearly over. The driver is about to drive the 14:00.
+        val now = highlightedRun(frequentService, at(14, 3))
+        assertEquals("14:00", now?.id)
+        assertEquals(RunHighlight.NOW, now?.let { highlightOf(it, at(14, 3)) })
+
+        val next = highlightedRun(frequentService, at(14, 7))
+        assertEquals("14:10", next?.id)
+        assertEquals(RunHighlight.NEXT, next?.let { highlightOf(it, at(14, 7)) })
+    }
+
+    @Test fun `skips a run that has ended, even with the nearest start`() {
+        val runs = listOf(run("a", at(8, 0), at(8, 5)), run("b", at(8, 20), at(8, 40)))
+
+        assertEquals("b", highlightedRun(runs, at(8, 7))?.id)
+    }
+
+    @Test fun `on a sparse route, keeps the run under way`() {
+        val runs = listOf(run("a", at(6, 0), at(10, 0)), run("b", at(14, 0), at(15, 0)))
+
+        assertEquals("a", highlightedRun(runs, at(9, 0))?.id)
     }
 
     @Test fun `the badge says Now once a run has started and Next before that`() {

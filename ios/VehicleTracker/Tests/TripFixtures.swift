@@ -44,6 +44,15 @@ nonisolated enum TripFixtures {
         thresholds: t1.thresholds
     )
 
+    /// A frequent route, like the 1 Line in #185: a run every 10 minutes from
+    /// 13:00 to 15:00, each an hour long, so six are under way at once. Each
+    /// run's id is its start time, "13:00" to "15:00".
+    static let frequentService: [TripSummary] = stride(from: 0, through: 120, by: 10).map { minutes in
+        let start = at(13 + minutes / 60, minutes % 60)
+        return TripSummary(id: String(format: "%d:%02d", 13 + minutes / 60, minutes % 60), headsign: "North", directionID: 0,
+                           startsAt: start, endsAt: start.addingTimeInterval(3600), firstStop: "A", lastStop: "B")
+    }
+
     static func fix(lat: Double, lon: Double, at time: Date, accuracy: Double = 5, speed: Double = 8, course: Double = 0) -> LocationFix {
         LocationFix(latitude: lat, longitude: lon, horizontalAccuracy: accuracy, speed: speed, course: course, timestamp: time)
     }

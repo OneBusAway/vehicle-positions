@@ -124,8 +124,24 @@ extension Color {
 
 /// Which run of a route the driver is most likely about to drive.
 nonisolated enum TripRun {
+    /// Of the runs not over yet, the one starting nearest `now`. Not the
+    /// earliest still running: on a frequent route that run can be an hour in,
+    /// and the driver is about to drive the one starting nearest now. A tie
+    /// goes to the later start, since the earlier run is already under way.
     static func highlighted(in trips: [TripSummary], now: Date) -> TripSummary? {
-        if let current = trips.first(where: { $0.startsAt <= now && now <= $0.endsAt }) { return current }
-        return trips.filter { $0.startsAt > now }.min { $0.startsAt < $1.startsAt }
+        trips.filter { $0.endsAt >= now }.min { a, b in
+            let fromA = abs(a.startsAt.timeIntervalSince(now)), fromB = abs(b.startsAt.timeIntervalSince(now))
+            return fromA == fromB ? a.startsAt > b.startsAt : fromA < fromB
+        }
+    }
+
+    /// The run the list opens at: the one just before the highlighted run, so
+    /// the highlighted run is in view under it, where Android's board opens.
+    /// The last run once every run is over; nil for an empty list.
+    static func openAt(in trips: [TripSummary], now: Date) -> String? {
+        guard let marked = highlighted(in: trips, now: now), let index = trips.firstIndex(of: marked) else {
+            return trips.last?.id
+        }
+        return trips[max(index - 1, 0)].id
     }
 }

@@ -307,10 +307,11 @@ takes about ten minutes. Before you start, make sure the driver has an account
      each run's start time over where it is headed, with a line at the current
      time. When the schedule gives the route two directions, a switch at the top
      picks one, named after where its runs go. The times are your agency's local
-     time, whatever time zone the phone is set to. The run under way is marked
-     **Now**; otherwise the next one to start is marked **Next**. Tap the run
-     the driver is about to drive. **No runs on route 7 today** means the
-     schedule has no service on that route today.
+     time, whatever time zone the phone is set to. Of the runs not over yet, the
+     one starting nearest the current time is marked: **Now** once it has
+     started, **Next** before that. Tap the run the driver is about to drive.
+     **No runs on route 7 today** means the schedule has no service on that
+     route today.
 
    The route and trip the app reports both come from the schedule, so as long
    as OneBusAway uses the same GTFS feed (your IT contact sets this up), it can

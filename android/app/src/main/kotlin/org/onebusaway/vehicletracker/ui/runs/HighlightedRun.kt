@@ -2,6 +2,7 @@ package org.onebusaway.vehicletracker.ui.runs
 
 import org.onebusaway.vehicletracker.data.api.RouteTripsDto
 import org.onebusaway.vehicletracker.data.api.TripSummaryDto
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalTime
 import java.time.OffsetDateTime
@@ -32,13 +33,16 @@ data class RunPage(
 enum class RunHighlight { NOW, NEXT }
 
 /**
- * The run the driver is most likely about to drive: the one whose window contains [now],
- * inclusive at both ends, and otherwise the earliest still to start. A port of
- * `TripRun.highlighted` in `ios/VehicleTracker/UI/Formatters.swift`.
+ * The run the driver is most likely about to drive: of the runs not over yet, the one starting
+ * nearest [now]. Not the earliest still running: on a frequent route that run can be an hour in,
+ * and the driver is about to drive the one starting nearest now. A tie goes to the later start,
+ * since the earlier run is already under way. A port of `TripRun.highlighted` in
+ * `ios/VehicleTracker/UI/Formatters.swift`.
  */
 fun highlightedRun(runs: List<TripRun>, now: Instant): TripRun? =
-    runs.firstOrNull { it.startsAt <= now && now <= it.endsAt }
-        ?: runs.filter { it.startsAt > now }.minByOrNull { it.startsAt }
+    runs.filter { it.endsAt >= now }.minWithOrNull(
+        compareBy<TripRun> { Duration.between(it.startsAt, now).abs() }.thenByDescending { it.startsAt },
+    )
 
 /** Which badge [run] carries: it is either already under way or still to come. */
 fun highlightOf(run: TripRun, now: Instant): RunHighlight =

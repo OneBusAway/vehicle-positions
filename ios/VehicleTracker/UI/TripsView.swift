@@ -5,6 +5,9 @@ struct TripsView: View {
     let vehicle: Vehicle
     let route: RouteInfo
     @State private var page: RouteTripsPage?
+    /// Read once per load, so the badge, the marked run and where the list
+    /// opens cannot disagree across a minute boundary.
+    @State private var now = Date()
     @State private var error: String?
 
     /// A start is in flight — this list's own, or one from the car, which
@@ -16,7 +19,7 @@ struct TripsView: View {
             List {
                 if let error { Text(error).foregroundStyle(.red) }
                 if let page {
-                    let highlighted = TripRun.highlighted(in: page.trips, now: Date())
+                    let highlighted = TripRun.highlighted(in: page.trips, now: now)
                     Section("\(page.serviceDate.prefix(4))-\(page.serviceDate.dropFirst(4).prefix(2))-\(page.serviceDate.suffix(2))") {
                         ForEach(page.trips) { trip in
                             Button {
@@ -32,7 +35,7 @@ struct TripsView: View {
                                     }
                                     Spacer()
                                     if trip.id == highlighted?.id {
-                                        Text(trip.startsAt <= Date() ? "Now" : "Next")
+                                        Text(trip.startsAt <= now ? "Now" : "Next")
                                             .font(.caption.bold())
                                             .padding(6)
                                             .background(Color.accentColor.opacity(0.2), in: Capsule())
@@ -54,14 +57,20 @@ struct TripsView: View {
             .task {
                 do {
                     let loaded = try await session.trips(routeID: route.id)
+                    now = Date()
                     page = loaded
-                    if let h = TripRun.highlighted(in: loaded.trips, now: Date()) {
-                        proxy.scrollTo(h.id, anchor: .center)
-                    }
                 } catch {
                     guard !session.handleIfUnauthorized(error) else { return }
                     self.error = error.localizedDescription
                 }
+            }
+            // After the update that sets the page, so its rows exist: a scroll
+            // in that same update does nothing, and one from onChange(of: page)
+            // lands at the end of a long list.
+            .task(id: page) {
+                await Task.yield()
+                guard let page, let id = TripRun.openAt(in: page.trips, now: now) else { return }
+                proxy.scrollTo(id, anchor: .top)
             }
         }
     }
