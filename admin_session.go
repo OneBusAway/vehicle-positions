@@ -24,6 +24,8 @@ var flashMessages = map[string]string{
 	"user_activated":      "User reactivated.",
 	"vehicle_assigned":    "Vehicle assigned.",
 	"vehicle_unassigned":  "Vehicle unassigned.",
+	"trip_ended":          "Trip ended. The driver can start a new trip.",
+	"trip_already_ended":  "That trip had already ended.",
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trustProxy bool) {

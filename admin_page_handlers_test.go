@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1681,6 +1683,140 @@ func TestTripsPageVehicleSelectActiveOnly(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, "Active Bus")
 	assert.NotContains(t, body, "Retired Bus")
+}
+
+// TestTripsPageEndTripButtonOnActiveRowsOnly verifies the End trip form is
+// offered on an active trip only: a completed trip has nothing to end.
+func TestTripsPageEndTripButtonOnActiveRowsOnly(t *testing.T) {
+	ui := newTestAdminUI(t)
+	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 1, 2, 8, 45, 0, 0, time.UTC)
+	ui.trips = &fakeTripLister{trips: []TripSummary{
+		{ID: 43, VehicleID: "bus-2", VehicleLabel: "Bus Two", UserID: 8, DriverName: "Chris H", StartTime: start, Status: "active"},
+		{ID: 42, VehicleID: "bus-1", VehicleLabel: "Bus One", UserID: 7, DriverName: "Asha Patel", StartTime: start, EndTime: &end, Status: "completed"},
+	}}
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, `<form method="post" action="/admin/trips/43/end" class="shrink-0" onsubmit="return confirm('End this trip? Do this only when the driver phone cannot end it.')">`)
+	assert.NotContains(t, body, `action="/admin/trips/42/end"`)
+	assert.Equal(t, 1, strings.Count(body, ">End trip</button>"))
+}
+
+// TestTripsPageShowsTripEndedFlash verifies the flash codes tripEnd sets
+// render their text on the page it redirects to.
+func TestTripsPageShowsTripEndedFlash(t *testing.T) {
+	for code, text := range map[string]string{
+		"trip_ended":         "Trip ended. The driver can start a new trip.",
+		"trip_already_ended": "That trip had already ended.",
+	} {
+		t.Run(code, func(t *testing.T) {
+			ui := newTestAdminUI(t)
+			ui.trips = &fakeTripLister{}
+			mux := http.NewServeMux()
+			registerAdminUI(mux, ui)
+
+			req := httptest.NewRequest(http.MethodGet, "/admin/trips", nil)
+			req.AddCookie(cookieFor(t, "admin"))
+			req.AddCookie(&http.Cookie{Name: flashCookieName, Value: code})
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), text)
+		})
+	}
+}
+
+// postTripEnd submits the Trips page's End trip form for id as an admin.
+func postTripEnd(t *testing.T, ender TripByIDEnder, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	ui := newTestAdminUI(t)
+	ui.tripEnder = ender
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/trips/"+id+"/end", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	return w
+}
+
+// flashCodeSet returns the flash code w sets, or "" if it sets none.
+func flashCodeSet(w *httptest.ResponseRecorder) string {
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+// TestTripEnd_EndsTrip verifies the success path flashes and redirects back
+// to the Trips page, and logs the admin who ended the trip.
+// Not safe for t.Parallel(); uses global logger.
+func TestTripEnd_EndsTrip(t *testing.T) {
+	fake := &fakeTripByIDEnder{trip: &TripSummary{ID: 5, VehicleID: "bus-1", UserID: 7, Status: "completed"}}
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	w := postTripEnd(t, fake, "5")
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/trips", w.Header().Get("Location"))
+	assert.Equal(t, "trip_ended", flashCodeSet(w))
+	assert.Equal(t, int64(5), fake.id)
+	assert.Contains(t, logs.String(), `msg="admin ended trip"`)
+	assert.Contains(t, logs.String(), "trip_id=5")
+	assert.Contains(t, logs.String(), "admin_sub=9")
+}
+
+// TestTripEnd_AlreadyEnded verifies a trip that ended before the click (a
+// stale page, or the driver ended it) is reported, not treated as an error.
+func TestTripEnd_AlreadyEnded(t *testing.T) {
+	w := postTripEnd(t, &fakeTripByIDEnder{err: ErrTripNotActive}, "5")
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/trips", w.Header().Get("Location"))
+	assert.Equal(t, "trip_already_ended", flashCodeSet(w))
+}
+
+func TestTripEnd_NoSuchTrip(t *testing.T) {
+	w := postTripEnd(t, &fakeTripByIDEnder{err: ErrTripNotFound}, "999")
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Empty(t, flashCodeSet(w))
+}
+
+func TestTripEnd_InvalidID(t *testing.T) {
+	for _, id := range []string{"abc", "0", "-1"} {
+		t.Run(id, func(t *testing.T) {
+			fake := &fakeTripByIDEnder{}
+			w := postTripEnd(t, fake, id)
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
+			assert.Zero(t, fake.calls, "the store must not be asked to end trip %q", id)
+		})
+	}
+}
+
+func TestTripEnd_StoreError(t *testing.T) {
+	w := postTripEnd(t, &fakeTripByIDEnder{err: errors.New("connection refused")}, "5")
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NotContains(t, w.Body.String(), "connection refused")
+	assert.Empty(t, flashCodeSet(w))
 }
 
 // TestVehiclesPageURL_PreservesFilters pins that every vehicle filter is

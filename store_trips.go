@@ -182,6 +182,33 @@ func (s *Store) EndTrip(ctx context.Context, tripID, userID int64) error {
 	return nil
 }
 
+// ErrTripNotActive is returned when an admin ends a trip that has already ended.
+var ErrTripNotActive = errors.New("trip is not active")
+
+// TripByIDEnder is the store interface for an admin ending any driver's trip.
+type TripByIDEnder interface {
+	EndTripByID(ctx context.Context, tripID int64) (*TripSummary, error)
+}
+
+// EndTripByID marks the active trip with this id as completed, whoever drove
+// it, and returns the ended trip. Unlike EndTrip it does not check the
+// driver, so only admin handlers may call it. It returns ErrTripNotFound when
+// no trip has this id and ErrTripNotActive when the trip has already ended.
+func (s *Store) EndTripByID(ctx context.Context, tripID int64) (*TripSummary, error) {
+	rowsAffected, err := s.queries.EndTripByID(ctx, tripID)
+	if err != nil {
+		return nil, fmt.Errorf("end trip by id: %w", err)
+	}
+	if rowsAffected == 0 {
+		// Nothing active had this id: tell a missing trip from an ended one.
+		if _, err := s.GetTripSummary(ctx, tripID); err != nil {
+			return nil, err
+		}
+		return nil, ErrTripNotActive
+	}
+	return s.GetTripSummary(ctx, tripID)
+}
+
 // ListTrips returns trip summaries newest-first with optional filters.
 // Dynamic WHERE clauses make this a hand-written query rather than sqlc.
 func (s *Store) ListTrips(ctx context.Context, f TripFilter) ([]TripSummary, error) {

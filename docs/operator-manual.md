@@ -406,6 +406,16 @@ actually driven as a line, with a **Start** and an **End** marker, and the
 sidebar replaced by **Trip Detail** showing driver, route, status and times.
 This is the tool for answering "where did this bus actually go?".
 
+An active trip also has **End trip**. It ends the trip for good, the same as
+the driver ending it. Use it when a driver sees **You already have a trip
+running. End it before starting another.** and their phone no longer shows
+that trip. Confirm **End this trip? Do this only when the driver phone cannot
+end it.**, the page says **Trip ended. The driver can start a new trip.**, and
+the driver taps the run again. If a phone does still show the trip, ending it
+there is safe: on Android **End trip** finishes as usual, and on an iPhone
+**End locally anyway** is right when the app says **Could not end the trip**,
+because the server has already ended it.
+
 ### The feed itself
 
 Hand this address to whoever runs your OneBusAway instance, or to any other
@@ -552,7 +562,7 @@ points are.
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | Driver sees **You're not assigned to bus 4317.** after tapping a run on **Choose a run** | The vehicle is not assigned to that driver, or the assignment was removed. | **Users** → **Edit** the driver → **Assigned vehicles** → pick the vehicle → **Assign**. Then have them tap the run again. |
-| Driver sees **You already have a trip running. End it before starting another.** | An earlier trip was never ended, usually because it was started on another phone or the app was reinstalled. | Have the driver open the app on the phone that started the trip; it returns to the tracking screen for the old trip, where **End trip** ends it. Confirm on **Trips** → **Active** that it is gone. If the app no longer knows about the trip, ask your IT contact: there is no button in the admin UI to end another person's trip. |
+| Driver sees **You already have a trip running. End it before starting another.** | An earlier trip was never ended, usually because it was started on another phone or the app was reinstalled. | Have the driver open the app on the phone that started the trip; it returns to the tracking screen for the old trip, where **End trip** ends it. Confirm on **Trips** → **Active** that it is gone. If the app no longer knows about the trip, end it yourself: **Trips** → **Active** → **Apply**, then **End trip** on the driver's row and confirm. Then have them tap the run again. |
 | Driver sees **No buses are assigned to you** | No active vehicle is assigned to that account. | Check the vehicle is not deactivated (**Vehicles** → **Show deactivated**), then assign it (section 6) and have the driver tap **Check again**. |
 | One vehicle missing from the feed and the map, others fine | That phone has stopped reporting for longer than the staleness threshold: no signal, app closed, trip never started, phone battery dead, or Android killed the app in the background. | Ask the driver what the line under the status card says. **No connection** is a coverage problem and clears itself. If the app is not on the tracking screen at all, the trip was never started or was ended. If it keeps dying when the screen locks, the background-location permission is not **"Allow all the time"**: redo step 6 of section 7. |
 | Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Dashboard**: if **Feed last updated** says **never** (nothing has reported for several minutes) and **Active Trips** is 0, it is the phones — start with two or three drivers. If **Active Trips** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |

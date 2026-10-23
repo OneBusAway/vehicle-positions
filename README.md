@@ -302,6 +302,7 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |`DELETE /api/v1/admin/api-keys/{id}`|DELETE|Revoke a feed API key                               |
 |`POST /api/v1/trips/start`          |POST  |Driver starts a trip (assigns vehicle to route/trip)|
 |`POST /api/v1/trips/end`            |POST  |Driver ends a trip                                  |
+|`POST /api/v1/admin/trips/{id}/end` |POST  |End any driver's active trip (admin)                |
 |`GET /api/v1/admin/status`          |GET   |System health, active vehicles, feed stats          |
 
 **Location Report Payload:**

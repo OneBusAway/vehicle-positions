@@ -78,6 +78,12 @@ func (n *noopStore) StartTrip(_ context.Context, _ int64, _, _, _ string) (*Trip
 func (n *noopStore) EndTrip(_ context.Context, _, _ int64) error {
 	return nil
 }
+
+// EndTripByID reports no such trip, so TestAdminEndTripRoute_Registered can
+// assert a 404 body that only handleAdminEndTrip writes.
+func (n *noopStore) EndTripByID(_ context.Context, _ int64) (*TripSummary, error) {
+	return nil, ErrTripNotFound
+}
 func (n *noopStore) Ping(_ context.Context) error {
 	return nil
 }
@@ -224,6 +230,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 		{"GET", "/api/v1/admin/trips"},
 		{"GET", "/api/v1/admin/trips/1"},
 		{"GET", "/api/v1/admin/trips/1/locations"},
+		{"POST", "/api/v1/admin/trips/1/end"},
 		{"GET", "/api/v1/admin/users"},
 		{"GET", "/api/v1/admin/users/1"},
 		{"POST", "/api/v1/admin/users"},
@@ -285,6 +292,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 		{"GET", "/api/v1/admin/trips"},
 		{"GET", "/api/v1/admin/trips/1"},
 		{"GET", "/api/v1/admin/trips/1/locations"},
+		{"POST", "/api/v1/admin/trips/1/end"},
 		{"GET", "/api/v1/admin/users"},
 		{"GET", "/api/v1/admin/users/1"},
 		{"POST", "/api/v1/admin/users"},
@@ -346,6 +354,50 @@ func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
 	assert.True(t, hasVehicles, "response must have a \"vehicles\" key, proving handleLiveVehicles served the request, not handleGetVehicle")
 }
 
+// endedTripStore is a noopStore whose trips have all ended already.
+type endedTripStore struct{ noopStore }
+
+func (e *endedTripStore) EndTripByID(_ context.Context, _ int64) (*TripSummary, error) {
+	return nil, ErrTripNotActive
+}
+
+// TestAdminEndTripRoute_Registered verifies POST /api/v1/admin/trips/{id}/end
+// reaches handleAdminEndTrip through the real mux. AdminTokenAllowed only
+// proves the middleware lets the request through, which an unregistered route
+// also passes with the mux's plain-text 404 page. The JSON 404 proves a
+// handler answered; the 409 proves it is this one, because handleGetTrip
+// writes the same "trip not found" body.
+func TestAdminEndTripRoute_Registered(t *testing.T) {
+	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		store      appStore
+		wantStatus int
+		wantError  string
+	}{
+		{"no such trip", &noopStore{}, http.StatusNotFound, "trip not found"},
+		{"already ended", &endedTripStore{}, http.StatusConflict, "trip is not active"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := newMux(tc.store, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/trips/1/end", nil)
+			req.Header.Set("Authorization", "Bearer "+adminToken)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			require.Equal(t, tc.wantStatus, w.Code)
+			var resp map[string]string
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&resp), "body must be the handler's JSON, not the mux's 404 page")
+			assert.Equal(t, tc.wantError, resp["error"])
+		})
+	}
+}
+
 // TestAdminPageRoutes_Wiring verifies every protected /admin/* page and POST
 // route registered by registerAdminUI (Tasks 8, 15, 16, 17) enforces
 // requireAdminPage: an unauthenticated visitor and a driver-role session
@@ -383,6 +435,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 		{"POST", "/admin/users/1/vehicles"},
 		{"POST", "/admin/users/1/vehicles/bus-1/remove"},
 		{"GET", "/admin/trips"},
+		{"POST", "/admin/trips/1/end"},
 	}
 
 	for _, tc := range tests {

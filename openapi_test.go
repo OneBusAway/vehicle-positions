@@ -53,6 +53,7 @@ var htmlUIRoutes = map[string]struct{}{
 	"GET /admin/dashboard":                               {},
 	"GET /admin/map":                                     {},
 	"GET /admin/trips":                                   {},
+	"POST /admin/trips/{id}/end":                         {},
 	"GET /admin/vehicles":                                {},
 	"GET /admin/vehicles/new":                            {},
 	"POST /admin/vehicles":                               {},

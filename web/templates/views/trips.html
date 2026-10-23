@@ -65,7 +65,14 @@
             </td>
             <td class="px-5 py-4 text-slate-400">{{.Duration}}</td>
             <td class="px-5 py-4">
-              <a href="/admin/map?trip_id={{.ID}}" class="text-xs font-semibold text-sky-600 hover:text-sky-800">View trail</a>
+              <div class="flex items-center gap-3 text-xs font-semibold">
+                <a href="/admin/map?trip_id={{.ID}}" class="text-sky-600 hover:text-sky-800">View trail</a>
+                {{if eq .Status "active"}}
+                <form method="post" action="/admin/trips/{{.ID}}/end" class="shrink-0" onsubmit="return confirm('End this trip? Do this only when the driver phone cannot end it.')">
+                  <button type="submit" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">End trip</button>
+                </form>
+                {{end}}
+              </div>
             </td>
           </tr>
           {{end}}

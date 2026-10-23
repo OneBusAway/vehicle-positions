@@ -71,6 +71,7 @@ type adminUI struct {
 	stats          adminStatsStore
 	activeTrips    ActiveTripLister
 	trips          TripLister
+	tripEnder      TripByIDEnder
 	vehicles       VehicleManager
 	vehiclePager   VehiclePager
 	userPager      UserPager
@@ -102,6 +103,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		stats:          store,
 		activeTrips:    store,
 		trips:          store,
+		tripEnder:      store,
 		vehicles:       store,
 		vehiclePager:   store,
 		userPager:      store,
@@ -147,6 +149,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("POST /admin/users/{id}/vehicles", protect(http.HandlerFunc(ui.userAssignVehicle)))
 	mux.Handle("POST /admin/users/{id}/vehicles/{vehicleID}/remove", protect(http.HandlerFunc(ui.userUnassignVehicle)))
 	mux.Handle("GET /admin/trips", protect(http.HandlerFunc(ui.tripsPage)))
+	mux.Handle("POST /admin/trips/{id}/end", protect(http.HandlerFunc(ui.tripEnd)))
 }
 
 func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
@@ -1361,4 +1364,37 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 		"PrevURL":   tripsPageURL(status, vehicleID, q, page-1),
 		"NextURL":   tripsPageURL(status, vehicleID, q, page+1),
 	})
+}
+
+// tripEnd ends a driver's active trip from the Trips page, for a driver
+// locked out by a trip their phone no longer knows about; it mirrors
+// handleAdminEndTrip. A trip that had already ended (a stale page, or the
+// driver ended it first) is not an error: it is ended, which is what the
+// admin wanted, so it gets its own flash and the same redirect, as
+// ErrAssignmentExists does in userAssignVehicle.
+func (ui *adminUI) tripEnd(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	sub := adminSub(r)
+	trip, err := ui.tripEnder.EndTripByID(r.Context(), id)
+	switch {
+	case err == nil:
+		slog.Info("admin ended trip", "trip_id", trip.ID, "driver_id", trip.UserID, "vehicle_id", trip.VehicleID, "admin_sub", sub)
+		setFlash(w, "trip_ended")
+	case errors.Is(err, ErrTripNotActive):
+		slog.Warn("admin end trip: trip already ended", "trip_id", id, "admin_sub", sub)
+		setFlash(w, "trip_already_ended")
+	case errors.Is(err, ErrTripNotFound):
+		slog.Warn("admin end trip: no trip with this id", "trip_id", id, "admin_sub", sub)
+		http.NotFound(w, r)
+		return
+	default:
+		slog.Error("failed to end trip by id", "trip_id", id, "admin_sub", sub, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/trips", http.StatusSeeOther)
 }

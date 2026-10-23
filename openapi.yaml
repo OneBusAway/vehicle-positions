@@ -1319,6 +1319,53 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/admin/trips/{id}/end:
+    parameters:
+      - $ref: '#/components/parameters/TripIDPath'
+    post:
+      tags: [admin]
+      summary: End any driver's active trip
+      description: |
+        Ends the active trip with this id, whichever driver started it, and
+        returns the ended trip. Requires the `admin` role. There is no request
+        body.
+
+        Use it when a driver is locked out by a trip their phone no longer
+        knows about: `POST /api/v1/trips/start` answers `409` until that trip
+        ends. The trip ends exactly as the driver's own `POST /api/v1/trips/end`
+        leaves it: `status` becomes `completed` and `end_time` is set.
+
+        A trip that has already ended returns `409`, not `404`, so a client can
+        tell "already done" from "wrong id". As on the other trip endpoints, a
+        non-numeric `id` returns `404`.
+      responses:
+        '200':
+          description: The ended trip, with `status` `completed` and `end_time` set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: |
+            No trip exists with this id, or the id is not a positive number
+            (`trip not found`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The trip exists but has already ended (`trip is not active`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/admin/users:
     get:
       tags: [admin]

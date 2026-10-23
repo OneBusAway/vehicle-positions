@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // ActiveTripLister returns the current active trip for each vehicle that
@@ -233,6 +235,49 @@ func handleGetTrip(store TripSummaryGetter) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, trip)
 	}
+}
+
+// handleAdminEndTrip ends any driver's active trip and returns it. It is for
+// a driver locked out by a trip their phone no longer knows about: every new
+// start answers 409 until that trip ends. A trip that has already ended is a
+// 409 rather than a 404, so a client can tell "already done" from "wrong id".
+func handleAdminEndTrip(store TripByIDEnder) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+			return
+		}
+
+		sub := adminSub(r)
+		trip, err := store.EndTripByID(r.Context(), id)
+		if err != nil {
+			switch {
+			case errors.Is(err, ErrTripNotFound):
+				slog.Warn("admin end trip: no trip with this id", "trip_id", id, "admin_sub", sub)
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "trip not found"})
+			case errors.Is(err, ErrTripNotActive):
+				slog.Warn("admin end trip: trip already ended", "trip_id", id, "admin_sub", sub)
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "trip is not active"})
+			default:
+				slog.Error("failed to end trip by id", "trip_id", id, "admin_sub", sub, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			}
+			return
+		}
+
+		slog.Info("admin ended trip", "trip_id", trip.ID, "driver_id", trip.UserID, "vehicle_id", trip.VehicleID, "admin_sub", sub)
+		writeJSON(w, http.StatusOK, trip)
+	}
+}
+
+// adminSub returns the sub claim of the admin making the request, so a log
+// line can say who changed something. requireAuth and requireAdminPage both
+// put the claims on the context before an admin handler runs.
+func adminSub(r *http.Request) string {
+	claims, _ := r.Context().Value(claimsKey).(jwt.MapClaims)
+	sub, _ := claims.GetSubject()
+	return sub
 }
 
 // handleTripLocations returns a single trip's summary joined with its

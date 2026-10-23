@@ -426,6 +426,112 @@ func TestStore_EndTrip_AlreadyEnded(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTripNotFound, "ending an already-completed trip should return not found")
 }
 
+// TestStore_EndTripByID_FreesLockedOutDriver is the lockout from #164: a
+// driver whose phone lost its trip cannot start another until something ends
+// the old one.
+func TestStore_EndTripByID_FreesLockedOutDriver(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx := context.Background()
+
+	trip, err := store.StartTrip(ctx, userID, "bus-trip-1", "route-5", "gtfs-5")
+	require.NoError(t, err)
+	_, err = store.StartTrip(ctx, userID, "bus-trip-1", "route-5", "gtfs-5")
+	require.ErrorIs(t, err, ErrActiveTripExists, "precondition: the driver is locked out")
+
+	ended, err := store.EndTripByID(ctx, trip.ID)
+	require.NoError(t, err)
+	assert.Equal(t, trip.ID, ended.ID)
+	assert.Equal(t, "completed", ended.Status)
+	require.NotNil(t, ended.EndTime)
+	assert.WithinDuration(t, time.Now(), *ended.EndTime, time.Minute)
+	assert.Equal(t, userID, ended.UserID)
+	assert.Equal(t, "Trip Driver", ended.DriverName)
+	assert.Equal(t, "bus-trip-1", ended.VehicleID)
+	assert.Equal(t, "Bus 1", ended.VehicleLabel)
+
+	var status string
+	err = store.pool.QueryRow(ctx, "SELECT status FROM trips WHERE id = $1", trip.ID).Scan(&status)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", status)
+
+	_, err = store.StartTrip(ctx, userID, "bus-trip-1", "route-5", "gtfs-5")
+	assert.NoError(t, err, "the driver must be able to start again once the trip is ended")
+}
+
+// TestStore_EndTripByID_EndsAnyDriversTrip verifies the admin end has no
+// driver check, which is what sets it apart from EndTrip, and that it ends
+// only the trip it names.
+func TestStore_EndTripByID_EndsAnyDriversTrip(t *testing.T) {
+	store := newTestStore(t)
+	driverA := setupTripTestData(t, store)
+	driverB := setupTripUser(t, store, "Other Driver", "other@test.com", "bus-trip-2", "Bus 2")
+	ctx := context.Background()
+
+	tripA, err := store.StartTrip(ctx, driverA, "bus-trip-1", "route-5", "")
+	require.NoError(t, err)
+	tripB, err := store.StartTrip(ctx, driverB, "bus-trip-2", "route-6", "")
+	require.NoError(t, err)
+
+	ended, err := store.EndTripByID(ctx, tripA.ID)
+	require.NoError(t, err)
+	assert.Equal(t, driverA, ended.UserID)
+	assert.Equal(t, "completed", ended.Status)
+
+	summaryB, err := store.GetTripSummary(ctx, tripB.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "active", summaryB.Status, "ending one trip must leave other drivers' trips running")
+}
+
+func TestStore_EndTripByID_NotFound(t *testing.T) {
+	store := newTestStore(t)
+	_ = setupTripTestData(t, store)
+
+	trip, err := store.EndTripByID(context.Background(), 99999999)
+	assert.ErrorIs(t, err, ErrTripNotFound)
+	assert.Nil(t, trip)
+}
+
+// TestStore_EndTripByID_AlreadyEnded verifies an ended trip is refused with
+// its own error and keeps the end_time it already had.
+func TestStore_EndTripByID_AlreadyEnded(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx := context.Background()
+
+	trip, err := store.StartTrip(ctx, userID, "bus-trip-1", "route-5", "")
+	require.NoError(t, err)
+	// The driver ended it an hour ago.
+	endedAt := time.Now().Add(-time.Hour).Truncate(time.Microsecond)
+	_, err = store.pool.Exec(ctx, "UPDATE trips SET status = 'completed', end_time = $2 WHERE id = $1", trip.ID, endedAt)
+	require.NoError(t, err)
+
+	ended, err := store.EndTripByID(ctx, trip.ID)
+	assert.ErrorIs(t, err, ErrTripNotActive)
+	assert.Nil(t, ended)
+
+	var endAfter time.Time
+	err = store.pool.QueryRow(ctx, "SELECT end_time FROM trips WHERE id = $1", trip.ID).Scan(&endAfter)
+	require.NoError(t, err)
+	assert.True(t, endAfter.Equal(endedAt), "an ended trip's end_time must not be overwritten: got %v, want %v", endAfter, endedAt)
+}
+
+// TestStore_EndTripByID_Twice verifies a second end of the same trip, such as
+// two admins clicking at once, is refused rather than ending it again.
+func TestStore_EndTripByID_Twice(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx := context.Background()
+
+	trip, err := store.StartTrip(ctx, userID, "bus-trip-1", "route-5", "")
+	require.NoError(t, err)
+
+	_, err = store.EndTripByID(ctx, trip.ID)
+	require.NoError(t, err)
+	_, err = store.EndTripByID(ctx, trip.ID)
+	assert.ErrorIs(t, err, ErrTripNotActive)
+}
+
 func TestStore_StartTrip_AfterEndingPrevious(t *testing.T) {
 	store := newTestStore(t)
 	userID := setupTripTestData(t, store)

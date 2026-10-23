@@ -112,6 +112,11 @@ UPDATE trips
 SET status = 'completed', end_time = NOW()
 WHERE id = $1 AND user_id = $2 AND status = 'active';
 
+-- name: EndTripByID :execrows
+UPDATE trips
+SET status = 'completed', end_time = NOW()
+WHERE id = $1 AND status = 'active';
+
 -- name: AssignUserVehicle :one
 INSERT INTO user_vehicles (user_id, vehicle_id)
 VALUES ($1, $2)

@@ -442,6 +442,20 @@ func (q *Queries) EndTrip(ctx context.Context, arg EndTripParams) (int64, error)
 	return result.RowsAffected(), nil
 }
 
+const endTripByID = `-- name: EndTripByID :execrows
+UPDATE trips
+SET status = 'completed', end_time = NOW()
+WHERE id = $1 AND status = 'active'
+`
+
+func (q *Queries) EndTripByID(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, endTripByID, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
 SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
 FROM api_keys

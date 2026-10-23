@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -597,4 +601,109 @@ func TestHandleGetTrip_StoreError(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Equal(t, "internal server error", resp["error"])
 	assert.NotContains(t, resp["error"], assert.AnError.Error())
+}
+
+// fakeTripByIDEnder returns a scripted result and records how it was called.
+type fakeTripByIDEnder struct {
+	trip  *TripSummary
+	err   error
+	calls int
+	id    int64
+}
+
+func (f *fakeTripByIDEnder) EndTripByID(_ context.Context, id int64) (*TripSummary, error) {
+	f.calls++
+	f.id = id
+	return f.trip, f.err
+}
+
+// adminEndTripRequest builds the request as it reaches the handler: the path
+// value set by the mux and admin claims set by requireAuth.
+func adminEndTripRequest(id string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/trips/"+id+"/end", nil)
+	req.SetPathValue("id", id)
+	return req.WithContext(contextWithClaims(req.Context(), jwt.MapClaims{"sub": "2", "role": roleAdmin}))
+}
+
+// TestHandleAdminEndTrip_EndsTrip verifies the ended trip is returned and the
+// end is logged with the admin who did it, since no column records that.
+// Not safe for t.Parallel(); uses global logger.
+func TestHandleAdminEndTrip_EndsTrip(t *testing.T) {
+	end := time.Unix(1752570000, 0).UTC()
+	fake := &fakeTripByIDEnder{trip: &TripSummary{
+		ID: 5, VehicleID: "bus-1", VehicleLabel: "Bus 1",
+		UserID: 7, DriverName: "Asha", StartTime: time.Unix(1752566400, 0).UTC(),
+		EndTime: &end, Status: "completed",
+	}}
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	w := httptest.NewRecorder()
+	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("5"))
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, int64(5), fake.id)
+
+	var got TripSummary
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&got))
+	assert.Equal(t, int64(5), got.ID)
+	assert.Equal(t, "completed", got.Status)
+	require.NotNil(t, got.EndTime)
+	assert.Equal(t, end, got.EndTime.UTC())
+
+	assert.Contains(t, logs.String(), `msg="admin ended trip"`)
+	assert.Contains(t, logs.String(), "trip_id=5")
+	assert.Contains(t, logs.String(), "driver_id=7")
+	assert.Contains(t, logs.String(), "vehicle_id=bus-1")
+	assert.Contains(t, logs.String(), "admin_sub=2")
+}
+
+// TestHandleAdminEndTrip_InvalidID verifies an id that cannot name a trip is
+// a 404 without asking the store, as on GET /api/v1/admin/trips/{id}.
+func TestHandleAdminEndTrip_InvalidID(t *testing.T) {
+	for _, id := range []string{"abc", "0", "-1"} {
+		t.Run(id, func(t *testing.T) {
+			fake := &fakeTripByIDEnder{}
+			w := httptest.NewRecorder()
+			handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest(id))
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
+			assert.Equal(t, "trip not found", errorBody(t, w))
+			assert.Zero(t, fake.calls, "the store must not be asked to end trip %q", id)
+		})
+	}
+}
+
+func TestHandleAdminEndTrip_NoSuchTrip(t *testing.T) {
+	fake := &fakeTripByIDEnder{err: ErrTripNotFound}
+	w := httptest.NewRecorder()
+	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("999"))
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, "trip not found", errorBody(t, w))
+}
+
+// TestHandleAdminEndTrip_AlreadyEnded verifies an ended trip is a 409, not a
+// 404, so a client can tell "already done" from "wrong id".
+func TestHandleAdminEndTrip_AlreadyEnded(t *testing.T) {
+	fake := &fakeTripByIDEnder{err: ErrTripNotActive}
+	w := httptest.NewRecorder()
+	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("5"))
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Equal(t, "trip is not active", errorBody(t, w))
+}
+
+// TestHandleAdminEndTrip_StoreError verifies a store failure is a 500 that
+// does not leak the underlying error to the client.
+func TestHandleAdminEndTrip_StoreError(t *testing.T) {
+	fake := &fakeTripByIDEnder{err: errors.New("end trip by id: connection refused")}
+	w := httptest.NewRecorder()
+	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("5"))
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NotContains(t, w.Body.String(), "connection refused")
+	assert.Equal(t, "internal server error", errorBody(t, w))
 }
