@@ -19,6 +19,7 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEFAULT_SERVER_URL: ""
 
 packages:
   VehiclePositionsKit:
@@ -38,6 +39,14 @@ targets:
       - path: Resources
     dependencies:
       - package: VehiclePositionsKit
+    preBuildScripts:
+      - name: Check DEFAULT_SERVER_URL
+        basedOnDependencyAnalysis: false
+        script: |
+          case "$DEFAULT_SERVER_URL" in
+            "" | https://*) ;;
+            *) echo "error: DEFAULT_SERVER_URL must be an https:// address, or empty for no default (got \"$DEFAULT_SERVER_URL\")"; exit 1 ;;
+          esac
     entitlements:
       path: VehicleTracker.entitlements
       properties:
@@ -48,6 +57,10 @@ targets:
         CFBundleDisplayName: OBA Vehicle Tracker
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [obavehicletracker]
+        OBADefaultServerURL: $(DEFAULT_SERVER_URL)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSLocationWhenInUseUsageDescription: Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is.

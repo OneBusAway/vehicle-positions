@@ -13,6 +13,7 @@ final class AppContainer {
 
     let settings: AppSettings
     let session: TripSession
+    let serverSetup: ServerSetup
 
     init() {
         let settings = AppSettings()
@@ -28,5 +29,6 @@ final class AppContainer {
                 try TrackerClient(baseURL: url, tokens: tokens, refresher: refresher)
             }
         )
+        serverSetup = ServerSetup(session: session)
     }
 }

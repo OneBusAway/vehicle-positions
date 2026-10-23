@@ -72,6 +72,7 @@ import VehiclePositionsKit
                                                  expiresAt: clock.now.addingTimeInterval(900)))
         #expect(s.settings.serverURLString == "https://positions.example.org")
         #expect(s.settings.email == "d@test.com")
+        #expect(s.settings.signInServerURL == server)
     }
 
     @Test func signInFailureStaysSignedOut() async {
@@ -81,6 +82,21 @@ import VehiclePositionsKit
             try await s.signIn(serverURL: server, email: "d@test.com", password: "bad")
         }
         #expect(s.phase == .signedOut)
+    }
+
+    /// The token and any trip belong to the server that issued them, so a
+    /// relaunch and a re-login stay there after the agency names another.
+    @Test func aRelaunchAndAReloginKeepTheSavedServerWhenTheAgencyNamesAnother() async throws {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-3600)))
+        defaults.set("https://positions.example.org", forKey: "serverURL")
+        defaults.set([AppSettings.managedServerURLKey: "https://other.example.org"],
+                     forKey: AppSettings.managedConfigurationKey)
+        var servers: [URL] = []
+        let s = TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
+                            makeAPI: { url, _ in servers.append(url); return api }, now: { clock.now })
+        try await s.reauthenticate(password: "pw")
+        #expect(s.phase == .idle)
+        #expect(servers == [server, server])
     }
 
     @Test func startFetchesGeometryThenStartsTheServerTrip() async throws {

@@ -977,3 +977,117 @@ Street names are drawn in Latin letters only: the English name where
 OpenStreetMap has one, or else the local name when it is written in Latin
 letters. A place named only in another script, such as Devanagari, has no label
 for now.
+
+## 13. Setting the server address on drivers' phones
+
+Out of the box, each driver types the server address on the sign-in screen,
+and a typo gives a confusing error. The iPhone app can get the address three
+other ways. (On Android, drivers still type it, as section 12.5 says.)
+
+When the sign-in screen opens, it uses the first of these that is set:
+
+1. the address your device management sets (section 13.1), and the driver
+   can't change it;
+2. the address this phone last signed in to;
+3. the address built into the app (section 13.2);
+4. nothing, so the driver types it.
+
+A setup link (section 13.3) doesn't add to this list: it fills in the field,
+and the address is saved only once a sign-in to it succeeds.
+
+An address from device management, the built-in default or a setup link must
+be one the app would accept if the driver typed it: `https://`, or plain
+`http://` only for `localhost`, `127.0.0.1` or a `.local` host. It also must
+not carry user info: `https://tracker.example.org@evil.example` goes to
+`evil.example`, so the app ignores it. An address that breaks either rule is
+ignored, as if it weren't set. A typed address is held only to the first rule.
+
+A new address applies at the **next sign-in**. A phone that is signed in keeps
+reporting to the server it signed in to, because its sign-in and its trip belong
+to that server. To move a signed-in phone, the driver signs out (**Sign out** on
+the vehicle screen) and signs in again.
+
+### 13.1 Device management (MDM)
+
+If your iPhones are managed and the app is installed through your device
+management, set the app's managed configuration (AppConfig) to:
+
+```xml
+<dict>
+  <key>server_url</key>
+  <string>https://tracker.example.org</string>
+</dict>
+```
+
+The app reads `server_url` from `com.apple.configuration.managed` when it
+starts and each time it comes to the front. The sign-in screen shows the
+address greyed out, with "Set by your agency." If the value isn't an address
+the app accepts, the app ignores it, and the field stays open with "Your
+agency's server setting is not a valid address, so type it here."
+
+### 13.2 Build the address into the app
+
+If you build the app yourself, set `DEFAULT_SERVER_URL` and the field starts
+filled in. Drivers can still change it. Add it to the `xcodebuild` command you
+build or archive with:
+
+```bash
+xcodebuild ... DEFAULT_SERVER_URL=https://tracker.example.org
+```
+
+or set it under `settings.base` in `ios/VehicleTracker/project.yml` and run
+`xcodegen generate`. It must be an `https://` address: anything else **fails
+the build** with "DEFAULT_SERVER_URL must be an https:// address, or empty for
+no default". It is empty in this repository, which means no address is built
+in. To check a build, `plutil -extract OBADefaultServerURL raw
+VehicleTracker.app/Info.plist` prints the address it carries.
+
+### 13.3 A setup link or QR code
+
+Send drivers a link, or print it as a QR code:
+
+```
+obavehicletracker://setup?server=https%3A%2F%2Ftracker.example.org
+```
+
+The `server` value is your address, percent-encoded. To make the link for
+yours:
+
+```bash
+python3 -c 'import sys, urllib.parse; print("obavehicletracker://setup?server=" + urllib.parse.quote(sys.argv[1], safe=""))' https://tracker.example.org
+```
+
+Any QR code generator turns the link into a code; the iPhone Camera app opens
+it. iOS may first ask whether to open OBA Vehicle Tracker. When a driver opens
+the link on the sign-in screen, the app asks **"Use
+tracker.example.org?"** with "Only continue if your agency sent you this link."
+**Use this server** fills in the field, and the driver then signs in as usual.
+
+The link only fills in the field, and only after the driver agrees: it never
+signs in and never sends anything. The address isn't saved until a sign-in to
+it succeeds, so leaving the sign-in screen without signing in forgets it. That
+matters after a driver deletes and reinstalls the app: iOS keeps the old
+sign-in, and a saved address would have paired it with the link's server. Anyone can send a driver a link, and one
+that signed in to a look-alike server would hand it the driver's password. The
+question names only the host, so the driver reads where the app would go
+rather than a long address that hides it.
+
+The app doesn't use the link, and says why, when:
+
+- the phone is signed in: "This phone is signed in to tracker.example.org. The
+  link was not used.";
+- your device management sets the address: "Your agency sets the server on
+  this phone.";
+- the link has no address the app accepts: "This link does not contain a
+  server address the app can use."
+
+### 13.4 What these cost
+
+- **Chat apps:** some chat and email apps don't turn an `obavehicletracker://`
+  link into one you can tap. A QR code or device management works everywhere.
+- **The next sign-in:** a changed address doesn't move a phone that is signed in
+  (see above).
+- **Another app can claim the link:** any app can register the
+  `obavehicletracker` scheme, and iOS then picks which one opens the link. The
+  link carries only your public server address, so the worst case is a missed
+  setup, not a leak.

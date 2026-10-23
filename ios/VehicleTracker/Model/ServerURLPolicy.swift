@@ -17,4 +17,14 @@ nonisolated enum ServerURLPolicy {
             return false
         }
     }
+
+    /// An address the driver didn't type: the agency's managed configuration,
+    /// the build default or a setup link. It must pass `isAllowed`, have a
+    /// host, and carry no user info: `https://tracker.example.org@evil.example`
+    /// goes to `evil.example`, and nobody reading it would think so.
+    static func presetURL(from raw: String) -> URL? {
+        guard let url = URL(string: raw), url.host()?.isEmpty == false,
+              url.user() == nil, url.password() == nil, isAllowed(url) else { return nil }
+        return url
+    }
 }

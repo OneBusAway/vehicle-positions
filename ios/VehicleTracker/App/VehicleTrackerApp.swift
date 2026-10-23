@@ -8,7 +8,9 @@ struct VehicleTrackerApp: App {
         WindowGroup {
             RootView()
                 .environment(container.session)
+                .environment(container.serverSetup)
                 .task { DebugAutoStart.runIfRequested(session: container.session) }
+                .onOpenURL { container.serverSetup.open($0) }
         }
     }
 }
