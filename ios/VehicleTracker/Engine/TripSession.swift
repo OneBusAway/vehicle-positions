@@ -13,12 +13,18 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     case unusableTrip
     /// `start()` was called while a trip was already starting or running.
     case busy
+    /// A trip this driver ended on the phone only is still open on the
+    /// server and its end could not be sent, so nothing was started: the
+    /// server would refuse the new trip while that one is open.
+    case previousTripNotEnded
 
     var errorDescription: String? {
         switch self {
         case .notSignedIn: "Sign in first."
         case .unusableTrip: "This run has no shape or stops to follow."
         case .busy: "A trip is already starting or running."
+        case .previousTripNotEnded:
+            "Your previous trip is still open on the server and could not be ended. Check the connection and try again."
         }
     }
 }
@@ -218,6 +224,7 @@ final class TripSession {
         let api = try requireAPI()
         phase = .starting
         do {
+            try await sendPendingEnds(api)
             let trip = try await api.trip(id: tripID)
             // Validate the geometry before telling the server anything: if
             // there is nothing to judge adherence against, nothing should be
@@ -243,6 +250,32 @@ final class TripSession {
         } catch {
             phase = .idle
             throw error
+        }
+    }
+
+    /// Sends the end of every trip this driver ended on this phone only, in
+    /// the order they were ended: the server still has the trip open and
+    /// would refuse the start. Each is forgotten as soon as its own end is
+    /// confirmed, and a 404 confirms it too. If one cannot be sent the start
+    /// is refused with ``TripSessionError/previousTripNotEnded`` and the rest
+    /// are kept. Other drivers' ends wait for their own next start: their
+    /// open trips do not block this driver's. Ends owed to another server wait
+    /// until the driver signs in there again.
+    private func sendPendingEnds(_ api: any TrackerAPI) async throws {
+        var pending = try store.loadPendingEnds()
+        for pendingEnd in pending where pendingEnd.isOwed(to: settings.serverURLString)
+            && pendingEnd.driverEmail.caseInsensitiveCompare(settings.email) == .orderedSame {
+            do {
+                try await api.endTrip(id: pendingEnd.serverTripID)
+                log.notice("sent the end of trip \(pendingEnd.serverTripID), which was ended on this phone only")
+            } catch APIError.status(404, _) {
+                log.notice("the server had no open trip \(pendingEnd.serverTripID) to end; forgetting its pending end")
+            } catch {
+                log.error("could not send the end of trip \(pendingEnd.serverTripID), which was ended on this phone only: \(String(describing: error))")
+                throw TripSessionError.previousTripNotEnded
+            }
+            pending.removeAll { $0 == pendingEnd }
+            try store.savePendingEnds(pending)
         }
     }
 
@@ -287,9 +320,12 @@ final class TripSession {
     /// `.active`/`.paused`; a second call while one is already `.ending` (or
     /// any other phase) is a no-op, so `end()` is never sent twice at once.
     /// If the server cannot be reached the trip stays active and the error is
-    /// thrown; the driver can retry or `endLocally()`. If something else
-    /// (namely `endLocally()`) already moved the phase on while the request
-    /// was in flight, that change is left alone rather than resurrected.
+    /// thrown; the driver can retry or `endLocally()`. A 404 is not a failure:
+    /// the server has no open trip under that id, so an earlier end got
+    /// through and only its reply was lost, or a dispatcher ended it. If
+    /// something else (namely `endLocally()`) already moved the phase on while
+    /// the request was in flight, that change is left alone rather than
+    /// resurrected.
     func end() async throws {
         let before: Phase
         switch phase {
@@ -302,6 +338,8 @@ final class TripSession {
         phase = .ending(active)
         do {
             try await api.endTrip(id: active.serverTripID)
+        } catch APIError.status(404, _) {
+            log.notice("the server had no open trip \(active.serverTripID) to end; treating it as ended")
         } catch {
             if phase == .ending(active) {
                 phase = before
@@ -315,10 +353,31 @@ final class TripSession {
         stopTracking()
     }
 
-    /// Stops tracking without telling the server (it will reap the trip).
+    /// Stops tracking without waiting for the server. The end is remembered
+    /// under the driver who started the trip and sent before that driver's
+    /// next start (`sendPendingEnds`).
     func endLocally() {
-        guard activeTrip != nil else { return }
+        guard let active = activeTrip else { return }
+        rememberEnd(of: active)
         stopTracking()
+    }
+
+    /// The driver asked to stop, so a failure to remember the end does not
+    /// keep them on the trip; it is logged, and the trip stays open on the
+    /// server.
+    private func rememberEnd(of active: ActiveTrip) {
+        do {
+            var pending = try store.loadPendingEnds()
+            let server = settings.serverURLString
+            if !pending.contains(where: { $0.serverTripID == active.serverTripID && $0.isOwed(to: server) }) {
+                pending.append(PendingTripEnd(serverTripID: active.serverTripID, driverEmail: active.driverEmail,
+                                              serverURL: server))
+                try store.savePendingEnds(pending)
+            }
+            log.notice("remembered the end of trip \(active.serverTripID) for the next start")
+        } catch {
+            log.error("could not remember the end of trip \(active.serverTripID); it stays open on the server: \(String(describing: error))")
+        }
     }
 
     // MARK: Tracking

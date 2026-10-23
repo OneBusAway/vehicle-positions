@@ -23,6 +23,9 @@ import Foundation
     private(set) nonisolated(unsafe) var starts: [(String, String, String)] = []
     private(set) nonisolated(unsafe) var ends: [Int64] = []
     private(set) nonisolated(unsafe) var posted: [LocationReport] = []
+    /// The trip, start and end calls in the order they were made, for tests
+    /// where the order is the point.
+    private(set) nonisolated(unsafe) var calls: [String] = []
 
     nonisolated init() {}
 
@@ -36,16 +39,19 @@ import Foundation
     func trips(routeID: String) async throws -> RouteTripsPage { page }
     func trip(id: String) async throws -> TripGeometry {
         tripRequests.append(id)
+        calls.append("trip \(id)")
         return geometry
     }
     func startTrip(vehicleID: String, routeID: String, gtfsTripID: String) async throws -> Int64 {
         starts.append((vehicleID, routeID, gtfsTripID))
+        calls.append("start \(gtfsTripID)")
         if let startError { throw startError }
         return startedID
     }
     func endTrip(id: Int64) async throws {
         if let endDelay { try? await Task.sleep(for: endDelay) }
         ends.append(id)
+        calls.append("end \(id)")
         if let endError { throw endError }
     }
     func postLocation(_ report: LocationReport) async throws {

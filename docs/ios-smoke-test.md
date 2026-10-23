@@ -384,6 +384,65 @@ curl -s "$BASE/gtfs-rt/vehicle-positions?format=json" | python3 -m json.tool
 `entity` should become an empty list (the key is omitted) about five minutes
 after the last report.
 
+### Check 5b: An End Locally is sent before the next start
+
+When End Trip can't reach the server, **End locally anyway** stops the trip
+on the phone only, and the server still has it open. The app remembers the end
+and sends it before the same driver's next start, which the server would
+otherwise refuse with `driver already has an active trip`. This check starts
+trips of its own.
+
+1. Start a run (route **1 Straight**, run **T1**), then stop the server:
+
+   ```bash
+   kill $(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t)
+   ```
+
+   Tap **End Trip** and confirm. When "Could not end the trip" appears, tap
+   **End locally anyway**.
+
+   **Expected outcome:** the app goes back to the vehicle picker at once, with
+   "Could not reach the server" above `Bus 1` while the server is down.
+
+2. Start the server again with the same environment, then pick `Bus 1`,
+   route **1 Straight** and run **T1**:
+
+   ```bash
+   go run . > /tmp/vt-server.log 2>&1 &
+   ```
+
+   **Expected outcome:** the Tracking screen appears. The server log shows the
+   old trip's end, then the new start, and no `409`:
+
+   ```bash
+   grep -E '"path":"/api/v1/trips/(start|end)"' /tmp/vt-server.log
+   # {...,"msg":"request","method":"POST","path":"/api/v1/trips/end","status":200,...}
+   # {...,"msg":"request","method":"POST","path":"/api/v1/trips/start","status":201,...}
+   ```
+
+3. End the new trip through the API, as an earlier end that got through would
+   have, then tap **End Trip** on the phone and confirm. The tokens from setup
+   don't work after Check 3b's new `JWT_SECRET`, so sign in again first:
+
+   ```bash
+   login() {
+     curl -s -X POST "$BASE/api/v1/auth/login" -H 'Content-Type: application/json' \
+       -d "{\"email\":\"$1\",\"password\":\"$2\"}" \
+       | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])'
+   }
+   ADMIN_TOKEN=$(login admin@test.com password123)
+   DRIVER_TOKEN=$(login driver@example.com driverpass123)
+   TRIP_ID=$(curl -s "$BASE/api/v1/admin/trips?status=active" -H "Authorization: Bearer $ADMIN_TOKEN" \
+     | python3 -c 'import sys,json;print(json.load(sys.stdin)["trips"][0]["id"])')
+   curl -s -X POST "$BASE/api/v1/trips/end" -H "Authorization: Bearer $DRIVER_TOKEN" \
+     -H 'Content-Type: application/json' -d "{\"trip_id\":$TRIP_ID}"
+   # {"status":"trip ended"}
+   ```
+
+   **Expected outcome:** the app's own end gets a `404` (no open trip under
+   that id), and the app treats it as ended: it goes back to the routes for
+   `Bus 1`, with no "Could not end the trip".
+
 ## CarPlay
 
 **Not yet run on this machine.** The steps and expected results below are

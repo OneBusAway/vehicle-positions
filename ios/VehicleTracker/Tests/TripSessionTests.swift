@@ -331,7 +331,8 @@ import VehiclePositionsKit
             Issue.record("the trip started while the end was in flight must still be active")
         }
         #expect(try store.load()?.serverTripID == 43, "the newer trip's record survives the older end")
-        #expect(api.ends == [42], "only the trip the call was given was ended on the server")
+        // The second is the End locally's own end, sent before the new start.
+        #expect(api.ends == [42, 42], "only the trip the call was given was ended on the server")
     }
 
     /// A stream that dies while the trip is being ended, whose end then fails,
@@ -373,6 +374,173 @@ import VehiclePositionsKit
 
         locations.emitFix(lat: 47.6050, lon: -122.3300, at: TripFixtures.at(8, 5, 5))
         #expect(await eventually { api.posted.count == 1 })
+    }
+
+    /// A 404 means the server has no open trip under that id: an earlier end
+    /// got through and only its reply was lost, or a dispatcher ended it.
+    @Test func endTreatsA404AsAlreadyEnded() async throws {
+        api.endError = APIError.status(404, message: "active trip not found")
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        try await s.end()
+        #expect(api.ends == [42])
+        #expect(s.phase == .idle)
+        #expect(try store.load() == nil)
+        #expect(locations.handles[0].invalidated)
+    }
+
+    /// Only a 404 means the trip is already ended; any other status is a
+    /// failure the driver has to see, so a new server error is not mistaken
+    /// for success.
+    @Test func endTreatsOtherStatusesAsFailures() async throws {
+        api.endError = APIError.status(500, message: "")
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        await #expect(throws: APIError.status(500, message: "")) { try await s.end() }
+        if case .active = s.phase {} else { Issue.record("a failed end keeps the trip active") }
+        #expect(try store.load() != nil)
+        #expect(!locations.handles[0].invalidated)
+    }
+
+    /// The pending end belongs to the driver who started the trip, not to
+    /// whoever is signed in when it is ended locally: only the starter's next
+    /// start may send it.
+    @Test func endLocallyRemembersTheEndForTheDriverWhoStartedTheTrip() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "a@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        s.settings.email = "b@test.com"
+
+        s.endLocally()
+        #expect(try store.loadPendingEnds() == [PendingTripEnd(serverTripID: 42, driverEmail: "a@test.com", serverURL: server.absoluteString)])
+        #expect(try store.load() == nil)
+        #expect(s.phase == .idle)
+        #expect(api.ends.isEmpty, "ending locally does not call the server")
+    }
+
+    /// The server still has the trip open and would refuse the start with
+    /// 409, so its end goes first.
+    @Test func theNextStartSendsTheRememberedEndFirst() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        s.endLocally()
+
+        api.startedID = 43
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(api.calls == ["trip T1", "start T1", "end 42", "trip T1", "start T1"])
+        #expect(try store.loadPendingEnds().isEmpty)
+        #expect(s.activeTrip?.serverTripID == 43)
+    }
+
+    /// A 404 means the server has no open trip under that id, which is what
+    /// the end was for.
+    @Test func aPendingEndAnswered404CountsAsSent() async throws {
+        try store.savePendingEnds([PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)])
+        api.endError = APIError.status(404, message: "active trip not found")
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(api.ends == [7])
+        #expect(try store.loadPendingEnds().isEmpty)
+        #expect(api.starts.count == 1)
+        #expect(s.activeTrip?.serverTripID == 42)
+    }
+
+    /// The server would refuse the start while the old trip is open, so it
+    /// is not asked for anything else: no trip fetched, no trip started.
+    @Test(arguments: [APIError.transport("offline"), APIError.status(500, message: "")])
+    func aPendingEndThatCannotBeSentRefusesTheStart(_ failure: APIError) async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
+        api.endError = failure
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        await #expect(throws: TripSessionError.previousTripNotEnded) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(api.ends == [7])
+        #expect(api.tripRequests.isEmpty)
+        #expect(api.starts.isEmpty)
+        #expect(try store.loadPendingEnds() == [owed], "kept for the next start")
+        #expect(s.phase == .idle)
+    }
+
+    /// Another driver's open trip does not block this driver's start, and
+    /// their pending end waits for their own next start. The email matches
+    /// case-insensitively, as it does for a stored trip.
+    @Test func onlyThisDriversPendingEndsAreSent() async throws {
+        let theirs = PendingTripEnd(serverTripID: 7, driverEmail: "a@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([theirs, PendingTripEnd(serverTripID: 8, driverEmail: "B@Test.com", serverURL: server.absoluteString)])
+        let s = session()
+        try await s.signIn(serverURL: server, email: "b@test.com", password: "pw")
+
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(api.ends == [8])
+        #expect(try store.loadPendingEnds() == [theirs])
+        #expect(s.activeTrip?.serverTripID == 42)
+    }
+
+    /// A trip ended locally twice (its record outlived the first time, as it
+    /// does if clearing it fails) is still one pending end.
+    @Test func endingTheSameTripLocallyTwiceRemembersItOnce() throws {
+        let (first, active) = try pausedSession()
+        first.endLocally()
+        try store.save(active)
+        let second = session()
+        #expect(second.phase == .paused(active))
+
+        second.endLocally()
+        #expect(try store.loadPendingEnds() == [PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)])
+    }
+
+    /// The driver asked to stop; a disk that cannot hold the pending end does
+    /// not keep them on the trip.
+    @Test func endLocallyStopsEvenIfTheEndCannotBeRemembered() async throws {
+        let unwritable = UnwritablePendingEndsStore()
+        let s = TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: unwritable,
+                            locations: locations, makeAPI: { _, _ in api }, now: { clock.now })
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        s.endLocally()
+        #expect(s.phase == .idle)
+        #expect(try unwritable.load() == nil)
+        #expect(locations.handles[0].invalidated)
+    }
+
+    /// Trip ids are numbered per server, so an end owed to another server is
+    /// not sent here, where the same id could be another trip; it waits for
+    /// the driver to sign in there again. A retyped address is still this
+    /// server, or its end would be held back and the start refused.
+    @Test func aPendingEndOwedToAnotherServerIsLeftForIt() async throws {
+        let elsewhere = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: "https://other.example.org")
+        try store.savePendingEnds([elsewhere, PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com",
+                                                             serverURL: "https://Positions.example.org/")])
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(api.ends == [7])
+        #expect(try store.loadPendingEnds() == [elsewhere])
+        #expect(s.activeTrip?.serverTripID == 42)
+    }
+
+    @Test func theSameTripIDOnAnotherServerIsAnotherPendingEnd() throws {
+        let elsewhere = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: "https://other.example.org")
+        try store.savePendingEnds([elsewhere])
+        let (s, _) = try pausedSession()
+
+        s.endLocally()
+        #expect(try store.loadPendingEnds() == [
+            elsewhere, PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString),
+        ])
     }
 
     @Test func relaunchWithAStoredTripIsPausedAndResumes() async throws {
@@ -478,4 +646,15 @@ import VehiclePositionsKit
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
         #expect(s.phase == .paused(active))
     }
+}
+
+/// Holds the active trip but cannot write pending ends, as a full disk would.
+nonisolated final class UnwritablePendingEndsStore: ActiveTripStoring, @unchecked Sendable {
+    private let trips = InMemoryActiveTripStore()
+
+    func load() throws -> ActiveTrip? { try trips.load() }
+    func save(_ trip: ActiveTrip) throws { try trips.save(trip) }
+    func clear() throws { try trips.clear() }
+    func loadPendingEnds() throws -> [PendingTripEnd] { [] }
+    func savePendingEnds(_ ends: [PendingTripEnd]) throws { throw CocoaError(.fileWriteOutOfSpace) }
 }
