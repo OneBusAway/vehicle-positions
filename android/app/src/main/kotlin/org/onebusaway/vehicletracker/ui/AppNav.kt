@@ -73,6 +73,8 @@ internal const val ARG_ROUTE_ID = "routeId"
 internal const val ARG_ROUTE_NAME = "routeName"
 internal const val ARG_ROUTE_COLOR = "routeColor"
 internal const val ARG_ROUTE_TEXT_COLOR = "routeTextColor"
+// Not private, for LoginViewModel, as above.
+internal const val ARG_SIGN_IN_AGAIN = "again"
 
 /**
  * A path argument for a string route. A GTFS `route_id` is arbitrary text — spaces, slashes
@@ -98,6 +100,10 @@ private val SETUP_STEPS = setOf(ROUTE_VEHICLES, ROUTE_ROUTES, ROUTE_RUNS)
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenSetupSteps(): Boolean =
     initialState.destination.route in SETUP_STEPS && targetState.destination.route in SETUP_STEPS
+
+/** Signing in is the step before choosing the bus, so it goes forward along the same axis. */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.fromSignInToBuses(): Boolean =
+    initialState.destination.route == ROUTE_LOGIN && targetState.destination.route == ROUTE_VEHICLES
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
@@ -197,22 +203,23 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
 
     val navController = rememberNavController()
     val slidePx = with(LocalDensity.current) { SharedAxisSlide.roundToPx() }
-    // The steps of choosing a trip slide along one axis; starting the trip and leaving it fade through instead,
-    // because they change the task. The rest keep the defaults. The back gesture previews the same pop it ends in.
+    // Signing in and the steps of choosing a trip slide along one axis; starting the trip and leaving it fade through
+    // instead, because they change the task. The rest keep the defaults. The back gesture previews the same pop it
+    // ends in.
     NavHost(
         navController = navController,
         startDestination = destination,
         modifier = modifier,
         enterTransition = {
             when {
-                betweenSetupSteps() -> sharedAxisIn(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || fromSignInToBuses() -> sharedAxisIn(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughIn()
                 else -> DefaultNavTransitions.enterTransition(this)
             }
         },
         exitTransition = {
             when {
-                betweenSetupSteps() -> sharedAxisOut(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || fromSignInToBuses() -> sharedAxisOut(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughOut()
                 else -> DefaultNavTransitions.exitTransition(this)
             }
@@ -237,7 +244,11 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 )
             }
         }
-        composable(ROUTE_LOGIN_REAUTH) {
+        composable(
+            route = ROUTE_LOGIN_REAUTH,
+            // Read by LoginViewModel, which shows the trip that is still open and asks only for the password.
+            arguments = listOf(navArgument(ARG_SIGN_IN_AGAIN) { type = NavType.BoolType; defaultValue = true }),
+        ) {
             ClearOfSystemBars {
                 LoginScreen(
                     onLoginSuccess = {
@@ -314,11 +325,12 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
         composable(ROUTE_RESUME) {
             ClearOfSystemBars {
                 ResumeShiftScreen(
-                    onResumed = {
+                    onResumed = dropUnlessResumed {
                         navController.navigate(ROUTE_TRACKING) {
                             popUpTo(ROUTE_RESUME) { inclusive = true }
                         }
                     },
+                    // Not a tap: the server confirms the end, perhaps after the driver has locked the phone.
                     onEnded = {
                         navController.navigate(ROUTE_VEHICLES) {
                             popUpTo(0) { inclusive = true }

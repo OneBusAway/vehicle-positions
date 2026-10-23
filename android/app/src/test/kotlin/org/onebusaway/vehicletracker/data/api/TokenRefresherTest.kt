@@ -209,7 +209,7 @@ class TokenRefresherTest {
     @Test fun `a refreshed pair that can't be saved drops the spent refresh token and still sends the request`() = runTest {
         val cryptor = FakeCryptor()
         val store = EncryptedSessionStore(newDataStore(), cryptor)
-        store.saveLogin(serverUrl, IssuedTokens("a1", "r1", ISSUED_AT + 900, ISSUED_AT))
+        store.saveLogin(serverUrl, "d@example.com", IssuedTokens("a1", "r1", ISSUED_AT + 900, ISSUED_AT))
         val holder = holder(store)
         cryptor.failEncrypt = true
 

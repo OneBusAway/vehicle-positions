@@ -1,15 +1,37 @@
 <resources>
     <string name="app_name">Vehicle Tracker</string>
 
-    <!-- Login screen -->
-    <string name="login_title">Driver Login</string>
-    <string name="login_server_url_label">Server URL</string>
+    <!-- Sign-in screen -->
+    <string name="login_title">Sign in</string>
+    <string name="login_subtitle">Use your driver account for this agency.</string>
+    <string name="login_server_url_label">Server address</string>
     <string name="login_email_label">Email</string>
     <string name="login_password_label">Password</string>
-    <string name="login_button">Log In</string>
-    <string name="login_error_other">Enter a server URL, email, and password.</string>
-    <string name="login_error_invalid_credentials">Invalid email or password.</string>
-    <string name="login_error_network">Could not reach the server. Check your connection.</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
+    <!-- Once the phone has signed in before: the server it used, which the driver rarely needs to change. -->
+    <string name="login_server">Server</string>
+    <string name="login_change_server">Change</string>
+    <string name="login_button">Sign in</string>
+    <string name="login_signing_in">Signing in</string>
+    <!-- Under the first field left empty. -->
+    <string name="login_error_missing_server">Enter the server address</string>
+    <string name="login_error_missing_email">Enter your email</string>
+    <string name="login_error_missing_password">Enter your password</string>
+    <string name="login_error_invalid_credentials">Wrong email or password. Try again.</string>
+    <!-- Under the server field when nothing answered at that address, beside the banner below. -->
+    <string name="login_error_check_address">Check the address</string>
+    <!-- The server's address as typed, e.g. "tracker.example.org". -->
+    <string name="login_error_unreachable">Can\'t reach %1$s. Check your connection, or the server address.</string>
+    <!-- The server answered, but not with a sign-in, such as a server error. -->
+    <string name="login_error_server">Couldn\'t sign in. Try again.</string>
+    <!-- Signing in again after the session ended during a trip. The email the driver signed in with last. -->
+    <string name="login_again_title">Sign in again</string>
+    <string name="login_again_subtitle">As %1$s</string>
+    <string name="login_again_button">Sign in and keep reporting</string>
+    <string name="login_trip_open_title">Your trip is still open</string>
+    <!-- The open trip's route, e.g. "7". -->
+    <string name="login_trip_open_message">Reports stopped when your session ended. Sign in to keep reporting on route %1$s.</string>
 
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>
@@ -103,12 +125,6 @@
     <string name="runs_error_other">Couldn\'t start the trip.</string>
 
     <!-- Tracking screen -->
-    <!-- The tracking notification's text. The screen says the same things in its own words, below. -->
-    <string name="tracking_status_connected">Tracking – Connected</string>
-    <string name="tracking_status_no_network">No connection</string>
-    <string name="tracking_status_no_gps">GPS unavailable</string>
-    <string name="tracking_status_clock_skew">Check device clock</string>
-    <string name="tracking_status_auth_expired">Session expired – log in again</string>
     <!-- The trip bar: the trip's running time, then how many reports have reached the server. -->
     <plurals name="tracking_bar_sent">
         <item quantity="one">%1$d sent</item>
@@ -146,7 +162,7 @@
     </plurals>
     <string name="tracking_end_trip_dialog_confirm">End trip</string>
     <string name="tracking_end_trip_dialog_cancel">Keep going</string>
-    <!-- The server did not confirm the end. Also on the resume prompt, after End Shift. -->
+    <!-- The server did not confirm the end. The last two are the resume prompt's buttons then, too. -->
     <string name="tracking_end_trip_error_title">Trip not ended yet</string>
     <string name="tracking_end_trip_error_message">The server didn\'t confirm the end. Check your signal and try again, or stop reporting on this phone now.</string>
     <string name="tracking_end_trip_error_retry">Try again</string>
@@ -213,40 +229,63 @@
     <string name="tracking_map_needs_https">Map link must use https, tell your agency</string>
 
     <!-- Resume prompt: a trip was stored but its tracking service was not running at launch -->
-    <string name="resume_title">Resume Shift?</string>
-    <string name="resume_message">An incomplete shift with Vehicle %1$s was detected. The app was closed while tracking was active.</string>
+    <string name="resume_title">Resume your trip?</string>
+    <string name="resume_message">The app closed while this trip was running. Reports are paused until you choose.</string>
+    <!-- In place of where the run goes, for a trip the phone has no schedule for. The route's id. -->
     <string name="resume_route">Route %1$s</string>
+    <!-- The run's first departure in the agency's zone, e.g. "6:58 AM run". -->
+    <string name="resume_run">%1$s run</string>
+    <string name="resume_bus">Bus %1$s</string>
+    <!-- Whole minutes since the trip began, then the time it began, e.g. "Started 23 min ago, at 6:58 AM". -->
     <plurals name="resume_started_minutes_ago">
-        <item quantity="one">Started %1$d min ago</item>
-        <item quantity="other">Started %1$d min ago</item>
+        <item quantity="one">Started %1$d min ago, at %2$s</item>
+        <item quantity="other">Started %1$d min ago, at %2$s</item>
     </plurals>
-    <!-- Hours, then minutes past the hour, e.g. "Started 2 h 5 min ago". -->
-    <string name="resume_started_hours_ago">Started %1$d h %2$d min ago</string>
-    <string name="resume_button">Resume</string>
-    <string name="resume_end_shift_button">End Shift</string>
+    <!-- Hours, then minutes past the hour, then the time it began, e.g. "Started 2 h 5 min ago, at 6:58 AM". -->
+    <string name="resume_started_hours_ago">Started %1$d h %2$d min ago, at %3$s</string>
+    <string name="resume_button">Resume trip</string>
+    <string name="resume_end_trip_button">End trip</string>
+    <string name="resume_ending">Ending trip</string>
+    <string name="resume_loading">Loading your trip</string>
+    <!-- Above the buttons once the server did not confirm the end; they then say Try again and End on this phone. -->
+    <string name="resume_end_failed">The server didn\'t confirm the trip ended. Try again, or end it on this phone only.</string>
+    <!-- Goes back from a failed end to Resume and End trip, for a driver who tapped End trip by mistake. -->
+    <string name="resume_end_failed_back">Don\'t end the trip</string>
 
-    <!-- Tracking notification -->
-    <string name="tracking_notification_channel_name">Trip Tracking</string>
-    <string name="tracking_notification_title">OBA Tracker is active</string>
-    <string name="tracking_notification_resume_title">Tap to resume tracking</string>
-    <string name="tracking_notification_resume_text">Location tracking paused. Open the app to resume.</string>
+    <!-- Tracking notification: the status card's words, with the route's short name, e.g. "Route 7 · On time". -->
+    <string name="tracking_notification_channel_name">Trip reporting</string>
+    <string name="tracking_notification_title">Route %1$s · %2$s</string>
+    <!-- The next stop, its time in the agency's zone, then the Reports row's word, e.g. "Next 3rd Ave & Seneca St · 7:18 AM · Reporting". -->
+    <string name="tracking_notification_next">Next %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Signed out. Open the app to sign in.</string>
+    <string name="tracking_notification_resume_title">Reports paused</string>
+    <string name="tracking_notification_resume_text">Open the app to keep reporting.</string>
 
-    <!-- Permission flow -->
-    <string name="permission_location_approx_title">Approximate Location Only</string>
-    <string name="permission_location_approx_message">Precise location wasn\'t granted, so tracking will be less accurate. You can grant precise location or continue with approximate location.</string>
-    <string name="permission_grant_precise_button">Grant Precise Location</string>
-    <string name="permission_continue_button">Continue</string>
-    <string name="permission_location_denied_title">Location Access Needed</string>
-    <string name="permission_location_denied_message">Location permission is required to start tracking a trip.</string>
-    <string name="permission_retry_button">Try Again</string>
-    <string name="permission_cancel_button">Cancel</string>
-    <string name="permission_background_title">Keep Tracking in the Background</string>
-    <string name="permission_background_message">To keep sending your location when the app isn\'t on screen, choose \"Allow all the time\" on the next screen.</string>
-    <string name="permission_skip_button">Not Now</string>
-    <string name="permission_notifications_denied_message">Notifications were not granted. You won\'t see the tracking status notification, but tracking will still run.</string>
-    <string name="permission_ok_button">OK</string>
-    <string name="permission_battery_title">Prevent Battery Optimization</string>
-    <string name="permission_battery_message">To keep tracking reliably in the background, allow this app to ignore battery optimizations.</string>
-    <string name="permission_location_services_off_title">Turn On Location Services</string>
-    <string name="permission_location_services_off_message">Device location services must be turned on to start tracking.</string>
+    <!-- The checklist before a trip, shown when the app is missing something it needs. The bus's fleet number. -->
+    <string name="preflight_title">Before you start</string>
+    <string name="preflight_message">The app needs these to report bus %1$s. Android asks about each one next.</string>
+    <string name="preflight_location">Location</string>
+    <string name="preflight_location_why">So the app knows where the bus is</string>
+    <string name="preflight_precise">Precise location</string>
+    <string name="preflight_precise_why">So riders see the bus at the right stop</string>
+    <string name="preflight_background">All the time</string>
+    <!-- Reports go on with the screen off without it; it lets the app restart reporting by itself. -->
+    <string name="preflight_background_why">So reporting can restart if Android closes the app</string>
+    <string name="preflight_notifications">Notifications</string>
+    <string name="preflight_notifications_why">So you can see that reporting is on</string>
+    <string name="preflight_battery">Battery</string>
+    <string name="preflight_battery_why">So Android doesn\'t stop reports mid-trip</string>
+    <string name="preflight_location_services">Location services</string>
+    <string name="preflight_location_services_why">Location must be on for the whole phone</string>
+    <!-- At the end of a row, once Android has asked about it, or before it asks next. -->
+    <string name="preflight_allowed">Allowed</string>
+    <string name="preflight_skipped">Skipped</string>
+    <string name="preflight_next">Next</string>
+    <!-- In place of a row's reason once the driver has said no to something the app can do without. -->
+    <string name="preflight_skipped_why">Not allowed. Reports still work.</string>
+    <string name="preflight_location_needed">Location is needed to report</string>
+    <string name="preflight_approximate">Only approximate was allowed</string>
+    <string name="preflight_try_again">Try again</string>
+    <string name="preflight_open_settings">Open settings</string>
+    <string name="preflight_continue">Continue</string>
 </resources>
