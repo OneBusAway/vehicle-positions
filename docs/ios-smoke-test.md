@@ -384,6 +384,46 @@ curl -s "$BASE/gtfs-rt/vehicle-positions?format=json" | python3 -m json.tool
 `entity` should become an empty list (the key is omitted) about five minutes
 after the last report.
 
+### Check 6: Location access is checked and named
+
+Check 5 ended the trip; this check starts its own. Start the GPS playback
+from step 5 again first, so fixes keep coming during step 3.
+
+1. Take location away and start a run:
+
+   ```bash
+   xcrun simctl privacy "$UDID" revoke location org.onebusaway.vehicletracker
+   grep -cE '"path":"/api/v1/(gtfs/trips/|trips/start)' /tmp/vt-server.log
+   ```
+
+   Pick `Bus 1`, route **1 Straight**, run **T1**, then run the `grep` again.
+
+   **Expected outcome:** the run list shows "Location is off for OBA Vehicle
+   Tracker. Turn it on in Settings to start a trip." in red, with an **Open
+   Settings** button that opens the app's page in Settings. The `grep` count
+   is the same both times: no trip geometry was fetched and no trip was
+   started on the server.
+
+2. Give location back and start the run again:
+
+   ```bash
+   xcrun simctl privacy "$UDID" grant location org.onebusaway.vehicletracker
+   ```
+
+   **Expected outcome:** the Tracking screen appears and the banner turns
+   green **Reporting**.
+
+3. In the simulator's Settings app, open **Privacy & Security > Location
+   Services > OBA Vehicle Tracker** and turn **Precise Location** off
+   (`simctl` cannot change it). Go back to the app.
+
+   **Expected outcome:** the banner turns red **Precise Location off · Tap to
+   fix**, and reports stop reaching the server. Tapping the banner opens the
+   app's page in Settings. Turn Precise Location back on there: the next fix
+   turns the banner green **Reporting** again. If it reads **No GPS**
+   instead, the simulator's playback stopped; start it again (step 5). End
+   the trip afterwards.
+
 ## CarPlay
 
 **Not yet run on this machine.** The steps and expected results below are

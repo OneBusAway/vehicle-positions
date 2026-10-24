@@ -13,12 +13,32 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     case unusableTrip
     /// `start()` was called while a trip was already starting or running.
     case busy
+    /// Location is refused for this app, or a restriction forbids it.
+    case locationDenied
+    /// Location Services are off for the whole phone.
+    case locationServicesOff
+    /// Precise Location is off, so every fix would be dropped as too coarse.
+    case preciseLocationOff
 
     var errorDescription: String? {
         switch self {
         case .notSignedIn: "Sign in first."
         case .unusableTrip: "This run has no shape or stops to follow."
         case .busy: "A trip is already starting or running."
+        case .locationDenied: "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip."
+        case .locationServicesOff: "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services."
+        case .preciseLocationOff: "Precise Location is off. Turn it on in Settings so the bus shows on the right street."
+        }
+    }
+
+    /// The driver fixes this in Settings, so the screen offers a way there.
+    /// iOS has no link to the Location Services page itself, so for
+    /// `locationServicesOff` the app's own page is the nearest and the message
+    /// names the path.
+    var opensSettings: Bool {
+        switch self {
+        case .locationDenied, .locationServicesOff, .preciseLocationOff: true
+        case .notSignedIn, .unusableTrip, .busy: false
         }
     }
 }
@@ -67,6 +87,12 @@ final class TripSession {
         /// was active. Distinct from `needsForeground`: the app does not know
         /// why, only that it must be resumed from the foreground.
         case locationLost
+        /// Location was turned off for this app (or for the whole phone)
+        /// during the trip. Not a lost signal: the driver fixes it in Settings.
+        case locationDenied
+        /// Precise Location was turned off during the trip, so every fix is
+        /// too coarse to report and is dropped.
+        case preciseLocationOff
     }
 
     private(set) var phase: Phase
@@ -89,6 +115,7 @@ final class TripSession {
     private let tokens: any TokenStoring
     private let store: any ActiveTripStoring
     private let locations: any LocationSource
+    private let access: any LocationAccess
     private let makeAPI: (URL, any TokenStoring) throws -> any TrackerAPI
     private let now: () -> Date
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "trip-session")
@@ -103,6 +130,9 @@ final class TripSession {
     private var backgroundHandle: (any BackgroundActivityHandle)?
     private var gpsAvailable = true
     private var needsForeground = false
+    /// `.locationDenied` or `.preciseLocationOff` once the stream says access
+    /// was taken away; cleared, like `gpsAvailable`, by the next good fix.
+    private var accessProblem: ReportingStatus?
     /// Set when the location stream itself ends while a trip is active; only
     /// `resume()` or a fresh `start()` clears it.
     private var streamEnded = false
@@ -112,6 +142,7 @@ final class TripSession {
         tokens: any TokenStoring,
         store: any ActiveTripStoring,
         locations: any LocationSource,
+        access: any LocationAccess,
         makeAPI: @escaping (URL, any TokenStoring) throws -> any TrackerAPI,
         now: @escaping () -> Date = Date.init
     ) {
@@ -119,6 +150,7 @@ final class TripSession {
         self.tokens = tokens
         self.store = store
         self.locations = locations
+        self.access = access
         self.makeAPI = makeAPI
         self.now = now
 
@@ -218,6 +250,9 @@ final class TripSession {
         let api = try requireAPI()
         phase = .starting
         do {
+            // Before the server hears anything: a trip started without
+            // location stays open on the server with nothing to report.
+            try await requireLocationAccess()
             let trip = try await api.trip(id: tripID)
             // Validate the geometry before telling the server anything: if
             // there is nothing to judge adherence against, nothing should be
@@ -244,6 +279,24 @@ final class TripSession {
             phase = .idle
             throw error
         }
+    }
+
+    /// Asks for what is missing, once each, and throws if a trip still could
+    /// not get precise positions. The phase is already `.starting`, so the run
+    /// lists stay disabled while a prompt is up.
+    private func requireLocationAccess() async throws {
+        var state = access.current()
+        if state == .notDetermined { state = await access.request() }
+        if state == .approximateOnly { state = await access.requestPrecise() }
+        let refusal: TripSessionError
+        switch state {
+        case .allowed: return
+        case .notDetermined, .denied, .restricted: refusal = .locationDenied
+        case .servicesOff: refusal = .locationServicesOff
+        case .approximateOnly: refusal = .preciseLocationOff
+        }
+        log.notice("refusing to start a trip: location access is \(String(describing: state))")
+        throw refusal
     }
 
     /// Restarts location delivery: for a trip a relaunch found in the store
@@ -333,6 +386,7 @@ final class TripSession {
         }
         gpsAvailable = true
         needsForeground = false
+        accessProblem = nil
         streamEnded = false
         // Resuming a trip whose stream died leaves the previous session open;
         // Core Location keeps it alive until it is invalidated.
@@ -370,6 +424,7 @@ final class TripSession {
         latestOnRoute = nil
         gpsAvailable = true
         needsForeground = false
+        accessProblem = nil
         streamEnded = false
         do {
             try store.clear()
@@ -383,16 +438,20 @@ final class TripSession {
     private func handle(_ sample: LocationSample, active: ActiveTrip) {
         // A sample whose fix is too coarse to place the bus on a street is no
         // position at all (spec §8): the map holds the last good one and the
-        // driver is told the GPS is unusable, rather than being shown — and
-        // riders being sent — a guess that could be a block out.
+        // driver is told Precise Location is off, rather than being shown, and
+        // riders being sent, a guess that could be a block out.
         var dropsFix = false
         switch sample.diagnostic {
-        case .authorizationDenied, .locationUnavailable:
+        case .authorizationDenied:
+            if accessProblem != .locationDenied { log.warning("location access was turned off during a trip") }
+            accessProblem = .locationDenied
+        case .locationUnavailable:
             gpsAvailable = false
         case .insufficientlyInUse:
             needsForeground = true
         case .accuracyLimited:
-            gpsAvailable = false
+            if accessProblem != .preciseLocationOff { log.warning("Precise Location was turned off during a trip") }
+            accessProblem = .preciseLocationOff
             dropsFix = true
         case nil:
             break
@@ -400,6 +459,7 @@ final class TripSession {
         if !dropsFix, let fix = sample.fix, let evaluator, let reporter {
             gpsAvailable = true
             needsForeground = false
+            accessProblem = nil
             let judged = evaluator.evaluate(fix, previous: latestOnRoute)
             latest = judged
             if judged.isOnRoute { latestOnRoute = judged }
@@ -429,6 +489,8 @@ final class TripSession {
             reporting = .locationLost
         } else if needsForeground {
             reporting = .needsForeground
+        } else if let accessProblem {
+            reporting = accessProblem
         } else if !gpsAvailable {
             reporting = .noGPS
         } else {
