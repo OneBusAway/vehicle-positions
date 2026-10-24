@@ -6,6 +6,9 @@ struct TripsView: View {
     let route: RouteInfo
     @State private var page: RouteTripsPage?
     @State private var error: String?
+    /// The start was refused for something the driver fixes in Settings.
+    @State private var errorOpensSettings = false
+    @Environment(\.openURL) private var openURL
 
     /// A start is in flight — this list's own, or one from the car, which
     /// must disable this list just the same.
@@ -14,7 +17,12 @@ struct TripsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                if let error { Text(error).foregroundStyle(.red) }
+                if let error {
+                    Text(error).foregroundStyle(.red)
+                    if errorOpensSettings {
+                        Button("Open Settings") { openURL(.appSettings) }
+                    }
+                }
                 if let page {
                     let highlighted = TripRun.highlighted(in: page.trips, now: Date())
                     Section("\(page.serviceDate.prefix(4))-\(page.serviceDate.dropFirst(4).prefix(2))-\(page.serviceDate.suffix(2))") {
@@ -68,12 +76,14 @@ struct TripsView: View {
 
     private func start(_ trip: TripSummary) {
         error = nil
+        errorOpensSettings = false
         Task {
             do {
                 try await session.start(vehicle: vehicle, tripID: trip.id)
             } catch {
                 guard !session.handleIfUnauthorized(error) else { return }
                 self.error = error.localizedDescription
+                errorOpensSettings = (error as? TripSessionError)?.opensSettings == true
             }
         }
     }

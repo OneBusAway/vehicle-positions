@@ -430,9 +430,9 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// Every flow that fetches something wants the same guards around that:
     /// nothing may touch the interface controller once the car has gone,
     /// an expired sign-in pops to the root, and anything else is an alert.
-    /// `serverMessage` shows what the server said in place of
-    /// `failureMessage` when it said anything — which starting a trip wants
-    /// and the pickers do not. Only one load runs at a time: a tap that
+    /// `serverMessage` shows what the server said, or the session's own
+    /// reason for refusing, in place of `failureMessage` when there is one.
+    /// Starting a trip wants that; the pickers do not. Only one load runs at a time: a tap that
     /// lands while one is pending is dropped, so a slow fetch cannot be
     /// asked for twice and push its list twice.
     private func load<T: Sendable>(_ failureMessage: String, serverMessage: Bool = false,
@@ -457,6 +457,9 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                 }
                 if serverMessage, case APIError.status(_, let message) = error, !message.isEmpty {
                     presentError(message)
+                } else if serverMessage, let refusal = error as? TripSessionError {
+                    // The car can't open Settings; the text says where to go.
+                    presentError(refusal.localizedDescription)
                 } else {
                     presentError(failureMessage)
                 }

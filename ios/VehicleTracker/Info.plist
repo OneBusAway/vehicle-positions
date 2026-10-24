@@ -25,6 +25,11 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>TripReporting</key>
+		<string>Precise location puts the bus on the right street on riders' maps.</string>
+	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is.</string>
 	<key>UIApplicationSceneManifest</key>
