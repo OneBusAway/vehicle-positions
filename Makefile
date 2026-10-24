@@ -1,4 +1,4 @@
-.PHONY: help generate fmt vet test up down run smoke simulate ridersim css
+.PHONY: help generate fmt vet test check up down run smoke simulate ridersim css
 
 # Tailwind CSS CLI version pinned for reproducible admin-UI builds. The Go CI
 # workflow (.github/workflows/ci.yml) downloads the linux-x64 binary of this
@@ -20,6 +20,10 @@ TAILWIND_SHA256_macos_x64   := 18cd6bb94d0f26ff8a0fa8a966beb9ea36bea2c7c444397f7
 TAILWIND_SHA256_macos_arm64 := d9e759fd6612dd442a9caa49d366b24e5097ea9802d35829da3f6db6ee5c2043
 TAILWIND_SHA256 := $(TAILWIND_SHA256_$(TAILWIND_OS)_$(TAILWIND_ARCH))
 
+# sqlc version the committed code in db/ is generated with. The Go CI workflow
+# installs this SAME version to check db/ is current — bump both together.
+SQLC_VERSION := v1.31.1
+
 help:
 	@echo "Available targets:"
 	@echo "  make up        - Start local Postgres + server with docker compose"
@@ -29,6 +33,7 @@ help:
 	@echo "  make simulate  - Run simulator against local server (needs ADMIN_BOOTSTRAP_EMAIL/PASSWORD)"
 	@echo "  make ridersim  - Run rider simulator against local server (rider mode; honours PORT)"
 	@echo "  make generate  - Regenerate sqlc code"
+	@echo "  make check     - Run the formatting and generated-code checks CI runs"
 	@echo "  make fmt       - Format Go code"
 	@echo "  make vet       - Run go vet"
 	@echo "  make test      - Run test suite"
@@ -36,6 +41,18 @@ help:
 
 generate:
 	cd db && sqlc generate
+
+# The two checks CI runs before vet and test: every Go file is gofmt'd, and
+# db/ matches what sqlc $(SQLC_VERSION) generates from db/query.sql.
+check:
+	@unformatted=$$(gofmt -l $$(git ls-files '*.go')); \
+	if [ -n "$$unformatted" ]; then echo "Not gofmt'd (run 'make fmt'):"; echo "$$unformatted"; exit 1; fi
+	@case "$$(sqlc version 2>/dev/null)" in \
+	  $(SQLC_VERSION)) ;; \
+	  *) echo "sqlc $(SQLC_VERSION) is required: go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)"; exit 1 ;; \
+	esac
+	@cd db && sqlc diff || { echo "db/ is stale; run 'make generate'"; exit 1; }
+	@echo "OK"
 
 fmt:
 	go fmt ./...

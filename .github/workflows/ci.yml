@@ -34,6 +34,21 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check Go formatting
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd; run 'make fmt' and commit:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Check generated sqlc code is current
+        run: |
+          # Same version as SQLC_VERSION in the Makefile — bump both together.
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          cd db && sqlc diff || { echo "db/ is stale against db/query.sql; run 'make generate' and commit"; exit 1; }
+
       - name: Vet
         run: go vet ./...
 
