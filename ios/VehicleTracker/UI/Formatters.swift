@@ -66,6 +66,8 @@ extension TripSession.ReportingStatus {
         case .clockSkew: String(localized: "Check the phone's clock")
         case .needsForeground: String(localized: "Open the app on iPhone")
         case .locationLost: String(localized: "Location stopped — tap Resume")
+        case .locationDenied: String(localized: "Location off · Tap to fix")
+        case .preciseLocationOff: String(localized: "Precise Location off · Tap to fix")
         }
     }
 

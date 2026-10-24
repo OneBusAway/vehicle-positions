@@ -530,7 +530,7 @@ import VehiclePositionsKit
     /// Spec §8: a fix the phone cannot trust is no position at all. It must
     /// not move the map and must not be reported, and the driver has to be
     /// told rather than left looking at a stale bus that reads as live.
-    @Test func accuracyLimitedFreezesAdherenceAndShowsNoGPS() async throws {
+    @Test func accuracyLimitedFreezesAdherenceAndNamesPreciseLocation() async throws {
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
         try await s.start(vehicle: bus, tripID: "T1")
@@ -543,7 +543,7 @@ import VehiclePositionsKit
         locations.emit(LocationSample(
             fix: TripFixtures.fix(lat: 47.6060, lon: -122.3300, at: TripFixtures.at(8, 5, 10), accuracy: 400),
             diagnostic: .accuracyLimited))
-        #expect(await eventually { s.reporting == .noGPS })
+        #expect(await eventually { s.reporting == .preciseLocationOff })
         #expect(s.latest == good, "the map holds the last fix it could trust")
         await Task.yield()
         #expect(api.posted.count == 1, "an accuracy-limited fix is not reported")
@@ -553,6 +553,62 @@ import VehiclePositionsKit
         #expect(await eventually { s.fixesSent == 2 })
         #expect(s.reporting == .connected)
         #expect(s.latest?.fix.latitude == 47.6065)
+    }
+
+    /// A refused location is not a lost signal: the driver can turn it back on
+    /// in Settings, and the banner has to say so.
+    @Test func locationTurnedOffDuringATripIsNamedNotNoGPS() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        locations.emit(LocationSample(fix: nil, diagnostic: .authorizationDenied))
+        #expect(await eventually { s.reporting == .locationDenied })
+
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        #expect(await eventually { s.reporting == .connected }, "a good fix means access is back")
+        #expect(await eventually { api.posted.count == 1 })
+    }
+
+    /// A new stream starts clean, as it does for the signal: if access is
+    /// still off, that stream says so again. An ended trip shows nothing.
+    @Test func resumingOrEndingClearsALocationAccessProblem() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        locations.emit(LocationSample(fix: nil, diagnostic: .authorizationDenied))
+        #expect(await eventually { s.reporting == .locationDenied })
+        locations.finish(throwing: APIError.transport("dropped"))
+        #expect(await eventually { s.reporting == .locationLost })
+        s.resume()
+        #expect(s.reporting == .connected)
+
+        locations.emit(LocationSample(fix: nil, diagnostic: .authorizationDenied))
+        #expect(await eventually { s.reporting == .locationDenied })
+        try await s.end()
+        #expect(s.reporting == .connected)
+    }
+
+    /// Most serious first: a dead stream, then the app needing the foreground,
+    /// then location access, then the signal. Each step changes what the
+    /// banner says, so each one is known to have been handled.
+    @Test func locationAccessRanksBetweenTheForegroundAndTheSignal() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        locations.emit(LocationSample(fix: nil, diagnostic: .locationUnavailable))
+        #expect(await eventually { s.reporting == .noGPS })
+
+        locations.emit(LocationSample(fix: nil, diagnostic: .authorizationDenied))
+        #expect(await eventually { s.reporting == .locationDenied }, "access outranks the signal")
+
+        locations.emit(LocationSample(fix: nil, diagnostic: .insufficientlyInUse))
+        #expect(await eventually { s.reporting == .needsForeground }, "the foreground outranks access")
+
+        locations.finish(throwing: APIError.transport("dropped"))
+        #expect(await eventually { s.reporting == .locationLost }, "a dead stream outranks everything")
     }
 
     /// Phones are shared between shifts: a trip left in the store by the
