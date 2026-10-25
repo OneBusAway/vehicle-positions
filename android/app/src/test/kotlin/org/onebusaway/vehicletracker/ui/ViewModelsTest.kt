@@ -85,7 +85,7 @@ class ViewModelsTest {
 
     @Test fun `login rejects blank fields without calling network`() = runTest(dispatcher) {
         val sessionStore = FakeSessionStore()
-        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
+        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L }), sessionStore)
         vm.onServerUrlChange(""); vm.onEmailChange(""); vm.onPasswordChange("")
         var succeeded = false
         vm.onLogin { succeeded = true }
@@ -98,7 +98,7 @@ class ViewModelsTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
         val sessionStore = FakeSessionStore()
-        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
+        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L }), sessionStore)
         vm.onServerUrlChange(server.url("/").toString())
         vm.onEmailChange("d@example.com"); vm.onPasswordChange("pw")
         var succeeded = false
@@ -112,7 +112,7 @@ class ViewModelsTest {
         val sessionStore = FakeSessionStore().apply {
             state.value = Session("https://saved.example.com", null, null)
         }
-        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, clock = { 0L }), sessionStore)
+        val vm = LoginViewModel(AuthRepository(sessionStore, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L }), sessionStore)
         vm.uiState.test {
             var state = awaitItem()
             while (state.serverUrl.isEmpty()) state = awaitItem()

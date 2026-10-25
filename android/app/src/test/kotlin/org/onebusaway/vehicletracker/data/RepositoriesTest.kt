@@ -17,6 +17,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.api.ApiFactory
+import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ApiHolder
 import java.io.IOException
@@ -32,7 +33,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody(
             """{"token":"jwt-1","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, ApiFactory { null }, clock = { 1000L })
+        val repo = AuthRepository(sessions, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 1000L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -46,7 +47,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody(
             """{"token":"deprecated-copy","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, ApiFactory { null }, clock = { 1000L })
+        val repo = AuthRepository(sessions, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 1000L })
 
         repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -54,10 +55,27 @@ class RepositoriesTest {
         server.shutdown()
     }
 
+    @Test fun `login hands the offline queue to the driver who signed in`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(3) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }
+        val queue = FakeOfflineFixQueue()
+        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, queue, clock = { 0L })
+        val url = server.url("/").toString()
+        val fix = LocationReportDto(vehicleId = "bus-1", routeId = "R1", startDate = "20260804", latitude = 1.0, longitude = 2.0, timestamp = 1L)
+
+        repo.login(url, "a@example.com", "pw")
+        queue.add(fix)
+        repo.login(url, " A@example.com", "pw")
+        assertEquals("the same driver signing in again keeps their backlog", 1, queue.queued.size)
+        repo.login(url, "b@example.com", "pw")
+        assertEquals("another driver's backlog would upload as theirs", 0, queue.queued.size)
+        server.shutdown()
+    }
+
     @Test fun `login 401 maps to Unauthorized`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
-        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "bad")
 

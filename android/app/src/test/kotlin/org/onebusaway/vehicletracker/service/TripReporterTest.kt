@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.Dispatcher
@@ -18,6 +19,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FakeSessionStore
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.TrackingProblem
@@ -40,11 +42,12 @@ class TripReporterTest {
 
     private fun reporterWith(
         server: MockWebServer,
+        queue: FakeOfflineFixQueue = FakeOfflineFixQueue(),
         elapsedMs: () -> Long = steppingClock(),
     ): Pair<TripReporter, TrackingRepository> {
         val tracking = TrackingRepository()
         val api = ApiFactory { "jwt" }.create(server.url("/").toString())
-        return TripReporter(TrackerApiProvider { api }, tracking, elapsedMs) to tracking
+        return TripReporter(TrackerApiProvider { api }, tracking, elapsedMs, queue) to tracking
     }
 
     @Test fun `successful send increments counter and clears problem`() = runTest {
@@ -70,7 +73,7 @@ class TripReporterTest {
         val server2 = MockWebServer().apply { start() }
         server2.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
         val api2 = ApiFactory { "jwt" }.create(server2.url("/").toString())
-        val reporter2 = TripReporter(TrackerApiProvider { api2 }, tracking, steppingClock())
+        val reporter2 = TripReporter(TrackerApiProvider { api2 }, tracking, steppingClock(), FakeOfflineFixQueue())
         reporter2.report(trip, fix())
         assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
         server2.shutdown()
@@ -84,7 +87,7 @@ class TripReporterTest {
         val tracking = TrackingRepository()
         val sessions = FakeSessionStore().apply { state.value = session(server.url("/").toString()) }
         val holder = ApiHolder(sessions, CoroutineScope(Job().apply { cancel() }), clock = { 1000L })
-        return TripReporter(TrackerApiProvider(holder::api), tracking, steppingClock()) to tracking
+        return TripReporter(TrackerApiProvider(holder::api), tracking, steppingClock(), FakeOfflineFixQueue()) to tracking
     }
 
     @Test fun `401 with no refresh token sets AUTH_EXPIRED`() = runTest {
@@ -368,6 +371,79 @@ class TripReporterTest {
         now = 9_100L
         reporter.report(trip, fix())
         assertEquals(2, server.requestCount)
+        server.shutdown()
+    }
+
+    // A fix that could not be sent is kept, and uploaded for history once reports go through again.
+    @Test fun `a fix sent offline is queued and uploaded once the connection is back`() = runTest {
+        val queue = FakeOfflineFixQueue()
+        val offline = MockWebServer().apply { start() }
+        val (offlineReporter, tracking) = reporterWith(offline, queue = queue)
+        offline.shutdown()
+        offlineReporter.report(trip, fix(ts = 1000L))
+        offlineReporter.report(trip, fix(ts = 1010L))
+        assertEquals(listOf(1000L, 1010L), queue.queued.map { it.timestamp })
+        assertEquals(TrackingProblem.NO_NETWORK, tracking.state.value.problem)
+
+        val online = MockWebServer().apply { start() }
+        online.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        online.enqueue(MockResponse().setResponseCode(201).setBody("""{"saved":2}"""))
+        val (reporter, _) = reporterWith(online, queue = queue)
+        reporter.report(trip, fix(ts = 1020L))
+
+        assertEquals("/api/v1/locations", online.takeRequest().path)
+        val upload = online.takeRequest()
+        assertEquals("/api/v1/locations/history", upload.path)
+        val body = Json.parseToJsonElement(upload.body.readUtf8()).jsonObject
+        assertEquals("bus-1", body["vehicle_id"]!!.jsonPrimitive.content)
+        assertEquals(listOf(1000L, 1010L), body["points"]!!.jsonArray.map { it.jsonObject["timestamp"]!!.jsonPrimitive.content.toLong() })
+        assertEquals(0, queue.queued.size)
+        online.shutdown()
+    }
+
+    @Test fun `a history upload refused for good is dropped, a passing failure is kept`() = runTest {
+        for ((code, kept) in listOf(403 to 0, 400 to 0, 429 to 1, 500 to 1)) {
+            val queue = FakeOfflineFixQueue()
+            val offline = MockWebServer().apply { start() }
+            val (offlineReporter, _) = reporterWith(offline, queue = queue)
+            offline.shutdown()
+            offlineReporter.report(trip, fix(ts = 1000L))
+
+            val online = MockWebServer().apply { start() }
+            online.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+            online.enqueue(MockResponse().setResponseCode(code).setBody("""{"error":"x"}"""))
+            val (reporter, _) = reporterWith(online, queue = queue)
+            reporter.report(trip, fix(ts = 1020L))
+            assertEquals("HTTP $code", kept, queue.queued.size)
+            online.shutdown()
+        }
+    }
+
+    @Test fun `queued fixes older than a day are not uploaded`() = runTest {
+        val queue = FakeOfflineFixQueue()
+        val offline = MockWebServer().apply { start() }
+        val (offlineReporter, _) = reporterWith(offline, queue = queue)
+        offline.shutdown()
+        offlineReporter.report(trip, fix(ts = 1000L))
+
+        val online = MockWebServer().apply { start() }
+        online.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        val (reporter, _) = reporterWith(online, queue = queue)
+        reporter.report(trip, fix(ts = 1000L + 25 * 3600L))
+
+        assertEquals(1, online.requestCount)
+        assertEquals(0, queue.queued.size)
+        online.shutdown()
+    }
+
+    @Test fun `a report refused by the server is not queued`() = runTest {
+        val queue = FakeOfflineFixQueue()
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"boom"}"""))
+        val (reporter, _) = reporterWith(server, queue = queue)
+        reporter.report(trip, fix())
+        assertEquals(0, queue.queued.size)
+        assertEquals(1, server.requestCount)
         server.shutdown()
     }
 }

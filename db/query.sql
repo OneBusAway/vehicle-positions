@@ -3,22 +3,28 @@ INSERT INTO vehicles (id)
 VALUES ($1)
 ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
 
--- name: InsertLocationPoint :exec
+-- name: InsertLocationPoint :execrows
+-- A fix already stored (the same vehicle, driver and timestamp) is not stored
+-- again: a phone retries an upload or report whose reply it never got.
 INSERT INTO location_points (vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING;
 
 -- name: GetRecentLocations :many
 -- route_id and start_date are selected because the feed's TripDescriptor is
 -- documented to carry what the driver sent: a seeded vehicle that came back
 -- without them would publish a narrower descriptor than it did before the
 -- restart, and a route-only vehicle would publish none at all. A deactivated
--- vehicle is left out, so a restart cannot put it back in the feed.
+-- vehicle is left out, so a restart cannot put it back in the feed. The latest
+-- is by the fix's own timestamp: a backlog a phone uploads after a dead zone
+-- (POST /api/v1/locations/history) is received after the live reports, and
+-- must not pass for the vehicle's latest position.
 SELECT DISTINCT ON (vehicle_id)
     vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
 FROM location_points
 WHERE received_at > $1
   AND vehicle_id IN (SELECT id FROM vehicles WHERE active)
-ORDER BY vehicle_id, received_at DESC;
+ORDER BY vehicle_id, timestamp DESC, received_at DESC;
 
 -- name: ListUsers :many
 -- safety bound; not pagination. Callers that need one page at a time use
@@ -207,15 +213,26 @@ WHERE t.id = $1;
 -- name: ListTripLocations :many
 -- Trail derivation per spec §4.5: location_points.trip_id is a client string,
 -- not trips.id, so trail points are matched by vehicle + driver + time window.
+-- A live point is in the window when it was received during the trip. A
+-- backlog point, one received more than five minutes after the phone recorded
+-- it (maxTimestampSkew: a live report that late is refused, so only
+-- POST /api/v1/locations/history stores one), is placed only by when it was
+-- recorded, so a dead zone uploaded later, even during the next trip, lands in
+-- the trail where it was driven and in no other.
 SELECT lp.latitude, lp.longitude, lp.bearing, lp.speed, lp.accuracy,
        lp.timestamp, lp.trip_id, lp.received_at
 FROM location_points lp
 JOIN trips t ON t.id = $1
 WHERE lp.vehicle_id = t.vehicle_id
   AND lp.driver_id = t.user_id::text
-  AND lp.received_at >= t.start_time
-  AND lp.received_at <= COALESCE(t.end_time, NOW())
-ORDER BY lp.received_at ASC
+  AND (
+    (lp.received_at >= t.start_time AND lp.received_at <= COALESCE(t.end_time, NOW())
+        AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes')
+    OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
+        AND lp.timestamp >= EXTRACT(EPOCH FROM t.start_time)
+        AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
+  )
+ORDER BY lp.timestamp ASC, lp.received_at ASC
 LIMIT 10000;
 
 -- name: ListActiveTripsByVehicle :many
