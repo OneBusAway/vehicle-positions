@@ -25,9 +25,7 @@ struct VehiclesView: View {
             }
         }
         .navigationTitle("Your vehicle")
-        .toolbar {
-            Button("Sign out") { Task { await session.signOut() } }
-        }
+        .toolbar { AccountMenu() }
         .refreshable { await load() }
         .task { await load() }
     }

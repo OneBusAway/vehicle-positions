@@ -196,7 +196,8 @@ final class TripSession {
     /// phone, from `.idle` or `.paused` only, as `endSessionLocally()` does.
     /// The logout goes first because the client reads the token from the
     /// store for every request. A logout that fails still signs out here: a
-    /// driver handing the phone on must never be left signed in.
+    /// driver handing the phone on must never be left signed in. The email
+    /// goes too, for the next driver to type their own; the server stays.
     func signOut() async {
         switch phase {
         case .idle, .paused:
@@ -207,6 +208,7 @@ final class TripSession {
                 log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error))")
             }
             endSessionLocally()
+            if phase == .signedOut { settings.email = "" }
         default:
             return
         }

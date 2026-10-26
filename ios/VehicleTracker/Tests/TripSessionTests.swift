@@ -714,6 +714,42 @@ import VehiclePositionsKit
         #expect(api.logouts == 0)
     }
 
+    /// The phone stays with the agency and goes to the next driver: the
+    /// server stays filled in, the email does not.
+    @Test func signOutForgetsTheEmailButKeepsTheServer() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        await s.signOut()
+        #expect(s.settings.email == "")
+        #expect(s.settings.signInServerURL == server)
+        #expect(AppSettings(defaults: defaults).email == "", "a relaunch finds it gone too")
+    }
+
+    /// A 401 ends this driver's session, not their turn with the phone: the
+    /// sign-in screen still has their email.
+    @Test func a401KeepsTheEmailForSigningBackIn() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        s.handleIfUnauthorized(APIError.status(401, message: "invalid token"))
+        #expect(s.phase == .signedOut)
+        #expect(s.settings.email == "d@test.com")
+    }
+
+    /// A start from the car can land while the logout is out. That trip keeps
+    /// its driver's email, which its Sign in again sheet signs in with.
+    @Test func aTripStartedDuringTheLogoutKeepsTheEmail() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        api.whileLoggingOut = { try? await s.start(vehicle: bus, tripID: "T1") }
+
+        await s.signOut()
+        #expect(s.activeTrip != nil)
+        #expect(try tokens.load() != nil)
+        #expect(s.settings.email == "d@test.com")
+    }
+
     @Test func signOutFromPausedKeepsTheStoredTripForNextSignIn() async throws {
         let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))
