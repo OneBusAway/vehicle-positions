@@ -60,4 +60,19 @@ import Testing
         #expect(TrackingBanner.text(phase: .active(active), reporting: .refused) == "Reports refused — ask your dispatcher")
         #expect(TrackingBanner.color(phase: .active(active), reporting: .refused) == .red)
     }
+
+    @Test func locationAccessProblemsAreNamedOnTheBanner() {
+        let active = ActiveTrip(serverTripID: 1, vehicle: Vehicle(id: "bus-1", label: "Bus 1"),
+                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 0),
+                                driverEmail: "d@test.com")
+
+        #expect(TripSession.ReportingStatus.locationDenied.label == "Location off · Tap to fix")
+        #expect(TripSession.ReportingStatus.preciseLocationOff.label == "Precise Location off · Tap to fix")
+        #expect(TripSession.ReportingStatus.locationDenied.isProblem)
+        #expect(TripSession.ReportingStatus.preciseLocationOff.isProblem)
+
+        #expect(TrackingBanner.color(phase: .active(active), reporting: .locationDenied) == .red)
+        #expect(TrackingBanner.color(phase: .active(active), reporting: .preciseLocationOff) == .red)
+        #expect(TrackingBanner.text(phase: .paused(active), reporting: .locationDenied) == "Paused — not reporting")
+    }
 }

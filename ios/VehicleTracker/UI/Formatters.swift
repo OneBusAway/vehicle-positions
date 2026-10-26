@@ -67,6 +67,8 @@ extension TripSession.ReportingStatus {
         case .refused: String(localized: "Reports refused — ask your dispatcher")
         case .needsForeground: String(localized: "Open the app on iPhone")
         case .locationLost: String(localized: "Location stopped — tap Resume")
+        case .locationDenied: String(localized: "Location off · Tap to fix")
+        case .preciseLocationOff: String(localized: "Precise Location off · Tap to fix")
         }
     }
 
@@ -110,6 +112,14 @@ extension TripSession {
             return true
         }
         return false
+    }
+}
+
+extension URL {
+    /// This app's page in the Settings app, where its location access is set.
+    static var appSettings: URL {
+        // A constant iOS defines; it always parses.
+        URL(string: UIApplication.openSettingsURLString)!
     }
 }
 
