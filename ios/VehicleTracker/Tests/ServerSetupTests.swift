@@ -12,7 +12,8 @@ import Testing
 
     func makeSession(makeAPI: @escaping (URL, any TokenStoring) throws -> any TrackerAPI) -> TripSession {
         TripSession(settings: AppSettings(defaults: defaults), tokens: tokens,
-                    store: InMemoryActiveTripStore(), locations: FakeLocationSource(), makeAPI: makeAPI)
+                    store: InMemoryActiveTripStore(), locations: FakeLocationSource(), access: FakeLocationAccess(),
+                    makeAPI: makeAPI)
     }
 
     func makeSession() -> TripSession {

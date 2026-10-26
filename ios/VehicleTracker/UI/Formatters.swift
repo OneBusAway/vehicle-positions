@@ -113,6 +113,14 @@ extension TripSession {
     }
 }
 
+extension URL {
+    /// This app's page in the Settings app, where its location access is set.
+    static var appSettings: URL {
+        // A constant iOS defines; it always parses.
+        URL(string: UIApplication.openSettingsURLString)!
+    }
+}
+
 extension Color {
     /// A GTFS route colour: six hex digits, with or without a leading '#'.
     /// One parser, in `UIColor`, so the badge and the map cannot disagree

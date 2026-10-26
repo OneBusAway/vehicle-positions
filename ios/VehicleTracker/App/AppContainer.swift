@@ -25,6 +25,7 @@ final class AppContainer {
             tokens: tokens,
             store: FileActiveTripStore(),
             locations: CoreLocationSource(configuration: .automotiveNavigation),
+            access: CoreLocationAccess(),
             makeAPI: { url, tokens in
                 try TrackerClient(baseURL: url, tokens: tokens, refresher: refresher)
             }

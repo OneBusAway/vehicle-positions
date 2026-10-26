@@ -6,6 +6,7 @@ import VehiclePositionsKit
 @Suite struct TripSessionTests {
     let api = FakeTrackerAPI()
     let locations = FakeLocationSource()
+    let access = FakeLocationAccess()
     let tokens = InMemoryTokenStore()
     let store = InMemoryActiveTripStore()
     let clock = ManualClock(start: TripFixtures.at(8, 0))
@@ -13,7 +14,7 @@ import VehiclePositionsKit
 
     func session() -> TripSession {
         TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
-                    makeAPI: { _, _ in api }, now: { clock.now })
+                    access: access, makeAPI: { _, _ in api }, now: { clock.now })
     }
 
     let bus = Vehicle(id: "bus-1", label: "Bus 1")
@@ -93,7 +94,7 @@ import VehiclePositionsKit
                      forKey: AppSettings.managedConfigurationKey)
         var servers: [URL] = []
         let s = TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
-                            makeAPI: { url, _ in servers.append(url); return api }, now: { clock.now })
+                            access: access, makeAPI: { url, _ in servers.append(url); return api }, now: { clock.now })
         try await s.reauthenticate(password: "pw")
         #expect(s.phase == .idle)
         #expect(servers == [server, server])
@@ -148,6 +149,136 @@ import VehiclePositionsKit
         await #expect(throws: TripSessionError.busy) {
             try await s.start(vehicle: bus, tripID: "T1")
         }
+        #expect(api.starts.count == 1)
+    }
+
+    /// The server must not hear of a trip the phone cannot report: the
+    /// geometry fetch counts too, so a refused start makes no request at all.
+    @Test(arguments: [
+        (LocationAccessState.denied, TripSessionError.locationDenied),
+        (.restricted, .locationDenied),
+        (.servicesOff, .locationServicesOff),
+    ])
+    func aRefusedLocationStopsTheStartBeforeAnyServerCall(state: LocationAccessState, refusal: TripSessionError) async throws {
+        access.state = state
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        await #expect(throws: refusal) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(api.tripRequests.isEmpty, "the geometry must not have been fetched")
+        #expect(api.starts.isEmpty, "the server trip must not have been started")
+        #expect(s.phase == .idle)
+        #expect(try store.load() == nil)
+        #expect(locations.handles.isEmpty)
+        #expect(access.requests == 0, "a driver who already answered is not asked again")
+        #expect(access.preciseRequests == 0)
+    }
+
+    @Test func anAllowedLocationStartsWithoutAPrompt() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(access.requests == 0)
+        #expect(access.preciseRequests == 0)
+        #expect(api.starts.count == 1)
+    }
+
+    @Test func aDriverNotAskedYetIsAskedOnceAndTheStartGoesAhead() async throws {
+        access.state = .notDetermined
+        access.requestAnswer = .allowed
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(access.requests == 1)
+        #expect(access.preciseRequests == 0)
+        #expect(api.starts.count == 1)
+        if case .active = s.phase {} else { Issue.record("expected active") }
+    }
+
+    @Test func refusingThePromptStopsTheStartBeforeAnyServerCall() async throws {
+        access.state = .notDetermined
+        access.requestAnswer = .denied
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        await #expect(throws: TripSessionError.locationDenied) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(access.requests == 1)
+        #expect(api.tripRequests.isEmpty)
+        #expect(api.starts.isEmpty)
+        #expect(s.phase == .idle)
+    }
+
+    /// The prompt came and went without an answer that iOS kept: there is
+    /// still no permission, and Settings is where to give it.
+    @Test func aPromptLeftUnansweredRefusesAsDenied() async throws {
+        access.state = .notDetermined
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        await #expect(throws: TripSessionError.locationDenied) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(access.requests == 1)
+        #expect(api.tripRequests.isEmpty)
+    }
+
+    @Test func approximateLocationAsksOnceForPreciseAndTheStartGoesAhead() async throws {
+        access.state = .approximateOnly
+        access.preciseAnswer = .allowed
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(access.preciseRequests == 1)
+        #expect(access.requests == 0)
+        #expect(api.starts.count == 1)
+    }
+
+    @Test func keepingApproximateLocationStopsTheStartBeforeAnyServerCall() async throws {
+        access.state = .approximateOnly
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        await #expect(throws: TripSessionError.preciseLocationOff) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(access.preciseRequests == 1)
+        #expect(api.tripRequests.isEmpty)
+        #expect(api.starts.isEmpty)
+        #expect(s.phase == .idle)
+    }
+
+    /// The first prompt has its own Precise switch; a driver who turns it off
+    /// there is asked for precise location once before the start is refused.
+    @Test func allowingWithoutPreciseAtThePromptAsksForPreciseOnce() async throws {
+        access.state = .notDetermined
+        access.requestAnswer = .approximateOnly
+        access.preciseAnswer = .allowed
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(access.requests == 1)
+        #expect(access.preciseRequests == 1)
+        #expect(api.starts.count == 1)
+    }
+
+    @Test func theSessionStaysStartingWhileThePromptIsUp() async throws {
+        access.state = .notDetermined
+        access.requestAnswer = .allowed
+        access.holdsRequest = true
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        let starting = Task { try await s.start(vehicle: bus, tripID: "T1") }
+        #expect(await eventually { access.isHoldingRequest }, "expected the prompt to be up")
+        #expect(s.phase == .starting, "the run lists stay disabled while the driver decides")
+        await #expect(throws: TripSessionError.busy) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(api.tripRequests.isEmpty)
+
+        access.answer()
+        try await starting.value
+        #expect(access.requests == 1)
         #expect(api.starts.count == 1)
     }
 
@@ -521,7 +652,7 @@ import VehiclePositionsKit
     @Test func endLocallyStopsEvenIfTheEndCannotBeRemembered() async throws {
         let unwritable = UnwritablePendingEndsStore()
         let s = TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: unwritable,
-                            locations: locations, makeAPI: { _, _ in api }, now: { clock.now })
+                            locations: locations, access: access, makeAPI: { _, _ in api }, now: { clock.now })
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
         try await s.start(vehicle: bus, tripID: "T1")
 
@@ -673,4 +804,25 @@ nonisolated final class UnwritablePendingEndsStore: ActiveTripStoring, @unchecke
     func clear() throws { try trips.clear() }
     func loadPendingEnds() throws -> [PendingTripEnd] { [] }
     func savePendingEnds(_ ends: [PendingTripEnd]) throws { throw CocoaError(.fileWriteOutOfSpace) }
+}
+
+@Suite struct TripSessionErrorTests {
+    @Test func onlyTheLocationRefusalsOpenSettings() {
+        #expect(TripSessionError.locationDenied.opensSettings)
+        #expect(TripSessionError.locationServicesOff.opensSettings)
+        #expect(TripSessionError.preciseLocationOff.opensSettings)
+        #expect(!TripSessionError.notSignedIn.opensSettings)
+        #expect(!TripSessionError.unusableTrip.opensSettings)
+        #expect(!TripSessionError.busy.opensSettings)
+        #expect(!TripSessionError.previousTripNotEnded.opensSettings)
+    }
+
+    @Test func eachLocationRefusalSaysWhatToChange() {
+        #expect(TripSessionError.locationDenied.localizedDescription
+            == "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip.")
+        #expect(TripSessionError.locationServicesOff.localizedDescription
+            == "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services.")
+        #expect(TripSessionError.preciseLocationOff.localizedDescription
+            == "Precise Location is off. Turn it on in Settings so the bus shows on the right street.")
+    }
 }
