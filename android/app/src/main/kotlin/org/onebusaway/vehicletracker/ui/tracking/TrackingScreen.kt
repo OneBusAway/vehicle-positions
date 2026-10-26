@@ -253,9 +253,9 @@ private fun endTripMessage(tracking: TrackingState): String {
     }
 }
 
-/** The server did not confirm the end. Shared with the resume prompt, which ends trips through [TripEnder] too. */
+/** The server did not confirm the end. The resume prompt says the same above its buttons instead. */
 @Composable
-internal fun EndTripErrorDialog(onRetry: () -> Unit, onEndLocally: () -> Unit, onDismiss: () -> Unit) {
+private fun EndTripErrorDialog(onRetry: () -> Unit, onEndLocally: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(painterResource(R.drawable.ic_cloud_off), contentDescription = null) },

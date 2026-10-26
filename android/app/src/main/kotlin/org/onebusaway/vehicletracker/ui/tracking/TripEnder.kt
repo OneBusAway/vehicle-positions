@@ -54,9 +54,17 @@ class TripEnder @Inject constructor(
      * driver signed in now only for a trip saved before drivers were recorded.
      */
     suspend fun endLocally(onEnded: () -> Unit) {
-        tripStateStore.endActiveTripLocally(sessionStore.session.first().driverId)
-        tripGeometryStore.clear()
-        serviceController.stopTracking()
+        // As for [end]: a second tap while the first is still writing would leave the screen twice.
+        if (_state.value.ending) return
+        _state.update { it.copy(ending = true) }
+        try {
+            tripStateStore.endActiveTripLocally(sessionStore.session.first().driverId)
+            tripGeometryStore.clear()
+            serviceController.stopTracking()
+        } finally {
+            // A write that failed gives the buttons back, with the failed end still shown.
+            _state.update { it.copy(ending = false) }
+        }
         _state.value = EndTripState()
         onEnded()
     }
