@@ -46,18 +46,58 @@ import Testing
                                 driverEmail: "d@test.com")
 
         #expect(TrackingBanner.text(phase: .paused(active), reporting: .connected) == "Paused — not reporting")
-        #expect(TrackingBanner.color(phase: .paused(active), reporting: .connected) == .orange)
+        #expect(TrackingBanner.tone(phase: .paused(active), reporting: .connected) == .problem)
 
         #expect(TrackingBanner.text(phase: .ending(active), reporting: .connected) == "Ending…")
-        #expect(TrackingBanner.color(phase: .ending(active), reporting: .connected) == .gray)
+        #expect(TrackingBanner.tone(phase: .ending(active), reporting: .connected) == .neutral)
 
         #expect(TrackingBanner.text(phase: .active(active), reporting: .connected) == "Reporting")
-        #expect(TrackingBanner.color(phase: .active(active), reporting: .connected) == .green)
+        #expect(TrackingBanner.tone(phase: .active(active), reporting: .connected) == .reporting)
 
         #expect(TrackingBanner.text(phase: .active(active), reporting: .noNetwork) == "No connection")
-        #expect(TrackingBanner.color(phase: .active(active), reporting: .noNetwork) == .red)
+        #expect(TrackingBanner.tone(phase: .active(active), reporting: .noNetwork) == .problem)
 
         #expect(TrackingBanner.text(phase: .active(active), reporting: .refused) == "Reports refused — ask your dispatcher")
-        #expect(TrackingBanner.color(phase: .active(active), reporting: .refused) == .red)
+        #expect(TrackingBanner.tone(phase: .active(active), reporting: .refused) == .problem)
+    }
+
+    /// Problems are ink and signed out has its own card, as on Android: red
+    /// means only early.
+    @Test func bannerToneForEveryReportingStatus() {
+        let active = ActiveTrip(serverTripID: 1, vehicle: Vehicle(id: "bus-1", label: "Bus 1"),
+                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 0),
+                                driverEmail: "d@test.com")
+        let expected: [(TripSession.ReportingStatus, BannerTone)] = [
+            (.connected, .reporting),
+            (.noNetwork, .problem),
+            (.noGPS, .problem),
+            (.authExpired, .signedOut),
+            (.clockSkew, .problem),
+            (.refused, .problem),
+            (.needsForeground, .problem),
+            (.locationLost, .problem),
+        ]
+        for (reporting, tone) in expected {
+            #expect(TrackingBanner.tone(phase: .active(active), reporting: reporting) == tone, "\(reporting)")
+            // The phase speaks first, whatever the status says.
+            #expect(TrackingBanner.tone(phase: .paused(active), reporting: reporting) == .problem, "\(reporting)")
+            #expect(TrackingBanner.tone(phase: .ending(active), reporting: reporting) == .neutral, "\(reporting)")
+        }
+    }
+
+    @Test func adherenceTone() {
+        let evaluator = AdherenceEvaluator(trip: TripFixtures.t1)!
+        func tone(_ status: AdherenceStatus, deviation: TimeInterval) -> StatusTone {
+            var adherence = evaluator.evaluate(TripFixtures.fix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5)), previous: nil)
+            adherence.status = status
+            adherence.scheduleDeviation = deviation
+            return adherence.tone
+        }
+        #expect(tone(.onTime, deviation: 30) == .onTime)
+        #expect(tone(.early, deviation: -120) == .early)
+        #expect(tone(.late, deviation: 600) == .late)
+        #expect(tone(.offSchedule, deviation: -120) == .early)
+        #expect(tone(.offSchedule, deviation: 600) == .late)
+        #expect(tone(.offRoute, deviation: 0) == .neutral)
     }
 }

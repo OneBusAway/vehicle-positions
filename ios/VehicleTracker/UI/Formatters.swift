@@ -37,13 +37,13 @@ enum Formatters {
 
 extension Adherence {
     /// OneBusAway's convention: green on time, red early, blue late.
-    var color: Color {
+    var tone: StatusTone {
         switch status {
-        case .onTime: .green
-        case .early: .red
-        case .late: .blue
-        case .offSchedule: scheduleDeviation < 0 ? .red : .blue
-        case .offRoute: .gray
+        case .onTime: .onTime
+        case .early: .early
+        case .late: .late
+        case .offSchedule: scheduleDeviation < 0 ? .early : .late
+        case .offRoute: .neutral
         }
     }
 
@@ -89,11 +89,17 @@ enum TrackingBanner {
         }
     }
 
-    static func color(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> Color {
+    /// Paused is a problem, since nothing is being reported.
+    static func tone(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> BannerTone {
         switch phase {
-        case .paused: .orange
-        case .ending: .gray
-        default: reporting.isProblem ? .red : .green
+        case .paused: .problem
+        case .ending: .neutral
+        default:
+            switch reporting {
+            case .connected: .reporting
+            case .authExpired: .signedOut
+            default: .problem
+            }
         }
     }
 }

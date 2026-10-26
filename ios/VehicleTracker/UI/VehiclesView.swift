@@ -9,7 +9,7 @@ struct VehiclesView: View {
     var body: some View {
         List {
             if let error {
-                Text(error).foregroundStyle(.red)
+                Text(error).foregroundStyle(.errorText)
             }
             ForEach(session.vehicles) { vehicle in
                 NavigationLink(value: PickerRoute.routes(vehicle)) {
