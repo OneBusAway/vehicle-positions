@@ -33,7 +33,7 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
             "Your previous trip is still open on the server and could not be ended. Check the connection and try again."
         case .locationDenied: "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip."
         case .locationServicesOff: "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services."
-        case .preciseLocationOff: "Precise Location is off. Turn it on in Settings so the bus shows on the right street."
+        case .preciseLocationOff: "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street."
         }
     }
 

@@ -65,7 +65,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSLocationWhenInUseUsageDescription: Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is.
         NSLocationTemporaryUsageDescriptionDictionary:
-          TripReporting: Precise location puts the bus on the right street on riders' maps.
+          TripReporting: Precise location puts the vehicle on the right street on riders' maps.
         UIBackgroundModes: [location]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

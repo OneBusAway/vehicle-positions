@@ -879,6 +879,6 @@ nonisolated final class UnwritablePendingEndsStore: ActiveTripStoring, @unchecke
         #expect(TripSessionError.locationServicesOff.localizedDescription
             == "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services.")
         #expect(TripSessionError.preciseLocationOff.localizedDescription
-            == "Precise Location is off. Turn it on in Settings so the bus shows on the right street.")
+            == "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street.")
     }
 }
