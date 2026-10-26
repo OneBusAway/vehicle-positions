@@ -36,7 +36,7 @@ struct LoginView: View {
                     SecureField("Password", text: $password)
                 }
                 if let error {
-                    Section { Text(error).foregroundStyle(.red) }
+                    Section { Text(error).foregroundStyle(.errorText) }
                 }
                 Section {
                     Button(action: signIn) {

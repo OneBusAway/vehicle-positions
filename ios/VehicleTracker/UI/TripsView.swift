@@ -21,7 +21,7 @@ struct TripsView: View {
         ScrollViewReader { proxy in
             List {
                 if let error {
-                    Text(error).foregroundStyle(.red)
+                    Text(error).foregroundStyle(.errorText)
                     if errorOpensSettings {
                         Button("Open Settings") { openURL(.appSettings) }
                     }
@@ -45,8 +45,9 @@ struct TripsView: View {
                                     if trip.id == highlighted?.id {
                                         Text(trip.startsAt <= now ? "Now" : "Next")
                                             .font(.caption.bold())
+                                            .foregroundStyle(.onAccentContainer)
                                             .padding(6)
-                                            .background(Color.accentColor.opacity(0.2), in: Capsule())
+                                            .background(.accentContainer, in: Capsule())
                                     }
                                 }
                                 .frame(minHeight: 64)

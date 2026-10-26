@@ -19,7 +19,7 @@ struct RoutesView: View {
 
     var body: some View {
         List {
-            if let error { Text(error).foregroundStyle(.red) }
+            if let error { Text(error).foregroundStyle(.errorText) }
             if search.isEmpty, !recent.isEmpty {
                 Section("Recent") { ForEach(recent) { row($0) } }
             }
