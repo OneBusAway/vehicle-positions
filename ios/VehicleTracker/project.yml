@@ -79,6 +79,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.onebusaway.vehicletracker
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: YES
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
 
   VehicleTrackerTests:
     type: bundle.unit-test
