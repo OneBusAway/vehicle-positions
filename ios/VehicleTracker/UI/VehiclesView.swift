@@ -5,6 +5,8 @@ struct VehiclesView: View {
     @Binding var path: [PickerRoute]
     @State private var error: String?
     @State private var loaded = false
+    /// This visit to the pickers has skipped past the vehicle screen already.
+    @State private var skippedOnce = false
 
     var body: some View {
         List {
@@ -35,14 +37,26 @@ struct VehiclesView: View {
             try await session.loadVehicles()
             error = nil
             loaded = true
-            // One vehicle is no choice: go straight to the routes.
-            if session.vehicles.count == 1, path.isEmpty {
-                path = [.routes(session.vehicles[0])]
+            if let only = VehicleAutoSkip.vehicle(toSkipTo: session.vehicles, alreadySkipped: skippedOnce,
+                                                  pathIsEmpty: path.isEmpty) {
+                skippedOnce = true
+                path = [.routes(only)]
             }
         } catch {
             guard !session.handleIfUnauthorized(error) else { return }
             self.error = error.localizedDescription
             loaded = true
         }
+    }
+}
+
+/// One vehicle is no choice, so the pickers go straight to its routes, but
+/// only once per visit. The vehicle screen loads again each time it
+/// reappears, and skipping again then would push the routes back over every
+/// Back, so the driver could never reach the vehicle screen.
+nonisolated enum VehicleAutoSkip {
+    static func vehicle(toSkipTo vehicles: [Vehicle], alreadySkipped: Bool, pathIsEmpty: Bool) -> Vehicle? {
+        guard vehicles.count == 1, !alreadySkipped, pathIsEmpty else { return nil }
+        return vehicles[0]
     }
 }
