@@ -17,7 +17,7 @@ struct TripsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                if let error { Text(error).foregroundStyle(.red) }
+                if let error { Text(error).foregroundStyle(.errorText) }
                 if let page {
                     let highlighted = TripRun.highlighted(in: page.trips, now: now)
                     Section("\(page.serviceDate.prefix(4))-\(page.serviceDate.dropFirst(4).prefix(2))-\(page.serviceDate.suffix(2))") {
@@ -37,8 +37,9 @@ struct TripsView: View {
                                     if trip.id == highlighted?.id {
                                         Text(trip.startsAt <= now ? "Now" : "Next")
                                             .font(.caption.bold())
+                                            .foregroundStyle(.onAccentContainer)
                                             .padding(6)
-                                            .background(Color.accentColor.opacity(0.2), in: Capsule())
+                                            .background(.accentContainer, in: Capsule())
                                     }
                                 }
                                 .frame(minHeight: 64)
