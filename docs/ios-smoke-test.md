@@ -300,6 +300,58 @@ LINK="obavehicletracker://setup?server=$(python3 -c 'import sys, urllib.parse; p
    **Expected outcome:** "This phone is signed in to localhost. The link was
    not used." Tap **OK**: the trip carries on.
 
+### Check 1c: Sign out from any step
+
+Run this at Check 1's run screen, before you tap **T1**. It ends signed in as
+the same driver, so Check 1 carries on from there. First add a second driver
+with no vehicle, and sign the first driver in once more with curl, which
+stands in for another phone:
+
+```bash
+curl -s -X POST "$BASE/api/v1/admin/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"Second Driver","email":"driver2@example.com","password":"driverpass123","role":"driver"}'
+
+OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"driver@example.com","password":"driverpass123"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["refresh_token"])')
+```
+
+1. On the run screen, tap the account menu (the person at the top right).
+
+   **Expected outcome:** the menu shows `driver@example.com`, then
+   `localhost` and the app's version greyed out, then **Sign out** in red.
+   Tap **Sign out**: "Sign out?" with "The next driver can sign in on this
+   phone." Tap **Sign out** again: the sign-in screen appears with the server
+   still filled in and the email empty, and the server log has the logout:
+
+   ```bash
+   grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log
+   # ..."method":"POST","path":"/api/v1/auth/logout","status":204...
+   ```
+
+2. Sign in as `driver2@example.com` with `driverpass123`.
+
+   **Expected outcome:** **Your vehicle** says "No vehicles are assigned to
+   you. Ask your dispatcher." The logout deleted every refresh token the
+   first driver had, so the other phone's is refused:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/api/v1/auth/refresh" \
+     -H 'Content-Type: application/json' -d "{\"refresh_token\":\"$OTHER_REFRESH\"}"
+   # 401
+   ```
+
+   Sign out from the account menu on **Your vehicle**.
+
+3. Sign in as `driver@example.com` again. That driver has one vehicle.
+
+   **Expected outcome:** the app goes straight to the routes for `Bus 1`. Tap
+   Back: **Your vehicle** shows `Bus 1` and the account menu, and it stays
+   there. Pull down to refresh: it still stays. Tap `Bus 1` and carry on with
+   Check 1.
+
 ### Check 2 — GPS playback drives the screen and the feed
 
 1. Start the simulated route (step 5 above).

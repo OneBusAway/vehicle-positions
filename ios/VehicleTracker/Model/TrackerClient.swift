@@ -38,6 +38,10 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         return try decode(AuthTokens.self, data)
     }
 
+    func logout() async throws {
+        _ = try await send("POST", "api/v1/auth/logout")
+    }
+
     func myVehicles() async throws -> [Vehicle] {
         try decode([Vehicle].self, try await send("GET", "api/v1/vehicles"))
     }

@@ -76,6 +76,17 @@ import Testing
         #expect(body == ["vehicle_id": "bus-1", "route_id": "R1", "gtfs_trip_id": "T1"])
     }
 
+    @Test func logoutPostsWithTheTokenAndNoBody() async throws {
+        StubURLProtocol.reset { _ in (204, Data()) }
+        try await client().logout()
+        #expect(StubURLProtocol.count == 1)
+        let sent = try #require(StubURLProtocol.last)
+        #expect(sent.method == "POST")
+        #expect(sent.url.path == "/api/v1/auth/logout")
+        #expect(sent.headers["Authorization"] == "Bearer tok")
+        #expect(sent.body == nil)
+    }
+
     @Test func endTripPostsTheID() async throws {
         StubURLProtocol.reset { _ in (200, Data(#"{"status":"trip ended"}"#.utf8)) }
         try await client().endTrip(id: 42)
@@ -316,5 +327,17 @@ import Testing
         #expect(requests.map(\.url.path) == ["/api/v1/auth/refresh", "/api/v1/vehicles"])
         #expect(requests.last?.headers["Authorization"] == "Bearer a1")
         #expect(try store.load() == aboutToExpire)
+    }
+
+    /// A sign-out at the end of a shift finds the access token long expired.
+    /// The logout is renewed first like any other request, or the server
+    /// would refuse it and the session would live on there.
+    @Test func aLogoutWithAnExpiredTokenIsRefreshedFirst() async throws {
+        serve(refresh: renewedReply)
+        let store = InMemoryTokenStore(StoredToken(token: "a1", issuedAt: now.addingTimeInterval(-3600), refreshToken: "r1",
+                                                   expiresAt: now.addingTimeInterval(-2700)))
+        try await refreshingClient(store).logout()
+        #expect(requests.map(\.url.path) == ["/api/v1/auth/refresh", "/api/v1/auth/logout"])
+        #expect(requests.last?.headers["Authorization"] == "Bearer a2")
     }
 }
