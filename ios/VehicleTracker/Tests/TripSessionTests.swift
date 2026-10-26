@@ -650,15 +650,19 @@ import VehiclePositionsKit
         try await s.loadVehicles()
         var storedDuringLogout: StoredToken?
         var phaseDuringLogout: TripSession.Phase?
+        var signingOutDuringLogout = false
         api.whileLoggingOut = {
             storedDuringLogout = try? tokens.load()
             phaseDuringLogout = s.phase
+            signingOutDuringLogout = s.isSigningOut
         }
 
         await s.signOut()
         #expect(api.logouts == 1)
         #expect(storedDuringLogout != nil, "the logout went out with the token")
         #expect(phaseDuringLogout == .idle)
+        #expect(signingOutDuringLogout)
+        #expect(!s.isSigningOut)
         #expect(try tokens.load() == nil)
         #expect(s.vehicles.isEmpty)
         #expect(s.phase == .signedOut)
@@ -737,17 +741,50 @@ import VehiclePositionsKit
         #expect(s.settings.email == "d@test.com")
     }
 
-    /// A start from the car can land while the logout is out. That trip keeps
-    /// its driver's email, which its Sign in again sheet signs in with.
-    @Test func aTripStartedDuringTheLogoutKeepsTheEmail() async throws {
+    /// A start from the car can come while the logout is out. It is refused:
+    /// the logout is revoking the token the trip would report with.
+    @Test func aStartWhileTheLogoutIsOutIsRefused() async throws {
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
-        api.whileLoggingOut = { try? await s.start(vehicle: bus, tripID: "T1") }
+        var startError: (any Error)?
+        api.whileLoggingOut = {
+            do { try await s.start(vehicle: bus, tripID: "T1") } catch { startError = error }
+        }
 
         await s.signOut()
-        #expect(s.activeTrip != nil)
-        #expect(try tokens.load() != nil)
-        #expect(s.settings.email == "d@test.com")
+        #expect(startError as? TripSessionError == .notSignedIn)
+        #expect(api.calls.isEmpty, "the server heard nothing of the start")
+        #expect(s.phase == .signedOut)
+        #expect(try tokens.load() == nil)
+        #expect(s.settings.email == "")
+    }
+
+    /// The same for a paused trip resumed while the logout is out.
+    @Test func aResumeWhileTheLogoutIsOutIsRefused() async throws {
+        let (s, active) = try pausedSession()
+        api.whileLoggingOut = { s.resume() }
+
+        await s.signOut()
+        #expect(locations.handles.isEmpty, "nothing was subscribed to")
+        #expect(s.phase == .signedOut)
+        #expect(try tokens.load() == nil)
+        #expect(try store.load() == active)
+    }
+
+    @Test func aSecondSignOutWhileTheFirstIsOutSendsNoSecondLogout() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        var signingOutAfterTheSecond = false
+        api.whileLoggingOut = {
+            api.whileLoggingOut = nil
+            await s.signOut()
+            signingOutAfterTheSecond = s.isSigningOut
+        }
+
+        await s.signOut()
+        #expect(api.logouts == 1)
+        #expect(signingOutAfterTheSecond, "the second call did not end the first one's sign-out")
+        #expect(s.phase == .signedOut)
     }
 
     @Test func signOutFromPausedKeepsTheStoredTripForNextSignIn() async throws {

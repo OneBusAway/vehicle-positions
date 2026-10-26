@@ -22,7 +22,6 @@ struct AccountMenu: ToolbarContent {
 private struct AccountMenuButton: View {
     @Environment(TripSession.self) private var session
     @State private var confirming = false
-    @State private var signingOut = false
 
     var body: some View {
         Menu {
@@ -37,20 +36,16 @@ private struct AccountMenuButton: View {
             // picker; a sign-out would do nothing until it is answered.
             .disabled(session.phase.isStarting)
         } label: {
-            if signingOut {
+            if session.isSigningOut {
                 ProgressView()
             } else {
                 Label("Account", systemImage: "person.crop.circle")
             }
         }
-        .disabled(signingOut)
+        .disabled(session.isSigningOut)
         .confirmationDialog("Sign out?", isPresented: $confirming, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
-                signingOut = true
-                Task {
-                    await session.signOut()
-                    signingOut = false
-                }
+                Task { await session.signOut() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
