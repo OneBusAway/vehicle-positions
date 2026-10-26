@@ -67,6 +67,8 @@ extension TripSession.ReportingStatus {
         case .refused: String(localized: "Reports refused — ask your dispatcher")
         case .needsForeground: String(localized: "Open the app on iPhone")
         case .locationLost: String(localized: "Location stopped — tap Resume")
+        case .locationDenied: String(localized: "Location off · Tap to fix")
+        case .preciseLocationOff: String(localized: "Precise Location off · Tap to fix")
         }
     }
 
