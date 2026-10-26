@@ -94,7 +94,7 @@ missing from the picker means its trips have no `shape_id`.
 | Method + path | Purpose |
 |---|---|
 | `GET /api/v1/gtfs/routes` | Routes with at least one trip, in display order. |
-| `GET /api/v1/gtfs/routes/{route_id}/trips?date=YYYYMMDD` | The route's trips active on a service date (default: today's), with absolute start and end times. |
+| `GET /api/v1/gtfs/routes/{route_id}/trips?date=YYYYMMDD` | The route's trips active on a service date (default: today's), with absolute start and end times, and each trip's run number and block id when the feed has them. |
 | `GET /api/v1/gtfs/trips/{trip_id}?date=YYYYMMDD` | One trip's shape, stops with absolute times, and the adherence thresholds the server applies. |
 
 ### Rider mode (crowdsourced positions)

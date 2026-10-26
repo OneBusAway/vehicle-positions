@@ -1,11 +1,9 @@
 package main
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -457,18 +455,8 @@ func TestHandleStartTrip_ChecksIDsAgainstSchedule(t *testing.T) {
 // to "to", as an agency's next feed version often regenerates its trip ids.
 func fixtureWithTripRenamed(t *testing.T, from, to string) *rider.Index {
 	t.Helper()
-	zr, err := zip.OpenReader("rider/testdata/fixture.zip")
-	require.NoError(t, err)
-	defer zr.Close()
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for _, f := range zr.File {
-		r, err := f.Open()
-		require.NoError(t, err)
-		body, err := io.ReadAll(r)
-		r.Close()
-		require.NoError(t, err)
-		if f.Name == "trips.txt" || f.Name == "stop_times.txt" {
+	return fixtureIndexEdited(t, func(name string, body []byte) []byte {
+		if name == "trips.txt" || name == "stop_times.txt" {
 			lines := strings.Split(string(body), "\n")
 			for i, line := range lines {
 				fields := strings.Split(line, ",")
@@ -481,15 +469,8 @@ func fixtureWithTripRenamed(t *testing.T, from, to string) *rider.Index {
 			}
 			body = []byte(strings.Join(lines, "\n"))
 		}
-		w, err := zw.Create(f.Name)
-		require.NoError(t, err)
-		_, err = w.Write(body)
-		require.NoError(t, err)
-	}
-	require.NoError(t, zw.Close())
-	ix, err := rider.IndexFromBytes(buf.Bytes(), "renamed", catalogNow)
-	require.NoError(t, err)
-	return ix
+		return body
+	})
 }
 
 // TestScheduleSwapMidTrip_ReportsStillAccepted: the schedule check is made
