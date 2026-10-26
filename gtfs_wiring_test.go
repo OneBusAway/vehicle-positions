@@ -1,10 +1,7 @@
 package main
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -118,27 +115,12 @@ func TestNewGTFSRuntime_FailsWithNoCachedCopy(t *testing.T) {
 // so it parses but has no trip a driver could pick.
 func zipWithoutStopTimes(t *testing.T) []byte {
 	t.Helper()
-	zr, err := zip.OpenReader("rider/testdata/fixture.zip")
-	require.NoError(t, err)
-	defer zr.Close()
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for _, f := range zr.File {
-		w, err := zw.Create(f.Name)
-		require.NoError(t, err)
-		if f.Name == "stop_times.txt" {
-			_, err = io.WriteString(w, "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n")
-			require.NoError(t, err)
-			continue
+	return fixtureZipEdited(t, func(name string, body []byte) []byte {
+		if name == "stop_times.txt" {
+			return []byte("trip_id,arrival_time,departure_time,stop_id,stop_sequence\n")
 		}
-		r, err := f.Open()
-		require.NoError(t, err)
-		_, err = io.Copy(w, r)
-		r.Close()
-		require.NoError(t, err)
-	}
-	require.NoError(t, zw.Close())
-	return buf.Bytes()
+		return body
+	})
 }
 
 // TestNewGTFSRuntime_RefusesFeedWithNoUsableTrips: a refresh that downloads a

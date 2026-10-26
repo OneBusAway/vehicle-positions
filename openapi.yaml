@@ -2373,12 +2373,18 @@ components:
 
     CatalogTripSummary:
       type: object
-      required: [id, headsign, direction_id, starts_at, ends_at, first_stop, last_stop]
+      required: [id, headsign, short_name, block_id, direction_id, starts_at, ends_at, first_stop, last_stop]
       properties:
         id:
           type: string
         headsign:
           type: string
+        short_name:
+          type: string
+          description: From trips.txt `trip_short_name`; empty when the feed gives none.
+        block_id:
+          type: string
+          description: From trips.txt `block_id`; empty when the feed gives none.
         direction_id:
           type: [integer, 'null']
           description: Null when the schedule does not give one.
