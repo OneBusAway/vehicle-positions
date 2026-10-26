@@ -634,7 +634,7 @@ import VehiclePositionsKit
     @Test func resumeWithoutAnAPIGoesToSignedOut() async throws {
         let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))
-        s.signOut()
+        await s.signOut()
         #expect(s.phase == .signedOut)
 
         s.resume()
@@ -642,19 +642,84 @@ import VehiclePositionsKit
         #expect(locations.handles.isEmpty, "nothing was subscribed to")
     }
 
-    @Test func signOutClearsTheToken() async throws {
+    /// The client reads the token from the store for every request, so the
+    /// logout has to go out before the store is cleared.
+    @Test func signOutLogsOutOnTheServerWhileTheTokenIsStillStored() async throws {
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
-        s.signOut()
-        #expect(s.phase == .signedOut)
+        try await s.loadVehicles()
+        var storedDuringLogout: StoredToken?
+        var phaseDuringLogout: TripSession.Phase?
+        api.whileLoggingOut = {
+            storedDuringLogout = try? tokens.load()
+            phaseDuringLogout = s.phase
+        }
+
+        await s.signOut()
+        #expect(api.logouts == 1)
+        #expect(storedDuringLogout != nil, "the logout went out with the token")
+        #expect(phaseDuringLogout == .idle)
         #expect(try tokens.load() == nil)
+        #expect(s.vehicles.isEmpty)
+        #expect(s.phase == .signedOut)
+        await #expect(throws: TripSessionError.notSignedIn) { try await s.loadVehicles() }
+    }
+
+    /// A driver handing the phone on must never be left signed in, whatever
+    /// the server said.
+    @Test(arguments: [
+        APIError.transport("The Internet connection appears to be offline."),
+        APIError.status(500, message: "internal server error"),
+        APIError.status(401, message: "invalid token"),
+    ])
+    func aLogoutThatFailsStillSignsOut(error: APIError) async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.loadVehicles()
+        api.logoutError = error
+
+        await s.signOut()
+        #expect(api.logouts == 1)
+        #expect(try tokens.load() == nil)
+        #expect(s.vehicles.isEmpty)
+        #expect(s.phase == .signedOut)
+        await #expect(throws: TripSessionError.notSignedIn) { try await s.loadVehicles() }
+    }
+
+    /// A running trip reports with this sign-in, so the driver ends the trip
+    /// before signing out.
+    @Test func signOutDuringATripDoesNothing() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        let during = s.phase
+        try #require(s.activeTrip != nil)
+
+        await s.signOut()
+        #expect(api.logouts == 0)
+        #expect(try tokens.load() != nil)
+        #expect(s.phase == during)
+    }
+
+    /// The client has already tried a refresh, so a 401 on the pickers means
+    /// the server ended the session: it is ended here without a logout.
+    @Test func a401OnThePickersEndsTheSessionWithoutALogout() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        #expect(s.handleIfUnauthorized(APIError.status(401, message: "invalid token")))
+        #expect(try tokens.load() == nil)
+        #expect(s.phase == .signedOut)
+        await Task.yield()
+        #expect(api.logouts == 0)
     }
 
     @Test func signOutFromPausedKeepsTheStoredTripForNextSignIn() async throws {
         let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))
 
-        s.signOut()
+        await s.signOut()
+        #expect(api.logouts == 1)
         #expect(s.phase == .signedOut)
         #expect(try tokens.load() == nil)
         #expect(try store.load() == active, "the stored trip survives a sign-out")

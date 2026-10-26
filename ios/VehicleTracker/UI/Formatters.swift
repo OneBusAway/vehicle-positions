@@ -100,13 +100,15 @@ enum TrackingBanner {
 
 extension TripSession {
     /// An expired token looks like any other server error to the caller; the
-    /// picker screens all want the same response — sign out and let
-    /// `RootView` fall back to `LoginView` — instead of surfacing a raw
-    /// "Server error 401" alongside the form.
+    /// picker screens all want the same response, ending the session and
+    /// letting `RootView` fall back to `LoginView`, instead of surfacing a raw
+    /// "Server error 401" alongside the form. The client has already tried a
+    /// refresh, so a 401 here means the server ended the session: there is
+    /// nothing left to log out of.
     @discardableResult
     func handleIfUnauthorized(_ error: any Error) -> Bool {
         if case APIError.status(401, _) = error {
-            signOut()
+            endSessionLocally()
             return true
         }
         return false

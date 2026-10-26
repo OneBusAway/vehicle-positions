@@ -192,9 +192,31 @@ final class TripSession {
         refreshReporting()
     }
 
-    /// Signs out of the account. Works from `.idle` and `.paused`: a paused
-    /// trip's record is left in the store so the next sign-in returns to it.
-    func signOut() {
+    /// The driver's sign-out: ends the session on the server, then on this
+    /// phone, from `.idle` or `.paused` only, as `endSessionLocally()` does.
+    /// The logout goes first because the client reads the token from the
+    /// store for every request. A logout that fails still signs out here: a
+    /// driver handing the phone on must never be left signed in.
+    func signOut() async {
+        switch phase {
+        case .idle, .paused:
+            do {
+                try await requireAPI().logout()
+                log.notice("logged out on the server")
+            } catch {
+                log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error))")
+            }
+            endSessionLocally()
+        default:
+            return
+        }
+    }
+
+    /// Signs out on this phone only, telling the server nothing: for a
+    /// session the server has already ended. Works from `.idle` and
+    /// `.paused`: a paused trip's record is left in the store so the next
+    /// sign-in returns to it.
+    func endSessionLocally() {
         switch phase {
         case .idle, .paused:
             try? tokens.clear()
