@@ -27,6 +27,7 @@ type UserResponse struct {
 
 var ErrUserNotFound = errors.New("user not found")
 var ErrDuplicateEmail = errors.New("email already exists")
+var ErrUserHasTrips = errors.New("user has trips")
 
 type UserLister interface {
 	ListUsers(ctx context.Context) ([]UserResponse, error)
@@ -61,6 +62,12 @@ type UserCreator interface {
 type UserUpdater interface {
 	UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error)
 	SetUserPasswordAndRevokeSessions(ctx context.Context, id int64, password string) error
+	SetUserActiveAndRevokeSessions(ctx context.Context, id int64, active bool) error
+	// GetUser and CountActiveUsersByRole are needed by the last-admin
+	// deactivation guard in handleUpdateUser, mirroring the check in the
+	// admin UI's setUserActive.
+	GetUser(ctx context.Context, id int64) (*UserResponse, error)
+	CountActiveUsersByRole(ctx context.Context, role string) (int, error)
 }
 
 type UserDeleter interface {
@@ -243,11 +250,16 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 	}, nil
 }
 
-// DeleteUser removes a user from the database by ID.
+// DeleteUser removes a user from the database by ID. It returns
+// ErrUserHasTrips when the user still owns trips (FK violation), and
+// ErrUserNotFound when no matching row exists.
 func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 
 	rowsAffected, err := s.queries.DeleteUser(ctx, id)
 	if err != nil {
+		if isFKViolation(err) {
+			return ErrUserHasTrips
+		}
 		return fmt.Errorf("delete user: %w", err)
 	}
 	if rowsAffected == 0 {
