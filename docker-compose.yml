@@ -35,6 +35,12 @@ services:
       # Rider mode is off by default. Set this to "true" to turn it on; riders
       # are verified against the schedule above.
       RIDER_MODE_ENABLED: "false"
+      # Admin bootstrap credentials (admin@test.com/password). The server creates
+      # an admin account only on first boot (when none exist yet), so these can be
+      # left set across restarts. The simulator, make smoke, and the admin UI all
+      # use these credentials by default. Compose refuses to start without them.
+      ADMIN_BOOTSTRAP_EMAIL: "${ADMIN_BOOTSTRAP_EMAIL:?ADMIN_BOOTSTRAP_EMAIL must be set}"
+      ADMIN_BOOTSTRAP_PASSWORD: "${ADMIN_BOOTSTRAP_PASSWORD:?ADMIN_BOOTSTRAP_PASSWORD must be set}"
       # TRUSTED_GTFS_RT_URLS: "https://example.org/vehicle-positions.pb"
     depends_on:
       db:

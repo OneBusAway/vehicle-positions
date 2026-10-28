@@ -26,7 +26,10 @@ From the repository root:
    and `GTFS_STATIC_URL`, the GTFS static zip drivers pick their routes from,
    so export both first (or put them in a `.env` file next to
    `docker-compose.yml`). The image carries no GTFS file, so under Compose
-   `GTFS_STATIC_URL` must be a URL the container can download:
+   `GTFS_STATIC_URL` must be a URL the container can download. The server now
+   also requires `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD`; the
+   default admin is seeded by `seed_dev.sql` (admin@test.com / password), or
+   you can set those variables directly:
 
    ```bash
    export JWT_SECRET=$(openssl rand -hex 32)
@@ -37,19 +40,46 @@ From the repository root:
    No feed to hand? The [local server run](#local-server-run-without-docker-server-container)
    below uses the repo's test feed, `rider/testdata/fixture.zip`, instead.
 
-2. Verify server health:
+2. Set up an admin account. By default, `make smoke` needs `ADMIN_BOOTSTRAP_EMAIL`
+   and `ADMIN_BOOTSTRAP_PASSWORD` environment variables to authenticate. There are several
+   ways to provide these:
+
+   a) **Seed the database with admin@test.com/password** (requires admin privileges on the DB):
+   ```bash
+   # This works for both local and Docker runs
+   docker compose exec db psql -U postgres -d vehicle_positions < seed_dev.sql
+   ```
+
+   b) **Export environment variables** (recommended for Docker):
+   ```bash
+   export ADMIN_BOOTSTRAP_EMAIL=admin@test.com
+   export ADMIN_BOOTSTRAP_PASSWORD=password
+   ```
+
+   c) **Set them in a `.env` file next to `docker-compose.yml`** - Make sure they're not
+   committed to git (add to `.gitignore`):
+   ```
+   ADMIN_BOOTSTRAP_EMAIL=admin@test.com
+   ADMIN_BOOTSTRAP_PASSWORD=password
+   ```
+
+   The server creates an admin account only if none exist during first boot (when neither
+   `ADMIN_BOOTSTRAP_EMAIL` nor `ADMIN_BOOTSTRAP_PASSWORD` are set). This admin is used for
+   authentication by `make smoke`, the simulator, and the admin UI.
+
+3. Verify server health:
 
    ```bash
    curl http://localhost:8080/health
    ```
 
-3. Run a smoke test (checks health, authenticates as admin, verifies admin status, and fetches the GTFS-RT vehicle positions feed as JSON):
+4. Run a smoke test (checks health, authenticates as admin, verifies admin status, and fetches the GTFS-RT vehicle positions feed as JSON):
 
    ```bash
    make smoke
    ```
 
-4. Stop the stack when done:
+5. Stop the stack when done:
 
    ```bash
    make down

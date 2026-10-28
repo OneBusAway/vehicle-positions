@@ -25,7 +25,7 @@ help:
 	@echo "  make up        - Start local Postgres + server with docker compose"
 	@echo "  make down      - Stop local docker compose stack"
 	@echo "  make run       - Run server locally (expects DATABASE_URL env var)"
-	@echo "  make smoke     - Post sample location and fetch feed/status"
+	@echo "  make smoke     - Check health, authenticate as admin, verify admin status, and fetch GTFS-RT feed"
 	@echo "  make simulate  - Run simulator against local server (needs ADMIN_BOOTSTRAP_EMAIL/PASSWORD)"
 	@echo "  make ridersim  - Run rider simulator against local server (rider mode; honours PORT)"
 	@echo "  make generate  - Regenerate sqlc code"
@@ -57,16 +57,16 @@ run:
 
 smoke:
 	@echo "Fetching health check..."
-	curl --silent --show-error --fail http://localhost:$(PORT)/health | cat
-	@echo "OK"
+	@curl --silent --show-error --fail http://localhost:$(PORT)/health && echo " OK"
 	@echo
 	@if [ -z "$(ADMIN_BOOTSTRAP_EMAIL)" ] || [ -z "$(ADMIN_BOOTSTRAP_PASSWORD)" ]; then \
 		echo "ERROR: ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD are required for authentication" >&2; \
-		echo "Set them in your environment or in a .env file" >&2; \
+		echo "Set them in your environment or in a .env file next to docker-compose.yml" >&2; \
 		exit 1; \
 	fi
 	@echo "Authenticating as admin..."
-	@ACCESS_TOKEN=$$(curl --silent --show-error --fail -X POST http://localhost:$(PORT)/api/v1/auth/login -H "Content-Type: application/json" -d "{\"email\":\"$(ADMIN_BOOTSTRAP_EMAIL)\",\"password\":\"$(ADMIN_BOOTSTRAP_PASSWORD)\"}" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4); \
+	@LOGIN_RESPONSE=$$(curl --silent --show-error --fail -X POST http://localhost:$(PORT)/api/v1/auth/login -H "Content-Type: application/json" -d "{\"email\":\"$(ADMIN_BOOTSTRAP_EMAIL)\",\"password\":\"$(ADMIN_BOOTSTRAP_PASSWORD)\"}") || { echo "ERROR: login request failed" >&2; exit 1; }; \
+	ACCESS_TOKEN=$$(echo "$$LOGIN_RESPONSE" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4); \
 	if [ -z "$$ACCESS_TOKEN" ]; then \
 		echo "ERROR: login response missing access_token" >&2; \
 		exit 1; \
@@ -74,12 +74,10 @@ smoke:
 	echo "OK"; \
 	echo; \
 	echo "Fetching admin status..."; \
-	curl --silent --show-error --fail -H "Authorization: Bearer $$ACCESS_TOKEN" http://localhost:$(PORT)/api/v1/admin/status | cat; \
-	echo "OK"; \
+	curl --silent --show-error --fail -H "Authorization: Bearer $$ACCESS_TOKEN" http://localhost:$(PORT)/api/v1/admin/status && echo " OK"; \
 	echo; \
 	echo "Fetching GTFS-RT JSON feed..."; \
-	curl --silent --show-error --fail 'http://localhost:$(PORT)/gtfs-rt/vehicle-positions?format=json' | cat; \
-	echo "OK"; \
+	curl --silent --show-error --fail 'http://localhost:$(PORT)/gtfs-rt/vehicle-positions?format=json' && echo " OK"; \
 	echo
 
 simulate:
