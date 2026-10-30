@@ -4,17 +4,25 @@ import UIKit
 /// Draws the trip: the shape in the route colour over its casing, its stops,
 /// the vehicle pointed along its course on its status ring, and the matched
 /// position with a dotted line to it while off route. Shared by the phone's
-/// tracking screen and the CarPlay window. The map takes no touches of its
-/// own: hosts drive it through `pan`, `zoom` and `followsVehicle`.
+/// tracking screen and the CarPlay window. On the phone the driver's pan and
+/// pinch are reported out through `onUserMovedMap` and `onUserTouchEnded`;
+/// the car drives it through `pan`, `zoom` and `followsVehicle` alone.
 @MainActor
-final class RouteMapViewController: UIViewController, MKMapViewDelegate {
-    /// Camera distance while following, metres, before the host zooms.
+final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestureRecognizerDelegate {
+    /// Camera distance while following, metres, before a framing or a zoom
+    /// changes it.
     static let defaultFollowDistance: CLLocationDistance = 1200
-    /// The range `zoom(by:)` may set the follow distance to.
+    /// The range the follow distance may be set to.
     static let followDistanceRange: ClosedRange<CLLocationDistance> = 200...50_000
-    /// How far ahead of the vehicle the camera centres, so the road ahead
-    /// fills the screen and the vehicle sits low.
+    /// How far ahead of the vehicle the camera centres on the car, which has
+    /// no framing to measure: the road ahead fills the screen and the
+    /// vehicle sits low.
     static let lookAheadMetres = 300.0
+    /// Each fix glides the camera and the vehicle over this long, as
+    /// Android's location component does (DESIGN-iOS §2.6).
+    static let followDuration: TimeInterval = 0.75
+    /// With Reduce Motion on, a move longer than this jumps instead.
+    static let jumpDistance = 300.0
     /// Android's widths: the line over a wider casing.
     static let lineWidth: CGFloat = 6
     static let casingWidth: CGFloat = 10
@@ -41,7 +49,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     }
 
     var followsVehicle = true {
-        didSet { if followsVehicle { follow(animated: true) } }
+        didSet { if followsVehicle { follow() } }
     }
 
     /// Points at the bottom of the map the host draws over. MapKit keeps its
@@ -54,11 +62,26 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         }
     }
 
+    /// Where the vehicle sits while following, on the phone. Nil on the car,
+    /// which keeps a fixed look-ahead and its own zoom buttons.
+    var followFraming: FollowFraming? {
+        didSet {
+            guard followFraming != oldValue else { return }
+            if followsVehicle { follow() }
+        }
+    }
+
+    /// Fired when the driver starts dragging or pinching the map, and when
+    /// that touch ends. Phone only.
+    var onUserMovedMap: (() -> Void)?
+    var onUserTouchEnded: (() -> Void)?
+
     private var trip: TripGeometry?
     private var shape: ShapeGeometry?
     private var lastAdherence: Adherence?
-    /// The camera distance `follow()` uses; `zoom(by:)` changes it so a zoom
-    /// survives the next fix instead of being undone by it.
+    /// The camera distance `follow()` uses. The first fix of a trip sets it
+    /// from the framing; a pinch, or the car's zoom buttons, change it so a
+    /// zoom survives the next fix instead of being undone by it.
     private var followDistance = RouteMapViewController.defaultFollowDistance
     /// Core Location reports -1 for an unknown course. Steering the camera to
     /// north on every such fix spins the map; the last known heading is a far
@@ -110,6 +133,15 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         mapView.pointOfInterestFilter = .excludingAll
         mapView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(mapView)
+        if allowsDirectInteraction {
+            // Alongside MapKit's own recognisers, which keep the panning and
+            // zooming: these only say that the driver has taken the map.
+            for recognizer in [UIPanGestureRecognizer(target: self, action: #selector(userTouched)),
+                               UIPinchGestureRecognizer(target: self, action: #selector(userTouched))] {
+                recognizer.delegate = self
+                mapView.addGestureRecognizer(recognizer)
+            }
+        }
         // The glyphs are bitmaps: light/dark has to redraw them, it cannot
         // re-resolve the colours inside an image that is already drawn.
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: RouteMapViewController, _) in
@@ -172,6 +204,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         // nothing to do with the vehicle; re-animating the camera each time
         // makes the map stutter. Only a genuinely new fix moves anything.
         guard adherence != lastAdherence else { return }
+        let isFirstFix = lastAdherence == nil
         lastAdherence = adherence
         guard let adherence else {
             if vehiclePlaced { mapView.removeAnnotation(vehicle); vehiclePlaced = false }
@@ -179,10 +212,20 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
             removeOffRouteLink()
             return
         }
-        vehicle.coordinate = CLLocationCoordinate2D(latitude: adherence.fix.latitude, longitude: adherence.fix.longitude)
+        let coordinate = CLLocationCoordinate2D(latitude: adherence.fix.latitude, longitude: adherence.fix.longitude)
         if (0...360).contains(adherence.fix.course) { lastCourse = adherence.fix.course }
         vehicle.course = lastCourse
-        if !vehiclePlaced { mapView.addAnnotation(vehicle); vehiclePlaced = true }
+        if isFirstFix, let framing = followFraming, let scale = cameraScale() {
+            // The first follow of a trip takes the scale that puts the road
+            // ahead across the uncovered map; after that the driver's own
+            // zoom holds.
+            followDistance = Self.clamped(scale.distance * framing.metresPerPoint / scale.metresPerPoint)
+        }
+        if !vehiclePlaced {
+            vehicle.coordinate = coordinate
+            mapView.addAnnotation(vehicle)
+            vehiclePlaced = true
+        }
         refreshVehicleView()
 
         // Off the route, the matched position shows with a dotted line to it
@@ -195,7 +238,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
             let p = shape.point(at: adherence.projection.alongShape)
             snapped.coordinate = CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon)
             if !snappedPlaced { mapView.addAnnotation(snapped); snappedPlaced = true }
-            replaceOffRouteLink(from: vehicle.coordinate, to: snapped.coordinate)
+            replaceOffRouteLink(from: coordinate, to: snapped.coordinate)
         }
 
         for stop in stops where stop.isNext != (stop.stop.id == adherence.nextStop.id && stop.stop.sequence == adherence.nextStop.sequence) {
@@ -204,7 +247,25 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
             mapView.addAnnotation(stop)
         }
 
-        if followsVehicle { follow(animated: true) }
+        move(to: coordinate, camera: followsVehicle ? followCamera(for: adherence) : nil, first: isFirstFix)
+    }
+
+    /// The camera and the vehicle move together, in one animation, so the
+    /// vehicle never jitters against the moving map. The first fix of a trip
+    /// leaves the whole-route view for the vehicle; with Reduce Motion on, a
+    /// long move jumps.
+    private func move(to coordinate: CLLocationCoordinate2D, camera: MKMapCamera?, first: Bool) {
+        let from = vehicle.coordinate
+        let far = Geo.distance(GeoPoint(from.latitude, from.longitude), GeoPoint(coordinate.latitude, coordinate.longitude)) > Self.jumpDistance
+        if first || (UIAccessibility.isReduceMotionEnabled && far) {
+            vehicle.coordinate = coordinate
+            if let camera { mapView.setCamera(camera, animated: first) }
+            return
+        }
+        UIView.animate(withDuration: Self.followDuration, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+            self.vehicle.coordinate = coordinate
+            if let camera { self.mapView.camera = camera }
+        }
     }
 
     private func replaceOffRouteLink(from vehicle: CLLocationCoordinate2D, to matched: CLLocationCoordinate2D) {
@@ -221,6 +282,34 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         linkRenderer = nil
     }
 
+    // MARK: The driver's touches
+
+    @objc private func userTouched(_ recognizer: UIGestureRecognizer) {
+        switch recognizer.state {
+        case .began:
+            // Stop here and now, before the host hears of it: a fix landing
+            // in between must not snap the camera back under the finger.
+            followsVehicle = false
+            onUserMovedMap?()
+        case .ended, .cancelled, .failed:
+            // The driver's zoom is kept for the next follow, as the car's
+            // zoom buttons keep theirs.
+            if recognizer is UIPinchGestureRecognizer {
+                followDistance = Self.clamped(mapView.camera.centerCoordinateDistance)
+            }
+            onUserTouchEnded?()
+        case .possible, .changed:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    /// MapKit's own recognisers keep the panning and the zooming.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
+    }
+
     // MARK: Host-driven camera
 
     func pan(by translation: CGPoint) {
@@ -232,10 +321,9 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
     func zoom(by factor: Double) {
         guard factor > 0 else { return }
-        followDistance = min(Self.followDistanceRange.upperBound,
-                             max(Self.followDistanceRange.lowerBound, followDistance / factor))
+        followDistance = Self.clamped(followDistance / factor)
         if followsVehicle, lastAdherence != nil {
-            follow(animated: true)
+            follow()
         } else {
             let camera = mapView.camera.copy() as! MKMapCamera
             camera.centerCoordinateDistance = followDistance
@@ -243,18 +331,55 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         }
     }
 
-    private func follow(animated: Bool) {
+    /// Brings the camera back to the vehicle: Re-center, the timed return,
+    /// a new framing, or a zoom while following.
+    private func follow() {
         guard let adherence = lastAdherence else { return }
+        let camera = followCamera(for: adherence)
+        UIView.animate(withDuration: Self.followDuration, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+            self.mapView.camera = camera
+        }
+    }
+
+    /// Heading-up and flat, centred ahead of the vehicle: by the framing on
+    /// the phone, so the vehicle lands a third of the way up the uncovered
+    /// map, and by a fixed look-ahead on the car.
+    private func followCamera(for adherence: Adherence) -> MKMapCamera {
         let course = lastCourse
         let here = GeoPoint(adherence.fix.latitude, adherence.fix.longitude)
+        var ahead = Self.lookAheadMetres
+        if let framing = followFraming, let scale = cameraScale() {
+            // At zero pitch a point covers ground in proportion to the
+            // camera's distance, so the scale at the follow distance follows
+            // from the scale now.
+            ahead = framing.vehicleOffsetFromCentre * scale.metresPerPoint * followDistance / scale.distance
+        }
         let rad = Geo.rad(course)
-        let ahead = GeoPoint(
-            here.lat + Self.lookAheadMetres * cos(rad) / Geo.metresPerDegree,
-            here.lon + Self.lookAheadMetres * sin(rad) / (Geo.metresPerDegree * max(cos(Geo.rad(here.lat)), 1e-6))
+        let centre = GeoPoint(
+            here.lat + ahead * cos(rad) / Geo.metresPerDegree,
+            here.lon + ahead * sin(rad) / (Geo.metresPerDegree * max(cos(Geo.rad(here.lat)), 1e-6))
         )
-        let camera = MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: ahead.lat, longitude: ahead.lon),
-                                 fromDistance: followDistance, pitch: 0, heading: course)
-        mapView.setCamera(camera, animated: animated)
+        return MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: centre.lat, longitude: centre.lon),
+                           fromDistance: followDistance, pitch: 0, heading: course)
+    }
+
+    /// The camera's distance now and the metres one point covers at it:
+    /// measured, because MapKit does not publish its field of view. Nil
+    /// before the map has a size to measure on.
+    private func cameraScale() -> (distance: CLLocationDistance, metresPerPoint: Double)? {
+        let bounds = mapView.bounds
+        guard bounds.height >= 200 else { return nil }
+        let centre = CGPoint(x: bounds.midX, y: bounds.midY)
+        let a = mapView.convert(centre, toCoordinateFrom: mapView)
+        let b = mapView.convert(CGPoint(x: centre.x, y: centre.y + 100), toCoordinateFrom: mapView)
+        let metresPerPoint = Geo.distance(GeoPoint(a.latitude, a.longitude), GeoPoint(b.latitude, b.longitude)) / 100
+        let distance = mapView.camera.centerCoordinateDistance
+        guard metresPerPoint > 0, metresPerPoint.isFinite, distance > 0 else { return nil }
+        return (distance, metresPerPoint)
+    }
+
+    private static func clamped(_ distance: CLLocationDistance) -> CLLocationDistance {
+        min(followDistanceRange.upperBound, max(followDistanceRange.lowerBound, distance))
     }
 
     // MARK: Glyphs and colours

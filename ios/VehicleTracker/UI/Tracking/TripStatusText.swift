@@ -263,6 +263,10 @@ enum TripStatusText {
         String(localized: "Re-center", comment: "The button over the map, once the driver has dragged it away from the vehicle, that makes the map follow the vehicle again.")
     }
 
+    static var recenterAccessibilityLabel: String {
+        String(localized: "Re-center the map on the vehicle", comment: "VoiceOver label of the Re-center button over the map.")
+    }
+
     // MARK: Ending the trip
 
     static var endTripTitle: String {
