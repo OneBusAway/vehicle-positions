@@ -150,6 +150,17 @@ struct TripSheet: View {
     }
 }
 
+/// Reads a group as one VoiceOver element with one sentence.
+private struct SpokenAsOne: ViewModifier {
+    let label: String
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+    }
+}
+
 /// One fact about the trip: a symbol, what it is, and its value. A problem
 /// shows in an amber symbol and heavier text.
 private struct FactRow: View {
@@ -211,12 +222,16 @@ struct TripBar: View, Equatable {
                         badge
                         titles
                     }
+                    .modifier(SpokenAsOne(label: spoken))
                     endButton
                 }
             } else {
                 HStack(spacing: 12) {
-                    badge
-                    titles
+                    HStack(spacing: 12) {
+                        badge
+                        titles
+                    }
+                    .modifier(SpokenAsOne(label: spoken))
                     Spacer(minLength: 8)
                     endButton
                 }
@@ -226,6 +241,12 @@ struct TripBar: View, Equatable {
         .padding(.top, 16)
         .padding(.bottom, 16)
         .onGeometryChange(for: Bool.self) { $0.size.width < Self.compactWidth } action: { isCompact = $0 }
+    }
+
+    /// "Route 7 to Downtown Seattle, 142 reports sent": the bar as one
+    /// element, with End trip on its own after it.
+    private var spoken: String {
+        TripStatusText.spokenTripBar(route: active.trip.route.shortName, headsign: active.trip.headsign, sent: session.fixesSent)
     }
 
     private var badge: some View {

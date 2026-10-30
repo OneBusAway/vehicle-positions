@@ -9,6 +9,8 @@ struct RouteMapView: UIViewControllerRepresentable {
     var adherence: Adherence?
     /// The status colour of the ring round the vehicle.
     var ring: StatusTone = .neutral
+    /// What VoiceOver calls the vehicle's mark.
+    var vehicleName = ""
     /// Points at the map's bottom that the trip sheet covers, so Apple's logo
     /// and the Legal link stay in view above it.
     var coveredBottom: CGFloat = 0
@@ -33,6 +35,7 @@ struct RouteMapView: UIViewControllerRepresentable {
         if controller.followFraming != framing { controller.followFraming = framing }
         controller.coveredBottom = coveredBottom
         if controller.followsVehicle != following.isFollowing { controller.followsVehicle = following.isFollowing }
+        controller.vehicleName = vehicleName
         controller.update(adherence, ring: ring)
     }
 

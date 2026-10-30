@@ -13,6 +13,7 @@ struct TrackingView: View {
     }
 
     @Environment(TripSession.self) private var session
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingRelogin = false
     @State private var following = MapFollowing()
     @State private var map = MapLayout()
@@ -45,7 +46,7 @@ struct TrackingView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, 12)
                     .padding(.bottom, TripSheet.peek + 12)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
             }
         }
         .coordinateSpace(.named("tracking"))
@@ -86,7 +87,7 @@ private struct TrackingMap: View {
     var body: some View {
         let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting)
         RouteMapView(trip: status?.active.trip, adherence: session.latest, ring: status?.ring ?? .neutral,
-                     coveredBottom: TripSheet.peek, framing: framing, following: following)
+                     vehicleName: status?.vehicleName ?? "", coveredBottom: TripSheet.peek, framing: framing, following: following)
     }
 }
 
@@ -94,6 +95,7 @@ private struct TrackingMap: View {
 /// their place. Reads the session itself, so each fix redraws only this.
 private struct StatusArea: View {
     @Environment(TripSession.self) private var session
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var showingRelogin: Bool
     @Binding var cardBottom: CGFloat
 
@@ -108,8 +110,21 @@ private struct StatusArea: View {
                         .modifier(CardBottom(cardBottom: $cardBottom))
                     if let problem = status.problem {
                         ProblemLine(problem: problem) { session.resume() }
+                            // It comes out from under the card and leaves the
+                            // same way; with Reduce Motion it only fades.
+                            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     }
                 }
+            }
+            .animation(.smooth(duration: 0.25), value: status.category)
+            // A problem appearing, or giving way to another, taps the wrist;
+            // one clearing does not (DESIGN-iOS §2.7).
+            .sensoryFeedback(.warning, trigger: status.problem?.kind) { old, new in new != nil && old != new }
+            .sensoryFeedback(.warning, trigger: status.isSignedOut) { _, signedOut in signedOut }
+            // A change of kind is read out; the minutes moving inside one
+            // kind are not.
+            .onChange(of: status.category) { _, _ in
+                AccessibilityNotification.Announcement(status.sentence).post()
             }
         }
     }

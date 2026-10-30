@@ -173,6 +173,15 @@ enum TripStatusText {
         String(localized: "Riders can't see you", comment: "Problem line, after 'No connection': the vehicle has dropped off riders' maps.")
     }
 
+    /// The problem line as VoiceOver reads it: "No connection, Riders can't see you".
+    static func spokenProblem(what: String, meaning: String) -> String {
+        String(localized: "\(what), \(meaning)", comment: "VoiceOver: the problem line in one sentence, what happened then what it means.")
+    }
+
+    static var opensSettings: String {
+        String(localized: "Opens Settings", comment: "VoiceOver hint on a problem line that opens the app's page in Settings.")
+    }
+
     // MARK: Signed out
 
     static var signedOut: String {
@@ -191,6 +200,14 @@ enum TripStatusText {
 
     static func sent(_ count: Int) -> String {
         String(localized: "\(count) sent", comment: "Trip bar: how many reports have reached the server, e.g. '142 sent'.")
+    }
+
+    /// The trip bar as VoiceOver reads it: "Route 7 to Downtown Seattle, 142 reports sent".
+    static func spokenTripBar(route: String, headsign: String, sent: Int) -> String {
+        if route.isEmpty {
+            return String(localized: "\(headsign), \(sent) reports sent", comment: "VoiceOver: the trip bar in one sentence for a route with no short name: the headsign, then how many reports have reached the server.")
+        }
+        return String(localized: "Route \(route) to \(headsign), \(sent) reports sent", comment: "VoiceOver: the trip bar in one sentence: the route's short name, the headsign, then how many reports have reached the server.")
     }
 
     static var endTrip: String {
@@ -249,6 +266,11 @@ enum TripStatusText {
         case .upcoming:
             String(localized: "\(name), \(time)", comment: "VoiceOver: a stop list row for a stop still ahead, with its scheduled time.")
         }
+    }
+
+    /// The next stop's mark on the map: "Next stop, 3rd Ave and Seneca St".
+    static func spokenNextStopMark(name: String) -> String {
+        String(localized: "Next stop, \(name)", comment: "VoiceOver: the next stop's mark on the map.")
     }
 
     /// The vehicle's row in one sentence: "Vehicle 4317, 3 min late".

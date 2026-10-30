@@ -15,10 +15,25 @@ struct ProblemLine: View {
         case .openSettings:
             Button { openURL(.appSettings) } label: { line }
                 .buttonStyle(.plain)
-                .accessibilityHint("Opens Settings")
-        case .resume, nil:
+                .accessibilityLabel(spoken)
+                .accessibilityHint(TripStatusText.opensSettings)
+        case .resume:
+            // One element: a double tap resumes, as the button beside the
+            // words does.
             line
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(spoken)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { onResume() }
+        case nil:
+            line
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(spoken)
         }
+    }
+
+    private var spoken: String {
+        TripStatusText.spokenProblem(what: problem.what, meaning: problem.meaning)
     }
 
     private var line: some View {

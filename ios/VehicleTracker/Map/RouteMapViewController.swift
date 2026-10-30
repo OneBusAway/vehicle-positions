@@ -76,6 +76,14 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestu
     var onUserMovedMap: (() -> Void)?
     var onUserTouchEnded: (() -> Void)?
 
+    /// What VoiceOver calls the vehicle's mark: "Vehicle 4317".
+    var vehicleName = "" {
+        didSet {
+            guard vehicleName != oldValue, let view = mapView.view(for: vehicle) else { return }
+            view.accessibilityLabel = TripStatusText.spokenVehicleRow(name: vehicleName, status: nil)
+        }
+    }
+
     private var trip: TripGeometry?
     private var shape: ShapeGeometry?
     private var lastAdherence: Adherence?
@@ -482,12 +490,16 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate, UIGestu
             view.centerOffset = stopCentreOffset(for: view)
             view.displayPriority = stop.isNext || stop.isLast ? .required : .defaultLow
             view.zPriority = stop.isNext ? .max : .defaultUnselected
+            view.isAccessibilityElement = true
+            view.accessibilityLabel = stop.isNext ? TripStatusText.spokenNextStopMark(name: stop.stop.name) : stop.stop.name
             return view
         case is VehicleAnnotation:
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "vehicle") ?? MKAnnotationView(annotation: annotation, reuseIdentifier: "vehicle")
             view.annotation = annotation
             view.displayPriority = .required
             view.zPriority = .max
+            view.isAccessibilityElement = true
+            view.accessibilityLabel = TripStatusText.spokenVehicleRow(name: vehicleName, status: nil)
             DispatchQueue.main.async { [weak self] in self?.refreshVehicleView() }
             return view
         case is SnappedAnnotation:

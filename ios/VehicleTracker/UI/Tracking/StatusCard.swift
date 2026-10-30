@@ -43,7 +43,10 @@ struct StatusCard: View {
         // The fill and the symbol cross-fade when the kind of answer changes,
         // never on the fixes in between (DESIGN-iOS §2.6).
         .animation(.smooth(duration: 0.25), value: status.category)
+        // Larger than this and the card would cover the map (DESIGN-iOS §2.2).
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(status.sentence)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }
