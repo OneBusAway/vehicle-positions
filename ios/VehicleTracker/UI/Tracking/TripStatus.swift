@@ -59,6 +59,15 @@ struct TripStatus: Equatable {
         var symbol: String
 
         var isProblem: Bool { word != .reporting }
+
+        var text: String {
+            switch word {
+            case .reporting: TripStatusText.reporting
+            case .notReporting: TripStatusText.notReporting
+            case .noGPS: TripStatusText.noGPS
+            case .stopped: TripStatusText.reportsStopped
+            }
+        }
     }
 
     /// What the card's animations and VoiceOver's announcements react to: the
@@ -84,6 +93,19 @@ struct TripStatus: Equatable {
     let ring: StatusTone
     /// The card as VoiceOver reads it, in one sentence.
     let sentence: String
+    /// When the run starts, on the agency's clock: "6:58 AM". Nil for a trip
+    /// with no stops.
+    let runTime: String?
+    /// The vehicle as the driver knows it: its label, or its id when the feed
+    /// gives none.
+    let vehicleName: String
+    /// The stop list's vehicle row: the exact deviation, "3 min late" even
+    /// inside the on-time window; "Off route" off the route; nil before the
+    /// first fix, when there is no row to put it in.
+    let vehicleRowStatus: String?
+    /// The next stop's place in the trip's stops, by id and sequence: a loop
+    /// calls at the same stop twice. Nil before the first fix.
+    let nextStopIndex: Int?
 
     var category: Category {
         Category(answer: answer, problem: problem?.kind, isSignedOut: isSignedOut)
@@ -102,9 +124,15 @@ struct TripStatus: Equatable {
         let problem = isSignedOut ? nil : Self.problemKind(phase: phase, reporting: reporting).map(Self.line)
 
         self.active = active
+        self.vehicleName = vehicleName
+        runTime = active.trip.stops.first.map { Formatters.clock($0.departureAt, timezone: active.trip.timezone) }
         answer = judged.answer
         card = judged.card
         sentence = judged.sentence
+        vehicleRowStatus = judged.vehicleRowStatus
+        nextStopIndex = latest.flatMap { judged in
+            active.trip.stops.firstIndex { $0.id == judged.nextStop.id && $0.sequence == judged.nextStop.sequence }
+        }
         self.isSignedOut = isSignedOut
         self.problem = problem
         reports = Self.reports(isSignedOut: isSignedOut, problem: problem)
@@ -117,6 +145,7 @@ struct TripStatus: Equatable {
         var answer: Answer
         var card: Card
         var sentence: String
+        var vehicleRowStatus: String?
     }
 
     private static func judge(_ latest: Adherence?, trip: TripGeometry, vehicleName: String) -> Judgement {
@@ -130,13 +159,14 @@ struct TripStatus: Equatable {
         let deviation = TripStatusText.deviation(latest.scheduleDeviation)
 
         /// A card that names the next stop, with its time and distance under it.
-        func nextStop(_ answer: Answer, _ symbol: String, _ text: String, spokenDistance: String?) -> Judgement {
+        func nextStop(_ answer: Answer, _ symbol: String, _ text: String, spokenDistance: String?, row: String) -> Judgement {
             let spoken = answer == .offRoute ? TripStatusText.offRouteShort : text
             return Judgement(
                 answer: answer,
                 card: Card(tone: tone, symbol: symbol, answer: text, label: TripStatusText.next, emphasis: stop.name,
                            line2: TripStatusText.pair(time, distance)),
-                sentence: TripStatusText.spokenNextStop(spoken, name: stop.name, time: time, distance: spokenDistance)
+                sentence: TripStatusText.spokenNextStop(spoken, name: stop.name, time: time, distance: spokenDistance),
+                vehicleRowStatus: row
             )
         }
 
@@ -145,24 +175,25 @@ struct TripStatus: Equatable {
         case .onTime:
             // Inside the window the card always says On time; the exact
             // minutes live on the stop list's vehicle row (P33).
-            return nextStop(.onTime, "checkmark.circle.fill", TripStatusText.onTime, spokenDistance: spokenDistance)
+            return nextStop(.onTime, "checkmark.circle.fill", TripStatusText.onTime, spokenDistance: spokenDistance, row: deviation)
         case .late:
-            return nextStop(.late, "hourglass.bottomhalf.filled", deviation, spokenDistance: spokenDistance)
+            return nextStop(.late, "hourglass.bottomhalf.filled", deviation, spokenDistance: spokenDistance, row: deviation)
         case .early:
-            return nextStop(.early, "gauge.with.dots.needle.67percent", deviation, spokenDistance: spokenDistance)
+            return nextStop(.early, "gauge.with.dots.needle.67percent", deviation, spokenDistance: spokenDistance, row: deviation)
         case .offSchedule:
             return Judgement(
                 answer: .offSchedule,
                 card: Card(tone: tone, symbol: "calendar.badge.exclamationmark", answer: deviation,
                            label: TripStatusText.offSchedule, emphasis: TripStatusText.rightRun,
                            line2: TripStatusText.offScheduleNext(name: stop.name, time: time)),
-                sentence: TripStatusText.spokenOffSchedule(deviation, name: stop.name, time: time)
+                sentence: TripStatusText.spokenOffSchedule(deviation, name: stop.name, time: time),
+                vehicleRowStatus: deviation
             )
         case .offRoute:
             // VoiceOver hears "Off route" and no distances: both change with
             // every fix (as Android).
             let text = TripStatusText.offRoute(distance: Formatters.distance(latest.projection.distanceToShape))
-            return nextStop(.offRoute, "mappin.slash", text, spokenDistance: nil)
+            return nextStop(.offRoute, "mappin.slash", text, spokenDistance: nil, row: TripStatusText.offRouteShort)
         }
     }
 
@@ -174,14 +205,15 @@ struct TripStatus: Equatable {
         guard let first = trip.stops.first else {
             return Judgement(answer: .waiting,
                              card: Card(tone: .neutral, symbol: "location.magnifyingglass", answer: answer, label: "", emphasis: "", line2: ""),
-                             sentence: answer)
+                             sentence: answer, vehicleRowStatus: nil)
         }
         let time = Formatters.clock(first.departureAt, timezone: trip.timezone)
         return Judgement(
             answer: .waiting,
             card: Card(tone: .neutral, symbol: "location.magnifyingglass", answer: answer, label: TripStatusText.from,
                        emphasis: first.name, line2: TripStatusText.runVehicle(time: time, vehicle: vehicleName)),
-            sentence: TripStatusText.spokenWaiting(name: first.name, time: time, vehicle: vehicleName)
+            sentence: TripStatusText.spokenWaiting(name: first.name, time: time, vehicle: vehicleName),
+            vehicleRowStatus: nil
         )
     }
 

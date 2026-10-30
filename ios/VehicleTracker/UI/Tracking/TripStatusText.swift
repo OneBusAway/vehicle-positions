@@ -229,6 +229,36 @@ enum TripStatusText {
         String(localized: "\(count) stops passed", comment: "Trip sheet stop list: the folded row standing in for the stops the vehicle has already passed, e.g. '6 stops passed'.")
     }
 
+    static var expanded: String {
+        String(localized: "expanded", comment: "VoiceOver value of the folded stops row while the stops it stands for are showing.")
+    }
+
+    static var collapsed: String {
+        String(localized: "collapsed", comment: "VoiceOver value of the folded stops row while the stops it stands for are hidden.")
+    }
+
+    /// A stop row in one sentence: "3rd Ave and Seneca St, next stop, 7:18 AM".
+    static func spokenStopRow(name: String, time: String, kind: StopRows.Kind) -> String {
+        switch kind {
+        case .next:
+            String(localized: "\(name), next stop, \(time)", comment: "VoiceOver: a stop list row for the next stop, with its scheduled time.")
+        case .last:
+            String(localized: "\(name), last stop, \(time)", comment: "VoiceOver: a stop list row for the end of the line, with its scheduled time.")
+        case .passed:
+            String(localized: "\(name), passed, \(time)", comment: "VoiceOver: a stop list row for a stop the vehicle has passed, with its scheduled time.")
+        case .upcoming:
+            String(localized: "\(name), \(time)", comment: "VoiceOver: a stop list row for a stop still ahead, with its scheduled time.")
+        }
+    }
+
+    /// The vehicle's row in one sentence: "Vehicle 4317, 3 min late".
+    static func spokenVehicleRow(name: String, status: String?) -> String {
+        guard let status else {
+            return String(localized: "Vehicle \(name)", comment: "VoiceOver: the vehicle's row of the stop list before the first fix, naming the vehicle.")
+        }
+        return String(localized: "Vehicle \(name), \(status)", comment: "VoiceOver: the vehicle's row of the stop list, naming the vehicle and how it is keeping to the schedule.")
+    }
+
     static var recenter: String {
         String(localized: "Re-center", comment: "The button over the map, once the driver has dragged it away from the vehicle, that makes the map follow the vehicle again.")
     }

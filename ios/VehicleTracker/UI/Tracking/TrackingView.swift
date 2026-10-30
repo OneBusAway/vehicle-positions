@@ -31,7 +31,7 @@ struct TrackingView: View {
             if detent == .height(TripSheet.peek) { expanded = wanted }
         }
         .sheet(isPresented: .constant(true)) {
-            TripSheet(showingRelogin: $showingRelogin)
+            TripSheet(showingRelogin: $showingRelogin, isExpanded: detent != .height(TripSheet.peek))
                 .presentationDetents([.height(TripSheet.peek), .height(expanded)], selection: $detent)
                 .presentationDragIndicator(.visible)
                 // The status card's buttons stay reachable at both detents,

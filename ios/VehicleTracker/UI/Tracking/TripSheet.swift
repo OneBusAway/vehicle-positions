@@ -11,7 +11,11 @@ struct TripSheet: View {
 
     @Environment(TripSession.self) private var session
     @Binding var showingRelogin: Bool
+    /// Whether the sheet is pulled up: the list goes back to its top each
+    /// time it is.
+    let isExpanded: Bool
     @State private var confirmEnd = false
+    @State private var unfolded = false
     @State private var endError: String?
     @State private var reloginPassword = ""
     @State private var reloginError: String?
@@ -20,6 +24,30 @@ struct TripSheet: View {
         VStack(spacing: 0) {
             if let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) {
                 TripBar(active: status.active, reports: status.reports, isEnding: session.phase.isEnding) { confirmEnd = true }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            FactRow(symbol: "bus.fill", label: TripStatusText.run,
+                                    value: status.runTime.map { TripStatusText.pair($0, status.vehicleName) } ?? status.vehicleName,
+                                    isProblem: false)
+                                .id(ScrollAnchor.top)
+                            FactRow(symbol: status.reports.symbol, label: TripStatusText.reports,
+                                    value: status.reports.text, isProblem: status.reports.isProblem)
+                            Divider()
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                            StopList(trip: status.active.trip,
+                                     rows: StopRows.rows(stops: status.active.trip.stops, nextStopIndex: status.nextStopIndex, unfolded: unfolded),
+                                     vehicleName: status.vehicleName, vehicleStatus: status.vehicleRowStatus,
+                                     vehicleTone: status.ring, strip: Self.stripColors(for: status.active.trip.route),
+                                     unfolded: $unfolded)
+                        }
+                        .padding(.bottom, 16)
+                    }
+                    .onChange(of: isExpanded) { _, expanded in
+                        if expanded { proxy.scrollTo(ScrollAnchor.top, anchor: .top) }
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -84,6 +112,46 @@ struct TripSheet: View {
         Task {
             do { try await session.end() } catch { endError = error.localizedDescription }
         }
+    }
+
+    private enum ScrollAnchor {
+        case top
+    }
+
+    /// The strip's colours are the map's: the route colour over a casing a
+    /// third darker.
+    private static func stripColors(for route: RouteSummary) -> RouteStripColors {
+        let line = UIColor(hex: route.color) ?? .systemBlue
+        return RouteStripColors(line: Color(uiColor: line), casing: Color(uiColor: line.darkened(by: RouteMapViewController.casingDarkening)))
+    }
+}
+
+/// One fact about the trip: a symbol, what it is, and its value. A problem
+/// shows in an amber symbol and heavier text.
+private struct FactRow: View {
+    let symbol: String
+    let label: String
+    let value: String
+    let isProblem: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: symbol)
+                .font(.system(size: 22))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(isProblem ? Color.amberOnSurface : Color.secondary)
+                .frame(width: 28)
+            Text(label)
+                .font(.body)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(isProblem ? .headline : .body)
+                .foregroundStyle(isProblem ? .primary : .secondary)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, 20)
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .combine)
     }
 }
 

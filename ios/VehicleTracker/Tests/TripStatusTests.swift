@@ -39,6 +39,10 @@ import Testing
         #expect(s.sentence.hasPrefix("Waiting for GPS. From Stop ST1, 8:00"))
         #expect(s.sentence.hasSuffix(" run, vehicle 4317"))
         #expect(s.ring == .neutral)
+        #expect(s.vehicleRowStatus == nil)
+        #expect(s.nextStopIndex == nil)
+        #expect(s.runTime?.hasPrefix("8:00") == true)
+        #expect(s.vehicleName == "4317")
     }
 
     @Test func onTimeNamesTheNextStop() throws {
@@ -54,6 +58,8 @@ import Testing
         #expect(s.sentence.hasPrefix("On time. Next stop Stop ST2, 8:05"))
         #expect(s.sentence.hasSuffix(", 500 metres"))
         #expect(s.ring == .onTime)
+        #expect(s.vehicleRowStatus == "On time")
+        #expect(s.nextStopIndex == 1)
         #expect(s.problem == nil)
         #expect(!s.isSignedOut)
     }
@@ -70,6 +76,7 @@ import Testing
         #expect(s.card.line2.hasSuffix(" · 500 m"))
         #expect(s.sentence.hasPrefix("6 min late. Next stop Stop ST2, 8:05"))
         #expect(s.ring == .late)
+        #expect(s.vehicleRowStatus == "6 min late")
     }
 
     @Test func earlyCountsTheMinutes() throws {
@@ -82,6 +89,7 @@ import Testing
         #expect(s.card.emphasis == "Stop ST2")
         #expect(s.sentence.hasPrefix("2 min early. Next stop Stop ST2, 8:05"))
         #expect(s.ring == .early)
+        #expect(s.vehicleRowStatus == "2 min early")
     }
 
     @Test func offScheduleAsksAboutTheRun() throws {
@@ -95,6 +103,7 @@ import Testing
         #expect(early.card.line2.hasPrefix("Next Stop ST2 · 8:05"))
         #expect(early.sentence.hasPrefix("21 min early. Off schedule, is this the right run? Next stop Stop ST2, 8:05"))
         #expect(early.ring == .early)
+        #expect(early.vehicleRowStatus == "21 min early", "the stop list shows the exact minutes")
 
         let late = try status(judged(secondsLate: 6000))
         #expect(late.answer == .offSchedule)
@@ -122,6 +131,30 @@ import Testing
         #expect(!s.sentence.contains("233"))
         #expect(!s.sentence.contains("metres"))
         #expect(s.ring == .neutral)
+        #expect(s.vehicleRowStatus == "Off route")
+        #expect(s.nextStopIndex == 2)
+    }
+
+    /// Inside the on-time window the card says On time, but the stop list's
+    /// vehicle row still counts the minutes (P33).
+    @Test func theVehicleRowCountsTheMinutesTheCardHides() throws {
+        let s = try status(judged(secondsLate: 180))
+        #expect(s.card.answer == "On time")
+        #expect(s.vehicleRowStatus == "3 min late")
+    }
+
+    /// A loop calls at the same stop twice; the next stop is found by its
+    /// sequence as well as its id, so the second call is not mistaken for
+    /// the first.
+    @Test func theNextStopIndexTellsTwoCallsAtOneStopApart() throws {
+        var loop = TripFixtures.loop
+        loop.stops[1].id = "A"
+        let trip = ActiveTrip(serverTripID: 7, vehicle: active.vehicle, trip: loop, startedAt: active.startedAt, driverEmail: active.driverEmail)
+        let evaluator = try #require(AdherenceEvaluator(trip: loop))
+        let lateInLoop = evaluator.evaluate(TripFixtures.fix(lat: 47.6001, lon: -122.3292, at: TripFixtures.at(9, 15)), previous: nil)
+        try #require(lateInLoop.nextStop.sequence == 2)
+        let s = try #require(TripStatus(phase: .active(trip), latest: lateInLoop, reporting: .connected))
+        #expect(s.nextStopIndex == 1)
     }
 
     /// The window's edges are the evaluator's: inside it the card says On
@@ -153,6 +186,7 @@ import Testing
         let labelled = ActiveTrip(serverTripID: 7, vehicle: Vehicle(id: "4317", label: "Shuttle 4317"), trip: TripFixtures.t1,
                                   startedAt: TripFixtures.at(7, 55), driverEmail: "d@test.com")
         let s = try #require(TripStatus(phase: .active(labelled), latest: nil, reporting: .connected))
+        #expect(s.vehicleName == "Shuttle 4317")
         #expect(s.card.line2.hasSuffix(" run · Shuttle 4317"))
         #expect(s.sentence.hasSuffix(" run, vehicle Shuttle 4317"))
     }
@@ -167,6 +201,7 @@ import Testing
         #expect(s.card.emphasis == "")
         #expect(s.card.line2 == "")
         #expect(s.sentence == "Waiting for GPS")
+        #expect(s.runTime == nil)
     }
 
     @Test func thereIsNoStatusWithoutATrip() {
@@ -222,6 +257,7 @@ import Testing
         #expect(problem.action == expected.action)
         #expect(s.reports.word == expected.reports)
         #expect(s.reports.symbol == expected.symbol, "the trip bar shows the problem's symbol")
+        #expect(s.reports.text == (expected.reports == .noGPS ? "No GPS" : "Not reporting"))
         #expect(s.reports.isProblem)
         #expect(s.ring == expected.ring)
         #expect(!s.isSignedOut)
@@ -235,7 +271,15 @@ import Testing
         #expect(s.reports.word == .reporting)
         #expect(s.reports.symbol == "checkmark.icloud.fill")
         #expect(!s.reports.isProblem)
+        #expect(s.reports.text == "Reporting")
         #expect(s.category.problem == nil)
+    }
+
+    @Test func theReportsWords() {
+        #expect(TripStatus.Reports(word: .reporting, symbol: "").text == "Reporting")
+        #expect(TripStatus.Reports(word: .notReporting, symbol: "").text == "Not reporting")
+        #expect(TripStatus.Reports(word: .noGPS, symbol: "").text == "No GPS")
+        #expect(TripStatus.Reports(word: .stopped, symbol: "").text == "Reports stopped")
     }
 
     @Test func signedOutReplacesTheCardAndStopsTheReports() throws {
@@ -244,6 +288,7 @@ import Testing
         #expect(s.problem == nil, "the Signed out card takes the status card's place")
         #expect(s.reports.word == .stopped)
         #expect(s.reports.symbol == "lock.fill")
+        #expect(s.reports.text == "Reports stopped")
         #expect(s.ring == .neutral)
         #expect(s.card.answer == "On time", "the card keeps the last answer for when the driver signs in")
         #expect(s.category.isSignedOut)

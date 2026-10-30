@@ -39,6 +39,9 @@ import UIKit
         AndroidColor(name: "SignedOutOnAccent", light: "1F1F1F", dark: "FDD663"), // signedOut.onAccent
         AndroidColor(name: "AttentionContainer", light: "FEF7E0", dark: "3A3220"), // attentionContainer
         AndroidColor(name: "ErrorText", light: "BA1A1A", dark: "FFB4AB"), // error
+        AndroidColor(name: "MapStopRing", light: "6B6B6B", dark: nil), // STOP_RING
+        AndroidColor(name: "MapNextStop", light: "FFA726", dark: nil), // NEXT_STOP_FILL
+        AndroidColor(name: "MapInk", light: "1F1F1F", dark: nil), // MARKER_INK
     ]
 
     nonisolated static let styles: [UIUserInterfaceStyle] = [.light, .dark]
