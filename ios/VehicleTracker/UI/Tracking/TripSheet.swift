@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 /// What the trip bar pulls up into (DESIGN-iOS §4.7.4). The bar is its top
@@ -16,9 +17,12 @@ struct TripSheet: View {
     let isExpanded: Bool
     @State private var confirmEnd = false
     @State private var unfolded = false
-    @State private var endError: String?
+    /// The server did not confirm the end. The error itself is logged; the
+    /// driver gets one sentence and three ways on.
+    @State private var endNotConfirmed = false
     @State private var reloginPassword = ""
     @State private var reloginError: String?
+    private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "tracking")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,16 +60,20 @@ struct TripSheet: View {
         .onChange(of: session.reporting == .authExpired, initial: true) { _, expired in
             if expired { showingRelogin = true }
         }
-        .confirmationDialog("End this trip?", isPresented: $confirmEnd, titleVisibility: .visible) {
-            Button("End Trip", role: .destructive) { end() }
-        }
-        .alert("Could not end the trip", isPresented: Binding(get: { endError != nil }, set: { if !$0 { endError = nil } })) {
-            Button("Retry") { end() }
-            Button("End locally anyway", role: .destructive) { session.endLocally() }
-            Button("Cancel", role: .cancel) {}
+        .alert(TripStatusText.endTripTitle, isPresented: $confirmEnd) {
+            Button(TripStatusText.endTrip, role: .destructive) { end() }
+            Button(TripStatusText.keepGoing, role: .cancel) {}
         } message: {
-            Text(endError ?? "")
+            Text(endMessage)
         }
+        .alert(TripStatusText.notEndedTitle, isPresented: $endNotConfirmed) {
+            Button(TripStatusText.tryAgain) { end() }
+            Button(TripStatusText.endOnThisPhone, role: .destructive) { session.endLocally() }
+            Button(TripStatusText.keepGoing, role: .cancel) {}
+        } message: {
+            Text(TripStatusText.notEndedMessage)
+        }
+        .sensoryFeedback(.error, trigger: endNotConfirmed) { _, failed in failed }
         .sheet(isPresented: $showingRelogin) {
             reloginSheet
         }
@@ -107,10 +115,25 @@ struct TripSheet: View {
         }
     }
 
+    /// What ending the trip will do: the run's name when the route has one,
+    /// and how many reports went out.
+    private var endMessage: String {
+        guard let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) else { return "" }
+        let route = status.active.trip.route.shortName
+        if let runTime = status.runTime, !route.isEmpty {
+            return TripStatusText.endTripMessage(route: route, time: runTime, count: session.fixesSent)
+        }
+        return TripStatusText.endTripMessage(count: session.fixesSent)
+    }
+
     private func end() {
-        endError = nil
         Task {
-            do { try await session.end() } catch { endError = error.localizedDescription }
+            do {
+                try await session.end()
+            } catch {
+                log.error("the server did not confirm the end of the trip: \(String(describing: error))")
+                endNotConfirmed = true
+            }
         }
     }
 

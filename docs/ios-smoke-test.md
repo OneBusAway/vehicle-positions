@@ -489,7 +489,9 @@ problem line, and reports reach the server again.
 
 ### Check 5 — Ending the trip drops the vehicle from the feed
 
-1. Tap **End Trip** and confirm in the dialog.
+1. Tap **End trip** on the trip bar. The alert **End this trip?** names
+   route 1's 8:00 AM run and how many reports were sent; confirm with **End
+   trip**.
 
 **Expected outcome, immediately:** the app returns to the vehicle picker (the
 token is still fresh, so no second sign-in), and the stored trip is gone —
@@ -508,7 +510,7 @@ after the last report.
 
 ### Check 5b: An End Locally is sent before the next start
 
-When End Trip can't reach the server, **End locally anyway** stops the trip
+When End trip can't reach the server, **End on this phone** stops the trip
 on the phone only, and the server still has it open. The app remembers the end
 and sends it before the same driver's next start, which the server would
 otherwise refuse with `driver already has an active trip`. This check starts
@@ -520,8 +522,9 @@ trips of its own.
    kill $(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t)
    ```
 
-   Tap **End Trip** and confirm. When "Could not end the trip" appears, tap
-   **End locally anyway**.
+   Tap **End trip** and confirm. When **Trip not ended yet** appears ("The
+   server didn't confirm the end. Check your signal and try again, or stop
+   reporting on this phone now."), tap **End on this phone**.
 
    **Expected outcome:** the app goes back to the vehicle picker at once, with
    "Could not reach the server" above `Bus 1` while the server is down.
@@ -543,7 +546,7 @@ trips of its own.
    ```
 
 3. End the new trip through the API, as an earlier end that got through would
-   have, then tap **End Trip** on the phone and confirm. The tokens from setup
+   have, then tap **End trip** on the phone and confirm. The tokens from setup
    don't work after Check 3b's new `JWT_SECRET`, so sign in again first:
 
    ```bash
@@ -563,7 +566,7 @@ trips of its own.
 
    **Expected outcome:** the app's own end gets a `404` (no open trip under
    that id), and the app treats it as ended: it goes back to the routes for
-   `Bus 1`, with no "Could not end the trip".
+   `Bus 1`, with no **Trip not ended yet**.
 
 ### Check 6: Location access is checked and named
 
