@@ -9,6 +9,7 @@ struct VehicleTrackerApp: App {
             RootView()
                 .environment(container.session)
                 .environment(container.serverSetup)
+                .environment(container.screenAwake)
                 .task { DebugAutoStart.runIfRequested(session: container.session) }
                 .onOpenURL { container.serverSetup.open($0) }
         }

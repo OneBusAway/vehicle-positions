@@ -51,6 +51,7 @@ struct TrackingView: View {
         }
         .coordinateSpace(.named("tracking"))
         .animation(.smooth(duration: 0.2), value: following.isFollowing)
+        .keepsScreenAwakeWhileCharging()
         .onDisappear { following.stop() }
         .onChange(of: wantedExpanded, initial: true) { _, wanted in
             if detent == .height(TripSheet.peek) { expanded = wanted }
