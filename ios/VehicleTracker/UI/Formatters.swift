@@ -20,12 +20,17 @@ enum Formatters {
         return date.formatted(style)
     }
 
+    static let metresPerKilometre = 1000.0
+
     static func distance(_ metres: Double) -> String {
-        if metres < 1000 { return "\(Int(metres.rounded())) m" }
-        // Round to one decimal place ourselves (away from zero on a tie):
-        // printf's round-half-to-even would print "1.2 km" for 1250 m.
-        let km = (metres / 100).rounded() / 10
-        return String(format: "%.1f km", km)
+        if metres < metresPerKilometre { return "\(Int(metres.rounded())) m" }
+        return String(format: "%.1f km", kilometres(metres))
+    }
+
+    /// `metres` in kilometres to one decimal place, rounded away from zero on
+    /// a tie: printf's round-half-to-even would print "1.2 km" for 1250 m.
+    static func kilometres(_ metres: Double) -> Double {
+        (metres / 100).rounded() / 10
     }
 
     static func elapsed(_ seconds: TimeInterval) -> String {
