@@ -37,6 +37,16 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         didSet { if followsVehicle { follow(animated: true) } }
     }
 
+    /// Points at the bottom of the map the host draws over. MapKit keeps its
+    /// own controls, Apple's logo and the Legal link, inside the layout
+    /// margins, so they stay in view above the trip sheet.
+    var coveredBottom: CGFloat = 0 {
+        didSet {
+            guard coveredBottom != oldValue else { return }
+            mapView.layoutMargins.bottom = coveredBottom
+        }
+    }
+
     private var trip: TripGeometry?
     private var shape: ShapeGeometry?
     private var lastAdherence: Adherence?

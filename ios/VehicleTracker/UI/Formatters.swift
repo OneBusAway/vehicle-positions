@@ -32,12 +32,6 @@ enum Formatters {
     static func kilometres(_ metres: Double) -> Double {
         (metres / 100).rounded() / 10
     }
-
-    static func elapsed(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
-    }
 }
 
 extension Adherence {
@@ -74,39 +68,6 @@ extension TripSession.ReportingStatus {
         case .locationLost: String(localized: "Location stopped — tap Resume")
         case .locationDenied: String(localized: "Location off · Tap to fix")
         case .preciseLocationOff: String(localized: "Precise Location off · Tap to fix")
-        }
-    }
-
-    var isProblem: Bool {
-        if case .connected = self { return false }
-        return true
-    }
-}
-
-/// The banner across the top of the tracking screen. It reads the phase as
-/// well as the reporting status, because a trip a relaunch found is not
-/// reporting anything yet — and `reporting` starts out `.connected`, which
-/// would otherwise paint a paused trip green.
-enum TrackingBanner {
-    static func text(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> String {
-        switch phase {
-        case .paused: String(localized: "Paused — not reporting")
-        case .ending: String(localized: "Ending…")
-        default: reporting.label
-        }
-    }
-
-    /// Paused is a problem, since nothing is being reported.
-    static func tone(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> BannerTone {
-        switch phase {
-        case .paused: .problem
-        case .ending: .neutral
-        default:
-            switch reporting {
-            case .connected: .reporting
-            case .authExpired: .signedOut
-            default: .problem
-            }
         }
     }
 }

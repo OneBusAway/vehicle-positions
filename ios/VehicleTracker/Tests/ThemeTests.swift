@@ -98,20 +98,6 @@ import UIKit
         }
     }
 
-    @Test(arguments: styles) func bannerTonesDrawTheirOwnColourSets(_ style: UIUserInterfaceStyle) throws {
-        let sets: [(BannerTone, background: String, foreground: String)] = [
-            (.reporting, "StatusOnTimeFill", "OnStatusFill"),
-            (.neutral, "StatusNoDataFill", "OnStatusFill"),
-            (.problem, "ProblemContainer", "ProblemContent"),
-            (.signedOut, "SignedOutContainer", "SignedOutContent"),
-        ]
-        for (tone, background, foreground) in sets {
-            let wantBackground = try Self.named(background, style).hex, wantForeground = try Self.named(foreground, style).hex
-            #expect(Self.hex(tone.background, style) == wantBackground, "\(tone)")
-            #expect(Self.hex(tone.foreground, style) == wantForeground, "\(tone)")
-        }
-    }
-
     /// A colour set from the app's catalog, resolved for `style`. A missing
     /// or misspelt set fails here.
     static func named(_ name: String, _ style: UIUserInterfaceStyle) throws -> UIColor {

@@ -5,6 +5,9 @@ import SwiftUI
 struct RouteMapView: UIViewControllerRepresentable {
     var trip: TripGeometry?
     var adherence: Adherence?
+    /// Points at the map's bottom that the trip sheet covers, so Apple's logo
+    /// and the Legal link stay in view above it.
+    var coveredBottom: CGFloat = 0
 
     func makeUIViewController(context: Context) -> RouteMapViewController {
         RouteMapViewController(allowsDirectInteraction: true)
@@ -13,5 +16,6 @@ struct RouteMapView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: RouteMapViewController, context: Context) {
         controller.setTrip(trip)
         controller.update(adherence)
+        controller.coveredBottom = coveredBottom
     }
 }

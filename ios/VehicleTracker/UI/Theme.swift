@@ -24,26 +24,3 @@ enum StatusTone {
         }
     }
 }
-
-/// The colours of the banner across the top of the tracking screen. A
-/// problem is ink, not red, because red already means early.
-enum BannerTone {
-    case reporting, neutral, problem, signedOut
-
-    var background: Color {
-        switch self {
-        case .reporting: .statusOnTimeFill
-        case .neutral: .statusNoDataFill
-        case .problem: .problemContainer
-        case .signedOut: .signedOutContainer
-        }
-    }
-
-    var foreground: Color {
-        switch self {
-        case .reporting, .neutral: .onStatusFill
-        case .problem: .problemContent
-        case .signedOut: .signedOutContent
-        }
-    }
-}
