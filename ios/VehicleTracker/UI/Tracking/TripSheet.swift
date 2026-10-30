@@ -11,6 +11,7 @@ struct TripSheet: View {
     static let peek: CGFloat = 76
 
     @Environment(TripSession.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var showingRelogin: Bool
     /// Whether the sheet is pulled up: the list goes back to its top each
     /// time it is.
@@ -43,7 +44,7 @@ struct TripSheet: View {
                             StopList(trip: status.active.trip,
                                      rows: StopRows.rows(stops: status.active.trip.stops, nextStopIndex: status.nextStopIndex, unfolded: unfolded),
                                      vehicleName: status.vehicleName, vehicleStatus: status.vehicleRowStatus,
-                                     vehicleTone: status.ring, strip: Self.stripColors(for: status.active.trip.route),
+                                     vehicleTone: status.ring, strip: stripColors(for: status.active.trip.route),
                                      unfolded: $unfolded)
                         }
                         .padding(.bottom, 16)
@@ -141,11 +142,11 @@ struct TripSheet: View {
         case top
     }
 
-    /// The strip's colours are the map's: the route colour over a casing a
-    /// third darker.
-    private static func stripColors(for route: RouteSummary) -> RouteStripColors {
-        let line = UIColor(hex: route.color) ?? .systemBlue
-        return RouteStripColors(line: Color(uiColor: line), casing: Color(uiColor: line.darkened(by: RouteMapViewController.casingDarkening)))
+    /// The strip's colours are the map's, in the same theme.
+    private func stripColors(for route: RouteSummary) -> RouteStripColors {
+        let dark = colorScheme == .dark
+        let line = RouteLineColors.line(hex: route.color, dark: dark)
+        return RouteStripColors(line: Color(uiColor: line.uiColor), casing: Color(uiColor: RouteLineColors.casing(line: line, dark: dark).uiColor))
     }
 }
 

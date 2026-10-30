@@ -52,7 +52,8 @@ private struct TrackingMap: View {
     @Environment(TripSession.self) private var session
 
     var body: some View {
-        RouteMapView(trip: session.activeTrip?.trip, adherence: session.latest, coveredBottom: TripSheet.peek)
+        let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting)
+        RouteMapView(trip: status?.active.trip, adherence: session.latest, ring: status?.ring ?? .neutral, coveredBottom: TripSheet.peek)
     }
 }
 

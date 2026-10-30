@@ -1,11 +1,11 @@
 import MapKit
 import UIKit
 
-/// Draws the trip: the shape in the route colour, its stops, the vehicle
-/// pointed along its course, and the projected position while off route.
-/// Shared by the phone's tracking screen and the CarPlay window. The map
-/// takes no touches of its own: hosts drive it through `pan`, `zoom` and
-/// `followsVehicle`.
+/// Draws the trip: the shape in the route colour over its casing, its stops,
+/// the vehicle pointed along its course on its status ring, and the matched
+/// position with a dotted line to it while off route. Shared by the phone's
+/// tracking screen and the CarPlay window. The map takes no touches of its
+/// own: hosts drive it through `pan`, `zoom` and `followsVehicle`.
 @MainActor
 final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// Camera distance while following, metres, before the host zooms.
@@ -15,6 +15,13 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// How far ahead of the vehicle the camera centres, so the road ahead
     /// fills the screen and the vehicle sits low.
     static let lookAheadMetres = 300.0
+    /// Android's widths: the line over a wider casing.
+    static let lineWidth: CGFloat = 6
+    static let casingWidth: CGFloat = 10
+    /// The off-route link: round dots 2.5 across, 8 apart (Android's 2 on 6
+    /// at 2.5 wide).
+    static let linkWidth: CGFloat = 2.5
+    static let linkDashes: [NSNumber] = [0, 8]
 
     let mapView = MKMapView()
 
@@ -57,26 +64,29 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     /// north on every such fix spins the map; the last known heading is a far
     /// better guess, so it is kept.
     private var lastCourse = 0.0
-    /// How much darker than the route colour the casing under the line is
-    /// drawn (spec §6.3).
-    static let casingDarkening: CGFloat = 0.35
-    private var routeColor = UIColor.systemBlue
+    /// The ring round the vehicle: the status colour of how it is keeping to
+    /// the schedule, so the map says what the card says.
+    private var ring = StatusTone.neutral
     private var polyline: MKPolyline?
     private var polylineRenderer: MKPolylineRenderer?
-    /// The same shape, drawn wider and darker underneath, so a bright route
-    /// colour still reads as a line over pale streets.
+    /// The same shape, drawn wider underneath in ink or white, so the line
+    /// reads over the streets whatever its colour.
     private var casing: MKPolyline?
     private var casingRenderer: MKPolylineRenderer?
+    /// The dotted line from an off-route vehicle to where it was matched on
+    /// the shape, for the driver to find the way back by.
+    private var offRouteLink: MKPolyline?
+    private var linkRenderer: MKPolylineRenderer?
     private var stops: [StopAnnotation] = []
     private let vehicle = VehicleAnnotation()
     private let snapped = SnappedAnnotation()
     private var vehiclePlaced = false
     private var snappedPlaced = false
-    /// The vehicle image and the resolved fill it was drawn with: the fill is
-    /// the only input to the drawing, so comparing it is what decides whether
-    /// a new route colour, an on/off-route flip or a trait change needs a
-    /// redraw, and nothing has to invalidate this by hand.
-    private var vehicleGlyph: (fill: UIColor, image: UIImage)?
+    /// The vehicle image and what it was drawn with. The ring and the style
+    /// are the drawing's only inputs, so comparing them is what decides
+    /// whether a new tone or a trait change needs a redraw, and nothing has
+    /// to invalidate this by hand.
+    private var vehicleGlyph: (ring: UIColor, style: UIUserInterfaceStyle, image: UIImage)?
 
     init(allowsDirectInteraction: Bool = false) {
         self.allowsDirectInteraction = allowsDirectInteraction
@@ -120,6 +130,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         self.trip = trip
         if let casing { mapView.removeOverlay(casing) }
         if let polyline { mapView.removeOverlay(polyline) }
+        removeOffRouteLink()
         mapView.removeAnnotations(stops)
         polyline = nil
         polylineRenderer = nil
@@ -134,57 +145,57 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
 
         guard let trip, let shape = ShapeGeometry(points: trip.shapePoints) else { return }
         self.shape = shape
-        routeColor = UIColor(hex: trip.route.color) ?? .systemBlue
         let coords = shape.points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
         let under = MKPolyline(coordinates: coords, count: coords.count)
         casing = under
         let line = MKPolyline(coordinates: coords, count: coords.count)
         polyline = line
         // Casing first: overlays draw in the order they are added, so the
-        // 6 pt line sits centred on the 10 pt one underneath it.
+        // line sits centred on the wider one underneath it.
         mapView.addOverlay(under, level: .aboveRoads)
         mapView.addOverlay(line, level: .aboveRoads)
-        stops = trip.stops.map(StopAnnotation.init(stop:))
+        stops = trip.stops.indices.map { StopAnnotation(stop: trip.stops[$0], isLast: $0 == trip.stops.count - 1) }
         mapView.addAnnotations(stops)
         mapView.setVisibleMapRect(line.boundingMapRect, edgePadding: UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40), animated: false)
     }
 
-    /// Moves the vehicle, re-styles the shape and stops, and follows.
-    func update(_ adherence: Adherence?) {
+    /// Moves the vehicle, rings it in `ring`, marks the next stop, and
+    /// follows.
+    func update(_ adherence: Adherence?, ring: StatusTone) {
+        // A new tone redraws the ring and nothing else: the camera must not
+        // move for a problem line coming or going.
+        if ring != self.ring {
+            self.ring = ring
+            refreshVehicleView()
+        }
         // SwiftUI re-runs `updateUIViewController` for reasons that have
         // nothing to do with the vehicle; re-animating the camera each time
         // makes the map stutter. Only a genuinely new fix moves anything.
         guard adherence != lastAdherence else { return }
-        let previous = lastAdherence
         lastAdherence = adherence
         guard let adherence else {
             if vehiclePlaced { mapView.removeAnnotation(vehicle); vehiclePlaced = false }
             if snappedPlaced { mapView.removeAnnotation(snapped); snappedPlaced = false }
+            removeOffRouteLink()
             return
         }
         vehicle.coordinate = CLLocationCoordinate2D(latitude: adherence.fix.latitude, longitude: adherence.fix.longitude)
         if (0...360).contains(adherence.fix.course) { lastCourse = adherence.fix.course }
         vehicle.course = lastCourse
-        vehicle.isOnRoute = adherence.isOnRoute
         if !vehiclePlaced { mapView.addAnnotation(vehicle); vehiclePlaced = true }
         refreshVehicleView()
 
+        // Off the route, the matched position shows with a dotted line to it
+        // from the vehicle. The route keeps its full colour: that is when the
+        // driver needs to find it again.
         if adherence.isOnRoute {
             if snappedPlaced { mapView.removeAnnotation(snapped); snappedPlaced = false }
+            removeOffRouteLink()
         } else if let shape {
             let p = shape.point(at: adherence.projection.alongShape)
             snapped.coordinate = CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon)
             if !snappedPlaced { mapView.addAnnotation(snapped); snappedPlaced = true }
-        }
-
-        // The line is only ever drawn two ways, so it is only restyled when it
-        // crosses between them — or on the first fix, which decides which.
-        if previous?.isOnRoute != adherence.isOnRoute {
-            let alpha: CGFloat = adherence.isOnRoute ? 1 : 0.35
-            polylineRenderer?.strokeColor = routeColor.withAlphaComponent(alpha)
-            polylineRenderer?.setNeedsDisplay()
-            casingRenderer?.strokeColor = casingColor.withAlphaComponent(alpha)
-            casingRenderer?.setNeedsDisplay()
+            replaceOffRouteLink(from: vehicle.coordinate, to: snapped.coordinate)
         }
 
         for stop in stops where stop.isNext != (stop.stop.id == adherence.nextStop.id && stop.stop.sequence == adherence.nextStop.sequence) {
@@ -194,6 +205,20 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         }
 
         if followsVehicle { follow(animated: true) }
+    }
+
+    private func replaceOffRouteLink(from vehicle: CLLocationCoordinate2D, to matched: CLLocationCoordinate2D) {
+        removeOffRouteLink()
+        let link = MKPolyline(coordinates: [vehicle, matched], count: 2)
+        offRouteLink = link
+        mapView.addOverlay(link, level: .aboveLabels)
+    }
+
+    private func removeOffRouteLink() {
+        guard let offRouteLink else { return }
+        mapView.removeOverlay(offRouteLink)
+        self.offRouteLink = nil
+        linkRenderer = nil
     }
 
     // MARK: Host-driven camera
@@ -232,11 +257,25 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         mapView.setCamera(camera, animated: animated)
     }
 
+    // MARK: Glyphs and colours
+
+    private var isDark: Bool {
+        mapView.traitCollection.userInterfaceStyle == .dark
+    }
+
+    /// The route colour and its casing for the map as it is, light or dark:
+    /// Android's `RouteLine.kt`, so both apps draw a feed's colour the same.
+    private var routeColors: (line: UIColor, casing: UIColor) {
+        let line = RouteLineColors.line(hex: trip?.route.color ?? "", dark: isDark)
+        return (line.uiColor, RouteLineColors.casing(line: line, dark: isDark).uiColor)
+    }
+
     private func refreshVehicleView() {
         guard let view = mapView.view(for: vehicle) else { return }
-        let fill = (vehicle.isOnRoute ? routeColor : .systemGray).resolvedColor(with: mapView.traitCollection)
-        if vehicleGlyph?.fill != fill {
-            vehicleGlyph = (fill, MapGlyphs.vehicle(fill: fill))
+        let traits = mapView.traitCollection
+        let ringColor = ring.uiText.resolvedColor(with: traits)
+        if vehicleGlyph?.ring != ringColor || vehicleGlyph?.style != traits.userInterfaceStyle {
+            vehicleGlyph = (ringColor, traits.userInterfaceStyle, MapGlyphs.vehicle(ring: ringColor, traits: traits))
         }
         view.image = vehicleGlyph?.image
         updateVehicleTransform(of: view)
@@ -249,10 +288,11 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         view.transform = CGAffineTransform(rotationAngle: relative * .pi / 180)
     }
 
-    /// Redraws every annotation image against the current traits. The glyphs
-    /// bake `UIColor.label` and `.systemBackground` in as they are drawn, so a
-    /// light/dark change — the car's own day/night switch included — leaves
-    /// stale colours on screen until they are drawn again.
+    /// Redraws every annotation image and re-resolves the overlay colours
+    /// against the current traits. The glyphs bake their colours in as they
+    /// are drawn, and the route is lifted on the dark map, so a light/dark
+    /// change, the car's own day/night switch included, leaves stale colours
+    /// on screen until they are picked again.
     func refreshGlyphs() {
         for stop in stops {
             guard let view = mapView.view(for: stop) else { continue }
@@ -261,20 +301,27 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         }
         refreshVehicleView()
         if let view = mapView.view(for: snapped) {
-            view.image = MapGlyphs.dot(traits: mapView.traitCollection)
+            view.image = MapGlyphs.stop(.last, traits: mapView.traitCollection)
         }
+        let colors = routeColors
+        polylineRenderer?.strokeColor = colors.line
+        polylineRenderer?.setNeedsDisplay()
+        casingRenderer?.strokeColor = colors.casing
+        casingRenderer?.setNeedsDisplay()
+        linkRenderer?.strokeColor = UIColor.label.resolvedColor(with: mapView.traitCollection)
+        linkRenderer?.setNeedsDisplay()
     }
 
     private func stopGlyph(for stop: StopAnnotation) -> UIImage {
-        MapGlyphs.stop(diameter: stop.isNext ? 18 : 10, fill: routeColor,
-                       label: stop.isNext ? stop.stop.name : nil, traits: mapView.traitCollection)
+        let kind: MapGlyphs.Stop = stop.isNext ? .next(label: stop.stop.name) : stop.isLast ? .last : .ordinary
+        return MapGlyphs.stop(kind, traits: mapView.traitCollection)
     }
 
-    /// A labelled stop is drawn as a dot with its name beside it; shifting the
-    /// view by half the extra width keeps the dot over the stop itself.
+    /// A labelled stop is drawn as its halo with the name beside it; shifting
+    /// the view by half the extra width keeps the halo over the stop itself.
     private func stopCentreOffset(for view: MKAnnotationView) -> CGPoint {
         guard let stop = view.annotation as? StopAnnotation, stop.isNext, let image = view.image else { return .zero }
-        return CGPoint(x: (image.size.width - 18) / 2, y: 0)
+        return CGPoint(x: (image.size.width - MapGlyphs.nextStopHaloDiameter) / 2, y: 0)
     }
 
     // MARK: MKMapViewDelegate
@@ -282,22 +329,24 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
         guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
         let renderer = MKPolylineRenderer(polyline: line)
-        let alpha: CGFloat = lastAdherence?.isOnRoute == false ? 0.35 : 1
-        if line === casing {
-            renderer.strokeColor = casingColor.withAlphaComponent(alpha)
-            renderer.lineWidth = 10
-            casingRenderer = renderer
-        } else {
-            renderer.strokeColor = routeColor.withAlphaComponent(alpha)
-            renderer.lineWidth = 6
-            polylineRenderer = renderer
-        }
         renderer.lineCap = .round
         renderer.lineJoin = .round
+        if line === casing {
+            renderer.strokeColor = routeColors.casing
+            renderer.lineWidth = Self.casingWidth
+            casingRenderer = renderer
+        } else if line === offRouteLink {
+            renderer.strokeColor = UIColor.label.resolvedColor(with: mapView.traitCollection)
+            renderer.lineWidth = Self.linkWidth
+            renderer.lineDashPattern = Self.linkDashes
+            linkRenderer = renderer
+        } else {
+            renderer.strokeColor = routeColors.line
+            renderer.lineWidth = Self.lineWidth
+            polylineRenderer = renderer
+        }
         return renderer
     }
-
-    private var casingColor: UIColor { routeColor.darkened(by: Self.casingDarkening) }
 
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
         switch annotation {
@@ -306,7 +355,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
             view.annotation = stop
             view.image = stopGlyph(for: stop)
             view.centerOffset = stopCentreOffset(for: view)
-            view.displayPriority = stop.isNext ? .required : .defaultLow
+            view.displayPriority = stop.isNext || stop.isLast ? .required : .defaultLow
             view.zPriority = stop.isNext ? .max : .defaultUnselected
             return view
         case is VehicleAnnotation:
@@ -319,7 +368,7 @@ final class RouteMapViewController: UIViewController, MKMapViewDelegate {
         case is SnappedAnnotation:
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "snapped") ?? MKAnnotationView(annotation: annotation, reuseIdentifier: "snapped")
             view.annotation = annotation
-            view.image = MapGlyphs.dot(traits: mapView.traitCollection)
+            view.image = MapGlyphs.stop(.last, traits: mapView.traitCollection)
             view.displayPriority = .required
             return view
         default:

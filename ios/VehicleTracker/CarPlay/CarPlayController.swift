@@ -146,7 +146,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         guidanceSuspendedForTripID = nil
         dismissDetails()
         map.setTrip(nil)
-        map.update(nil)
+        map.update(nil, ring: .neutral)
         // Its setter re-arms user tracking, which fights the driver's own
         // panning; the setter itself ignores anything but a genuine change.
         map.showsPhoneLocation = true
@@ -162,7 +162,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         guidanceSuspendedForTripID = nil
         dismissDetails()
         map.setTrip(active.trip)
-        map.update(nil)
+        map.update(nil, ring: .neutral)
         let buttons = CarPlayTemplates.pausedBarButtons { [weak self] in self?.confirmEnd() }
         mapTemplate.leadingNavigationBarButtons = buttons.leading
         mapTemplate.trailingNavigationBarButtons = buttons.trailing
@@ -171,7 +171,8 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
 
     private func renderActive(_ active: ActiveTrip) {
         map.setTrip(active.trip)
-        map.update(session.latest)
+        // The car's marker is ringed as the phone's is, from the same judgement.
+        map.update(session.latest, ring: TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting)?.ring ?? .neutral)
         // A different run is a fresh start: whatever the car's navigation took
         // over for is over with the trip it was suspended on.
         let suspended = guidanceSuspendedForTripID == active.trip.id
