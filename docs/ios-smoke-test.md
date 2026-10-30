@@ -656,16 +656,18 @@ command.
    "Start trip" bar button — and no crash.
 2. **Active trip.** With GPS playback running (step 5 above) and a trip
    started, screenshot again. Expect the route line, the vehicle, a
-   next-stop maneuver card ("Stop ST2 · 8:05 · 2 min late", shortening to
-   "Stop ST2 · 2 min late" and then "Stop ST2" as space allows), an
+   next-stop maneuver card saying what the phone's status card says ("Stop
+   ST2 · 8:05 AM · On time", shortening to "Stop ST2 · On time" and then
+   "Stop ST2" as space allows), an
    estimates bar coloured by adherence (green on time, orange late, red
    early, default (uncoloured) off route or off schedule, per
    `CarPlayTemplates.timeRemainingColor`), "End" and
    "Details" bar buttons, and three map buttons.
 3. **Off route.** Drive GPS away from the shape until `isOnRoute` flips.
-   Expect the dimmed route line, a grey vehicle marker, the snapped dot on
-   the shape, and an "Off route" navigation alert with a distance-off
-   subtitle (e.g. "75 m ...") and an "OK" button; the alert never times out
+   Expect the route line at full colour, the vehicle's ring grey, the
+   matched point on the shape with a dotted line to it from the vehicle,
+   and an "Off route · 75 m" navigation alert with an "OK" button; the
+   alert never times out
    on its own and dismissing it silences further alerts until the next
    off-route episode.
 

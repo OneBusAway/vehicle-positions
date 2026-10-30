@@ -42,29 +42,36 @@ import Testing
         #expect(!trailing[0].isEnabled)
     }
 
+    /// The status card's answer, as the phone shows it, on the next stop's card.
+    func status(_ adherence: Adherence?, reporting: TripSession.ReportingStatus = .connected,
+                phase: TripSession.Phase? = nil) throws -> TripStatus {
+        try #require(TripStatus(phase: phase ?? .active(active), latest: adherence, reporting: reporting))
+    }
+
     @Test func maneuverVariantsLongestFirst() {
-        // ~300 m along, due 08:03:00 → 2 min late at 08:05.
+        // ~300 m along, heading for ST2 at 08:05.
         let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6027, lon: -122.3300, at: TripFixtures.at(8, 5)), previous: nil)
-        let v = CarPlayTemplates.maneuverVariants(stop: a.nextStop, adherence: a, timezone: "America/Los_Angeles")
+        let v = CarPlayTemplates.maneuverVariants(stop: a.nextStop, answer: "6 min late", timezone: "America/Los_Angeles")
         #expect(v.count == 3)
         #expect(v[0].hasPrefix("Stop ST2 · 8:05"))
-        #expect(v[0].hasSuffix("2 min late"))
-        #expect(v[1] == "Stop ST2 · 2 min late")
+        #expect(v[0].hasSuffix(" · 6 min late"))
+        #expect(v[1] == "Stop ST2 · 6 min late")
         #expect(v[2] == "Stop ST2")
-        let m = CarPlayTemplates.maneuver(stop: a.nextStop, adherence: a, timezone: "America/Los_Angeles")
+        let m = CarPlayTemplates.maneuver(stop: a.nextStop, answer: "6 min late", timezone: "America/Los_Angeles")
         #expect(m.instructionVariants == v)
         #expect(m.symbolImage != nil)
     }
 
-    @Test func maneuverVariantsOnTime() {
-        // ~445 m along, due 08:04:27 → 33 s late at 08:05, which reads on time.
-        let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6040, lon: -122.3300, at: TripFixtures.at(8, 5)), previous: nil)
+    /// Three minutes behind is inside the on-time window, so the car says
+    /// On time, as the phone's card does.
+    @Test func maneuverVariantsSayOnTimeWheneverThePhoneDoes() throws {
+        let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6000, lon: -122.3300, at: TripFixtures.at(8, 3)), previous: nil)
         #expect(a.nextStop.id == "ST2")
-        let v = CarPlayTemplates.maneuverVariants(stop: a.nextStop, adherence: a, timezone: "America/Los_Angeles")
+        let v = CarPlayTemplates.maneuverVariants(stop: a.nextStop, answer: try status(a).card.answer, timezone: "America/Los_Angeles")
         #expect(v.count == 3)
         #expect(v[0].hasPrefix("Stop ST2 · 8:05"))
-        #expect(v[0].hasSuffix(" · on time"))
-        #expect(v[1] == "Stop ST2 · on time")
+        #expect(v[0].hasSuffix(" · On time"))
+        #expect(v[1] == "Stop ST2 · On time")
         #expect(v[2] == "Stop ST2")
     }
 
@@ -77,8 +84,8 @@ import Testing
         #expect(enabled == 3)
     }
 
-    @Test func maneuverWithoutAdherenceShowsScheduleOnly() {
-        let v = CarPlayTemplates.maneuverVariants(stop: TripFixtures.t1.stops[0], adherence: nil, timezone: "America/Los_Angeles")
+    @Test func maneuverWithoutAnAnswerShowsScheduleOnly() {
+        let v = CarPlayTemplates.maneuverVariants(stop: TripFixtures.t1.stops[0], answer: nil, timezone: "America/Los_Angeles")
         #expect(v.count == 2)
         #expect(v[0].hasPrefix("Stop ST1 · 8:00"))
         #expect(v[1] == "Stop ST1")
@@ -106,29 +113,72 @@ import Testing
         #expect(abs(trip.distanceRemaining.converted(to: .meters).value - 501) <= 5)
     }
 
-    @Test func detailItems() {
+    @Test func detailItems() throws {
         let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5), accuracy: 7), previous: nil)
-        let items = CarPlayTemplates.detailItems(active: active, adherence: a, reporting: .connected, fixesSent: 214)
+        let items = CarPlayTemplates.detailItems(status: try status(a), adherence: a, fixesSent: 214)
         #expect(items.count == 6)
-        #expect(items.map(\.title) == ["Route", "Trip", "Schedule", "Next stop", "Reporting", "GPS"])
+        #expect(items.map(\.title) == ["Route", "Trip", "Schedule", "Next stop", "Reports", "GPS"])
         #expect(items[0].detail == "1 · Straight")
         #expect(items[1].detail?.hasPrefix("North · 8:00") == true)
-        #expect(items[2].detail == "on time")
+        #expect(items[2].detail == "On time")
         #expect(items[3].detail?.hasPrefix("Stop ST3 · 8:10") == true)
-        #expect(items[4].detail == "Connected · 214 sent")
+        #expect(items[3].detail?.hasSuffix(" m") == true)
+        #expect(items[4].detail == "Reporting · 214 sent")
         #expect(items[5].detail == "±7 m")
-        let waiting = CarPlayTemplates.detailItems(active: active, adherence: nil, reporting: .noGPS, fixesSent: 0)
-        #expect(waiting[2].detail == "Waiting for GPS")
-        #expect(waiting[4].detail == "No GPS")
     }
 
-    @Test func offRouteAlertNeverTimesOut() {
-        let off = evaluator.evaluate(TripFixtures.fix(lat: 47.60225, lon: -122.3290, at: TripFixtures.at(8, 2, 30)), previous: nil)
+    /// The Reports row says what the phone's problem line says, from the
+    /// same judgement: a paused trip reads Location stopped though its
+    /// reporting status is still `.connected`.
+    @Test func detailItemsCarryThePhonesProblemLine() throws {
+        let waiting = CarPlayTemplates.detailItems(status: try status(nil, reporting: .noGPS), adherence: nil, fixesSent: 0)
+        #expect(waiting[2].detail == "Waiting for GPS")
+        #expect(waiting[3].detail?.hasPrefix("Stop ST1 · 8:00") == true)
+        #expect(waiting[4].detail == "No GPS signal · Position paused")
+        #expect(waiting[5].detail == "—")
+
+        let offline = CarPlayTemplates.detailItems(status: try status(nil, reporting: .noNetwork), adherence: nil, fixesSent: 3)
+        #expect(offline[4].detail == "No connection · Riders can't see you")
+
+        let paused = CarPlayTemplates.detailItems(status: try status(nil, phase: .paused(active)), adherence: nil, fixesSent: 3)
+        #expect(paused[4].detail == "Location stopped · Tap Resume")
+
+        let signedOut = CarPlayTemplates.detailItems(status: try status(nil, reporting: .authExpired), adherence: nil, fixesSent: 3)
+        #expect(signedOut[4].detail == "Reports stopped · Sign in on iPhone")
+    }
+
+    @Test func offRouteAlertSaysHowFarAndNeverTimesOut() throws {
+        var off = evaluator.evaluate(TripFixtures.fix(lat: 47.60225, lon: -122.3290, at: TripFixtures.at(8, 2, 30)), previous: nil)
+        try #require(off.status == .offRoute)
+        off.projection.distanceToShape = 98
         let alert = CarPlayTemplates.offRouteAlert(adherence: off)
-        #expect(alert.titleVariants == ["Off route"])
-        #expect(alert.subtitleVariants.first?.hasPrefix("75 m") == true)
+        #expect(alert.titleVariants == ["Off route · 98 m"])
+        #expect(alert.subtitleVariants.isEmpty)
         #expect(alert.duration == 0)
         #expect(alert.primaryAction.title == "OK")
+        #expect(CarPlayTemplates.offRouteTitle(adherence: off) == "Off route · 98 m")
+    }
+
+    @Test func theEndAlertsUseThePhonesWords() {
+        var ended = false, kept = false
+        let end = CarPlayTemplates.endTripAlert(onEnd: { ended = true }, onKeepGoing: { kept = true })
+        #expect(end.titleVariants == ["End this trip?"])
+        #expect(end.actions.map(\.title) == ["End trip", "Keep going"])
+        #expect(end.actions.map(\.style) == [.destructive, .cancel])
+        end.actions[0].handler(end.actions[0])
+        #expect(ended && !kept)
+        end.actions[1].handler(end.actions[1])
+        #expect(kept)
+
+        var tried = false, local = false, going = false
+        let notEnded = CarPlayTemplates.notEndedAlert(onTryAgain: { tried = true }, onEndOnThisPhone: { local = true }, onKeepGoing: { going = true })
+        #expect(notEnded.titleVariants == ["Trip not ended yet"])
+        #expect(notEnded.actions.map(\.title) == ["Try again", "End on this phone", "Keep going"])
+        #expect(notEnded.actions.map(\.style) == [.default, .destructive, .cancel])
+        notEnded.actions[0].handler(notEnded.actions[0])
+        notEnded.actions[1].handler(notEnded.actions[1])
+        notEnded.actions[2].handler(notEnded.actions[2])
+        #expect(tried && local && going)
     }
 
     @Test func vehicleItems() {

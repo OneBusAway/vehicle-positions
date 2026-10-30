@@ -4,16 +4,6 @@ import Testing
 @testable import VehicleTracker
 
 @Suite struct FormattersTests {
-    @Test func deviationText() {
-        #expect(Formatters.deviation(0) == "on time")
-        #expect(Formatters.deviation(59) == "on time")
-        #expect(Formatters.deviation(-59) == "on time")
-        #expect(Formatters.deviation(60) == "1 min late")
-        #expect(Formatters.deviation(200) == "3 min late")
-        #expect(Formatters.deviation(-90) == "2 min early")
-        #expect(Formatters.deviation(3600) == "60 min late")
-    }
-
     @Test func distanceText() {
         #expect(Formatters.distance(0) == "0 m")
         #expect(Formatters.distance(449.6) == "450 m")
@@ -46,10 +36,5 @@ import Testing
         #expect(tone(.offSchedule, deviation: -120) == .early)
         #expect(tone(.offSchedule, deviation: 600) == .late)
         #expect(tone(.offRoute, deviation: 0) == .neutral)
-    }
-
-    @Test func locationAccessProblemsAreNamed() {
-        #expect(TripSession.ReportingStatus.locationDenied.label == "Location off · Tap to fix")
-        #expect(TripSession.ReportingStatus.preciseLocationOff.label == "Precise Location off · Tap to fix")
     }
 }

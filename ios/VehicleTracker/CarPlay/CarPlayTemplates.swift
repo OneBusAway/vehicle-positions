@@ -37,19 +37,20 @@ enum CarPlayTemplates {
     // MARK: Active trip
 
     /// The next stop as a maneuver instruction, longest variant first: name,
-    /// scheduled time and deviation; then name and deviation; then the name.
-    static func maneuverVariants(stop: TripStop, adherence: Adherence?, timezone: String) -> [String] {
+    /// scheduled time and the status card's answer, so the car says "On
+    /// time" whenever the phone does; then name and answer; then the name.
+    /// With no answer (the stop after next), the time and the name.
+    static func maneuverVariants(stop: TripStop, answer: String?, timezone: String) -> [String] {
         let scheduled = Formatters.clock(stop.arrivalAt, timezone: timezone)
-        guard let adherence else {
+        guard let answer else {
             return ["\(stop.name) · \(scheduled)", stop.name]
         }
-        let deviation = Formatters.deviation(adherence.scheduleDeviation)
-        return ["\(stop.name) · \(scheduled) · \(deviation)", "\(stop.name) · \(deviation)", stop.name]
+        return ["\(stop.name) · \(scheduled) · \(answer)", "\(stop.name) · \(answer)", stop.name]
     }
 
-    static func maneuver(stop: TripStop, adherence: Adherence?, timezone: String) -> CPManeuver {
+    static func maneuver(stop: TripStop, answer: String?, timezone: String) -> CPManeuver {
         let m = CPManeuver()
-        m.instructionVariants = maneuverVariants(stop: stop, adherence: adherence, timezone: timezone)
+        m.instructionVariants = maneuverVariants(stop: stop, answer: answer, timezone: timezone)
         m.symbolImage = UIImage(systemName: "bus.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 40, weight: .medium))
         m.userInfo = stop.id
         return m
@@ -79,17 +80,21 @@ enum CarPlayTemplates {
         return CPTravelEstimates(distanceRemaining: Measurement(value: distance, unit: UnitLength.meters), timeRemaining: time)
     }
 
-    static func detailItems(active: ActiveTrip, adherence: Adherence?,
-                            reporting: TripSession.ReportingStatus, fixesSent: Int) -> [CPInformationItem] {
+    /// The Details template: the phone's status card and problem line in
+    /// rows, from the same `TripStatus`, so the car and the phone agree.
+    static func detailItems(status: TripStatus, adherence: Adherence?, fixesSent: Int) -> [CPInformationItem] {
+        let active = status.active
         let tz = active.trip.timezone
         let route = active.trip.route
-        let schedule = adherence.map(\.statusLabel) ?? String(localized: "Waiting for GPS")
-        let next = adherence.map { "\($0.nextStop.name) · \(Formatters.clock($0.nextStop.arrivalAt, timezone: tz)) · \(Formatters.distance($0.distanceToNextStop))" }
-            ?? String(localized: "—")
-        let reportingText: String = {
-            if case .connected = reporting { return String(localized: "Connected · \(fixesSent) sent") }
-            return reporting.label
-        }()
+        let card = status.card
+        let reports: String
+        if let problem = status.problem {
+            reports = TripStatusText.pair(problem.what, problem.meaning)
+        } else if status.isSignedOut {
+            reports = TripStatusText.pair(status.reports.text, String(localized: "Sign in on iPhone"))
+        } else {
+            reports = TripStatusText.pair(status.reports.text, TripStatusText.sent(fixesSent))
+        }
         let gps: String = {
             guard let a = adherence, a.fix.horizontalAccuracy >= 0 else { return String(localized: "—") }
             return "±\(Int(a.fix.horizontalAccuracy.rounded())) m"
@@ -97,19 +102,17 @@ enum CarPlayTemplates {
         return [
             CPInformationItem(title: String(localized: "Route"), detail: "\(route.shortName) · \(route.longName)"),
             CPInformationItem(title: String(localized: "Trip"), detail: "\(active.trip.headsign) · \(Formatters.clock(active.trip.stops.first?.departureAt ?? active.startedAt, timezone: tz))"),
-            CPInformationItem(title: String(localized: "Schedule"), detail: schedule),
-            CPInformationItem(title: String(localized: "Next stop"), detail: next),
-            CPInformationItem(title: String(localized: "Reporting"), detail: reportingText),
+            CPInformationItem(title: String(localized: "Schedule"), detail: card.answer),
+            CPInformationItem(title: String(localized: "Next stop"), detail: TripStatusText.pair(card.emphasis, card.line2)),
+            CPInformationItem(title: TripStatusText.reports, detail: reports),
             CPInformationItem(title: String(localized: "GPS"), detail: gps),
         ]
     }
 
-    static var offRouteTitle: String { String(localized: "Off route") }
-
-    /// How far off the route the vehicle is. The controller refreshes a
-    /// standing alert with this while the distance text keeps changing.
-    static func offRouteSubtitle(adherence: Adherence) -> String {
-        String(localized: "\(Formatters.distance(adherence.projection.distanceToShape)) from the route")
+    /// "Off route · 98 m", the phone's answer. The controller rewrites a
+    /// standing alert's title with it while the distance keeps changing.
+    static func offRouteTitle(adherence: Adherence) -> String {
+        TripStatusText.offRoute(distance: Formatters.distance(adherence.projection.distanceToShape))
     }
 
     static func offRouteAlert(adherence: Adherence) -> CPNavigationAlert {
@@ -117,11 +120,30 @@ enum CarPlayTemplates {
         // hears about that through `didDismiss`.
         let ok = CPAlertAction(title: String(localized: "OK"), style: .default) { _ in }
         return CPNavigationAlert(
-            titleVariants: [offRouteTitle],
-            subtitleVariants: [offRouteSubtitle(adherence: adherence)],
-            image: UIImage(systemName: "exclamationmark.triangle.fill"),
+            titleVariants: [offRouteTitle(adherence: adherence)],
+            subtitleVariants: [],
+            image: UIImage(systemName: "mappin.slash"),
             primaryAction: ok, secondaryAction: nil, duration: 0
         )
+    }
+
+    // MARK: Ending the trip
+
+    static func endTripAlert(onEnd: @escaping () -> Void, onKeepGoing: @escaping () -> Void) -> CPAlertTemplate {
+        CPAlertTemplate(titleVariants: [TripStatusText.endTripTitle], actions: [
+            CPAlertAction(title: TripStatusText.endTrip, style: .destructive) { _ in onEnd() },
+            CPAlertAction(title: TripStatusText.keepGoing, style: .cancel) { _ in onKeepGoing() },
+        ])
+    }
+
+    /// The server did not confirm the end: the phone's three ways on.
+    static func notEndedAlert(onTryAgain: @escaping () -> Void, onEndOnThisPhone: @escaping () -> Void,
+                              onKeepGoing: @escaping () -> Void) -> CPAlertTemplate {
+        CPAlertTemplate(titleVariants: [TripStatusText.notEndedTitle], actions: [
+            CPAlertAction(title: TripStatusText.tryAgain, style: .default) { _ in onTryAgain() },
+            CPAlertAction(title: TripStatusText.endOnThisPhone, style: .destructive) { _ in onEndOnThisPhone() },
+            CPAlertAction(title: TripStatusText.keepGoing, style: .cancel) { _ in onKeepGoing() },
+        ])
     }
 
     // MARK: Map buttons
