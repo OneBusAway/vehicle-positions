@@ -580,7 +580,14 @@ final class TripSession {
 
     private func refreshReporting() {
         if let reporter { fixesSent = reporter.fixesSent }
-        if streamEnded {
+        let sent = Self.status(for: reporter?.problem ?? .none)
+        // Signed out comes before the location problems: a driver who is
+        // signed out and has also lost the stream has to sign in before
+        // Resume can do anything, so Sign in shows first, and Location
+        // stopped once they have (DESIGN-iOS §4.7.2).
+        if sent == .authExpired {
+            reporting = .authExpired
+        } else if streamEnded {
             reporting = .locationLost
         } else if needsForeground {
             reporting = .needsForeground
@@ -589,13 +596,18 @@ final class TripSession {
         } else if !gpsAvailable {
             reporting = .noGPS
         } else {
-            switch reporter?.problem ?? .none {
-            case .none: reporting = .connected
-            case .noNetwork: reporting = .noNetwork
-            case .authExpired: reporting = .authExpired
-            case .clockSkew: reporting = .clockSkew
-            case .refused: reporting = .refused
-            }
+            reporting = sent
+        }
+    }
+
+    /// The reporter's send problem as the driver sees it.
+    private static func status(for problem: ReportingProblem) -> ReportingStatus {
+        switch problem {
+        case .none: .connected
+        case .noNetwork: .noNetwork
+        case .authExpired: .authExpired
+        case .clockSkew: .clockSkew
+        case .refused: .refused
         }
     }
 

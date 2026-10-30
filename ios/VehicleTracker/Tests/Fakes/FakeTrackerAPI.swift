@@ -21,6 +21,7 @@ import Foundation
     /// Awaited inside `logout()`, so a test can look at the session, or act
     /// on it, while the request is out.
     nonisolated(unsafe) var whileLoggingOut: (() async -> Void)?
+    nonisolated(unsafe) var postDelay: Duration?
 
     private(set) nonisolated(unsafe) var logins: [(String, String)] = []
     private(set) nonisolated(unsafe) var tripRequests: [String] = []
@@ -60,6 +61,7 @@ import Foundation
         if let endError { throw endError }
     }
     func postLocation(_ report: LocationReport) async throws {
+        if let postDelay { try? await Task.sleep(for: postDelay) }
         posted.append(report)
         if let postError { throw postError }
     }

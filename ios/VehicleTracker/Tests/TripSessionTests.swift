@@ -774,9 +774,10 @@ import VehiclePositionsKit
         #expect(s.reporting == .connected)
     }
 
-    /// Most serious first: a dead stream, then the app needing the foreground,
-    /// then location access, then the signal. Each step changes what the
-    /// banner says, so each one is known to have been handled.
+    /// Under signed out, most serious first: a dead stream, then the app
+    /// needing the foreground, then location access, then the signal. Each
+    /// step changes what the screen says, so each one is known to have been
+    /// handled.
     @Test func locationAccessRanksBetweenTheForegroundAndTheSignal() async throws {
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
@@ -792,7 +793,27 @@ import VehiclePositionsKit
         #expect(await eventually { s.reporting == .needsForeground }, "the foreground outranks access")
 
         locations.finish(throwing: APIError.transport("dropped"))
-        #expect(await eventually { s.reporting == .locationLost }, "a dead stream outranks everything")
+        #expect(await eventually { s.reporting == .locationLost }, "a dead stream outranks the rest")
+    }
+
+    /// Signing in comes before Resume: a driver who is signed out and has
+    /// also lost the location stream sees Sign in, and Location stopped once
+    /// signed in again. Here the 401 lands after the stream has gone.
+    @Test func signedOutOutranksALostStream() async throws {
+        api.postError = APIError.status(401, message: "invalid token")
+        api.postDelay = .milliseconds(500)
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        locations.finish(throwing: APIError.transport("dropped"))
+        #expect(await eventually { s.reporting == .locationLost }, "the stream is gone before the server answers")
+        #expect(await eventually { s.reporting == .authExpired }, "signed out outranks the lost stream")
+
+        api.postError = nil
+        try await s.reauthenticate(password: "pw")
+        #expect(s.reporting == .locationLost, "signed in again, the lost stream shows with its Resume")
     }
 
     /// Phones are shared between shifts: a trip left in the store by the
