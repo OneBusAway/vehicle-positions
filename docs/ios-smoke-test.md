@@ -689,9 +689,15 @@ With the server running and the app signed in but idle (`-autoServer …
 -autoEmail … -autoPassword …`, no `-autoVehicle`/`-autoTrip`), open the
 CarPlay window and click **Start trip** in it — `osascript ... click at {x,
 y}` on the Simulator process, with coordinates read from a screenshot.
-Screenshot the resulting vehicle/route/run picker:
-`/tmp/vt-carplay-routes.png`. If clicking cannot be scripted, say so; the
-picker's contents are covered by `CarPlayTemplatesTests` instead.
+Expect the phone's words: **Choose your vehicle** (skipped with one vehicle),
+**Choose a route** with **Recent** and **All routes**, and **Choose a run**
+opening at the run just gone, with **Now** or **Next** on the run after it.
+Clicking a run asks **Start the 8:00 AM run? Route 1 to North on vehicle
+bus-1.** with **Start trip** and **Cancel**; a refused start says the phone's
+sentence, such as **You're not assigned to vehicle bus-1.**, with **OK**.
+Screenshot the picker: `/tmp/vt-carplay-routes.png`. If clicking cannot be
+scripted, say so; the picker's contents are covered by `CarPlayTemplatesTests`
+instead.
 
 ### Real car and background caveats
 

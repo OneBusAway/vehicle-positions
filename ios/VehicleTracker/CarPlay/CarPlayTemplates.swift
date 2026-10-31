@@ -205,41 +205,51 @@ enum CarPlayTemplates {
         return CPListTemplate(title: title, sections: built)
     }
 
-    static func vehicleItems(_ vehicles: [Vehicle], onSelect: @escaping (Vehicle) -> Void) -> [CPListItem] {
-        vehicles.map { vehicle in
-            let item = CPListItem(text: vehicle.label.isEmpty ? vehicle.id : vehicle.label, detailText: nil)
-            item.handler = { _, done in
-                onSelect(vehicle)
-                done()
-            }
-            return item
+    /// Favorites, Recent and All vehicles, as the phone groups them: each
+    /// item is the fleet number, with the label under it when it says more.
+    static func vehicleSections(_ vehicles: [Vehicle], favorites: Set<String>, recents: [String],
+                                onSelect: @escaping (Vehicle) -> Void) -> [(header: String?, items: [CPListItem])] {
+        VehicleGroups.of(vehicles, query: "", favorites: favorites, recents: recents).map { group in
+            (PickerText.section(group.section), group.tiles.map { tile in
+                let item = CPListItem(text: tile.vehicle.id, detailText: tile.label)
+                item.handler = { _, done in
+                    onSelect(tile.vehicle)
+                    done()
+                }
+                return item
+            })
         }
     }
 
+    /// Recent and All routes, as the phone lists them.
     static func routeSections(_ routes: [RouteInfo], recentIDs: [String], onSelect: @escaping (RouteInfo) -> Void) -> [(header: String?, items: [CPListItem])] {
         func item(_ route: RouteInfo) -> CPListItem {
-            let item = CPListItem(text: route.shortName.isEmpty ? route.longName : route.shortName, detailText: route.longName)
+            let item = CPListItem(text: PickerText.name(of: route), detailText: route.longName)
             item.handler = { _, done in
                 onSelect(route)
                 done()
             }
             return item
         }
-        let recent = routes.matching(ids: recentIDs)
+        let list = RouteList.of(routes, query: "", recentIDs: recentIDs)
         var sections: [(header: String?, items: [CPListItem])] = []
-        if !recent.isEmpty {
-            sections.append((String(localized: "Recent"), recent.map(item)))
+        if !list.recent.isEmpty {
+            sections.append((PickerText.recent, list.recent.map(item)))
         }
-        sections.append((String(localized: "All routes"), routes.map(item)))
+        sections.append((PickerText.allRoutes, list.visible.map(item)))
         return sections
     }
 
+    /// The runs from the run just gone, so the run under way or next is
+    /// second: the car caps the list from the top, and on a long route the
+    /// runs since the morning would otherwise fill it.
     static func tripItems(_ page: RouteTripsPage, now: Date, onSelect: @escaping (TripSummary) -> Void) -> [CPListItem] {
         let highlighted = TripRun.highlighted(in: page.trips, now: now)
-        return page.trips.map { trip in
-            var detail = "\(trip.firstStop) → \(trip.lastStop)"
+        let opening = TripRun.openAt(in: page.trips, now: now).flatMap { id in page.trips.firstIndex { $0.id == id } } ?? 0
+        return page.trips[opening...].map { trip in
+            var detail = PickerText.stops(trip.firstStop, trip.lastStop)
             if trip.id == highlighted?.id {
-                detail = (trip.startsAt <= now ? String(localized: "Now") : String(localized: "Next")) + " · " + detail
+                detail = TripStatusText.pair(trip.startsAt <= now ? PickerText.now : PickerText.next, detail)
             }
             let item = CPListItem(text: "\(Formatters.clock(trip.startsAt, timezone: page.timezone)) → \(trip.headsign)", detailText: detail)
             item.handler = { _, done in
@@ -248,5 +258,29 @@ enum CarPlayTemplates {
             }
             return item
         }
+    }
+
+    /// The start confirmation, in the phone's words. The alert template has
+    /// no message line, so the longest variant carries the message; the car
+    /// picks the longest that fits.
+    static func startAlert(time: String, route: String, headsign: String, vehicle: String,
+                           onStart: @escaping () -> Void, onCancel: @escaping () -> Void) -> CPAlertTemplate {
+        let start = CPAlertAction(title: PickerText.startTrip, style: .default) { _ in onStart() }
+        let cancel = CPAlertAction(title: PickerText.cancel, style: .cancel) { _ in onCancel() }
+        return CPAlertTemplate(titleVariants: [
+            PickerText.startTitleWithMessage(time: time, route: route, headsign: headsign, vehicle: vehicle),
+            PickerText.startTitle(time: time),
+        ], actions: [start, cancel])
+    }
+
+    /// A refused start, in the phone's sentence for it and never the
+    /// server's. The car offers no fix: that is the phone's job.
+    static func startRefusedAlert(_ error: any Error, vehicleID: String, onOK: @escaping () -> Void) -> CPAlertTemplate {
+        errorAlert(StartRefusal(error, vehicleID: vehicleID).text, onOK: onOK)
+    }
+
+    static func errorAlert(_ message: String, onOK: @escaping () -> Void) -> CPAlertTemplate {
+        let ok = CPAlertAction(title: String(localized: "OK"), style: .cancel) { _ in onOK() }
+        return CPAlertTemplate(titleVariants: [message], actions: [ok])
     }
 }

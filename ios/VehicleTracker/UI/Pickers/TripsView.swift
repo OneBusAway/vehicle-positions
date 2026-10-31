@@ -60,7 +60,7 @@ struct TripsView: View {
                        action: PickerText.tryAgain, onAction: loadAgain)
         case .loaded(let page):
             if page.trips.isEmpty {
-                EmptyState(symbol: "calendar.badge.exclamationmark", title: noRunsTitle, detail: PickerText.noRunsDetail,
+                EmptyState(symbol: "calendar.badge.exclamationmark", title: PickerText.noRunsTitle(route: route), detail: PickerText.noRunsDetail,
                            action: PickerText.chooseAnotherRoute) { dismiss() }
             } else {
                 // Runs go by while the driver looks at the board: each new
@@ -70,11 +70,6 @@ struct TripsView: View {
                 }
             }
         }
-    }
-
-    private var noRunsTitle: String {
-        let number = route.shortName.trimmingCharacters(in: .whitespaces)
-        return number.isEmpty ? PickerText.noRunsUnnamed : PickerText.noRuns(route: number)
     }
 
     /// The header stays put over the board as a top inset, so the rows scroll

@@ -174,6 +174,13 @@ nonisolated enum PickerText {
         String(localized: "No runs on this route today", comment: "Empty state title when a route whose feed gave no number has no runs today.")
     }
 
+    /// "No runs on route 7 today", or the unnamed form for a route whose
+    /// feed gave no number.
+    static func noRunsTitle(route: RouteInfo) -> String {
+        let number = route.shortName.trimmingCharacters(in: .whitespaces)
+        return number.isEmpty ? noRunsUnnamed : noRuns(route: number)
+    }
+
     static var noRunsDetail: String {
         String(localized: "Pick another route, or check again tomorrow.", comment: "Empty state text under 'No runs on route … today'.")
     }
@@ -220,6 +227,12 @@ nonisolated enum PickerText {
 
     static func startMessage(route: String, headsign: String, vehicle: String) -> String {
         String(localized: "Route \(route) to \(headsign) on vehicle \(vehicle).", comment: "Message of the start confirmation: the route's number, the run's headsign, then the vehicle's fleet number.")
+    }
+
+    /// CarPlay's alert has no message line, so its longest title carries
+    /// the message too; the car picks the longest that fits.
+    static func startTitleWithMessage(time: String, route: String, headsign: String, vehicle: String) -> String {
+        String(localized: "Start the \(time) run? Route \(route) to \(headsign) on vehicle \(vehicle).", comment: "CarPlay's start confirmation in one line: the run's start time, the route's number, the headsign, then the vehicle's fleet number.")
     }
 
     static var startTrip: String {
