@@ -90,4 +90,68 @@ enum PickerText {
     static func removeFromFavorites(_ id: String) -> String {
         String(localized: "Remove \(id) from favorites", comment: "Label of the star on a vehicle tile that is a favourite; the argument is the fleet number.")
     }
+
+    // MARK: Choose a route
+
+    static var routesTitle: String {
+        String(localized: "Choose a route", comment: "Title of the second picker screen, the schedule's routes.")
+    }
+
+    static var routeSearchPrompt: String {
+        String(localized: "Route number or name", comment: "Placeholder of the route screen's search field.")
+    }
+
+    static var allRoutes: String {
+        String(localized: "All routes", comment: "Section header over every route in the schedule, as rows with names.")
+    }
+
+    static func allRoutes(count: Int) -> String {
+        String(localized: "All routes · \(count)", comment: "Section header over a grid of route numbers, from a feed that names none of its routes: how many there are.")
+    }
+
+    static func noRouteMatches(_ query: String) -> String {
+        String(localized: "No route matches \(query)", comment: "Empty state title when the route search finds nothing; the argument is what the driver typed.")
+    }
+
+    static var routeSearchHint: String {
+        String(localized: "Search by the number on the sign, or part of the name.", comment: "Empty state text under 'No route matches …'.")
+    }
+
+    static var noRoutes: String {
+        String(localized: "The schedule has no routes", comment: "Empty state title when the server's schedule lists no routes.")
+    }
+
+    static var askAdmin: String {
+        String(localized: "Ask your agency's admin to check the schedule.", comment: "Empty state text under 'The schedule has no routes'.")
+    }
+
+    static var routesLoadFailed: String {
+        String(localized: "Couldn't load the routes", comment: "Empty state title when the route list could not be loaded.")
+    }
+
+    static var noSchedule: String {
+        String(localized: "No schedule on this server yet", comment: "Empty state title when the server has no GTFS schedule loaded.")
+    }
+
+    static var noScheduleDetail: String {
+        String(localized: "An operator has to load one before trips can start. Tell your agency's admin.", comment: "Empty state text under 'No schedule on this server yet'.")
+    }
+
+    /// The subtitle of Choose a route: the fleet number of the vehicle chosen.
+    static func vehicle(_ id: String) -> String {
+        String(localized: "Vehicle \(id)", comment: "Subtitle of the route screen: the fleet number of the vehicle the driver chose.")
+    }
+
+    /// The number a route goes by, or its name when the feed gave no number.
+    static func name(of route: RouteInfo) -> String {
+        route.shortName.isEmpty ? route.longName : route.shortName
+    }
+
+    static func route(_ name: String) -> String {
+        String(localized: "Route \(name)", comment: "VoiceOver label of a route badge; the argument is the route's number.")
+    }
+
+    static func routeRow(_ route: RouteInfo) -> String {
+        String(localized: "Route \(name(of: route)), \(route.longName)", comment: "VoiceOver label of a route row: the route's number, then its name.")
+    }
 }

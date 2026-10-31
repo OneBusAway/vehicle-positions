@@ -4,8 +4,11 @@ import UIKit
 /// The route's short name on its GTFS colour, as riders see it.
 struct RouteBadge: View {
     enum Size {
-        /// In a list row.
-        case list
+        /// In a route row: at least 56 × 40 pt (Android's `RouteRow`).
+        case row
+        /// A cell of the route grid: 56 pt tall and the cell's full width,
+        /// in larger type (Android's `BigBadge`).
+        case grid
         /// On the trip bar: at least a 44 pt square, in larger type (DESIGN-iOS §2.3).
         case trip
     }
@@ -13,19 +16,35 @@ struct RouteBadge: View {
     var shortName: String
     var color: String
     var textColor: String
-    var size: Size = .list
+    var size: Size
 
     var body: some View {
         let colors = RouteBadgeColors(color: color, textColor: textColor)
         Text(shortName.isEmpty ? "—" : shortName)
-            .font(size == .trip ? .title2.bold() : .title3.bold())
+            .font(size == .row ? .title3.bold() : .title2.bold())
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .foregroundStyle(colors.text)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .frame(minWidth: size == .trip ? 44 : nil, minHeight: size == .trip ? 44 : nil)
+            .frame(minWidth: minWidth, maxWidth: size == .grid ? .infinity : nil, minHeight: minHeight)
             .background(colors.background, in: RouteBadgeShape())
+    }
+
+    private var minWidth: CGFloat {
+        switch size {
+        case .row: 56
+        case .grid: 0
+        case .trip: 44
+        }
+    }
+
+    private var minHeight: CGFloat {
+        switch size {
+        case .row: 40
+        case .grid: 56
+        case .trip: 44
+        }
     }
 }
 

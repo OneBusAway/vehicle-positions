@@ -103,6 +103,29 @@
         }
       }
     },
+    "All routes · %lld": {
+      "comment": "Section header over a grid of route numbers, from a feed that names none of its routes: how many there are.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "All routes · %lld"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "All routes · %lld"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Reports stop, and route %@'s %@ run is marked complete. %lld reports were sent.": {
       "comment": "Message of the 'End this trip?' alert: the route's short name, the run's start time in the agency's zone, then how many reports reached the server.",
       "localizations": {

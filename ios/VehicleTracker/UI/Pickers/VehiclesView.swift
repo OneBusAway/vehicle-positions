@@ -64,12 +64,7 @@ struct VehiclesView: View {
                                 }
                             }
                         } header: {
-                            Text(PickerText.section(group.section))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, 8)
-                                .accessibilityAddTraits(.isHeader)
+                            PickerSectionHeader(title: PickerText.section(group.section))
                         }
                     }
                 }

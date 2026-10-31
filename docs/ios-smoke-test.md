@@ -353,7 +353,8 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
 3. Sign in as `driver@example.com` again. That driver has one vehicle.
 
-   **Expected outcome:** the app goes straight to the routes for `bus-1`. Tap
+   **Expected outcome:** the app goes straight to **Choose a route**, with
+   **Vehicle bus-1** under the title. Tap
    Back: **Choose your vehicle** shows the `bus-1` tile and the account menu,
    and it stays there. Pull down to refresh: it still stays. Tap the tile and carry on with
    Check 1.
@@ -570,8 +571,8 @@ trips of its own.
    ```
 
    **Expected outcome:** the app's own end gets a `404` (no open trip under
-   that id), and the app treats it as ended: it goes back to the routes for
-   `Bus 1`, with no **Trip not ended yet**.
+   that id), and the app treats it as ended: it goes back to **Choose a
+   route** for `bus-1`, with no **Trip not ended yet**.
 
 ### Check 6: Location access is checked and named
 
