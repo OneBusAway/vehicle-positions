@@ -18,7 +18,7 @@ struct PickerFlow: View {
                     case .routes(let vehicle):
                         RoutesView(vehicle: vehicle)
                     case .trips(let vehicle, let route):
-                        TripsView(vehicle: vehicle, route: route)
+                        TripsView(vehicle: vehicle, route: route, path: $path)
                     }
                 }
         }

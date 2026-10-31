@@ -235,7 +235,9 @@ Run these in order against a single trip; check 5 ends it.
    the day's runs as a board under **Vehicle bus-1 · Route 1**, with the
    service day in words, big start times, a green line at now and a **Now**
    or **Next** tag; the board opens at the run just gone. Tap the **8:00 AM**
-   run (T1).
+   run (T1): a popover asks **Start the 8:00 AM run?** with "Route 1 to North
+   on vehicle bus-1." Tap **Start trip**: the row shows a spinner, the other
+   rows dim, and Back is hidden until the server answers.
 
 **Expected outcome:** the Tracking screen appears. The map fills the screen
 and shows the R1 shape drawn in the route colour (`0077C0`) with its three
@@ -592,10 +594,10 @@ playback from step 5 again first, so fixes keep coming during step 3.
 
    Pick `Bus 1`, route **1 Straight**, run **T1**, then run the `grep` again.
 
-   **Expected outcome:** the run list shows "Location is off for OBA Vehicle
-   Tracker. Turn it on in Settings to start a trip." in red, with an **Open
-   Settings** button that opens the app's page in Settings. The `grep` count
-   is the same both times: no trip geometry was fetched and no trip was
+   **Expected outcome:** a banner under the title reads "Location is off for
+   OBA Vehicle Tracker. Turn it on in Settings to start a trip." with an
+   **Open Settings** button that opens the app's page in Settings. The `grep`
+   count is the same both times: no trip geometry was fetched and no trip was
    started on the server.
 
 2. Give location back and start the run again:

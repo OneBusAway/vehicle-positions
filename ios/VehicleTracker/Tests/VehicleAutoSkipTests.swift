@@ -9,8 +9,9 @@ import Testing
         #expect(VehicleAutoSkip.vehicle(toSkipTo: [only], alreadySkipped: false, pathIsEmpty: true) == only)
     }
 
-    /// Back from the routes loads the vehicle screen again with nothing
-    /// pushed; skipping there is the loop that hid Sign out.
+    /// Back from the routes, a pull to refresh, or Change vehicle on a
+    /// refused start all show the vehicle screen again with nothing pushed;
+    /// skipping there is the loop that hid Sign out.
     @Test func notAgainOnceThisVisitHasSkipped() {
         #expect(VehicleAutoSkip.vehicle(toSkipTo: [only], alreadySkipped: true, pathIsEmpty: true) == nil)
     }

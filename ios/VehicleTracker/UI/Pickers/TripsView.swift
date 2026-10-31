@@ -5,7 +5,8 @@ import SwiftUI
 /// switch between the route's two directions, a line at now, and the run
 /// under way or next tagged. The header stays put; only the board scrolls,
 /// and it opens at the run just gone, so the driver sees where the day is
-/// without scrolling.
+/// without scrolling. A tap asks before the run starts, and a refused start
+/// says what happened under the header, with the one action that fixes it.
 struct TripsView: View {
     @Environment(TripSession.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -14,8 +15,10 @@ struct TripsView: View {
     @Environment(\.dismiss) private var dismiss
     let vehicle: Vehicle
     let route: RouteInfo
+    /// Change vehicle empties it, to land on the vehicle screen.
+    @Binding var path: [PickerRoute]
     @State private var load: PickerLoad<RouteTripsPage> = .loading
-    /// Bumped by Try again, so the load task runs again.
+    /// Bumped by Try again and Reload, so the load task runs again.
     @State private var loadRequest = 0
     /// The board shown, by index: the highlighted run's direction once the
     /// runs load, then whatever the switch is set to.
@@ -23,9 +26,12 @@ struct TripsView: View {
     /// The boards that have scrolled to their opening run. A board is kept
     /// invisible until then, so it never shows its first run and then jumps.
     @State private var landed: Set<Int> = []
-    @State private var error: String?
-    /// The start was refused for something the driver fixes in Settings.
-    @State private var errorOpensSettings = false
+    /// The run waiting for the driver's confirmation.
+    @State private var confirming: BoardRun?
+    /// The run the driver confirmed last: the one a start is in flight for,
+    /// and the one Try again starts without asking again.
+    @State private var confirmed: BoardRun?
+    @State private var refusal: StartRefusal?
 
     /// A start is in flight: this board's own, or one from the car, which
     /// must disable this board just the same.
@@ -35,12 +41,14 @@ struct TripsView: View {
         content
             .navigationTitle(PickerText.runsTitle)
             .navigationSubtitle(PickerText.runsSubtitle(vehicle: vehicle.id, route: PickerText.name(of: route)))
+            .navigationBarBackButtonHidden(starting)
             .toolbar { AccountMenu() }
             // One load per visit: Back finds the board where it was.
             .task(id: loadRequest) {
                 guard case .loading = load else { return }
                 await load()
             }
+            .sensoryFeedback(.error, trigger: refusal) { old, new in new != nil && old != new }
     }
 
     @ViewBuilder private var content: some View {
@@ -86,7 +94,7 @@ struct TripsView: View {
                             if dynamicTypeSize.isAccessibilitySize {
                                 header(boards, selected: selected, page: page)
                             }
-                            rows(boards.boards[index], timezone: page.timezone)
+                            rows(boards.boards[index], page: page)
                         }
                     }
                     // After the update that made the rows, so they exist to
@@ -110,29 +118,41 @@ struct TripsView: View {
         }
     }
 
-    @ViewBuilder private func rows(_ board: Board, timezone: String) -> some View {
+    @ViewBuilder private func rows(_ board: Board, page: RouteTripsPage) -> some View {
         ForEach(Array(board.runs.enumerated()), id: \.element.id) { index, run in
             if index == board.nowAt {
                 NowLine()
             }
-            RunRow(run: run, timezone: timezone, starting: false, dimmed: starting) { start(run) }
+            RunRow(run: run, timezone: page.timezone, starting: starting && confirmed?.id == run.id,
+                   dimmed: starting && confirmed?.id != run.id) { confirming = run }
                 .equatable()
                 .id(run.id)
+                // On the row, so the dialog anchors to it on iPhone, where a
+                // tap outside cancels and iOS shows no Cancel button.
+                .confirmationDialog(PickerText.startTitle(time: Formatters.clock(run.startsAt, timezone: page.timezone)),
+                                    isPresented: isConfirming(run), titleVisibility: .visible, presenting: run) { run in
+                    Button(PickerText.startTrip) { start(run) }
+                    Button(PickerText.cancel, role: .cancel) {}
+                } message: { run in
+                    Text(PickerText.startMessage(route: PickerText.name(of: route), headsign: run.headsign, vehicle: vehicle.id))
+                }
         }
         if board.nowAt == board.runs.count {
             NowLine()
         }
     }
 
+    private func isConfirming(_ run: BoardRun) -> Binding<Bool> {
+        Binding(get: { confirming?.id == run.id }, set: { if !$0, confirming?.id == run.id { confirming = nil } })
+    }
+
     private func header(_ boards: RunBoards, selected: Int, page: RouteTripsPage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let error {
-                Text(error)
-                    .font(.subheadline)
-                    .foregroundStyle(.errorText)
-                if errorOpensSettings {
-                    Button("Open Settings") { openURL(.appSettings) }
+            if let refusal {
+                AttentionBanner(symbol: refusal.symbol, text: refusal.text, action: refusal.action.map(actionTitle)) {
+                    act(on: refusal.action)
                 }
+                .padding(.bottom, 8)
             }
             if boards.boards.count > 1 {
                 directionSwitch(boards)
@@ -167,6 +187,31 @@ struct TripsView: View {
         }
     }
 
+    private func actionTitle(_ action: StartRefusal.Action) -> String {
+        switch action {
+        case .changeVehicle: PickerText.changeVehicle
+        case .tryAgain: PickerText.tryAgain
+        case .reload: PickerText.reload
+        case .openSettings: PickerText.openSettings
+        }
+    }
+
+    private func act(on action: StartRefusal.Action?) {
+        switch action {
+        case .changeVehicle:
+            path = []
+        case .tryAgain:
+            // The driver confirmed this run already; it is not asked again.
+            if let confirmed { start(confirmed) }
+        case .reload:
+            loadAgain()
+        case .openSettings:
+            openURL(.appSettings)
+        case nil:
+            return
+        }
+    }
+
     private func loadAgain() {
         load = .loading
         loadRequest += 1
@@ -177,6 +222,9 @@ struct TripsView: View {
             let page = try await session.trips(routeID: route.id)
             direction = RunBoards.of(page, now: Date()).start
             landed = []
+            // Whatever refused a start against the old list, such as a run
+            // gone out of service, is not true of the new one.
+            refusal = nil
             load = .loaded(page)
         } catch {
             // The view went away mid-load; the next visit loads afresh.
@@ -187,15 +235,19 @@ struct TripsView: View {
     }
 
     private func start(_ run: BoardRun) {
-        error = nil
-        errorOpensSettings = false
+        confirmed = run
+        refusal = nil
+        // Not tied to this view on purpose: the session owns the start, and
+        // cancelling it halfway could leave a trip open on the server.
         Task {
             do {
                 try await session.start(vehicle: vehicle, tripID: run.id)
             } catch {
                 guard !session.handleIfUnauthorized(error) else { return }
-                self.error = error.localizedDescription
-                errorOpensSettings = (error as? TripSessionError)?.opensSettings == true
+                let refusal = StartRefusal(error, vehicleID: vehicle.id)
+                self.refusal = refusal
+                // Read out when it appears, as Android's banner is.
+                AccessibilityNotification.Announcement(refusal.text).post()
             }
         }
     }

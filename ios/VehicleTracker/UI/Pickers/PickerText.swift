@@ -4,7 +4,7 @@ import Foundation
 /// Android's words (`res/values/strings.xml`, `vehicles_*`, `routes_*`,
 /// `runs_*`) with "vehicle" for "bus". One place for all of them, so the
 /// phone and the car cannot differ.
-enum PickerText {
+nonisolated enum PickerText {
     // MARK: Choose your vehicle
 
     static var vehiclesTitle: String {
@@ -210,5 +210,55 @@ enum PickerText {
 
     static var starting: String {
         String(localized: "Starting…", comment: "VoiceOver value of the run being started.")
+    }
+
+    // MARK: Starting a run
+
+    static func startTitle(time: String) -> String {
+        String(localized: "Start the \(time) run?", comment: "Title of the start confirmation; the argument is the run's start time in the agency's zone, e.g. '6:43 AM'.")
+    }
+
+    static func startMessage(route: String, headsign: String, vehicle: String) -> String {
+        String(localized: "Route \(route) to \(headsign) on vehicle \(vehicle).", comment: "Message of the start confirmation: the route's number, the run's headsign, then the vehicle's fleet number.")
+    }
+
+    static var startTrip: String {
+        String(localized: "Start trip", comment: "The start confirmation's confirming button.")
+    }
+
+    static var cancel: String {
+        String(localized: "Cancel", comment: "The start confirmation's cancel button.")
+    }
+
+    static func notAssigned(_ vehicleID: String) -> String {
+        String(localized: "You're not assigned to vehicle \(vehicleID).", comment: "Banner when the server refused a start because the driver is not assigned to the vehicle; the argument is the fleet number.")
+    }
+
+    static var changeVehicle: String {
+        String(localized: "Change vehicle", comment: "Banner button that goes back to the vehicle screen after a start was refused for the vehicle.")
+    }
+
+    static var tripAlreadyRunning: String {
+        String(localized: "You already have a trip running. End it before starting another.", comment: "Banner when the server refused a start because the driver already has a trip running.")
+    }
+
+    static var cannotReachServer: String {
+        String(localized: "Can't reach the server. Check your connection.", comment: "Banner when a start could not reach the server.")
+    }
+
+    static var scheduleMovedOn: String {
+        String(localized: "The schedule moved on to a new day.", comment: "Banner when the server refused a start because the run is not in service on the day it now resolves to.")
+    }
+
+    static var reload: String {
+        String(localized: "Reload", comment: "Banner button that loads the run list again after the schedule moved on to a new day.")
+    }
+
+    static var couldNotStart: String {
+        String(localized: "Couldn't start the trip.", comment: "Banner when a start failed for a reason the app does not name.")
+    }
+
+    static var openSettings: String {
+        String(localized: "Open Settings", comment: "Banner button that opens the app's page in the Settings app after a start was refused for location access.")
     }
 }

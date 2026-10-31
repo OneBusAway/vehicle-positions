@@ -30,6 +30,8 @@ import Testing
 
     @Test func tripSessionErrorsReadAsInstructions() {
         #expect(TripSessionError.notSignedIn.localizedDescription == "Sign in first.")
-        #expect(TripSessionError.unusableTrip.localizedDescription == "This run has no shape or stops to follow.")
+        #expect(TripSessionError.unusableTrip.localizedDescription == "This run has no route or stops to follow. Pick another run.")
+        #expect(TripSessionError.previousTripNotEnded.localizedDescription
+            == "Your previous trip could not be ended yet. Check your connection and try again.")
     }
 }

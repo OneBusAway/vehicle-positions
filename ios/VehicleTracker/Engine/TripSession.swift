@@ -27,14 +27,20 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notSignedIn: "Sign in first."
-        case .unusableTrip: "This run has no shape or stops to follow."
-        case .busy: "A trip is already starting or running."
+        case .notSignedIn:
+            String(localized: "Sign in first.", comment: "Error when a server call is made while signed out.")
+        case .unusableTrip:
+            String(localized: "This run has no route or stops to follow. Pick another run.", comment: "Refusal when the run's geometry has no shape or no stops to judge adherence against.")
+        case .busy:
+            String(localized: "A trip is already starting or running.", comment: "Error when a start is attempted while a trip is already starting or running.")
         case .previousTripNotEnded:
-            "Your previous trip is still open on the server and could not be ended. Check the connection and try again."
-        case .locationDenied: "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip."
-        case .locationServicesOff: "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services."
-        case .preciseLocationOff: "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street."
+            String(localized: "Your previous trip could not be ended yet. Check your connection and try again.", comment: "Refusal when the end of a trip ended on this phone only could not be sent before the next start.")
+        case .locationDenied:
+            String(localized: "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip.", comment: "Refusal when the app has no location access.")
+        case .locationServicesOff:
+            String(localized: "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services.", comment: "Refusal when Location Services are off for the whole phone.")
+        case .preciseLocationOff:
+            String(localized: "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street.", comment: "Refusal when the app has only approximate location.")
         }
     }
 
