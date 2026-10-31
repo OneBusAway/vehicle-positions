@@ -9,6 +9,7 @@ import UIKit
 @MainActor @Observable
 final class AppSettings {
     static let maxRecentRoutes = 5
+    static let maxRecentVehicles = 5
     /// Where device management (MDM) puts an app's managed configuration, and
     /// the key in it that names the agency's server.
     static let managedConfigurationKey = "com.apple.configuration.managed"
@@ -27,8 +28,16 @@ final class AppSettings {
     private(set) var recentRouteIDs: [String] {
         didSet { defaults.set(recentRouteIDs, forKey: Keys.recentRoutes) }
     }
-    var lastVehicleID: String? {
-        didSet { defaults.set(lastVehicleID, forKey: Keys.lastVehicle) }
+    /// The vehicles the driver starred. They belong to the phone, not the
+    /// account: a sign-out leaves them, and an id the driver is no longer
+    /// assigned stays until the vehicle comes back. Stored sorted, so the
+    /// file does not churn.
+    private(set) var favoriteVehicleIDs: Set<String> {
+        didSet { defaults.set(favoriteVehicleIDs.sorted(), forKey: Keys.favoriteVehicles) }
+    }
+    /// The vehicles the driver drove last, newest first, at most five.
+    private(set) var recentVehicleIDs: [String] {
+        didSet { defaults.set(recentVehicleIDs, forKey: Keys.recentVehicles) }
     }
     /// The agency's server from managed configuration, when it is one the app
     /// may use. Read again when the defaults change and when the app comes to
@@ -50,7 +59,12 @@ final class AppSettings {
         serverURLString = defaults.string(forKey: Keys.serverURL) ?? ""
         email = defaults.string(forKey: Keys.email) ?? ""
         recentRouteIDs = defaults.stringArray(forKey: Keys.recentRoutes) ?? []
-        lastVehicleID = defaults.string(forKey: Keys.lastVehicle)
+        favoriteVehicleIDs = Set(defaults.stringArray(forKey: Keys.favoriteVehicles) ?? [])
+        // Builds before this one kept only the last vehicle. Until a start
+        // writes the list, that vehicle is the one recent vehicle, so it is
+        // still offered after the update. The old key is read, never deleted.
+        recentVehicleIDs = defaults.stringArray(forKey: Keys.recentVehicles)
+            ?? [defaults.string(forKey: Keys.legacyLastVehicle)].compactMap { $0 }
         readManagedConfiguration()
         if !defaultServerURL.isEmpty && self.defaultServerURL == nil {
             log.warning("ignoring the built-in DEFAULT_SERVER_URL: not an address the app may use")
@@ -74,9 +88,28 @@ final class AppSettings {
 
     /// Moves the route to the front of the recent list, keeping at most five.
     func rememberRoute(_ id: String) {
-        var ids = recentRouteIDs.filter { $0 != id }
+        recentRouteIDs = Self.remembering(id, in: recentRouteIDs, limit: Self.maxRecentRoutes)
+    }
+
+    /// Moves the vehicle to the front of the recent list, keeping at most five.
+    func rememberVehicle(_ id: String) {
+        recentVehicleIDs = Self.remembering(id, in: recentVehicleIDs, limit: Self.maxRecentVehicles)
+    }
+
+    func toggleFavorite(_ id: String) {
+        if favoriteVehicleIDs.contains(id) {
+            favoriteVehicleIDs.remove(id)
+        } else {
+            favoriteVehicleIDs.insert(id)
+        }
+    }
+
+    /// `ids` with `id` at the front, any earlier copy of it dropped, and at
+    /// most `limit` kept.
+    private static func remembering(_ id: String, in ids: [String], limit: Int) -> [String] {
+        var ids = ids.filter { $0 != id }
         ids.insert(id, at: 0)
-        recentRouteIDs = Array(ids.prefix(Self.maxRecentRoutes))
+        return Array(ids.prefix(limit))
     }
 
     var serverURL: URL? {
@@ -110,6 +143,9 @@ final class AppSettings {
         static let serverURL = "serverURL"
         static let email = "email"
         static let recentRoutes = "recentRouteIDs"
-        static let lastVehicle = "lastVehicleID"
+        static let favoriteVehicles = "favoriteVehicleIDs"
+        static let recentVehicles = "recentVehicleIDs"
+        /// Written by builds before favourites and recents; read as a fallback only.
+        static let legacyLastVehicle = "lastVehicleID"
     }
 }

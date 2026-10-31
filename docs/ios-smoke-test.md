@@ -227,8 +227,11 @@ Run these in order against a single trip; check 5 ends it.
 ### Check 1 — Sign in → vehicle → route → run → tracking
 
 1. Launch the app and sign in (or use the auto-start arguments).
-2. With exactly one assigned vehicle the picker shows `Bus 1`; choose it, then
-   route **1 Straight**, then run **T1**.
+2. With exactly one assigned vehicle the app skips **Choose your vehicle**
+   and opens the routes. Tap Back to see it: one tile, `bus-1` with `Bus 1`
+   under it, under **All vehicles**. Tap the tile's star: the tile moves under
+   **Favorites** and the star fills. Relaunch the app: the star is still
+   filled. Tap the tile, then route **1 Straight**, then run **T1**.
 
 **Expected outcome:** the Tracking screen appears. The map fills the screen
 and shows the R1 shape drawn in the route colour (`0077C0`) with its three
@@ -335,8 +338,9 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
 2. Sign in as `driver2@example.com` with `driverpass123`.
 
-   **Expected outcome:** **Your vehicle** says "No vehicles are assigned to
-   you. Ask your dispatcher." The logout deleted every refresh token the
+   **Expected outcome:** **Choose your vehicle** says **No vehicles are
+   assigned to you** and **Ask your dispatcher to assign one, then check
+   again.** with a **Check again** button. The logout deleted every refresh token the
    first driver had, so the other phone's is refused:
 
    ```bash
@@ -345,13 +349,13 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    # 401
    ```
 
-   Sign out from the account menu on **Your vehicle**.
+   Sign out from the account menu on **Choose your vehicle**.
 
 3. Sign in as `driver@example.com` again. That driver has one vehicle.
 
-   **Expected outcome:** the app goes straight to the routes for `Bus 1`. Tap
-   Back: **Your vehicle** shows `Bus 1` and the account menu, and it stays
-   there. Pull down to refresh: it still stays. Tap `Bus 1` and carry on with
+   **Expected outcome:** the app goes straight to the routes for `bus-1`. Tap
+   Back: **Choose your vehicle** shows the `bus-1` tile and the account menu,
+   and it stays there. Pull down to refresh: it still stays. Tap the tile and carry on with
    Check 1.
 
 ### Check 2 — GPS playback drives the screen and the feed
@@ -527,7 +531,8 @@ trips of its own.
    reporting on this phone now."), tap **End on this phone**.
 
    **Expected outcome:** the app goes back to the vehicle picker at once, with
-   "Could not reach the server" above `Bus 1` while the server is down.
+   **Couldn't load your vehicles** and a **Try again** button while the
+   server is down.
 
 2. Start the server again with the same environment, then pick `Bus 1`,
    route **1 Straight** and run **T1**:

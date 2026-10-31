@@ -271,16 +271,34 @@ final class TripSession {
 
     // MARK: Catalog
 
+    // The pickers show a fixed sentence when a load fails, so each failure
+    // is logged here, once, with its cause.
+
     func loadVehicles() async throws {
-        vehicles = try await requireAPI().myVehicles()
+        do {
+            vehicles = try await requireAPI().myVehicles()
+        } catch {
+            log.error("could not load the vehicles: \(String(describing: error))")
+            throw error
+        }
     }
 
     func routes() async throws -> [RouteInfo] {
-        try await requireAPI().routes()
+        do {
+            return try await requireAPI().routes()
+        } catch {
+            log.error("could not load the routes: \(String(describing: error))")
+            throw error
+        }
     }
 
     func trips(routeID: String) async throws -> RouteTripsPage {
-        try await requireAPI().trips(routeID: routeID)
+        do {
+            return try await requireAPI().trips(routeID: routeID)
+        } catch {
+            log.error("could not load the runs of route \(routeID): \(String(describing: error))")
+            throw error
+        }
     }
 
     // MARK: Trip lifecycle
@@ -315,9 +333,12 @@ final class TripSession {
                 throw error
             }
             settings.rememberRoute(trip.routeID)
-            settings.lastVehicleID = vehicle.id
+            settings.rememberVehicle(vehicle.id)
             try beginTracking(active, evaluator: evaluator)
         } catch {
+            // The screens show a fixed sentence for each refusal, never the
+            // server's words, so the cause is only here.
+            log.error("could not start trip \(tripID) on vehicle \(vehicle.id): \(String(describing: error))")
             phase = .idle
             throw error
         }
