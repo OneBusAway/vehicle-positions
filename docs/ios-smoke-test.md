@@ -231,7 +231,11 @@ Run these in order against a single trip; check 5 ends it.
    and opens the routes. Tap Back to see it: one tile, `bus-1` with `Bus 1`
    under it, under **All vehicles**. Tap the tile's star: the tile moves under
    **Favorites** and the star fills. Relaunch the app: the star is still
-   filled. Tap the tile, then route **1 Straight**, then run **T1**.
+   filled. Tap the tile, then route **1 Straight**. **Choose a run** shows
+   the day's runs as a board under **Vehicle bus-1 · Route 1**, with the
+   service day in words, big start times, a green line at now and a **Now**
+   or **Next** tag; the board opens at the run just gone. Tap the **8:00 AM**
+   run (T1).
 
 **Expected outcome:** the Tracking screen appears. The map fills the screen
 and shows the R1 shape drawn in the route colour (`0077C0`) with its three

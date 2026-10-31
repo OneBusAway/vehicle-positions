@@ -154,4 +154,61 @@ enum PickerText {
     static func routeRow(_ route: RouteInfo) -> String {
         String(localized: "Route \(name(of: route)), \(route.longName)", comment: "VoiceOver label of a route row: the route's number, then its name.")
     }
+
+    // MARK: Choose a run
+
+    static var runsTitle: String {
+        String(localized: "Choose a run", comment: "Title of the third picker screen, the route's runs today.")
+    }
+
+    /// The subtitle of Choose a run: the vehicle, then the route.
+    static func runsSubtitle(vehicle: String, route: String) -> String {
+        String(localized: "Vehicle \(vehicle) · Route \(route)", comment: "Subtitle of the run screen: the fleet number of the vehicle, then the route's number.")
+    }
+
+    static func noRuns(route: String) -> String {
+        String(localized: "No runs on route \(route) today", comment: "Empty state title when the route has no runs today; the argument is the route's number.")
+    }
+
+    static var noRunsUnnamed: String {
+        String(localized: "No runs on this route today", comment: "Empty state title when a route whose feed gave no number has no runs today.")
+    }
+
+    static var noRunsDetail: String {
+        String(localized: "Pick another route, or check again tomorrow.", comment: "Empty state text under 'No runs on route … today'.")
+    }
+
+    static var chooseAnotherRoute: String {
+        String(localized: "Choose another route", comment: "Button under 'No runs on route … today' that goes back to the route screen.")
+    }
+
+    static var runsLoadFailed: String {
+        String(localized: "Couldn't load the runs", comment: "Empty state title when the run list could not be loaded.")
+    }
+
+    static var now: String {
+        String(localized: "Now", comment: "Tag on the run under way, and the VoiceOver label of the line between the runs gone and the rest.")
+    }
+
+    static var next: String {
+        String(localized: "Next", comment: "Tag on the next run to start, when none is under way.")
+    }
+
+    /// A segment of the direction switch: where most runs that way are headed.
+    static func direction(_ headsign: String) -> String {
+        String(localized: "To \(headsign)", comment: "A segment of the direction switch over the run board; the argument is the headsign most of that direction's runs show, e.g. 'To Downtown Seattle'.")
+    }
+
+    static var directionTitle: String {
+        String(localized: "Direction", comment: "VoiceOver title of the direction switch over the run board.")
+    }
+
+    /// Under the date: the first stop, then the last stop, of the direction shown.
+    static func stops(_ first: String, _ last: String) -> String {
+        String(localized: "\(first) → \(last)", comment: "Under the run board's date: the direction's first stop, then its last stop.")
+    }
+
+    static var starting: String {
+        String(localized: "Starting…", comment: "VoiceOver value of the run being started.")
+    }
 }
