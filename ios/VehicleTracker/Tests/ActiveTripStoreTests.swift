@@ -28,6 +28,41 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "active-trip.json").path(percentEncoded: false)))
     }
 
+    /// P44: Tracking's count carries on after a relaunch, read by a store
+    /// made afresh, as the next launch's is.
+    @Test func theSentCountIsKeptForItsOwnTripAndGoesWithIt() throws {
+        let directory = URL.temporaryDirectory.appending(path: "Application Support \(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileActiveTripStore(directory: directory)
+        #expect(store.loadSent(for: 7) == 0, "no file yet, as for a trip stored by an older build")
+
+        try store.saveSent(142, for: 7)
+        #expect(FileActiveTripStore(directory: directory).loadSent(for: 7) == 142)
+        #expect(store.loadSent(for: 8) == 0, "another trip's count is not this one's")
+
+        try store.clear()
+        #expect(store.loadSent(for: 7) == 0)
+        #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "active-trip-sent.json").path(percentEncoded: false)))
+    }
+
+    @Test func anUnreadableSentCountStartsAgainFromZero() throws {
+        let directory = URL.temporaryDirectory.appending(path: "Application Support \(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: directory.appending(path: "active-trip-sent.json"))
+        #expect(FileActiveTripStore(directory: directory).loadSent(for: 7) == 0)
+    }
+
+    @Test func theInMemoryStoreKeepsTheCountTheSameWay() throws {
+        let store = InMemoryActiveTripStore()
+        #expect(store.loadSent(for: 7) == 0)
+        try store.saveSent(142, for: 7)
+        #expect(store.loadSent(for: 7) == 142)
+        #expect(store.loadSent(for: 8) == 0)
+        try store.clear()
+        #expect(store.loadSent(for: 7) == 0)
+    }
+
     let owed = [PendingTripEnd(serverTripID: 7, driverEmail: "a@test.com", serverURL: "https://positions.example.org"),
                 PendingTripEnd(serverTripID: 9, driverEmail: "b@test.com", serverURL: "https://other.example.org")]
 

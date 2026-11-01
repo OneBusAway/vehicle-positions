@@ -491,7 +491,9 @@ only.", and the buttons become **Try again**, **End on this phone** and
 
 **Expected outcome:** the Tracking screen appears for the same trip, reading
 **Waiting for GPS** until the next fix, with no call to the server; then the
-status card and the reports carry on. The line **Location stopped · Tap
+status card and the reports carry on. The trip bar's "n sent" carries on from
+the count before the relaunch rather than starting again at 0. The line
+**Location stopped · Tap
 Resume** with a **Resume** button still appears when the location stream dies
 mid-trip.
 

@@ -514,7 +514,8 @@ final class TripSession {
     private func beginTracking(_ active: ActiveTrip, evaluator: AdherenceEvaluator) throws {
         guard let api else { throw TripSessionError.notSignedIn }
         self.evaluator = evaluator
-        reporter = LocationReporter(api: api, now: now) { [weak self] in
+        // A fresh trip has no count kept, so it starts at 0.
+        reporter = LocationReporter(api: api, now: now, sent: store.loadSent(for: active.serverTripID)) { [weak self] in
             // A send finishes long after the fix that started it was handed
             // over, so its outcome has to be published when it lands.
             self?.refreshReporting()
@@ -619,7 +620,10 @@ final class TripSession {
     }
 
     private func refreshReporting() {
-        if let reporter { fixesSent = reporter.fixesSent }
+        if let reporter, reporter.fixesSent != fixesSent {
+            fixesSent = reporter.fixesSent
+            keepSent()
+        }
         let sent = Self.status(for: reporter?.problem ?? .none)
         // Signed out comes before the location problems: a driver who is
         // signed out and has also lost the stream has to sign in before
@@ -637,6 +641,17 @@ final class TripSession {
             reporting = .noGPS
         } else {
             reporting = sent
+        }
+    }
+
+    /// Writes the count down as it changes, so a relaunch carries on from it
+    /// (P44). A failed write costs only the count, never the trip.
+    private func keepSent() {
+        guard let active = activeTrip else { return }
+        do {
+            try store.saveSent(fixesSent, for: active.serverTripID)
+        } catch {
+            log.error("could not keep the sent count of trip \(active.serverTripID): \(String(describing: error))")
         }
     }
 

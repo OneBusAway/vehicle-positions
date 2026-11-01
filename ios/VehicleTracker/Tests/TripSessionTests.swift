@@ -357,6 +357,36 @@ import VehiclePositionsKit
         #expect(s.fixesSent == 2)
     }
 
+    /// P44: Resume carries the sent count on from before the relaunch.
+    @Test func theSentCountCarriesOnAfterARelaunch() async throws {
+        let (s, active) = try pausedSession()
+        try store.saveSent(142, for: active.serverTripID)
+        s.resume()
+        #expect(s.fixesSent == 142)
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        #expect(await eventually { s.fixesSent == 143 })
+        #expect(store.loadSent(for: active.serverTripID) == 143)
+    }
+
+    @Test func aFreshTripCountsFromZeroKeepsEachReportAndDropsTheCountWhenItEnds() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        // A count kept for an earlier trip is not this one's.
+        try store.saveSent(99, for: api.startedID - 1)
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(s.fixesSent == 0)
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        #expect(await eventually { s.fixesSent == 1 })
+        #expect(store.loadSent(for: api.startedID) == 1)
+        clock.advance(6)
+        locations.emitFix(lat: 47.6050, lon: -122.3300, at: TripFixtures.at(8, 5, 6))
+        #expect(await eventually { s.fixesSent == 2 })
+        #expect(store.loadSent(for: api.startedID) == 2)
+
+        try await s.end()
+        #expect(store.loadSent(for: api.startedID) == 0)
+    }
+
     @Test func anOffRouteFixKeepsTheLastOnRouteHint() async throws {
         // The evaluator already ignores an off-route `previous`
         // (`offRoutePreviousDoesNotHint`). What this pins is what the session
@@ -1063,6 +1093,8 @@ nonisolated final class UnwritablePendingEndsStore: ActiveTripStoring, @unchecke
     func load() throws -> ActiveTrip? { try trips.load() }
     func save(_ trip: ActiveTrip) throws { try trips.save(trip) }
     func clear() throws { try trips.clear() }
+    func loadSent(for serverTripID: Int64) -> Int { trips.loadSent(for: serverTripID) }
+    func saveSent(_ count: Int, for serverTripID: Int64) throws { try trips.saveSent(count, for: serverTripID) }
     func loadPendingEnds() throws -> [PendingTripEnd] { [] }
     func savePendingEnds(_ ends: [PendingTripEnd]) throws { throw CocoaError(.fileWriteOutOfSpace) }
 }
