@@ -51,6 +51,34 @@ nonisolated enum SignInText {
         String(localized: "Signing in", comment: "The sign-in button while the server is being asked, beside a spinner.")
     }
 
+    // MARK: Sign in again
+
+    static var againTitle: String {
+        String(localized: "Sign in again", comment: "Title of the sheet for signing in again after the session ended during a trip.")
+    }
+
+    static func signingInAs(_ email: String) -> String {
+        String(localized: "As \(email)", comment: "Under the trip card when signing in again: the email the trip's driver signed in with, e.g. 'As jordan.lee@example.org'.")
+    }
+
+    static var signInAndKeepReporting: String {
+        String(localized: "Sign in and keep reporting", comment: "The button that signs in again during a trip, so reports start again.")
+    }
+
+    static var notNow: String {
+        String(localized: "Not now", comment: "Closes the sign-in-again sheet without signing in; the trip stays open and the Signed out card stays.")
+    }
+
+    static var tripStillOpen: String {
+        String(localized: "Your trip is still open", comment: "Title of the card at the top of the sign-in-again sheet.")
+    }
+
+    static func tripStillOpenMessage(route: String) -> String {
+        String(localized: "Reports stopped when your session ended. Sign in to keep reporting on route \(route).", comment: "On the sign-in-again sheet's card. The open trip's route, e.g. '7'.")
+    }
+
+    // MARK: The agency's server
+
     static var setByAgency: String {
         String(localized: "Set by your agency.", comment: "Under the server line when the agency's device management sets the server.")
     }

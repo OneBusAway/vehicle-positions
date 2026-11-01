@@ -43,6 +43,15 @@ import UIKit
         }
     }
 
+    @Test func aTripsBadgeIsItsShortNameOrElseItsRouteID() {
+        var trip = TripFixtures.t1
+        trip.routeID = "100263"
+        trip.route.shortName = "7"
+        #expect(trip.badgeName == "7")
+        trip.route.shortName = ""
+        #expect(trip.badgeName == "100263")
+    }
+
     @Test func cornersAreContinuousAtTwentyEightPercentOfTheHeight() {
         let rect = CGRect(x: 0, y: 0, width: 60, height: 44)
         #expect(RouteBadgeShape().path(in: rect) == RoundedRectangle(cornerRadius: 12.32, style: .continuous).path(in: rect))

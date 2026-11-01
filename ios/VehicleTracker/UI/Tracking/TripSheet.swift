@@ -12,7 +12,7 @@ struct TripSheet: View {
 
     @Environment(TripSession.self) private var session
     @Environment(\.colorScheme) private var colorScheme
-    @Binding var showingRelogin: Bool
+    @Binding var showingSignInAgain: Bool
     /// The sheet's peek: the bar as measured, never under `minimumPeek`. At
     /// accessibility sizes the bar stacks End trip under the headsign and
     /// needs well over 76 pt; a fixed peek would clip the button.
@@ -25,8 +25,6 @@ struct TripSheet: View {
     /// The server did not confirm the end. The error itself is logged; the
     /// driver gets one sentence and three ways on.
     @State private var endNotConfirmed = false
-    @State private var reloginPassword = ""
-    @State private var reloginError: String?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "tracking")
 
     var body: some View {
@@ -61,11 +59,6 @@ struct TripSheet: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // The sheet is driven by its own state rather than straight off
-        // `reporting`, so "Later" can dismiss it while the status stands.
-        .onChange(of: session.reporting == .authExpired, initial: true) { _, expired in
-            if expired { showingRelogin = true }
-        }
         .alert(TripStatusText.endTripTitle, isPresented: $confirmEnd) {
             Button(TripStatusText.endTrip, role: .destructive) { end() }
             Button(TripStatusText.keepGoing, role: .cancel) {}
@@ -80,45 +73,10 @@ struct TripSheet: View {
             Text(TripStatusText.notEndedMessage)
         }
         .sensoryFeedback(.error, trigger: endNotConfirmed) { _, failed in failed }
-        .sheet(isPresented: $showingRelogin) {
-            reloginSheet
+        .sheet(isPresented: $showingSignInAgain) {
+            SignInAgainSheet()
         }
         .serverSetupPrompt()
-    }
-
-    private var reloginSheet: some View {
-        NavigationStack {
-            Form {
-                Text("Your sign-in expired. The trip keeps running; sign in again to keep reporting.")
-                SecureField("Password", text: $reloginPassword)
-                if let reloginError { Text(reloginError).foregroundStyle(.errorText) }
-                Button("Sign In") {
-                    Task {
-                        do {
-                            try await session.reauthenticate(password: reloginPassword)
-                            reloginPassword = ""
-                            reloginError = nil
-                            showingRelogin = false
-                        } catch {
-                            reloginError = error.localizedDescription
-                        }
-                    }
-                }
-                .disabled(reloginPassword.isEmpty)
-            }
-            .navigationTitle("Sign in again")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    // Nothing is lost by putting this off: the trip keeps
-                    // running locally and the Signed out card stays.
-                    Button("Later") {
-                        reloginPassword = ""
-                        reloginError = nil
-                        showingRelogin = false
-                    }
-                }
-            }
-        }
     }
 
     /// What ending the trip will do: the run's name when the route has one,

@@ -48,6 +48,12 @@ struct RouteBadge: View {
     }
 }
 
+extension TripGeometry {
+    /// The route as its badge names it: the short name, or the route's id for
+    /// a feed that gives none (Android's `RouteBadgeModel.forTrip`).
+    var badgeName: String { route.shortName.isEmpty ? routeID : route.shortName }
+}
+
 /// The feed's `route_color` and `route_text_color` as it gives them, with no
 /// contrast override, so a route looks the same on both apps. With no route
 /// colour the badge is the accent pair (Android's `primary` and `onPrimary`),

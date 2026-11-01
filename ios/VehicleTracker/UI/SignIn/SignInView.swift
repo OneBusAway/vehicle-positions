@@ -6,24 +6,45 @@ import UIKit
 /// error shows under the field it is about, or in a banner above the button
 /// when no one field is to blame. Nothing the system says is shown: the
 /// session logs the cause, and the driver reads one fixed sentence.
+///
+/// Signing in again during a trip (§4.9) is the same screen, as on Android:
+/// the open trip takes the icon's place, the server and email are the trip's
+/// own, and only the password is left to type.
 struct SignInView: View {
     @Environment(TripSession.self) private var session
     @Environment(ServerSetup.self) private var serverSetup
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var form = SignInForm()
+    let isAgain: Bool
+    /// Signing in again succeeded.
+    var onSignedIn: () -> Void = {}
+    @State private var form: SignInForm
     @State private var server = ""
     @State private var email = ""
     @State private var password = ""
     @State private var signing: Task<Void, Never>?
     @FocusState private var focus: SignInField?
 
+    init(isAgain: Bool = false, onSignedIn: @escaping () -> Void = {}) {
+        self.isAgain = isAgain
+        self.onSignedIn = onSignedIn
+        _form = State(initialValue: SignInForm(isAgain: isAgain))
+    }
+
     private var settings: AppSettings { session.settings }
+
+    /// The server to sign in to: on Sign in, the agency's, the last one or the
+    /// built-in one; signing in again, the open trip's.
+    private var savedServer: URL? { isAgain ? settings.serverURL : settings.signInServerURL }
 
     var body: some View {
         ScrollViewReader { proxy in
             Form {
                 Section {
-                    header
+                    if isAgain, let trip = session.activeTrip?.trip {
+                        againHeader(trip)
+                    } else {
+                        header
+                    }
                 }
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
@@ -41,6 +62,11 @@ struct SignInView: View {
                             .focused($focus, equals: .email)
                             .onSubmit { focus = .password }
                             .fieldError(form.fieldError(for: .email))
+                            // The trip and its pending ends belong to the
+                            // driver who started it, so another driver can't
+                            // take it over here. It stays a field for
+                            // Password AutoFill.
+                            .disabled(isAgain)
                     }
                     LabeledField(label: SignInText.password, error: form.fieldError(for: .password)) {
                         PasswordField(text: $password, focus: $focus, error: form.fieldError(for: .password), onSubmit: signIn)
@@ -55,7 +81,8 @@ struct SignInView: View {
                     .listRowInsets(EdgeInsets())
                 }
                 Section {
-                    WideButton(title: SignInText.signIn, busyTitle: form.isSigningIn ? SignInText.signingIn : nil, action: signIn)
+                    WideButton(title: isAgain ? SignInText.signInAndKeepReporting : SignInText.signIn,
+                               busyTitle: form.isSigningIn ? SignInText.signingIn : nil, action: signIn)
                         .id(Anchor.button)
                 }
                 .listRowBackground(Color.clear)
@@ -84,17 +111,20 @@ struct SignInView: View {
                 AccessibilityNotification.Announcement(said).post()
             }
         }
-        .onChange(of: settings.signInServerURL, initial: true) { _, url in
+        .onChange(of: savedServer, initial: true) { _, url in
             server = url?.absoluteString ?? ""
         }
         // A setup link's server is filled in for this sign-in, in the open
         // field, so the driver sees the address before using it.
         .onChange(of: serverSetup.linkedServer) { _, url in
-            guard let url else { return }
+            guard !isAgain, let url else { return }
             server = url.absoluteString
             form.changeServer()
         }
-        .onAppear { email = settings.email }
+        .onAppear {
+            email = settings.email
+            if isAgain { focus = .password }
+        }
         .onDisappear { signing?.cancel() }
     }
 
@@ -112,9 +142,24 @@ struct SignInView: View {
         .padding(.bottom, 16)
     }
 
+    /// The trip that is still open, then whose sign-in it is.
+    private func againHeader(_ trip: TripGeometry) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            TripStillOpenCard(trip: trip)
+            Text(SignInText.signingInAs(settings.email))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.bottom, 8)
+    }
+
     @ViewBuilder private var serverSection: some View {
         let managed = settings.serverIsManaged
-        if form.showsServerField(savedServer: settings.signInServerURL, managedInvalid: settings.managedServerURLIsInvalid) {
+        if isAgain {
+            // The open trip is on this server, so it isn't for changing here.
+            Section {
+                SavedServerRow(label: SignInForm.serverLabel(server))
+            }
+        } else if form.showsServerField(savedServer: savedServer, managedInvalid: settings.managedServerURLIsInvalid) {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     TextField(SignInText.serverAddress, text: $server, prompt: Text(verbatim: SignInText.serverPlaceholder))
@@ -168,8 +213,13 @@ struct SignInView: View {
         let typed = server
         signing = Task {
             do {
-                try await session.signIn(serverURL: url, email: email, password: password)
+                if isAgain {
+                    try await session.reauthenticate(password: password)
+                } else {
+                    try await session.signIn(serverURL: url, email: email, password: password)
+                }
                 form.succeeded()
+                onSignedIn()
             } catch {
                 // The screen went away mid-sign-in; there is nothing to show.
                 guard !Task.isCancelled else { return }

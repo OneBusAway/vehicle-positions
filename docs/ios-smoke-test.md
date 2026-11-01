@@ -482,7 +482,7 @@ resuming by itself.)
 
 The same line and button appear when the location stream dies mid-trip.
 
-### Check 4b — A sign-in that can't be renewed can be put off
+### Check 4b: A sign-in that can't be renewed is asked for from the card
 
 The app asks for the password only when the server refuses its refresh token.
 Deactivating the driver deletes their refresh tokens, so it reaches that state
@@ -496,25 +496,29 @@ within one two-minute access token from Check 3b.
 **Expected outcome:** within about two minutes, when the app's access token
 runs out, the status card is replaced by the **Signed out** card (ink by day,
 amber at night) reading "Reports have stopped. Your trip is still open." with
-a **Sign in** button, and the **Sign in again** sheet appears over the trip
-sheet. Deactivating deleted the
-driver's refresh tokens, so in the token's last minute the log from Check 3b
-shows each early refresh refused (`refresh: unknown token presented`) while
-reports still get `201`. Once the token expires, a report gets `401`, the
-refresh is refused once more, and every report after that gets `401` with no
-refresh.
+a **Sign in** button. Nothing opens over the map by itself. Deactivating
+deleted the driver's refresh tokens, so in the token's last minute the log
+from Check 3b shows each early refresh refused (`refresh: unknown token
+presented`) while reports still get `201`. Once the token expires, a report
+gets `401`, the refresh is refused once more, and every report after that
+gets `401` with no refresh.
 
-2. Tap **Later**.
+2. Tap **Sign in** on the card.
 
-**Expected outcome:** the sheet goes away without signing in. The trip keeps
-running and the Signed out card stays. Tapping **Sign in** on it brings the
-sheet back.
+**Expected outcome:** the **Sign in again** sheet opens: a card with the route
+badge `1`, "Your trip is still open" and "Reports stopped when your session
+ended. Sign in to keep reporting on route 1.", then "As driver@example.com",
+the server as one line with no **Change**, the email greyed out, and the
+password field focused. Tap **Not now**: the sheet goes away without signing
+in, the trip keeps running and the Signed out card stays.
 
-3. Click **Activate** on the same row, then sign in on the sheet with the
-   driver's password.
+3. Click **Activate** on the same row, then tap **Sign in** on the card and
+   sign in on the sheet with the driver's password.
 
-**Expected outcome:** the status card comes back on the same trip, with no
-problem line, and reports reach the server again.
+**Expected outcome:** the button reads **Signing in**, then the sheet closes,
+the status card comes back on the same trip with no problem line, and reports
+reach the server again. A wrong password instead shows "Wrong email or
+password. Try again." under the password, and the sheet stays.
 
 ### Check 5 — Ending the trip drops the vehicle from the feed
 
