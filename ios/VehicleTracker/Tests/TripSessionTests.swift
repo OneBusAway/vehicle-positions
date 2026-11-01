@@ -40,6 +40,12 @@ import VehiclePositionsKit
         return (session(), active)
     }
 
+    /// Before you start asks through the same object the start checks, so
+    /// the two can't disagree about what was allowed.
+    @Test func theLocationAccessIsTheOneTheStartChecks() {
+        #expect(session().locationAccess as? FakeLocationAccess === access)
+    }
+
     @Test func startsSignedOutWithoutAToken() {
         #expect(session().phase == .signedOut)
     }

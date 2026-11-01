@@ -5,8 +5,9 @@ import SwiftUI
 /// switch between the route's two directions, a line at now, and the run
 /// under way or next tagged. The header stays put; only the board scrolls,
 /// and it opens at the run just gone, so the driver sees where the day is
-/// without scrolling. A tap asks before the run starts, and a refused start
-/// says what happened under the header, with the one action that fixes it.
+/// without scrolling. A tap asks before the run starts, Before you start
+/// follows when location access is missing, and a refused start says what
+/// happened under the header, with the one action that fixes it.
 struct TripsView: View {
     @Environment(TripSession.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -33,6 +34,8 @@ struct TripsView: View {
     /// The run the driver confirmed last: the one a start is in flight for,
     /// and the one Try again starts without asking again.
     @State private var confirmed: BoardRun?
+    /// The confirmed run waiting on Before you start.
+    @State private var checklist: BoardRun?
     @State private var refusal: StartRefusal?
 
     /// A start is in flight: this board's own, or one from the car, which
@@ -51,6 +54,12 @@ struct TripsView: View {
                 await load()
             }
             .sensoryFeedback(.error, trigger: refusal) { old, new in new != nil && old != new }
+            .sheet(item: $checklist) { run in
+                BeforeYouStartSheet(vehicleID: vehicle.id, access: session.locationAccess) {
+                    checklist = nil
+                    start(run)
+                }
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -141,7 +150,7 @@ struct TripsView: View {
                 // tap outside cancels and iOS shows no Cancel button.
                 .confirmationDialog(PickerText.startTitle(time: Formatters.clock(run.startsAt, timezone: page.timezone)),
                                     isPresented: isConfirming(run), titleVisibility: .visible, presenting: run) { run in
-                    Button(PickerText.startTrip) { start(run) }
+                    Button(PickerText.startTrip) { startWhenReady(run) }
                     Button(PickerText.cancel, role: .cancel) {}
                 } message: { run in
                     Text(PickerText.startMessage(route: PickerText.name(of: route), headsign: run.headsign, vehicle: vehicle.id))
@@ -207,7 +216,7 @@ struct TripsView: View {
             path = []
         case .tryAgain:
             // The driver confirmed this run already; it is not asked again.
-            if let confirmed { start(confirmed) }
+            if let confirmed { startWhenReady(confirmed) }
         case .reload:
             loadAgain()
         case .openSettings:
@@ -237,6 +246,19 @@ struct TripsView: View {
             guard !session.handleIfUnauthorized(error) else { return }
             load = .failed(PickerLoadFailure(error))
         }
+    }
+
+    /// The confirmed run starts now, or once Before you start has got what a
+    /// trip needs. `TripSession.start()` checks location again either way,
+    /// as it must for a run started from the car.
+    private func startWhenReady(_ run: BoardRun) {
+        guard LocationChecklist.needed(session.locationAccess.current()) else {
+            start(run)
+            return
+        }
+        confirmed = run
+        refusal = nil
+        checklist = run
     }
 
     private func start(_ run: BoardRun) {

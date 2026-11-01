@@ -134,7 +134,9 @@ final class TripSession {
     private let tokens: any TokenStoring
     private let store: any ActiveTripStoring
     private let locations: any LocationSource
-    private let access: any LocationAccess
+    /// Read by Before you start, which asks through it before a run starts:
+    /// one object, so the sheet and `start()`'s own check see the same answers.
+    let locationAccess: any LocationAccess
     private let makeAPI: (URL, any TokenStoring) throws -> any TrackerAPI
     private let now: () -> Date
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "trip-session")
@@ -169,7 +171,7 @@ final class TripSession {
         self.tokens = tokens
         self.store = store
         self.locations = locations
-        self.access = access
+        self.locationAccess = access
         self.makeAPI = makeAPI
         self.now = now
 
@@ -391,9 +393,9 @@ final class TripSession {
     /// not get precise positions. The phase is already `.starting`, so the run
     /// lists stay disabled while a prompt is up.
     private func requireLocationAccess() async throws {
-        var state = access.current()
-        if state == .notDetermined { state = await access.request() }
-        if state == .approximateOnly { state = await access.requestPrecise() }
+        var state = locationAccess.current()
+        if state == .notDetermined { state = await locationAccess.request() }
+        if state == .approximateOnly { state = await locationAccess.requestPrecise() }
         let refusal: TripSessionError
         switch state {
         case .allowed: return

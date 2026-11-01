@@ -614,24 +614,30 @@ playback from step 5 again first, so fixes keep coming during step 3.
    grep -cE '"path":"/api/v1/(gtfs/trips/|trips/start)' /tmp/vt-server.log
    ```
 
-   Pick `Bus 1`, route **1 Straight**, run **T1**, then run the `grep` again.
+   Pick `Bus 1`, route **1 Straight**, run **T1**, tap **Start trip**, then
+   run the `grep` again.
 
-   **Expected outcome:** a banner under the title reads "Location is off for
-   OBA Vehicle Tracker. Turn it on in Settings to start a trip." with an
-   **Open Settings** button that opens the app's page in Settings. The `grep`
-   count is the same both times: no trip geometry was fetched and no trip was
-   started on the server. At the largest text sizes (Settings > Accessibility
-   > Display & Text Size > Larger Text, slider to the end) the banner is still
-   under the title, above the board, with its button on screen.
+   **Expected outcome:** **Before you start** opens over the board: "The app
+   needs these to report vehicle bus-1. iOS asks about each one next."
+   **Location** reads "Location is needed to report" with **Open Settings**,
+   which opens the app's page in Settings; **Precise location** and **Location
+   services** are not reached yet, **Continue** is greyed out, and **Cancel**
+   is at the top. Tap **Cancel**. The `grep` count is the same both times: no
+   trip geometry was fetched and no trip was started on the server.
 
-2. Give location back and start the run again:
+2. Let iOS ask again, then start the run:
 
    ```bash
-   xcrun simctl privacy "$UDID" grant location org.onebusaway.vehicletracker
+   xcrun simctl privacy "$UDID" reset location org.onebusaway.vehicletracker
    ```
 
-   **Expected outcome:** the Tracking screen appears with no problem line
-   under the status card.
+   Open the app again if the reset closed it, and start **T1** as before.
+
+   **Expected outcome:** **Before you start** shows **Location** with
+   **Next**, and no **Cancel**: swiping the sheet down does nothing. Tap
+   **Continue**: iOS asks for location. Tap **Allow While Using App**:
+   **Location** reads **Allowed**, the sheet closes by itself, and the
+   Tracking screen appears with no problem line under the status card.
 
 3. In the simulator's Settings app, open **Privacy & Security > Location
    Services > OBA Vehicle Tracker** and turn **Precise Location** off
@@ -661,9 +667,12 @@ loaded, so **Change vehicle** loads them again. Back does not.
    Tap run **T1**, then **Start trip**.
 
    **Expected outcome:** a banner under the title reads **You're not assigned
-   to vehicle bus-1.** with a **Change vehicle** button. Tap it: **Choose your
-   vehicle** loads again and says **No vehicles are assigned to you** with
-   **Check again**; the `bus-1` tile is gone.
+   to vehicle bus-1.** with a **Change vehicle** button. At the largest text
+   sizes (Settings > Accessibility > Display & Text Size > Larger Text, slider
+   to the end) the banner is still under the title, above the board, with its
+   button on screen. Tap it: **Choose your vehicle** loads again and says **No
+   vehicles are assigned to you** with **Check again**; the `bus-1` tile is
+   gone.
 
 2. Give the assignment back (the `POST .../admin/assignments` from setup step
    3), then tap **Check again**.
