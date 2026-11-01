@@ -65,7 +65,7 @@ extension Adherence {
 extension TripSession {
     /// An expired token looks like any other server error to the caller; the
     /// picker screens all want the same response, ending the session and
-    /// letting `RootView` fall back to `LoginView`, instead of surfacing a raw
+    /// letting `RootView` fall back to `SignInView`, instead of surfacing a raw
     /// "Server error 401" alongside the form. The client has already tried a
     /// refresh, so a 401 here means the server ended the session: there is
     /// nothing left to log out of.

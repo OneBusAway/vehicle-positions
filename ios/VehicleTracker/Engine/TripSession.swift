@@ -210,7 +210,18 @@ final class TripSession {
 
     // MARK: Sign-in
 
+    /// The sign-in screens show a fixed sentence for each failure, never the
+    /// error itself, so the cause is logged here.
     func signIn(serverURL: URL, email: String, password: String) async throws {
+        do {
+            try await logIn(serverURL: serverURL, email: email, password: password)
+        } catch {
+            log.error("could not sign in to \(serverURL.host() ?? "the server"): \(String(describing: error))")
+            throw error
+        }
+    }
+
+    private func logIn(serverURL: URL, email: String, password: String) async throws {
         let api = try makeAPI(serverURL, tokens)
         let issued = try await api.login(email: email, password: password)
         try tokens.save(StoredToken(issued, receivedAt: now()))

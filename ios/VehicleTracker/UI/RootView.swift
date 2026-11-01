@@ -22,7 +22,7 @@ struct RootView: View {
         ZStack {
             switch screen {
             case .signIn:
-                LoginView().transition(.opacity)
+                SignInView().transition(.opacity)
             case .pickers:
                 PickerFlow().transition(.opacity)
             case .tracking:

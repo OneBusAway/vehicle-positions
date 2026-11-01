@@ -226,7 +226,11 @@ Run these in order against a single trip; check 5 ends it.
 
 ### Check 1 — Sign in → vehicle → route → run → tracking
 
-1. Launch the app and sign in (or use the auto-start arguments).
+1. Launch the app. **Sign in** shows the app's icon, "Use your driver account
+   for this agency.", a **Server address** field, **Email** and **Password**
+   with an eye that shows and hides it. Type `$BASE`, `driver@example.com` and
+   `driverpass123`, and tap **Sign in** (or use the auto-start arguments). The
+   button reads **Signing in** beside a spinner until the server answers.
 2. With exactly one assigned vehicle the app skips **Choose your vehicle**
    and opens the routes. Tap Back to see it: one tile, `bus-1` with `Bus 1`
    under it, under **All vehicles**. Tap the tile's star: the tile moves under
@@ -335,14 +339,28 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    `localhost` and the app's version greyed out, then **Sign out** in red.
    Tap **Sign out**: "Sign out?" with "The next driver can sign in on this
    phone." Tap **Sign out** again: the sign-in screen appears with the server
-   still filled in and the email empty, and the server log has the logout:
+   as one line, **Server localhost:8081 Change**, the email empty, and the
+   server log has the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log
    # ..."method":"POST","path":"/api/v1/auth/logout","status":204...
    ```
 
-2. Sign in as `driver2@example.com` with `driverpass123`.
+2. Before signing in, see what a failed sign-in says. Type
+   `driver2@example.com` and the password `wrong`, and tap **Sign in**.
+
+   **Expected outcome:** "Wrong email or password. Try again." under the
+   password, which keeps what was typed. Typing in any field clears it.
+
+   Tap **Change**, type `localhost:8081` with no `http://`, and tap **Sign in**.
+
+   **Expected outcome:** "Check the address" under the server field, and a
+   banner above the button: "Can't reach localhost:8081. Check your
+   connection, or the server address." Nothing reached the server: the log
+   has no new `/api/v1/auth/login` line. Type `$BASE` back in.
+
+3. Sign in as `driver2@example.com` with `driverpass123`.
 
    **Expected outcome:** **Choose your vehicle** says **No vehicles are
    assigned to you** and **Ask your dispatcher to assign one, then check
@@ -357,7 +375,7 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
    Sign out from the account menu on **Choose your vehicle**.
 
-3. Sign in as `driver@example.com` again. That driver has one vehicle.
+4. Sign in as `driver@example.com` again. That driver has one vehicle.
 
    **Expected outcome:** the app goes straight to **Choose a route**, with
    **Vehicle bus-1** under the title. Tap
