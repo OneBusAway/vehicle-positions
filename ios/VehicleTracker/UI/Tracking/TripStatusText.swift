@@ -321,10 +321,10 @@ enum TripStatusText {
     }
 
     static var tryAgain: String {
-        String(localized: "Try again", comment: "Button in the 'Trip not ended yet' alert: send the end again.")
+        String(localized: "Try again", comment: "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: send the end again.")
     }
 
     static var endOnThisPhone: String {
-        String(localized: "End on this phone", comment: "Button in the 'Trip not ended yet' alert: stop reporting now; the end is sent before the driver's next start.")
+        String(localized: "End on this phone", comment: "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: stop reporting now; the end is sent before the driver's next start.")
     }
 }

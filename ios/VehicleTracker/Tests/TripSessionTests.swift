@@ -457,6 +457,16 @@ import VehiclePositionsKit
         #expect(locations.handles[0].invalidated)
     }
 
+    /// Resume's End trip: a failed end leaves the trip as it was, paused, so
+    /// the screen stays on Resume with the banner.
+    @Test func aFailedEndOfAPausedTripLeavesItPaused() async throws {
+        api.endError = APIError.transport("offline")
+        let (s, active) = try pausedSession()
+        await #expect(throws: APIError.transport("offline")) { try await s.end() }
+        #expect(s.phase == .paused(active))
+        #expect(try store.load() == active)
+    }
+
     @Test func endIsNotReentrant() async throws {
         api.endDelay = .milliseconds(50)
         let s = session()

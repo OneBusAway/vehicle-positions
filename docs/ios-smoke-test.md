@@ -188,8 +188,8 @@ xcrun simctl launch "$UDID" org.onebusaway.vehicletracker \
 ```
 
 The auto-start only runs from a signed-out or idle session: if a stored trip
-makes the app open **Paused**, tap Resume (or end the trip) rather than
-expecting the arguments to start a second one.
+makes the app open **Resume your trip?**, tap **Resume trip** (or **End
+trip**) rather than expecting the arguments to start a second one.
 
 Plain HTTP is refused except to `localhost`, `127.0.0.1` or a `.local` host
 (`Model/ServerURLPolicy.swift`). On a physical iPhone, put the Mac on the same
@@ -465,22 +465,35 @@ with or without a refresh and is not part of this check.)
 The rest of the checks run the same with two-minute tokens, and Check 4b needs
 them, so leave `ACCESS_TOKEN_TTL` set.
 
-### Check 4 — Relaunching rehydrates the trip as Paused
+### Check 4: A relaunch asks to resume the trip
 
 1. Terminate the app (`xcrun simctl terminate "$UDID"
    org.onebusaway.vehicletracker`) and launch it again with no arguments.
 
-**Expected outcome:** the app opens straight back on the Tracking screen for
-the same trip. The status card reads **Waiting for GPS** with the run's first
-stop (a rehydrated trip is never painted green), the line under it reads
-**Location stopped · Tap Resume** with a **Resume** button, the map shows the
-route, and the trip sheet still offers **End trip**, so a paused trip can still
-be ended. Tapping Resume restarts location delivery without touching the
-server, and the line goes away. (iOS only permits a (re)start of the location
-session from the foreground, which is why a relaunch pauses rather than
-resuming by itself.)
+**Expected outcome:** the app opens on **Resume your trip?** with "The app
+closed while this trip was running. Reports are paused until you choose." and
+a card: the route badge `1`, "North", "8:00 AM run", **Vehicle bus-1**, and
+"Started N min ago, at" the time the trip began, which moves on once a
+minute. Under it, **Resume trip** and **End trip**. iOS only lets the location
+session start again from the foreground, which is why a relaunch asks rather
+than resuming by itself.
 
-The same line and button appear when the location stream dies mid-trip.
+2. Stop the server (`kill %1`), tap **End trip**, then start the server again.
+
+**Expected outcome:** **End trip** reads **Ending trip** beside a spinner and
+the screen stays put. Once the request fails, a banner under the card reads
+"The server didn't confirm the trip ended. Try again, or end it on this phone
+only.", and the buttons become **Try again**, **End on this phone** and
+**Don't end the trip**. Tap **Don't end the trip**: the banner goes and
+**Resume trip** and **End trip** come back. Nothing was ended.
+
+3. Tap **Resume trip**.
+
+**Expected outcome:** the Tracking screen appears for the same trip, reading
+**Waiting for GPS** until the next fix, with no call to the server; then the
+status card and the reports carry on. The line **Location stopped · Tap
+Resume** with a **Resume** button still appears when the location stream dies
+mid-trip.
 
 ### Check 4b: A sign-in that can't be renewed is asked for from the card
 
@@ -528,7 +541,7 @@ password. Try again." under the password, and the sheet stays.
 
 **Expected outcome, immediately:** the app returns to the vehicle picker (the
 token is still fresh, so no second sign-in), and the stored trip is gone —
-a further relaunch goes to the picker, not to Paused.
+a further relaunch goes to the picker, not to **Resume your trip?**.
 
 **Expected outcome, after the staleness window:** the feed serves only points
 newer than `STALENESS_THRESHOLD` (5 m above), so the `bus-1` entity keeps

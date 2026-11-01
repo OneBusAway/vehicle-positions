@@ -4,8 +4,8 @@ import UIKit
 
 /// Text the driver reads at a glance. Every string here is short on purpose.
 enum Formatters {
-    static func clock(_ date: Date, timezone: String) -> String {
-        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+    nonisolated static func clock(_ date: Date, timezone: String, locale: Locale = .current) -> String {
+        var style = Date.FormatStyle(date: .omitted, time: .shortened, locale: locale)
         style.timeZone = TimeZone(identifier: timezone) ?? .current
         return date.formatted(style)
     }
