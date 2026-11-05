@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -24,6 +26,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -34,6 +37,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -42,6 +46,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -73,8 +78,21 @@ import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.engine.TripStop
 import org.onebusaway.vehicletracker.service.LocationFix
 import org.onebusaway.vehicletracker.ui.components.SPINNER_DELAY_MS
+import org.onebusaway.vehicletracker.ui.login.LoginError
+import org.onebusaway.vehicletracker.ui.login.LoginField
 import org.onebusaway.vehicletracker.ui.login.LoginScreenContent
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
+import org.onebusaway.vehicletracker.ui.permissions.ChecklistRow
+import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
+import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
+import org.onebusaway.vehicletracker.ui.permissions.RowState
+import org.onebusaway.vehicletracker.ui.permissions.RowState.ALLOWED
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NEEDED
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NEEDED_IN_SETTINGS
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NEXT
+import org.onebusaway.vehicletracker.ui.permissions.RowState.NOT_REACHED
+import org.onebusaway.vehicletracker.ui.permissions.RowState.SKIPPED
+import org.onebusaway.vehicletracker.ui.resume.ResumeCard
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreenContent
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftUiState
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
@@ -94,6 +112,7 @@ import org.onebusaway.vehicletracker.ui.tracking.StatusArea
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreenContent
 import org.onebusaway.vehicletracker.ui.tracking.TrackingUiState
 import org.onebusaway.vehicletracker.ui.tracking.TripPanel
+import org.onebusaway.vehicletracker.ui.tracking.formatClock
 import org.onebusaway.vehicletracker.ui.tracking.statusCardModel
 import org.onebusaway.vehicletracker.ui.vehicles.BusGroup
 import org.onebusaway.vehicletracker.ui.vehicles.BusSection
@@ -117,19 +136,230 @@ class ScreenFlowTest {
     private fun getString(resId: Int): String =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(resId)
 
-    @Test
-    fun loginScreen_disablesButtonWhileLoading() {
+    // --- Sign in ---
+
+    private class LoginFields(
+        val server: TextFieldState = TextFieldState(),
+        val email: TextFieldState = TextFieldState(),
+        val password: TextFieldState = TextFieldState(),
+    )
+
+    private fun showLogin(
+        state: LoginUiState,
+        fields: LoginFields = LoginFields(),
+        onChangeServer: () -> Unit = {},
+        onSignIn: () -> Unit = {},
+    ) {
         compose.setContent {
-            LoginScreenContent(
-                state = LoginUiState(loading = true),
-                onServerUrlChange = {},
-                onEmailChange = {},
-                onPasswordChange = {},
-                onLoginClick = {},
-            )
+            LoginScreenContent(state, fields.server, fields.email, fields.password, onChangeServer, onEdited = {}, onSignIn = onSignIn)
+        }
+    }
+
+    // By its label, and whether or not it is enabled: a disabled field has no SetText action.
+    private fun loginField(label: Int) =
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText) and hasText(getString(label)))
+
+    private fun hasError(message: String?) =
+        SemanticsMatcher("error is $message") { it.config.getOrNull(SemanticsProperties.Error) == message }
+
+    @Test
+    fun loginScreen_saysEachErrorUnderItsFieldAndAnnouncesIt() {
+        var state by mutableStateOf(LoginUiState(error = LoginError.MissingField(LoginField.EMAIL)))
+        compose.setContent {
+            LoginScreenContent(state, TextFieldState(), TextFieldState(), TextFieldState(), {}, {}, {})
         }
 
-        compose.onNodeWithText(getString(R.string.login_button)).assertIsNotEnabled()
+        loginField(R.string.login_email_label).assert(hasError(getString(R.string.login_error_missing_email)))
+        loginField(R.string.login_server_url_label).assert(hasError(null))
+        loginField(R.string.login_password_label).assert(hasError(null))
+
+        state = LoginUiState(error = LoginError.InvalidCredentials)
+        loginField(R.string.login_password_label).assert(hasError(getString(R.string.login_error_invalid_credentials)))
+        loginField(R.string.login_email_label).assert(hasError(null))
+
+        state = LoginUiState(error = LoginError.Unreachable("https://tracker.example.org/"))
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_check_address)))
+        compose.onNode(hasText(resources.getString(R.string.login_error_unreachable, "tracker.example.org")) and announcedPolitely)
+            .assertIsDisplayed()
+
+        state = LoginUiState(error = LoginError.ServerError)
+        compose.onNodeWithText(getString(R.string.login_error_server)).assertIsDisplayed()
+        for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
+            loginField(field).assert(hasError(null))
+        }
+    }
+
+    @Test
+    fun loginScreen_whileSigningInDisablesTheFieldsAndSaysSo() {
+        showLogin(LoginUiState(loading = true))
+
+        compose.onNode(hasText(getString(R.string.login_signing_in)) and announcedPolitely).assertIsNotEnabled()
+        compose.onNode(hasText(getString(R.string.login_button)) and hasClickAction()).assertDoesNotExist()
+        for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
+            loginField(field).assertIsNotEnabled()
+        }
+    }
+
+    /** What a field draws, which for a password is not what it holds: TalkBack gets the text, marked as a password. */
+    private fun drawnText(node: SemanticsNodeInteraction): String {
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.first().layoutInput.text.text
+    }
+
+    @Test
+    fun loginScreen_eyeShowsAndHidesThePassword() {
+        showLogin(LoginUiState(), LoginFields(password = TextFieldState("secret")))
+        val password = loginField(R.string.login_password_label)
+
+        assertEquals("\u2022".repeat(6), drawnText(password))
+        compose.onNodeWithContentDescription(getString(R.string.login_show_password)).performClick()
+        assertEquals("secret", drawnText(password))
+        compose.onNodeWithContentDescription(getString(R.string.login_hide_password)).performClick()
+        assertEquals("\u2022".repeat(6), drawnText(password))
+    }
+
+    @Test
+    fun loginScreen_signsInFromTheButtonAndFromTheKeyboard() {
+        var signIns = 0
+        showLogin(LoginUiState(), onSignIn = { signIns++ })
+
+        compose.onNode(hasText(getString(R.string.login_button)) and hasClickAction()).performClick()
+        loginField(R.string.login_password_label).performImeAction()
+
+        assertEquals(2, signIns)
+    }
+
+    @Test
+    fun loginScreen_showsAKnownServerAsALineUntilChangeIsTapped() {
+        var state by mutableStateOf(LoginUiState(savedServer = "https://tracker.example.org/"))
+        val server = TextFieldState("https://tracker.example.org/")
+        compose.setContent {
+            LoginScreenContent(state, server, TextFieldState(), TextFieldState(), { state = state.copy(changingServer = true) }, {}, {})
+        }
+
+        compose.onNodeWithText("tracker.example.org").assertIsDisplayed()
+        loginField(R.string.login_server_url_label).assertDoesNotExist()
+
+        compose.onNodeWithText(getString(R.string.login_change_server)).performClick()
+
+        loginField(R.string.login_server_url_label).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_change_server)).assertDoesNotExist()
+    }
+
+    @Test
+    fun loginScreen_signingInAgainShowsTheOpenTripAndAsksOnlyForThePassword() {
+        showLogin(
+            LoginUiState(
+                again = true,
+                openTrip = RouteBadgeModel("7", Color(0xFFFDB71A), Color.Black),
+                savedEmail = "maria@metro.example",
+                savedServer = "https://tracker.example.org/",
+            ),
+            LoginFields(server = TextFieldState("https://tracker.example.org/"), email = TextFieldState("maria@metro.example")),
+        )
+
+        compose.onNodeWithText(getString(R.string.login_trip_open_title)).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.login_trip_open_message, "7")).assertIsDisplayed()
+        compose.onNode(hasText(getString(R.string.login_again_title)) and isHeading()).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.login_again_subtitle, "maria@metro.example")).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_again_button)).assertIsDisplayed()
+        compose.onNodeWithText("tracker.example.org").assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_change_server)).assertDoesNotExist()
+        loginField(R.string.login_password_label).assertIsFocused()
+    }
+
+    @Test
+    fun loginScreen_titleIsAHeading() {
+        showLogin(LoginUiState())
+
+        compose.onNode(hasText(getString(R.string.login_title)) and isHeading()).assertIsDisplayed()
+    }
+
+    @Test
+    fun loginScreen_scrollsToSignInAtALargeFontScale() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                // A short screen, so Sign in starts below the fold whatever the test device.
+                Box(Modifier.height(360.dp)) {
+                    LoginScreenContent(LoginUiState(), TextFieldState(), TextFieldState(), TextFieldState(), {}, {}, {})
+                }
+            }
+        }
+
+        val signIn = compose.onNode(hasText(getString(R.string.login_button)) and hasClickAction())
+        signIn.assertIsNotDisplayed()
+        signIn.performScrollTo().assertIsDisplayed()
+    }
+
+    // --- The checklist before a trip ---
+
+    private fun checklist(vararg states: RowState) = PermissionRow.entries.zip(states.toList()) { row, state -> ChecklistRow(row, state) }
+
+    private fun showChecklist(
+        rows: List<ChecklistRow>,
+        canContinue: Boolean = true,
+        onBack: () -> Unit = {},
+        onContinue: () -> Unit = {},
+        onRowAction: () -> Unit = {},
+    ) {
+        compose.setContent { PreflightContent("4317", rows, canContinue, onBack, onContinue, onRowAction) }
+    }
+
+    @Test
+    fun preflight_saysEachRowsStateInWords() {
+        showChecklist(checklist(ALLOWED, ALLOWED, ALLOWED, SKIPPED, NEXT, NOT_REACHED))
+
+        compose.onNode(hasText(getString(R.string.preflight_title)) and isHeading()).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.preflight_message, "4317")).assertIsDisplayed()
+        assertEquals(3, compose.onAllNodes(hasText(getString(R.string.preflight_allowed)) and announcedPolitely).fetchSemanticsNodes().size)
+        compose.onNode(hasText(getString(R.string.preflight_skipped)) and announcedPolitely).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_skipped_why)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_notifications_why)).assertDoesNotExist()
+        compose.onNode(hasText(getString(R.string.preflight_next)) and announcedPolitely).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_battery_why)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_location_services_why)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun preflight_continueWalksTheStepsAndWaitsWhileAndroidAsks() {
+        var continued = 0
+        var canContinue by mutableStateOf(true)
+        compose.setContent {
+            PreflightContent("4317", checklist(NEXT, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED), canContinue, {}, { continued++ }, {})
+        }
+
+        compose.onNodeWithText(getString(R.string.preflight_continue)).performClick()
+        assertEquals(1, continued)
+        canContinue = false
+        compose.onNodeWithText(getString(R.string.preflight_continue)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun preflight_offersTryAgainOrOpenSettingsWhenLocationIsRefused() {
+        var actions = 0
+        var rows by mutableStateOf(checklist(NEEDED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED))
+        compose.setContent { PreflightContent("4317", rows, false, {}, {}, { actions++ }) }
+
+        compose.onNodeWithText(getString(R.string.preflight_location_needed)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.preflight_open_settings)).assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.preflight_try_again)).performClick()
+
+        rows = checklist(NEEDED_IN_SETTINGS, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED)
+        compose.onNodeWithText(getString(R.string.preflight_try_again)).assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.preflight_open_settings)).performClick()
+
+        assertEquals(2, actions)
+    }
+
+    @Test
+    fun preflight_backLeavesTheChecklist() {
+        var back = false
+        showChecklist(checklist(NEXT, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED, NOT_REACHED), onBack = { back = true })
+
+        compose.onNodeWithContentDescription(getString(R.string.setup_navigate_up)).performClick()
+
+        assertTrue(back)
     }
 
     @Test
@@ -142,68 +372,136 @@ class ScreenFlowTest {
         compose.onNodeWithText(getString(R.string.tracking_signed_out_title)).assertDoesNotExist()
     }
 
-    @Test
-    fun resumeScreen_namesTheShiftAndOffersBothActions() {
-        var resumed = false
-        var ended = false
-        compose.setContent {
-            ResumeShiftScreenContent(
-                state = ResumeShiftUiState(
-                    trip = ActiveTrip(7L, "T1", "bus-1", "R1", "20260902", 100L),
-                    startedAgoSec = 2 * 3600L + 5 * 60,
-                ),
-                onResumeClick = { resumed = true },
-                onEndShiftClick = { ended = true },
-                onEndShiftLocallyClick = {},
-                onDismissError = {},
-            )
-        }
+    // --- Resume ---
 
-        compose.onNodeWithText(resources.getString(R.string.resume_message, "bus-1")).assertIsDisplayed()
-        compose.onNodeWithText(resources.getString(R.string.resume_route, "R1")).assertIsDisplayed()
-        compose.onNodeWithText(resources.getString(R.string.resume_started_hours_ago, 2, 5)).assertIsDisplayed()
-        compose.onNodeWithText(getString(R.string.resume_button)).performClick()
-        compose.onNodeWithText(getString(R.string.resume_end_shift_button)).performClick()
-        assertTrue(resumed)
-        assertTrue(ended)
+    private val resumeTrip = ActiveTrip(7L, "T1", "4317", "100263", "20260902", 100L)
+    private val runAt: Instant = ZonedDateTime.of(2026, 9, 2, 6, 58, 0, 0, ZoneId.of("America/Los_Angeles")).toInstant()
+    private val resumeCard = ResumeCard(
+        route = RouteBadgeModel("7", Color(0xFFFDB71A), Color.Black),
+        headsign = "Downtown Seattle Via Rainier Ave S",
+        runStartsAt = runAt,
+        vehicleId = "4317",
+        startedAt = runAt,
+        zone = ZoneId.of("America/Los_Angeles"),
+    )
+
+    private class ResumeCalls(var resumed: Int = 0, var ended: Int = 0, var endedLocally: Int = 0, var keptTrip: Int = 0)
+
+    private fun showResume(state: ResumeShiftUiState, now: () -> Long = { runAt.epochSecond + 23 * 60 }): ResumeCalls {
+        val calls = ResumeCalls()
+        compose.setContent {
+            ResumeShiftScreenContent(state, now, { calls.resumed++ }, { calls.ended++ }, { calls.endedLocally++ }, { calls.keptTrip++ })
+        }
+        return calls
     }
 
     @Test
-    fun resumeScreen_disablesBothActionsUntilTheTripLoads() {
-        compose.setContent {
-            ResumeShiftScreenContent(
-                state = ResumeShiftUiState(trip = null),
-                onResumeClick = {},
-                onEndShiftClick = {},
-                onEndShiftLocallyClick = {},
-                onDismissError = {},
-            )
-        }
+    fun resumeScreen_showsTheTripAsTheDriverKnowsItAndOffersBothActions() {
+        val calls = showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard))
+        val at = formatClock(runAt, resumeCard.zone)
+
+        compose.onNode(hasText(getString(R.string.resume_title)) and isHeading()).assertIsDisplayed()
+        compose.onNodeWithText("7").assertIsDisplayed()
+        compose.onNodeWithText("Downtown Seattle Via Rainier Ave S").assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.resume_run, at)).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.resume_bus, "4317")).assertIsDisplayed()
+        compose.onNodeWithText(resources.getQuantityString(R.plurals.resume_started_minutes_ago, 23, 23, at)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.resume_button)).performClick()
+        compose.onNodeWithText(getString(R.string.resume_end_trip_button)).performClick()
+        assertEquals(1, calls.resumed)
+        assertEquals(1, calls.ended)
+    }
+
+    @Test
+    fun resumeScreen_namesATripWithNoScheduleByItsRoute() {
+        showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard.copy(route = RouteBadgeModel("100263", null, null), headsign = null, runStartsAt = null)))
+
+        compose.onNodeWithText(resources.getString(R.string.resume_route, "100263")).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.resume_run, formatClock(runAt, resumeCard.zone))).assertDoesNotExist()
+    }
+
+    @Test
+    fun resumeScreen_ticksTheStartedTimeOnceAMinute() {
+        var now = runAt.epochSecond + 23 * 60 + 30
+        compose.mainClock.autoAdvance = false
+        showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard), now = { now })
+        val at = formatClock(runAt, resumeCard.zone)
+        compose.onNodeWithText(resources.getQuantityString(R.plurals.resume_started_minutes_ago, 23, 23, at)).assertIsDisplayed()
+
+        now += 30
+        compose.mainClock.advanceTimeBy(30_000)
+        compose.mainClock.advanceTimeByFrame()
+
+        compose.onNodeWithText(resources.getQuantityString(R.plurals.resume_started_minutes_ago, 24, 24, at)).assertIsDisplayed()
+    }
+
+    @Test
+    fun resumeScreen_disablesBothActionsAndSaysSoWhileTheTripLoads() {
+        compose.mainClock.autoAdvance = false
+        showResume(ResumeShiftUiState())
 
         compose.onNodeWithText(getString(R.string.resume_button)).assertIsNotEnabled()
-        compose.onNodeWithText(getString(R.string.resume_end_shift_button)).assertIsNotEnabled()
+        compose.onNodeWithText(getString(R.string.resume_end_trip_button)).assertIsNotEnabled()
+        // A quick read goes straight to the card; only a slow one says it is loading.
+        compose.mainClock.advanceTimeBy(SPINNER_DELAY_MS - 100)
+        compose.onNodeWithText(getString(R.string.resume_loading)).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(200)
+        compose.onNodeWithText(getString(R.string.resume_loading)).assertIsDisplayed()
     }
 
     @Test
-    fun resumeScreen_scrollsToEndShiftAtALargeFontScale() {
+    fun resumeScreen_saysEndingTripAndWaits() {
+        showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard, ending = true))
+
+        compose.onNodeWithText(getString(R.string.resume_ending)).assertIsNotEnabled()
+        compose.onNodeWithText(getString(R.string.resume_button)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun resumeScreen_saysAFailedEndAboveTryAgainAndEndOnThisPhone() {
+        val calls = showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard, endTripError = true))
+
+        compose.onNode(hasText(getString(R.string.resume_end_failed)) and announcedPolitely).assertIsDisplayed()
+        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.resume_button)).assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.tracking_end_trip_error_retry)).performScrollTo().performClick()
+        compose.onNodeWithText(getString(R.string.tracking_end_trip_error_end_locally)).performScrollTo().performClick()
+        assertEquals(1, calls.ended)
+        assertEquals(1, calls.endedLocally)
+    }
+
+    @Test
+    fun resumeScreen_goesBackFromAFailedEndByItsButtonOrBack() {
+        val calls = showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard, endTripError = true))
+
+        compose.onNodeWithText(getString(R.string.resume_end_failed_back)).performScrollTo().performClick()
+        assertEquals(1, calls.keptTrip)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitForIdle()
+        assertEquals(2, calls.keptTrip)
+    }
+
+    @Test
+    fun resumeScreen_hasNoWayBackBeforeAnEndFails() {
+        showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard))
+
+        compose.onNodeWithText(getString(R.string.resume_end_failed_back)).assertDoesNotExist()
+    }
+
+    @Test
+    fun resumeScreen_scrollsToEndTripAtALargeFontScale() {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
-                // A short screen, so End Shift starts below the fold whatever the test device.
+                // A short screen, so End trip starts below the fold whatever the test device.
                 Box(Modifier.height(360.dp)) {
-                    ResumeShiftScreenContent(
-                        state = ResumeShiftUiState(trip = ActiveTrip(7L, "T1", "bus-1", "R1", "20260902", 100L)),
-                        onResumeClick = {},
-                        onEndShiftClick = {},
-                        onEndShiftLocallyClick = {},
-                        onDismissError = {},
-                    )
+                    ResumeShiftScreenContent(ResumeShiftUiState(trip = resumeTrip, card = resumeCard), { runAt.epochSecond }, {}, {}, {}, {})
                 }
             }
         }
 
-        val endShift = compose.onNodeWithText(getString(R.string.resume_end_shift_button))
-        endShift.assertIsNotDisplayed()
-        endShift.performScrollTo().assertIsDisplayed()
+        val endTrip = compose.onNodeWithText(getString(R.string.resume_end_trip_button))
+        endTrip.assertIsNotDisplayed()
+        endTrip.performScrollTo().assertIsDisplayed()
     }
 
     // --- The status card, against the server fixture's trip T1 ---

@@ -71,9 +71,7 @@ internal fun SetupHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
-            IconButton(onClick = onBack) {
-                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.setup_navigate_up))
-            }
+            SetupBackButton(onBack)
         } else {
             Spacer(Modifier.width(NoBackInset))
         }
@@ -101,6 +99,14 @@ internal fun SetupHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+/** The setup screens' Back, also on the checklist before a trip, which has no trip so far to show beside it. */
+@Composable
+internal fun SetupBackButton(onBack: () -> Unit) {
+    IconButton(onClick = onBack) {
+        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.setup_navigate_up))
     }
 }
 
