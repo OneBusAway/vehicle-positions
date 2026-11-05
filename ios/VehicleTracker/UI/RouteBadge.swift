@@ -20,10 +20,11 @@ struct RouteBadge: View {
 
 /// The feed's `route_color` and `route_text_color` as it gives them, with no
 /// contrast override, so a route looks the same on both apps. With no route
-/// colour the badge is the accent pair, as Android's `RouteBadge` falls back
-/// to `primary` and `onPrimary`. With a route colour but no text colour, the
-/// text is black or white for that colour: the accent's label can be 1.6:1
-/// on a feed's dark red.
+/// colour the badge is the accent pair (Android's `primary` and `onPrimary`),
+/// even if the feed gives a text colour, because that text was chosen for the
+/// route colour and not for the accent. With a route colour but no text
+/// colour, the text is black or white for that colour: the accent's label can
+/// be 1.6:1 on a feed's dark red.
 struct RouteBadgeColors {
     let background: Color
     let text: Color
@@ -31,7 +32,7 @@ struct RouteBadgeColors {
     init(color: String, textColor: String) {
         guard let route = UIColor(hex: color) else {
             background = .accent
-            text = Color(hex: textColor) ?? .onAccent
+            text = .onAccent
             return
         }
         background = Color(uiColor: route)

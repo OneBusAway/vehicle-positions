@@ -18,8 +18,12 @@ import UIKit
     @Test(arguments: ThemeTests.styles) func noRouteColourIsTheAccentPair(_ style: UIUserInterfaceStyle) throws {
         let accent = try ThemeTests.named("AccentColor", style).hex
         let onAccent = try ThemeTests.named("OnAccent", style).hex
+        // White text from the feed is 1.7:1 on the dark mode accent, so a feed's
+        // text colour only goes with the feed's own route colour.
         for color in ["", "ZZZZZZ", "12345"] {
-            #expect(hexes(RouteBadgeColors(color: color, textColor: ""), style) == (accent, onAccent), "\(color)")
+            for textColor in ["", "FFFFFF", "000000"] {
+                #expect(hexes(RouteBadgeColors(color: color, textColor: textColor), style) == (accent, onAccent), "\(color) \(textColor)")
+            }
         }
     }
 
