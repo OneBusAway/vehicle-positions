@@ -925,6 +925,16 @@ func (f *fakeUserStore) SetUserPasswordAndRevokeSessions(_ context.Context, id i
 	return nil
 }
 
+func (f *fakeUserStore) CountActiveUsersByRole(_ context.Context, role string) (int, error) {
+	n := 0
+	for _, u := range f.users {
+		if u.Role == role && u.Active {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // fakeAssignmentStore is an in-memory double implementing
 // AssignmentCreator/Deleter/ListerByUser, keyed by user ID then vehicle ID.
 // missingVehicle lets a test mark specific vehicle IDs as nonexistent, so

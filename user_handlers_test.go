@@ -28,7 +28,7 @@ type mockUserPager struct {
 	gotFilter UserFilter
 }
 
-// Role, Q and ActiveOnly are recorded rather than applied — matching them is
+// Role, Q and ActiveOnly are recorded rather than applied â€” matching them is
 // the store's job, tested against Postgres.
 func (m *mockUserPager) ListUsersPage(_ context.Context, filter UserFilter) ([]UserResponse, error) {
 	m.gotFilter = filter
@@ -60,10 +60,23 @@ type mockUserUpdater struct {
 	user        *UserResponse
 	err         error
 	passwordErr error
+	activeErr   error
+
+	// getUserResp / getUserErr control the GetUser stub used by the
+	// last-admin deactivation guard.
+	getUserResp *UserResponse
+	getUserErr  error
+
+	// countAdmins / countAdminsErr control the CountActiveUsersByRole
+	// stub. When countAdmins is 0 and countAdminsErr is nil the stub
+	// returns 0 (useful for testing the <= 1 branch).
+	countAdmins    int
+	countAdminsErr error
 
 	passwordUpdates map[int64]string
+	activeUpdates   map[int64]bool
 	updateUserCalls int
-	calls           []string // "profile" / "password", in call order
+	calls           []string // "profile" / "password" / "active", in call order
 }
 
 func (m *mockUserUpdater) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
@@ -82,6 +95,27 @@ func (m *mockUserUpdater) SetUserPasswordAndRevokeSessions(_ context.Context, id
 	}
 	m.passwordUpdates[id] = password
 	return nil
+}
+
+func (m *mockUserUpdater) SetUserActiveAndRevokeSessions(_ context.Context, id int64, active bool) error {
+	m.calls = append(m.calls, "active")
+	if m.activeErr != nil {
+		return m.activeErr
+	}
+	if m.activeUpdates == nil {
+		m.activeUpdates = map[int64]bool{}
+	}
+	m.activeUpdates[id] = active
+	return nil
+}
+
+func (m *mockUserUpdater) GetUser(_ context.Context, _ int64) (*UserResponse, error) {
+	m.calls = append(m.calls, "getUser")
+	return m.getUserResp, m.getUserErr
+}
+
+func (m *mockUserUpdater) CountActiveUsersByRole(_ context.Context, _ string) (int, error) {
+	return m.countAdmins, m.countAdminsErr
 }
 
 type mockUserDeleter struct {
@@ -562,7 +596,10 @@ func TestHandleCreateUser_BodyTooLarge(t *testing.T) {
 
 func TestHandleUpdateUser_HappyPath(t *testing.T) {
 	updated := &UserResponse{ID: 1, Name: "Alice Updated", Email: "alice2@example.com", Role: "driver"}
-	handler := handleUpdateUser(&mockUserUpdater{user: updated})
+	handler := handleUpdateUser(&mockUserUpdater{
+		user:        updated,
+		getUserResp: &UserResponse{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true},
+	})
 	body := `{"name":"Alice Updated","email":"alice2@example.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -581,7 +618,7 @@ func TestHandleUpdateUser_HappyPath(t *testing.T) {
 }
 
 func TestHandleUpdateUser_NotFound(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{err: ErrUserNotFound})
+	handler := handleUpdateUser(&mockUserUpdater{getUserErr: ErrUserNotFound})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/999", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -594,7 +631,10 @@ func TestHandleUpdateUser_NotFound(t *testing.T) {
 }
 
 func TestHandleUpdateUser_DuplicateEmail(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{err: ErrDuplicateEmail})
+	handler := handleUpdateUser(&mockUserUpdater{
+		err:         ErrDuplicateEmail,
+		getUserResp: &UserResponse{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true},
+	})
 	body := `{"name":"Alice","email":"taken@example.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -698,7 +738,10 @@ func TestHandleUpdateUser_UnknownFieldRejected(t *testing.T) {
 }
 
 func TestHandleUpdateUser_DBError(t *testing.T) {
-	handler := handleUpdateUser(&mockUserUpdater{err: errors.New("database down")})
+	handler := handleUpdateUser(&mockUserUpdater{
+		err:         errors.New("database down"),
+		getUserResp: &UserResponse{ID: 1, Name: "Alice", Email: "a@b.com", Role: "driver", Active: true},
+	})
 	body := `{"name":"Alice","email":"a@b.com","role":"driver"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/users/1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -725,18 +768,24 @@ func TestHandleUpdateUser_BodyTooLarge(t *testing.T) {
 
 func TestHandleUpdateUser_PasswordOptional(t *testing.T) {
 	t.Run("blank password leaves the hash alone", func(t *testing.T) {
-		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		store := &mockUserUpdater{
+			user:        &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"},
+			getUserResp: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true},
+		}
 		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver"}`)
 		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 		assert.Empty(t, store.passwordUpdates)
 	})
 	t.Run("new password is applied after the profile update", func(t *testing.T) {
-		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
+		store := &mockUserUpdater{
+			user:        &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"},
+			getUserResp: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true},
+		}
 		rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","password":"newlongpassword"}`)
 		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 		assert.Equal(t, "newlongpassword", store.passwordUpdates[1])
 		assert.NotContains(t, rr.Body.String(), "newlongpassword")
-		assert.Equal(t, []string{"profile", "password"}, store.calls)
+		assert.Equal(t, []string{"getUser", "profile", "password"}, store.calls)
 	})
 	t.Run("short password is rejected before any write", func(t *testing.T) {
 		store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver"}}
@@ -802,6 +851,17 @@ func TestHandleDeleteUser_DBError(t *testing.T) {
 	assert.Equal(t, "internal server error", decodeErrorResponse(t, w))
 }
 
+func TestHandleDeleteUser_UserHasTrips(t *testing.T) {
+	handler := handleDeleteUser(&mockUserDeleter{err: ErrUserHasTrips})
+	req := httptest.NewRequest("DELETE", "/api/v1/admin/users/1", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Equal(t, "cannot delete a user who has trips; deactivate the user instead", decodeErrorResponse(t, w))
+}
+
 // TestHandleListUsers_FilterParams is the validation table for the search and
 // role filters. Every case asserts the filter the handler handed the store,
 // or the exact error message, so a case can't pass for the wrong reason. The
@@ -861,7 +921,7 @@ func TestHandleListUsers_FilterParams(t *testing.T) {
 }
 
 // TestHandleListUsers_IncludesInactive pins that the endpoint still lists
-// deactivated users, which it has always done — the admin page's active-only
+// deactivated users, which it has always done â€” the admin page's active-only
 // filter must not leak into the API.
 func TestHandleListUsers_IncludesInactive(t *testing.T) {
 	store := &mockUserPager{users: []UserResponse{
@@ -887,7 +947,11 @@ func TestHandleListUsers_IncludesInactive(t *testing.T) {
 // land together or not at all is the store's job, tested against Postgres in
 // TestStore_SetUserPasswordAndRevokeSessions_RollsBackOnRevokeFailure.
 func TestHandleUpdateUser_PasswordResetFailureIs500(t *testing.T) {
-	store := &mockUserUpdater{user: newSampleUser(), passwordErr: errors.New("database unavailable")}
+	store := &mockUserUpdater{
+		user:        newSampleUser(),
+		passwordErr: errors.New("database unavailable"),
+		getUserResp: &UserResponse{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin", Active: true},
+	}
 	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","password":"new-password"}`)
 
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
@@ -897,9 +961,216 @@ func TestHandleUpdateUser_PasswordResetFailureIs500(t *testing.T) {
 // TestHandleUpdateUser_PasswordResetUnknownUserIs404 covers a user deleted
 // between the profile update and the password reset.
 func TestHandleUpdateUser_PasswordResetUnknownUserIs404(t *testing.T) {
-	store := &mockUserUpdater{user: newSampleUser(), passwordErr: ErrUserNotFound}
+	store := &mockUserUpdater{
+		user:        newSampleUser(),
+		passwordErr: ErrUserNotFound,
+		getUserResp: &UserResponse{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin", Active: true},
+	}
 	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","password":"new-password"}`)
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Equal(t, "user not found", decodeErrorResponse(t, rr))
+}
+
+// --- Update User: active field ---
+
+func TestHandleUpdateUser_ActiveDeactivate(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true},
+		getUserResp: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true},
+	}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","active":false}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, false, store.activeUpdates[1])
+	var resp UserResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	assert.False(t, resp.Active)
+}
+
+func TestHandleUpdateUser_ActiveReactivate(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: false},
+		getUserResp: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: false},
+	}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","active":true}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, true, store.activeUpdates[1])
+	var resp UserResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	assert.True(t, resp.Active)
+}
+
+func TestHandleUpdateUser_ActiveOmittedLeavesUnchanged(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true},
+		getUserResp: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true},
+	}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver"}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Nil(t, store.activeUpdates, "active must not be toggled when the field is absent")
+}
+
+func TestHandleUpdateUser_ActiveErrorIs500(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        newSampleUser(),
+		activeErr:   errors.New("db unavailable"),
+		getUserResp: &UserResponse{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true},
+	}
+	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","active":false}`)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "internal server error", decodeErrorResponse(t, rr))
+}
+
+func TestHandleUpdateUser_ActiveUnknownUserIs404(t *testing.T) {
+	store := &mockUserUpdater{user: newSampleUser(), activeErr: ErrUserNotFound}
+	// getUserResp must still succeed for the guard check to reach the store call.
+	store.getUserResp = &UserResponse{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "driver", Active: true}
+	store.countAdmins = 2
+	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice@example.com","role":"admin","active":false}`)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, "user not found", decodeErrorResponse(t, rr))
+}
+
+func TestHandleUpdateUser_ActiveWithPasswordOrdering(t *testing.T) {
+	store := &mockUserUpdater{user: &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true}}
+	// Guard: target is a driver, so the admin-count branch is skipped.
+	store.getUserResp = &UserResponse{ID: 1, Name: "N", Email: "n@test.com", Role: "driver", Active: true}
+	rr := putUser(t, store, 1, `{"name":"N","email":"n@test.com","role":"driver","password":"newlongpassword","active":false}`)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, []string{"getUser", "profile", "password", "active"}, store.calls, "getUser -> profile -> password -> active ordering")
+}
+
+// --- Update User: last-admin deactivation guard ---
+
+func TestHandleUpdateUser_DeactivateLastAdminReturns422(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		getUserResp: &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		countAdmins: 1,
+	}
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
+	assert.Equal(t, "cannot deactivate the last active admin", decodeErrorResponse(t, rr))
+	assert.Nil(t, store.activeUpdates, "SetUserActiveAndRevokeSessions must not be called")
+	assert.Zero(t, store.updateUserCalls, "UpdateUser must not be called when validation fails")
+}
+
+// TestHandleUpdateUser_DemoteLastAdminReturns422 covers the race the old
+// code missed: submitting role:"driver" + active:false in one request would
+// demote the admin before the deactivation guard ran, so GetUser saw a
+// driver and skipped the check. The fix validates against the ORIGINAL
+// state, catching demotions that would leave zero active admins.
+func TestHandleUpdateUser_DemoteLastAdminReturns422(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		getUserResp: &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		countAdmins: 1,
+	}
+	// Demote to driver AND deactivate in one request
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"driver","active":false}`)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
+	assert.Equal(t, "cannot deactivate the last active admin", decodeErrorResponse(t, rr))
+	assert.Zero(t, store.updateUserCalls, "no writes must happen when validation fails")
+}
+
+// TestHandleUpdateUser_DemoteLastAdminWithoutDeactivateReturns422 covers
+// role demotion alone (no active:false): changing the sole admin to a driver
+// still removes the last active admin.
+func TestHandleUpdateUser_DemoteLastAdminWithoutDeactivateReturns422(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		getUserResp: &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		countAdmins: 1,
+	}
+	// Demote to driver but don't change active — still removes the last admin
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"driver"}`)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
+	assert.Equal(t, "cannot deactivate the last active admin", decodeErrorResponse(t, rr))
+	assert.Zero(t, store.updateUserCalls, "no writes must happen when validation fails")
+}
+
+func TestHandleUpdateUser_DeactivateAdminWithMultipleAdminsAllowed(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		getUserResp: &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		countAdmins: 2,
+	}
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, false, store.activeUpdates[1])
+}
+
+func TestHandleUpdateUser_DeactivateDriverNotGuarded(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 2, Name: "Driver", Email: "driver@test.com", Role: "driver", Active: true},
+		getUserResp: &UserResponse{ID: 2, Name: "Driver", Email: "driver@test.com", Role: "driver", Active: true},
+		countAdmins: 1, // only one admin exists, but the target is a driver
+	}
+	rr := putUser(t, store, 2, `{"name":"Driver","email":"driver@test.com","role":"driver","active":false}`)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, false, store.activeUpdates[2])
+}
+
+func TestHandleUpdateUser_ReactivateNotGuarded(t *testing.T) {
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: false},
+		getUserResp: &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: false},
+	}
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":true}`)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, true, store.activeUpdates[1])
+}
+
+func TestHandleUpdateUser_DeactivateGuardGetUserError(t *testing.T) {
+	store := &mockUserUpdater{
+		user:       &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		getUserErr: errors.New("db timeout"),
+	}
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "internal server error", decodeErrorResponse(t, rr))
+}
+
+func TestHandleUpdateUser_DeactivateGuardGetUserNotFound(t *testing.T) {
+	store := &mockUserUpdater{
+		user:       &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		getUserErr: ErrUserNotFound,
+	}
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, "user not found", decodeErrorResponse(t, rr))
+}
+
+func TestHandleUpdateUser_DeactivateGuardCountError(t *testing.T) {
+	store := &mockUserUpdater{
+		user:           &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		getUserResp:    &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
+		countAdminsErr: errors.New("db timeout"),
+	}
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "internal server error", decodeErrorResponse(t, rr))
+}
+
+func TestHandleUpdateUser_DeactivateAlreadyInactiveAdminAllowed(t *testing.T) {
+	// An admin who is already inactive is not counted as "active", so
+	// deactivating them again must not trigger the guard.
+	store := &mockUserUpdater{
+		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: false},
+		getUserResp: &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: false},
+		countAdmins: 1,
+	}
+	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
+
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	assert.Equal(t, false, store.activeUpdates[1])
 }

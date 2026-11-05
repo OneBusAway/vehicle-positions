@@ -1474,7 +1474,7 @@ paths:
       tags: [admin]
       summary: Update a user
       description: |
-        Updates name, email, role and, optionally, password. Requires the `admin` role. Request
+        Updates name, email, role and, optionally, password or active status. Requires the `admin` role. Request
         bodies are capped at 1 KiB.
       requestBody:
         required: true
@@ -1522,6 +1522,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: User has trips and cannot be deleted; deactivate the user instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -2156,6 +2162,12 @@ components:
             Optional. A non-empty value replaces the user's password, held to
             the same rules as on create. Omit it, or send an empty string, to
             keep the current one.
+        active:
+          type: boolean
+          description: |
+            Optional. When present, activates or deactivates the user account.
+            Deactivating revokes all refresh tokens held by the user. Omitting
+            the field leaves the flag unchanged.
 
     # Shared by create and update so the length rules live in one place. The
     # upper bound is bcrypt's 72-byte input limit, which JSON Schema's
