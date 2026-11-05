@@ -6,7 +6,8 @@ import VehiclePositionsKit
 /// Errors this session raises itself, as opposed to ones the server sent
 /// (``APIError``).
 nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
-    /// A call that needs the server was made while signed out.
+    /// A call that needs the server was made while signed out, or a trip
+    /// was started while signing out.
     case notSignedIn
     /// The fetched trip has no usable shape or no stops: nothing to judge
     /// adherence against, so it is refused before anything is started.
@@ -93,6 +94,9 @@ final class TripSession {
     /// replaced by it.
     private(set) var fixesSent = 0
     private(set) var vehicles: [Vehicle] = []
+    /// A sign-out is waiting on the server. No trip may start or resume
+    /// meanwhile: the logout is revoking the token it would report with.
+    private(set) var isSigningOut = false
     let settings: AppSettings
 
     private let tokens: any TokenStoring
@@ -192,9 +196,36 @@ final class TripSession {
         refreshReporting()
     }
 
-    /// Signs out of the account. Works from `.idle` and `.paused`: a paused
-    /// trip's record is left in the store so the next sign-in returns to it.
-    func signOut() {
+    /// The driver's sign-out: ends the session on the server, then on this
+    /// phone, from `.idle` or `.paused` only, as `endSessionLocally()` does.
+    /// The logout goes first because the client reads the token from the
+    /// store for every request. A logout that fails still signs out here: a
+    /// driver handing the phone on must never be left signed in. The email
+    /// goes too, for the next driver to type their own; the server stays.
+    func signOut() async {
+        switch phase {
+        case .idle, .paused:
+            guard !isSigningOut else { return }
+            isSigningOut = true
+            defer { isSigningOut = false }
+            do {
+                try await requireAPI().logout()
+                log.notice("logged out on the server")
+            } catch {
+                log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error))")
+            }
+            endSessionLocally()
+            settings.email = ""
+        default:
+            return
+        }
+    }
+
+    /// Signs out on this phone only, telling the server nothing: for a
+    /// session the server has already ended. Works from `.idle` and
+    /// `.paused`: a paused trip's record is left in the store so the next
+    /// sign-in returns to it.
+    func endSessionLocally() {
         switch phase {
         case .idle, .paused:
             try? tokens.clear()
@@ -223,6 +254,7 @@ final class TripSession {
     // MARK: Trip lifecycle
 
     func start(vehicle: Vehicle, tripID: String) async throws {
+        guard !isSigningOut else { throw TripSessionError.notSignedIn }
         guard case .idle = phase else { throw TripSessionError.busy }
         let api = try requireAPI()
         phase = .starting
@@ -287,6 +319,7 @@ final class TripSession {
     /// with `streamEnded`). Neither case makes a server call. Must be called
     /// from the foreground, as any (re)start must.
     func resume() {
+        guard !isSigningOut else { return }
         switch phase {
         case .paused(let active):
             guard let evaluator = AdherenceEvaluator(trip: active.trip) else {

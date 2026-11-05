@@ -53,6 +53,7 @@ struct TripsView: View {
                 }
             }
             .navigationTitle("Route \(route.shortName)")
+            .toolbar { AccountMenu() }
             .overlay { if starting { ProgressView("Starting…") } }
             .task {
                 do {

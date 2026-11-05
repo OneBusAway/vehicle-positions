@@ -4,6 +4,7 @@ import Foundation
 /// implementation; tests substitute a fake.
 nonisolated protocol TrackerAPI: Sendable {
     func login(email: String, password: String) async throws -> AuthTokens
+    func logout() async throws
     func myVehicles() async throws -> [Vehicle]
     func routes() async throws -> [RouteInfo]
     func trips(routeID: String) async throws -> RouteTripsPage

@@ -17,6 +17,10 @@ import Foundation
     /// Awaited, before recording the call, so tests can exercise a request
     /// that is still in flight.
     nonisolated(unsafe) var endDelay: Duration?
+    nonisolated(unsafe) var logoutError: (any Error)?
+    /// Awaited inside `logout()`, so a test can look at the session, or act
+    /// on it, while the request is out.
+    nonisolated(unsafe) var whileLoggingOut: (() async -> Void)?
 
     private(set) nonisolated(unsafe) var logins: [(String, String)] = []
     private(set) nonisolated(unsafe) var tripRequests: [String] = []
@@ -26,6 +30,7 @@ import Foundation
     /// The trip, start and end calls in the order they were made, for tests
     /// where the order is the point.
     private(set) nonisolated(unsafe) var calls: [String] = []
+    private(set) nonisolated(unsafe) var logouts = 0
 
     nonisolated init() {}
 
@@ -57,5 +62,10 @@ import Foundation
     func postLocation(_ report: LocationReport) async throws {
         posted.append(report)
         if let postError { throw postError }
+    }
+    func logout() async throws {
+        await whileLoggingOut?()
+        logouts += 1
+        if let logoutError { throw logoutError }
     }
 }

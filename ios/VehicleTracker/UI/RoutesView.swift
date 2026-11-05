@@ -27,6 +27,7 @@ struct RoutesView: View {
         }
         .searchable(text: $search, prompt: "Route number or name")
         .navigationTitle(vehicle.label.isEmpty ? vehicle.id : vehicle.label)
+        .toolbar { AccountMenu() }
         .task {
             do {
                 routes = try await session.routes()
