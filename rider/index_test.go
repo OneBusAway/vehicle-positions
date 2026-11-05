@@ -273,6 +273,36 @@ func TestBuildIndex_HeadsignDirectionAndStopNames(t *testing.T) {
 	assert.Equal(t, 1, t3.DirectionID)
 }
 
+func TestBuildIndex_ShortNameAndBlockID(t *testing.T) {
+	ix := fixtureIndexEdited(t, "trips.txt", "route_id,service_id,trip_id,trip_short_name,shape_id,trip_headsign,direction_id,block_id\n"+
+		"R1,WEEKDAY,T1,1503,S1,North,0,599-20\n"+
+		"R1,SAT,T2,,S1,North,,\n"+
+		"R2,WEEKDAY,T3,,S2,Loop,1,B-7\n"+
+		"R1,WEEKDAY,T4,,,North,0,\n")
+	tests := []struct{ id, shortName, blockID string }{
+		{"T1", "1503", "599-20"},
+		{"T2", "", ""},
+		{"T3", "", "B-7"},
+		{"T4", "", ""},
+	}
+	for _, tc := range tests {
+		trip, ok := ix.Trip(tc.id)
+		require.True(t, ok, tc.id)
+		assert.Equal(t, tc.shortName, trip.ShortName, tc.id)
+		assert.Equal(t, tc.blockID, trip.BlockID, tc.id)
+	}
+}
+
+func TestBuildIndex_ShortNameAndBlockIDEmptyWithoutTheColumns(t *testing.T) {
+	ix := fixtureIndex(t) // trips.txt has neither trip_short_name nor block_id
+	require.Len(t, ix.TripIDs(), 4)
+	for _, id := range ix.TripIDs() {
+		trip, _ := ix.Trip(id)
+		assert.Equal(t, "", trip.ShortName, id)
+		assert.Equal(t, "", trip.BlockID, id)
+	}
+}
+
 func TestTripsOnRoute(t *testing.T) {
 	ix := fixtureIndex(t)
 	weekday := ix.TripsOnRoute("R1", "20260902") // Wednesday

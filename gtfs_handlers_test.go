@@ -1,8 +1,11 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,6 +27,39 @@ func testCatalog(t *testing.T) *gtfsCatalog {
 	c := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
 	c.now = func() time.Time { return catalogNow }
 	return c
+}
+
+// fixtureZipEdited returns the fixture feed with each member's body replaced
+// by what edit returns for it. The committed fixture is left untouched, so
+// cases that only one test needs do not have to live in it.
+func fixtureZipEdited(t *testing.T, edit func(name string, body []byte) []byte) []byte {
+	t.Helper()
+	zr, err := zip.OpenReader("rider/testdata/fixture.zip")
+	require.NoError(t, err)
+	defer zr.Close()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, f := range zr.File {
+		r, err := f.Open()
+		require.NoError(t, err)
+		body, err := io.ReadAll(r)
+		r.Close()
+		require.NoError(t, err)
+		w, err := zw.Create(f.Name)
+		require.NoError(t, err)
+		_, err = w.Write(edit(f.Name, body))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+// fixtureIndexEdited builds an index over fixtureZipEdited's feed.
+func fixtureIndexEdited(t *testing.T, edit func(name string, body []byte) []byte) *rider.Index {
+	t.Helper()
+	ix, err := rider.IndexFromBytes(fixtureZipEdited(t, edit), "edited", catalogNow)
+	require.NoError(t, err)
+	return ix
 }
 
 func catalogGet(t *testing.T, h http.Handler, path string, pathValues map[string]string) (int, map[string]any) {
@@ -58,7 +94,7 @@ func TestCatalogRouteTrips_DefaultsToTodaysServiceDate(t *testing.T) {
 	trips := body["trips"].([]any)
 	require.Len(t, trips, 2)
 	assert.Equal(t, map[string]any{
-		"id": "T1", "headsign": "North", "direction_id": float64(0),
+		"id": "T1", "headsign": "North", "short_name": "", "block_id": "", "direction_id": float64(0),
 		"starts_at": "2026-09-02T08:00:00-07:00", "ends_at": "2026-09-02T08:10:00-07:00",
 		"first_stop": "Stop ST1", "last_stop": "Stop ST3",
 	}, trips[0])
@@ -73,6 +109,50 @@ func TestCatalogRouteTrips_ExplicitDateAndNullDirection(t *testing.T) {
 	require.Len(t, trips, 1)
 	assert.Equal(t, "T2", trips[0].(map[string]any)["id"])
 	assert.Nil(t, trips[0].(map[string]any)["direction_id"])
+}
+
+func TestCatalogRouteTrips_ShortNameAndBlockID(t *testing.T) {
+	ix := fixtureIndexEdited(t, func(name string, body []byte) []byte {
+		if name != "trips.txt" {
+			return body
+		}
+		return []byte("route_id,service_id,trip_id,trip_short_name,shape_id,trip_headsign,direction_id,block_id\n" +
+			"R1,WEEKDAY,T1,1503,S1,North,0,599-20\n" +
+			"R1,SAT,T2,,S1,North,,\n" +
+			"R2,WEEKDAY,T3,,S2,Loop,1,B-7\n" +
+			"R1,WEEKDAY,T4,,,North,0,\n")
+	})
+	c := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
+	c.now = func() time.Time { return catalogNow }
+
+	code, body := catalogGet(t, c.handleRouteTrips(), "/api/v1/gtfs/routes/R1/trips?date=20260902", map[string]string{"route_id": "R1"})
+	require.Equal(t, http.StatusOK, code)
+	trips := body["trips"].([]any)
+	require.Len(t, trips, 2)
+	t1, t4 := trips[0].(map[string]any), trips[1].(map[string]any)
+	require.Equal(t, "T1", t1["id"])
+	assert.Equal(t, "1503", t1["short_name"])
+	assert.Equal(t, "599-20", t1["block_id"])
+	require.Equal(t, "T4", t4["id"])
+	assert.Equal(t, "", t4["short_name"])
+	assert.Equal(t, "", t4["block_id"])
+}
+
+// TestCatalogRouteTrips_ShortNameAndBlockIDAlwaysPresent: the committed
+// fixture has neither column, and every trip still carries both keys, so a
+// client never has to tell a missing key from an empty one.
+func TestCatalogRouteTrips_ShortNameAndBlockIDAlwaysPresent(t *testing.T) {
+	code, body := catalogGet(t, testCatalog(t).handleRouteTrips(), "/api/v1/gtfs/routes/R1/trips?date=20260902", map[string]string{"route_id": "R1"})
+	require.Equal(t, http.StatusOK, code)
+	trips := body["trips"].([]any)
+	require.Len(t, trips, 2)
+	for _, trip := range trips {
+		trip := trip.(map[string]any)
+		for _, key := range []string{"short_name", "block_id"} {
+			require.Containsf(t, trip, key, "trip %s", trip["id"])
+			assert.Equalf(t, "", trip[key], "trip %s %s", trip["id"], key)
+		}
+	}
 }
 
 func TestCatalogRouteTrips_Errors(t *testing.T) {

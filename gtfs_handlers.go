@@ -45,6 +45,8 @@ type catalogRoutesResponse struct {
 type catalogTripSummary struct {
 	ID          string    `json:"id"`
 	Headsign    string    `json:"headsign"`
+	ShortName   string    `json:"short_name"`
+	BlockID     string    `json:"block_id"`
 	DirectionID *int      `json:"direction_id"`
 	StartsAt    time.Time `json:"starts_at"`
 	EndsAt      time.Time `json:"ends_at"`
@@ -149,6 +151,7 @@ func (c *gtfsCatalog) handleRouteTrips() http.HandlerFunc {
 			first, last := trip.StopTimes[0], trip.StopTimes[len(trip.StopTimes)-1]
 			out.Trips = append(out.Trips, catalogTripSummary{
 				ID: trip.ID, Headsign: trip.Headsign, DirectionID: directionJSON(trip.DirectionID),
+				ShortName: trip.ShortName, BlockID: trip.BlockID,
 				StartsAt: dayStart.Add(first.Departure), EndsAt: dayStart.Add(last.Arrival),
 				FirstStop: first.StopName, LastStop: last.StopName,
 			})

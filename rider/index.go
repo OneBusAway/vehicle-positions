@@ -53,7 +53,9 @@ type TripInfo struct {
 	RouteID     string
 	ServiceID   string
 	Headsign    string
-	DirectionID int // 0 or 1 as in trips.txt; -1 when the feed gives none
+	ShortName   string // trip_short_name, such as a train number; "" when the feed gives none
+	BlockID     string // "" when the feed gives none
+	DirectionID int    // 0 or 1 as in trips.txt; -1 when the feed gives none
 	Shape       *ShapeGeom
 	// ShapeFromStops is set when the feed gives the trip no shape and Shape
 	// was drawn through its stops. Those straight lines cut every curve
@@ -156,6 +158,8 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 		info := &TripInfo{
 			ID:             trip.ID,
 			Headsign:       trip.Headsign,
+			ShortName:      trip.ShortName,
+			BlockID:        trip.BlockID,
 			DirectionID:    directionID(trip.DirectionId),
 			Shape:          shape,
 			ShapeFromStops: fromStops,
