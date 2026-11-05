@@ -7,6 +7,7 @@ struct TrackingView: View {
     @State private var showingRelogin = false
     @State private var reloginPassword = ""
     @State private var reloginError: String?
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,13 +51,19 @@ struct TrackingView: View {
     }
 
     /// While the sign-in is expired the banner is the way back to the sheet,
-    /// so dismissing it with "Later" is not a one-way door.
+    /// so dismissing it with "Later" is not a one-way door. While location
+    /// access is off it opens Settings, where the driver turns it back on.
     @ViewBuilder private var statusBanner: some View {
-        if session.reporting == .authExpired {
+        switch session.reporting {
+        case .authExpired:
             Button { showingRelogin = true } label: { bannerLabel }
                 .buttonStyle(.plain)
                 .accessibilityHint("Sign in again")
-        } else {
+        case .locationDenied, .preciseLocationOff:
+            Button { openURL(.appSettings) } label: { bannerLabel }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens Settings")
+        default:
             bannerLabel
         }
     }
