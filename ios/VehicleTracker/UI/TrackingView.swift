@@ -43,11 +43,12 @@ struct TrackingView: View {
     // MARK: Banner
 
     private var bannerLabel: some View {
-        Text(TrackingBanner.text(phase: session.phase, reporting: session.reporting))
+        let tone = TrackingBanner.tone(phase: session.phase, reporting: session.reporting)
+        return Text(TrackingBanner.text(phase: session.phase, reporting: session.reporting))
             .font(.title2.bold())
             .frame(maxWidth: .infinity, minHeight: 56)
-            .background(TrackingBanner.color(phase: session.phase, reporting: session.reporting))
-            .foregroundStyle(.white)
+            .background(tone.background)
+            .foregroundStyle(tone.foreground)
     }
 
     /// While the sign-in is expired the banner is the way back to the sheet,
@@ -85,7 +86,7 @@ struct TrackingView: View {
             if let a = session.latest {
                 Text(a.statusLabel)
                     .font(.system(size: 34, weight: .heavy))
-                    .foregroundStyle(a.color)
+                    .foregroundStyle(a.tone.text)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                 HStack {
@@ -125,7 +126,7 @@ struct TrackingView: View {
                 Button {
                     session.resume()
                 } label: {
-                    Text("Resume").bold().frame(maxWidth: .infinity, minHeight: 64)
+                    Text("Resume").bold().foregroundStyle(.onAccent).frame(maxWidth: .infinity, minHeight: 64)
                 }
                 .buttonStyle(.borderedProminent)
                 endTripButton
@@ -140,10 +141,11 @@ struct TrackingView: View {
         Button {
             confirmEnd = true
         } label: {
-            Text("End Trip").bold().frame(maxWidth: .infinity, minHeight: 64)
+            Text("End Trip").bold().foregroundStyle(Color(.systemBackground)).frame(maxWidth: .infinity, minHeight: 64)
         }
+        // Ink, as on Android: red already means early.
         .buttonStyle(.borderedProminent)
-        .tint(.red)
+        .tint(.primary)
         .disabled(session.phase.isEnding)
     }
 
@@ -152,7 +154,7 @@ struct TrackingView: View {
             Form {
                 Text("Your sign-in expired. The trip keeps running; sign in again to keep reporting.")
                 SecureField("Password", text: $reloginPassword)
-                if let reloginError { Text(reloginError).foregroundStyle(.red) }
+                if let reloginError { Text(reloginError).foregroundStyle(.errorText) }
                 Button("Sign In") {
                     Task {
                         do {
