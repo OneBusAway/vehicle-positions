@@ -475,9 +475,13 @@ force-stop the app, open it again and resume the shift.
 
 **Expected outcome:** within ~10 seconds of the network dropping, a dark
 "No connection · Riders can't see you" line appears under the status card.
-Within ~10 seconds of the network returning, the line goes away. GPS fixes
-captured while offline are dropped, not queued (v1 behavior): the counter should
-resume climbing from wherever it left off, not "catch up".
+Within ~10 seconds of the network returning, the line goes away. The counter
+resumes climbing from wherever it left off, not "catch up": fixes captured
+while offline never reach the realtime feed. They are kept on the phone and
+uploaded for location history once reports go through again, so the trip's
+trail in the admin UI (Trips → the trip) has no gap for the dead zone. The
+server log shows a `POST /api/v1/locations/history` right after the first
+report that succeeds.
 
 ### Check 3b: The sign-in renews itself during a trip
 

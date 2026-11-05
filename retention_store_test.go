@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,13 +12,16 @@ import (
 
 // insertLocationPointAt writes a point with an explicit received_at. The sqlc
 // insert always takes NOW() for that column, so retention tests set it directly.
+// Each point gets its own timestamp, so each is a distinct fix.
 func insertLocationPointAt(t *testing.T, store *Store, vehicleID string, receivedAt time.Time) {
 	t.Helper()
 	_, err := store.pool.Exec(context.Background(),
 		"INSERT INTO location_points (vehicle_id, trip_id, latitude, longitude, timestamp, received_at) VALUES ($1, '', $2, $3, $4, $5)",
-		vehicleID, -1.29, 36.82, time.Now().Unix(), receivedAt)
+		vehicleID, -1.29, 36.82, time.Now().Unix()+fixSeq.Add(1), receivedAt)
 	require.NoError(t, err)
 }
+
+var fixSeq atomic.Int64
 
 func countLocationPoints(t *testing.T, store *Store) int64 {
 	t.Helper()

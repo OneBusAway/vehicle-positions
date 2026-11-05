@@ -141,6 +141,8 @@ var schemaStructs = map[string]string{
 // send it at all.
 var requestSchemaStructs = map[string]string{
 	"LocationReport":          "LocationReport",
+	"LocationHistoryRequest":  "LocationHistoryRequest",
+	"HistoryPoint":            "HistoryPoint",
 	"UpsertVehicleRequest":    "upsertVehicleRequest",
 	"StartTripRequest":        "StartTripRequest",
 	"EndTripRequest":          "EndTripRequest",

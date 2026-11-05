@@ -133,7 +133,7 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 		return fmt.Errorf("upsert vehicle: %w", err)
 	}
 
-	if err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
+	if _, err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
 		VehicleID: loc.VehicleID,
 		TripID:    loc.TripID,
 		RouteID:   loc.RouteID,
@@ -153,6 +153,51 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 		return fmt.Errorf("commit tx: %w", err)
 	}
 	return nil
+}
+
+// SaveLocationHistory stores a batch of fixes a phone recorded offline, in one
+// transaction, once it has checked the driver is assigned to the vehicle, and
+// returns how many it stored: a fix already stored, from an upload retried
+// after its reply was lost, is not stored twice. The assignment's foreign key
+// guarantees the vehicle exists, so none is created.
+func (s *Store) SaveLocationHistory(ctx context.Context, userID int64, vehicleID string, points []*LocationReport) (int, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer rollbackTx(tx)
+	qtx := s.queries.WithTx(tx)
+
+	if _, err := qtx.CheckUserVehicleAssignment(ctx, db.CheckUserVehicleAssignmentParams{UserID: userID, VehicleID: vehicleID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, ErrNotAssigned
+		}
+		return 0, fmt.Errorf("check assignment: %w", err)
+	}
+	saved := 0
+	for _, loc := range points {
+		n, err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
+			VehicleID: vehicleID,
+			TripID:    loc.TripID,
+			RouteID:   loc.RouteID,
+			StartDate: loc.StartDate,
+			Latitude:  loc.Latitude,
+			Longitude: loc.Longitude,
+			Bearing:   optionalFloat(loc.Bearing),
+			Speed:     optionalFloat(loc.Speed),
+			Accuracy:  optionalFloat(loc.Accuracy),
+			Timestamp: loc.Timestamp,
+			DriverID:  loc.DriverID,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("insert location: %w", err)
+		}
+		saved += int(n)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit tx: %w", err)
+	}
+	return saved, nil
 }
 
 // GetRecentLocations retrieves the latest position for each vehicle since the

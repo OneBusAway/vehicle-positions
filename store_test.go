@@ -138,10 +138,10 @@ func TestStore_SaveLocation_UpsertVehicle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	// But two location points
+	// And one location point: the same fix sent again is stored once
 	err = store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM location_points WHERE vehicle_id = $1", "test-bus-2").Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count)
+	assert.Equal(t, 1, count)
 }
 
 func TestStore_GetRecentLocations(t *testing.T) {

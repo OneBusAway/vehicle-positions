@@ -17,6 +17,8 @@ import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
 import org.onebusaway.vehicletracker.data.EncryptedSessionStore
+import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
+import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.FileTripGeometryStore
 import org.onebusaway.vehicletracker.data.KeystoreCryptor
 import org.onebusaway.vehicletracker.data.SessionStore
@@ -166,6 +168,11 @@ object AppModule {
     @Singleton
     fun provideTripGeometryStore(@ApplicationContext context: Context): TripGeometryStore =
         FileTripGeometryStore(File(context.filesDir, "active_trip_geometry.json"))
+
+    @Provides
+    @Singleton
+    fun provideOfflineFixQueue(@ApplicationContext context: Context): OfflineFixQueue =
+        FileOfflineFixQueue(File(context.filesDir, "offline_fixes.jsonl"))
 
     @Provides
     @Singleton

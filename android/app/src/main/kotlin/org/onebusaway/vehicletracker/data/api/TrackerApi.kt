@@ -12,6 +12,7 @@ interface TrackerApi {
     @POST("api/v1/trips/start") suspend fun startTrip(@Body body: StartTripRequest): TripDto
     @POST("api/v1/trips/end") suspend fun endTrip(@Body body: EndTripRequest)
     @POST("api/v1/locations") suspend fun postLocation(@Body body: LocationReportDto)
+    @POST("api/v1/locations/history") suspend fun postLocationHistory(@Body body: LocationHistoryDto)
     @GET("api/v1/gtfs/routes") suspend fun routes(): RoutesResponse
 
     // A GTFS route_id is arbitrary text, so the id is left to Retrofit to percent-encode

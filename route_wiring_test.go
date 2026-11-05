@@ -63,6 +63,9 @@ func (n *noopStore) AuthorizeLocation(_ context.Context, _ *LocationReport) erro
 func (n *noopStore) SaveLocation(_ context.Context, _ *LocationReport) error {
 	return nil
 }
+func (n *noopStore) SaveLocationHistory(_ context.Context, _ int64, _ string, _ []*LocationReport) (int, error) {
+	return 0, nil
+}
 func (n *noopStore) CreateAssignment(_ context.Context, _ int64, _ string) (*AssignmentResponse, error) {
 	return nil, nil
 }

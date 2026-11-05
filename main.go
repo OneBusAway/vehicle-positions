@@ -41,6 +41,7 @@ type appStore interface {
 	VehicleActivator
 	VehicleCreator
 	LocationStore
+	LocationHistorySaver
 	AssignmentCreator
 	AssignmentDeleter
 	AssignmentListerByUser
@@ -112,6 +113,10 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.HandleFunc("GET /ready", handleReadiness(store))
 
 	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	// Built here rather than passed in like the others: it lives as long as the mux, and nothing
+	// else needs to reach it.
+	historyLimiter := NewKeyedRateLimiter(historyUploadInterval, historyUploadBurst, false)
+	mux.Handle("POST /api/v1/locations/history", authMiddleware(handlePostLocationHistory(store, historyLimiter)))
 	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store, catalog)))
 	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
 	mux.Handle("GET /api/v1/vehicles", authMiddleware(handleListMyVehicles(store)))
@@ -361,10 +366,17 @@ func main() {
 	if err != nil {
 		slog.Warn("failed to seed tracker from database", "error", err)
 	} else {
+		seeded := 0
 		for _, loc := range recentLocations {
+			// A vehicle whose latest row is an uploaded backlog has nothing
+			// current to publish: the feed is for where vehicles are now.
+			if loc.Timestamp < cutoff.Unix() {
+				continue
+			}
 			tracker.Update(loc)
+			seeded++
 		}
-		slog.Info("seeded tracker", "active_vehicles", len(recentLocations))
+		slog.Info("seeded tracker", "active_vehicles", seeded)
 	}
 
 	startTime := time.Now()
