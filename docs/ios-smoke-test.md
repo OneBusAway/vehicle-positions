@@ -212,8 +212,8 @@ xcrun simctl location "$UDID" start --speed=8 --interval=1 \
 ```
 
 Stop it again with `xcrun simctl location "$UDID" clear`. When the route runs
-out of waypoints the simulator stops delivering fixes and the banner correctly
-turns red "No GPS".
+out of waypoints the simulator stops delivering fixes and the line **No GPS
+signal · Position paused** correctly appears under the status card.
 
 For a run from Xcode instead, `ios/VehicleTracker/gpx/fixture-t1.gpx` holds the
 same three waypoints for **Debug → Simulate Location → Add GPX File to
@@ -230,10 +230,12 @@ Run these in order against a single trip; check 5 ends it.
 2. With exactly one assigned vehicle the picker shows `Bus 1`; choose it, then
    route **1 Straight**, then run **T1**.
 
-**Expected outcome:** the Tracking screen appears with the route badge `1`,
-headsign "North" and "Bus 1" in the header; the map shows the R1 shape drawn
-in the route colour (`0077C0`) with its three stops; and — before the first
-fix — a red **No GPS** banner over "Waiting for GPS…".
+**Expected outcome:** the Tracking screen appears. The map fills the screen
+and shows the R1 shape drawn in the route colour (`0077C0`) with its three
+stops. Before the first fix a grey status card at the top reads **Waiting for
+GPS**, **From Stop ST1**, and the run's start time with `Bus 1`. The trip
+sheet at the bottom shows the route badge `1`, the headsign "North", the
+running time with **0 sent**, and **End trip**.
 
 ### Check 1b: A setup link fills in the server
 
@@ -361,18 +363,19 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    curl -s "$BASE/gtfs-rt/vehicle-positions?format=json" | python3 -m json.tool
    ```
 
-**Expected outcome:** the banner turns green **Reporting**; the "n sent"
-counter in the footer climbs (it stays visible whatever the banner says); the map follows the vehicle (camera heading north, marker low
-on the screen, look-ahead centring) and the **next stop** is drawn larger and
-labelled, advancing from `Stop ST2` to `Stop ST3` as the vehicle passes ST2;
-and the adherence line shows the deviation against the schedule, with the next
-stop's scheduled time and the distance to it.
+**Expected outcome:** the status card turns green **On time** (or the
+deviation, see below) with **Next** and the next stop's name, then its
+scheduled time and the distance to it; the "n sent" count on the trip bar
+climbs (it stays on screen whatever the card says); the map follows the
+vehicle (camera heading north, marker low on the screen, look-ahead centring)
+and the **next stop** is drawn larger and labelled, advancing from `Stop ST2`
+to `Stop ST3` as the vehicle passes ST2.
 
 The fixture's `T1` is scheduled at 08:00 Pacific, so unless you run this
-around 08:00 the deviation is large and the line reads
-`Off schedule · N min late` (blue) or `… early` (red) — that is correct: the
-`Off schedule` cut-off comes from the server's own thresholds (±900 s early,
-±5400 s late).
+around 08:00 the deviation is large and the card reads `N min late` (blue) or
+`N min early` (red) over **Off schedule · Is this the right run?**. That is
+correct: the `Off schedule` cut-off comes from the server's own thresholds
+(±900 s early, ±5400 s late).
 
 In the feed, exactly one entity, with `vehicle.id` `bus-1`, `trip.trip_id`
 `T1`, and a latitude tracking the simulated position:
@@ -384,18 +387,19 @@ In the feed, exactly one entity, with `vehicle.id` `bus-1`, `trip.trip_id`
   "timestamp": "1789461576"}}]
 ```
 
-### Check 3 — Losing the server flips the banner red, recovery flips it back
+### Check 3: Losing the server shows a problem line, recovery clears it
 
 1. Stop the server (`kill %1`, or kill the `go run` and its child binary).
 2. Watch the Tracking screen for ~15 s.
 3. Start the server again with the same environment and wait ~15 s.
 
-**Expected outcome:** the banner turns red **No connection** within about a
-reporting interval, and returns to green **Reporting** once the server is
-back. The footer keeps showing the "n sent" counter throughout — the banner
-alone carries the status. Fixes captured while offline are dropped, not queued
-(v1 behaviour), so the counter resumes climbing from where it left off rather
-than catching up.
+**Expected outcome:** an ink line **No connection · Riders can't see you**
+appears under the status card within about a reporting interval, and goes
+away once the server is back. The card itself keeps its last schedule answer.
+The trip bar keeps showing the "n sent" count throughout, with the cloud
+symbol beside it in amber while the line shows. Fixes captured while offline
+are dropped, not queued (v1 behaviour), so the count resumes climbing from
+where it left off rather than catching up.
 
 ### Check 3b — The sign-in renews itself during a trip
 
@@ -424,8 +428,8 @@ the app keep reporting without the driver doing anything.
 **Expected outcome:** the first report after the restart gets a `401`, followed
 at once by `refresh token rotated` and the same report again, answered `201`.
 After that, `refresh token rotated` appears about once a minute, every
-`/api/v1/locations` is answered `201`, and there is no other `401`. The banner
-stays green **Reporting** and the "n sent" counter keeps climbing. (A rare
+`/api/v1/locations` is answered `201`, and there is no other `401`. No problem
+line appears under the status card, and the "n sent" count keeps climbing. (A rare
 `429` is the server's limit of one report per 5 seconds, #171; it turns up
 with or without a refresh and is not part of this check.)
 
@@ -438,17 +442,16 @@ them, so leave `ACCESS_TOKEN_TTL` set.
    org.onebusaway.vehicletracker`) and launch it again with no arguments.
 
 **Expected outcome:** the app opens straight back on the Tracking screen for
-the same trip, with an **orange "Paused — not reporting"** banner (the banner
-reads the phase, not just the send status, so a rehydrated trip is never
-painted green), **Paused** / "Tap Resume to keep reporting." in the middle, the
-map redrawn, and **both** a blue **Resume** button and a red **End Trip**
-button beneath it — a paused trip must still be endable. Tapping Resume
-restarts location delivery without touching the server, and the banner goes
-back to green. (iOS only permits a (re)start of the location session from the
-foreground, which is why a relaunch pauses rather than resuming by itself.)
+the same trip. The status card reads **Waiting for GPS** with the run's first
+stop (a rehydrated trip is never painted green), the line under it reads
+**Location stopped · Tap Resume** with a **Resume** button, the map shows the
+route, and the trip sheet still offers **End trip**, so a paused trip can still
+be ended. Tapping Resume restarts location delivery without touching the
+server, and the line goes away. (iOS only permits a (re)start of the location
+session from the foreground, which is why a relaunch pauses rather than
+resuming by itself.)
 
-The same pair of buttons appears when the location stream dies mid-trip and
-the banner reads "Location stopped — tap Resume".
+The same line and button appear when the location stream dies mid-trip.
 
 ### Check 4b — A sign-in that can't be renewed can be put off
 
@@ -462,8 +465,10 @@ within one two-minute access token from Check 3b.
    driver's row and confirm.
 
 **Expected outcome:** within about two minutes, when the app's access token
-runs out, the banner turns red **Signed out — sign in again** and the **Sign
-in again** sheet appears over the tracking screen. Deactivating deleted the
+runs out, the status card is replaced by the **Signed out** card (ink by day,
+amber at night) reading "Reports have stopped. Your trip is still open." with
+a **Sign in** button, and the **Sign in again** sheet appears over the trip
+sheet. Deactivating deleted the
 driver's refresh tokens, so in the token's last minute the log from Check 3b
 shows each early refresh refused (`refresh: unknown token presented`) while
 reports still get `201`. Once the token expires, a report gets `401`, the
@@ -473,18 +478,20 @@ refresh.
 2. Tap **Later**.
 
 **Expected outcome:** the sheet goes away without signing in. The trip keeps
-running and the banner keeps saying signed out. **Tapping the banner** brings
-the sheet back.
+running and the Signed out card stays. Tapping **Sign in** on it brings the
+sheet back.
 
 3. Click **Activate** on the same row, then sign in on the sheet with the
    driver's password.
 
-**Expected outcome:** the banner turns green **Reporting** on the same trip,
-and reports reach the server again.
+**Expected outcome:** the status card comes back on the same trip, with no
+problem line, and reports reach the server again.
 
 ### Check 5 — Ending the trip drops the vehicle from the feed
 
-1. Tap **End Trip** and confirm in the dialog.
+1. Tap **End trip** on the trip bar. The alert **End this trip?** names
+   route 1's 8:00 AM run and how many reports were sent; confirm with **End
+   trip**.
 
 **Expected outcome, immediately:** the app returns to the vehicle picker (the
 token is still fresh, so no second sign-in), and the stored trip is gone —
@@ -503,7 +510,7 @@ after the last report.
 
 ### Check 5b: An End Locally is sent before the next start
 
-When End Trip can't reach the server, **End locally anyway** stops the trip
+When End trip can't reach the server, **End on this phone** stops the trip
 on the phone only, and the server still has it open. The app remembers the end
 and sends it before the same driver's next start, which the server would
 otherwise refuse with `driver already has an active trip`. This check starts
@@ -515,8 +522,9 @@ trips of its own.
    kill $(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t)
    ```
 
-   Tap **End Trip** and confirm. When "Could not end the trip" appears, tap
-   **End locally anyway**.
+   Tap **End trip** and confirm. When **Trip not ended yet** appears ("The
+   server didn't confirm the end. Check your signal and try again, or stop
+   reporting on this phone now."), tap **End on this phone**.
 
    **Expected outcome:** the app goes back to the vehicle picker at once, with
    "Could not reach the server" above `Bus 1` while the server is down.
@@ -538,7 +546,7 @@ trips of its own.
    ```
 
 3. End the new trip through the API, as an earlier end that got through would
-   have, then tap **End Trip** on the phone and confirm. The tokens from setup
+   have, then tap **End trip** on the phone and confirm. The tokens from setup
    don't work after Check 3b's new `JWT_SECRET`, so sign in again first:
 
    ```bash
@@ -558,7 +566,7 @@ trips of its own.
 
    **Expected outcome:** the app's own end gets a `404` (no open trip under
    that id), and the app treats it as ended: it goes back to the routes for
-   `Bus 1`, with no "Could not end the trip".
+   `Bus 1`, with no **Trip not ended yet**.
 
 ### Check 6: Location access is checked and named
 
@@ -586,19 +594,19 @@ playback from step 5 again first, so fixes keep coming during step 3.
    xcrun simctl privacy "$UDID" grant location org.onebusaway.vehicletracker
    ```
 
-   **Expected outcome:** the Tracking screen appears and the banner turns
-   green **Reporting**.
+   **Expected outcome:** the Tracking screen appears with no problem line
+   under the status card.
 
 3. In the simulator's Settings app, open **Privacy & Security > Location
    Services > OBA Vehicle Tracker** and turn **Precise Location** off
    (`simctl` cannot change it). Go back to the app.
 
-   **Expected outcome:** the banner turns red **Precise Location off · Tap to
-   fix**, and reports stop reaching the server. Tapping the banner opens the
-   app's page in Settings. Turn Precise Location back on there: the next fix
-   turns the banner green **Reporting** again. If it reads **No GPS**
-   instead, the simulator's playback stopped; start it again (step 5). End
-   the trip afterwards.
+   **Expected outcome:** the line **Precise Location off · Tap to fix**
+   appears under the status card, and reports stop reaching the server.
+   Tapping the line opens the app's page in Settings. Turn Precise Location
+   back on there: the next fix clears the line. If it reads **No GPS signal ·
+   Position paused** instead, the simulator's playback stopped; start it
+   again (step 5). End the trip afterwards.
 
 ## CarPlay
 
@@ -648,16 +656,18 @@ command.
    "Start trip" bar button — and no crash.
 2. **Active trip.** With GPS playback running (step 5 above) and a trip
    started, screenshot again. Expect the route line, the vehicle, a
-   next-stop maneuver card ("Stop ST2 · 8:05 · 2 min late", shortening to
-   "Stop ST2 · 2 min late" and then "Stop ST2" as space allows), an
+   next-stop maneuver card saying what the phone's status card says ("Stop
+   ST2 · 8:05 AM · On time", shortening to "Stop ST2 · On time" and then
+   "Stop ST2" as space allows), an
    estimates bar coloured by adherence (green on time, orange late, red
    early, default (uncoloured) off route or off schedule, per
    `CarPlayTemplates.timeRemainingColor`), "End" and
    "Details" bar buttons, and three map buttons.
 3. **Off route.** Drive GPS away from the shape until `isOnRoute` flips.
-   Expect the dimmed route line, a grey vehicle marker, the snapped dot on
-   the shape, and an "Off route" navigation alert with a distance-off
-   subtitle (e.g. "75 m ...") and an "OK" button; the alert never times out
+   Expect the route line at full colour, the vehicle's ring grey, the
+   matched point on the shape with a dotted line to it from the vehicle,
+   and an "Off route · 75 m" navigation alert with an "OK" button; the
+   alert never times out
    on its own and dismissing it silences further alerts until the next
    off-route episode.
 

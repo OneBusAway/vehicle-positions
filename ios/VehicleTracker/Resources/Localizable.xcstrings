@@ -1,1 +1,197 @@
-{ "sourceLanguage" : "en", "strings" : { }, "version" : "1.0" }
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@, %lld reports sent": {
+      "comment": "VoiceOver: the trip bar in one sentence for a route with no short name: the headsign, then how many reports have reached the server.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$#@reports@"
+          },
+          "substitutions": {
+            "reports": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg report sent"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg reports sent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld metres": {
+      "comment": "VoiceOver: a distance in whole metres.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld metre"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld metres"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld sent": {
+      "comment": "Trip bar: how many reports have reached the server, e.g. '142 sent'.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld sent"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld sent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld stops passed": {
+      "comment": "Trip sheet stop list: the folded row standing in for the stops the vehicle has already passed, e.g. '6 stops passed'.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld stop passed"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld stops passed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Reports stop, and route %@'s %@ run is marked complete. %lld reports were sent.": {
+      "comment": "Message of the 'End this trip?' alert: the route's short name, the run's start time in the agency's zone, then how many reports reached the server.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports stop, and route %1$@'s %2$@ run is marked complete. %3$#@reports@"
+          },
+          "substitutions": {
+            "reports": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg report was sent."
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg reports were sent."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Reports stop, and this run is marked complete. %lld reports were sent.": {
+      "comment": "Message of the 'End this trip?' alert for a route with no short name: how many reports reached the server.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Reports stop, and this run is marked complete. %lld report was sent."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Reports stop, and this run is marked complete. %lld reports were sent."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Route %@ to %@, %lld reports sent": {
+      "comment": "VoiceOver: the trip bar in one sentence: the route's short name, the headsign, then how many reports have reached the server.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Route %1$@ to %2$@, %3$#@reports@"
+          },
+          "substitutions": {
+            "reports": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg report sent"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg reports sent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

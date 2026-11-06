@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// A schedule status in Android's colours (`StatusTone` and `StatusColors` in
 /// its `Color.kt`): `fill` behind `OnStatusFill` on a status card, `text` for
@@ -23,27 +24,14 @@ enum StatusTone {
         case .neutral: .statusNoDataText
         }
     }
-}
 
-/// The colours of the banner across the top of the tracking screen. A
-/// problem is ink, not red, because red already means early.
-enum BannerTone {
-    case reporting, neutral, problem, signedOut
-
-    var background: Color {
+    /// `text` for UIKit, where the map draws the ring round the vehicle.
+    var uiText: UIColor {
         switch self {
-        case .reporting: .statusOnTimeFill
-        case .neutral: .statusNoDataFill
-        case .problem: .problemContainer
-        case .signedOut: .signedOutContainer
-        }
-    }
-
-    var foreground: Color {
-        switch self {
-        case .reporting, .neutral: .onStatusFill
-        case .problem: .problemContent
-        case .signedOut: .signedOutContent
+        case .onTime: .statusOnTimeText
+        case .late: .statusLateText
+        case .early: .statusEarlyText
+        case .neutral: .statusNoDataText
         }
     }
 }

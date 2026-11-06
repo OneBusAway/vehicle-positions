@@ -39,6 +39,12 @@ import UIKit
         AndroidColor(name: "SignedOutOnAccent", light: "1F1F1F", dark: "FDD663"), // signedOut.onAccent
         AndroidColor(name: "AttentionContainer", light: "FEF7E0", dark: "3A3220"), // attentionContainer
         AndroidColor(name: "ErrorText", light: "BA1A1A", dark: "FFB4AB"), // error
+        AndroidColor(name: "MapStopRing", light: "6B6B6B", dark: nil), // STOP_RING
+        AndroidColor(name: "MapNextStop", light: "FFA726", dark: nil), // NEXT_STOP_FILL
+        AndroidColor(name: "MapInk", light: "1F1F1F", dark: nil), // MARKER_INK
+        AndroidColor(name: "MapVehicleEdge", light: "FFFFFF", dark: "0B0B0C"), // ic_map_vehicle_puck's edge
+        AndroidColor(name: "MapVehicleDisc", light: "1F1F1F", dark: "E8EAED"), // its disc
+        AndroidColor(name: "MapVehicleArrow", light: "FFFFFF", dark: "1F1F1F"), // its arrow
     ]
 
     nonisolated static let styles: [UIUserInterfaceStyle] = [.light, .dark]
@@ -91,24 +97,12 @@ import UIKit
             (.early, "StatusEarlyFill", "StatusEarlyText"),
             (.neutral, "StatusNoDataFill", "StatusNoDataText"),
         ]
+        let traits = UITraitCollection(userInterfaceStyle: style)
         for (tone, fill, text) in sets {
             let wantFill = try Self.named(fill, style).hex, wantText = try Self.named(text, style).hex
             #expect(Self.hex(tone.fill, style) == wantFill, "\(tone)")
             #expect(Self.hex(tone.text, style) == wantText, "\(tone)")
-        }
-    }
-
-    @Test(arguments: styles) func bannerTonesDrawTheirOwnColourSets(_ style: UIUserInterfaceStyle) throws {
-        let sets: [(BannerTone, background: String, foreground: String)] = [
-            (.reporting, "StatusOnTimeFill", "OnStatusFill"),
-            (.neutral, "StatusNoDataFill", "OnStatusFill"),
-            (.problem, "ProblemContainer", "ProblemContent"),
-            (.signedOut, "SignedOutContainer", "SignedOutContent"),
-        ]
-        for (tone, background, foreground) in sets {
-            let wantBackground = try Self.named(background, style).hex, wantForeground = try Self.named(foreground, style).hex
-            #expect(Self.hex(tone.background, style) == wantBackground, "\(tone)")
-            #expect(Self.hex(tone.foreground, style) == wantForeground, "\(tone)")
+            #expect(tone.uiText.resolvedColor(with: traits).hex == wantText, "\(tone)")
         }
     }
 

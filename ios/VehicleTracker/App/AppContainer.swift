@@ -14,6 +14,7 @@ final class AppContainer {
     let settings: AppSettings
     let session: TripSession
     let serverSetup: ServerSetup
+    let screenAwake: ScreenAwakeCoordinator
 
     init() {
         let settings = AppSettings()
@@ -31,5 +32,6 @@ final class AppContainer {
             }
         )
         serverSetup = ServerSetup(session: session)
+        screenAwake = ScreenAwakeCoordinator(power: DevicePowerSource(), idleTimer: ApplicationIdleTimer())
     }
 }

@@ -4,34 +4,23 @@ import UIKit
 
 /// Text the driver reads at a glance. Every string here is short on purpose.
 enum Formatters {
-    /// "on time" within a minute, otherwise whole minutes late or early,
-    /// rounded to the nearest minute.
-    static func deviation(_ seconds: TimeInterval) -> String {
-        guard abs(seconds) >= 60 else { return String(localized: "on time") }
-        let minutes = Int((abs(seconds) / 60).rounded())
-        return seconds > 0
-            ? String(localized: "\(minutes) min late")
-            : String(localized: "\(minutes) min early")
-    }
-
     static func clock(_ date: Date, timezone: String) -> String {
         var style = Date.FormatStyle(date: .omitted, time: .shortened)
         style.timeZone = TimeZone(identifier: timezone) ?? .current
         return date.formatted(style)
     }
 
+    static let metresPerKilometre = 1000.0
+
     static func distance(_ metres: Double) -> String {
-        if metres < 1000 { return "\(Int(metres.rounded())) m" }
-        // Round to one decimal place ourselves (away from zero on a tie):
-        // printf's round-half-to-even would print "1.2 km" for 1250 m.
-        let km = (metres / 100).rounded() / 10
-        return String(format: "%.1f km", km)
+        if metres < metresPerKilometre { return "\(Int(metres.rounded())) m" }
+        return String(format: "%.1f km", kilometres(metres))
     }
 
-    static func elapsed(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    /// `metres` in kilometres to one decimal place, rounded away from zero on
+    /// a tie: printf's round-half-to-even would print "1.2 km" for 1250 m.
+    static func kilometres(_ metres: Double) -> Double {
+        (metres / 100).rounded() / 10
     }
 }
 
@@ -44,64 +33,6 @@ extension Adherence {
         case .late: .late
         case .offSchedule: scheduleDeviation < 0 ? .early : .late
         case .offRoute: .neutral
-        }
-    }
-
-    var statusLabel: String {
-        switch status {
-        case .onTime, .early, .late: Formatters.deviation(scheduleDeviation)
-        case .offSchedule: String(localized: "Off schedule · \(Formatters.deviation(scheduleDeviation))")
-        case .offRoute: String(localized: "Off route · \(Formatters.distance(projection.distanceToShape)) from the route")
-        }
-    }
-}
-
-extension TripSession.ReportingStatus {
-    var label: String {
-        switch self {
-        case .connected: String(localized: "Reporting")
-        case .noNetwork: String(localized: "No connection")
-        case .noGPS: String(localized: "No GPS")
-        case .authExpired: String(localized: "Signed out — sign in again")
-        case .clockSkew: String(localized: "Check the phone's clock")
-        case .refused: String(localized: "Reports refused — ask your dispatcher")
-        case .needsForeground: String(localized: "Open the app on iPhone")
-        case .locationLost: String(localized: "Location stopped — tap Resume")
-        case .locationDenied: String(localized: "Location off · Tap to fix")
-        case .preciseLocationOff: String(localized: "Precise Location off · Tap to fix")
-        }
-    }
-
-    var isProblem: Bool {
-        if case .connected = self { return false }
-        return true
-    }
-}
-
-/// The banner across the top of the tracking screen. It reads the phase as
-/// well as the reporting status, because a trip a relaunch found is not
-/// reporting anything yet — and `reporting` starts out `.connected`, which
-/// would otherwise paint a paused trip green.
-enum TrackingBanner {
-    static func text(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> String {
-        switch phase {
-        case .paused: String(localized: "Paused — not reporting")
-        case .ending: String(localized: "Ending…")
-        default: reporting.label
-        }
-    }
-
-    /// Paused is a problem, since nothing is being reported.
-    static func tone(phase: TripSession.Phase, reporting: TripSession.ReportingStatus) -> BannerTone {
-        switch phase {
-        case .paused: .problem
-        case .ending: .neutral
-        default:
-            switch reporting {
-            case .connected: .reporting
-            case .authExpired: .signedOut
-            default: .problem
-            }
         }
     }
 }

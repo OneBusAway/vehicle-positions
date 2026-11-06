@@ -3,17 +3,28 @@ import UIKit
 
 /// The route's short name on its GTFS colour, as riders see it.
 struct RouteBadge: View {
+    enum Size {
+        /// In a list row.
+        case list
+        /// On the trip bar: at least a 44 pt square, in larger type (DESIGN-iOS §2.3).
+        case trip
+    }
+
     var shortName: String
     var color: String
     var textColor: String
+    var size: Size = .list
 
     var body: some View {
         let colors = RouteBadgeColors(color: color, textColor: textColor)
         Text(shortName.isEmpty ? "—" : shortName)
-            .font(.title3.bold())
+            .font(size == .trip ? .title2.bold() : .title3.bold())
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .foregroundStyle(colors.text)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
+            .frame(minWidth: size == .trip ? 44 : nil, minHeight: size == .trip ? 44 : nil)
             .background(colors.background, in: RouteBadgeShape())
     }
 }

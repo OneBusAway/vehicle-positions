@@ -1,6 +1,7 @@
 import CarPlay
 import CoreLocation
 import Observation
+import OSLog
 import UIKit
 
 /// Everything the car screen shows, driven by `TripSession` (spec §6). One
@@ -26,12 +27,12 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// chronological order.
     private var upcomingSequences: [Int] = []
     private var addedSequences: Set<Int> = []
-    /// The banner we presented and the subtitle it is showing: the alert so a
+    /// The banner we presented and the title it is showing: the alert so a
     /// dismissal of somebody else's banner is not mistaken for the driver
-    /// dismissing ours, the subtitle so a standing banner is only rewritten
+    /// dismissing ours, the title so a standing banner is only rewritten
     /// when the distance on it has actually changed. Nil means none of ours
     /// is up.
-    private var offRouteBanner: (alert: CPNavigationAlert, subtitle: String)?
+    private var offRouteBanner: (alert: CPNavigationAlert, title: String)?
     /// Whether this off-route stretch has already had its banner. The driver
     /// dismissing one must not bring it straight back on the next fix: the
     /// vehicle has to be back on route before another may be presented.
@@ -56,6 +57,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// The car screen's controls are rebuilt only when what they say changes;
     /// reassigning them on every fix makes CarPlay redraw the bar.
     private var lastActiveChrome: (isPanning: Bool, ending: Bool, guidanceSuspended: Bool)?
+    private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "carplay")
 
     private lazy var endBarButton = CPBarButton(title: String(localized: "End")) { [weak self] _ in self?.confirmEnd() }
     private lazy var detailsBarButton = CPBarButton(title: String(localized: "Details")) { [weak self] _ in self?.showDetails() }
@@ -146,7 +148,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         guidanceSuspendedForTripID = nil
         dismissDetails()
         map.setTrip(nil)
-        map.update(nil)
+        map.update(nil, ring: .neutral)
         // Its setter re-arms user tracking, which fights the driver's own
         // panning; the setter itself ignores anything but a genuine change.
         map.showsPhoneLocation = true
@@ -162,7 +164,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         guidanceSuspendedForTripID = nil
         dismissDetails()
         map.setTrip(active.trip)
-        map.update(nil)
+        map.update(nil, ring: .neutral)
         let buttons = CarPlayTemplates.pausedBarButtons { [weak self] in self?.confirmEnd() }
         mapTemplate.leadingNavigationBarButtons = buttons.leading
         mapTemplate.trailingNavigationBarButtons = buttons.trailing
@@ -170,8 +172,11 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     }
 
     private func renderActive(_ active: ActiveTrip) {
+        // One judgement for the marker's ring, the maneuver and the details,
+        // the same one the phone shows.
+        guard let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) else { return }
         map.setTrip(active.trip)
-        map.update(session.latest)
+        map.update(session.latest, ring: status.ring)
         // A different run is a fresh start: whatever the car's navigation took
         // over for is over with the trip it was suspended on.
         let suspended = guidanceSuspendedForTripID == active.trip.id
@@ -179,7 +184,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             guidanceSuspendedForTripID = nil
             if navigationTripID != active.trip.id { startGuidance(active) }
         }
-        updateGuidance(active, session.latest)
+        updateGuidance(active, session.latest, answer: status.card.answer)
         updateOffRouteAlert(session.latest)
 
         let ending = session.phase.isEnding
@@ -204,7 +209,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                 // The driver popped it with the car's own back control.
                 self.details = nil
             } else if interface.topTemplate === details {
-                let items = detailItems(active)
+                let items = detailItems(status)
                 // Every fix rebuilds the same six strings; only a changed one
                 // is worth making CarPlay redraw the template.
                 if items.map(\.detail) != details.items.map(\.detail) {
@@ -280,30 +285,32 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         navigationTripID = active.trip.id
     }
 
-    private func updateGuidance(_ active: ActiveTrip, _ adherence: Adherence?) {
+    /// `answer` is the status card's; it goes on the next stop's card once
+    /// there is a fix to judge, never on the stop after it.
+    private func updateGuidance(_ active: ActiveTrip, _ adherence: Adherence?, answer: String) {
         guard let navigation else { return }
         let tz = active.trip.timezone
         let stops = active.trip.stops
         let next = adherence?.nextStop ?? stops[0]
 
-        func maneuver(for stop: TripStop, adherence: Adherence?) -> CPManeuver {
-            let variants = CarPlayTemplates.maneuverVariants(stop: stop, adherence: adherence, timezone: tz)
+        func maneuver(for stop: TripStop, answer: String?) -> CPManeuver {
+            let variants = CarPlayTemplates.maneuverVariants(stop: stop, answer: answer, timezone: tz)
             if let existing = maneuversByStop[stop.sequence] {
                 if existing.instructionVariants != variants { existing.instructionVariants = variants }
                 return existing
             }
-            let made = CarPlayTemplates.maneuver(stop: stop, adherence: adherence, timezone: tz)
+            let made = CarPlayTemplates.maneuver(stop: stop, answer: answer, timezone: tz)
             maneuversByStop[stop.sequence] = made
             return made
         }
 
         // Never empty: the next stop is always one maneuver, with the stop
         // after it as the follower CarPlay may show alongside.
-        var upcoming = [maneuver(for: next, adherence: adherence)]
+        var upcoming = [maneuver(for: next, answer: adherence == nil ? nil : answer)]
         var sequences = [next.sequence]
         if let index = stops.firstIndex(where: { $0.sequence == next.sequence }), index + 1 < stops.count {
             let following = stops[index + 1]
-            upcoming.append(maneuver(for: following, adherence: nil))
+            upcoming.append(maneuver(for: following, answer: nil))
             sequences.append(following.sequence)
         }
         if sequences != upcomingSequences {
@@ -335,13 +342,13 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             offRouteEpisodeSeen = false
             return
         }
-        let subtitle = CarPlayTemplates.offRouteSubtitle(adherence: adherence)
+        let title = CarPlayTemplates.offRouteTitle(adherence: adherence)
         if let banner = offRouteBanner {
             // Still off route: keep the distance on the standing banner honest
             // rather than presenting a second one.
-            if let alert = mapTemplate.currentNavigationAlert, subtitle != banner.subtitle {
-                offRouteBanner = (banner.alert, subtitle)
-                alert.updateTitleVariants([CarPlayTemplates.offRouteTitle], subtitleVariants: [subtitle])
+            if let alert = mapTemplate.currentNavigationAlert, title != banner.title {
+                offRouteBanner = (banner.alert, title)
+                alert.updateTitleVariants([title], subtitleVariants: [])
             }
             return
         }
@@ -350,21 +357,20 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         // Something else may own the banner; never stack ours on top of it.
         guard mapTemplate.currentNavigationAlert == nil else { return }
         let alert = CarPlayTemplates.offRouteAlert(adherence: adherence)
-        offRouteBanner = (alert, subtitle)
+        offRouteBanner = (alert, title)
         offRouteEpisodeSeen = true
         mapTemplate.present(navigationAlert: alert, animated: true)
     }
 
-    private func detailItems(_ active: ActiveTrip) -> [CPInformationItem] {
-        CarPlayTemplates.detailItems(active: active, adherence: session.latest,
-                                     reporting: session.reporting, fixesSent: session.fixesSent)
+    private func detailItems(_ status: TripStatus) -> [CPInformationItem] {
+        CarPlayTemplates.detailItems(status: status, adherence: session.latest, fixesSent: session.fixesSent)
     }
 
     private func showDetails() {
-        guard let active = session.activeTrip else { return }
+        guard let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) else { return }
         if let details, interface.topTemplate === details { return }
         let template = CPInformationTemplate(title: String(localized: "Trip"), layout: .leading,
-                                             items: detailItems(active), actions: [])
+                                             items: detailItems(status), actions: [])
         details = template
         interface.pushTemplate(template, animated: true, completion: nil)
     }
@@ -551,14 +557,13 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     // MARK: End
 
     private func confirmEnd() {
-        let end = CPAlertAction(title: String(localized: "End Trip"), style: .destructive) { [weak self] _ in
+        let alert = CarPlayTemplates.endTripAlert(onEnd: { [weak self] in
             self?.interface.dismissTemplate(animated: true, completion: nil)
             self?.endTrip()
-        }
-        let cancel = CPAlertAction(title: String(localized: "Cancel"), style: .cancel) { [weak self] _ in
+        }, onKeepGoing: { [weak self] in
             self?.interface.dismissTemplate(animated: true, completion: nil)
-        }
-        interface.presentTemplate(CPAlertTemplate(titleVariants: [String(localized: "End this trip?")], actions: [end, cancel]), animated: true, completion: nil)
+        })
+        interface.presentTemplate(alert, animated: true, completion: nil)
     }
 
     private func endTrip() {
@@ -567,18 +572,17 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             do {
                 try await session.end()
             } catch {
-                let retry = CPAlertAction(title: String(localized: "Retry"), style: .default) { [weak self] _ in
+                log.error("the server did not confirm the end of the trip: \(String(describing: error))")
+                let alert = CarPlayTemplates.notEndedAlert(onTryAgain: { [weak self] in
                     self?.interface.dismissTemplate(animated: true, completion: nil)
                     self?.endTrip()
-                }
-                let local = CPAlertAction(title: String(localized: "End locally"), style: .destructive) { [weak self] _ in
+                }, onEndOnThisPhone: { [weak self] in
                     self?.interface.dismissTemplate(animated: true, completion: nil)
                     self?.session.endLocally()
-                }
-                let keep = CPAlertAction(title: String(localized: "Keep going"), style: .cancel) { [weak self] _ in
+                }, onKeepGoing: { [weak self] in
                     self?.interface.dismissTemplate(animated: true, completion: nil)
-                }
-                interface.presentTemplate(CPAlertTemplate(titleVariants: [String(localized: "Could not end the trip"), String(localized: "Could not end")], actions: [retry, local, keep]), animated: true, completion: nil)
+                })
+                interface.presentTemplate(alert, animated: true, completion: nil)
             }
         }
     }

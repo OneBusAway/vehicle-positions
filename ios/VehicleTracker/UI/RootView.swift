@@ -2,44 +2,43 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(TripSession.self) private var session
-    @Environment(ServerSetup.self) private var serverSetup
+
+    /// Which screen the phase puts up. `.active`, `.paused` and `.ending` are
+    /// all Tracking, so a trip pausing or ending does not cross-fade the
+    /// screen with itself.
+    private enum Screen: Equatable {
+        case signIn, pickers, tracking
+    }
+
+    private var screen: Screen {
+        switch session.phase {
+        case .signedOut: .signIn
+        case .idle, .starting: .pickers
+        case .active, .paused, .ending: .tracking
+        }
+    }
 
     var body: some View {
-        Group {
-            switch session.phase {
-            case .signedOut:
-                LoginView()
-            case .idle, .starting:
-                PickerFlow()
-            case .active, .paused, .ending:
-                TrackingView()
+        ZStack {
+            switch screen {
+            case .signIn:
+                LoginView().transition(.opacity)
+            case .pickers:
+                PickerFlow().transition(.opacity)
+            case .tracking:
+                TrackingView().transition(.opacity)
             }
         }
-        .alert(title(of: serverSetup.prompt), isPresented: isPrompting, presenting: serverSetup.prompt) { prompt in
-            if case .confirm(let server, _) = prompt {
-                Button("Use this server") { serverSetup.confirm(server) }
-                Button("Cancel", role: .cancel) { serverSetup.dismiss() }
-            } else {
-                Button("OK") { serverSetup.dismiss() }
-            }
-        } message: { prompt in
-            if case .confirm = prompt {
-                Text("Only continue if your agency sent you this link.")
+        .animation(.smooth(duration: 0.35), value: screen)
+        // The trip started, or ended, on the server (DESIGN-iOS §2.7).
+        .sensoryFeedback(.success, trigger: session.phase) { old, new in
+            switch (old, new) {
+            case (.starting, .active), (.ending, .idle): true
+            default: false
             }
         }
-    }
-
-    private var isPrompting: Binding<Bool> {
-        Binding(get: { serverSetup.prompt != nil }, set: { if !$0 { serverSetup.dismiss() } })
-    }
-
-    private func title(of prompt: ServerSetupLink.Decision?) -> Text {
-        switch prompt {
-        case .confirm(_, let host): Text("Use \(host)?")
-        case .refusedSignedIn(let host): Text("This phone is signed in to \(host). The link was not used.")
-        case .refusedManaged: Text("Your agency sets the server on this phone.")
-        case .invalid: Text("This link does not contain a server address the app can use.")
-        case nil: Text(verbatim: "")
-        }
+        // Inside Tracking the trip sheet shows it: an alert cannot present
+        // from under a sheet that is already up.
+        .serverSetupPrompt(isActive: screen != .tracking)
     }
 }
