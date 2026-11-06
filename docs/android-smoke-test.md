@@ -585,7 +585,7 @@ asks the driver instead of carrying on as if it were.
 that the system is restarting that long to announce itself), then **Resume your
 trip?**: "The app closed while this trip was running. Reports are paused until
 you choose.", and a card with the route's badge, where the run is headed, the
-run's start time, `Bus bus-1`, and how long ago the trip started and at what
+run's start time, `Vehicle bus-1`, and how long ago the trip started and at what
 time. Under it, a green **Resume trip** button and an outlined **End trip**. The
 service stays stopped while the prompt is up.
 
@@ -669,8 +669,8 @@ immediate: no migration runs and nothing listens on `$PORT`.
 2. Force-stop and relaunch the app.
 
 **Expected outcome:** to the app, a server that refused to start is simply a
-server that is down. **Choose your bus** reads "Couldn't load your buses" with a
-**Try again** button. The route picker's "No schedule on this server
+server that is down. **Choose your vehicle** reads "Couldn't load your vehicles"
+with a **Try again** button. The route picker's "No schedule on this server
 yet" message does not appear: only a server that is running without a
 catalog (a build from before the schedule was required) can produce it.
 
