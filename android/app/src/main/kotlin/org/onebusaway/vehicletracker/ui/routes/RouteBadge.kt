@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.engine.TripGeometry
+import org.onebusaway.vehicletracker.ui.map.contrast
 
 private const val HEX_DIGITS = 6
 private const val OPAQUE_ALPHA = 0xFF000000L
@@ -41,12 +42,26 @@ fun routeColorArgb(hex: String): Long? {
 fun routeColorHex(color: Color?): String =
     color?.let { (it.toArgb() and RGB_MASK).toString(radix = 16).padStart(HEX_DIGITS, '0').uppercase() }.orEmpty()
 
+/** Black or white, whichever has more contrast on [background]. One of the two always reaches 4.5:1. */
+fun legibleTextOn(background: Color): Color {
+    val argb = background.toArgb()
+    return if (contrast(Color.Black.toArgb(), argb) >= contrast(Color.White.toArgb(), argb)) Color.Black else Color.White
+}
+
 /**
  * A route's short name and colours with the feed's hex already read, so a list of badges parses nothing while it
  * scrolls. A null colour leaves the badge on the theme's own, as [routeColorArgb] explains.
  */
 @Immutable
 data class RouteBadgeModel(val shortName: String, val color: Color?, val textColor: Color?) {
+    /**
+     * The badge's text colour. With no route colour the badge sits on the theme's primary, so it takes [onPrimary],
+     * even if the feed gives a text colour: that colour was chosen for the route's. With a route colour and no text
+     * colour it is [legibleTextOn] that colour, because [onPrimary] can be unreadable there.
+     */
+    fun foreground(onPrimary: Color): Color =
+        if (color == null) onPrimary else textColor ?: legibleTextOn(color)
+
     companion object {
         /** [color] and [textColor] as the feed writes them: six hex digits. */
         fun of(shortName: String, color: String, textColor: String) = RouteBadgeModel(
@@ -93,7 +108,7 @@ fun RouteBadge(
     shape: Shape = RoundedCornerShape(6.dp),
 ) {
     val background = route.color ?: MaterialTheme.colorScheme.primary
-    val foreground = route.textColor ?: MaterialTheme.colorScheme.onPrimary
+    val foreground = route.foreground(MaterialTheme.colorScheme.onPrimary)
     Box(
         modifier = modifier
             .background(background, shape)
