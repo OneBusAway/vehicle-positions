@@ -280,8 +280,8 @@ whichever bus is free — and a vehicle may be assigned to several drivers.
 
 If a driver tries to start a trip on a vehicle that is not assigned to them, the
 server refuses (`403 driver is not assigned to this vehicle`) and the app shows
-**You're not assigned to bus 4317.**, with the bus's number, and a **Change
-bus** button. Note the one thing this does *not*
+**You're not assigned to vehicle 4317.**, with the vehicle's number, and a **Change
+vehicle** button. Note the one thing this does *not*
 cover: the assignment is checked when a trip is started, not on each individual
 location report. In normal use that is the same thing, because the app only
 reports while a trip is running.
@@ -318,11 +318,11 @@ takes about ten minutes. Before you start, make sure the driver has an account
      means the phone cannot reach the server: check the network and the server
      address.
    - **Couldn't sign in. Try again.** means the server answered with an error.
-4. Next is **Choose your bus**, showing exactly the vehicles you assigned as
-   tiles, with the buses the driver starred under **Favorites** and the ones
+4. Next is **Choose your vehicle**, showing exactly the vehicles you assigned
+   as tiles, with the ones the driver starred under **Favorites** and the ones
    they drove last under **Recent**. If there is only one, the app skips this
-   screen and selects it automatically. If it says **No buses are assigned to
-   you**, go back to section 6, then have the driver tap **Check again**.
+   screen and selects it automatically. If it says **No vehicles are assigned
+   to you**, go back to section 6, then have the driver tap **Check again**.
 5. Next the driver picks the route, then the run, from your agency's GTFS
    schedule. There is nothing to type:
    - **Choose a route** lists the routes in the schedule, each with its number
@@ -600,9 +600,9 @@ points are.
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| Driver sees **You're not assigned to bus 4317.** after tapping a run on **Choose a run** | The vehicle is not assigned to that driver, or the assignment was removed. | **Users** → **Edit** the driver → **Assigned vehicles** → pick the vehicle → **Assign**. Then have them tap the run again. |
+| Driver sees **You're not assigned to vehicle 4317.** after tapping a run on **Choose a run** | The vehicle is not assigned to that driver, or the assignment was removed. | **Users** → **Edit** the driver → **Assigned vehicles** → pick the vehicle → **Assign**. Then have them tap the run again. |
 | Driver sees **You already have a trip running. End it before starting another.** | An earlier trip was never ended, usually because it was started on another phone or the app was reinstalled. | Have the driver open the app on the phone that started the trip; it returns to the tracking screen for the old trip, where **End trip** ends it. Confirm on **Trips** → **Active** that it is gone. If the app no longer knows about the trip, end it yourself: **Trips** → **Active** → **Apply**, then **End trip** on the driver's row and confirm. Then have them tap the run again. |
-| Driver sees **No buses are assigned to you** | No active vehicle is assigned to that account. | Check the vehicle is not deactivated (**Vehicles** → **Show deactivated**), then assign it (section 6) and have the driver tap **Check again**. |
+| Driver sees **No vehicles are assigned to you** | No active vehicle is assigned to that account. | Check the vehicle is not deactivated (**Vehicles** → **Show deactivated**), then assign it (section 6) and have the driver tap **Check again**. |
 | One vehicle missing from the feed and the map, others fine | That phone has stopped reporting for longer than the staleness threshold: no signal, app closed, trip never started, phone battery dead, or Android killed the app in the background. | Ask the driver what the line under the status card says. **No connection** is a coverage problem and clears itself. If the app is not on the tracking screen at all, the trip was never started or was ended. If it keeps dying when the screen locks, the background-location permission is not **"Allow all the time"**: redo step 6 of section 7. |
 | Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Dashboard**: if **Feed last updated** says **never** (nothing has reported for several minutes) and **Active Trips** is 0, it is the phones — start with two or three drivers. If **Active Trips** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |
 | Driver phone shows **Signed out** | The sign-in could not be renewed: the account was deactivated or deleted, or its password changed, the phone went a week without using the app, or the driver signed out on another phone. | Have the driver tap **Sign in** on that card and sign in again. If you have since deactivated the account, sign-in is refused, which is the intended outcome. |

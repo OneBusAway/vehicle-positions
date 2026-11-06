@@ -36,8 +36,8 @@
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>
     <string name="setup_trip_so_far">Trip so far</string>
-    <!-- Read before the bus's number on its chip, e.g. "Bus, 4317". -->
-    <string name="setup_bus">Bus</string>
+    <!-- Read before the vehicle's number on its chip, e.g. "Vehicle, 4317". -->
+    <string name="setup_bus">Vehicle</string>
     <!-- The route's chip, read out, e.g. "Route 7". -->
     <string name="setup_route">Route %1$s</string>
     <!-- After the chips: the step the driver is on. -->
@@ -48,22 +48,22 @@
     <string name="setup_clear_search">Clear search</string>
 
     <!-- Vehicle selection screen -->
-    <string name="vehicles_title">Choose your bus</string>
-    <string name="vehicles_empty">No buses are assigned to you</string>
+    <string name="vehicles_title">Choose your vehicle</string>
+    <string name="vehicles_empty">No vehicles are assigned to you</string>
     <string name="vehicles_empty_detail">Ask your dispatcher to assign one, then check again.</string>
     <string name="vehicles_check_again">Check again</string>
-    <string name="vehicles_error_message">Couldn\'t load your buses</string>
+    <string name="vehicles_error_message">Couldn\'t load your vehicles</string>
     <string name="vehicles_error_detail">Check your connection and try again.</string>
     <string name="vehicles_retry_button">Try again</string>
-    <string name="vehicles_search_label">Bus number</string>
-    <!-- What the driver typed, e.g. "No bus matches 999". -->
-    <string name="vehicles_search_no_matches">No bus matches %1$s</string>
-    <string name="vehicles_search_no_matches_detail">Check the fleet number on the bus.</string>
+    <string name="vehicles_search_label">Vehicle number</string>
+    <!-- What the driver typed, e.g. "No vehicle matches 999". -->
+    <string name="vehicles_search_no_matches">No vehicle matches %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Check the fleet number on the vehicle.</string>
     <string name="vehicles_section_favorites">Favorites</string>
     <string name="vehicles_section_recent">Recent</string>
-    <string name="vehicles_section_all">All buses</string>
+    <string name="vehicles_section_all">All vehicles</string>
     <string name="vehicles_section_matches">Matches</string>
-    <!-- How TalkBack describes a starred bus's tile, e.g. "4317, Bus 4317, Favorite". -->
+    <!-- How TalkBack describes a starred vehicle's tile, e.g. "4317, Bus 4317, Favorite". -->
     <string name="vehicles_tile_favorite">Favorite</string>
     <string name="vehicles_favorite_description">Add %1$s to favorites</string>
     <string name="vehicles_unfavorite_description">Remove %1$s from favorites</string>
@@ -113,9 +113,9 @@
     <string name="runs_error_message">Couldn\'t load the runs</string>
     <string name="runs_error_detail">Check your connection and try again.</string>
     <string name="runs_retry_button">Try again</string>
-    <!-- The bus the driver chose, e.g. "You're not assigned to bus 4317." -->
-    <string name="runs_error_not_assigned">You\'re not assigned to bus %1$s.</string>
-    <string name="runs_change_bus">Change bus</string>
+    <!-- The vehicle the driver chose, e.g. "You're not assigned to vehicle 4317." -->
+    <string name="runs_error_not_assigned">You\'re not assigned to vehicle %1$s.</string>
+    <string name="runs_change_bus">Change vehicle</string>
     <string name="runs_error_trip_active">You already have a trip running. End it before starting another.</string>
     <string name="runs_error_previous_trip_not_ended">Your previous trip could not be ended yet. Check your connection and try again.</string>
     <string name="runs_error_network">Can\'t reach the server. Check your connection.</string>
@@ -216,7 +216,7 @@
     <string name="tracking_adherence_run_vehicle">%1$s run · %2$s</string>
     <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
     <string name="tracking_adherence_no_schedule">No schedule</string>
-    <string name="tracking_adherence_no_schedule_riders">Riders still see the bus</string>
+    <string name="tracking_adherence_no_schedule_riders">Riders still see the vehicle</string>
     <string name="tracking_adherence_no_schedule_detail">This run has no timetable</string>
     <!-- On the tracking screen's map, once the driver has dragged it away from the vehicle. -->
     <string name="tracking_map_recenter">Re-center</string>
@@ -237,7 +237,7 @@
     <string name="resume_route">Route %1$s</string>
     <!-- The run's first departure in the agency's zone, e.g. "6:58 AM run". -->
     <string name="resume_run">%1$s run</string>
-    <string name="resume_bus">Bus %1$s</string>
+    <string name="resume_bus">Vehicle %1$s</string>
     <!-- Whole minutes since the trip began, then the time it began, e.g. "Started 23 min ago, at 6:58 AM". -->
     <plurals name="resume_started_minutes_ago">
         <item quantity="one">Started %1$d min ago, at %2$s</item>
@@ -265,13 +265,13 @@
     <string name="tracking_notification_resume_title">Reports paused</string>
     <string name="tracking_notification_resume_text">Open the app to keep reporting.</string>
 
-    <!-- The checklist before a trip, shown when the app is missing something it needs. The bus's fleet number. -->
+    <!-- The checklist before a trip, shown when the app is missing something it needs. The vehicle's fleet number. -->
     <string name="preflight_title">Before you start</string>
-    <string name="preflight_message">The app needs these to report bus %1$s. Android asks about each one next.</string>
+    <string name="preflight_message">The app needs these to report vehicle %1$s. Android asks about each one next.</string>
     <string name="preflight_location">Location</string>
-    <string name="preflight_location_why">So the app knows where the bus is</string>
+    <string name="preflight_location_why">So the app knows where the vehicle is</string>
     <string name="preflight_precise">Precise location</string>
-    <string name="preflight_precise_why">So riders see the bus at the right stop</string>
+    <string name="preflight_precise_why">So riders see the vehicle at the right stop</string>
     <string name="preflight_background">All the time</string>
     <!-- Reports go on with the screen off without it; it lets the app restart reporting by itself. -->
     <string name="preflight_background_why">So reporting can restart if Android closes the app</string>
