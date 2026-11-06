@@ -1,10 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app icon's vehicle and signal arcs for the status bar: ic_launcher_monochrome's shapes, framed on the
+     mark so it fills the 24 dp. Android uses only the shape here and tints it itself. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="960"
-    android:viewportHeight="960"
-    android:tint="#FFFFFF">
-  <path
-      android:fillColor="@android:color/white"
-      android:pathData="M320,760L320,780Q320,805 302.5,822.5Q285,840 260,840Q235,840 217.5,822.5Q200,805 200,780L200,718Q182,698 171,673.5Q160,649 160,620L160,240Q160,157 237,118.5Q314,80 480,80Q652,80 726,117Q800,154 800,240L800,620Q800,649 789,673.5Q778,698 760,718L760,780Q760,805 742.5,822.5Q725,840 700,840Q675,840 657.5,822.5Q640,805 640,780L640,760L320,760ZM240,400L720,400L720,280L240,280L240,400ZM382.5,622.5Q400,605 400,580Q400,555 382.5,537.5Q365,520 340,520Q315,520 297.5,537.5Q280,555 280,580Q280,605 297.5,622.5Q315,640 340,640Q365,640 382.5,622.5ZM662.5,622.5Q680,605 680,580Q680,555 662.5,537.5Q645,520 620,520Q595,520 577.5,537.5Q560,555 560,580Q560,605 577.5,622.5Q595,640 620,640Q645,640 662.5,622.5Z"/>
+    android:viewportWidth="57"
+    android:viewportHeight="57">
+    <group
+        android:translateX="-25.44"
+        android:translateY="-24.17">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M37.81,51.88A7.46,7.46 0 0,1 45.27,44.41H62.61A7.46,7.46 0 0,1 70.08,51.88V72.03A2.41,2.41 0 0,1 67.67,74.44V76.33A2.3,2.3 0 0,1 65.37,78.63H63.82A2.3,2.3 0 0,1 61.52,76.33V74.44H46.36V76.33A2.3,2.3 0 0,1 44.07,78.63H42.52A2.3,2.3 0 0,1 40.22,76.33V74.44A2.41,2.41 0 0,1 37.81,72.03ZM44.24,46.94A1.03,1.03 0 0,0 43.21,47.97V48.95A1.03,1.03 0 0,0 44.24,49.98H63.65A1.03,1.03 0 0,0 64.68,48.95V47.97A1.03,1.03 0 0,0 63.65,46.94ZM41.37,52.22A0.69,0.69 0 0,0 40.68,52.91V62.96A0.69,0.69 0 0,0 41.37,63.65H52.39A0.69,0.69 0 0,0 53.08,62.96V52.91A0.69,0.69 0 0,0 52.39,52.22ZM55.49,52.22A0.69,0.69 0 0,0 54.8,52.91V62.96A0.69,0.69 0 0,0 55.49,63.65H66.52A0.69,0.69 0 0,0 67.21,62.96V52.91A0.69,0.69 0 0,0 66.52,52.22ZM46.08,69.19A2.5,2.5 0 1,0 41.08,69.19A2.5,2.5 0 1,0 46.08,69.19ZM66.8,69.19A2.5,2.5 0 1,0 61.81,69.19A2.5,2.5 0 1,0 66.8,69.19Z" />
+        <path
+            android:pathData="M38.36,35.51A21.3,21.3 0 0,1 69.52,35.51"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4.08"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M44.53,40.25A13.58,13.58 0 0,1 63.36,40.25"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.79"
+            android:strokeLineCap="round" />
+    </group>
 </vector>
