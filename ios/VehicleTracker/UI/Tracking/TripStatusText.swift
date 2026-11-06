@@ -192,6 +192,10 @@ enum TripStatusText {
         String(localized: "Reports have stopped. Your trip is still open.", comment: "Under 'Signed out': what the expired sign-in means for the trip.")
     }
 
+    static var spokenSignedOut: String {
+        String(localized: "Signed out. \(signedOutMessage)", comment: "VoiceOver: the Signed out card in one announcement, when it takes the status card's place.")
+    }
+
     static var signIn: String {
         String(localized: "Sign in", comment: "The button on the Signed out card that opens the sign-in sheet.")
     }

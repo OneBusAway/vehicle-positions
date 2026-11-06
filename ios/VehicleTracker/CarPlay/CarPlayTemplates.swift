@@ -87,6 +87,15 @@ enum CarPlayTemplates {
         let tz = active.trip.timezone
         let route = active.trip.route
         let card = status.card
+        // Off schedule, the card's answer is only the minutes; the row keeps
+        // the words main showed with them.
+        let schedule = status.answer == .offSchedule ? TripStatusText.pair(card.label, card.answer) : card.answer
+        // From the fix, as on main. The card's lines hold the From line
+        // before the first fix and the off-schedule question, neither of
+        // which belongs under "Next stop".
+        let next = adherence.map {
+            TripStatusText.pair($0.nextStop.name, TripStatusText.pair(Formatters.clock($0.nextStop.arrivalAt, timezone: tz), Formatters.distance($0.distanceToNextStop)))
+        } ?? String(localized: "—")
         let reports: String
         if let problem = status.problem {
             reports = TripStatusText.pair(problem.what, problem.meaning)
@@ -102,8 +111,8 @@ enum CarPlayTemplates {
         return [
             CPInformationItem(title: String(localized: "Route"), detail: "\(route.shortName) · \(route.longName)"),
             CPInformationItem(title: String(localized: "Trip"), detail: "\(active.trip.headsign) · \(Formatters.clock(active.trip.stops.first?.departureAt ?? active.startedAt, timezone: tz))"),
-            CPInformationItem(title: String(localized: "Schedule"), detail: card.answer),
-            CPInformationItem(title: String(localized: "Next stop"), detail: TripStatusText.pair(card.emphasis, card.line2)),
+            CPInformationItem(title: String(localized: "Schedule"), detail: schedule),
+            CPInformationItem(title: String(localized: "Next stop"), detail: next),
             CPInformationItem(title: TripStatusText.reports, detail: reports),
             CPInformationItem(title: String(localized: "GPS"), detail: gps),
         ]

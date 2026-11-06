@@ -21,18 +21,20 @@ struct TrackingView: View {
     /// from the card alone, so a problem line coming or going never moves
     /// the map.
     @State private var cardBottom: CGFloat = 0
+    /// The sheet's peek, measured from its bar by the sheet itself.
+    @State private var peek: CGFloat = TripSheet.minimumPeek
     /// The sheet's detent is view state, so nothing resizes the sheet out
     /// from under the driver's hand.
-    @State private var detent: PresentationDetent = .height(TripSheet.peek)
+    @State private var detent: PresentationDetent = .height(TripSheet.minimumPeek)
     /// The tall detent ends 8 pt under the status area. It is re-measured
     /// only while the sheet is at the peek: a problem line coming or going
     /// under the card must not move a sheet that is up or being dragged.
-    @State private var expanded: CGFloat = TripSheet.peek
+    @State private var expanded: CGFloat = TripSheet.minimumPeek
     @State private var statusAreaBottom: CGFloat = 0
 
     var body: some View {
         ZStack(alignment: .top) {
-            TrackingMap(framing: framing, following: following)
+            TrackingMap(coveredBottom: peek, framing: framing, following: following)
                 .ignoresSafeArea()
                 .onGeometryChange(for: MapLayout.self) {
                     MapLayout(height: $0.size.height, safeTop: $0.safeAreaInsets.top, safeBottom: $0.safeAreaInsets.bottom)
@@ -45,7 +47,7 @@ struct TrackingView: View {
                 RecenterButton { following.follow() }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, 12)
-                    .padding(.bottom, TripSheet.peek + 12)
+                    .padding(.bottom, peek + 12)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
             }
         }
@@ -54,11 +56,16 @@ struct TrackingView: View {
         .keepsScreenAwakeWhileCharging()
         .onDisappear { following.stop() }
         .onChange(of: wantedExpanded, initial: true) { _, wanted in
-            if detent == .height(TripSheet.peek) { expanded = wanted }
+            if detent == .height(peek) { expanded = wanted }
+        }
+        // The bar was measured, or the text size changed it: a sheet resting
+        // at the old peek moves to the new one.
+        .onChange(of: peek) { old, new in
+            if detent == .height(old) { detent = .height(new) }
         }
         .sheet(isPresented: .constant(true)) {
-            TripSheet(showingRelogin: $showingRelogin, isExpanded: detent != .height(TripSheet.peek))
-                .presentationDetents([.height(TripSheet.peek), .height(expanded)], selection: $detent)
+            TripSheet(showingRelogin: $showingRelogin, peek: $peek, isExpanded: detent != .height(peek))
+                .presentationDetents([.height(peek), .height(expanded)], selection: $detent)
                 .presentationDragIndicator(.visible)
                 // The status card's buttons stay reachable at both detents,
                 // and the map takes touches at the peek.
@@ -71,24 +78,25 @@ struct TrackingView: View {
     /// The sheet's height is measured from the bottom of the safe area, and
     /// `map.height` is the safe area's: the map itself runs under the insets.
     private var wantedExpanded: CGFloat {
-        max(TripSheet.peek, map.height - statusAreaBottom - 8)
+        max(peek, map.height - statusAreaBottom - 8)
     }
 
     private var framing: FollowFraming {
-        FollowFraming(mapHeight: map.height, coveredTop: map.safeTop + cardBottom, coveredBottom: TripSheet.peek + map.safeBottom)
+        FollowFraming(mapHeight: map.height, coveredTop: map.safeTop + cardBottom, coveredBottom: peek + map.safeBottom)
     }
 }
 
 /// The map, in its own view so the fixes it follows redraw it alone.
 private struct TrackingMap: View {
     @Environment(TripSession.self) private var session
+    let coveredBottom: CGFloat
     let framing: FollowFraming
     let following: MapFollowing
 
     var body: some View {
         let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting)
         RouteMapView(trip: status?.active.trip, adherence: session.latest, ring: status?.ring ?? .neutral,
-                     vehicleName: status?.vehicleName ?? "", coveredBottom: TripSheet.peek, framing: framing, following: following)
+                     vehicleName: status?.vehicleName ?? "", coveredBottom: coveredBottom, framing: framing, following: following)
     }
 }
 
@@ -122,10 +130,10 @@ private struct StatusArea: View {
             // one clearing does not (DESIGN-iOS §2.7).
             .sensoryFeedback(.warning, trigger: status.problem?.kind) { old, new in new != nil && old != new }
             .sensoryFeedback(.warning, trigger: status.isSignedOut) { _, signedOut in signedOut }
-            // A change of kind is read out; the minutes moving inside one
-            // kind are not.
-            .onChange(of: status.category) { _, _ in
-                AccessibilityNotification.Announcement(status.sentence).post()
+            // A change of kind is read out, as the problem that appeared or
+            // the card; the minutes moving inside one kind are not.
+            .onChange(of: status.category) { old, _ in
+                AccessibilityNotification.Announcement(status.announcement(after: old)).post()
             }
         }
     }

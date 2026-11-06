@@ -6,13 +6,17 @@ import SwiftUI
 /// and the sign-in sheet present from here: the sheet is already up, and
 /// SwiftUI cannot present over it from the screen underneath.
 struct TripSheet: View {
-    /// The bar's height, which is the sheet's peek. The sheet adds the
-    /// bottom safe area itself.
-    static let peek: CGFloat = 76
+    /// The least the sheet's peek can be: the bar's height in the design.
+    /// The sheet adds the bottom safe area itself.
+    static let minimumPeek: CGFloat = 76
 
     @Environment(TripSession.self) private var session
     @Environment(\.colorScheme) private var colorScheme
     @Binding var showingRelogin: Bool
+    /// The sheet's peek: the bar as measured, never under `minimumPeek`. At
+    /// accessibility sizes the bar stacks End trip under the headsign and
+    /// needs well over 76 pt; a fixed peek would clip the button.
+    @Binding var peek: CGFloat
     /// Whether the sheet is pulled up: the list goes back to its top each
     /// time it is.
     let isExpanded: Bool
@@ -29,6 +33,7 @@ struct TripSheet: View {
         VStack(spacing: 0) {
             if let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) {
                 TripBar(active: status.active, reports: status.reports, isEnding: session.phase.isEnding) { confirmEnd = true }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { peek = max(Self.minimumPeek, $0) }
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 0) {

@@ -127,13 +127,26 @@ import Testing
         #expect(items[5].detail == "±7 m")
     }
 
+    /// Off schedule, the Schedule row keeps the words main showed with the
+    /// deviation, and the Next stop row stays a stop with its time and
+    /// distance: the card's question never lands under "Next stop".
+    @Test func detailItemsKeepOffScheduleInTheScheduleRow() throws {
+        let early = evaluator.evaluate(TripFixtures.fix(lat: 47.6000, lon: -122.3300, at: TripFixtures.at(8, 0).addingTimeInterval(-1260)), previous: nil)
+        try #require(early.status == .offSchedule)
+        let items = CarPlayTemplates.detailItems(status: try status(early), adherence: early, fixesSent: 1)
+        #expect(items[2].detail == "Off schedule · 21 min early")
+        #expect(items[3].detail?.hasPrefix("Stop ST2 · 8:05") == true)
+        #expect(items[3].detail?.hasSuffix(" m") == true)
+        #expect(items[3].detail?.contains("right run") == false)
+    }
+
     /// The Reports row says what the phone's problem line says, from the
     /// same judgement: a paused trip reads Location stopped though its
     /// reporting status is still `.connected`.
     @Test func detailItemsCarryThePhonesProblemLine() throws {
         let waiting = CarPlayTemplates.detailItems(status: try status(nil, reporting: .noGPS), adherence: nil, fixesSent: 0)
         #expect(waiting[2].detail == "Waiting for GPS")
-        #expect(waiting[3].detail?.hasPrefix("Stop ST1 · 8:00") == true)
+        #expect(waiting[3].detail == "—", "no next stop before the first fix, as on main")
         #expect(waiting[4].detail == "No GPS signal · Position paused")
         #expect(waiting[5].detail == "—")
 
@@ -145,6 +158,9 @@ import Testing
 
         let signedOut = CarPlayTemplates.detailItems(status: try status(nil, reporting: .authExpired), adherence: nil, fixesSent: 3)
         #expect(signedOut[4].detail == "Reports stopped · Sign in on iPhone")
+
+        let ending = CarPlayTemplates.detailItems(status: try status(nil, phase: .ending(active)), adherence: nil, fixesSent: 3)
+        #expect(ending[4].detail == "Ending… · 3 sent", "a paused trip being ended is not Reporting")
     }
 
     @Test func offRouteAlertSaysHowFarAndNeverTimesOut() throws {

@@ -280,6 +280,25 @@ import Testing
         #expect(TripStatus.Reports(word: .notReporting, symbol: "").text == "Not reporting")
         #expect(TripStatus.Reports(word: .noGPS, symbol: "").text == "No GPS")
         #expect(TripStatus.Reports(word: .stopped, symbol: "").text == "Reports stopped")
+        #expect(TripStatus.Reports(word: .ending, symbol: "").text == "Ending…")
+    }
+
+    /// While the end is being sent the Reports row and CarPlay say Ending…,
+    /// as main's banner did, whatever the trip was doing before: a paused
+    /// trip's reports had already stopped, so Reporting would be wrong.
+    @Test func endingSaysEndingWhateverTheTripWasDoing() throws {
+        let fromPaused = try status(nil, phase: .ending(active))
+        #expect(fromPaused.reports.word == .ending)
+        #expect(fromPaused.reports.text == "Ending…")
+        #expect(fromPaused.reports.symbol == "hourglass")
+        #expect(!fromPaused.reports.isProblem)
+
+        let fromActive = try status(judged(secondsLate: 0), phase: .ending(active))
+        #expect(fromActive.reports.word == .ending)
+        #expect(fromActive.card.answer == "On time", "the card keeps its answer while the end is sent")
+
+        let signedOut = try status(nil, reporting: .authExpired, phase: .ending(active))
+        #expect(signedOut.reports.word == .stopped, "signed out still outranks it")
     }
 
     @Test func signedOutReplacesTheCardAndStopsTheReports() throws {
@@ -332,6 +351,32 @@ import Testing
         near.projection.distanceToShape = 98
         far.projection.distanceToShape = 300
         #expect(try status(near).category == status(far).category, "off route, the distance moves with every fix")
+    }
+
+    // MARK: Announcements
+
+    /// VoiceOver names what changed: a problem appearing is read as the
+    /// problem, not as the card it appeared under.
+    @Test func aProblemAppearingIsAnnouncedAsTheProblem() throws {
+        let well = try status(judged(secondsLate: 0))
+        let offline = try status(judged(secondsLate: 0), reporting: .noNetwork)
+        #expect(offline.announcement(after: well.category) == "No connection, Riders can't see you")
+        #expect(well.announcement(after: offline.category) == well.sentence, "the problem clearing reads the card again")
+
+        let late = try status(judged(secondsLate: 360), reporting: .noNetwork)
+        #expect(late.announcement(after: offline.category) == late.sentence, "with the same problem standing, the card's change is read")
+
+        let paused = try status(judged(secondsLate: 0), reporting: .noNetwork, phase: .paused(active))
+        #expect(paused.announcement(after: offline.category) == "Location stopped, Tap Resume", "one problem giving way to another reads the new one")
+    }
+
+    @Test func signingOutIsAnnouncedAsSignedOut() throws {
+        let well = try status(judged(secondsLate: 0))
+        let out = try status(judged(secondsLate: 0), reporting: .authExpired)
+        #expect(out.announcement(after: well.category) == "Signed out. Reports have stopped. Your trip is still open.")
+
+        let outAndLate = try status(judged(secondsLate: 360), reporting: .authExpired)
+        #expect(outAndLate.announcement(after: out.category) == outAndLate.sentence, "signed out already, a card change reads the card")
     }
 
     // MARK: Counts

@@ -49,16 +49,21 @@ struct TripStatus: Equatable {
     }
 
     /// Whether the server is hearing from the phone, as the trip bar and the
-    /// sheet's Reports row say it.
+    /// sheet's Reports row say it; "Ending…" while the end is being sent.
     struct Reports: Equatable {
         enum Word: Equatable {
-            case reporting, notReporting, noGPS, stopped
+            case reporting, notReporting, noGPS, stopped, ending
         }
 
         var word: Word
         var symbol: String
 
-        var isProblem: Bool { word != .reporting }
+        var isProblem: Bool {
+            switch word {
+            case .reporting, .ending: false
+            case .notReporting, .noGPS, .stopped: true
+            }
+        }
 
         var text: String {
             switch word {
@@ -66,6 +71,7 @@ struct TripStatus: Equatable {
             case .notReporting: TripStatusText.notReporting
             case .noGPS: TripStatusText.noGPS
             case .stopped: TripStatusText.reportsStopped
+            case .ending: TripStatusText.ending
             }
         }
     }
@@ -111,6 +117,19 @@ struct TripStatus: Equatable {
         Category(answer: answer, problem: problem?.kind, isSignedOut: isSignedOut)
     }
 
+    /// What VoiceOver announces when the category changes. The card's
+    /// sentence alone would not say what went wrong, so a problem that has
+    /// just appeared, or the Signed out card, is read in its place.
+    func announcement(after old: Category) -> String {
+        if isSignedOut {
+            return old.isSignedOut ? sentence : TripStatusText.spokenSignedOut
+        }
+        if let problem, problem.kind != old.problem {
+            return TripStatusText.spokenProblem(what: problem.what, meaning: problem.meaning)
+        }
+        return sentence
+    }
+
     /// Nil when there is no trip to describe: signed out, idle, or starting.
     init?(phase: TripSession.Phase, latest: Adherence?, reporting: TripSession.ReportingStatus) {
         let active: ActiveTrip
@@ -135,7 +154,7 @@ struct TripStatus: Equatable {
         }
         self.isSignedOut = isSignedOut
         self.problem = problem
-        reports = Self.reports(isSignedOut: isSignedOut, problem: problem)
+        reports = Self.reports(isSignedOut: isSignedOut, isEnding: phase.isEnding, problem: problem)
         ring = Self.ring(latest: latest, isSignedOut: isSignedOut, problem: problem)
     }
 
@@ -267,8 +286,12 @@ struct TripStatus: Equatable {
         }
     }
 
-    private static func reports(isSignedOut: Bool, problem: Problem?) -> Reports {
+    /// Signed out outranks everything. Then, while the end is being sent,
+    /// "Ending…" whatever the trip was doing before: a paused trip's reports
+    /// had already stopped, so Reporting would be the wrong word.
+    private static func reports(isSignedOut: Bool, isEnding: Bool, problem: Problem?) -> Reports {
         if isSignedOut { return Reports(word: .stopped, symbol: "lock.fill") }
+        if isEnding { return Reports(word: .ending, symbol: "hourglass") }
         guard let problem else { return Reports(word: .reporting, symbol: "checkmark.icloud.fill") }
         return Reports(word: pausesThePosition(problem.kind) ? .noGPS : .notReporting, symbol: problem.symbol)
     }
