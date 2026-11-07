@@ -806,6 +806,8 @@ server's schedule, so point `GTFS_STATIC_URL` at that same feed.
 The driver app lives in [`android/`](../android/) and takes the server URL on
 its **login screen**, stored per device. One APK therefore works for every
 agency and every server — there is nothing to rebuild per deployment.
+You can still build your server's address in, or set it without a rebuild
+(section 13).
 
 **Version skew:** this app sends `route_id` and `start_date` on every location
 report, so it requires a server built from this repository at or after the
@@ -939,6 +941,7 @@ lower than the installed one, and identical codes make it impossible to tell
 which build a driver is running when you are debugging a report from the field.
 
 Then tell drivers three things: the server URL, their email, and their password.
+Section 13 covers giving them the server URL without typing it.
 The app's [smoke-test walkthrough](android-smoke-test.md) is a useful script for
 verifying a new build end to end before you distribute it.
 
@@ -992,8 +995,8 @@ for now.
 ## 13. Setting the server address on drivers' phones
 
 Out of the box, each driver types the server address on the sign-in screen,
-and a typo gives a confusing error. The iPhone app can get the address three
-other ways. (On Android, drivers still type it, as section 12.5 says.)
+and a typo gives a confusing error. Both apps can get the address three other
+ways.
 
 When the sign-in screen opens, it uses the first of these that is set:
 
@@ -1007,16 +1010,25 @@ A setup link (section 13.3) doesn't add to this list: it fills in the field,
 and the address is saved only once a sign-in to it succeeds.
 
 An address from device management, the built-in default or a setup link must
-be one the app would accept if the driver typed it: `https://`, or plain
-`http://` only for `localhost`, `127.0.0.1` or a `.local` host. It also must
-not carry user info: `https://tracker.example.org@evil.example` goes to
-`evil.example`, so the app ignores it. An address that breaks either rule is
-ignored, as if it weren't set. A typed address is held only to the first rule.
+be one the app would accept if the driver typed it:
+
+- on iPhones, `https://`, or plain `http://` only for `localhost`, `127.0.0.1`
+  or a `.local` host;
+- on Android, `https://`. Plain `http://` works only in a debug build, and only
+  to `10.0.2.2`, `localhost` or `127.0.0.1`, the hosts its debug network
+  config allows. A release build sends nothing over plain `http://`.
+
+It also must not carry user info: `https://tracker.example.org@evil.example`
+goes to `evil.example`, so the app ignores it. An address that breaks either
+rule is ignored, as if it weren't set. A typed address is held only to the
+first rule. Write these addresses in full: on Android a typed address with no
+scheme gets `https://` added, but one from these three sources doesn't.
 
 A new address applies at the **next sign-in**. A phone that is signed in keeps
 reporting to the server it signed in to, because its sign-in and its trip belong
-to that server. To move a signed-in phone, the driver signs out (**Sign out** on
-the vehicle screen) and signs in again.
+to that server. To move a signed-in phone, the driver ends any trip, signs out
+(**Sign out** in the account menu at the top right of the vehicle, route and run
+steps) and signs in again.
 
 ### 13.1 Device management (MDM)
 
@@ -1036,22 +1048,50 @@ address greyed out, with "Set by your agency." If the value isn't an address
 the app accepts, the app ignores it, and the field stays open with "Your
 agency's server setting is not a valid address, so type it here."
 
+On Android, your EMM sets it as the app's managed configuration, which Android
+applies only on a phone or work profile the EMM manages. The app declares one
+key, `server_url`, a string, so the EMM's console offers it as **Server
+address**. The sign-in screen reads it each time it opens, and again if your
+EMM changes it while that screen is showing. It shows the address as the
+**Server** line with no **Change**, and "Set by your agency." under it. A value
+the app doesn't accept is ignored, and "Your agency's server setting is not a
+valid address, so type it here." shows under the server field. On a phone that
+has signed in before, the field shows once the driver taps **Change**.
+
 ### 13.2 Build the address into the app
 
-If you build the app yourself, set `DEFAULT_SERVER_URL` and the field starts
-filled in. Drivers can still change it. Add it to the `xcodebuild` command you
-build or archive with:
+If you build the app yourself, you can build the address in, and the field
+starts filled in. Drivers can still change it. It must be an `https://`
+address: anything else **fails the build**. It is empty in this repository,
+which means no address is built in.
+
+For the iPhone app, set `DEFAULT_SERVER_URL`. Add it to the `xcodebuild`
+command you build or archive with:
 
 ```bash
 xcodebuild ... DEFAULT_SERVER_URL=https://tracker.example.org
 ```
 
 or set it under `settings.base` in `ios/VehicleTracker/project.yml` and run
-`xcodegen generate`. It must be an `https://` address: anything else **fails
-the build** with "DEFAULT_SERVER_URL must be an https:// address, or empty for
-no default". It is empty in this repository, which means no address is built
-in. To check a build, `plutil -extract OBADefaultServerURL raw
-VehicleTracker.app/Info.plist` prints the address it carries.
+`xcodegen generate`. Anything but `https://` fails with "DEFAULT_SERVER_URL must
+be an https:// address, or empty for no default". To check a build, `plutil
+-extract OBADefaultServerURL raw VehicleTracker.app/Info.plist` prints the
+address it carries.
+
+For the Android app, pass `defaultServerUrl` to Gradle:
+
+```bash
+cd android
+./gradlew :app:assembleRelease -PdefaultServerUrl=https://tracker.example.org
+```
+
+Anything but `https://` fails with "defaultServerUrl must be an https://
+address, or empty for no default". To check an APK, `aapt2 dump resources`
+from the build-tools shows the address it carries:
+
+```bash
+"$BT/aapt2" dump resources app-release.apk | grep -A1 default_server_url
+```
 
 ### 13.3 A setup link or QR code
 
@@ -1068,25 +1108,31 @@ yours:
 python3 -c 'import sys, urllib.parse; print("obavehicletracker://setup?server=" + urllib.parse.quote(sys.argv[1], safe=""))' https://tracker.example.org
 ```
 
-Any QR code generator turns the link into a code; the iPhone Camera app opens
-it. iOS may first ask whether to open OBA Vehicle Tracker. When a driver opens
-the link on the sign-in screen, the app asks **"Use
-tracker.example.org?"** with "Only continue if your agency sent you this link."
-**Use this server** fills in the field, and the driver then signs in as usual.
+Any QR code generator turns the link into a code. The iPhone Camera app opens
+it, and iOS may first ask whether to open OBA Vehicle Tracker. On Android, a
+QR scanner such as Google Lens opens it, and if another app also takes these
+links, Android asks which one to use. When a driver opens the link, the app
+asks **"Use tracker.example.org?"** with "Only continue if your agency sent you
+this link." **Use this server** fills in the field on the sign-in screen, and
+the driver then signs in as usual.
 
 The link only fills in the field, and only after the driver agrees: it never
 signs in and never sends anything. The address isn't saved until a sign-in to
 it succeeds, so leaving the sign-in screen without signing in forgets it. That
-matters after a driver deletes and reinstalls the app: iOS keeps the old
-sign-in, and a saved address would have paired it with the link's server. Anyone can send a driver a link, and one
-that signed in to a look-alike server would hand it the driver's password. The
-question names only the host, so the driver reads where the app would go
-rather than a long address that hides it.
+matters after a driver deletes and reinstalls the iPhone app: iOS keeps the old
+sign-in, and a saved address would have paired it with the link's server.
+Anyone can send a driver a link, and one that signed in to a look-alike server
+would hand it the driver's password. The question names only the host, so the
+driver reads where the app would go rather than a long address that hides it.
 
 The app doesn't use the link, and says why, when:
 
 - the phone is signed in: "This phone is signed in to tracker.example.org. The
-  link was not used.";
+  link was not used." On Android this also covers a phone that still holds a
+  sign-in that has run out, or has a trip stored, even one waiting on **Resume
+  your trip?** with no sign-in at all: both belong to the server they came
+  from. A phone restored from a backup keeps its trip but not its sign-in or
+  its server, and says "This phone has a trip open. The link was not used.";
 - your device management sets the address: "Your agency sets the server on
   this phone.";
 - the link has no address the app accepts: "This link does not contain a
@@ -1099,6 +1145,6 @@ The app doesn't use the link, and says why, when:
 - **The next sign-in:** a changed address doesn't move a phone that is signed in
   (see above).
 - **Another app can claim the link:** any app can register the
-  `obavehicletracker` scheme, and iOS then picks which one opens the link. The
-  link carries only your public server address, so the worst case is a missed
-  setup, not a leak.
+  `obavehicletracker` scheme, and the phone then picks which one opens the link,
+  or on Android may ask the driver. The link carries only your public server
+  address, so the worst case is a missed setup, not a leak.
