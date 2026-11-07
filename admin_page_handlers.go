@@ -1173,7 +1173,9 @@ func (ui *adminUI) setUserActive(w http.ResponseWriter, r *http.Request, active 
 // does in handleCreateAssignment (assignment_handlers.go): ErrAssignmentExists
 // (a double-submit or a race with another admin) is treated as success — the
 // end state is what the admin wanted, so it just redirects without a flash —
-// and ErrVehicleNotFoundFK 404s rather than surfacing a raw 500.
+// ErrVehicleNotFoundFK 404s rather than surfacing a raw 500, and
+// ErrVehicleInactive (the form only offers active vehicles, so a vehicle
+// deactivated since the page loaded) is a 409.
 func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -1190,6 +1192,10 @@ func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 		if _, err := ui.assignments.CreateAssignment(r.Context(), id, vehicleID); err != nil {
 			if errors.Is(err, ErrVehicleNotFoundFK) {
 				http.NotFound(w, r)
+				return
+			}
+			if errors.Is(err, ErrVehicleInactive) {
+				http.Error(w, "vehicle is inactive", http.StatusConflict)
 				return
 			}
 			if !errors.Is(err, ErrAssignmentExists) {

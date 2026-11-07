@@ -590,3 +590,14 @@ func TestHandleListVehicleUsers_DBError(t *testing.T) {
 	errMsg := decodeAssignmentError(t, w)
 	assert.Equal(t, "internal server error", errMsg)
 }
+
+func TestHandleCreateAssignment_InactiveVehicle(t *testing.T) {
+	mock := &mockAssignmentCreator{err: ErrVehicleInactive}
+	handler := handleCreateAssignment(mock)
+
+	body, _ := json.Marshal(AssignmentRequest{UserID: 1, VehicleID: "bus-retired"})
+	w := postAssignment(handler, body, "application/json")
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Equal(t, "vehicle is inactive", decodeAssignmentError(t, w))
+}
