@@ -72,6 +72,9 @@ class TripRepository @Inject constructor(
         Result.failure(mapHttpError(e))
     }
 
+    /** Sends this driver's pending ends while the token still works: sign-out is the last chance to. */
+    suspend fun sendUnconfirmedEnds(): Result<Unit> = endUnconfirmedTrips(sessionStore.session.first().driverId)
+
     suspend fun end(tripDbId: Long): Result<Unit> = try {
         sendEnd(tripDbId)
         tripStateStore.clearActiveTrip()

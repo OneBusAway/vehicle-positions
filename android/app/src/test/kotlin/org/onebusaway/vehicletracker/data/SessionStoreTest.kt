@@ -115,6 +115,62 @@ class SessionStoreTest {
         assertEquals(setOf("server_url", "email"), dataStore.data.first().asMap().keys.map { it.name }.toSet())
     }
 
+    @Test fun `clearing the token and the email keeps only the server`() = runTest {
+        val dataStore = newDataStore()
+        val store = EncryptedSessionStore(dataStore, FakeCryptor())
+        store.saveLogin(SERVER, EMAIL, TOKENS)
+
+        store.clearTokenAndEmail()
+
+        assertEquals(Session(serverUrl = SERVER, token = null, issuedAtEpochSec = null), store.session.first())
+        assertEquals(setOf("server_url"), dataStore.data.first().asMap().keys.map { it.name }.toSet())
+    }
+
+    // A refresh still in flight when the session is cleared would sign the phone back in as the driver who left.
+    @Test fun `a refresh after the session is cleared writes nothing`() = runTest {
+        val clears = mapOf<String, suspend (SessionStore) -> Unit>(
+            "signed out" to { it.clearTokenAndEmail() },
+            "ended by the server" to { it.clearToken() },
+        )
+        for ((name, clear) in clears) {
+            val dataStore = newDataStore()
+            val store = EncryptedSessionStore(dataStore, FakeCryptor())
+            store.saveLogin(SERVER, EMAIL, TOKENS)
+            clear(store)
+            val cleared = store.session.first()
+
+            store.saveRefreshed(REFRESHED)
+
+            assertEquals(name, cleared, store.session.first())
+            val keys = dataStore.data.first().asMap().keys.map { it.name }
+            assertTrue("$name: $keys", keys.none { it.startsWith("token") || it.startsWith("refresh_token") })
+        }
+    }
+
+    @Test fun `the fake store refuses a refresh after the session is cleared, as the real one does`() = runTest {
+        val fake = FakeSessionStore()
+        fake.saveLogin(SERVER, EMAIL, TOKENS)
+        fake.clearTokenAndEmail()
+
+        fake.saveRefreshed(REFRESHED)
+
+        assertEquals(Session(serverUrl = SERVER, token = null, issuedAtEpochSec = null), fake.session.first())
+    }
+
+    @Test fun `a sign-in after the session is cleared still saves`() = runTest {
+        val next = IssuedTokens("b1", "rb1", EXPIRES_AT + 60, ISSUED_AT + 60)
+        val expected = Session(SERVER, "b1", ISSUED_AT + 60, "rb1", EXPIRES_AT + 60, "next@metro.example")
+        val stores = listOf(EncryptedSessionStore(newDataStore(), FakeCryptor()), FakeSessionStore())
+        for (store in stores) {
+            store.saveLogin(SERVER, EMAIL, TOKENS)
+            store.clearTokenAndEmail()
+
+            store.saveLogin(SERVER, "next@metro.example", next)
+
+            assertEquals(store::class.simpleName, expected, store.session.first())
+        }
+    }
+
     @Test fun `a session saved before the email was kept still reads, with no email`() = runTest {
         val dataStore = newDataStore()
         // The keys exactly as the build before this one wrote them.
@@ -346,6 +402,7 @@ class SessionStoreTest {
         const val REFRESH_TOKEN = "3f9a17c0d2e84b65a1f0c9e7b3d24a68"
         const val EXPIRES_AT = ISSUED_AT + 24 * 3600
         val TOKENS = IssuedTokens(TOKEN, REFRESH_TOKEN, EXPIRES_AT, ISSUED_AT)
+        val REFRESHED = IssuedTokens("a2", "r2", EXPIRES_AT + 900, ISSUED_AT + 900)
 
         // Named, as the email is a String? like the fields before it, so a field out of place would still compile.
         val SIGNED_IN = Session(

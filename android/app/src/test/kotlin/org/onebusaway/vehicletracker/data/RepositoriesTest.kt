@@ -28,12 +28,15 @@ class RepositoriesTest {
     private fun apiFor(server: MockWebServer) =
         ApiFactory { "jwt" }.create(server.url("/").toString())
 
+    /** For the sign-in tests, which log nobody out. */
+    private val noLogout = TrackerApiProvider { error("no server to log out of") }
+
     @Test fun `login success stores url, email, both tokens, issue time and expiry`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody(
             """{"token":"jwt-1","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 1000L })
+        val repo = AuthRepository(sessions, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -57,7 +60,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody(
             """{"token":"deprecated-copy","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 1000L })
+        val repo = AuthRepository(sessions, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
 
         repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -69,7 +72,7 @@ class RepositoriesTest {
         val server = MockWebServer().apply { start() }
         repeat(3) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }
         val queue = FakeOfflineFixQueue()
-        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, queue, clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, noLogout, queue, clock = { 0L })
         val url = server.url("/").toString()
         val fix = LocationReportDto(vehicleId = "bus-1", routeId = "R1", startDate = "20260804", latitude = 1.0, longitude = 2.0, timestamp = 1L)
 
@@ -85,7 +88,7 @@ class RepositoriesTest {
     @Test fun `login 401 maps to Unauthorized`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
-        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "bad")
 
@@ -357,6 +360,36 @@ class RepositoriesTest {
         // The first end got through and is not sent again; the second waits for the next start.
         assertEquals(listOf(UnconfirmedEnd(6L, null)), store.unconfirmedEnds.first())
         assertNull(store.activeTrip.first())
+        server.shutdown()
+    }
+
+    @Test fun `sendUnconfirmedEnds sends only this driver's ends`() = runTest {
+        val server = MockWebServer().apply { start() }
+        val store = FakeTripStateStore().apply {
+            unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, "1"), UnconfirmedEnd(8L, "2"))
+        }
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, FakeVehiclePrefsStore(), signedInAs("2"), clock = { 500L })
+
+        server.enqueue(MockResponse().setBody("""{"status":"trip ended"}"""))
+        assertTrue(repo.sendUnconfirmedEnds().isSuccess)
+
+        assertEquals(1, server.requestCount)
+        assertEquals("8", server.takeEndedTripId())
+        assertEquals("driver 1's end waits for driver 1", listOf(UnconfirmedEnd(7L, "1")), store.unconfirmedEnds.first())
+        server.shutdown()
+    }
+
+    @Test fun `sendUnconfirmedEnds that fails keeps this driver's end`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"failed to end trip"}"""))
+        val store = FakeTripStateStore().apply {
+            unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, "1"), UnconfirmedEnd(8L, "2"))
+        }
+        val repo = TripRepository(TrackerApiProvider { apiFor(server) }, store, FakeVehiclePrefsStore(), signedInAs("2"), clock = { 500L })
+
+        assertTrue(repo.sendUnconfirmedEnds().isFailure)
+
+        assertEquals(listOf(UnconfirmedEnd(7L, "1"), UnconfirmedEnd(8L, "2")), store.unconfirmedEnds.first())
         server.shutdown()
     }
 

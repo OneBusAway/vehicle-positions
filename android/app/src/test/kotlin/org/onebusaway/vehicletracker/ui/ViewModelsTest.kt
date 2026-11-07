@@ -107,8 +107,8 @@ class ViewModelsTest {
         if (!condition()) fail("Timed out after ${timeoutMs}ms waiting for: $description")
     }
 
-    private fun authOver(sessionStore: SessionStore) =
-        AuthRepository(sessionStore, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L })
+    private fun authOver(sessionStore: SessionStore, apiProvider: TrackerApiProvider = TrackerApiProvider { error("no server to log out of") }) =
+        AuthRepository(sessionStore, ApiFactory { null }, apiProvider, FakeOfflineFixQueue(), clock = { 0L })
 
     // --- Sign in ---
 

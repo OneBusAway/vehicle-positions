@@ -8,6 +8,7 @@ import retrofit2.http.Path
 
 interface TrackerApi {
     @POST("api/v1/auth/login") suspend fun login(@Body body: LoginRequest): LoginResponse
+    @POST("api/v1/auth/logout") suspend fun logout()
     @GET("api/v1/vehicles") suspend fun myVehicles(): List<VehicleDto>
     @POST("api/v1/trips/start") suspend fun startTrip(@Body body: StartTripRequest): TripDto
     @POST("api/v1/trips/end") suspend fun endTrip(@Body body: EndTripRequest)
