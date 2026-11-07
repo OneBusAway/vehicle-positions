@@ -48,6 +48,12 @@ class FakeMapFileSource : MapFileSource {
     override val state = MutableStateFlow<MapFileState>(MapFileState.None)
 }
 
+/** Device management as the platform reports it: [state] is what the agency sets now, and setting it is a change. */
+class FakeManagedServerSource : ManagedServerSource {
+    val state = MutableStateFlow(ManagedServer(url = null, invalid = false))
+    override val server = state
+}
+
 class FakeSessionStore : SessionStore {
     val state = MutableStateFlow(Session(serverUrl = null, token = null, issuedAtEpochSec = null))
     override val session = state

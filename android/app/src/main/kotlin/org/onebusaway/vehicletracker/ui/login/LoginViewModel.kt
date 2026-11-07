@@ -16,6 +16,8 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.AuthRepository
+import org.onebusaway.vehicletracker.data.ManagedServer
+import org.onebusaway.vehicletracker.data.ManagedServerSource
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
@@ -64,12 +66,19 @@ data class LoginUiState(
     val savedEmail: String? = null,
     /** The server this phone last signed in to; null before its first sign-in. */
     val savedServer: String? = null,
+    /** The server the agency's device management sets, which the driver can't change. Never when signing in [again]. */
+    val managedServer: String? = null,
+    /** The agency's device management sets a server the app can't use, so it is ignored and the driver types one. */
+    val managedServerInvalid: Boolean = false,
     val changingServer: Boolean = false,
     val loading: Boolean = false,
     val error: LoginError? = null,
 ) {
-    /** Once the phone knows its server it shows as one quiet line, until the driver asks to change it. */
-    val showsServerField: Boolean get() = savedServer == null || changingServer
+    /**
+     * Once the phone knows its server it shows as one quiet line, until the driver asks to change it. The agency's
+     * server is always a line.
+     */
+    val showsServerField: Boolean get() = managedServer == null && (savedServer == null || changingServer)
 }
 
 /**
@@ -98,6 +107,7 @@ class LoginViewModel @Inject constructor(
     sessionStore: SessionStore,
     tripStateStore: TripStateStore,
     tripGeometryStore: TripGeometryStore,
+    managedServerSource: ManagedServerSource,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val server = TextFieldState()
@@ -126,7 +136,20 @@ class LoginViewModel @Inject constructor(
                 val route = RouteBadgeModel.forTrip(trip, tripGeometryStore.loadFor(trip))
                 _uiState.update { it.copy(openTrip = route) }
             }
+        } else {
+            // Kept in step while Sign in shows. Not when signing in again: the open trip is on the saved server.
+            viewModelScope.launch { managedServerSource.server.collect(::useManaged) }
         }
+    }
+
+    private fun useManaged(managed: ManagedServer) {
+        val wasManaged = _uiState.value.managedServer != null
+        when {
+            managed.url != null -> server.setTextAndPlaceCursorAtEnd(managed.url)
+            // The agency stopped setting it, and the driver couldn't type while it did: back to where Sign in starts.
+            wasManaged -> server.setTextAndPlaceCursorAtEnd(_uiState.value.savedServer.orEmpty())
+        }
+        _uiState.update { it.copy(managedServer = managed.url, managedServerInvalid = managed.invalid) }
     }
 
     fun onChangeServer() = _uiState.update { it.copy(changingServer = true) }
@@ -178,12 +201,12 @@ class LoginViewModel @Inject constructor(
     }
 
     // The server field is opened for an error about the server, so the error has a field to sit under. Not when
-    // signing in again: the open trip is on that server, so the banner alone names it.
+    // signing in again, nor when the agency sets the server: it isn't for changing, so the banner alone names it.
     private fun failed(error: LoginError) = _uiState.update {
         it.copy(
             loading = false,
             error = error,
-            changingServer = it.changingServer || (error.isAboutTheServer && !it.again),
+            changingServer = it.changingServer || (error.isAboutTheServer && !it.again && it.managedServer == null),
         )
     }
 }

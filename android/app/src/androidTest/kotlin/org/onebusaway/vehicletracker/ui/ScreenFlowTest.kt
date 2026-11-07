@@ -308,6 +308,36 @@ class ScreenFlowTest {
     }
 
     @Test
+    fun loginScreen_showsTheAgencysServerAsALineWithNoChange() {
+        showLogin(
+            LoginUiState(savedServer = "https://saved.example.org/", managedServer = "https://tracker.example.org/"),
+            LoginFields(server = TextFieldState("https://tracker.example.org/")),
+        )
+
+        compose.onNodeWithText("tracker.example.org").assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_server_managed)).assertIsDisplayed()
+        compose.onNodeWithText("saved.example.org").assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.login_change_server)).assertDoesNotExist()
+        loginField(R.string.login_server_url_label).assertDoesNotExist()
+    }
+
+    @Test
+    fun loginScreen_saysUnderTheFieldWhenTheAgencysServerCantBeUsed() {
+        var state by mutableStateOf(LoginUiState(managedServerInvalid = true))
+        compose.setContent {
+            LoginScreenContent(state, TextFieldState(), TextFieldState(), TextFieldState(), {}, {}, {})
+        }
+
+        loginField(R.string.login_server_url_label).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.login_server_managed_invalid)).assertIsDisplayed()
+
+        // The field's own error takes its place.
+        state = state.copy(error = LoginError.MissingField(LoginField.SERVER))
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_missing_server)))
+        compose.onNodeWithText(getString(R.string.login_server_managed_invalid)).assertDoesNotExist()
+    }
+
+    @Test
     fun loginScreen_signingInAgainShowsTheOpenTripAndAsksOnlyForThePassword() {
         showLogin(
             LoginUiState(

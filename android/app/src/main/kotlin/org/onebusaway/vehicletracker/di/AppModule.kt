@@ -21,6 +21,8 @@ import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.FileTripGeometryStore
 import org.onebusaway.vehicletracker.data.KeystoreCryptor
+import org.onebusaway.vehicletracker.data.ManagedServerSource
+import org.onebusaway.vehicletracker.data.RestrictionsManagedServerSource
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
@@ -190,6 +192,10 @@ object AppModule {
     @Singleton
     fun provideVehiclePrefsStore(@ApplicationContext context: Context): VehiclePrefsStore =
         DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore)
+
+    @Provides
+    fun provideManagedServerSource(@ApplicationContext context: Context): ManagedServerSource =
+        RestrictionsManagedServerSource(context)
 
     @Provides
     @Singleton

@@ -42,6 +42,14 @@
     <string name="login_trip_open_title">Your trip is still open</string>
     <!-- The open trip's route, e.g. "7". -->
     <string name="login_trip_open_message">Reports stopped when your session ended. Sign in to keep reporting on route %1$s.</string>
+    <!-- Under the server line when the agency's device management sets the server, which the driver can't change. -->
+    <string name="login_server_managed">Set by your agency.</string>
+    <!-- Under the server field when the agency's device management sets a server the app can't use, so it is ignored. -->
+    <string name="login_server_managed_invalid">Your agency\'s server setting is not a valid address, so type it here.</string>
+
+    <!-- The app's managed configuration, as an agency's device management console shows it. -->
+    <string name="restriction_server_url_title">Server address</string>
+    <string name="restriction_server_url_description">The agency\'s tracker server, an https:// address. Drivers sign in to it and can\'t change it.</string>
 
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>

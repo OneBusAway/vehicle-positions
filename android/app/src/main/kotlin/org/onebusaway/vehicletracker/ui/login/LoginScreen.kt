@@ -194,6 +194,7 @@ fun LoginScreenContent(
                     label = stringResource(R.string.login_server_url_label),
                     placeholder = stringResource(R.string.login_server_placeholder),
                     error = fieldErrorRes(error, LoginField.SERVER)?.let { stringResource(it) },
+                    note = if (state.managedServerInvalid) stringResource(R.string.login_server_managed_invalid) else null,
                     enabled = enabled,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Uri,
@@ -202,6 +203,8 @@ fun LoginScreenContent(
                     ),
                     modifier = Modifier.focusRequester(focus.getValue(LoginField.SERVER)),
                 )
+            } else if (state.managedServer != null) {
+                AgencyServer(state.managedServer, enabled)
             } else if (state.savedServer != null) {
                 // During a trip the server is the trip's, so it is not for changing here.
                 SavedServer(state.savedServer, enabled, onChange = if (state.again) null else onChangeServer)
@@ -336,6 +339,22 @@ private fun SavedServer(server: String, enabled: Boolean, onChange: (() -> Unit)
     }
 }
 
+/** The server the agency's device management sets, as the same line, with no Change and a note saying who set it. */
+@Composable
+private fun AgencyServer(server: String, enabled: Boolean) {
+    Column {
+        SavedServer(server, enabled, onChange = null)
+        Text(
+            text = stringResource(R.string.login_server_managed),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // Under "Server", past the icon.
+            modifier = Modifier.padding(start = 30.dp),
+        )
+    }
+}
+
+/** [note] goes under the field while it has no [error] to show there. */
 @Composable
 private fun LoginTextField(
     state: TextFieldState,
@@ -345,6 +364,7 @@ private fun LoginTextField(
     keyboardOptions: KeyboardOptions,
     modifier: Modifier,
     placeholder: String? = null,
+    note: String? = null,
 ) {
     OutlinedTextField(
         state = state,
@@ -352,7 +372,11 @@ private fun LoginTextField(
         placeholder = placeholder?.let { { Text(it) } },
         enabled = enabled,
         isError = error != null,
-        supportingText = error?.let { { FieldError(it) } },
+        supportingText = when {
+            error != null -> { { FieldError(error) } }
+            note != null -> { { Text(note) } }
+            else -> null
+        },
         keyboardOptions = keyboardOptions,
         lineLimits = TextFieldLineLimits.SingleLine,
         modifier = modifier.fillMaxWidth().fieldError(error),
