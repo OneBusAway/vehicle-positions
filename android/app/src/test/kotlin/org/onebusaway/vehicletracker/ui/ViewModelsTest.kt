@@ -45,6 +45,7 @@ import org.onebusaway.vehicletracker.ui.login.LoginUiState
 import org.onebusaway.vehicletracker.ui.login.LoginViewModel
 import org.onebusaway.vehicletracker.ui.login.bannerOf
 import org.onebusaway.vehicletracker.ui.login.fieldErrorRes
+import org.onebusaway.vehicletracker.ui.login.serverAddressOf
 import org.onebusaway.vehicletracker.ui.login.serverLabel
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import org.onebusaway.vehicletracker.ui.routes.RouteItem
@@ -222,15 +223,77 @@ class ViewModelsTest {
         server.shutdown()
     }
 
-    @Test fun `an address that is not http is unreachable without asking anyone`() = runTest(dispatcher) {
+    @Test fun `serverAddressOf reads what was typed`() {
+        val cases = mapOf(
+            "tracker.example.org" to "https://tracker.example.org/",
+            " tracker.example.org " to "https://tracker.example.org/",
+            "tracker.example.org:8443/" to "https://tracker.example.org:8443/",
+            "http://10.0.2.2:8080" to "http://10.0.2.2:8080/",
+            "HTTPS://Tracker.Example.org" to "https://tracker.example.org/",
+            "foo bar" to null,
+            "ftp://x" to null,
+            "://" to null,
+            "https://" to null,
+            "" to null,
+        )
+        for ((typed, address) in cases) assertEquals("for '$typed'", address, serverAddressOf(typed))
+    }
+
+    @Test fun `an address with no scheme goes out over https`() = runTest(dispatcher) {
+        // Plain http, so the handshake fails with no DNS involved, and a request sent as plain http would be answered.
+        // Counted here, because requestCount also counts the handshake's bytes once the client gives up on them.
+        val answered = AtomicInteger()
+        val server = MockWebServer().apply {
+            dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    answered.incrementAndGet()
+                    return MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}""")
+                }
+            }
+            start()
+        }
         val vm = loginViewModel()
         dispatcher.scheduler.advanceUntilIdle()
-        vm.fill("tracker.example.org", "d@example.com", "pw")
+        vm.fill("localhost:${server.port}", "d@example.com", "pw")
+
+        vm.onSignIn { fail("nothing here speaks https") }
+        // The server waits for a request line that never comes, so this takes the client's whole read timeout.
+        awaitCondition(timeoutMs = 15_000, description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+        assertEquals(LoginError.Unreachable("https://localhost:${server.port}/"), vm.uiState.value.error)
+        assertEquals(0, answered.get())
+        server.shutdown()
+    }
+
+    @Test fun `an address that can't be one is refused without asking anyone`() = runTest(dispatcher) {
+        // A returning driver, whose server is a quiet line until something is wrong with it.
+        val vm = loginViewModel(FakeSessionStore().apply { state.value = Session(serverUrl = "https://saved.example.com", token = null, issuedAtEpochSec = null, email = "d@example.com") })
+        dispatcher.scheduler.advanceUntilIdle()
+        require(!vm.uiState.value.showsServerField)
+        vm.fill("foo bar", "d@example.com", "pw")
+
         vm.onSignIn { fail("there is no server to sign in to") }
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(LoginError.Unreachable("tracker.example.org"), vm.uiState.value.error)
+        assertEquals(LoginError.InvalidAddress, vm.uiState.value.error)
         assertFalse(vm.uiState.value.loading)
+        assertTrue("the error goes under the server field, so it shows", vm.uiState.value.showsServerField)
+    }
+
+    @Test fun `the address is saved as it was used`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
+        val sessionStore = FakeSessionStore()
+        val vm = loginViewModel(sessionStore)
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill(" ${server.url("/")} ", "d@example.com", "pw")
+        var succeeded = false
+
+        vm.onSignIn { succeeded = true }
+        awaitCondition(description = "sign-in callback invoked") { succeeded }
+
+        assertEquals(server.url("/").toString(), sessionStore.state.value.serverUrl)
+        server.shutdown()
     }
 
     @Test fun `typing clears the error`() = runTest(dispatcher) {
@@ -358,12 +421,15 @@ class ViewModelsTest {
         assertNull(fieldErrorRes(LoginError.MissingField(LoginField.EMAIL), LoginField.PASSWORD))
         assertEquals(R.string.login_error_invalid_credentials, fieldErrorRes(LoginError.InvalidCredentials, LoginField.PASSWORD))
         assertNull(fieldErrorRes(LoginError.InvalidCredentials, LoginField.EMAIL))
+        assertEquals(R.string.login_error_invalid_address, fieldErrorRes(LoginError.InvalidAddress, LoginField.SERVER))
+        assertNull(fieldErrorRes(LoginError.InvalidAddress, LoginField.EMAIL))
         assertEquals(R.string.login_error_check_address, fieldErrorRes(LoginError.Unreachable("x"), LoginField.SERVER))
         assertNull(fieldErrorRes(LoginError.Unreachable("x"), LoginField.PASSWORD))
 
         assertEquals(R.string.login_error_unreachable, bannerOf(LoginError.Unreachable("x"))?.text)
         assertEquals(R.string.login_error_server, bannerOf(LoginError.ServerError)?.text)
         assertNull(bannerOf(LoginError.InvalidCredentials))
+        assertNull(bannerOf(LoginError.InvalidAddress))
         assertNull(bannerOf(LoginError.MissingField(LoginField.EMAIL)))
         assertNull(bannerOf(null))
     }

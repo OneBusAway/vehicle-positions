@@ -134,9 +134,9 @@ fun LoginScreenContent(
     LaunchedEffect(state.again) {
         if (state.again) focus.getValue(LoginField.PASSWORD).requestFocus()
     }
-    // Change opens the field to type in; an unreachable server opens it too, but only to show the error under it.
+    // Change opens the field to type in; an error about the server opens it too, but only to show the error under it.
     LaunchedEffect(state.changingServer) {
-        if (state.changingServer && error !is LoginError.Unreachable) focus.getValue(LoginField.SERVER).requestFocus()
+        if (state.changingServer && error?.isAboutTheServer != true) focus.getValue(LoginField.SERVER).requestFocus()
     }
     val latestOnEdited by rememberUpdatedState(onEdited)
     LaunchedEffect(server, email, password) {
@@ -192,6 +192,7 @@ fun LoginScreenContent(
                 LoginTextField(
                     state = server,
                     label = stringResource(R.string.login_server_url_label),
+                    placeholder = stringResource(R.string.login_server_placeholder),
                     error = fieldErrorRes(error, LoginField.SERVER)?.let { stringResource(it) },
                     enabled = enabled,
                     keyboardOptions = KeyboardOptions(
@@ -339,10 +340,12 @@ private fun LoginTextField(
     enabled: Boolean,
     keyboardOptions: KeyboardOptions,
     modifier: Modifier,
+    placeholder: String? = null,
 ) {
     OutlinedTextField(
         state = state,
         label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
         enabled = enabled,
         isError = error != null,
         supportingText = error?.let { { FieldError(it) } },
@@ -444,6 +447,7 @@ internal fun fieldErrorRes(error: LoginError?, field: LoginField): Int? = when {
         LoginField.PASSWORD -> R.string.login_error_missing_password
     }
     error is LoginError.InvalidCredentials && field == LoginField.PASSWORD -> R.string.login_error_invalid_credentials
+    error is LoginError.InvalidAddress && field == LoginField.SERVER -> R.string.login_error_invalid_address
     error is LoginError.Unreachable && field == LoginField.SERVER -> R.string.login_error_check_address
     else -> null
 }
