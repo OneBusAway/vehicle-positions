@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -16,10 +17,14 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.AuthRepository
+import org.onebusaway.vehicletracker.data.ManagedServer
+import org.onebusaway.vehicletracker.data.ManagedServerSource
+import org.onebusaway.vehicletracker.data.ServerSetup
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.loadFor
+import org.onebusaway.vehicletracker.di.DefaultServerUrl
 import org.onebusaway.vehicletracker.ui.ARG_SIGN_IN_AGAIN
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import javax.inject.Inject
@@ -64,12 +69,19 @@ data class LoginUiState(
     val savedEmail: String? = null,
     /** The server this phone last signed in to; null before its first sign-in. */
     val savedServer: String? = null,
+    /** The server the agency's device management sets, which the driver can't change. Never when signing in [again]. */
+    val managedServer: String? = null,
+    /** The agency's device management sets a server the app can't use, so it is ignored and the driver types one. */
+    val managedServerInvalid: Boolean = false,
     val changingServer: Boolean = false,
     val loading: Boolean = false,
     val error: LoginError? = null,
 ) {
-    /** Once the phone knows its server it shows as one quiet line, until the driver asks to change it. */
-    val showsServerField: Boolean get() = savedServer == null || changingServer
+    /**
+     * Once the phone knows its server it shows as one quiet line, until the driver asks to change it. The agency's
+     * server is always a line.
+     */
+    val showsServerField: Boolean get() = managedServer == null && (savedServer == null || changingServer)
 }
 
 /**
@@ -98,6 +110,9 @@ class LoginViewModel @Inject constructor(
     sessionStore: SessionStore,
     tripStateStore: TripStateStore,
     tripGeometryStore: TripGeometryStore,
+    managedServerSource: ManagedServerSource,
+    private val serverSetup: ServerSetup,
+    @param:DefaultServerUrl private val builtInServer: String?,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val server = TextFieldState()
@@ -108,12 +123,17 @@ class LoginViewModel @Inject constructor(
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     init {
-        // Filled once, from the last sign-in, and only where the driver has not started typing.
+        // Filled once, from the last sign-in or else the server built into the app, and only where the driver has not
+        // started typing.
         viewModelScope.launch {
             val session = sessionStore.session.first()
-            session.serverUrl?.takeIf { it.isNotBlank() }?.let { saved ->
+            val saved = session.serverUrl?.takeIf { it.isNotBlank() }
+            if (saved != null) {
                 if (server.text.isEmpty()) server.setTextAndPlaceCursorAtEnd(saved)
                 _uiState.update { it.copy(savedServer = saved) }
+            } else if (builtInServer != null && !_uiState.value.again && server.text.isEmpty()) {
+                // A field, not the saved line: the driver can still change it.
+                server.setTextAndPlaceCursorAtEnd(builtInServer)
             }
             session.email?.takeIf { it.isNotBlank() }?.let { saved ->
                 if (email.text.isEmpty()) email.setTextAndPlaceCursorAtEnd(saved)
@@ -126,7 +146,31 @@ class LoginViewModel @Inject constructor(
                 val route = RouteBadgeModel.forTrip(trip, tripGeometryStore.loadFor(trip))
                 _uiState.update { it.copy(openTrip = route) }
             }
+        } else {
+            // Kept in step while Sign in shows, as is a setup link the driver agrees to. Not when signing in again: the
+            // open trip is on the saved server.
+            viewModelScope.launch { managedServerSource.server.collect(::useManaged) }
+            viewModelScope.launch { serverSetup.linkedServer.filterNotNull().collect(::useLinked) }
         }
+    }
+
+    /** Only into the field: the address is saved once a sign-in to it succeeds, and leaving Sign in forgets it. */
+    private fun useLinked(linked: String) {
+        if (_uiState.value.managedServer == null) {
+            server.setTextAndPlaceCursorAtEnd(linked)
+            _uiState.update { it.copy(changingServer = true, error = null) }
+        }
+        serverSetup.linkUsed()
+    }
+
+    private fun useManaged(managed: ManagedServer) {
+        val wasManaged = _uiState.value.managedServer != null
+        when {
+            managed.url != null -> server.setTextAndPlaceCursorAtEnd(managed.url)
+            // The agency stopped setting it, and the driver couldn't type while it did: back to where Sign in starts.
+            wasManaged -> server.setTextAndPlaceCursorAtEnd(_uiState.value.savedServer ?: builtInServer.orEmpty())
+        }
+        _uiState.update { it.copy(managedServer = managed.url, managedServerInvalid = managed.invalid) }
     }
 
     fun onChangeServer() = _uiState.update { it.copy(changingServer = true) }
@@ -178,12 +222,12 @@ class LoginViewModel @Inject constructor(
     }
 
     // The server field is opened for an error about the server, so the error has a field to sit under. Not when
-    // signing in again: the open trip is on that server, so the banner alone names it.
+    // signing in again, nor when the agency sets the server: it isn't for changing, so the banner alone names it.
     private fun failed(error: LoginError) = _uiState.update {
         it.copy(
             loading = false,
             error = error,
-            changingServer = it.changingServer || (error.isAboutTheServer && !it.again),
+            changingServer = it.changingServer || (error.isAboutTheServer && !it.again && it.managedServer == null),
         )
     }
 }
