@@ -22,6 +22,7 @@ import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.loadFor
+import org.onebusaway.vehicletracker.di.DefaultServerUrl
 import org.onebusaway.vehicletracker.ui.ARG_SIGN_IN_AGAIN
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import javax.inject.Inject
@@ -108,6 +109,7 @@ class LoginViewModel @Inject constructor(
     tripStateStore: TripStateStore,
     tripGeometryStore: TripGeometryStore,
     managedServerSource: ManagedServerSource,
+    @param:DefaultServerUrl private val builtInServer: String?,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val server = TextFieldState()
@@ -118,12 +120,17 @@ class LoginViewModel @Inject constructor(
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     init {
-        // Filled once, from the last sign-in, and only where the driver has not started typing.
+        // Filled once, from the last sign-in or else the server built into the app, and only where the driver has not
+        // started typing.
         viewModelScope.launch {
             val session = sessionStore.session.first()
-            session.serverUrl?.takeIf { it.isNotBlank() }?.let { saved ->
+            val saved = session.serverUrl?.takeIf { it.isNotBlank() }
+            if (saved != null) {
                 if (server.text.isEmpty()) server.setTextAndPlaceCursorAtEnd(saved)
                 _uiState.update { it.copy(savedServer = saved) }
+            } else if (builtInServer != null && !_uiState.value.again && server.text.isEmpty()) {
+                // A field, not the saved line: the driver can still change it.
+                server.setTextAndPlaceCursorAtEnd(builtInServer)
             }
             session.email?.takeIf { it.isNotBlank() }?.let { saved ->
                 if (email.text.isEmpty()) email.setTextAndPlaceCursorAtEnd(saved)
@@ -147,7 +154,7 @@ class LoginViewModel @Inject constructor(
         when {
             managed.url != null -> server.setTextAndPlaceCursorAtEnd(managed.url)
             // The agency stopped setting it, and the driver couldn't type while it did: back to where Sign in starts.
-            wasManaged -> server.setTextAndPlaceCursorAtEnd(_uiState.value.savedServer.orEmpty())
+            wasManaged -> server.setTextAndPlaceCursorAtEnd(_uiState.value.savedServer ?: builtInServer.orEmpty())
         }
         _uiState.update { it.copy(managedServer = managed.url, managedServerInvalid = managed.invalid) }
     }

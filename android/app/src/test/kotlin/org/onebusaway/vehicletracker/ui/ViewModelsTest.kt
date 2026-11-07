@@ -129,6 +129,7 @@ class ViewModelsTest {
         tripState: FakeTripStateStore = FakeTripStateStore(),
         geometryStore: FakeTripGeometryStore = FakeTripGeometryStore(),
         managed: FakeManagedServerSource = FakeManagedServerSource(),
+        builtIn: String? = null,
         again: Boolean = false,
     ) = LoginViewModel(
         authOver(sessionStore),
@@ -136,6 +137,7 @@ class ViewModelsTest {
         tripState,
         geometryStore,
         managed,
+        builtIn,
         // As the nav graph writes it: only the route Tracking opens sets it.
         SavedStateHandle(if (again) mapOf(ARG_SIGN_IN_AGAIN to true) else emptyMap()),
     )
@@ -495,20 +497,29 @@ class ViewModelsTest {
         override val session = store.state.onStart { delay(1) }
     }
 
-    @Test fun `the first of managed and saved is used`() = runTest(dispatcher) {
+    @Test fun `the first of managed, saved and built-in is used`() = runTest(dispatcher) {
         val managed = "https://managed.example.org/"
         val saved = "https://saved.example.org/"
-        data class Case(val managed: String?, val saved: String?, val field: String, val showsField: Boolean)
+        val builtIn = "https://built-in.example.org/"
+        data class Case(val managed: String?, val saved: String?, val builtIn: String?, val field: String, val showsField: Boolean)
         val cases = listOf(
-            Case(managed, saved, field = managed, showsField = false),
-            Case(managed, null, field = managed, showsField = false),
-            Case(null, saved, field = saved, showsField = false),
-            Case(null, null, field = "", showsField = true),
+            Case(managed, saved, builtIn, field = managed, showsField = false),
+            Case(managed, saved, null, field = managed, showsField = false),
+            Case(managed, null, builtIn, field = managed, showsField = false),
+            Case(managed, null, null, field = managed, showsField = false),
+            Case(null, saved, builtIn, field = saved, showsField = false),
+            Case(null, saved, null, field = saved, showsField = false),
+            Case(null, null, builtIn, field = builtIn, showsField = true),
+            Case(null, null, null, field = "", showsField = true),
         )
         for (case in cases) {
             for (managedFirst in listOf(false, true)) {
                 val store = FakeSessionStore().apply { state.value = Session(case.saved, null, null) }
-                val vm = loginViewModel(if (managedFirst) slowToRead(store) else store, managed = managedAs(case.managed))
+                val vm = loginViewModel(
+                    if (managedFirst) slowToRead(store) else store,
+                    managed = managedAs(case.managed),
+                    builtIn = case.builtIn,
+                )
                 dispatcher.scheduler.advanceUntilIdle()
 
                 val label = "$case, ${if (managedFirst) "managed" else "saved"} read first"
@@ -599,6 +610,37 @@ class ViewModelsTest {
 
         assertEquals("https://saved.example.org/", vm.server.text.toString())
         assertFalse("the saved server is a line again", vm.uiState.value.showsServerField)
+    }
+
+    @Test fun `the built-in address fills only an empty field`() = runTest(dispatcher) {
+        val builtIn = "https://built-in.example.org/"
+
+        val fresh = loginViewModel(builtIn = builtIn)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(builtIn, fresh.server.text.toString())
+        assertNull("it is not the phone's server until a sign-in", fresh.uiState.value.savedServer)
+        assertTrue("the driver can still change it", fresh.uiState.value.showsServerField)
+
+        val returning = loginViewModel(FakeSessionStore().apply { state.value = Session("https://saved.example.org/", null, null) }, builtIn = builtIn)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("https://saved.example.org/", returning.server.text.toString())
+
+        val typing = loginViewModel(builtIn = builtIn)
+        typing.server.setTextAndPlaceCursorAtEnd("https://typed.example.org")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("https://typed.example.org", typing.server.text.toString())
+    }
+
+    @Test fun `a managed server that goes away leaves the built-in one`() = runTest(dispatcher) {
+        val managed = managedAs("https://managed.example.org/")
+        val vm = loginViewModel(managed = managed, builtIn = "https://built-in.example.org/")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        managed.state.value = ManagedServer(null, invalid = false)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://built-in.example.org/", vm.server.text.toString())
+        assertTrue(vm.uiState.value.showsServerField)
     }
 
     @Test fun `signing in again ignores the managed server`() = runTest(dispatcher) {

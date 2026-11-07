@@ -6,6 +6,13 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// An agency building its own app can give Sign in a server to start from, which the driver can still change:
+// ./gradlew assembleRelease -PdefaultServerUrl=https://tracker.example.org (docs/deployment.md, section 13.2).
+val defaultServerUrl = (findProperty("defaultServerUrl") as String?).orEmpty()
+if (defaultServerUrl.isNotEmpty() && !defaultServerUrl.startsWith("https://")) {
+    throw GradleException("defaultServerUrl must be an https:// address, or empty for no default")
+}
+
 android {
     namespace = "org.onebusaway.vehicletracker"
     compileSdk = 37
@@ -17,6 +24,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        resValue("string", "default_server_url", defaultServerUrl)
     }
 
     buildTypes {
@@ -33,7 +41,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        resValues = true
+    }
     testOptions.unitTests.isReturnDefaultValues = true
     // MapAssetsTest and WindowColorsTest read committed files from disk, so a change to them has to rerun the tests.
     testOptions.unitTests.all {
