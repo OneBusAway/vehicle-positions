@@ -823,6 +823,7 @@ class ViewModelsTest {
         geometryStore: TripGeometryStore = FakeTripGeometryStore(),
         extraArgs: Map<String, String> = emptyMap(),
         wallClock: (() -> Long)? = null,
+        sessionStore: SessionStore = FakeSessionStore(),
         block: (RunsViewModel, MockWebServer, FakeServiceController, FakeTripStateStore) -> Unit,
     ) {
         val server = MockWebServer().apply { start() }
@@ -842,13 +843,13 @@ class ViewModelsTest {
             val nowEpochSec = OffsetDateTime.parse(now).toEpochSecond()
             val clock = wallClock ?: { nowEpochSec }
             val tripState = FakeTripStateStore()
-            val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), FakeSessionStore(), clock = clock)
+            val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), sessionStore, clock = clock)
             val serviceController = FakeServiceController()
             // The nav graph's arguments, which is where the ViewModel reads them from — and it
             // loads off them in init, with no load() call from the screen.
             val args = SavedStateHandle(mapOf("vehicleId" to "bus-1", "routeId" to "R1") + extraArgs)
             val vm = RunsViewModel(
-                args, CatalogRepository(provider), tripRepository, geometryStore, serviceController, authOver(FakeSessionStore()), clock,
+                args, CatalogRepository(provider), tripRepository, geometryStore, serviceController, authOver(sessionStore), clock,
             )
             awaitCondition(description = "runs settled") { vm.uiState.value !is RunsUiState.Loading }
             block(vm, server, serviceController, tripState)
@@ -1009,13 +1010,72 @@ class ViewModelsTest {
             MockResponse().setResponseCode(403).setBody("""{"error":"driver is not assigned to this vehicle"}"""),
             MockResponse().setResponseCode(409).setBody("""{"error":"driver already has an active trip"}"""),
         )
-        withRunsViewModel(startResponses = refusals) { vm, _, serviceController, _ ->
+        val store = FakeSessionStore().apply { state.value = signedIn }
+        withRunsViewModel(startResponses = refusals, sessionStore = store) { vm, _, serviceController, _ ->
             vm.onStartRun("T1") { }
             awaitCondition(description = "403 surfaced") { loadedRuns(vm).error != null }
             assertEquals(TripError.NOT_ASSIGNED, loadedRuns(vm).error)
 
             vm.onStartRun("T1") { }
             awaitCondition(description = "409 surfaced") { loadedRuns(vm).error == TripError.TRIP_ACTIVE }
+            assertEquals(0, serviceController.startCount)
+            assertEquals("a refusal is not the end of the session", signedIn, store.state.value)
+        }
+    }
+
+    @Test fun `a start the network or the server fails keeps the session and offers Try again`() = runTest(dispatcher) {
+        val failures = listOf(
+            MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST) to TripError.NETWORK,
+            MockResponse().setResponseCode(500).setBody("""{"error":"failed to start trip"}""") to TripError.OTHER,
+        )
+        for ((failure, error) in failures) {
+            val store = FakeSessionStore().apply { state.value = signedIn }
+            withRunsViewModel(startResponses = listOf(failure), sessionStore = store) { vm, _, _, _ ->
+                vm.onStartRun("T1") { fail("a start that failed must not leave the screen") }
+                awaitCondition(description = "$error surfaced") { loadedRuns(vm).error != null }
+
+                assertEquals(error, loadedRuns(vm).error)
+                assertEquals(signedIn, store.state.value)
+            }
+        }
+    }
+
+    @Test fun `a geometry fetch that gets a 401 ends the session and starts nothing`() = runTest(dispatcher) {
+        val store = FakeSessionStore().apply { state.value = signedIn }
+        withRunsViewModel(geometry = ::unauthorized, sessionStore = store) { vm, server, serviceController, tripState ->
+            vm.onStartRun("T1") { fail("nothing may start once the server has ended the session") }
+            awaitCondition(description = "session ended") { vm.uiState.value == RunsUiState.SessionEnded }
+
+            assertEquals(Session(signedIn.serverUrl, null, null, email = signedIn.email), store.state.value)
+            assertTrue("/api/v1/trips/start" !in requestPaths(server))
+            assertEquals(0, serviceController.startCount)
+            assertNull(tripState.tripState.value)
+        }
+    }
+
+    @Test fun `a start that gets a 401 ends the session`() = runTest(dispatcher) {
+        val store = FakeSessionStore().apply { state.value = signedIn }
+        withRunsViewModel(startResponses = listOf(unauthorized()), sessionStore = store) { vm, server, serviceController, tripState ->
+            vm.onStartRun("T1") { fail("nothing may start once the server has ended the session") }
+            awaitCondition(description = "session ended") { vm.uiState.value == RunsUiState.SessionEnded }
+
+            assertEquals(Session(signedIn.serverUrl, null, null, email = signedIn.email), store.state.value)
+            assertTrue("the start is what got the 401", "/api/v1/trips/start" in requestPaths(server))
+            assertEquals(0, serviceController.startCount)
+            assertNull(tripState.tripState.value)
+        }
+    }
+
+    @Test fun `a leftover end that gets a 401 ends the session, and keeps the end`() = runTest(dispatcher) {
+        val store = FakeSessionStore().apply { state.value = signedIn }
+        withRunsViewModel(endResponse = ::unauthorized, sessionStore = store) { vm, server, serviceController, tripState ->
+            tripState.unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, null))
+            vm.onStartRun("T1") { fail("nothing may start while the previous trip is open") }
+            awaitCondition(description = "session ended") { vm.uiState.value == RunsUiState.SessionEnded }
+
+            assertEquals(Session(signedIn.serverUrl, null, null, email = signedIn.email), store.state.value)
+            assertEquals("kept for this driver's next sign-in", listOf(UnconfirmedEnd(7L, null)), tripState.unconfirmedEndsState.value)
+            assertTrue("/api/v1/trips/start" !in requestPaths(server))
             assertEquals(0, serviceController.startCount)
         }
     }

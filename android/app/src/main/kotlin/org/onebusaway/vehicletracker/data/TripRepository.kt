@@ -89,7 +89,8 @@ class TripRepository @Inject constructor(
      * would have been refused anyway, with [ApiError.PreviousTripNotEnded] so the driver is told
      * which trip is stuck, and the ends not yet confirmed are kept for the next start. Other
      * drivers' ends are left for them ([UnconfirmedEnd.belongsTo]): their open trips do not block
-     * this driver's start.
+     * this driver's start. A 401 is passed on as [ApiError.Unauthorized], because the session is
+     * over rather than the trip stuck: the ends stay stored for that driver's next sign-in.
      */
     private suspend fun endUnconfirmedTrips(signedInDriverId: String?): Result<Unit> = try {
         tripStateStore.unconfirmedEnds.first()
@@ -103,7 +104,7 @@ class TripRepository @Inject constructor(
         throw e
     } catch (e: Exception) {
         Log.w(TAG, "Could not end a trip ended on this phone only", e)
-        Result.failure(ApiError.PreviousTripNotEnded)
+        Result.failure(if (mapHttpError(e) is ApiError.Unauthorized) ApiError.Unauthorized else ApiError.PreviousTripNotEnded)
     }
 
     /**
