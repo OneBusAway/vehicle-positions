@@ -1071,6 +1071,78 @@ import VehiclePositionsKit
         #expect(s.phase == .signedOut)
     }
 
+    /// A 401 while the logout is out ends the session on the phone and shows
+    /// Sign in, so the next driver can sign in before the logout returns. That
+    /// logout was the first driver's: it must not clear the second's session.
+    @Test func aSignInWhileTheLogoutIsOutIsKeptWhenTheLogoutReturns() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "first@test.com", password: "pw")
+        var secondSignInError: (any Error)?
+        var signingOutAfterTheSecondSignIn = true
+        api.whileLoggingOut = {
+            s.handleIfUnauthorized(APIError.status(401, message: "invalid token"))
+            api.tokens = AuthTokens(accessToken: "jwt-2", refreshToken: "refresh-2", expiresIn: 900)
+            do {
+                try await s.signIn(serverURL: server, email: "second@test.com", password: "pw")
+            } catch {
+                secondSignInError = error
+            }
+            signingOutAfterTheSecondSignIn = s.isSigningOut
+        }
+
+        await s.signOut()
+        #expect(secondSignInError == nil)
+        #expect(api.logouts == 1)
+        #expect(!signingOutAfterTheSecondSignIn, "the second driver can start a trip at once")
+        #expect(s.phase == .idle)
+        #expect(try tokens.load()?.token == "jwt-2")
+        #expect(s.settings.email == "second@test.com")
+        #expect(!s.isSigningOut)
+        try await s.loadVehicles()
+    }
+
+    /// The second driver can sign out too while the first logout is still
+    /// out. Theirs is a new sign-out with its own logout, and the first one
+    /// returning must not end it early: a start from the car would then slip
+    /// through while the second logout is revoking the token.
+    @Test func theFirstLogoutReturningDoesNotEndASecondDriversSignOut() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "first@test.com", password: "pw")
+        let (firstReturned, release) = AsyncStream.makeStream(of: Void.self)
+        var second: Task<Void, Never>?
+        var secondSignInError: (any Error)?
+        var secondWasOutWhenTheFirstReturned = false
+        var signingOutWhenTheFirstReturned = false
+        api.whileLoggingOut = {
+            s.handleIfUnauthorized(APIError.status(401, message: "invalid token"))
+            do {
+                try await s.signIn(serverURL: server, email: "second@test.com", password: "pw")
+            } catch {
+                secondSignInError = error
+            }
+            api.whileLoggingOut = {
+                secondWasOutWhenTheFirstReturned = true
+                for await _ in firstReturned { break }
+                signingOutWhenTheFirstReturned = s.isSigningOut
+            }
+            second = Task { await s.signOut() }
+            // Lets the second sign-out reach its logout before the first returns.
+            await Task.yield()
+        }
+
+        await s.signOut()
+        #expect(secondSignInError == nil)
+        #expect(secondWasOutWhenTheFirstReturned)
+        release.yield(())
+        await second?.value
+        #expect(signingOutWhenTheFirstReturned, "the first logout's return did not end the second sign-out")
+        #expect(api.logouts == 2)
+        #expect(s.phase == .signedOut)
+        #expect(try tokens.load() == nil)
+        #expect(s.settings.email == "")
+        #expect(!s.isSigningOut)
+    }
+
     @Test func signOutFromPausedKeepsTheStoredTripForNextSignIn() async throws {
         let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))

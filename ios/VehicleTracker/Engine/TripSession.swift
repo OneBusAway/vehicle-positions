@@ -126,9 +126,17 @@ final class TripSession {
     /// replaced by it.
     private(set) var fixesSent = 0
     private(set) var vehicles: [Vehicle] = []
-    /// A sign-out is waiting on the server. No trip may start or resume
-    /// meanwhile: the logout is revoking the token it would report with.
-    private(set) var isSigningOut = false
+    /// Bumped by every sign-in. A 401 while a logout is out ends the session
+    /// on the phone and shows Sign in, so the next driver can sign in before
+    /// that logout returns; it then belongs to an earlier generation and must
+    /// leave the new session alone.
+    private var sessionGeneration = 0
+    /// The generation whose sign-out is waiting on the server, if any.
+    private var signingOutGeneration: Int?
+    /// A sign-out is waiting on the server for the current session. No trip
+    /// may start or resume meanwhile: the logout is revoking the token it
+    /// would report with.
+    var isSigningOut: Bool { signingOutGeneration == sessionGeneration }
     let settings: AppSettings
 
     private let tokens: any TokenStoring
@@ -227,6 +235,7 @@ final class TripSession {
         let api = try makeAPI(serverURL, tokens)
         let issued = try await api.login(email: email, password: password)
         try tokens.save(StoredToken(issued, receivedAt: now()))
+        sessionGeneration += 1
         settings.serverURLString = serverURL.absoluteString
         settings.email = email
         self.api = api
@@ -257,13 +266,23 @@ final class TripSession {
         switch phase {
         case .idle, .paused:
             guard !isSigningOut else { return }
-            isSigningOut = true
-            defer { isSigningOut = false }
+            let generation = sessionGeneration
+            signingOutGeneration = generation
+            // A later sign-out, from a driver who signed in meanwhile, owns
+            // the flag by then and clears it itself.
+            defer { if signingOutGeneration == generation { signingOutGeneration = nil } }
             do {
                 try await requireAPI().logout()
                 log.notice("logged out on the server")
             } catch {
                 log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error))")
+            }
+            // The driver who asked to sign out is gone if a 401 ended the
+            // session while the logout was out; whoever signed in since keeps
+            // their session.
+            guard generation == sessionGeneration else {
+                log.notice("a new sign-in landed while the logout was out; leaving it signed in")
+                return
             }
             endSessionLocally()
             settings.email = ""
