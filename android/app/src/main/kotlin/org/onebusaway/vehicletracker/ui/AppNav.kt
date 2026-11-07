@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.DefaultNavTransitions
@@ -60,7 +61,10 @@ private const val ROUTE_LOGIN = "login"
 // string matching stays unambiguous; reuses the same LoginScreen composable with a different
 // post-login destination — returns to the still-active Tracking screen instead of Vehicles.
 private const val ROUTE_LOGIN_REAUTH = "login_reauth"
-private const val ROUTE_VEHICLES = "vehicles"
+internal const val ROUTE_VEHICLES = "vehicles"
+// The same bus step, opened because the driver asked to change bus. A distinct route, as for ROUTE_LOGIN_REAUTH, so
+// skipBusStep's `popUpTo` still matches only the step the app opened by itself.
+internal const val ROUTE_VEHICLES_CHOSEN = "vehicles_chosen"
 private const val ROUTE_ROUTES = "trip/{vehicleId}"
 // The route's badge rides along as optional arguments: the runs reply names only the route's id.
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}?name={routeName}&color={routeColor}&text={routeTextColor}"
@@ -96,7 +100,7 @@ internal fun <T> NavBackStackEntry.ifResumed(block: (T) -> Unit): (T) -> Unit = 
     if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) block(value)
 }
 
-private val SETUP_STEPS = setOf(ROUTE_VEHICLES, ROUTE_ROUTES, ROUTE_RUNS)
+private val SETUP_STEPS = setOf(ROUTE_VEHICLES, ROUTE_VEHICLES_CHOSEN, ROUTE_ROUTES, ROUTE_RUNS)
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenSetupSteps(): Boolean =
     initialState.destination.route in SETUP_STEPS && targetState.destination.route in SETUP_STEPS
@@ -109,23 +113,30 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking()
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
 
 /** Whether the bus step is behind this screen. It is not once the one-bus skip has taken its place. */
-private fun NavController.hasBusStep(): Boolean =
+private fun NavController.hasBusStep(): Boolean = listOf(ROUTE_VEHICLES, ROUTE_VEHICLES_CHOSEN).any { route ->
     try {
-        getBackStackEntry(ROUTE_VEHICLES)
+        getBackStackEntry(route)
         true
     } catch (e: IllegalArgumentException) {
         false
     }
+}
 
 /**
  * Back to the bus step, to choose another bus. After the one-bus skip there is no bus step to go back to, so a fresh
- * one replaces the flow: it loads the assignments again, and skips once more if there is still only one.
+ * one replaces the flow: it loads the assignments again, and shows them even if there is still only one.
  */
-private fun NavController.toBusStep() {
-    if (!popBackStack(ROUTE_VEHICLES, inclusive = false)) {
-        navigate(ROUTE_VEHICLES) { popUpTo(0) { inclusive = true } }
+internal fun NavController.toBusStep() {
+    if (!popBackStack(ROUTE_VEHICLES, inclusive = false) && !popBackStack(ROUTE_VEHICLES_CHOSEN, inclusive = false)) {
+        navigate(ROUTE_VEHICLES_CHOSEN) { popUpTo(0) { inclusive = true } }
     }
 }
+
+/**
+ * Only the step the app opened by itself skips. One the driver asked for shows the one vehicle, rather than bouncing
+ * back.
+ */
+internal fun skipsOnlyVehicle(route: String?): Boolean = route == ROUTE_VEHICLES
 
 /**
  * How the app leaves the bus step when the driver has only one bus: the route step takes its place. Left on the back
@@ -264,23 +275,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 )
             }
         }
-        composable(ROUTE_VEHICLES) { backStackEntry ->
-            val openRoutes = remember(backStackEntry) {
-                backStackEntry.ifResumed<String> { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") }
-            }
-            ClearOfSystemBars {
-                VehicleScreen(
-                    onVehicleSelected = openRoutes,
-                    // Not a tap: it fires once the assignments load, which can be while this screen is still sliding
-                    // in, and a guard would drop it.
-                    onOnlyVehicle = { vehicleId -> navController.navigate("trip/${arg(vehicleId)}", skipBusStep) },
-                    // Not a tap: it fires when the reply lands, and a guard would drop it.
-                    onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
-                    // Not a tap either: it fires once the phone has forgotten the driver.
-                    onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
-                )
-            }
-        }
+        vehicleStep(ROUTE_VEHICLES, navController)
+        vehicleStep(ROUTE_VEHICLES_CHOSEN, navController)
         composable(
             route = ROUTE_ROUTES,
             arguments = listOf(navArgument(ARG_VEHICLE_ID) { type = NavType.StringType }),
@@ -370,6 +366,29 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     }
                 },
                 onReauthRequired = { navController.navigate(ROUTE_LOGIN_REAUTH) },
+            )
+        }
+    }
+}
+
+/** The bus step, under either of its routes: they differ only in whether one bus skips it. */
+private fun NavGraphBuilder.vehicleStep(route: String, navController: NavController) {
+    composable(route) { backStackEntry ->
+        val openRoutes = remember(backStackEntry) {
+            backStackEntry.ifResumed<String> { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") }
+        }
+        ClearOfSystemBars {
+            VehicleScreen(
+                onVehicleSelected = openRoutes,
+                // Not a tap: it fires once the assignments load, which can be while this screen is still sliding in,
+                // and a guard would drop it.
+                onOnlyVehicle = { vehicleId ->
+                    if (skipsOnlyVehicle(route)) navController.navigate("trip/${arg(vehicleId)}", skipBusStep)
+                },
+                // Not a tap: it fires when the reply lands, and a guard would drop it.
+                onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+                // Not a tap either: it fires once the phone has forgotten the driver.
+                onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
             )
         }
     }
