@@ -78,8 +78,9 @@ struct TripsView: View {
     /// under it and the board's opening run lands right under it, while the
     /// title still collapses as the board scrolls. At accessibility sizes the
     /// header scrolls with the rows instead, so it cannot take the whole
-    /// screen. Both directions stay alive, each with its own scroll
-    /// position; the one not shown is hidden and cannot be hit.
+    /// screen; the refusal banner stays in the bar at every size. Both
+    /// directions stay alive, each with its own scroll position; the one not
+    /// shown is hidden and cannot be hit.
     private func board(_ boards: RunBoards, page: RouteTripsPage) -> some View {
         // A reload can split the runs into fewer boards than the switch was set to.
         let selected = min(direction, boards.boards.count - 1)
@@ -109,8 +110,20 @@ struct TripsView: View {
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selected)
         .safeAreaBar(edge: .top, spacing: 0) {
-            if !dynamicTypeSize.isAccessibilitySize {
-                header(boards, selected: selected, page: page)
+            VStack(alignment: .leading, spacing: 0) {
+                // Never in the scroll: the board has moved to its opening run,
+                // so anything above the rows is off screen when a start is refused.
+                if let refusal {
+                    AttentionBanner(symbol: refusal.symbol, text: refusal.text, action: refusal.action.map(actionTitle)) {
+                        act(on: refusal.action)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, dynamicTypeSize.isAccessibilitySize ? 8 : 4)
+                }
+                if !dynamicTypeSize.isAccessibilitySize {
+                    header(boards, selected: selected, page: page)
+                }
             }
         }
     }
@@ -145,12 +158,6 @@ struct TripsView: View {
 
     private func header(_ boards: RunBoards, selected: Int, page: RouteTripsPage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let refusal {
-                AttentionBanner(symbol: refusal.symbol, text: refusal.text, action: refusal.action.map(actionTitle)) {
-                    act(on: refusal.action)
-                }
-                .padding(.bottom, 8)
-            }
             if boards.boards.count > 1 {
                 directionSwitch(boards)
             }
