@@ -17,10 +17,14 @@ import Foundation
     /// Awaited, before recording the call, so tests can exercise a request
     /// that is still in flight.
     nonisolated(unsafe) var endDelay: Duration?
+    /// Awaited inside `endTrip(id:)`, before recording the call, so a test
+    /// can act while an end is out, or hold it until it is cancelled: what it
+    /// throws then is the end's error, as a cancelled request's is.
+    nonisolated(unsafe) var whileEnding: (() async throws -> Void)?
     nonisolated(unsafe) var logoutError: (any Error)?
     /// Awaited inside `logout()`, so a test can look at the session, or act
-    /// on it, while the request is out.
-    nonisolated(unsafe) var whileLoggingOut: (() async -> Void)?
+    /// on it, while the request is out. What it throws is the logout's error.
+    nonisolated(unsafe) var whileLoggingOut: (() async throws -> Void)?
     nonisolated(unsafe) var postDelay: Duration?
 
     private(set) nonisolated(unsafe) var logins: [(String, String)] = []
@@ -28,8 +32,8 @@ import Foundation
     private(set) nonisolated(unsafe) var starts: [(String, String, String)] = []
     private(set) nonisolated(unsafe) var ends: [Int64] = []
     private(set) nonisolated(unsafe) var posted: [LocationReport] = []
-    /// The trip, start and end calls in the order they were made, for tests
-    /// where the order is the point.
+    /// The trip, start, end and logout calls in the order they were made, for
+    /// tests where the order is the point.
     private(set) nonisolated(unsafe) var calls: [String] = []
     private(set) nonisolated(unsafe) var logouts = 0
 
@@ -56,6 +60,7 @@ import Foundation
     }
     func endTrip(id: Int64) async throws {
         if let endDelay { try? await Task.sleep(for: endDelay) }
+        try await whileEnding?()
         ends.append(id)
         calls.append("end \(id)")
         if let endError { throw endError }
@@ -66,8 +71,9 @@ import Foundation
         if let postError { throw postError }
     }
     func logout() async throws {
-        await whileLoggingOut?()
+        try await whileLoggingOut?()
         logouts += 1
+        calls.append("logout")
         if let logoutError { throw logoutError }
     }
 }
