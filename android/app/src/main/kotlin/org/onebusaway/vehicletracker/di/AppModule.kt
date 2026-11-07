@@ -81,6 +81,11 @@ annotation class ServiceAnnounceGrace
 @Retention(AnnotationRetention.BINARY)
 annotation class DefaultServerUrl
 
+/** Qualifies whether this is a debug build, whose network config lets plain http reach the developer's machine. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DebugBuild
+
 /**
  * Keeps a `@Volatile` cache of the current auth token + server URL in sync with [SessionStore],
  * so [TrackerApi] calls can read them synchronously (Retrofit interceptors are not suspending).
@@ -212,6 +217,10 @@ object AppModule {
         if (server == null) Log.w("DefaultServerUrl", "Ignoring the built-in defaultServerUrl: not an address the app may use.")
         return server?.toString()
     }
+
+    @Provides
+    @DebugBuild
+    fun provideDebugBuild(@ApplicationContext context: Context): Boolean = context.isDebuggable
 
     @Provides
     fun provideManagedServerSource(@ApplicationContext context: Context): ManagedServerSource =

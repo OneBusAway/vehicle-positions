@@ -1,5 +1,7 @@
 package org.onebusaway.vehicletracker.ui
 
+import android.content.Intent
+import android.net.Uri
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -69,8 +71,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.onebusaway.vehicletracker.MainActivity
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.ServerSetupLink
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.api.VehicleDto
@@ -87,6 +91,7 @@ import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginField
 import org.onebusaway.vehicletracker.ui.login.LoginScreenContent
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
+import org.onebusaway.vehicletracker.ui.setup.ServerSetupDialog
 import org.onebusaway.vehicletracker.ui.permissions.ChecklistRow
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
@@ -357,6 +362,59 @@ class ScreenFlowTest {
         compose.onNodeWithText("tracker.example.org").assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.login_change_server)).assertDoesNotExist()
         loginField(R.string.login_password_label).assertIsFocused()
+    }
+
+    // --- A setup link ---
+
+    @Test
+    fun setupLink_opensTheAppAndNoOtherLinkDoes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        fun activitiesFor(link: String) = context.packageManager.queryIntentActivities(
+            Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(context.packageName),
+            0,
+        ).map { it.activityInfo.name }
+
+        assertEquals(
+            listOf(MainActivity::class.java.name),
+            activitiesFor("obavehicletracker://setup?server=https%3A%2F%2Ftracker.example.org"),
+        )
+        assertEquals(emptyList<String>(), activitiesFor("obavehicletracker://other?server=https%3A%2F%2Ftracker.example.org"))
+        assertEquals(emptyList<String>(), activitiesFor("https://setup?server=https%3A%2F%2Ftracker.example.org"))
+    }
+
+    @Test
+    fun setupDialog_asksNamingTheHostThenSaysWhyALinkWasNotUsed() {
+        var decision by mutableStateOf<ServerSetupLink.Decision>(
+            ServerSetupLink.Decision.Confirm("https://tracker.example.org/", "tracker.example.org"),
+        )
+        var confirmed: String? = null
+        var dismissals = 0
+        compose.setContent { ServerSetupDialog(decision, onConfirm = { confirmed = it }, onDismiss = { dismissals++ }) }
+
+        compose.onNodeWithText(resources.getString(R.string.server_setup_confirm_title, "tracker.example.org")).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.server_setup_confirm_message)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.server_setup_ok)).assertDoesNotExist()
+        compose.onNodeWithText(getString(R.string.server_setup_cancel)).performClick()
+        assertEquals(1, dismissals)
+        compose.onNodeWithText(getString(R.string.server_setup_use)).performClick()
+        assertEquals("https://tracker.example.org/", confirmed)
+
+        val refusals = listOf(
+            ServerSetupLink.Decision.RefusedSignedIn("positions.example.org") to
+                resources.getString(R.string.server_setup_refused_signed_in, "positions.example.org"),
+            ServerSetupLink.Decision.RefusedSignedIn(host = null) to getString(R.string.server_setup_refused_trip_open),
+            ServerSetupLink.Decision.RefusedManaged to getString(R.string.server_setup_refused_managed),
+            ServerSetupLink.Decision.Invalid to getString(R.string.server_setup_invalid),
+        )
+        for ((refusal, words) in refusals) {
+            decision = refusal
+            compose.onNodeWithText(words).assertIsDisplayed()
+            compose.onNodeWithText(getString(R.string.server_setup_use)).assertDoesNotExist()
+            compose.onNodeWithText(getString(R.string.server_setup_cancel)).assertDoesNotExist()
+            compose.onNodeWithText(getString(R.string.server_setup_ok)).performClick()
+        }
+        assertEquals(5, dismissals)
+        assertEquals("only the first could be agreed to", "https://tracker.example.org/", confirmed)
     }
 
     @Test

@@ -47,6 +47,19 @@
     <!-- Under the server field when the agency's device management sets a server the app can't use, so it is ignored. -->
     <string name="login_server_managed_invalid">Your agency\'s server setting is not a valid address, so type it here.</string>
 
+    <!-- A setup link from the agency, which fills in the server on the sign-in screen once the driver agrees. The server's host, e.g. "tracker.example.org". -->
+    <string name="server_setup_confirm_title">Use %1$s?</string>
+    <string name="server_setup_confirm_message">Only continue if your agency sent you this link.</string>
+    <string name="server_setup_use">Use this server</string>
+    <string name="server_setup_cancel">Cancel</string>
+    <!-- Why a setup link was not used. The host of the server the phone is signed in to, e.g. "tracker.example.org". -->
+    <string name="server_setup_refused_signed_in">This phone is signed in to %1$s. The link was not used.</string>
+    <!-- A trip is stored, but not which server it is on, as after a restore from backup. -->
+    <string name="server_setup_refused_trip_open">This phone has a trip open. The link was not used.</string>
+    <string name="server_setup_refused_managed">Your agency sets the server on this phone.</string>
+    <string name="server_setup_invalid">This link does not contain a server address the app can use.</string>
+    <string name="server_setup_ok">OK</string>
+
     <!-- The app's managed configuration, as an agency's device management console shows it. -->
     <string name="restriction_server_url_title">Server address</string>
     <string name="restriction_server_url_description">The agency\'s tracker server, an https:// address. Drivers sign in to it and can\'t change it.</string>

@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import org.onebusaway.vehicletracker.data.ServerSetup
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.map.MapRepository
@@ -22,6 +24,7 @@ import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.rearmWhenActive
 import org.onebusaway.vehicletracker.ui.AppNav
 import org.onebusaway.vehicletracker.ui.AppNavViewModel
+import org.onebusaway.vehicletracker.ui.setup.ServerSetupPrompt
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import javax.inject.Inject
 
@@ -32,6 +35,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var trackingRepository: TrackingRepository
     @Inject lateinit var sessionStore: SessionStore
     @Inject lateinit var mapRepository: MapRepository
+    @Inject lateinit var serverSetup: ServerSetup
 
     private val navViewModel: AppNavViewModel by viewModels()
 
@@ -50,9 +54,12 @@ class MainActivity : ComponentActivity() {
                 // draws its map under them.
                 Surface(modifier = Modifier.fillMaxSize()) {
                     AppNav(navViewModel = navViewModel)
+                    ServerSetupPrompt(serverSetup)
                 }
             }
         }
+        // Not again when the activity is recreated, as on a rotation, which hands it the same intent.
+        if (savedInstanceState == null) openSetupLink(intent)
         // Re-arms a service that is running without location updates: the degraded restart
         // path (SecurityException in the service). Watched while resumed rather than checked once,
         // because a START_STICKY restart can turn active after the activity has resumed. A stored
@@ -66,5 +73,21 @@ class MainActivity : ComponentActivity() {
                 refreshWhenSignedIn(sessionStore.session, mapRepository::refresh)
             }
         }
+    }
+
+    // The activity is singleTask, so a link that arrives while it runs comes here.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openSetupLink(intent)
+    }
+
+    /**
+     * A setup link, read once. Reopening the app from Recents after it was closed hands it the intent it was first
+     * opened with, so that one is not a new link.
+     */
+    private fun openSetupLink(intent: Intent) {
+        if (intent.action != Intent.ACTION_VIEW) return
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        intent.dataString?.let(serverSetup::open)
     }
 }

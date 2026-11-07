@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.cash.turbine.test
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -129,6 +130,7 @@ class ViewModelsTest {
         tripState: FakeTripStateStore = FakeTripStateStore(),
         geometryStore: FakeTripGeometryStore = FakeTripGeometryStore(),
         managed: FakeManagedServerSource = FakeManagedServerSource(),
+        serverSetup: ServerSetup = setupOver(sessionStore, tripState, managed),
         builtIn: String? = null,
         again: Boolean = false,
     ) = LoginViewModel(
@@ -137,10 +139,17 @@ class ViewModelsTest {
         tripState,
         geometryStore,
         managed,
+        serverSetup,
         builtIn,
         // As the nav graph writes it: only the route Tracking opens sets it.
         SavedStateHandle(if (again) mapOf(ARG_SIGN_IN_AGAIN to true) else emptyMap()),
     )
+
+    private fun setupOver(
+        sessionStore: SessionStore = FakeSessionStore(),
+        tripState: FakeTripStateStore = FakeTripStateStore(),
+        managed: FakeManagedServerSource = FakeManagedServerSource(),
+    ) = ServerSetup(sessionStore, tripState, managed, debuggable = false, scope = CoroutineScope(dispatcher))
 
     private fun LoginViewModel.fill(server: String, email: String, password: String) {
         this.server.setTextAndPlaceCursorAtEnd(server)
@@ -641,6 +650,133 @@ class ViewModelsTest {
 
         assertEquals("https://built-in.example.org/", vm.server.text.toString())
         assertTrue(vm.uiState.value.showsServerField)
+    }
+
+    // --- A setup link ---
+
+    private val setupLink = "obavehicletracker://setup?server=https%3A%2F%2Ftracker.example.org"
+    private val serverInLink = "https://tracker.example.org/"
+
+    /** The driver opens the link and agrees to it. */
+    private fun ServerSetup.agree() {
+        open(setupLink)
+        dispatcher.scheduler.advanceUntilIdle()
+        require(prompt.value == ServerSetupLink.Decision.Confirm(serverInLink, "tracker.example.org")) { "asked ${prompt.value}" }
+        confirm(serverInLink)
+        dispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test fun `a confirmed link fills the field, and leaving Sign in forgets it`() = runTest(dispatcher) {
+        val sessionStore = FakeSessionStore()
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.agree()
+
+        assertEquals(serverInLink, vm.server.text.toString())
+        assertTrue(vm.uiState.value.showsServerField)
+        assertNull("saved by nothing but a sign-in", sessionStore.state.value.serverUrl)
+        val next = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("", next.server.text.toString())
+    }
+
+    @Test fun `a confirmed link opens the field over the saved server`() = runTest(dispatcher) {
+        val sessionStore = FakeSessionStore().apply {
+            state.value = Session(serverUrl = "https://saved.example.org/", token = null, issuedAtEpochSec = null, email = "d@example.com")
+        }
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        require(!vm.uiState.value.showsServerField)
+        vm.onSignIn { fail("there is no password") }
+        require(vm.uiState.value.error == LoginError.MissingField(LoginField.PASSWORD))
+
+        setup.agree()
+
+        assertEquals(serverInLink, vm.server.text.toString())
+        assertTrue(vm.uiState.value.showsServerField)
+        assertNull("the last error was about something else", vm.uiState.value.error)
+        assertEquals("https://saved.example.org/", sessionStore.state.value.serverUrl)
+    }
+
+    @Test fun `agreeing to the same link twice fills it twice`() = runTest(dispatcher) {
+        val setup = setupOver()
+        val vm = loginViewModel(serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        setup.agree()
+        vm.server.setTextAndPlaceCursorAtEnd("https://typed.example.org")
+
+        setup.agree()
+
+        assertEquals(serverInLink, vm.server.text.toString())
+    }
+
+    @Test fun `a link, then a sign-in somewhere else, saves only what was signed in to`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
+        val sessionStore = FakeSessionStore()
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        setup.agree()
+        vm.fill(server.url("/").toString(), "d@example.com", "pw")
+        var succeeded = false
+
+        vm.onSignIn { succeeded = true }
+        awaitCondition(description = "sign-in callback invoked") { succeeded }
+
+        assertEquals(server.url("/").toString(), sessionStore.state.value.serverUrl)
+        server.shutdown()
+    }
+
+    @Test fun `a token left on the phone is never paired with a link's host`() = runTest(dispatcher) {
+        // Sign in shows, because the token has expired with no refresh token, but it is still stored.
+        val session = Session(serverUrl = "https://positions.example.org/", token = jwtFor("7"), issuedAtEpochSec = 0L, email = "d@example.com")
+        val sessionStore = FakeSessionStore().apply { state.value = session }
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.open(setupLink)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(ServerSetupLink.Decision.RefusedSignedIn("positions.example.org"), setup.prompt.value)
+        // Agreed to all the same, as a dialog left up from before could be.
+        setup.confirm(serverInLink)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://positions.example.org/", vm.server.text.toString())
+        assertEquals(session, sessionStore.state.value)
+    }
+
+    @Test fun `a link can't replace the agency's server`() = runTest(dispatcher) {
+        // The link was agreed to just before the agency set the server.
+        val setup = setupOver()
+        val vm = loginViewModel(managed = managedAs("https://managed.example.org/"), serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.agree()
+
+        assertEquals("https://managed.example.org/", vm.server.text.toString())
+        assertNull("used up, so it can't fill the field later", setup.linkedServer.value)
+    }
+
+    @Test fun `signing in again ignores a linked server`() = runTest(dispatcher) {
+        // Agreed to on a phone where nothing refuses it, so only Sign in can.
+        val setup = setupOver()
+        val vm = loginViewModel(
+            sessionStore = FakeSessionStore().apply { state.value = Session(serverUrl = "https://saved.example.org/", token = null, issuedAtEpochSec = null, email = "d@example.com") },
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip },
+            serverSetup = setup,
+            again = true,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.agree()
+
+        assertEquals("the open trip is on the saved server", "https://saved.example.org/", vm.server.text.toString())
+        assertFalse(vm.uiState.value.showsServerField)
     }
 
     @Test fun `signing in again ignores the managed server`() = runTest(dispatcher) {

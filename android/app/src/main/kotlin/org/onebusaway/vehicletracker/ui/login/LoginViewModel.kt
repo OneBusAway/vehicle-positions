@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -18,6 +19,7 @@ import org.onebusaway.vehicletracker.data.ApiError
 import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.ManagedServer
 import org.onebusaway.vehicletracker.data.ManagedServerSource
+import org.onebusaway.vehicletracker.data.ServerSetup
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
@@ -109,6 +111,7 @@ class LoginViewModel @Inject constructor(
     tripStateStore: TripStateStore,
     tripGeometryStore: TripGeometryStore,
     managedServerSource: ManagedServerSource,
+    private val serverSetup: ServerSetup,
     @param:DefaultServerUrl private val builtInServer: String?,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -144,9 +147,20 @@ class LoginViewModel @Inject constructor(
                 _uiState.update { it.copy(openTrip = route) }
             }
         } else {
-            // Kept in step while Sign in shows. Not when signing in again: the open trip is on the saved server.
+            // Kept in step while Sign in shows, as is a setup link the driver agrees to. Not when signing in again: the
+            // open trip is on the saved server.
             viewModelScope.launch { managedServerSource.server.collect(::useManaged) }
+            viewModelScope.launch { serverSetup.linkedServer.filterNotNull().collect(::useLinked) }
         }
+    }
+
+    /** Only into the field: the address is saved once a sign-in to it succeeds, and leaving Sign in forgets it. */
+    private fun useLinked(linked: String) {
+        if (_uiState.value.managedServer == null) {
+            server.setTextAndPlaceCursorAtEnd(linked)
+            _uiState.update { it.copy(changingServer = true, error = null) }
+        }
+        serverSetup.linkUsed()
     }
 
     private fun useManaged(managed: ManagedServer) {
