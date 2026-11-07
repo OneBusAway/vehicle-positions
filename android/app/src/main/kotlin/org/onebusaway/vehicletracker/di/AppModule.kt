@@ -95,7 +95,7 @@ class ApiHolder(private val sessionStore: SessionStore, scope: CoroutineScope, c
         apiFactory.createRefreshApi(url)
     }
 
-    val apiFactory: ApiFactory = ApiFactory(refresher) { token }
+    val apiFactory: ApiFactory = ApiFactory(refresher) { token ?: storedToken() }
 
     init {
         sessionStore.session
@@ -107,6 +107,13 @@ class ApiHolder(private val sessionStore: SessionStore, scope: CoroutineScope, c
             }
             .launchIn(scope)
     }
+
+    /**
+     * The stored token, for the moment after a sign-in when the collector in [init] has not delivered it yet. A request
+     * sent without one gets a 401, which ends the session the driver has just started. OkHttp calls this on its own
+     * threads, as it does [TokenRefresher].
+     */
+    private fun storedToken(): String? = runCatching { runBlocking { sessionStore.session.first().token } }.getOrNull()
 
     /**
      * Blocks (briefly — [SessionStore.session] reads from an already-warm in-memory DataStore

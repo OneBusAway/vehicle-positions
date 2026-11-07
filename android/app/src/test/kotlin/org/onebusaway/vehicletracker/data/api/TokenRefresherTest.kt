@@ -322,6 +322,17 @@ class TokenRefresherTest {
         assertEquals(listOf("/api/v1/auth/refresh", "/api/v1/vehicles"), recorded().map { it.path })
     }
 
+    @Test fun `a request right after a sign-in carries the token even before the cache hears of it`() = runTest {
+        sessions.state.value = Session(serverUrl, null, null)
+        val holder = holder()
+        holder.api() // seeds the cached copy with no token, and it never hears of a later one
+        sessions.saveLogin(serverUrl, "d@example.com", IssuedTokens("a2", "r2", NOW + 900, NOW))
+
+        assertEquals(emptyList<VehicleDto>(), holder.api().myVehicles())
+
+        assertEquals(listOf("Bearer a2"), recorded().map { it.getHeader("Authorization") })
+    }
+
     @Test fun `the store, not the cached copy, decides whether a refresh is due`() = runTest {
         fake.accepted = "a1"
         val holder = holder(now = DUE)
