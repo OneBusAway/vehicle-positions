@@ -197,9 +197,48 @@ import Testing
         #expect(tried && local && going)
     }
 
-    @Test func vehicleItems() {
-        let items = CarPlayTemplates.vehicleItems([Vehicle(id: "bus-1", label: "Bus 1"), Vehicle(id: "bus-2", label: "")], onSelect: { _ in })
-        #expect(items.map(\.text) == ["Bus 1", "bus-2"])
+    /// The car lists what the phone's tiles show, in the phone's sections.
+    @Test func vehicleSectionsFollowThePhonesGroups() {
+        let vehicles = [Vehicle(id: "bus-1", label: "Bus 1"), Vehicle(id: "bus-2", label: ""), Vehicle(id: "van-3", label: "Airport")]
+        let sections = CarPlayTemplates.vehicleSections(vehicles, favorites: ["van-3"], recents: ["bus-2"], onSelect: { _ in })
+        #expect(sections.map(\.header) == ["Favorites", "Recent", "All vehicles"])
+        #expect(sections.map { $0.items.compactMap { ($0 as CPListItem).text } } == [["van-3"], ["bus-2"], ["bus-1"]])
+        #expect(sections.map { $0.items.map { ($0 as CPListItem).detailText } } == [["Airport"], [nil], ["Bus 1"]])
+        // Nothing starred or recent: by label, and an empty label sorts first.
+        let plain = CarPlayTemplates.vehicleSections(vehicles, favorites: [], recents: [], onSelect: { _ in })
+        #expect(plain.map(\.header) == ["All vehicles"])
+        #expect(plain[0].items.compactMap { ($0 as CPListItem).text } == ["bus-2", "van-3", "bus-1"])
+    }
+
+    @Test func theEmptyRunListNamesTheRoute() {
+        let seven = RouteInfo(id: "R7", shortName: "7", longName: "Rainier Beach", color: "", textColor: "", type: 3)
+        let unnamed = RouteInfo(id: "R8", shortName: " ", longName: "Loop", color: "", textColor: "", type: 3)
+        #expect(PickerText.noRunsTitle(route: seven) == "No runs on route 7 today")
+        #expect(PickerText.noRunsTitle(route: unnamed) == "No runs on this route today")
+    }
+
+    @Test func theStartAlertsUseThePhonesWords() {
+        var started = false, cancelled = false
+        let start = CarPlayTemplates.startAlert(time: "6:43 AM", route: "7", headsign: "Downtown Seattle", vehicle: "4317",
+                                                onStart: { started = true }, onCancel: { cancelled = true })
+        #expect(start.titleVariants == ["Start the 6:43 AM run? Route 7 to Downtown Seattle on vehicle 4317.", "Start the 6:43 AM run?"])
+        #expect(start.actions.map(\.title) == ["Start trip", "Cancel"])
+        #expect(start.actions.map(\.style) == [.default, .cancel])
+        start.actions[0].handler(start.actions[0])
+        #expect(started && !cancelled)
+        start.actions[1].handler(start.actions[1])
+        #expect(cancelled)
+
+        // The refusal reads the phone's sentence, never the server's.
+        var dismissed = false
+        let refused = CarPlayTemplates.startRefusedAlert(APIError.status(403, message: "driver is not assigned to this vehicle"),
+                                                         vehicleID: "4317") { dismissed = true }
+        #expect(refused.titleVariants == ["You're not assigned to vehicle 4317."])
+        #expect(refused.actions.map(\.title) == ["OK"])
+        refused.actions[0].handler(refused.actions[0])
+        #expect(dismissed)
+        let busy = CarPlayTemplates.startRefusedAlert(TripSessionError.busy, vehicleID: "4317") {}
+        #expect(busy.titleVariants == ["You already have a trip running. End it before starting another."])
     }
 
     @Test func routeSectionsPutRecentFirst() {
@@ -226,12 +265,34 @@ import Testing
         #expect(items[1].detailText == "Now · A → B")
     }
 
-    @Test func tripItemsMarkTheRunStartingNearestNowOnAFrequentRoute() throws {
+    /// The list starts at the run just gone, so the marked run is second
+    /// and a long route's morning does not fill the car's cap.
+    @Test func tripItemsStartAtTheRunJustGoneAndMarkTheRunStartingNearestNow() {
         let page = RouteTripsPage(routeID: "R1", serviceDate: "20260902", timezone: "America/Los_Angeles", trips: TripFixtures.frequentService)
         let items = CarPlayTemplates.tripItems(page, now: TripFixtures.at(14, 3), onSelect: { _ in })
-        let fourteenHundred = try #require(page.trips.firstIndex { $0.id == "14:00" })
-        #expect(items[fourteenHundred].detailText == "Now · A → B")
-        #expect(items.indices.filter { items[$0].detailText != "A → B" } == [fourteenHundred])
+        #expect(items.count == 8, "13:50 to 15:00")
+        #expect(items[0].text?.hasPrefix(Formatters.clock(TripFixtures.at(13, 50), timezone: page.timezone)) == true)
+        #expect(items[1].text?.hasPrefix(Formatters.clock(TripFixtures.at(14, 0), timezone: page.timezone)) == true)
+        #expect(items[1].detailText == "Now · A → B")
+        #expect(items.indices.filter { items[$0].detailText != "A → B" } == [1])
+    }
+
+    /// A 30-run day at a time between runs 14 and 15, on a car that shows
+    /// twelve rows: run 14 is first, and the last row says there is more.
+    @Test func aCappedRunListStillShowsTheRunUnderWay() {
+        let trips = (1...30).map { i in
+            TripSummary(id: "r\(i)", headsign: "North", directionID: 0, startsAt: TripFixtures.at(5 + i / 2, i % 2 * 30),
+                        endsAt: TripFixtures.at(5 + i / 2, i % 2 * 30).addingTimeInterval(20 * 60), firstStop: "A", lastStop: "B")
+        }
+        let page = RouteTripsPage(routeID: "R1", serviceDate: "20260902", timezone: "America/Los_Angeles", trips: trips)
+        // Run 14 starts at 12:00, run 15 at 12:30.
+        let items = CarPlayTemplates.tripItems(page, now: TripFixtures.at(12, 25), onSelect: { _ in })
+        let list = CarPlayTemplates.list(title: "Choose a run", sections: [(header: nil, items: items)], maxItems: 12, maxSections: 4)
+        #expect(list.itemCount == 12)
+        let rows = list.sections.flatMap { $0.items.compactMap { $0 as? CPListItem } }
+        #expect(rows.first?.text?.hasPrefix(Formatters.clock(TripFixtures.at(12, 0), timezone: page.timezone)) == true)
+        #expect(rows[1].detailText == "Next · A → B")
+        #expect(rows.last?.text == "Use iPhone to see more")
     }
 
     @Test func listTruncatesToTheCap() {
@@ -274,8 +335,10 @@ import Testing
 
     @Test func listItemHandlersInvokeOnSelect() {
         var pickedVehicle: Vehicle?
-        let vehicles = CarPlayTemplates.vehicleItems([Vehicle(id: "bus-1", label: "Bus 1"), Vehicle(id: "bus-2", label: "Bus 2")]) { pickedVehicle = $0 }
-        vehicles[1].handler?(vehicles[1]) {}
+        let vehicles = CarPlayTemplates.vehicleSections([Vehicle(id: "bus-1", label: "Bus 1"), Vehicle(id: "bus-2", label: "Bus 2")],
+                                                        favorites: [], recents: []) { pickedVehicle = $0 }
+        let second = vehicles[0].items[1]
+        second.handler?(second) {}
         #expect(pickedVehicle?.id == "bus-2")
 
         var pickedRoute: RouteInfo?

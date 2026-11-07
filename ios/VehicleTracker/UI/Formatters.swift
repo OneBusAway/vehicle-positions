@@ -10,6 +10,31 @@ enum Formatters {
         return date.formatted(style)
     }
 
+    /// "20261024" as "Saturday, October 24": the agency's service day in words.
+    /// The date is built and formatted in the agency's zone, never the
+    /// device's, so the day never shifts by the two zones' offset. A string
+    /// that is not a service date comes back with dashes, "2026-10-24", or as
+    /// it came (Android's `serviceDay` and `serviceDateLabel`).
+    static func serviceDay(_ serviceDate: String, timezone: String, locale: Locale = .current) -> String {
+        guard serviceDate.count == 8, let year = Int(serviceDate.prefix(4)), let month = Int(serviceDate.dropFirst(4).prefix(2)),
+              let day = Int(serviceDate.suffix(2)), let zone = TimeZone(identifier: timezone) else {
+            return serviceDateLabel(serviceDate)
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let components = DateComponents(year: year, month: month, day: day)
+        guard components.isValidDate(in: calendar), let date = calendar.date(from: components) else {
+            return serviceDateLabel(serviceDate)
+        }
+        return date.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: zone).weekday(.wide).month(.wide).day())
+    }
+
+    /// "20260922" as "2026-09-22"; anything else as it came.
+    static func serviceDateLabel(_ serviceDate: String) -> String {
+        guard serviceDate.count == 8 else { return serviceDate }
+        return "\(serviceDate.prefix(4))-\(serviceDate.dropFirst(4).prefix(2))-\(serviceDate.suffix(2))"
+    }
+
     static let metresPerKilometre = 1000.0
 
     static func distance(_ metres: Double) -> String {

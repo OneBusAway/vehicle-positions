@@ -115,7 +115,37 @@ import VehiclePositionsKit
         #expect(locations.handles.count == 1)
         #expect(locations.subscriptions == 1)
         #expect(s.settings.recentRouteIDs == ["R1"])
-        #expect(s.settings.lastVehicleID == "bus-1")
+        #expect(s.settings.recentVehicleIDs == ["bus-1"])
+    }
+
+    /// The vehicle joins Recent only once the server has started a trip on it.
+    @Test func startRemembersTheVehicleOnlyOnceTheServerHasStartedTheTrip() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        api.startError = APIError.status(403, message: "driver is not assigned to this vehicle")
+        await #expect(throws: APIError.status(403, message: "driver is not assigned to this vehicle")) {
+            try await s.start(vehicle: bus, tripID: "T1")
+        }
+        #expect(s.settings.recentVehicleIDs.isEmpty)
+
+        api.startError = nil
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(s.settings.recentVehicleIDs == ["bus-1"])
+        #expect(AppSettings(defaults: defaults).recentVehicleIDs == ["bus-1"], "a relaunch finds it")
+    }
+
+    /// Favourites and recent vehicles belong to the phone, not the account.
+    @Test func signOutKeepsTheFavoritesAndRecentVehicles() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        s.settings.toggleFavorite("4317")
+        try await s.start(vehicle: bus, tripID: "T1")
+        try await s.end()
+
+        await s.signOut()
+        #expect(s.phase == .signedOut)
+        #expect(s.settings.favoriteVehicleIDs == ["4317"])
+        #expect(s.settings.recentVehicleIDs == ["bus-1"])
     }
 
     @Test func startFailureReturnsToIdle() async throws {

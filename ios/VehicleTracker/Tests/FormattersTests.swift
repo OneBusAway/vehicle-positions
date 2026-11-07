@@ -15,6 +15,21 @@ import Testing
         #expect(Formatters.clock(TripFixtures.at(8, 5), timezone: "America/Los_Angeles").hasPrefix("8:05"))
     }
 
+    /// Kiritimati is UTC+14, so a day formatted in the device's zone would
+    /// read as the day before on any machine west of it, CI's UTC included.
+    @Test func serviceDayIsFormattedInTheAgencysZone() {
+        #expect(Formatters.serviceDay("20261024", timezone: "Pacific/Kiritimati", locale: Locale(identifier: "en_US")) == "Saturday, October 24")
+        #expect(Formatters.serviceDay("20260902", timezone: "America/Los_Angeles", locale: Locale(identifier: "en_US")) == "Wednesday, September 2")
+    }
+
+    @Test func aServiceDateThatIsNotADateIsShownAsItCame() {
+        #expect(Formatters.serviceDay("20261399", timezone: "America/Los_Angeles", locale: Locale(identifier: "en_US")) == "2026-13-99")
+        #expect(Formatters.serviceDay("2026102", timezone: "America/Los_Angeles", locale: Locale(identifier: "en_US")) == "2026102")
+        #expect(Formatters.serviceDay("20261024", timezone: "Mars/Olympus", locale: Locale(identifier: "en_US")) == "2026-10-24")
+        #expect(Formatters.serviceDateLabel("20260922") == "2026-09-22")
+        #expect(Formatters.serviceDateLabel("") == "")
+    }
+
     @Test func hexColor() {
         #expect(Color(hex: "0077C0") != nil)
         #expect(Color(hex: "#0077C0") != nil)

@@ -227,8 +227,17 @@ Run these in order against a single trip; check 5 ends it.
 ### Check 1 — Sign in → vehicle → route → run → tracking
 
 1. Launch the app and sign in (or use the auto-start arguments).
-2. With exactly one assigned vehicle the picker shows `Bus 1`; choose it, then
-   route **1 Straight**, then run **T1**.
+2. With exactly one assigned vehicle the app skips **Choose your vehicle**
+   and opens the routes. Tap Back to see it: one tile, `bus-1` with `Bus 1`
+   under it, under **All vehicles**. Tap the tile's star: the tile moves under
+   **Favorites** and the star fills. Relaunch the app: the star is still
+   filled. Tap the tile, then route **1 Straight**. **Choose a run** shows
+   the day's runs as a board under **Vehicle bus-1 · Route 1**, with the
+   service day in words, big start times, a green line at now and a **Now**
+   or **Next** tag; the board opens at the run just gone. Tap the **8:00 AM**
+   run (T1): a popover asks **Start the 8:00 AM run?** with "Route 1 to North
+   on vehicle bus-1." Tap **Start trip**: the row shows a spinner, the other
+   rows dim, and Back is hidden until the server answers.
 
 **Expected outcome:** the Tracking screen appears. The map fills the screen
 and shows the R1 shape drawn in the route colour (`0077C0`) with its three
@@ -335,8 +344,9 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
 2. Sign in as `driver2@example.com` with `driverpass123`.
 
-   **Expected outcome:** **Your vehicle** says "No vehicles are assigned to
-   you. Ask your dispatcher." The logout deleted every refresh token the
+   **Expected outcome:** **Choose your vehicle** says **No vehicles are
+   assigned to you** and **Ask your dispatcher to assign one, then check
+   again.** with a **Check again** button. The logout deleted every refresh token the
    first driver had, so the other phone's is refused:
 
    ```bash
@@ -345,13 +355,14 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    # 401
    ```
 
-   Sign out from the account menu on **Your vehicle**.
+   Sign out from the account menu on **Choose your vehicle**.
 
 3. Sign in as `driver@example.com` again. That driver has one vehicle.
 
-   **Expected outcome:** the app goes straight to the routes for `Bus 1`. Tap
-   Back: **Your vehicle** shows `Bus 1` and the account menu, and it stays
-   there. Pull down to refresh: it still stays. Tap `Bus 1` and carry on with
+   **Expected outcome:** the app goes straight to **Choose a route**, with
+   **Vehicle bus-1** under the title. Tap
+   Back: **Choose your vehicle** shows the `bus-1` tile and the account menu,
+   and it stays there. Pull down to refresh: it still stays. Tap the tile and carry on with
    Check 1.
 
 ### Check 2 — GPS playback drives the screen and the feed
@@ -527,7 +538,8 @@ trips of its own.
    reporting on this phone now."), tap **End on this phone**.
 
    **Expected outcome:** the app goes back to the vehicle picker at once, with
-   "Could not reach the server" above `Bus 1` while the server is down.
+   **Couldn't load your vehicles** and a **Try again** button while the
+   server is down.
 
 2. Start the server again with the same environment, then pick `Bus 1`,
    route **1 Straight** and run **T1**:
@@ -565,8 +577,8 @@ trips of its own.
    ```
 
    **Expected outcome:** the app's own end gets a `404` (no open trip under
-   that id), and the app treats it as ended: it goes back to the routes for
-   `Bus 1`, with no **Trip not ended yet**.
+   that id), and the app treats it as ended: it goes back to **Choose a
+   route** for `bus-1`, with no **Trip not ended yet**.
 
 ### Check 6: Location access is checked and named
 
@@ -582,11 +594,13 @@ playback from step 5 again first, so fixes keep coming during step 3.
 
    Pick `Bus 1`, route **1 Straight**, run **T1**, then run the `grep` again.
 
-   **Expected outcome:** the run list shows "Location is off for OBA Vehicle
-   Tracker. Turn it on in Settings to start a trip." in red, with an **Open
-   Settings** button that opens the app's page in Settings. The `grep` count
-   is the same both times: no trip geometry was fetched and no trip was
-   started on the server.
+   **Expected outcome:** a banner under the title reads "Location is off for
+   OBA Vehicle Tracker. Turn it on in Settings to start a trip." with an
+   **Open Settings** button that opens the app's page in Settings. The `grep`
+   count is the same both times: no trip geometry was fetched and no trip was
+   started on the server. At the largest text sizes (Settings > Accessibility
+   > Display & Text Size > Larger Text, slider to the end) the banner is still
+   under the title, above the board, with its button on screen.
 
 2. Give location back and start the run again:
 
@@ -607,6 +621,33 @@ playback from step 5 again first, so fixes keep coming during step 3.
    back on there: the next fix clears the line. If it reads **No GPS signal ·
    Position paused** instead, the simulator's playback stopped; start it
    again (step 5). End the trip afterwards.
+
+### Check 6b: Change vehicle after a refused start
+
+A 403 on a start means the driver's vehicles changed after the vehicle screen
+loaded, so **Change vehicle** loads them again. Back does not.
+
+1. Pick `Bus 1` and route **1 Straight**. On **Choose a run**, before tapping
+   a run, take the assignment away:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X DELETE \
+     "$BASE/api/v1/admin/users/$USER_ID/vehicles/bus-1" \
+     -H "Authorization: Bearer $ADMIN_TOKEN"
+   ```
+
+   Tap run **T1**, then **Start trip**.
+
+   **Expected outcome:** a banner under the title reads **You're not assigned
+   to vehicle bus-1.** with a **Change vehicle** button. Tap it: **Choose your
+   vehicle** loads again and says **No vehicles are assigned to you** with
+   **Check again**; the `bus-1` tile is gone.
+
+2. Give the assignment back (the `POST .../admin/assignments` from setup step
+   3), then tap **Check again**.
+
+   **Expected outcome:** with its one vehicle back, the app goes straight on
+   to **Choose a route**, as a fresh sign-in does.
 
 ## CarPlay
 
@@ -677,9 +718,15 @@ With the server running and the app signed in but idle (`-autoServer …
 -autoEmail … -autoPassword …`, no `-autoVehicle`/`-autoTrip`), open the
 CarPlay window and click **Start trip** in it — `osascript ... click at {x,
 y}` on the Simulator process, with coordinates read from a screenshot.
-Screenshot the resulting vehicle/route/run picker:
-`/tmp/vt-carplay-routes.png`. If clicking cannot be scripted, say so; the
-picker's contents are covered by `CarPlayTemplatesTests` instead.
+Expect the phone's words: **Choose your vehicle** (skipped with one vehicle),
+**Choose a route** with **Recent** and **All routes**, and **Choose a run**
+opening at the run just gone, with **Now** or **Next** on the run after it.
+Clicking a run asks **Start the 8:00 AM run? Route 1 to North on vehicle
+bus-1.** with **Start trip** and **Cancel**; a refused start says the phone's
+sentence, such as **You're not assigned to vehicle bus-1.**, with **OK**.
+Screenshot the picker: `/tmp/vt-carplay-routes.png`. If clicking cannot be
+scripted, say so; the picker's contents are covered by `CarPlayTemplatesTests`
+instead.
 
 ### Real car and background caveats
 

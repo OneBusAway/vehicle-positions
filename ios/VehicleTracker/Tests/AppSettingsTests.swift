@@ -88,6 +88,48 @@ import UIKit
         }
     }
 
+    @Test func aFavoriteTogglesOnAndOffAndIsThereOnTheNextLaunch() async {
+        await withDefaults { defaults in
+            let settings = AppSettings(defaults: defaults)
+            #expect(settings.favoriteVehicleIDs.isEmpty)
+            settings.toggleFavorite("4317")
+            settings.toggleFavorite("7034")
+            #expect(settings.favoriteVehicleIDs == ["4317", "7034"])
+            #expect(AppSettings(defaults: defaults).favoriteVehicleIDs == ["4317", "7034"], "a relaunch finds them")
+            settings.toggleFavorite("4317")
+            #expect(settings.favoriteVehicleIDs == ["7034"])
+            #expect(AppSettings(defaults: defaults).favoriteVehicleIDs == ["7034"])
+        }
+    }
+
+    @Test func recentVehiclesKeepTheFiveNewestFirst() async {
+        await withDefaults { defaults in
+            let settings = AppSettings(defaults: defaults)
+            #expect(settings.recentVehicleIDs.isEmpty)
+            for id in ["1", "2", "3", "4", "5"] { settings.rememberVehicle(id) }
+            #expect(settings.recentVehicleIDs == ["5", "4", "3", "2", "1"])
+            settings.rememberVehicle("6")
+            #expect(settings.recentVehicleIDs == ["6", "5", "4", "3", "2"], "the sixth drops the oldest")
+            settings.rememberVehicle("4")
+            #expect(settings.recentVehicleIDs == ["4", "6", "5", "3", "2"], "a repeat moves to the front")
+            #expect(AppSettings(defaults: defaults).recentVehicleIDs == ["4", "6", "5", "3", "2"], "a relaunch finds them")
+        }
+    }
+
+    /// Builds before favourites kept only the last vehicle. It shows under
+    /// Recent after the update, and its key is left where it was.
+    @Test func theOldLastVehicleIsTheOneRecentVehicleUntilAStartWritesTheList() async {
+        await withDefaults { defaults in
+            defaults.set("4317", forKey: "lastVehicleID")
+            let settings = AppSettings(defaults: defaults)
+            #expect(settings.recentVehicleIDs == ["4317"])
+            settings.rememberVehicle("7034")
+            #expect(settings.recentVehicleIDs == ["7034", "4317"])
+            #expect(AppSettings(defaults: defaults).recentVehicleIDs == ["7034", "4317"])
+            #expect(defaults.string(forKey: "lastVehicleID") == "4317", "the old key is never deleted")
+        }
+    }
+
     /// Device management changes the settings from outside the app, which
     /// doesn't post `didChangeNotification` to it. A second `UserDefaults` on
     /// the same suite stands in for that.

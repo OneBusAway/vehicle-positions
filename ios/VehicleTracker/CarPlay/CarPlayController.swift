@@ -435,15 +435,13 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     /// Runs `work`, then hands what it produced to `then` on the car screen.
     /// Every flow that fetches something wants the same guards around that:
     /// nothing may touch the interface controller once the car has gone,
-    /// an expired sign-in pops to the root, and anything else is an alert.
-    /// `serverMessage` shows what the server said, or the session's own
-    /// reason for refusing, in place of `failureMessage` when there is one.
-    /// Starting a trip wants that; the pickers do not. Only one load runs at a time: a tap that
-    /// lands while one is pending is dropped, so a slow fetch cannot be
+    /// an expired sign-in pops to the root, and anything else presents the
+    /// alert `failed` builds for it. Only one load runs at a time: a tap
+    /// that lands while one is pending is dropped, so a slow fetch cannot be
     /// asked for twice and push its list twice.
-    private func load<T: Sendable>(_ failureMessage: String, serverMessage: Bool = false,
-                                   _ work: @escaping @MainActor () async throws -> T,
-                                   then: @escaping @MainActor (T) -> Void) {
+    private func load<T: Sendable>(_ work: @escaping @MainActor () async throws -> T,
+                                   then: @escaping @MainActor (T) -> Void,
+                                   failed: @escaping @MainActor (any Error) -> CPAlertTemplate) {
         guard !loading else { return }
         loading = true
         Task { [weak self] in
@@ -461,39 +459,40 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                     interface.popToRootTemplate(animated: true, completion: nil)
                     return
                 }
-                if serverMessage, case APIError.status(_, let message) = error, !message.isEmpty {
-                    presentError(message)
-                } else if serverMessage, let refusal = error as? TripSessionError {
-                    // The car can't open Settings; the text says where to go.
-                    presentError(refusal.localizedDescription)
-                } else {
-                    presentError(failureMessage)
-                }
+                interface.presentTemplate(failed(error), animated: true, completion: nil)
             }
         }
     }
 
-    /// Vehicle → route → run, on list templates (spec §6.4). Sign-in stays on
-    /// the phone; everything after it happens here.
+    private func dismissAlert() {
+        interface.dismissTemplate(animated: true, completion: nil)
+    }
+
+    /// Vehicle → route → run, on list templates (spec §6.4), in the phone's
+    /// words and order. Sign-in stays on the phone; everything after it
+    /// happens here.
     private func startFlow() {
-        load(String(localized: "Could not load your vehicles")) {
+        load {
             try await self.session.loadVehicles()
         } then: { [weak self] _ in
             guard let self else { return }
             if session.vehicles.count == 1 {
                 pickRoute(for: session.vehicles[0])
             } else {
-                let items = CarPlayTemplates.vehicleItems(session.vehicles) { [weak self] vehicle in
+                let sections = CarPlayTemplates.vehicleSections(session.vehicles, favorites: session.settings.favoriteVehicleIDs,
+                                                                recents: session.settings.recentVehicleIDs) { [weak self] vehicle in
                     guard let self, !loading else { return }
                     pickRoute(for: vehicle)
                 }
-                interface.pushTemplate(CarPlayTemplates.list(title: String(localized: "Your vehicle"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
+                interface.pushTemplate(CarPlayTemplates.list(title: PickerText.vehiclesTitle, sections: sections, maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
             }
+        } failed: { [weak self] _ in
+            CarPlayTemplates.errorAlert(PickerText.vehiclesLoadFailed) { self?.dismissAlert() }
         }
     }
 
     private func pickRoute(for vehicle: Vehicle) {
-        load(String(localized: "Could not load routes")) {
+        load {
             try await self.session.routes()
         } then: { [weak self] routes in
             guard let self else { return }
@@ -501,12 +500,14 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                 guard let self, !loading else { return }
                 pickTrip(vehicle: vehicle, route: route)
             }
-            interface.pushTemplate(CarPlayTemplates.list(title: vehicle.label.isEmpty ? vehicle.id : vehicle.label, sections: sections, maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
+            interface.pushTemplate(CarPlayTemplates.list(title: PickerText.routesTitle, sections: sections, maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount), animated: true, completion: nil)
+        } failed: { [weak self] _ in
+            CarPlayTemplates.errorAlert(PickerText.routesLoadFailed) { self?.dismissAlert() }
         }
     }
 
     private func pickTrip(vehicle: Vehicle, route: RouteInfo) {
-        load(String(localized: "Could not load runs")) {
+        load {
             try await self.session.trips(routeID: route.id)
         } then: { [weak self] page in
             guard let self else { return }
@@ -514,44 +515,50 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                 guard let self, !loading else { return }
                 confirmStart(vehicle: vehicle, route: route, trip: trip, timezone: page.timezone)
             }
-            let list = CarPlayTemplates.list(title: String(localized: "Route \(route.shortName)"), sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount)
-            list.emptyViewTitleVariants = [String(localized: "No runs today")]
+            let list = CarPlayTemplates.list(title: PickerText.runsTitle, sections: [(nil, items)], maxItems: CPListTemplate.maximumItemCount, maxSections: CPListTemplate.maximumSectionCount)
+            list.emptyViewTitleVariants = [PickerText.noRunsTitle(route: route)]
             interface.pushTemplate(list, animated: true, completion: nil)
+        } failed: { [weak self] _ in
+            CarPlayTemplates.errorAlert(PickerText.runsLoadFailed) { self?.dismissAlert() }
         }
     }
 
     private func confirmStart(vehicle: Vehicle, route: RouteInfo, trip: TripSummary, timezone: String) {
-        let start = CPAlertAction(title: String(localized: "Start"), style: .default) { [weak self] _ in
-            guard let self, !loading else { return }
-            guard case .idle = session.phase else {
-                // A trip is already starting or running — started on the
-                // phone, most likely, while this alert sat on the car screen.
-                // Say so rather than letting the button do nothing. The error
-                // waits for the dismissal: only one template may be presented.
-                interface.dismissTemplate(animated: true) { [weak self] _, _ in
-                    self?.presentError(TripSessionError.busy.localizedDescription)
+        let alert = CarPlayTemplates.startAlert(
+            time: Formatters.clock(trip.startsAt, timezone: timezone), route: PickerText.name(of: route),
+            headsign: trip.headsign, vehicle: vehicle.id,
+            onStart: { [weak self] in
+                guard let self, !loading else { return }
+                guard case .idle = session.phase else {
+                    // A trip is already starting or running: started on the
+                    // phone, most likely, while this alert sat on the car screen.
+                    // Say so rather than letting the button do nothing. The alert
+                    // waits for the dismissal: only one template may be presented.
+                    interface.dismissTemplate(animated: true) { [weak self] _, _ in
+                        guard let self else { return }
+                        interface.presentTemplate(CarPlayTemplates.startRefusedAlert(TripSessionError.busy, vehicleID: vehicle.id) { [weak self] in self?.dismissAlert() },
+                                                  animated: true, completion: nil)
+                    }
+                    return
                 }
-                return
-            }
-            interface.dismissTemplate(animated: true, completion: nil)
-            load(String(localized: "Could not start the trip"), serverMessage: true) {
-                try await self.session.start(vehicle: vehicle, tripID: trip.id)
-            } then: { [weak self] _ in
-                self?.interface.popToRootTemplate(animated: true, completion: nil)
-            }
-        }
-        let cancel = CPAlertAction(title: String(localized: "Cancel"), style: .cancel) { [weak self] _ in
-            self?.interface.dismissTemplate(animated: true, completion: nil)
-        }
-        let title = "\(Formatters.clock(trip.startsAt, timezone: timezone)) → \(trip.headsign)"
-        interface.presentTemplate(CPAlertTemplate(titleVariants: [String(localized: "Start \(title)?"), String(localized: "Start this run?")], actions: [start, cancel]), animated: true, completion: nil)
-    }
-
-    private func presentError(_ message: String) {
-        let ok = CPAlertAction(title: String(localized: "OK"), style: .cancel) { [weak self] _ in
-            self?.interface.dismissTemplate(animated: true, completion: nil)
-        }
-        interface.presentTemplate(CPAlertTemplate(titleVariants: [message], actions: [ok]), animated: true, completion: nil)
+                // The start waits for this alert to go: a refusal that came
+                // back fast would present over it, and the car shows one alert
+                // at a time. A dismissal that fails leaves the alert, and its
+                // Start, in place.
+                interface.dismissTemplate(animated: true) { [weak self] done, _ in
+                    guard let self, done else { return }
+                    load {
+                        try await self.session.start(vehicle: vehicle, tripID: trip.id)
+                    } then: { [weak self] _ in
+                        self?.interface.popToRootTemplate(animated: true, completion: nil)
+                    } failed: { [weak self] error in
+                        CarPlayTemplates.startRefusedAlert(error, vehicleID: vehicle.id) { self?.dismissAlert() }
+                    }
+                }
+            },
+            onCancel: { [weak self] in self?.dismissAlert() }
+        )
+        interface.presentTemplate(alert, animated: true, completion: nil)
     }
 
     // MARK: End
