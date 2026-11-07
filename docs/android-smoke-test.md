@@ -5,7 +5,7 @@ against a real local server and a real (or emulated) Android device end to
 end. It complements the automated test suites (`make test` for the server,
 `./gradlew :app:testDebugUnitTest` for the app) — those check units of
 behavior in isolation; this checks that the whole system actually works
-together: login, the vehicle/route/run pickers, permissions, GPS capture,
+together: login and sign-out, the vehicle/route/run pickers, permissions, GPS capture,
 network loss, task removal, an interrupted shift, and trip lifecycle, as seen
 through both the app UI
 and the GTFS-RT feed.
@@ -200,7 +200,8 @@ a route or set points interactively.)
 
 ## The checks
 
-Run checks 1-5 in order against a single trip; check 5 ends it. Check 6 tries
+Run checks 1-5 in order against a single trip; check 5 ends it. Check 1b runs
+at Check 1's run step and leaves the same driver signed in. Check 6 tries
 to restart the server without a schedule and needs no trip at all. Check 2b
 needs a run scheduled around now, so it has its own setup and its own trips: run
 it on its own, before or after the rest.
@@ -237,6 +238,64 @@ foreground-service notification is in the status bar.
 
 There is no route-id or trip-id text box anywhere in this flow any more. The
 ids now come from the catalog, which is the point of Check 2.
+
+### Check 1b: Sign out from any step
+
+Run this at Check 1's **Choose a run**, before you tap the run. It ends signed
+in as the same driver, so Check 1 carries on from there. First add a second
+driver with no vehicle, and sign the first driver in once more with curl, which
+stands in for another phone:
+
+```bash
+curl -s -X POST "$BASE/api/v1/admin/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"Second Driver","email":"driver2@example.com","password":"driverpass123","role":"driver"}'
+
+OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"driver@example.com","password":"driverpass123"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["refresh_token"])')
+```
+
+1. On **Choose a run**, tap **Account** (the person at the top right).
+
+   **Expected outcome:** the menu shows `driver@example.com`, then the server
+   (`10.0.2.2:8081` on an emulator) and `Version 0.1.0 (1)` in grey, then
+   **Sign out**. Tap **Sign out**: "Sign out?" with "The next driver can sign
+   in on this phone." Tap **Sign out** again: **Sign in** opens with the server
+   as one line and the email empty. Back closes the app. The server log has
+   the logout:
+
+   ```bash
+   grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log
+   # ..."method":"POST","path":"/api/v1/auth/logout","status":204...
+   ```
+
+2. Sign in as `driver2@example.com` with `driverpass123`.
+
+   **Expected outcome:** **Choose your vehicle** says **No vehicles are
+   assigned to you** and **Ask your dispatcher to assign one, then check
+   again.** with a **Check again** button, and the account menu at the top
+   right. The logout deleted every refresh token the first driver had, so the
+   other phone's is refused:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/api/v1/auth/refresh" \
+     -H 'Content-Type: application/json' -d "{\"refresh_token\":\"$OTHER_REFRESH\"}"
+   # 401
+   ```
+
+   Sign out from the account menu on **Choose your vehicle**.
+
+3. Sign in as `driver@example.com` again. That driver has one vehicle.
+
+   **Expected outcome:** the app goes straight to **Choose a route**, with the
+   `bus-1` chip and no Back, and the account menu is there too, so a driver
+   with one vehicle can always sign out. Tap **1 Straight** and carry on with
+   Check 1 from step 4.
+
+Tracking and **Resume your trip?** have no account menu: a driver ends the
+trip first, then signs out.
 
 ### Check 2 — GPS playback appears in the feed
 

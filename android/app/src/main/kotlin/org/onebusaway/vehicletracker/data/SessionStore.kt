@@ -3,6 +3,7 @@ package org.onebusaway.vehicletracker.data
 import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -29,8 +30,9 @@ import java.util.Base64
  * by a build that did not keep them.
  *
  * [email] is the one the driver last signed in with. It stays when the tokens are cleared, so
- * signing in again after a session ends asks only for the password; null before the first sign-in,
- * or when an older build stored the session.
+ * signing in again after a session ends asks only for the password, and goes when the driver signs
+ * out, for the next driver; null before the first sign-in, after a sign-out, or when an older build
+ * stored the session.
  */
 data class Session(
     val serverUrl: String?,
@@ -117,12 +119,18 @@ interface SessionStore {
     val session: Flow<Session>
     suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens)
 
-    /** Saves the pair a refresh handed out, keeping the server URL and the email. */
+    /**
+     * Saves the pair a refresh handed out, keeping the server URL and the email. Once the tokens
+     * are cleared it saves nothing: a refresh still in flight then would sign the phone back in.
+     */
     suspend fun saveRefreshed(tokens: IssuedTokens)
 
     /** Forgets the refresh token and keeps the access token, which works until it expires. */
     suspend fun dropRefreshToken()
     suspend fun clearToken()
+
+    /** Readies the phone for the next driver: the tokens and the email go, and the server stays. */
+    suspend fun clearTokenAndEmail()
 }
 
 /** Internal, not private, only because [org.onebusaway.vehicletracker.di.AppModule] provides the store. */
@@ -250,7 +258,10 @@ class EncryptedSessionStore(
 
     override suspend fun saveRefreshed(tokens: IssuedTokens) = save(serverUrl = null, email = null, tokens)
 
-    /** Saves [tokens], and [serverUrl] and [email] unless they are null. */
+    /**
+     * Saves [tokens], and [serverUrl] and [email] unless they are null. A refresh, with no
+     * [serverUrl], saves nothing when no access token is stored.
+     */
     private suspend fun save(serverUrl: String?, email: String?, tokens: IssuedTokens) {
         // Encrypt before opening the transaction, so a Keystore failure reaches the caller without
         // half-writing a session: AuthRepository.login turns it into Result.failure, and
@@ -258,6 +269,10 @@ class EncryptedSessionStore(
         val access = cryptor.encrypt(tokens.accessToken)
         val refresh = cryptor.encrypt(tokens.refreshToken)
         dataStore.edit { prefs ->
+            // A refresh renews the stored session. With no access token stored, that session was
+            // cleared while the refresh was out, by a sign-out or a 401, and writing the refresh
+            // would sign the old driver back in.
+            if (serverUrl == null && !prefs.contains(Keys.TOKEN)) return@edit
             if (serverUrl != null) prefs[Keys.SERVER_URL] = serverUrl
             if (email != null) prefs[Keys.EMAIL] = email
             prefs[Keys.TOKEN] = access
@@ -273,12 +288,21 @@ class EncryptedSessionStore(
     }
 
     override suspend fun clearToken() {
+        dataStore.edit { prefs -> removeTokens(prefs) }
+    }
+
+    override suspend fun clearTokenAndEmail() {
         dataStore.edit { prefs ->
-            prefs.remove(Keys.TOKEN)
-            prefs.remove(Keys.TOKEN_ISSUED_AT)
-            prefs.remove(Keys.REFRESH_TOKEN)
-            prefs.remove(Keys.TOKEN_EXPIRES_AT)
-            prefs.remove(Keys.LEGACY_TOKEN)
+            removeTokens(prefs)
+            prefs.remove(Keys.EMAIL)
         }
+    }
+
+    private fun removeTokens(prefs: MutablePreferences) {
+        prefs.remove(Keys.TOKEN)
+        prefs.remove(Keys.TOKEN_ISSUED_AT)
+        prefs.remove(Keys.REFRESH_TOKEN)
+        prefs.remove(Keys.TOKEN_EXPIRES_AT)
+        prefs.remove(Keys.LEGACY_TOKEN)
     }
 }

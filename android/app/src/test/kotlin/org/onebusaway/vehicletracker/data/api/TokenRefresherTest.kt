@@ -200,10 +200,23 @@ class TokenRefresherTest {
         assertEquals(listOf("Bearer a1", null, "Bearer a2"), requests.map { it.getHeader("Authorization") })
     }
 
+    // A driver signing out at the end of a shift has often outlived the access token.
+    @Test fun `logout with an expired token refreshes and logs out`() = runTest {
+        val holder = holder()
+        val auth = AuthRepository(sessions, holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), clock = { NOW })
+
+        val result = auth.logout()
+
+        assertTrue("expected success, got ${result.exceptionOrNull()}", result.isSuccess)
+        val requests = recorded()
+        assertEquals(listOf("/api/v1/auth/logout", "/api/v1/auth/refresh", "/api/v1/auth/logout"), requests.map { it.path })
+        assertEquals(listOf("Bearer a1", null, "Bearer a2"), requests.map { it.getHeader("Authorization") })
+    }
+
     @Test fun `a wrong password with a session stored sends no token and refreshes nothing`() = runTest {
         val holder = holder()
         holder.api() // seeds the cached copy with a1, the token AuthInterceptor would otherwise send
-        val auth = AuthRepository(sessions, holder.apiFactory, FakeOfflineFixQueue(), clock = { NOW })
+        val auth = AuthRepository(sessions, holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), clock = { NOW })
 
         val result = auth.login(serverUrl, "d@example.com", "wrong")
 
@@ -356,7 +369,7 @@ class TokenRefresherTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         try {
             val holder = holder()
-            val auth = AuthRepository(sessions, holder.apiFactory, FakeOfflineFixQueue(), clock = { NOW })
+            val auth = AuthRepository(sessions, holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), clock = { NOW })
             val vm = VehicleViewModel(VehicleRepository(TrackerApiProvider(holder::api)), FakeVehiclePrefsStore(), auth)
             withTimeout(5_000) { vm.uiState.first { it !is VehiclesUiState.Loading } }
         } finally {
@@ -387,8 +400,8 @@ class TokenRefresherTest {
     }
 
     /**
-     * Answers like the server. The API takes only [accepted] and answers 401 to anything else.
-     * `/auth/refresh` answers with [refreshReply], except to a refresh token it has already
+     * Answers like the server. The API takes only [accepted] and answers 401 to anything else, and
+     * a logout it takes with 204. `/auth/refresh` answers with [refreshReply], except to a refresh token it has already
      * exchanged, which it refuses: the server takes that for a stolen token.
      */
     private class FakeServer : Dispatcher() {
@@ -407,8 +420,9 @@ class TokenRefresherTest {
                     refreshReply().also { if (it.handsOutTokens()) spent += presented }
                 }
             }
-            request.getHeader("Authorization") == "Bearer $accepted" -> MockResponse().setBody("[]")
-            else -> unauthorized("invalid or expired token").also { onUnauthorized() }
+            request.getHeader("Authorization") != "Bearer $accepted" -> unauthorized("invalid or expired token").also { onUnauthorized() }
+            request.path == "/api/v1/auth/logout" -> MockResponse().setResponseCode(204)
+            else -> MockResponse().setBody("[]")
         }
 
         private fun MockResponse.handsOutTokens() =

@@ -57,6 +57,16 @@
     <!-- In a setup screen's search field, once something is typed. -->
     <string name="setup_clear_search">Clear search</string>
 
+    <!-- The account menu at the end of each setup screen's header: the driver's email, the server, then this. -->
+    <string name="account_menu">Account</string>
+    <!-- The app's version, then its build number in brackets, e.g. "Version 0.1.0 (1)". -->
+    <string name="account_version">Version %1$s</string>
+    <string name="account_sign_out">Sign out</string>
+    <!-- Asked before signing out, since the phone is usually going to the next driver. -->
+    <string name="account_sign_out_title">Sign out?</string>
+    <string name="account_sign_out_message">The next driver can sign in on this phone.</string>
+    <string name="account_sign_out_cancel">Cancel</string>
+
     <!-- Vehicle selection screen -->
     <string name="vehicles_title">Choose your vehicle</string>
     <string name="vehicles_empty">No vehicles are assigned to you</string>

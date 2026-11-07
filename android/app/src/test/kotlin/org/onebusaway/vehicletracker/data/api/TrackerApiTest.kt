@@ -44,6 +44,20 @@ class TrackerApiTest {
         assertEquals(LoginResponse(accessToken = "jwt-abc", refreshToken = "a1b2c3", expiresIn = 900), resp)
     }
 
+    // POST /api/v1/auth/logout reads no body and answers 204 (handleLogout in auth.go).
+    @Test fun `logout posts with the token and no body`() = runTest {
+        token = "jwt-abc"
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        api.logout()
+
+        val recorded = server.takeRequest()
+        assertEquals("/api/v1/auth/logout", recorded.path)
+        assertEquals("POST", recorded.method)
+        assertEquals("Bearer jwt-abc", recorded.getHeader("Authorization"))
+        assertEquals(0L, recorded.bodySize)
+    }
+
     @Test fun `auth interceptor adds bearer token when present`() = runTest {
         token = "jwt-abc"
         server.enqueue(MockResponse().setBody("""[]"""))

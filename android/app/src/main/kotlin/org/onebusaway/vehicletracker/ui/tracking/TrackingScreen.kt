@@ -20,14 +20,11 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
@@ -58,6 +55,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.TrackingState
+import org.onebusaway.vehicletracker.ui.components.InkButton
+import org.onebusaway.vehicletracker.ui.components.QuietButton
 import org.onebusaway.vehicletracker.ui.map.RouteMap
 import org.onebusaway.vehicletracker.ui.map.glEsVersion
 import org.onebusaway.vehicletracker.ui.map.supportsMap
@@ -205,13 +204,16 @@ fun TrackingScreenContent(
             title = { Text(stringResource(R.string.tracking_end_trip_dialog_title)) },
             text = { Text(endTripMessage(state.tracking)) },
             confirmButton = {
-                InkButton(stringResource(R.string.tracking_end_trip_dialog_confirm)) {
-                    showConfirmDialog = false
-                    onEndTripClick()
-                }
+                InkButton(
+                    stringResource(R.string.tracking_end_trip_dialog_confirm),
+                    onClick = {
+                        showConfirmDialog = false
+                        onEndTripClick()
+                    },
+                )
             },
             dismissButton = {
-                QuietButton(stringResource(R.string.tracking_end_trip_dialog_cancel)) { showConfirmDialog = false }
+                QuietButton(stringResource(R.string.tracking_end_trip_dialog_cancel), onClick = { showConfirmDialog = false })
             },
         )
     }
@@ -265,26 +267,4 @@ private fun EndTripErrorDialog(onRetry: () -> Unit, onEndLocally: () -> Unit, on
         confirmButton = { InkButton(stringResource(R.string.tracking_end_trip_error_retry), onRetry) },
         dismissButton = { QuietButton(stringResource(R.string.tracking_end_trip_error_end_locally), onEndLocally) },
     )
-}
-
-/** A dialog's main action, filled in ink rather than red: red means early on this screen. */
-@Composable
-private fun InkButton(text: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.onSurface,
-            contentColor = MaterialTheme.colorScheme.surface,
-        ),
-    ) {
-        Text(text)
-    }
-}
-
-/** A dialog's other action, in ink rather than the theme's green. */
-@Composable
-private fun QuietButton(text: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) {
-        Text(text)
-    }
 }

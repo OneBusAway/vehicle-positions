@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,8 +53,9 @@ private val NoBackInset = 14.dp
 
 /**
  * The top of the route and run steps: Back, then the trip so far as chips that each go back to their own step, then
- * the step the driver is on. [onBack] is null on a first step, which has nothing to go back to, and [onBusClick] is
- * null when the driver's only bus was chosen for them: the chip still says which bus it is, but is not a button.
+ * the step the driver is on, and [account] at the end. [onBack] is null on a first step, which has nothing to go back
+ * to, and [onBusClick] is null when the driver's only bus was chosen for them: the chip still says which bus it is,
+ * but is not a button.
  */
 @Composable
 internal fun SetupHeader(
@@ -64,12 +66,9 @@ internal fun SetupHeader(
     modifier: Modifier = Modifier,
     route: RouteBadgeModel? = null,
     onRouteClick: () -> Unit = {},
+    account: @Composable () -> Unit,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth().height(56.dp).padding(start = 4.dp, end = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    HeaderRow(modifier, Arrangement.spacedBy(6.dp)) {
         if (onBack != null) {
             SetupBackButton(onBack)
         } else {
@@ -99,7 +98,29 @@ internal fun SetupHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        account()
     }
+}
+
+/** The top of the bus step, which has no step before it and no trip yet: the same row, with only [account] in it. */
+@Composable
+internal fun FirstStepHeader(account: @Composable () -> Unit) {
+    HeaderRow(Modifier, Arrangement.End) { account() }
+}
+
+// The end padding is small because the account button brings its own touch target.
+@Composable
+private fun HeaderRow(
+    modifier: Modifier,
+    arrangement: Arrangement.Horizontal,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
+        horizontalArrangement = arrangement,
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }
 
 /** The setup screens' Back, also on the checklist before a trip, which has no trip so far to show beside it. */

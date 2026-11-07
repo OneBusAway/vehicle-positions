@@ -52,7 +52,7 @@ class FakeSessionStore : SessionStore {
     val state = MutableStateFlow(Session(serverUrl = null, token = null, issuedAtEpochSec = null))
     override val session = state
 
-    /** Thrown raw from [clearToken], as `DataStore.edit` throws it. */
+    /** Thrown raw from [clearToken] and [clearTokenAndEmail], as `DataStore.edit` throws it. */
     var clearFailure: Exception? = null
 
     override suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens) {
@@ -65,7 +65,9 @@ class FakeSessionStore : SessionStore {
             email = email,
         )
     }
+    /** Saves nothing once the tokens are cleared, as [EncryptedSessionStore] does. */
     override suspend fun saveRefreshed(tokens: IssuedTokens) {
+        if (state.value.token == null) return
         state.value = state.value.copy(
             token = tokens.accessToken,
             issuedAtEpochSec = tokens.issuedAtEpochSec,
@@ -77,6 +79,10 @@ class FakeSessionStore : SessionStore {
     override suspend fun clearToken() {
         clearFailure?.let { throw it }
         state.value = state.value.copy(token = null, issuedAtEpochSec = null, refreshToken = null, accessExpiresAtEpochSec = null)
+    }
+    override suspend fun clearTokenAndEmail() {
+        clearToken()
+        state.value = state.value.copy(email = null)
     }
 }
 
