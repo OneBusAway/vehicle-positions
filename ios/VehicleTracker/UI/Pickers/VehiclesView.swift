@@ -8,6 +8,9 @@ struct VehiclesView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var path: [PickerRoute]
+    /// Bumped when the list has to be loaded again on a return here; see
+    /// `PickerFlow`.
+    let reload: Int
     @State private var load: PickerLoad<[Vehicle]> = .loading
     /// Bumped by Check again and Try again, so the load task runs again.
     @State private var loadRequest = 0
@@ -25,6 +28,13 @@ struct VehiclesView: View {
             .task(id: loadRequest) {
                 guard case .loading = load else { return }
                 await load()
+            }
+            // Change vehicle: the vehicles changed under the list, so it is
+            // loaded again, and skips again if one is all that is left, as
+            // Android's bus step does when it is reached that way.
+            .onChange(of: reload) {
+                skippedOnce = false
+                loadAgain()
             }
             .sensoryFeedback(.selection, trigger: session.settings.favoriteVehicleIDs)
     }

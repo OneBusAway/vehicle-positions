@@ -17,6 +17,8 @@ struct TripsView: View {
     let route: RouteInfo
     /// Change vehicle empties it, to land on the vehicle screen.
     @Binding var path: [PickerRoute]
+    /// Change vehicle bumps it, so that screen loads its vehicles again.
+    @Binding var vehicleReload: Int
     @State private var load: PickerLoad<RouteTripsPage> = .loading
     /// Bumped by Try again and Reload, so the load task runs again.
     @State private var loadRequest = 0
@@ -194,6 +196,7 @@ struct TripsView: View {
     private func act(on action: StartRefusal.Action?) {
         switch action {
         case .changeVehicle:
+            vehicleReload += 1
             path = []
         case .tryAgain:
             // The driver confirmed this run already; it is not asked again.
