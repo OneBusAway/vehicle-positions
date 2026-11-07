@@ -88,8 +88,9 @@ class TrackingNotification(private val context: Context) {
             .build()
 
     /**
-     * Degraded-path variant shown when location updates stopped and need a foreground tap to resume. It sounds once:
-     * posting it again while it is still showing stays silent.
+     * Degraded-path variant shown when location updates stopped and need a foreground tap to resume, and by
+     * [RestartTracking] for a trip it did not start again after a reboot or an update. It sounds once: posting it again
+     * while it is still showing stays silent.
      */
     fun buildResumeNotification(): Notification =
         baseBuilder(ATTENTION_CHANNEL_ID, NotificationCompat.PRIORITY_DEFAULT)

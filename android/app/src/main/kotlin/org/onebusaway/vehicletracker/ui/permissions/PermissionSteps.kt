@@ -2,6 +2,7 @@ package org.onebusaway.vehicletracker.ui.permissions
 
 import android.os.Build
 import androidx.compose.runtime.Immutable
+import org.onebusaway.vehicletracker.service.canReportInBackground
 
 /**
  * What the phone has granted, read again at every step, and the Android version that decides what there is to ask:
@@ -23,8 +24,8 @@ internal data class Grants(
     fun allows(row: PermissionRow): Boolean = when (row) {
         PermissionRow.LOCATION -> fine || coarse
         PermissionRow.PRECISE -> fine
-        // Before Android 10 location is not split into while in use and all the time: having it is having it all.
-        PermissionRow.BACKGROUND -> if (sdk < Build.VERSION_CODES.Q) fine || coarse else background
+        // The same rule decides whether a trip can restart by itself after a reboot.
+        PermissionRow.BACKGROUND -> canReportInBackground(sdk, fine, coarse, background)
         PermissionRow.NOTIFICATIONS -> sdk < Build.VERSION_CODES.TIRAMISU || notifications
         PermissionRow.BATTERY -> batteryExempt
         // Known only once the phone has been asked, on the way to a trip.

@@ -39,8 +39,13 @@ import org.onebusaway.vehicletracker.data.map.MapFileStore
 import org.onebusaway.vehicletracker.data.map.MapRepository
 import org.onebusaway.vehicletracker.data.map.MapServer
 import org.onebusaway.vehicletracker.data.map.TrackerMapServer
+import org.onebusaway.vehicletracker.service.RestartTracking
+import org.onebusaway.vehicletracker.service.ResumeNotifier
 import org.onebusaway.vehicletracker.service.ServiceController
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
+import org.onebusaway.vehicletracker.service.TrackingNotification
+import org.onebusaway.vehicletracker.service.appInFront
+import org.onebusaway.vehicletracker.service.canReportInBackground
 import java.io.File
 import java.time.Duration
 import java.time.ZoneId
@@ -250,4 +255,21 @@ object AppModule {
     @Singleton
     fun provideServiceController(@ApplicationContext context: Context): ServiceController =
         ServiceControllerImpl(context)
+
+    @Provides
+    fun provideRestartTracking(
+        @ApplicationContext context: Context,
+        tripStateStore: TripStateStore,
+        serviceController: ServiceController,
+        @EpochSecondsClock clock: () -> Long,
+    ): RestartTracking = RestartTracking(
+        tripStateStore = tripStateStore,
+        serviceController = serviceController,
+        resumeNotifier = ResumeNotifier {
+            TrackingNotification(context).run { postIfPermitted(buildResumeNotification()) }
+        },
+        clock = clock,
+        canReportInBackground = { context.canReportInBackground() },
+        appInFront = ::appInFront,
+    )
 }
