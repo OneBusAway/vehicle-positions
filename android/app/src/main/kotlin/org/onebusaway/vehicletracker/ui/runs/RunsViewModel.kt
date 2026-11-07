@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
+import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.CatalogRepository
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripRepository
@@ -46,6 +47,16 @@ fun Throwable.toTripError(): TripError = when {
     else -> TripError.OTHER
 }
 
+/** How a start came out. A session the server has ended has no banner: the screen leaves for Sign in. */
+private sealed interface StartOutcome {
+    data object Started : StartOutcome
+    data class Refused(val error: TripError) : StartOutcome
+    data object SessionEnded : StartOutcome
+}
+
+private fun Throwable.toStartOutcome(): StartOutcome =
+    if (this is ApiError.Unauthorized) StartOutcome.SessionEnded else StartOutcome.Refused(toTripError())
+
 sealed interface RunsUiState {
     data object Loading : RunsUiState
 
@@ -62,7 +73,10 @@ sealed interface RunsUiState {
         val starting: Boolean get() = startingRunId != null
     }
 
-    data class Error(val retry: Boolean) : RunsUiState
+    data object Error : RunsUiState
+
+    /** The server has ended the session and the tokens are gone, so the screen opens Sign in. */
+    data object SessionEnded : RunsUiState
 }
 
 @HiltViewModel
@@ -72,6 +86,7 @@ class RunsViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val tripGeometryStore: TripGeometryStore,
     private val serviceController: ServiceController,
+    private val authRepository: AuthRepository,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) : ViewModel() {
     // Read here rather than handed in by the screen, so a rotation reuses the ViewModel and its
@@ -99,17 +114,20 @@ class RunsViewModel @Inject constructor(
 
     private val startingRun = MutableStateFlow<String?>(null)
     private val startError = MutableStateFlow<TripError?>(null)
+    private val sessionEnded = MutableStateFlow(false)
 
     private val boards = combine(loadResult, now) { result, now ->
         result?.mapCatching { page -> page to departureBoardsOf(page, now, timeFormat) }
     }
 
     val uiState: StateFlow<RunsUiState> = combine(
+        sessionEnded,
         boards,
         startingRun,
         startError,
-    ) { result, startingRunId, error ->
+    ) { ended, result, startingRunId, error ->
         when {
+            ended -> RunsUiState.SessionEnded
             result == null -> RunsUiState.Loading
             result.isSuccess -> {
                 val (page, boards) = result.getOrThrow()
@@ -121,7 +139,7 @@ class RunsViewModel @Inject constructor(
                     error = error,
                 )
             }
-            else -> RunsUiState.Error(retry = result.exceptionOrNull() !is ApiError.Unauthorized)
+            else -> RunsUiState.Error
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RunsUiState.Loading)
 
@@ -156,9 +174,19 @@ class RunsViewModel @Inject constructor(
             // mapCatching: a zone or a schedule time this platform cannot read is a bad reply,
             // not a crash — the screen offers a retry as it would for any other failed load.
             val result = catalogRepository.trips(routeId).mapCatching { it.toRunPage() }
+            if (result.exceptionOrNull() is ApiError.Unauthorized) endSession()
             now.value = Instant.ofEpochSecond(clock())
             loadResult.value = result
         }
+    }
+
+    /**
+     * The client has already tried a refresh. The tokens go before the state changes, so nothing can read a dead one
+     * once the session shows as ended.
+     */
+    private suspend fun endSession() {
+        authRepository.endSessionLocally()
+        sessionEnded.value = true
     }
 
     /**
@@ -172,15 +200,19 @@ class RunsViewModel @Inject constructor(
         startingRun.value = runId
         startError.value = null
         viewModelScope.launch {
-            when (val error = startRun(runId, serviceDate)) {
-                null -> {
+            when (val outcome = startRun(runId, serviceDate)) {
+                StartOutcome.Started -> {
                     serviceController.startTracking()
                     startingRun.value = null
                     onStarted()
                 }
-                else -> {
+                is StartOutcome.Refused -> {
                     startingRun.value = null
-                    startError.value = error
+                    startError.value = outcome.error
+                }
+                StartOutcome.SessionEnded -> {
+                    endSession()
+                    startingRun.value = null
                 }
             }
         }
@@ -189,19 +221,19 @@ class RunsViewModel @Inject constructor(
     /**
      * Fetches and checks the run's geometry before telling the server anything, as iOS's
      * `TripSession.start` does: if there is nothing to judge adherence against, nothing should be
-     * started, so a retry does not run into "trip already active". Null once the run has started.
+     * started, so a retry does not run into "trip already active".
      */
-    private suspend fun startRun(runId: String, serviceDate: String): TripError? {
-        val geometry = catalogRepository.trip(runId).getOrElse { return it.toTripError() }
+    private suspend fun startRun(runId: String, serviceDate: String): StartOutcome {
+        val geometry = catalogRepository.trip(runId).getOrElse { return it.toStartOutcome() }
         // The server dates the run by the day it runs on now. If the service day has rolled over
         // at 03:00 since the list was loaded, that is not the list's date, and the feed would
         // carry one day's start_date against the other day's schedule.
-        if (geometry.serviceDate != serviceDate) return TripError.TRIP_NOT_ACTIVE
-        if (AdherenceEvaluator.of(geometry) == null) return TripError.NO_GEOMETRY
-        tripRepository.start(vehicleId, routeId, runId, serviceDate).onFailure { return it.toTripError() }
+        if (geometry.serviceDate != serviceDate) return StartOutcome.Refused(TripError.TRIP_NOT_ACTIVE)
+        if (AdherenceEvaluator.of(geometry) == null) return StartOutcome.Refused(TripError.NO_GEOMETRY)
+        tripRepository.start(vehicleId, routeId, runId, serviceDate).onFailure { return it.toStartOutcome() }
         // Best-effort, as the other writes after a start are: without it the trip still reports,
         // and the tracking screen says the schedule is unavailable.
         recordLocally("trip geometry") { tripGeometryStore.save(geometry) }
-        return null
+        return StartOutcome.Started
     }
 }

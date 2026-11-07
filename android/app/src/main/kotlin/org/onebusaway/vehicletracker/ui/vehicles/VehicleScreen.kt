@@ -54,11 +54,13 @@ private val TitleTop = 64.dp
 /**
  * [onVehicleSelected] is a tap on a tile. [onOnlyVehicle] is the bus a driver with one assignment never has to
  * choose, and takes the bus step's place: navigating there leaves nothing behind it that would skip forward again.
+ * [onSessionEnded] is the server having ended the session.
  */
 @Composable
 fun VehicleScreen(
     onVehicleSelected: (String) -> Unit,
     onOnlyVehicle: (String) -> Unit,
+    onSessionEnded: () -> Unit,
     viewModel: VehicleViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -77,6 +79,7 @@ fun VehicleScreen(
         onQueryChange = viewModel::onQueryChange,
         onToggleFavorite = viewModel::onToggleFavorite,
         onRetry = viewModel::retry,
+        onSessionEnded = onSessionEnded,
     )
 }
 
@@ -91,7 +94,11 @@ fun VehicleScreenContent(
     onQueryChange: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onRetry: () -> Unit,
+    onSessionEnded: () -> Unit,
 ) {
+    val sessionEnded = state is VehiclesUiState.SessionEnded
+    LaunchedEffect(sessionEnded) { if (sessionEnded) onSessionEnded() }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         state = rememberLazyGridState(),
@@ -107,15 +114,14 @@ fun VehicleScreenContent(
             )
         }
         when (state) {
-            is VehiclesUiState.Loading -> fullWidth("progress") { DelayedSpinner() }
+            is VehiclesUiState.Loading, is VehiclesUiState.SessionEnded -> fullWidth("progress") { DelayedSpinner() }
             is VehiclesUiState.Loaded -> loaded(state, onVehicleClick, onQueryChange, onToggleFavorite, onRetry)
             is VehiclesUiState.Error -> fullWidth("empty") {
                 EmptyState(
                     icon = R.drawable.ic_cloud_off,
                     title = stringResource(R.string.vehicles_error_message),
-                    // A 401 is not fixed by trying again: there is nothing for the driver to do here.
-                    body = if (state.retry) stringResource(R.string.vehicles_error_detail) else null,
-                    action = if (state.retry) stringResource(R.string.vehicles_retry_button) else null,
+                    body = stringResource(R.string.vehicles_error_detail),
+                    action = stringResource(R.string.vehicles_retry_button),
                     onAction = onRetry,
                 )
             }

@@ -29,14 +29,13 @@ private val DiscSize = 80.dp
 
 /**
  * What a setup screen shows in place of its list when there is nothing to choose: an icon on a disc, what
- * happened, what the driver can do about it, and one button when the app itself can do something. [body] is null
- * when there is nothing the driver can do.
+ * happened, what the driver can do about it, and one button when the app itself can do something.
  */
 @Composable
 internal fun EmptyState(
     @DrawableRes icon: Int,
     title: String,
-    body: String?,
+    body: String,
     modifier: Modifier = Modifier,
     action: String? = null,
     onAction: () -> Unit = {},
@@ -63,15 +62,13 @@ internal fun EmptyState(
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() },
         )
-        if (body != null) {
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
         if (action != null) {
             Spacer(Modifier.height(24.dp))
             FilledTonalButton(

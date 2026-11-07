@@ -51,6 +51,10 @@ class FakeMapFileSource : MapFileSource {
 class FakeSessionStore : SessionStore {
     val state = MutableStateFlow(Session(serverUrl = null, token = null, issuedAtEpochSec = null))
     override val session = state
+
+    /** Thrown raw from [clearToken], as `DataStore.edit` throws it. */
+    var clearFailure: Exception? = null
+
     override suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens) {
         state.value = Session(
             serverUrl = serverUrl,
@@ -71,6 +75,7 @@ class FakeSessionStore : SessionStore {
     }
     override suspend fun dropRefreshToken() { state.value = state.value.copy(refreshToken = null) }
     override suspend fun clearToken() {
+        clearFailure?.let { throw it }
         state.value = state.value.copy(token = null, issuedAtEpochSec = null, refreshToken = null, accessExpiresAtEpochSec = null)
     }
 }

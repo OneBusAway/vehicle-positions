@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,13 +53,17 @@ private val BadgeGap = 10.dp
 private val BigBadgeShape = RoundedCornerShape(14.dp)
 private val RowBadgeShape = RoundedCornerShape(10.dp)
 
-/** [onBack] and [onBusClick] are null when the bus step was skipped: there is no bus step to go back to. */
+/**
+ * [onBack] and [onBusClick] are null when the bus step was skipped: there is no bus step to go back to.
+ * [onSessionEnded] is the server having ended the session.
+ */
 @Composable
 fun RoutesScreen(
     busId: String,
     onBack: (() -> Unit)?,
     onBusClick: (() -> Unit)?,
     onRouteSelected: (RouteItem) -> Unit,
+    onSessionEnded: () -> Unit,
     viewModel: RoutesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -71,6 +76,7 @@ fun RoutesScreen(
         onRouteClick = onRouteSelected,
         onQueryChange = viewModel::onQueryChange,
         onRetry = viewModel::retry,
+        onSessionEnded = onSessionEnded,
     )
 }
 
@@ -88,7 +94,11 @@ fun RoutesScreenContent(
     onRouteClick: (RouteItem) -> Unit,
     onQueryChange: (String) -> Unit,
     onRetry: () -> Unit,
+    onSessionEnded: () -> Unit,
 ) {
+    val sessionEnded = state is RoutesUiState.SessionEnded
+    LaunchedEffect(sessionEnded) { if (sessionEnded) onSessionEnded() }
+
     val gridState = rememberLazyGridState()
     Column(Modifier.fillMaxSize()) {
         SetupHeader(busId = busId, step = stringResource(R.string.setup_step_route), onBack = onBack, onBusClick = onBusClick)
@@ -120,7 +130,7 @@ private fun RouteGrid(
             )
         }
         when (state) {
-            is RoutesUiState.Loading -> fullWidth("progress") { DelayedSpinner() }
+            is RoutesUiState.Loading, is RoutesUiState.SessionEnded -> fullWidth("progress") { DelayedSpinner() }
             is RoutesUiState.Loaded -> loaded(state, onRouteClick, onQueryChange, onRetry)
             is RoutesUiState.NoSchedule -> fullWidth("empty") {
                 EmptyState(
@@ -133,9 +143,8 @@ private fun RouteGrid(
                 EmptyState(
                     icon = R.drawable.ic_cloud_off,
                     title = stringResource(R.string.routes_error_message),
-                    // A 401 is not fixed by trying again: there is nothing for the driver to do here.
-                    body = if (state.retry) stringResource(R.string.routes_error_detail) else null,
-                    action = if (state.retry) stringResource(R.string.routes_retry_button) else null,
+                    body = stringResource(R.string.routes_error_detail),
+                    action = stringResource(R.string.routes_retry_button),
                     onAction = onRetry,
                 )
             }

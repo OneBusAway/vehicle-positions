@@ -22,4 +22,11 @@ class AuthRepository @Inject constructor(
     } catch (e: Exception) {
         Result.failure(mapHttpError(e))
     }
+
+    /**
+     * Ends the session on this phone only, for one the server has already ended: there is nothing left to log out of.
+     * The server and the email stay, so signing in again asks only for the password. A write that fails is logged: the
+     * driver still goes to Sign in, and the next 401 ends the session again.
+     */
+    suspend fun endSessionLocally() = recordLocally("the end of the session") { sessionStore.clearToken() }
 }

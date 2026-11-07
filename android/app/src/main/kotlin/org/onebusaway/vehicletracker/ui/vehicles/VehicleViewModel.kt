@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
+import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
 import org.onebusaway.vehicletracker.data.VehicleRepository
 import org.onebusaway.vehicletracker.data.api.VehicleDto
@@ -48,13 +49,17 @@ sealed interface VehiclesUiState {
         val autoSelectId: String? get() = vehicles.singleOrNull()?.id
     }
 
-    data class Error(val retry: Boolean) : VehiclesUiState
+    data object Error : VehiclesUiState
+
+    /** The server has ended the session and the tokens are gone, so the screen opens Sign in. */
+    data object SessionEnded : VehiclesUiState
 }
 
 @HiltViewModel
 class VehicleViewModel @Inject constructor(
     private val vehicleRepository: VehicleRepository,
     private val vehiclePrefsStore: VehiclePrefsStore,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
     /** null while a load is in flight; otherwise the outcome of the last one. */
     private val loadResult = MutableStateFlow<Result<List<VehicleDto>>?>(null)
@@ -78,7 +83,8 @@ class VehicleViewModel @Inject constructor(
                     groups = groupsOf(vehicles, query, favorites, recents),
                 )
             }
-            else -> VehiclesUiState.Error(retry = result.exceptionOrNull() !is ApiError.Unauthorized)
+            result.exceptionOrNull() is ApiError.Unauthorized -> VehiclesUiState.SessionEnded
+            else -> VehiclesUiState.Error
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, VehiclesUiState.Loading)
 
@@ -98,7 +104,13 @@ class VehicleViewModel @Inject constructor(
 
     private fun load() {
         loadResult.value = null
-        viewModelScope.launch { loadResult.value = vehicleRepository.myVehicles() }
+        viewModelScope.launch {
+            val result = vehicleRepository.myVehicles()
+            // The client has already tried a refresh. The tokens go before the state changes, so nothing can read a dead
+            // one once the session shows as ended.
+            if (result.exceptionOrNull() is ApiError.Unauthorized) authRepository.endSessionLocally()
+            loadResult.value = result
+        }
     }
 }
 
