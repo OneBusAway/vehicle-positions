@@ -5,6 +5,8 @@
     <string name="login_title">Sign in</string>
     <string name="login_subtitle">Use your driver account for this agency.</string>
     <string name="login_server_url_label">Server address</string>
+    <!-- An example address, in the empty server field: the same in every language. -->
+    <string name="login_server_placeholder" translatable="false">https://tracker.example.org</string>
     <string name="login_email_label">Email</string>
     <string name="login_password_label">Password</string>
     <string name="login_show_password">Show password</string>
@@ -19,10 +21,18 @@
     <string name="login_error_missing_email">Enter your email</string>
     <string name="login_error_missing_password">Enter your password</string>
     <string name="login_error_invalid_credentials">Wrong email or password. Try again.</string>
-    <!-- Under the server field when nothing answered at that address, beside the banner below. -->
+    <!-- Under the server field when what was typed can't be an address. The example shows only while the field is empty, so this repeats it. -->
+    <string name="login_error_invalid_address">Enter an address like https://tracker.example.org</string>
+    <!-- Under the server field for a plain http:// address, which the phone won't send. -->
+    <string name="login_error_https_required">Use an https:// address</string>
+    <!-- Under the server field when nothing answered at that address, or what answered isn't a tracker server, beside the banner below. -->
     <string name="login_error_check_address">Check the address</string>
     <!-- The server's address as typed, e.g. "tracker.example.org". -->
     <string name="login_error_unreachable">Can\'t reach %1$s. Check your connection, or the server address.</string>
+    <!-- Something answered at the address, but not as a tracker server does. The server's address, e.g. "tracker.example.org". -->
+    <string name="login_error_not_tracker">%1$s doesn\'t look like a tracker server.</string>
+    <!-- The server refused for too many attempts; its window is one minute. -->
+    <string name="login_error_too_many_tries">Too many tries. Wait a minute, then try again.</string>
     <!-- The server answered, but not with a sign-in, such as a server error. -->
     <string name="login_error_server">Couldn\'t sign in. Try again.</string>
     <!-- Signing in again after the session ended during a trip. The email the driver signed in with last. -->

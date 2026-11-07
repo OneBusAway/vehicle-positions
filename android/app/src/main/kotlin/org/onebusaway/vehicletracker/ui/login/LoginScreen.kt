@@ -134,9 +134,9 @@ fun LoginScreenContent(
     LaunchedEffect(state.again) {
         if (state.again) focus.getValue(LoginField.PASSWORD).requestFocus()
     }
-    // Change opens the field to type in; an unreachable server opens it too, but only to show the error under it.
+    // Change opens the field to type in; an error about the server opens it too, but only to show the error under it.
     LaunchedEffect(state.changingServer) {
-        if (state.changingServer && error !is LoginError.Unreachable) focus.getValue(LoginField.SERVER).requestFocus()
+        if (state.changingServer && error?.isAboutTheServer != true) focus.getValue(LoginField.SERVER).requestFocus()
     }
     val latestOnEdited by rememberUpdatedState(onEdited)
     LaunchedEffect(server, email, password) {
@@ -192,6 +192,7 @@ fun LoginScreenContent(
                 LoginTextField(
                     state = server,
                     label = stringResource(R.string.login_server_url_label),
+                    placeholder = stringResource(R.string.login_server_placeholder),
                     error = fieldErrorRes(error, LoginField.SERVER)?.let { stringResource(it) },
                     enabled = enabled,
                     keyboardOptions = KeyboardOptions(
@@ -229,10 +230,14 @@ fun LoginScreenContent(
                     .onFocusChanged { passwordFocused = it.isFocused },
             )
             bannerOf(error)?.let { banner ->
-                val unreachable = (error as? LoginError.Unreachable)?.server
+                val named = when (error) {
+                    is LoginError.Unreachable -> error.server
+                    is LoginError.NotATrackerServer -> error.server
+                    else -> null
+                }
                 AttentionBanner(
                     icon = banner.icon,
-                    text = if (unreachable != null) stringResource(banner.text, serverLabel(unreachable)) else stringResource(banner.text),
+                    text = if (named != null) stringResource(banner.text, serverLabel(named)) else stringResource(banner.text),
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -339,10 +344,12 @@ private fun LoginTextField(
     enabled: Boolean,
     keyboardOptions: KeyboardOptions,
     modifier: Modifier,
+    placeholder: String? = null,
 ) {
     OutlinedTextField(
         state = state,
         label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
         enabled = enabled,
         isError = error != null,
         supportingText = error?.let { { FieldError(it) } },
@@ -444,7 +451,10 @@ internal fun fieldErrorRes(error: LoginError?, field: LoginField): Int? = when {
         LoginField.PASSWORD -> R.string.login_error_missing_password
     }
     error is LoginError.InvalidCredentials && field == LoginField.PASSWORD -> R.string.login_error_invalid_credentials
+    error is LoginError.InvalidAddress && field == LoginField.SERVER -> R.string.login_error_invalid_address
+    error is LoginError.HttpsRequired && field == LoginField.SERVER -> R.string.login_error_https_required
     error is LoginError.Unreachable && field == LoginField.SERVER -> R.string.login_error_check_address
+    error is LoginError.NotATrackerServer && field == LoginField.SERVER -> R.string.login_error_check_address
     else -> null
 }
 
@@ -453,6 +463,8 @@ internal data class LoginBanner(@DrawableRes val icon: Int, @StringRes val text:
 
 internal fun bannerOf(error: LoginError?): LoginBanner? = when (error) {
     is LoginError.Unreachable -> LoginBanner(R.drawable.ic_cloud_off, R.string.login_error_unreachable)
+    is LoginError.NotATrackerServer -> LoginBanner(R.drawable.ic_dns, R.string.login_error_not_tracker)
+    LoginError.TooManyAttempts -> LoginBanner(R.drawable.ic_error, R.string.login_error_too_many_tries)
     LoginError.ServerError -> LoginBanner(R.drawable.ic_error, R.string.login_error_server)
     else -> null
 }

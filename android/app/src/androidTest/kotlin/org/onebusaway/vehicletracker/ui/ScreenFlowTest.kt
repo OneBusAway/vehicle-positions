@@ -27,6 +27,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -182,11 +183,66 @@ class ScreenFlowTest {
         compose.onNode(hasText(resources.getString(R.string.login_error_unreachable, "tracker.example.org")) and announcedPolitely)
             .assertIsDisplayed()
 
+        state = LoginUiState(error = LoginError.InvalidAddress)
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_invalid_address)))
+
+        state = LoginUiState(error = LoginError.HttpsRequired)
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_https_required)))
+
+        state = LoginUiState(error = LoginError.NotATrackerServer("https://example.com/"))
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_check_address)))
+        compose.onNode(hasText(resources.getString(R.string.login_error_not_tracker, "example.com")) and announcedPolitely)
+            .assertIsDisplayed()
+
+        state = LoginUiState(error = LoginError.TooManyAttempts)
+        compose.onNode(hasText(getString(R.string.login_error_too_many_tries)) and announcedPolitely).assertIsDisplayed()
+        for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
+            loginField(field).assert(hasError(null))
+        }
+
         state = LoginUiState(error = LoginError.ServerError)
         compose.onNodeWithText(getString(R.string.login_error_server)).assertIsDisplayed()
         for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
             loginField(field).assert(hasError(null))
         }
+    }
+
+    @Test
+    fun loginScreen_showsAnExampleAddressInTheEmptyServerFieldOnceFocused() {
+        showLogin(LoginUiState())
+        val server = loginField(R.string.login_server_url_label)
+        val example = hasText(getString(R.string.login_server_placeholder))
+        require(!example.matches(server.fetchSemanticsNode()))
+
+        server.performClick()
+
+        server.assertIsFocused()
+        server.assert(example)
+    }
+
+    @Test
+    fun loginScreen_changeFocusesTheServerField_anErrorAboutItOnlyOpensIt() {
+        var state by mutableStateOf(LoginUiState(savedServer = "https://tracker.example.org/"))
+        compose.setContent {
+            LoginScreenContent(state, TextFieldState(), TextFieldState(), TextFieldState(), {}, {}, {})
+        }
+        val server = loginField(R.string.login_server_url_label)
+
+        val aboutTheServer = listOf(
+            LoginError.InvalidAddress,
+            LoginError.HttpsRequired,
+            LoginError.Unreachable("https://tracker.example.org/"),
+            LoginError.NotATrackerServer("https://tracker.example.org/"),
+        )
+        for (error in aboutTheServer) {
+            state = LoginUiState(savedServer = state.savedServer, changingServer = true, error = error)
+            server.assertIsDisplayed().assertIsNotFocused()
+            state = LoginUiState(savedServer = state.savedServer)
+            server.assertDoesNotExist()
+        }
+
+        state = state.copy(changingServer = true)
+        server.assertIsFocused()
     }
 
     @Test

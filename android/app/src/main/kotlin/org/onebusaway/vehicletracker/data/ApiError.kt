@@ -30,6 +30,23 @@ sealed class ApiError : Exception() {
      */
     object PreviousTripNotEnded : ApiError()
 
+    /**
+     * Something answered the sign-in, but not as a tracker server does: a 404, a 405, or a reply
+     * that isn't our JSON. Those mean something else on every other call, so only
+     * [AuthRepository.login] produces this.
+     */
+    object NotATrackerServer : ApiError()
+
+    /** `429 too many attempts`, the server's limit on sign-ins. Only [AuthRepository.login] produces this. */
+    object TooManyAttempts : ApiError()
+
+    /**
+     * The phone's network security policy refused a plain `http://` address. OkHttp throws an
+     * [IOException] for it, which [mapHttpError] reads as no network, so only
+     * [AuthRepository.login] produces this.
+     */
+    object CleartextBlocked : ApiError()
+
     data class Other(val msg: String) : ApiError()
 }
 

@@ -31,12 +31,29 @@ sealed interface LoginError {
     data class MissingField(val field: LoginField) : LoginError
     data object InvalidCredentials : LoginError
 
-    /** Nothing answered at [server], as it was typed, or it is not an address at all. */
+    /** What was typed cannot be an http or https address, so nothing was asked. */
+    data object InvalidAddress : LoginError
+
+    /** The phone's network policy refused a plain http address, before anything was sent. */
+    data object HttpsRequired : LoginError
+
+    /** Nothing answered at [server], the address the sign-in went to. */
     data class Unreachable(val server: String) : LoginError
+
+    /** Something answered at [server], but not as a tracker server does: a 404, or a web page. */
+    data class NotATrackerServer(val server: String) : LoginError
+
+    /** The server's limit on sign-ins. Nothing in the fields is wrong. */
+    data object TooManyAttempts : LoginError
 
     /** The server answered, but not with a sign-in, such as a 500. */
     data object ServerError : LoginError
 }
+
+/** An error about the address, which opens the server field to sit under, and leaves the keyboard where it is. */
+internal val LoginError.isAboutTheServer: Boolean
+    get() = this is LoginError.InvalidAddress || this is LoginError.HttpsRequired ||
+        this is LoginError.Unreachable || this is LoginError.NotATrackerServer
 
 data class LoginUiState(
     /** Signing in again after the session ended during a trip, which is still open. */
@@ -62,6 +79,16 @@ data class LoginUiState(
 internal fun serverLabel(server: String): String {
     val url = server.toHttpUrlOrNull() ?: return server.trim()
     return if (url.port == HttpUrl.defaultPort(url.scheme)) url.host else "${url.host}:${url.port}"
+}
+
+/**
+ * The address to sign in to, from what was typed: trimmed, and over https when no scheme was typed, since that is
+ * how a driver is usually told the address. Null when it is not an http or https address at all.
+ */
+internal fun serverAddressOf(typed: String): String? {
+    val trimmed = typed.trim()
+    val withScheme = if ("://" in trimmed) trimmed else "https://$trimmed"
+    return withScheme.toHttpUrlOrNull()?.toString()
 }
 
 /** [ARG_SIGN_IN_AGAIN] is set on the route Tracking opens once the session has ended; the first sign-in has none. */
@@ -111,9 +138,9 @@ class LoginViewModel @Inject constructor(
         // The button is disabled while signing in, but a second tap already on its way must not sign in, and
         // navigate, twice.
         if (_uiState.value.loading) return
-        val serverUrl = server.text.toString()
+        val typedServer = server.text.toString()
         val missing = when {
-            serverUrl.isBlank() -> LoginField.SERVER
+            typedServer.isBlank() -> LoginField.SERVER
             email.text.isBlank() -> LoginField.EMAIL
             password.text.isBlank() -> LoginField.PASSWORD
             else -> null
@@ -122,10 +149,9 @@ class LoginViewModel @Inject constructor(
             _uiState.update { it.copy(error = LoginError.MissingField(missing)) }
             return
         }
-        // Retrofit refuses an address with no http or https, and an address it refuses is as unreachable as one
-        // nothing answers at.
-        if (serverUrl.toHttpUrlOrNull() == null) {
-            failed(LoginError.Unreachable(serverUrl))
+        val serverUrl = serverAddressOf(typedServer)
+        if (serverUrl == null) {
+            failed(LoginError.InvalidAddress)
             return
         }
         _uiState.update { it.copy(loading = true, error = null) }
@@ -139,6 +165,9 @@ class LoginViewModel @Inject constructor(
                     failed(
                         when {
                             error is ApiError.Unauthorized -> LoginError.InvalidCredentials
+                            error is ApiError.CleartextBlocked -> LoginError.HttpsRequired
+                            error is ApiError.NotATrackerServer -> LoginError.NotATrackerServer(serverUrl)
+                            error is ApiError.TooManyAttempts -> LoginError.TooManyAttempts
                             error is ApiError.Other && error.msg == "network" -> LoginError.Unreachable(serverUrl)
                             else -> LoginError.ServerError
                         },
@@ -148,13 +177,13 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    // The server field is opened for an unreachable server, so its error has a field to sit under. Not when signing
-    // in again: the open trip is on that server, so the banner alone names it.
+    // The server field is opened for an error about the server, so the error has a field to sit under. Not when
+    // signing in again: the open trip is on that server, so the banner alone names it.
     private fun failed(error: LoginError) = _uiState.update {
         it.copy(
             loading = false,
             error = error,
-            changingServer = it.changingServer || (error is LoginError.Unreachable && !it.again),
+            changingServer = it.changingServer || (error.isAboutTheServer && !it.again),
         )
     }
 }
