@@ -29,6 +29,15 @@ import VehiclePositionsKit
         #expect(r.problem == .none)
     }
 
+    /// After a relaunch the count carries on from what was kept (P44).
+    @Test func aReporterGivenACountCarriesOnFromIt() async {
+        let r = LocationReporter(api: api, now: { clock.now }, sent: 142)
+        #expect(r.fixesSent == 142)
+        r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+        await r.waitForInFlightSend()
+        #expect(r.fixesSent == 143)
+    }
+
     @Test func dropsUnknownBearingSpeedAndAccuracy() async {
         let r = reporter()
         r.report(fix(bearing: -1, speed: -1, accuracy: -1), vehicleID: "bus-1", gtfsTripID: "T1")

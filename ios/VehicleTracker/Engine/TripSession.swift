@@ -134,7 +134,9 @@ final class TripSession {
     private let tokens: any TokenStoring
     private let store: any ActiveTripStoring
     private let locations: any LocationSource
-    private let access: any LocationAccess
+    /// Read by Before you start, which asks through it before a run starts:
+    /// one object, so the sheet and `start()`'s own check see the same answers.
+    let locationAccess: any LocationAccess
     private let makeAPI: (URL, any TokenStoring) throws -> any TrackerAPI
     private let now: () -> Date
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "trip-session")
@@ -169,7 +171,7 @@ final class TripSession {
         self.tokens = tokens
         self.store = store
         self.locations = locations
-        self.access = access
+        self.locationAccess = access
         self.makeAPI = makeAPI
         self.now = now
 
@@ -210,7 +212,18 @@ final class TripSession {
 
     // MARK: Sign-in
 
+    /// The sign-in screens show a fixed sentence for each failure, never the
+    /// error itself, so the cause is logged here.
     func signIn(serverURL: URL, email: String, password: String) async throws {
+        do {
+            try await logIn(serverURL: serverURL, email: email, password: password)
+        } catch {
+            log.error("could not sign in to \(serverURL.host() ?? "the server"): \(String(describing: error))")
+            throw error
+        }
+    }
+
+    private func logIn(serverURL: URL, email: String, password: String) async throws {
         let api = try makeAPI(serverURL, tokens)
         let issued = try await api.login(email: email, password: password)
         try tokens.save(StoredToken(issued, receivedAt: now()))
@@ -380,9 +393,9 @@ final class TripSession {
     /// not get precise positions. The phase is already `.starting`, so the run
     /// lists stay disabled while a prompt is up.
     private func requireLocationAccess() async throws {
-        var state = access.current()
-        if state == .notDetermined { state = await access.request() }
-        if state == .approximateOnly { state = await access.requestPrecise() }
+        var state = locationAccess.current()
+        if state == .notDetermined { state = await locationAccess.request() }
+        if state == .approximateOnly { state = await locationAccess.requestPrecise() }
         let refusal: TripSessionError
         switch state {
         case .allowed: return
@@ -501,7 +514,8 @@ final class TripSession {
     private func beginTracking(_ active: ActiveTrip, evaluator: AdherenceEvaluator) throws {
         guard let api else { throw TripSessionError.notSignedIn }
         self.evaluator = evaluator
-        reporter = LocationReporter(api: api, now: now) { [weak self] in
+        // A fresh trip has no count kept, so it starts at 0.
+        reporter = LocationReporter(api: api, now: now, sent: store.loadSent(for: active.serverTripID)) { [weak self] in
             // A send finishes long after the fix that started it was handed
             // over, so its outcome has to be published when it lands.
             self?.refreshReporting()
@@ -606,7 +620,10 @@ final class TripSession {
     }
 
     private func refreshReporting() {
-        if let reporter { fixesSent = reporter.fixesSent }
+        if let reporter, reporter.fixesSent != fixesSent {
+            fixesSent = reporter.fixesSent
+            keepSent()
+        }
         let sent = Self.status(for: reporter?.problem ?? .none)
         // Signed out comes before the location problems: a driver who is
         // signed out and has also lost the stream has to sign in before
@@ -624,6 +641,17 @@ final class TripSession {
             reporting = .noGPS
         } else {
             reporting = sent
+        }
+    }
+
+    /// Writes the count down as it changes, so a relaunch carries on from it
+    /// (P44). A failed write costs only the count, never the trip.
+    private func keepSent() {
+        guard let active = activeTrip else { return }
+        do {
+            try store.saveSent(fixesSent, for: active.serverTripID)
+        } catch {
+            log.error("could not keep the sent count of trip \(active.serverTripID): \(String(describing: error))")
         }
     }
 

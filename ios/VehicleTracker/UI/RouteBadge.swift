@@ -11,6 +11,9 @@ struct RouteBadge: View {
         case grid
         /// On the trip bar: at least a 44 pt square, in larger type (DESIGN-iOS §2.3).
         case trip
+        /// On Resume's trip card: at least a 56 pt square, in larger type still
+        /// (Android's `ResumeShiftScreen`).
+        case card
     }
 
     var shortName: String
@@ -21,7 +24,7 @@ struct RouteBadge: View {
     var body: some View {
         let colors = RouteBadgeColors(color: color, textColor: textColor)
         Text(shortName.isEmpty ? "—" : shortName)
-            .font(size == .row ? .title3.bold() : .title2.bold())
+            .font(font)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .foregroundStyle(colors.text)
@@ -31,11 +34,20 @@ struct RouteBadge: View {
             .background(colors.background, in: RouteBadgeShape())
     }
 
+    private var font: Font {
+        switch size {
+        case .row: .title3.bold()
+        case .grid, .trip: .title2.bold()
+        case .card: .title.bold()
+        }
+    }
+
     private var minWidth: CGFloat {
         switch size {
         case .row: 56
         case .grid: 0
         case .trip: 44
+        case .card: 56
         }
     }
 
@@ -44,8 +56,15 @@ struct RouteBadge: View {
         case .row: 40
         case .grid: 56
         case .trip: 44
+        case .card: 56
         }
     }
+}
+
+extension TripGeometry {
+    /// The route as its badge names it: the short name, or the route's id for
+    /// a feed that gives none (Android's `RouteBadgeModel.forTrip`).
+    nonisolated var badgeName: String { route.shortName.isEmpty ? routeID : route.shortName }
 }
 
 /// The feed's `route_color` and `route_text_color` as it gives them, with no

@@ -14,7 +14,7 @@ struct TrackingView: View {
 
     @Environment(TripSession.self) private var session
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showingRelogin = false
+    @State private var showingSignInAgain = false
     @State private var following = MapFollowing()
     @State private var map = MapLayout()
     /// The status card's bottom edge, in the safe area. The framing is built
@@ -39,7 +39,7 @@ struct TrackingView: View {
                 .onGeometryChange(for: MapLayout.self) {
                     MapLayout(height: $0.size.height, safeTop: $0.safeAreaInsets.top, safeBottom: $0.safeAreaInsets.bottom)
                 } action: { map = $0 }
-            StatusArea(showingRelogin: $showingRelogin, cardBottom: $cardBottom)
+            StatusArea(showingSignInAgain: $showingSignInAgain, cardBottom: $cardBottom)
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("tracking")).maxY } action: { statusAreaBottom = $0 }
@@ -64,7 +64,7 @@ struct TrackingView: View {
             if detent == .height(old) { detent = .height(new) }
         }
         .sheet(isPresented: .constant(true)) {
-            TripSheet(showingRelogin: $showingRelogin, peek: $peek, isExpanded: detent != .height(peek))
+            TripSheet(showingSignInAgain: $showingSignInAgain, peek: $peek, isExpanded: detent != .height(peek))
                 .presentationDetents([.height(peek), .height(expanded)], selection: $detent)
                 .presentationDragIndicator(.visible)
                 // The status card's buttons stay reachable at both detents,
@@ -105,14 +105,14 @@ private struct TrackingMap: View {
 private struct StatusArea: View {
     @Environment(TripSession.self) private var session
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Binding var showingRelogin: Bool
+    @Binding var showingSignInAgain: Bool
     @Binding var cardBottom: CGFloat
 
     var body: some View {
         if let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) {
             VStack(spacing: 8) {
                 if status.isSignedOut {
-                    SignedOutCard { showingRelogin = true }
+                    SignedOutCard { showingSignInAgain = true }
                         .modifier(CardBottom(cardBottom: $cardBottom))
                 } else {
                     StatusCard(status: status)

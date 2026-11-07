@@ -2,34 +2,34 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(TripSession.self) private var session
+    /// Kept from the first phase change on, so an end in flight can stay on
+    /// the screen it came from.
+    @State private var screen: RootScreen?
 
-    /// Which screen the phase puts up. `.active`, `.paused` and `.ending` are
-    /// all Tracking, so a trip pausing or ending does not cross-fade the
-    /// screen with itself.
-    private enum Screen: Equatable {
-        case signIn, pickers, tracking
-    }
-
-    private var screen: Screen {
-        switch session.phase {
-        case .signedOut: .signIn
-        case .idle, .starting: .pickers
-        case .active, .paused, .ending: .tracking
-        }
+    /// Until the first change, the launch phase decides: the first frame is
+    /// already the right screen, and a relaunch onto Resume never shows
+    /// Sign in first.
+    private var shown: RootScreen {
+        screen ?? RootScreen.next(phase: session.phase, showing: .signIn)
     }
 
     var body: some View {
         ZStack {
-            switch screen {
+            switch shown {
             case .signIn:
-                LoginView().transition(.opacity)
+                SignInView().transition(.opacity)
             case .pickers:
                 PickerFlow().transition(.opacity)
+            case .resume:
+                ResumeView().transition(.opacity)
             case .tracking:
                 TrackingView().transition(.opacity)
             }
         }
-        .animation(.smooth(duration: 0.35), value: screen)
+        .animation(.smooth(duration: 0.35), value: shown)
+        .onChange(of: session.phase, initial: true) { _, phase in
+            screen = RootScreen.next(phase: phase, showing: shown)
+        }
         // The trip started, or ended, on the server (DESIGN-iOS §2.7).
         .sensoryFeedback(.success, trigger: session.phase) { old, new in
             switch (old, new) {
@@ -39,6 +39,6 @@ struct RootView: View {
         }
         // Inside Tracking the trip sheet shows it: an alert cannot present
         // from under a sheet that is already up.
-        .serverSetupPrompt(isActive: screen != .tracking)
+        .serverSetupPrompt(isActive: shown != .tracking)
     }
 }

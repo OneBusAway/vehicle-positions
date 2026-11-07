@@ -2,9 +2,9 @@ import Foundation
 import Testing
 @testable import VehicleTracker
 
-/// The login and picker screens show `error.localizedDescription` as it comes,
-/// so each case has to read as a sentence to a driver — not as the enum's own
-/// name, which is what an `Error` without `LocalizedError` falls back to.
+/// Each error reads as a sentence, not as the enum's own name, which is what
+/// an `Error` without `LocalizedError` falls back to: the run board and
+/// CarPlay show `TripSessionError`'s, and a failed refresh logs `APIError`'s.
 @Suite struct APIErrorTests {
     @Test func insecureURLExplainsThePolicy() {
         #expect(APIError.insecureURL.localizedDescription == ServerURLPolicy.explanation)

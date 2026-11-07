@@ -153,9 +153,9 @@ nonisolated struct ErrorBody: Sendable, Decodable {
     var error: String
 }
 
-/// Why a request failed. The descriptions are what the driver reads: the
-/// screens show `error.localizedDescription` as it comes, so every case has to
-/// stand on its own without the enum's name.
+/// Why a request failed. Each description stands on its own as a sentence,
+/// without the enum's name: a refresh that fails passes it on as the reason
+/// it logs. No screen shows it; each says what happened in its own words.
 nonisolated enum APIError: Error, Equatable, LocalizedError {
     /// The base URL fails ``ServerURLPolicy``.
     case insecureURL

@@ -188,8 +188,8 @@ xcrun simctl launch "$UDID" org.onebusaway.vehicletracker \
 ```
 
 The auto-start only runs from a signed-out or idle session: if a stored trip
-makes the app open **Paused**, tap Resume (or end the trip) rather than
-expecting the arguments to start a second one.
+makes the app open **Resume your trip?**, tap **Resume trip** (or **End
+trip**) rather than expecting the arguments to start a second one.
 
 Plain HTTP is refused except to `localhost`, `127.0.0.1` or a `.local` host
 (`Model/ServerURLPolicy.swift`). On a physical iPhone, put the Mac on the same
@@ -226,7 +226,11 @@ Run these in order against a single trip; check 5 ends it.
 
 ### Check 1 — Sign in → vehicle → route → run → tracking
 
-1. Launch the app and sign in (or use the auto-start arguments).
+1. Launch the app. **Sign in** shows the app's icon, "Use your driver account
+   for this agency.", a **Server address** field, **Email** and **Password**
+   with an eye that shows and hides it. Type `$BASE`, `driver@example.com` and
+   `driverpass123`, and tap **Sign in** (or use the auto-start arguments). The
+   button reads **Signing in** beside a spinner until the server answers.
 2. With exactly one assigned vehicle the app skips **Choose your vehicle**
    and opens the routes. Tap Back to see it: one tile, `bus-1` with `Bus 1`
    under it, under **All vehicles**. Tap the tile's star: the tile moves under
@@ -335,14 +339,28 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    `localhost` and the app's version greyed out, then **Sign out** in red.
    Tap **Sign out**: "Sign out?" with "The next driver can sign in on this
    phone." Tap **Sign out** again: the sign-in screen appears with the server
-   still filled in and the email empty, and the server log has the logout:
+   as one line, **Server localhost:8081 Change**, the email empty, and the
+   server log has the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log
    # ..."method":"POST","path":"/api/v1/auth/logout","status":204...
    ```
 
-2. Sign in as `driver2@example.com` with `driverpass123`.
+2. Before signing in, see what a failed sign-in says. Type
+   `driver2@example.com` and the password `wrong`, and tap **Sign in**.
+
+   **Expected outcome:** "Wrong email or password. Try again." under the
+   password, which keeps what was typed. Typing in any field clears it.
+
+   Tap **Change**, type `localhost:8081` with no `http://`, and tap **Sign in**.
+
+   **Expected outcome:** "Check the address" under the server field, and a
+   banner above the button: "Can't reach localhost:8081. Check your
+   connection, or the server address." Nothing reached the server: the log
+   has no new `/api/v1/auth/login` line. Type `$BASE` back in.
+
+3. Sign in as `driver2@example.com` with `driverpass123`.
 
    **Expected outcome:** **Choose your vehicle** says **No vehicles are
    assigned to you** and **Ask your dispatcher to assign one, then check
@@ -357,7 +375,7 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
    Sign out from the account menu on **Choose your vehicle**.
 
-3. Sign in as `driver@example.com` again. That driver has one vehicle.
+4. Sign in as `driver@example.com` again. That driver has one vehicle.
 
    **Expected outcome:** the app goes straight to **Choose a route**, with
    **Vehicle bus-1** under the title. Tap
@@ -447,24 +465,39 @@ with or without a refresh and is not part of this check.)
 The rest of the checks run the same with two-minute tokens, and Check 4b needs
 them, so leave `ACCESS_TOKEN_TTL` set.
 
-### Check 4 — Relaunching rehydrates the trip as Paused
+### Check 4: A relaunch asks to resume the trip
 
 1. Terminate the app (`xcrun simctl terminate "$UDID"
    org.onebusaway.vehicletracker`) and launch it again with no arguments.
 
-**Expected outcome:** the app opens straight back on the Tracking screen for
-the same trip. The status card reads **Waiting for GPS** with the run's first
-stop (a rehydrated trip is never painted green), the line under it reads
-**Location stopped · Tap Resume** with a **Resume** button, the map shows the
-route, and the trip sheet still offers **End trip**, so a paused trip can still
-be ended. Tapping Resume restarts location delivery without touching the
-server, and the line goes away. (iOS only permits a (re)start of the location
-session from the foreground, which is why a relaunch pauses rather than
-resuming by itself.)
+**Expected outcome:** the app opens on **Resume your trip?** with "The app
+closed while this trip was running. Reports are paused until you choose." and
+a card: the route badge `1`, "North", "8:00 AM run", **Vehicle bus-1**, and
+"Started N min ago, at" the time the trip began, which moves on once a
+minute. Under it, **Resume trip** and **End trip**. iOS only lets the location
+session start again from the foreground, which is why a relaunch asks rather
+than resuming by itself.
 
-The same line and button appear when the location stream dies mid-trip.
+2. Stop the server (`kill %1`), tap **End trip**, then start the server again.
 
-### Check 4b — A sign-in that can't be renewed can be put off
+**Expected outcome:** **End trip** reads **Ending trip** beside a spinner and
+the screen stays put. Once the request fails, a banner under the card reads
+"The server didn't confirm the trip ended. Try again, or end it on this phone
+only.", and the buttons become **Try again**, **End on this phone** and
+**Don't end the trip**. Tap **Don't end the trip**: the banner goes and
+**Resume trip** and **End trip** come back. Nothing was ended.
+
+3. Tap **Resume trip**.
+
+**Expected outcome:** the Tracking screen appears for the same trip, reading
+**Waiting for GPS** until the next fix, with no call to the server; then the
+status card and the reports carry on. The trip bar's "n sent" carries on from
+the count before the relaunch rather than starting again at 0. The line
+**Location stopped · Tap
+Resume** with a **Resume** button still appears when the location stream dies
+mid-trip.
+
+### Check 4b: A sign-in that can't be renewed is asked for from the card
 
 The app asks for the password only when the server refuses its refresh token.
 Deactivating the driver deletes their refresh tokens, so it reaches that state
@@ -478,25 +511,29 @@ within one two-minute access token from Check 3b.
 **Expected outcome:** within about two minutes, when the app's access token
 runs out, the status card is replaced by the **Signed out** card (ink by day,
 amber at night) reading "Reports have stopped. Your trip is still open." with
-a **Sign in** button, and the **Sign in again** sheet appears over the trip
-sheet. Deactivating deleted the
-driver's refresh tokens, so in the token's last minute the log from Check 3b
-shows each early refresh refused (`refresh: unknown token presented`) while
-reports still get `201`. Once the token expires, a report gets `401`, the
-refresh is refused once more, and every report after that gets `401` with no
-refresh.
+a **Sign in** button. Nothing opens over the map by itself. Deactivating
+deleted the driver's refresh tokens, so in the token's last minute the log
+from Check 3b shows each early refresh refused (`refresh: unknown token
+presented`) while reports still get `201`. Once the token expires, a report
+gets `401`, the refresh is refused once more, and every report after that
+gets `401` with no refresh.
 
-2. Tap **Later**.
+2. Tap **Sign in** on the card.
 
-**Expected outcome:** the sheet goes away without signing in. The trip keeps
-running and the Signed out card stays. Tapping **Sign in** on it brings the
-sheet back.
+**Expected outcome:** the **Sign in again** sheet opens: a card with the route
+badge `1`, "Your trip is still open" and "Reports stopped when your session
+ended. Sign in to keep reporting on route 1.", then "As driver@example.com",
+the server as one line with no **Change**, the email greyed out, and the
+password field focused. Tap **Not now**: the sheet goes away without signing
+in, the trip keeps running and the Signed out card stays.
 
-3. Click **Activate** on the same row, then sign in on the sheet with the
-   driver's password.
+3. Click **Activate** on the same row, then tap **Sign in** on the card and
+   sign in on the sheet with the driver's password.
 
-**Expected outcome:** the status card comes back on the same trip, with no
-problem line, and reports reach the server again.
+**Expected outcome:** the button reads **Signing in**, then the sheet closes,
+the status card comes back on the same trip with no problem line, and reports
+reach the server again. A wrong password instead shows "Wrong email or
+password. Try again." under the password, and the sheet stays.
 
 ### Check 5 — Ending the trip drops the vehicle from the feed
 
@@ -506,7 +543,7 @@ problem line, and reports reach the server again.
 
 **Expected outcome, immediately:** the app returns to the vehicle picker (the
 token is still fresh, so no second sign-in), and the stored trip is gone —
-a further relaunch goes to the picker, not to Paused.
+a further relaunch goes to the picker, not to **Resume your trip?**.
 
 **Expected outcome, after the staleness window:** the feed serves only points
 newer than `STALENESS_THRESHOLD` (5 m above), so the `bus-1` entity keeps
@@ -592,24 +629,30 @@ playback from step 5 again first, so fixes keep coming during step 3.
    grep -cE '"path":"/api/v1/(gtfs/trips/|trips/start)' /tmp/vt-server.log
    ```
 
-   Pick `Bus 1`, route **1 Straight**, run **T1**, then run the `grep` again.
+   Pick `Bus 1`, route **1 Straight**, run **T1**, tap **Start trip**, then
+   run the `grep` again.
 
-   **Expected outcome:** a banner under the title reads "Location is off for
-   OBA Vehicle Tracker. Turn it on in Settings to start a trip." with an
-   **Open Settings** button that opens the app's page in Settings. The `grep`
-   count is the same both times: no trip geometry was fetched and no trip was
-   started on the server. At the largest text sizes (Settings > Accessibility
-   > Display & Text Size > Larger Text, slider to the end) the banner is still
-   under the title, above the board, with its button on screen.
+   **Expected outcome:** **Before you start** opens over the board: "The app
+   needs these to report vehicle bus-1. iOS asks about each one next."
+   **Location** reads "Location is needed to report" with **Open Settings**,
+   which opens the app's page in Settings; **Precise location** and **Location
+   services** are not reached yet, **Continue** is greyed out, and **Cancel**
+   is at the top. Tap **Cancel**. The `grep` count is the same both times: no
+   trip geometry was fetched and no trip was started on the server.
 
-2. Give location back and start the run again:
+2. Let iOS ask again, then start the run:
 
    ```bash
-   xcrun simctl privacy "$UDID" grant location org.onebusaway.vehicletracker
+   xcrun simctl privacy "$UDID" reset location org.onebusaway.vehicletracker
    ```
 
-   **Expected outcome:** the Tracking screen appears with no problem line
-   under the status card.
+   Open the app again if the reset closed it, and start **T1** as before.
+
+   **Expected outcome:** **Before you start** shows **Location** with
+   **Next**, and no **Cancel**: swiping the sheet down does nothing. Tap
+   **Continue**: iOS asks for location. Tap **Allow While Using App**:
+   **Location** reads **Allowed**, the sheet closes by itself, and the
+   Tracking screen appears with no problem line under the status card.
 
 3. In the simulator's Settings app, open **Privacy & Security > Location
    Services > OBA Vehicle Tracker** and turn **Precise Location** off
@@ -639,9 +682,12 @@ loaded, so **Change vehicle** loads them again. Back does not.
    Tap run **T1**, then **Start trip**.
 
    **Expected outcome:** a banner under the title reads **You're not assigned
-   to vehicle bus-1.** with a **Change vehicle** button. Tap it: **Choose your
-   vehicle** loads again and says **No vehicles are assigned to you** with
-   **Check again**; the `bus-1` tile is gone.
+   to vehicle bus-1.** with a **Change vehicle** button. At the largest text
+   sizes (Settings > Accessibility > Display & Text Size > Larger Text, slider
+   to the end) the banner is still under the title, above the board, with its
+   button on screen. Tap it: **Choose your vehicle** loads again and says **No
+   vehicles are assigned to you** with **Check again**; the `bus-1` tile is
+   gone.
 
 2. Give the assignment back (the `POST .../admin/assignments` from setup step
    3), then tap **Check again**.

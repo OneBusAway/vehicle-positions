@@ -4,8 +4,8 @@ import UIKit
 
 /// Text the driver reads at a glance. Every string here is short on purpose.
 enum Formatters {
-    static func clock(_ date: Date, timezone: String) -> String {
-        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+    nonisolated static func clock(_ date: Date, timezone: String, locale: Locale = .current) -> String {
+        var style = Date.FormatStyle(date: .omitted, time: .shortened, locale: locale)
         style.timeZone = TimeZone(identifier: timezone) ?? .current
         return date.formatted(style)
     }
@@ -65,7 +65,7 @@ extension Adherence {
 extension TripSession {
     /// An expired token looks like any other server error to the caller; the
     /// picker screens all want the same response, ending the session and
-    /// letting `RootView` fall back to `LoginView`, instead of surfacing a raw
+    /// letting `RootView` fall back to `SignInView`, instead of surfacing a raw
     /// "Server error 401" alongside the form. The client has already tried a
     /// refresh, so a 401 here means the server ended the session: there is
     /// nothing left to log out of.

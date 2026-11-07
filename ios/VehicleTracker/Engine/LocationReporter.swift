@@ -38,9 +38,12 @@ final class LocationReporter {
     private var sendTask: Task<Void, Never>?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "reporter")
 
-    init(api: any TrackerAPI, now: @escaping () -> Date, onChange: @escaping @MainActor () -> Void = {}) {
+    /// `sent` is how many reports of this trip the server already accepted,
+    /// before a relaunch: the count carries on from there.
+    init(api: any TrackerAPI, now: @escaping () -> Date, sent: Int = 0, onChange: @escaping @MainActor () -> Void = {}) {
         self.api = api
         self.now = now
+        fixesSent = sent
         self.onChange = onChange
     }
 
