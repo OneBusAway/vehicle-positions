@@ -284,6 +284,8 @@
     <string name="tracking_notification_reports_refused">Reports refused. Ask your dispatcher.</string>
     <string name="tracking_notification_resume_title">Reports paused</string>
     <string name="tracking_notification_resume_text">Open the app to keep reporting.</string>
+    <!-- The channel of the notification above, which makes a sound: Android lists it in the app's notification settings. -->
+    <string name="tracking_notification_attention_channel_name">Trip needs you</string>
 
     <!-- The checklist before a trip, shown when the app is missing something it needs. The vehicle's fleet number. -->
     <string name="preflight_title">Before you start</string>

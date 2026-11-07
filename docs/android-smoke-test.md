@@ -668,6 +668,76 @@ confirm the end, the prompt says so above its buttons, which become **Try
 again** and **End on this phone**, with **Don't end the trip** (or Back) under
 them to go back to **Resume**.
 
+### Check 4c: A reboot or an app update during a trip
+
+Neither a reboot nor an update of the app leaves the tracking service running,
+and Android restarts it after neither. The app hears both and starts reporting
+again by itself when location is allowed **all the time**. Without that, or for
+a trip started 12 hours ago or more, it posts **Reports paused** instead, and
+the driver carries on from **Resume your trip?** as in Check 4b.
+
+On a physical phone, run `adb reverse tcp:$PORT tcp:$PORT` again after each
+boot. Before each step, count the starts in the server log as in Check 4b.
+
+1. With the trip running and location allowed **all the time**, restart the
+   phone, unlock it, and don't open the app:
+
+   ```bash
+   adb reboot
+   adb wait-for-device shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'
+   adb shell input keyevent 82                  # unlocks a phone with no PIN
+   adb logcat -d -s RestartTracking
+   ```
+
+**Expected outcome:** the log shows
+`android.intent.action.BOOT_COMPLETED: Started` and the tracking notification
+is back. Reports reach the server again within about two minutes, and there is
+**no** second `POST /api/v1/trips/start`. Opening the app shows the Tracking
+screen, not **Resume**.
+
+2. Install the same build over itself while the trip is running (from
+   `android/`):
+
+   ```bash
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
+
+**Expected outcome:** `android.intent.action.MY_PACKAGE_REPLACED: Started` in
+the same log, and reports carry on as in step 1.
+
+3. Force-stop the app as in Check 4b, then in Android's settings for the app
+   change location to **Allow only while using the app**. Open the app, tap
+   **Resume trip**, and restart and unlock the phone as in step 1, again
+   without opening the app.
+
+**Expected outcome:** `BOOT_COMPLETED: AskedDriver`, after
+`Not restarting without background location`. The app has not crashed
+(`adb logcat -d -b crash` shows nothing from it), no service is running
+(`adb shell dumpsys activity services LocationTrackingService` is empty), and a
+**Reports paused** notification, "Open the app to keep reporting.", has made a
+sound. Tapping it opens **Resume your trip?**. An update in this state (step 2)
+ends the same way.
+
+4. Set location back to **all the time** and resume the trip. Turn off
+   automatic date and time in Android's settings, move the clock 13 hours ahead,
+   and restart and unlock the phone.
+
+**Expected outcome:** `BOOT_COMPLETED: AskedDriver`, after
+`Not restarting a trip started …s ago`, and **Reports paused**: a trip that old
+was most likely left open, so the app does not put the phone back on the feed
+without the driver. Set the clock back and turn automatic time on again before
+tapping **Resume trip**, or the server refuses the reports for the clock.
+
+Three things this check cannot change. Reporting starts again only once the
+phone has been unlocked after it started: until then Android keeps the trip's
+storage locked. A force-stopped app hears neither broadcast until it is opened
+again, so after a force-stop, even a reboot leaves the trip waiting for
+**Resume** (Check 4b). From Android 15, opening it delivers the
+`BOOT_COMPLETED` it missed; the app is in front by then, so the log shows
+`AppInFront` and the choice stays with **Resume**. And on Android 13 and later,
+with notifications refused, **Reports paused** cannot be shown, so nothing
+tells the driver until they open the app.
+
 ### Check 5 — Ending the trip stops everything and the vehicle drops from the feed
 
 1. Reopen the app (if not already open) and tap **End trip** on the trip bar.

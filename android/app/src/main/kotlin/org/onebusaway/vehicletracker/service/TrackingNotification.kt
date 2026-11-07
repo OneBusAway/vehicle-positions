@@ -1,12 +1,17 @@
 package org.onebusaway.vehicletracker.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import org.onebusaway.vehicletracker.MainActivity
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.TrackingProblem
@@ -14,26 +19,38 @@ import org.onebusaway.vehicletracker.ui.tracking.formatClock
 
 const val NOTIFICATION_ID = 1001
 private const val CHANNEL_ID = "tracking"
+private const val ATTENTION_CHANNEL_ID = "tracking_attention"
 
 /**
- * Builds the ongoing tracking notification and its "tap to resume" degraded-path variant.
- * Creates the notification channel (minSdk 26 requirement, importance LOW) on first use.
+ * Builds the ongoing tracking notification and its "tap to resume" degraded-path variant, and posts them.
+ * Creates their channels (a minSdk 26 requirement) on first use: the ongoing one's at importance LOW, the resume
+ * one's at DEFAULT.
  */
 class TrackingNotification(private val context: Context) {
 
     init {
-        ensureChannel()
+        ensureChannels()
     }
 
-    // Creating it again under the same id renames it for drivers who already have it.
-    private fun ensureChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            context.getString(R.string.tracking_notification_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
-        )
+    // Creating them again under the same ids renames them for drivers who already have them.
+    private fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager?.createNotificationChannel(channel)
+        manager?.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.tracking_notification_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ),
+        )
+        // A channel of its own, because Android never changes a channel's importance once it exists: the resume
+        // notification asks the driver to act, so it makes a sound, and the ongoing one stays quiet.
+        manager?.createNotificationChannel(
+            NotificationChannel(
+                ATTENTION_CHANNEL_ID,
+                context.getString(R.string.tracking_notification_attention_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
     }
 
     private fun contentIntent(): PendingIntent {
@@ -48,11 +65,11 @@ class TrackingNotification(private val context: Context) {
         )
     }
 
-    private fun baseBuilder(): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, CHANNEL_ID)
+    private fun baseBuilder(channelId: String, priority: Int): NotificationCompat.Builder =
+        NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_tracking_notification)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(priority)
             .setCategory(NotificationCompat.CATEGORY_LOCATION_SHARING)
             .setContentIntent(contentIntent())
 
@@ -61,7 +78,7 @@ class TrackingNotification(private val context: Context) {
      * them, over the next stop or what is wrong. [routeColor] tints it, as ARGB, when the schedule gives one.
      */
     internal fun buildActiveNotification(text: NotificationText, routeColor: Int?): Notification =
-        baseBuilder()
+        baseBuilder(CHANNEL_ID, NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             // Shown as soon as the trip starts, rather than after Android's usual few seconds' wait.
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -70,12 +87,31 @@ class TrackingNotification(private val context: Context) {
             .apply { routeColor?.let(::setColor) }
             .build()
 
-    /** Degraded-path variant shown when location updates stopped and need a foreground tap to resume. */
+    /**
+     * Degraded-path variant shown when location updates stopped and need a foreground tap to resume, and by
+     * [RestartTracking] for a trip it did not start again after a reboot or an update. It sounds once: posting it again
+     * while it is still showing stays silent.
+     */
     fun buildResumeNotification(): Notification =
-        baseBuilder()
+        baseBuilder(ATTENTION_CHANNEL_ID, NotificationCompat.PRIORITY_DEFAULT)
             .setContentTitle(context.getString(R.string.tracking_notification_resume_title))
             .setContentText(context.getString(R.string.tracking_notification_resume_text))
             .build()
+
+    /**
+     * Posts [notification] in the tracking notification's place. On Android 13+ a driver who denied notifications has
+     * nothing to replace, and the foreground service keeps running without one, so the post is skipped rather than
+     * handed to a call that requires POST_NOTIFICATIONS.
+     */
+    fun postIfPermitted(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+    }
 
     private fun title(text: NotificationText): String {
         val status = when (val status = text.status) {

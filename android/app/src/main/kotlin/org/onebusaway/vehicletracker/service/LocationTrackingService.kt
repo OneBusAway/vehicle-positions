@@ -1,18 +1,13 @@
 package org.onebusaway.vehicletracker.service
 
-import android.Manifest
 import android.app.Notification
 import android.app.Service
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationAvailability
@@ -173,7 +168,7 @@ class LocationTrackingService : Service() {
             Log.w(TAG, "Missing location permission for background restart; entering degraded mode", e)
             locationUpdatesActive = false
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
-            notifyIfPermitted(notification.buildResumeNotification())
+            notification.postIfPermitted(notification.buildResumeNotification())
         }
     }
 
@@ -192,22 +187,7 @@ class LocationTrackingService : Service() {
 
     private fun postNotification() {
         if (!locationUpdatesActive) return
-        notifyIfPermitted(activeNotification())
-    }
-
-    /**
-     * Replaces the tracking notification. On Android 13+ a driver who denied notifications has
-     * nothing to replace, and the foreground service keeps running without one, so the update is
-     * skipped rather than handed to a call that requires POST_NOTIFICATIONS.
-     */
-    private fun notifyIfPermitted(update: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, update)
+        notification.postIfPermitted(activeNotification())
     }
 
     private fun activeNotification(): Notification {

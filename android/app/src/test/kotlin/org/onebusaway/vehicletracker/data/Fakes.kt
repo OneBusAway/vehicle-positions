@@ -146,7 +146,13 @@ class FakeTripGeometryStore : TripGeometryStore {
 class FakeServiceController : ServiceController {
     var startCount = 0
     var stopCount = 0
-    override fun startTracking() { startCount++ }
+
+    /** Thrown by each [startTracking] after it is counted, as Android throws when it refuses the start. */
+    var startFailure: RuntimeException? = null
+    override fun startTracking() {
+        startCount++
+        startFailure?.let { throw it }
+    }
     override fun stopTracking() { stopCount++ }
 }
 
