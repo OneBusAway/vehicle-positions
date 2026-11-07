@@ -133,6 +133,9 @@ private fun NavController.toBusStep() {
  */
 internal val skipBusStep: NavOptionsBuilder.() -> Unit = { popUpTo(ROUTE_VEHICLES) { inclusive = true } }
 
+/** Off to Sign in once the server has ended the session: nothing behind it still works, so nothing stays behind it. */
+internal val toSignIn: NavOptionsBuilder.() -> Unit = { popUpTo(0) { inclusive = true } }
+
 /** Determines which route the app should land on at launch, based on persisted session/trip state. */
 @HiltViewModel
 class AppNavViewModel @Inject constructor(
@@ -268,6 +271,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     // Not a tap: it fires once the assignments load, which can be while this screen is still sliding
                     // in, and a guard would drop it.
                     onOnlyVehicle = { vehicleId -> navController.navigate("trip/${arg(vehicleId)}", skipBusStep) },
+                    // Not a tap: it fires when the reply lands, and a guard would drop it.
+                    onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 )
             }
         }
@@ -290,7 +295,14 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 }
             }
             ClearOfSystemBars {
-                RoutesScreen(busId = vehicleId, onBack = backToBuses, onBusClick = backToBuses, onRouteSelected = openRuns)
+                RoutesScreen(
+                    busId = vehicleId,
+                    onBack = backToBuses,
+                    onBusClick = backToBuses,
+                    onRouteSelected = openRuns,
+                    // Not a tap: it fires when the reply lands, and a guard would drop it.
+                    onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+                )
             }
         }
         composable(
@@ -319,6 +331,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     onRouteClick = dropUnlessResumed { navController.popBackStack(ROUTE_ROUTES, inclusive = false) },
                     onChangeBus = dropUnlessResumed { navController.toBusStep() },
                     onChooseAnotherRoute = dropUnlessResumed { navController.popBackStack() },
+                    // Not a tap: it fires when the reply lands, and a guard would drop it.
+                    onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 )
             }
         }

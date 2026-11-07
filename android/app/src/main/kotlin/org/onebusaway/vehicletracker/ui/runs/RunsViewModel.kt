@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
+import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.CatalogRepository
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripRepository
@@ -62,7 +63,10 @@ sealed interface RunsUiState {
         val starting: Boolean get() = startingRunId != null
     }
 
-    data class Error(val retry: Boolean) : RunsUiState
+    data object Error : RunsUiState
+
+    /** The server has ended the session and the tokens are gone, so the screen opens Sign in. */
+    data object SessionEnded : RunsUiState
 }
 
 @HiltViewModel
@@ -72,6 +76,7 @@ class RunsViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val tripGeometryStore: TripGeometryStore,
     private val serviceController: ServiceController,
+    private val authRepository: AuthRepository,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) : ViewModel() {
     // Read here rather than handed in by the screen, so a rotation reuses the ViewModel and its
@@ -99,17 +104,20 @@ class RunsViewModel @Inject constructor(
 
     private val startingRun = MutableStateFlow<String?>(null)
     private val startError = MutableStateFlow<TripError?>(null)
+    private val sessionEnded = MutableStateFlow(false)
 
     private val boards = combine(loadResult, now) { result, now ->
         result?.mapCatching { page -> page to departureBoardsOf(page, now, timeFormat) }
     }
 
     val uiState: StateFlow<RunsUiState> = combine(
+        sessionEnded,
         boards,
         startingRun,
         startError,
-    ) { result, startingRunId, error ->
+    ) { ended, result, startingRunId, error ->
         when {
+            ended -> RunsUiState.SessionEnded
             result == null -> RunsUiState.Loading
             result.isSuccess -> {
                 val (page, boards) = result.getOrThrow()
@@ -121,7 +129,7 @@ class RunsViewModel @Inject constructor(
                     error = error,
                 )
             }
-            else -> RunsUiState.Error(retry = result.exceptionOrNull() !is ApiError.Unauthorized)
+            else -> RunsUiState.Error
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RunsUiState.Loading)
 
@@ -156,9 +164,19 @@ class RunsViewModel @Inject constructor(
             // mapCatching: a zone or a schedule time this platform cannot read is a bad reply,
             // not a crash — the screen offers a retry as it would for any other failed load.
             val result = catalogRepository.trips(routeId).mapCatching { it.toRunPage() }
+            if (result.exceptionOrNull() is ApiError.Unauthorized) endSession()
             now.value = Instant.ofEpochSecond(clock())
             loadResult.value = result
         }
+    }
+
+    /**
+     * The client has already tried a refresh. The tokens go before the state changes, so nothing can read a dead one
+     * once the session shows as ended.
+     */
+    private suspend fun endSession() {
+        authRepository.endSessionLocally()
+        sessionEnded.value = true
     }
 
     /**

@@ -12,7 +12,11 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -36,11 +40,14 @@ import org.onebusaway.vehicletracker.data.EncryptedSessionStore
 import org.onebusaway.vehicletracker.data.FakeCryptor
 import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FakeSessionStore
+import org.onebusaway.vehicletracker.data.FakeVehiclePrefsStore
 import org.onebusaway.vehicletracker.data.IssuedTokens
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.VehicleRepository
 import org.onebusaway.vehicletracker.di.ApiHolder
+import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
+import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 import retrofit2.HttpException
 import java.io.File
 import java.io.IOException
@@ -342,6 +349,41 @@ class TokenRefresherTest {
         holder.api().myVehicles()
 
         assertTrue(recorded().refreshes().isEmpty())
+    }
+
+    /** What the bus step ends up showing after its load, with the real client under it. */
+    private fun busStepAfterItsLoad(): VehiclesUiState = runBlocking {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        try {
+            val holder = holder()
+            val auth = AuthRepository(sessions, holder.apiFactory, FakeOfflineFixQueue(), clock = { NOW })
+            val vm = VehicleViewModel(VehicleRepository(TrackerApiProvider(holder::api)), FakeVehiclePrefsStore(), auth)
+            withTimeout(5_000) { vm.uiState.first { it !is VehiclesUiState.Loading } }
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun `a 401 the refresh can fix keeps the driver signed in`() {
+        assertTrue(busStepAfterItsLoad() is VehiclesUiState.Loaded)
+
+        assertEquals(Session(serverUrl, "a2", NOW, "r2", NOW + 900), sessions.state.value)
+    }
+
+    @Test fun `a refused refresh ends the session`() {
+        fake.refreshReply = { unauthorized("invalid or expired refresh token") }
+
+        assertEquals(VehiclesUiState.SessionEnded, busStepAfterItsLoad())
+
+        assertEquals(Session(serverUrl, null, null), sessions.state.value)
+    }
+
+    @Test fun `a refresh the server can't do right now is not the end of the session`() {
+        fake.refreshReply = { MockResponse().setResponseCode(503).setBody("""{"error":"service unavailable"}""") }
+
+        assertEquals(VehiclesUiState.Error, busStepAfterItsLoad())
+
+        assertEquals(Session(serverUrl, "a1", ISSUED_AT, "r1", ISSUED_AT + 900), sessions.state.value)
     }
 
     /**

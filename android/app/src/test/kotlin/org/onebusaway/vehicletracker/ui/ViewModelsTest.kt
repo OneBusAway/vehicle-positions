@@ -7,6 +7,9 @@ import app.cash.turbine.test
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -96,6 +99,9 @@ class ViewModelsTest {
         if (!condition()) fail("Timed out after ${timeoutMs}ms waiting for: $description")
     }
 
+    private fun authOver(sessionStore: SessionStore) =
+        AuthRepository(sessionStore, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L })
+
     // --- Sign in ---
 
     private fun loginViewModel(
@@ -104,7 +110,7 @@ class ViewModelsTest {
         geometryStore: FakeTripGeometryStore = FakeTripGeometryStore(),
         again: Boolean = false,
     ) = LoginViewModel(
-        AuthRepository(sessionStore, ApiFactory { null }, FakeOfflineFixQueue(), clock = { 0L }),
+        authOver(sessionStore),
         sessionStore,
         tripState,
         geometryStore,
@@ -374,8 +380,9 @@ class ViewModelsTest {
         trip: ActiveTrip? = null,
         session: Session = freshSession,
         tracking: TrackingRepository = TrackingRepository(),
+        sessionStore: SessionStore = FakeSessionStore().apply { state.value = session },
     ) = AppNavViewModel(
-        FakeSessionStore().apply { state.value = session },
+        sessionStore,
         FakeTripStateStore().apply { tripState.value = trip },
         tracking,
         clock = { launchNow },
@@ -474,7 +481,7 @@ class ViewModelsTest {
             val repo = VehicleRepository(
                 TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) },
             )
-            val vm = VehicleViewModel(repo, prefs)
+            val vm = VehicleViewModel(repo, prefs, authOver(FakeSessionStore()))
             awaitCondition(description = "vehicles loaded") { vm.uiState.value is VehiclesUiState.Loaded }
             block(vm, prefs)
         } finally {
@@ -675,7 +682,7 @@ class ViewModelsTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(response)
         try {
-            val vm = RoutesViewModel(catalogFor(server), store)
+            val vm = RoutesViewModel(catalogFor(server), store, authOver(FakeSessionStore()))
             awaitCondition(description = "routes settled") { vm.uiState.value !is RoutesUiState.Loading }
             block(vm)
         } finally {
@@ -760,13 +767,13 @@ class ViewModelsTest {
         }
     }
 
-    @Test fun `a failed route load offers a retry, and a 401 does not`() = runTest(dispatcher) {
+    @Test fun `a failed route load offers a retry, and a 401 ends the session`() = runTest(dispatcher) {
         withRoutesViewModel(response = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)) { vm ->
-            assertEquals(RoutesUiState.Error(retry = true), vm.uiState.value)
+            assertEquals(RoutesUiState.Error, vm.uiState.value)
         }
         withRoutesViewModel(response = MockResponse().setResponseCode(401).setBody("""{"error":"bad token"}""")) { vm ->
             // Retrying with the same dead token only fails again; the driver has to sign in.
-            assertEquals(RoutesUiState.Error(retry = false), vm.uiState.value)
+            assertEquals(RoutesUiState.SessionEnded, vm.uiState.value)
         }
     }
 
@@ -840,7 +847,9 @@ class ViewModelsTest {
             // The nav graph's arguments, which is where the ViewModel reads them from — and it
             // loads off them in init, with no load() call from the screen.
             val args = SavedStateHandle(mapOf("vehicleId" to "bus-1", "routeId" to "R1") + extraArgs)
-            val vm = RunsViewModel(args, CatalogRepository(provider), tripRepository, geometryStore, serviceController, clock)
+            val vm = RunsViewModel(
+                args, CatalogRepository(provider), tripRepository, geometryStore, serviceController, authOver(FakeSessionStore()), clock,
+            )
             awaitCondition(description = "runs settled") { vm.uiState.value !is RunsUiState.Loading }
             block(vm, server, serviceController, tripState)
         } finally {
@@ -1155,6 +1164,150 @@ class ViewModelsTest {
             assertEquals(1, serviceController.startCount)
             assertEquals("T1", tripState.tripState.value?.gtfsTripId)
             assertNull(loadedRuns(vm).error)
+        }
+    }
+
+    // --- A session the server has ended: the same on all three pickers ---
+
+    private val signedIn = Session("https://tracker.example.com/", "a1", 100L, "r1", 1_000L, "d@example.com")
+
+    private fun unauthorized() = MockResponse().setResponseCode(401).setBody("""{"error":"invalid or expired token"}""")
+
+    /** A picker, whichever it is, in terms of its own states. [goodReply] is a body that loads it. */
+    private class Picker(
+        val name: String,
+        val goodReply: String,
+        val state: StateFlow<Any>,
+        val loading: Any,
+        val error: Any,
+        val sessionEnded: Any,
+        val isLoaded: () -> Boolean,
+        val retry: () -> Unit,
+    )
+
+    private fun busStep(provider: TrackerApiProvider, store: SessionStore): Picker {
+        val vm = VehicleViewModel(VehicleRepository(provider), FakeVehiclePrefsStore(), authOver(store))
+        return Picker(
+            "bus step", threeVehiclesJson, vm.uiState, VehiclesUiState.Loading, VehiclesUiState.Error, VehiclesUiState.SessionEnded,
+            { vm.uiState.value is VehiclesUiState.Loaded }, vm::retry,
+        )
+    }
+
+    private fun routeStep(provider: TrackerApiProvider, store: SessionStore): Picker {
+        val vm = RoutesViewModel(CatalogRepository(provider), FakeTripStateStore(), authOver(store))
+        return Picker(
+            "route step", catalogRoutesJson, vm.uiState, RoutesUiState.Loading, RoutesUiState.Error, RoutesUiState.SessionEnded,
+            { vm.uiState.value is RoutesUiState.Loaded }, vm::retry,
+        )
+    }
+
+    private fun runStep(provider: TrackerApiProvider, store: SessionStore): Picker {
+        val clock = { OffsetDateTime.parse("2026-09-22T08:05:00-07:00").toEpochSecond() }
+        val args = SavedStateHandle(mapOf("vehicleId" to "bus-1", "routeId" to "R1"))
+        val trips = TripRepository(provider, FakeTripStateStore(), FakeVehiclePrefsStore(), store, clock = clock)
+        val vm = RunsViewModel(args, CatalogRepository(provider), trips, FakeTripGeometryStore(), FakeServiceController(), authOver(store), clock)
+        return Picker(
+            "run step", twoRunsJson, vm.uiState, RunsUiState.Loading, RunsUiState.Error, RunsUiState.SessionEnded,
+            { vm.uiState.value is RunsUiState.Loaded }, vm::retry,
+        )
+    }
+
+    /**
+     * Runs [block] on each picker, with a store holding [signedIn] and a server answering the first load with
+     * [firstReply] and the next with one that works. The first load is still to come when [block] starts: the pickers
+     * load through the test dispatcher.
+     */
+    private fun onEachPicker(
+        firstReply: () -> MockResponse,
+        storeFor: (FakeSessionStore) -> SessionStore = { it },
+        block: (Picker, FakeSessionStore) -> Unit,
+    ) {
+        for (build in listOf(::busStep, ::routeStep, ::runStep)) {
+            val store = FakeSessionStore().apply { state.value = signedIn }
+            val server = MockWebServer().apply { start() }
+            try {
+                val provider = TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }
+                val picker = build(provider, storeFor(store))
+                server.enqueue(firstReply())
+                server.enqueue(MockResponse().setBody(picker.goodReply))
+                block(picker, store)
+            } finally {
+                server.shutdown()
+            }
+        }
+    }
+
+    private fun Picker.awaitFirstLoad() = awaitCondition(description = "$name settled") { state.value != loading }
+
+    @Test fun `a 401 ends the session and keeps the server and the email`() = runTest(dispatcher) {
+        onEachPicker(firstReply = ::unauthorized) { picker, store ->
+            picker.awaitFirstLoad()
+
+            assertEquals(picker.name, picker.sessionEnded, picker.state.value)
+            assertEquals(picker.name, Session(signedIn.serverUrl, null, null, email = signedIn.email), store.state.value)
+        }
+    }
+
+    @Test fun `a failed load keeps the session and offers a retry`() = runTest(dispatcher) {
+        val failures = listOf(
+            { MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START) },
+            { MockResponse().setResponseCode(500).setBody("""{"error":"internal server error"}""") },
+        )
+        for (failure in failures) {
+            onEachPicker(firstReply = failure) { picker, store ->
+                picker.awaitFirstLoad()
+
+                assertEquals(picker.name, picker.error, picker.state.value)
+                assertEquals(picker.name, signedIn, store.state.value)
+
+                picker.retry()
+                awaitCondition(description = "${picker.name} loaded on the retry") { picker.isLoaded() }
+
+                assertEquals(picker.name, signedIn, store.state.value)
+            }
+        }
+    }
+
+    // A write takes time on a real disk. A screen that heard first would open Sign in with the dead token still stored.
+    @Test fun `the session is cleared before the screen hears it ended`() = runTest(dispatcher) {
+        val slowToClear = { store: FakeSessionStore ->
+            object : SessionStore by store {
+                override suspend fun clearToken() {
+                    delay(1)
+                    store.clearToken()
+                }
+            }
+        }
+        onEachPicker(firstReply = ::unauthorized, storeFor = slowToClear) { picker, store ->
+            var tokenWhenEnded: String? = "the screen never heard"
+            val screen = launch {
+                picker.state.first { it == picker.sessionEnded }
+                tokenWhenEnded = store.state.value.token
+            }
+            awaitCondition(description = "${picker.name} heard the session ended") { screen.isCompleted }
+
+            assertNull(picker.name, tokenWhenEnded)
+        }
+    }
+
+    @Test fun `a session that can't be cleared still goes to Sign in`() = runTest(dispatcher) {
+        val fullDisk = { store: FakeSessionStore -> store.apply { clearFailure = IOException("No space left on device") } }
+        onEachPicker(firstReply = ::unauthorized, storeFor = fullDisk) { picker, store ->
+            picker.awaitFirstLoad()
+
+            assertEquals(picker.name, picker.sessionEnded, picker.state.value)
+            assertEquals("still stored, so the next 401 ends it again", signedIn, store.state.value)
+        }
+    }
+
+    @Test fun `the next launch after a 401 opens Sign in`() = runTest(dispatcher) {
+        onEachPicker(firstReply = ::unauthorized) { picker, store ->
+            picker.awaitFirstLoad()
+
+            val nextLaunch = appNavViewModel(sessionStore = store)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(picker.name, "login", nextLaunch.startDestination.value)
         }
     }
 

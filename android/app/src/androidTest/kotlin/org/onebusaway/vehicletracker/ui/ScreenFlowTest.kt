@@ -1017,8 +1017,9 @@ class ScreenFlowTest {
         onVehicleClick: (String) -> Unit = {},
         onToggleFavorite: (String) -> Unit = {},
         onRetry: () -> Unit = {},
+        onSessionEnded: () -> Unit = {},
     ) {
-        compose.setContent { VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry) }
+        compose.setContent { VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry, onSessionEnded) }
     }
 
     private fun top(node: SemanticsNodeInteraction) = node.getBoundsInRoot().top
@@ -1083,7 +1084,7 @@ class ScreenFlowTest {
     @Test
     fun busScreen_triesAgainAfterAFailedLoad() {
         var reloads = 0
-        showBuses(VehiclesUiState.Error(retry = true), onRetry = { reloads++ })
+        showBuses(VehiclesUiState.Error, onRetry = { reloads++ })
 
         compose.onNodeWithText(getString(R.string.vehicles_error_message)).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.vehicles_error_detail)).assertIsDisplayed()
@@ -1092,11 +1093,13 @@ class ScreenFlowTest {
     }
 
     @Test
-    fun busScreen_offersNothingToTryWhenSignedOut() {
-        showBuses(VehiclesUiState.Error(retry = false))
+    fun busScreen_reportsTheEndOfTheSession() {
+        var ended = 0
+        showBuses(VehiclesUiState.SessionEnded, onSessionEnded = { ended++ })
 
-        compose.onNodeWithText(getString(R.string.vehicles_error_message)).assertIsDisplayed()
-        compose.onNodeWithText(getString(R.string.vehicles_error_detail)).assertDoesNotExist()
+        compose.waitForIdle()
+        assertEquals(1, ended)
+        compose.onNodeWithText(getString(R.string.vehicles_error_message)).assertDoesNotExist()
         compose.onNodeWithText(getString(R.string.vehicles_retry_button)).assertDoesNotExist()
     }
 
@@ -1125,7 +1128,7 @@ class ScreenFlowTest {
     private val numberedRoutes = listOf("1", "2", "3", "4", "5", "7").map { route("R$it", it) }
 
     private fun showRoutes(state: RoutesUiState, onRouteClick: (String) -> Unit = {}, onRetry: () -> Unit = {}) {
-        compose.setContent { RoutesScreenContent(state, "4317", {}, {}, { onRouteClick(it.id) }, onQueryChange = {}, onRetry) }
+        compose.setContent { RoutesScreenContent(state, "4317", {}, {}, { onRouteClick(it.id) }, onQueryChange = {}, onRetry, onSessionEnded = {}) }
     }
 
     @Test
@@ -1197,17 +1200,25 @@ class ScreenFlowTest {
     }
 
     @Test
-    fun routesScreen_triesAgainAfterAFailedLoadButNotWhenSignedOut() {
+    fun routesScreen_triesAgainAfterAFailedLoadAndReportsTheEndOfTheSession() {
         var reloads = 0
-        var state by mutableStateOf<RoutesUiState>(RoutesUiState.Error(retry = true))
-        compose.setContent { RoutesScreenContent(state, "4317", {}, {}, onRouteClick = {}, onQueryChange = {}, onRetry = { reloads++ }) }
+        var ended = 0
+        var state by mutableStateOf<RoutesUiState>(RoutesUiState.Error)
+        compose.setContent {
+            RoutesScreenContent(
+                state, "4317", {}, {}, onRouteClick = {}, onQueryChange = {}, onRetry = { reloads++ }, onSessionEnded = { ended++ },
+            )
+        }
 
         compose.onNodeWithText(getString(R.string.routes_error_detail)).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.routes_retry_button)).performClick()
         assertEquals(1, reloads)
+        assertEquals(0, ended)
 
-        state = RoutesUiState.Error(retry = false)
-        compose.onNodeWithText(getString(R.string.routes_error_message)).assertIsDisplayed()
+        state = RoutesUiState.SessionEnded
+        compose.waitForIdle()
+        assertEquals(1, ended)
+        compose.onNodeWithText(getString(R.string.routes_error_message)).assertDoesNotExist()
         compose.onNodeWithText(getString(R.string.routes_retry_button)).assertDoesNotExist()
     }
 
@@ -1255,6 +1266,7 @@ class ScreenFlowTest {
                 onTryAgain = { calls.triesAgain++ },
                 onChangeBus = { calls.changeBus++ },
                 onChooseAnotherRoute = { calls.anotherRoute++ },
+                onSessionEnded = {},
             )
         }
         return calls
@@ -1322,7 +1334,7 @@ class ScreenFlowTest {
             RunsScreenContent(
                 state, badge7, "4317", onBack = {}, onBusClick = {}, onRouteClick = {},
                 onRunClick = {}, onReload = { calls.reloads++ }, onTryAgain = { calls.triesAgain++ },
-                onChangeBus = { calls.changeBus++ }, onChooseAnotherRoute = {},
+                onChangeBus = { calls.changeBus++ }, onChooseAnotherRoute = {}, onSessionEnded = {},
             )
         }
 
@@ -1361,7 +1373,7 @@ class ScreenFlowTest {
             RunsScreenContent(
                 RunsUiState.Loaded(runPage, listOf(Board(null, emptyList(), null, 0)), 0, null, null),
                 RouteBadgeModel.of("", "", ""), "4317", onBack = {}, onBusClick = {}, onRouteClick = {},
-                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {},
+                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {},
             )
         }
 
@@ -1378,7 +1390,7 @@ class ScreenFlowTest {
             RunsScreenContent(
                 if (restored) board(boards = listOf(inboundBoard)) else board(), badge7, "4317",
                 onBack = {}, onBusClick = {}, onRouteClick = {}, onRunClick = {}, onReload = {}, onTryAgain = {},
-                onChangeBus = {}, onChooseAnotherRoute = {},
+                onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {},
             )
         }
         compose.onNode(hasText(getString(R.string.runs_direction, "Mount Baker")) and isSelectable()).performClick()
@@ -1390,22 +1402,27 @@ class ScreenFlowTest {
     }
 
     @Test
-    fun runsScreen_triesAgainAfterAFailedLoadButNotWhenSignedOut() {
-        var state by mutableStateOf<RunsUiState>(RunsUiState.Error(retry = true))
+    fun runsScreen_triesAgainAfterAFailedLoadAndReportsTheEndOfTheSession() {
+        var state by mutableStateOf<RunsUiState>(RunsUiState.Error)
         var reloads = 0
+        var ended = 0
         compose.setContent {
             RunsScreenContent(
                 state, badge7, "4317", onBack = {}, onBusClick = {}, onRouteClick = {},
                 onRunClick = {}, onReload = { reloads++ }, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {},
+                onSessionEnded = { ended++ },
             )
         }
 
         compose.onNodeWithText(getString(R.string.runs_error_detail)).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.runs_retry_button)).performClick()
         assertEquals(1, reloads)
+        assertEquals(0, ended)
 
-        state = RunsUiState.Error(retry = false)
-        compose.onNodeWithText(getString(R.string.runs_error_message)).assertIsDisplayed()
+        state = RunsUiState.SessionEnded
+        compose.waitForIdle()
+        assertEquals(1, ended)
+        compose.onNodeWithText(getString(R.string.runs_error_message)).assertDoesNotExist()
         compose.onNodeWithText(getString(R.string.runs_retry_button)).assertDoesNotExist()
     }
 
@@ -1419,7 +1436,7 @@ class ScreenFlowTest {
         compose.setContent {
             RunsScreenContent(
                 board(), badge7, "4317", onBack = { back++ }, onBusClick = { bus++ }, onRouteClick = { routeStep++ },
-                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {},
+                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {},
             )
         }
 
@@ -1436,7 +1453,7 @@ class ScreenFlowTest {
         compose.setContent {
             RoutesScreenContent(
                 RoutesUiState.Loading, busId = "4317", onBack = null, onBusClick = null,
-                onRouteClick = {}, onQueryChange = {}, onRetry = {},
+                onRouteClick = {}, onQueryChange = {}, onRetry = {}, onSessionEnded = {},
             )
         }
 
@@ -1456,7 +1473,7 @@ class ScreenFlowTest {
                 composable("vehicles") { entry ->
                     // Wired as AppNav wires the bus step.
                     val open = remember(entry) { entry.ifResumed<String> { id -> navController.navigate("trip/$id") } }
-                    VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), open, {}, {}, {})
+                    VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), open, {}, {}, {}, onSessionEnded = {})
                 }
                 composable("trip/{vehicleId}") {}
             }

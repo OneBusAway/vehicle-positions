@@ -36,6 +36,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -79,7 +80,10 @@ import java.time.format.DateTimeFormatter
 
 private val TagShape = RoundedCornerShape(8.dp)
 
-/** [onBusClick] is null when the bus step was skipped: there is no bus step to go back to. */
+/**
+ * [onBusClick] is null when the bus step was skipped: there is no bus step to go back to. [onSessionEnded] is the server
+ * having ended the session.
+ */
 @Composable
 fun RunsScreen(
     onTripStarted: () -> Unit,
@@ -88,6 +92,7 @@ fun RunsScreen(
     onRouteClick: () -> Unit,
     onChangeBus: () -> Unit,
     onChooseAnotherRoute: () -> Unit,
+    onSessionEnded: () -> Unit,
     viewModel: RunsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -123,6 +128,7 @@ fun RunsScreen(
                 onTryAgain = { pendingRunId?.let { viewModel.onStartRun(it, onTripStarted) } },
                 onChangeBus = onChangeBus,
                 onChooseAnotherRoute = onChooseAnotherRoute,
+                onSessionEnded = onSessionEnded,
             )
         }
         AnimatedVisibility(visible = permissionFlow.visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
@@ -156,7 +162,11 @@ fun RunsScreenContent(
     onTryAgain: () -> Unit,
     onChangeBus: () -> Unit,
     onChooseAnotherRoute: () -> Unit,
+    onSessionEnded: () -> Unit,
 ) {
+    val sessionEnded = state is RunsUiState.SessionEnded
+    LaunchedEffect(sessionEnded) { if (sessionEnded) onSessionEnded() }
+
     Column(Modifier.fillMaxSize()) {
         SetupHeader(
             busId = vehicleId,
@@ -172,14 +182,13 @@ fun RunsScreenContent(
             modifier = Modifier.padding(start = 24.dp, top = 8.dp, end = 24.dp, bottom = 18.dp).semantics { heading() },
         )
         when (state) {
-            is RunsUiState.Loading -> DelayedSpinner()
+            is RunsUiState.Loading, is RunsUiState.SessionEnded -> DelayedSpinner()
             is RunsUiState.Error -> Column(Modifier.verticalScroll(rememberScrollState())) {
                 EmptyState(
                     icon = R.drawable.ic_cloud_off,
                     title = stringResource(R.string.runs_error_message),
-                    // A 401 is not fixed by trying again: there is nothing for the driver to do here.
-                    body = if (state.retry) stringResource(R.string.runs_error_detail) else null,
-                    action = if (state.retry) stringResource(R.string.runs_retry_button) else null,
+                    body = stringResource(R.string.runs_error_detail),
+                    action = stringResource(R.string.runs_retry_button),
                     onAction = onReload,
                 )
             }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
+import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.CatalogRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.api.RouteDto
@@ -42,13 +43,17 @@ sealed interface RoutesUiState {
      */
     data object NoSchedule : RoutesUiState
 
-    data class Error(val retry: Boolean) : RoutesUiState
+    data object Error : RoutesUiState
+
+    /** The server has ended the session and the tokens are gone, so the screen opens Sign in. */
+    data object SessionEnded : RoutesUiState
 }
 
 @HiltViewModel
 class RoutesViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     tripStateStore: TripStateStore,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
     /** null while a load is in flight; otherwise the outcome of the last one, with every route's badge read once. */
     private val loadResult = MutableStateFlow<Result<List<RouteItem>>?>(null)
@@ -75,7 +80,8 @@ class RoutesViewModel @Inject constructor(
                 )
             }
             result.exceptionOrNull() is ApiError.CatalogUnavailable -> RoutesUiState.NoSchedule
-            else -> RoutesUiState.Error(retry = result.exceptionOrNull() !is ApiError.Unauthorized)
+            result.exceptionOrNull() is ApiError.Unauthorized -> RoutesUiState.SessionEnded
+            else -> RoutesUiState.Error
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RoutesUiState.Loading)
 
@@ -91,7 +97,13 @@ class RoutesViewModel @Inject constructor(
 
     private fun load() {
         loadResult.value = null
-        viewModelScope.launch { loadResult.value = catalogRepository.routes().map { routes -> routes.map { it.toItem() } } }
+        viewModelScope.launch {
+            val result = catalogRepository.routes().map { routes -> routes.map { it.toItem() } }
+            // The client has already tried a refresh. The tokens go before the state changes, so nothing can read a dead
+            // one once the session shows as ended.
+            if (result.exceptionOrNull() is ApiError.Unauthorized) authRepository.endSessionLocally()
+            loadResult.value = result
+        }
     }
 }
 
