@@ -15,9 +15,12 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.internal.platform.Platform
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -39,6 +42,7 @@ import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.login.LoginBanner
 import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginField
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
@@ -64,8 +68,11 @@ import org.onebusaway.vehicletracker.ui.tracking.TripEnder
 import org.onebusaway.vehicletracker.ui.vehicles.BusSection
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
+import retrofit2.HttpException
+import retrofit2.Response
 import java.io.File
 import java.io.IOException
+import java.net.UnknownServiceException
 import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -178,8 +185,8 @@ class ViewModelsTest {
         server.shutdown()
     }
 
-    private fun failedSignIn(response: MockResponse): LoginUiState {
-        val server = MockWebServer().apply { start() }
+    private fun failedSignIn(response: MockResponse, server: MockWebServer = MockWebServer()): LoginUiState {
+        server.start()
         server.enqueue(response)
         try {
             val vm = loginViewModel()
@@ -221,6 +228,123 @@ class ViewModelsTest {
         assertEquals(LoginError.Unreachable(url), vm.uiState.value.error)
         assertTrue("the error goes under the server field, so it shows", vm.uiState.value.showsServerField)
         server.shutdown()
+    }
+
+    private fun assertNotATrackerServer(response: MockResponse) {
+        val server = MockWebServer()
+        val state = failedSignIn(response, server)
+        assertEquals(LoginError.NotATrackerServer(server.url("/").toString()), state.error)
+        assertTrue("the error goes under the server field, so it shows", state.changingServer)
+    }
+
+    @Test fun `a 404 is not a tracker server`() = runTest(dispatcher) {
+        assertNotATrackerServer(MockResponse().setResponseCode(404).setBody("404 page not found"))
+    }
+
+    @Test fun `a 405 is not a tracker server`() = runTest(dispatcher) {
+        assertNotATrackerServer(MockResponse().setResponseCode(405))
+    }
+
+    @Test fun `a web page is not a tracker server`() = runTest(dispatcher) {
+        assertNotATrackerServer(MockResponse().setBody("<!doctype html><html><body>Sign in to the Wi-Fi</body></html>"))
+    }
+
+    @Test fun `a 200 with other JSON is not a tracker server`() = runTest(dispatcher) {
+        assertNotATrackerServer(MockResponse().setBody("""{"status":"ok"}"""))
+    }
+
+    @Test fun `a 429 says wait, and doesn't open the server field`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":"too many attempts"}"""))
+        val url = server.url("/").toString()
+        // A returning driver, whose server is a quiet line until something is wrong with it.
+        val vm = loginViewModel(FakeSessionStore().apply { state.value = Session(serverUrl = url, token = null, issuedAtEpochSec = null, email = "d@example.com") })
+        dispatcher.scheduler.advanceUntilIdle()
+        require(!vm.uiState.value.showsServerField)
+        vm.password.setTextAndPlaceCursorAtEnd("pw")
+
+        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+        assertEquals(LoginError.TooManyAttempts, vm.uiState.value.error)
+        assertFalse("nothing is wrong with the server", vm.uiState.value.showsServerField)
+        assertEquals(url, vm.server.text.toString())
+        assertEquals("d@example.com", vm.email.text.toString())
+        assertEquals("pw", vm.password.text.toString())
+        server.shutdown()
+    }
+
+    @Test fun `a 500 stays a server error`() = runTest(dispatcher) {
+        // With a gateway's web page for a body, which a 5xx never gets as far as reading.
+        for (status in listOf(500, 502, 503)) {
+            val state = failedSignIn(MockResponse().setResponseCode(status).setBody("<html><body>Bad gateway</body></html>"))
+            assertEquals("for $status", LoginError.ServerError, state.error)
+            assertFalse("for $status", state.changingServer)
+        }
+    }
+
+    @Test fun `a 400 is not blamed on the address`() = runTest(dispatcher) {
+        // The server's own answer to a bad body, so it is a tracker server, and a bug if the app ever gets this.
+        val state = failedSignIn(MockResponse().setResponseCode(400).setBody("""{"error":"invalid request body"}"""))
+        assertEquals(LoginError.ServerError, state.error)
+    }
+
+    @Test fun `the catalog's and trips' errors don't change`() {
+        for (status in listOf(404, 405, 429)) {
+            val http = HttpException(Response.error<Unit>(status, "".toResponseBody()))
+            assertTrue("for $status", mapHttpError(http) is ApiError.Other)
+        }
+        assertEquals(ApiError.Other("network"), mapHttpError(UnknownServiceException("CLEARTEXT")))
+        assertTrue(mapHttpError(SerializationException("not json")) is ApiError.Other)
+    }
+
+    @Test fun `signing in again with a server that isn't one keeps the field closed and shows the banner`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(404))
+        val url = server.url("/").toString()
+        val vm = loginViewModel(
+            sessionStore = FakeSessionStore().apply { state.value = Session(serverUrl = url, token = null, issuedAtEpochSec = null, email = "d@example.com") },
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip },
+            again = true,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.password.setTextAndPlaceCursorAtEnd("pw")
+
+        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+        assertEquals(LoginError.NotATrackerServer(url), vm.uiState.value.error)
+        assertFalse("the open trip is on this server, so it cannot be changed here", vm.uiState.value.showsServerField)
+        assertEquals(R.string.login_error_not_tracker, bannerOf(vm.uiState.value.error)?.text)
+        server.shutdown()
+    }
+
+    @Test fun `a cleartext refusal maps to its own error, not to no network`() {
+        assertEquals(ApiError.CleartextBlocked, mapLoginError(UnknownServiceException("CLEARTEXT communication to 192.0.2.1 not permitted by network security policy")))
+    }
+
+    @Test fun `the network policy's refusal says https is required`() = runTest(dispatcher) {
+        // OkHttp asks its platform, which on a phone is the network security policy; on the JVM it always says yes, so
+        // only that answer is faked here. CleartextPolicyTest runs the real policy on a device.
+        Platform.resetForTests(object : Platform() {
+            override fun isCleartextTrafficPermitted(hostname: String) = false
+        })
+        val server = MockWebServer().apply { start() }
+        try {
+            val vm = loginViewModel()
+            dispatcher.scheduler.advanceUntilIdle()
+            vm.fill(server.url("/").toString(), "d@example.com", "pw")
+
+            vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+            awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+            assertEquals(LoginError.HttpsRequired, vm.uiState.value.error)
+            assertTrue("the error goes under the server field, so it shows", vm.uiState.value.changingServer)
+            assertEquals("refused before it connected", 0, server.requestCount)
+        } finally {
+            Platform.resetForTests()
+            server.shutdown()
+        }
     }
 
     @Test fun `serverAddressOf reads what was typed`() {
@@ -414,6 +538,7 @@ class ViewModelsTest {
         for (field in LoginField.entries) {
             assertNull(fieldErrorRes(null, field))
             assertNull(fieldErrorRes(LoginError.ServerError, field))
+            assertNull(fieldErrorRes(LoginError.TooManyAttempts, field))
         }
         assertEquals(R.string.login_error_missing_server, fieldErrorRes(LoginError.MissingField(LoginField.SERVER), LoginField.SERVER))
         assertEquals(R.string.login_error_missing_email, fieldErrorRes(LoginError.MissingField(LoginField.EMAIL), LoginField.EMAIL))
@@ -423,11 +548,18 @@ class ViewModelsTest {
         assertNull(fieldErrorRes(LoginError.InvalidCredentials, LoginField.EMAIL))
         assertEquals(R.string.login_error_invalid_address, fieldErrorRes(LoginError.InvalidAddress, LoginField.SERVER))
         assertNull(fieldErrorRes(LoginError.InvalidAddress, LoginField.EMAIL))
+        assertEquals(R.string.login_error_https_required, fieldErrorRes(LoginError.HttpsRequired, LoginField.SERVER))
+        assertNull(fieldErrorRes(LoginError.HttpsRequired, LoginField.PASSWORD))
+        assertEquals(R.string.login_error_check_address, fieldErrorRes(LoginError.NotATrackerServer("x"), LoginField.SERVER))
+        assertNull(fieldErrorRes(LoginError.NotATrackerServer("x"), LoginField.PASSWORD))
         assertEquals(R.string.login_error_check_address, fieldErrorRes(LoginError.Unreachable("x"), LoginField.SERVER))
         assertNull(fieldErrorRes(LoginError.Unreachable("x"), LoginField.PASSWORD))
 
         assertEquals(R.string.login_error_unreachable, bannerOf(LoginError.Unreachable("x"))?.text)
         assertEquals(R.string.login_error_server, bannerOf(LoginError.ServerError)?.text)
+        assertEquals(LoginBanner(R.drawable.ic_dns, R.string.login_error_not_tracker), bannerOf(LoginError.NotATrackerServer("x")))
+        assertEquals(LoginBanner(R.drawable.ic_error, R.string.login_error_too_many_tries), bannerOf(LoginError.TooManyAttempts))
+        assertNull(bannerOf(LoginError.HttpsRequired))
         assertNull(bannerOf(LoginError.InvalidCredentials))
         assertNull(bannerOf(LoginError.InvalidAddress))
         assertNull(bannerOf(LoginError.MissingField(LoginField.EMAIL)))

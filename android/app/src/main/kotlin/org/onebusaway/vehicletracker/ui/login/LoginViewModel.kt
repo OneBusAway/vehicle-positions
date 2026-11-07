@@ -34,8 +34,17 @@ sealed interface LoginError {
     /** What was typed cannot be an http or https address, so nothing was asked. */
     data object InvalidAddress : LoginError
 
+    /** The phone's network policy refused a plain http address, before anything was sent. */
+    data object HttpsRequired : LoginError
+
     /** Nothing answered at [server], the address the sign-in went to. */
     data class Unreachable(val server: String) : LoginError
+
+    /** Something answered at [server], but not as a tracker server does: a 404, or a web page. */
+    data class NotATrackerServer(val server: String) : LoginError
+
+    /** The server's limit on sign-ins. Nothing in the fields is wrong. */
+    data object TooManyAttempts : LoginError
 
     /** The server answered, but not with a sign-in, such as a 500. */
     data object ServerError : LoginError
@@ -43,7 +52,8 @@ sealed interface LoginError {
 
 /** An error about the address, which opens the server field to sit under, and leaves the keyboard where it is. */
 internal val LoginError.isAboutTheServer: Boolean
-    get() = this is LoginError.InvalidAddress || this is LoginError.Unreachable
+    get() = this is LoginError.InvalidAddress || this is LoginError.HttpsRequired ||
+        this is LoginError.Unreachable || this is LoginError.NotATrackerServer
 
 data class LoginUiState(
     /** Signing in again after the session ended during a trip, which is still open. */
@@ -155,6 +165,9 @@ class LoginViewModel @Inject constructor(
                     failed(
                         when {
                             error is ApiError.Unauthorized -> LoginError.InvalidCredentials
+                            error is ApiError.CleartextBlocked -> LoginError.HttpsRequired
+                            error is ApiError.NotATrackerServer -> LoginError.NotATrackerServer(serverUrl)
+                            error is ApiError.TooManyAttempts -> LoginError.TooManyAttempts
                             error is ApiError.Other && error.msg == "network" -> LoginError.Unreachable(serverUrl)
                             else -> LoginError.ServerError
                         },

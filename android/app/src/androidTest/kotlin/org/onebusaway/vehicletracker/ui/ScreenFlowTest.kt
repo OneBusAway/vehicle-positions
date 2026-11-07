@@ -186,6 +186,20 @@ class ScreenFlowTest {
         state = LoginUiState(error = LoginError.InvalidAddress)
         loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_invalid_address)))
 
+        state = LoginUiState(error = LoginError.HttpsRequired)
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_https_required)))
+
+        state = LoginUiState(error = LoginError.NotATrackerServer("https://example.com/"))
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_check_address)))
+        compose.onNode(hasText(resources.getString(R.string.login_error_not_tracker, "example.com")) and announcedPolitely)
+            .assertIsDisplayed()
+
+        state = LoginUiState(error = LoginError.TooManyAttempts)
+        compose.onNode(hasText(getString(R.string.login_error_too_many_tries)) and announcedPolitely).assertIsDisplayed()
+        for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
+            loginField(field).assert(hasError(null))
+        }
+
         state = LoginUiState(error = LoginError.ServerError)
         compose.onNodeWithText(getString(R.string.login_error_server)).assertIsDisplayed()
         for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
@@ -214,7 +228,13 @@ class ScreenFlowTest {
         }
         val server = loginField(R.string.login_server_url_label)
 
-        for (error in listOf(LoginError.InvalidAddress, LoginError.Unreachable("https://tracker.example.org/"))) {
+        val aboutTheServer = listOf(
+            LoginError.InvalidAddress,
+            LoginError.HttpsRequired,
+            LoginError.Unreachable("https://tracker.example.org/"),
+            LoginError.NotATrackerServer("https://tracker.example.org/"),
+        )
+        for (error in aboutTheServer) {
             state = LoginUiState(savedServer = state.savedServer, changingServer = true, error = error)
             server.assertIsDisplayed().assertIsNotFocused()
             state = LoginUiState(savedServer = state.savedServer)
