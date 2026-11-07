@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +80,8 @@ import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.engine.TripStop
 import org.onebusaway.vehicletracker.service.LocationFix
+import org.onebusaway.vehicletracker.ui.account.AccountMenuContent
+import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.components.SPINNER_DELAY_MS
 import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginField
@@ -1075,7 +1079,7 @@ class ScreenFlowTest {
         onRetry: () -> Unit = {},
         onSessionEnded: () -> Unit = {},
     ) {
-        compose.setContent { VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry, onSessionEnded) }
+        compose.setContent { VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry, onSessionEnded, account = {}) }
     }
 
     private fun top(node: SemanticsNodeInteraction) = node.getBoundsInRoot().top
@@ -1184,7 +1188,7 @@ class ScreenFlowTest {
     private val numberedRoutes = listOf("1", "2", "3", "4", "5", "7").map { route("R$it", it) }
 
     private fun showRoutes(state: RoutesUiState, onRouteClick: (String) -> Unit = {}, onRetry: () -> Unit = {}) {
-        compose.setContent { RoutesScreenContent(state, "4317", {}, {}, { onRouteClick(it.id) }, onQueryChange = {}, onRetry, onSessionEnded = {}) }
+        compose.setContent { RoutesScreenContent(state, "4317", {}, {}, { onRouteClick(it.id) }, onQueryChange = {}, onRetry, onSessionEnded = {}, account = {}) }
     }
 
     @Test
@@ -1262,7 +1266,7 @@ class ScreenFlowTest {
         var state by mutableStateOf<RoutesUiState>(RoutesUiState.Error)
         compose.setContent {
             RoutesScreenContent(
-                state, "4317", {}, {}, onRouteClick = {}, onQueryChange = {}, onRetry = { reloads++ }, onSessionEnded = { ended++ },
+                state, "4317", {}, {}, onRouteClick = {}, onQueryChange = {}, onRetry = { reloads++ }, onSessionEnded = { ended++ }, account = {},
             )
         }
 
@@ -1323,6 +1327,7 @@ class ScreenFlowTest {
                 onChangeBus = { calls.changeBus++ },
                 onChooseAnotherRoute = { calls.anotherRoute++ },
                 onSessionEnded = {},
+                account = {},
             )
         }
         return calls
@@ -1390,7 +1395,7 @@ class ScreenFlowTest {
             RunsScreenContent(
                 state, badge7, "4317", onBack = {}, onBusClick = {}, onRouteClick = {},
                 onRunClick = {}, onReload = { calls.reloads++ }, onTryAgain = { calls.triesAgain++ },
-                onChangeBus = { calls.changeBus++ }, onChooseAnotherRoute = {}, onSessionEnded = {},
+                onChangeBus = { calls.changeBus++ }, onChooseAnotherRoute = {}, onSessionEnded = {}, account = {},
             )
         }
 
@@ -1429,7 +1434,7 @@ class ScreenFlowTest {
             RunsScreenContent(
                 RunsUiState.Loaded(runPage, listOf(Board(null, emptyList(), null, 0)), 0, null, null),
                 RouteBadgeModel.of("", "", ""), "4317", onBack = {}, onBusClick = {}, onRouteClick = {},
-                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {},
+                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {}, account = {},
             )
         }
 
@@ -1446,7 +1451,7 @@ class ScreenFlowTest {
             RunsScreenContent(
                 if (restored) board(boards = listOf(inboundBoard)) else board(), badge7, "4317",
                 onBack = {}, onBusClick = {}, onRouteClick = {}, onRunClick = {}, onReload = {}, onTryAgain = {},
-                onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {},
+                onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {}, account = {},
             )
         }
         compose.onNode(hasText(getString(R.string.runs_direction, "Mount Baker")) and isSelectable()).performClick()
@@ -1467,6 +1472,7 @@ class ScreenFlowTest {
                 state, badge7, "4317", onBack = {}, onBusClick = {}, onRouteClick = {},
                 onRunClick = {}, onReload = { reloads++ }, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {},
                 onSessionEnded = { ended++ },
+                account = {},
             )
         }
 
@@ -1492,7 +1498,7 @@ class ScreenFlowTest {
         compose.setContent {
             RunsScreenContent(
                 board(), badge7, "4317", onBack = { back++ }, onBusClick = { bus++ }, onRouteClick = { routeStep++ },
-                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {},
+                onRunClick = {}, onReload = {}, onTryAgain = {}, onChangeBus = {}, onChooseAnotherRoute = {}, onSessionEnded = {}, account = {},
             )
         }
 
@@ -1509,13 +1515,156 @@ class ScreenFlowTest {
         compose.setContent {
             RoutesScreenContent(
                 RoutesUiState.Loading, busId = "4317", onBack = null, onBusClick = null,
-                onRouteClick = {}, onQueryChange = {}, onRetry = {}, onSessionEnded = {},
+                onRouteClick = {}, onQueryChange = {}, onRetry = {}, onSessionEnded = {}, account = {},
             )
         }
 
         compose.onNodeWithText(getString(R.string.setup_step_route)).assertIsDisplayed()
         compose.onNodeWithContentDescription(getString(R.string.setup_navigate_up)).assertDoesNotExist()
         compose.onNode(hasText("4317")).assertIsDisplayed().assert(hasClickAction().not())
+    }
+
+    // --- The account menu on the picker steps ---
+
+    private val account = AccountUiState(email = "d@example.com", server = "tracker.example.com")
+    private val accountButton get() = compose.onNodeWithContentDescription(getString(R.string.account_menu))
+
+    private class AccountCalls {
+        var signOuts = 0
+        var signedOut = 0
+    }
+
+    private fun showAccount(state: () -> AccountUiState, enabled: Boolean = true): AccountCalls {
+        val calls = AccountCalls()
+        compose.setContent {
+            AccountMenuContent(state(), "0.1.0 (1)", enabled, onSignOut = { calls.signOuts++ }, onSignedOut = { calls.signedOut++ })
+        }
+        return calls
+    }
+
+    /** Opens the menu and asks to sign out, which puts the question up. */
+    private fun askToSignOut() {
+        accountButton.performClick()
+        compose.onNodeWithText(getString(R.string.account_sign_out)).performClick()
+    }
+
+    @Test
+    fun accountMenu_saysWhoIsSignedInWhereAndWhichBuild() {
+        showAccount({ account })
+
+        accountButton.performClick()
+
+        compose.onNodeWithText("d@example.com").assertIsDisplayed()
+        compose.onNodeWithText("tracker.example.com").assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.account_version, "0.1.0 (1)")).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.account_sign_out)).assertIsDisplayed()
+    }
+
+    @Test
+    fun accountMenu_leavesOutAnEmailItDoesNotHave() {
+        showAccount({ account.copy(email = null) })
+
+        accountButton.performClick()
+
+        compose.onNodeWithText("tracker.example.com").assertIsDisplayed()
+        compose.onNodeWithText("d@example.com").assertDoesNotExist()
+    }
+
+    @Test
+    fun accountMenu_asksFirstAndCancelSignsNobodyOut() {
+        val calls = showAccount({ account })
+
+        askToSignOut()
+        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.account_sign_out_message)).assertIsDisplayed()
+        inDialog(getString(R.string.account_sign_out_cancel)).performClick()
+
+        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertDoesNotExist()
+        assertEquals(0, calls.signOuts)
+    }
+
+    @Test
+    fun accountMenu_signsOutOnceConfirmed() {
+        val calls = showAccount({ account })
+
+        askToSignOut()
+        inDialog(getString(R.string.account_sign_out)).performClick()
+
+        assertEquals(1, calls.signOuts)
+    }
+
+    @Test
+    fun accountMenu_holdsTheQuestionUpWhileSigningOut() {
+        var state by mutableStateOf(account)
+        showAccount({ state })
+        askToSignOut()
+
+        state = state.copy(signingOut = true)
+        compose.waitForIdle()
+
+        val spinner = SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate)
+        compose.onNode(spinner and hasAnyAncestor(isDialog()), useUnmergedTree = true).assertExists()
+        inDialog(getString(R.string.account_sign_out)).assertIsNotEnabled()
+        inDialog(getString(R.string.account_sign_out_cancel)).assertIsNotEnabled()
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitForIdle()
+        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertIsDisplayed()
+    }
+
+    @Test
+    fun accountMenu_keepsTheQuestionThroughARotation() {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { AccountMenuContent(account, "0.1.0 (1)", enabled = true, onSignOut = {}, onSignedOut = {}) }
+        askToSignOut()
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        compose.onNodeWithText(getString(R.string.account_sign_out_title)).assertIsDisplayed()
+    }
+
+    @Test
+    fun accountMenu_waitsWhileATripStarts() {
+        showAccount({ account }, enabled = false)
+
+        accountButton.assertIsNotEnabled()
+    }
+
+    @Test
+    fun accountMenu_reportsTheSignOutOnce() {
+        var state by mutableStateOf(account.copy(signingOut = true))
+        val calls = showAccount({ state })
+
+        state = state.copy(signedOut = true)
+        compose.waitForIdle()
+        state = state.copy(email = null)
+        compose.waitForIdle()
+
+        assertEquals(1, calls.signedOut)
+    }
+
+    @Test
+    fun setupSteps_eachDrawsTheAccountMenuAndTheBusTitleStaysLevel() {
+        val slot = "account slot"
+        var step by mutableStateOf("vehicles")
+        compose.setContent {
+            val account = @Composable { Text(slot) }
+            when (step) {
+                "vehicles" -> VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), {}, {}, {}, {}, {}, account)
+                "routes" -> RoutesScreenContent(RoutesUiState.Loaded(namedRoutes, namedRoutes, emptyList(), "", grid = false), "4317", {}, {}, {}, {}, {}, {}, account)
+                else -> RunsScreenContent(board(), badge7, "4317", {}, {}, {}, {}, {}, {}, {}, {}, {}, account)
+            }
+        }
+        val titleTops = mutableMapOf<String, Float>()
+        val titles = mapOf("vehicles" to R.string.vehicles_title, "routes" to R.string.routes_title, "runs" to R.string.runs_title)
+        for ((name, title) in titles) {
+            step = name
+            compose.waitForIdle()
+            compose.onNodeWithText(slot).assertIsDisplayed()
+            titleTops[name] = top(compose.onNode(hasText(getString(title)) and heading)).value
+        }
+
+        // The bus step and the route step slide into each other.
+        assertEquals(titleTops.getValue("routes"), titleTops.getValue("vehicles"), 0.5f)
     }
 
     // --- Moving between the steps ---
@@ -1529,7 +1678,7 @@ class ScreenFlowTest {
                 composable("vehicles") { entry ->
                     // Wired as AppNav wires the bus step.
                     val open = remember(entry) { entry.ifResumed<String> { id -> navController.navigate("trip/$id") } }
-                    VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), open, {}, {}, {}, onSessionEnded = {})
+                    VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), open, {}, {}, {}, onSessionEnded = {}, account = {})
                 }
                 composable("trip/{vehicleId}") {}
             }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -38,8 +39,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.account.AccountMenu
 import org.onebusaway.vehicletracker.ui.components.DelayedSpinner
 import org.onebusaway.vehicletracker.ui.components.EmptyState
+import org.onebusaway.vehicletracker.ui.components.FirstStepHeader
+import org.onebusaway.vehicletracker.ui.components.ScrolledUnderDivider
 import org.onebusaway.vehicletracker.ui.components.SearchField
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.theme.fleetNumber
@@ -47,20 +51,17 @@ import org.onebusaway.vehicletracker.ui.theme.fleetNumber
 private val TileShape = RoundedCornerShape(20.dp)
 private val TileGap = 12.dp
 
-// The route and run steps have a 56 dp header over their title; the bus step has none, but keeps its title at the
-// same height so the title does not jump as the screens slide.
-private val TitleTop = 64.dp
-
 /**
  * [onVehicleSelected] is a tap on a tile. [onOnlyVehicle] is the bus a driver with one assignment never has to
  * choose, and takes the bus step's place: navigating there leaves nothing behind it that would skip forward again.
- * [onSessionEnded] is the server having ended the session.
+ * [onSessionEnded] is the server having ended the session, and [onSignedOut] the driver having signed out.
  */
 @Composable
 fun VehicleScreen(
     onVehicleSelected: (String) -> Unit,
     onOnlyVehicle: (String) -> Unit,
     onSessionEnded: () -> Unit,
+    onSignedOut: () -> Unit,
     viewModel: VehicleViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -80,12 +81,14 @@ fun VehicleScreen(
         onToggleFavorite = viewModel::onToggleFavorite,
         onRetry = viewModel::retry,
         onSessionEnded = onSessionEnded,
+        account = { AccountMenu(onSignedOut) },
     )
 }
 
 /**
  * The bus step: the driver's buses as big tiles, two to a row, under Favorites, Recent and All buses, or under
- * Matches while searching. Title, search, labels and tiles are all items of one grid, so the page scrolls as one.
+ * Matches while searching. Under the header with [account], title, search, labels and tiles are all items of one
+ * grid, so the page scrolls as one.
  */
 @Composable
 fun VehicleScreenContent(
@@ -95,13 +98,31 @@ fun VehicleScreenContent(
     onToggleFavorite: (String) -> Unit,
     onRetry: () -> Unit,
     onSessionEnded: () -> Unit,
+    account: @Composable () -> Unit,
 ) {
     val sessionEnded = state is VehiclesUiState.SessionEnded
     LaunchedEffect(sessionEnded) { if (sessionEnded) onSessionEnded() }
 
+    val gridState = rememberLazyGridState()
+    Column(Modifier.fillMaxSize()) {
+        FirstStepHeader(account)
+        ScrolledUnderDivider({ gridState.canScrollBackward })
+        BusGrid(state, gridState, onVehicleClick, onQueryChange, onToggleFavorite, onRetry)
+    }
+}
+
+@Composable
+private fun BusGrid(
+    state: VehiclesUiState,
+    gridState: LazyGridState,
+    onVehicleClick: (String) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        state = rememberLazyGridState(),
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(TileGap),
@@ -110,7 +131,7 @@ fun VehicleScreenContent(
             Text(
                 text = stringResource(R.string.vehicles_title),
                 style = MaterialTheme.typography.headlineLarge,
-                modifier = Modifier.padding(start = 8.dp, top = TitleTop, bottom = 18.dp).semantics { heading() },
+                modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 18.dp).semantics { heading() },
             )
         }
         when (state) {

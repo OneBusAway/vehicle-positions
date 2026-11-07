@@ -133,7 +133,10 @@ private fun NavController.toBusStep() {
  */
 internal val skipBusStep: NavOptionsBuilder.() -> Unit = { popUpTo(ROUTE_VEHICLES) { inclusive = true } }
 
-/** Off to Sign in once the server has ended the session: nothing behind it still works, so nothing stays behind it. */
+/**
+ * Off to Sign in once the session is over, ended by the server or by Sign out: nothing behind it still works, so nothing
+ * stays behind it.
+ */
 internal val toSignIn: NavOptionsBuilder.() -> Unit = { popUpTo(0) { inclusive = true } }
 
 /** Determines which route the app should land on at launch, based on persisted session/trip state. */
@@ -273,6 +276,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     onOnlyVehicle = { vehicleId -> navController.navigate("trip/${arg(vehicleId)}", skipBusStep) },
                     // Not a tap: it fires when the reply lands, and a guard would drop it.
                     onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+                    // Not a tap either: it fires once the phone has forgotten the driver.
+                    onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 )
             }
         }
@@ -302,6 +307,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     onRouteSelected = openRuns,
                     // Not a tap: it fires when the reply lands, and a guard would drop it.
                     onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+                    // Not a tap either: it fires once the phone has forgotten the driver.
+                    onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 )
             }
         }
@@ -333,6 +340,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     onChooseAnotherRoute = dropUnlessResumed { navController.popBackStack() },
                     // Not a tap: it fires when the reply lands, and a guard would drop it.
                     onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+                    // Not a tap either: it fires once the phone has forgotten the driver.
+                    onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 )
             }
         }

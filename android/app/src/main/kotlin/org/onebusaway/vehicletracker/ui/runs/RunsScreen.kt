@@ -63,6 +63,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.account.AccountMenu
 import org.onebusaway.vehicletracker.ui.components.AttentionBanner
 import org.onebusaway.vehicletracker.ui.components.DelayedSpinner
 import org.onebusaway.vehicletracker.ui.components.EmptyState
@@ -80,9 +81,12 @@ import java.time.format.DateTimeFormatter
 
 private val TagShape = RoundedCornerShape(8.dp)
 
+/** Sign out waits while a start is in flight, which it would leave started for nobody, as iOS's menu does. */
+internal fun canSignOut(state: RunsUiState): Boolean = state !is RunsUiState.Loaded || !state.starting
+
 /**
  * [onBusClick] is null when the bus step was skipped: there is no bus step to go back to. [onSessionEnded] is the server
- * having ended the session.
+ * having ended the session, and [onSignedOut] the driver having signed out.
  */
 @Composable
 fun RunsScreen(
@@ -93,6 +97,7 @@ fun RunsScreen(
     onChangeBus: () -> Unit,
     onChooseAnotherRoute: () -> Unit,
     onSessionEnded: () -> Unit,
+    onSignedOut: () -> Unit,
     viewModel: RunsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -129,6 +134,7 @@ fun RunsScreen(
                 onChangeBus = onChangeBus,
                 onChooseAnotherRoute = onChooseAnotherRoute,
                 onSessionEnded = onSessionEnded,
+                account = { AccountMenu(onSignedOut, enabled = canSignOut(state)) },
             )
         }
         AnimatedVisibility(visible = permissionFlow.visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
@@ -163,6 +169,7 @@ fun RunsScreenContent(
     onChangeBus: () -> Unit,
     onChooseAnotherRoute: () -> Unit,
     onSessionEnded: () -> Unit,
+    account: @Composable () -> Unit,
 ) {
     val sessionEnded = state is RunsUiState.SessionEnded
     LaunchedEffect(sessionEnded) { if (sessionEnded) onSessionEnded() }
@@ -175,6 +182,7 @@ fun RunsScreenContent(
             onBusClick = onBusClick,
             route = route,
             onRouteClick = onRouteClick,
+            account = account,
         )
         Text(
             text = stringResource(R.string.runs_title),

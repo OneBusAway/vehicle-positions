@@ -3,6 +3,10 @@ package org.onebusaway.vehicletracker.ui
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import app.cash.turbine.test
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -42,6 +46,10 @@ import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.account.AccountUiState
+import org.onebusaway.vehicletracker.ui.account.AccountViewModel
+import org.onebusaway.vehicletracker.ui.account.SIGN_OUT_WAIT_MS
+import org.onebusaway.vehicletracker.ui.account.versionText
 import org.onebusaway.vehicletracker.ui.login.LoginBanner
 import org.onebusaway.vehicletracker.ui.login.LoginError
 import org.onebusaway.vehicletracker.ui.login.LoginField
@@ -61,6 +69,7 @@ import org.onebusaway.vehicletracker.ui.runs.RunHighlight
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.RunsViewModel
 import org.onebusaway.vehicletracker.ui.runs.TripError
+import org.onebusaway.vehicletracker.ui.runs.canSignOut
 import org.onebusaway.vehicletracker.ui.resume.ResumeCard
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TrackingViewModel
@@ -78,6 +87,8 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class ViewModelsTest {
@@ -1307,6 +1318,24 @@ class ViewModelsTest {
         }
     }
 
+    // A sign-out under a start would leave the trip started with nobody signed in to end it.
+    @Test fun `the account menu waits while a start is in flight`() = runTest(dispatcher) {
+        // Holds the run's geometry back, which the start waits on before it posts.
+        val held = CountDownLatch(1)
+        withRunsViewModel(geometry = { held.await(5, TimeUnit.SECONDS); MockResponse().setBody(t1GeometryJson) }) { vm, _, _, _ ->
+            assertTrue("before the tap", canSignOut(vm.uiState.value))
+
+            vm.onStartRun("T1") {}
+            dispatcher.scheduler.runCurrent()
+            assertFalse("while the start is out", canSignOut(vm.uiState.value))
+
+            held.countDown()
+            awaitCondition(description = "the start settled") { vm.uiState.value.let { it is RunsUiState.Loaded && !it.starting } }
+            assertTrue("once it has settled", canSignOut(vm.uiState.value))
+        }
+        assertTrue("the other states", listOf(RunsUiState.Loading, RunsUiState.Error, RunsUiState.SessionEnded).all(::canSignOut))
+    }
+
     // --- Starting a run: the geometry is fetched and checked before the server is told ---
 
     private fun requestPaths(server: MockWebServer): List<String> =
@@ -1566,6 +1595,233 @@ class ViewModelsTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(picker.name, "login", nextLaunch.startDestination.value)
+        }
+    }
+
+    // --- Sign out, from the account menu on the pickers ---
+
+    private val driver2 = jwtFor("2")
+
+    private fun ended() = MockResponse().setBody("""{"status":"trip ended"}""")
+    private fun loggedOut() = MockResponse().setResponseCode(204)
+
+    /**
+     * Like [awaitCondition], but the test clock moves on no faster than real time. Skipping ahead, as advanceUntilIdle
+     * does, would run out [SIGN_OUT_WAIT_MS] at once, while the requests are still on their way to the server.
+     */
+    private fun awaitInRealTime(description: String, condition: () -> Boolean) {
+        val deadlineNanos = System.nanoTime() + 5_000_000_000
+        while (!condition() && System.nanoTime() < deadlineNanos) {
+            dispatcher.scheduler.advanceTimeBy(1)
+            dispatcher.scheduler.runCurrent()
+            Thread.sleep(1)
+        }
+        if (!condition()) fail("Timed out after 5000ms waiting for: $description")
+    }
+
+    /** The account menu's view model, signed in as driver 2, over a [MockWebServer] that answers in the order enqueued. */
+    private inner class SignOut(
+        val trips: FakeTripStateStore = FakeTripStateStore(),
+        val prefs: FakeVehiclePrefsStore = FakeVehiclePrefsStore(),
+        storeFor: (FakeSessionStore) -> SessionStore = { it },
+    ) : AutoCloseable {
+        val server = MockWebServer().apply { start() }
+        val serverUrl = server.url("/").toString()
+        val signedIn = Session(serverUrl, driver2, 100L, "r2", 1_000L, "d@example.com")
+        val sessions = FakeSessionStore().apply { state.value = signedIn }
+        val store = storeFor(sessions)
+
+        // Sends the token the store holds when each request goes, as the app's client does.
+        private val provider = TrackerApiProvider { ApiFactory { sessions.state.value.token }.create(serverUrl) }
+        val vm = AccountViewModel(store, authOver(store, provider), TripRepository(provider, trips, prefs, store, clock = { 0L }))
+
+        /** Every request the server got, in order. Call once, after the requests are done. */
+        fun requests(): List<RecordedRequest> = List(server.requestCount) { server.takeRequest() }
+
+        fun signOut() {
+            vm.onSignOut()
+            awaitInRealTime("signed out") { vm.uiState.value.signedOut }
+        }
+
+        override fun close() = server.shutdown()
+    }
+
+    @Test fun `the menu shows who is signed in, and the server as its host`() = runTest(dispatcher) {
+        val sessions = FakeSessionStore().apply { state.value = Session("https://tracker.example.com/", "a1", 100L, email = "d@example.com") }
+        val vm = AccountViewModel(sessions, authOver(sessions), TripRepository({ error("no server") }, FakeTripStateStore(), FakeVehiclePrefsStore(), sessions) { 0L })
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(AccountUiState(email = "d@example.com", server = "tracker.example.com"), vm.uiState.value)
+    }
+
+    @Test fun `the version reads as its name and build, with a mark for a build with no name`() {
+        assertEquals("1.2.3 (45)", versionText("1.2.3", 45))
+        assertEquals("? (45)", versionText(null, 45))
+    }
+
+    @Test fun `signing out sends the ends, then logs out, then forgets the driver`() = runTest(dispatcher) {
+        SignOut(trips = FakeTripStateStore().apply { unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, "2")) }).use { s ->
+            s.server.enqueue(ended())
+            s.server.enqueue(loggedOut())
+
+            s.signOut()
+
+            assertEquals(listOf("/api/v1/trips/end", "/api/v1/auth/logout"), s.requests().map { it.path })
+            assertEquals("the server stays, and nothing else", Session(s.serverUrl, null, null), s.sessions.state.value)
+            assertEquals(emptyList<UnconfirmedEnd>(), s.trips.unconfirmedEnds.first())
+        }
+    }
+
+    /** Suspends before it clears, as a DataStore write does: a write cancelled on the way never happens. */
+    private val slowToClear = { store: FakeSessionStore ->
+        object : SessionStore by store {
+            override suspend fun clearTokenAndEmail() {
+                delay(1)
+                store.clearTokenAndEmail()
+            }
+        }
+    }
+
+    // A screen that heard first would open Sign in with the old driver's token still stored.
+    @Test fun `the token is still there for the logout, and gone before Sign in opens`() = runTest(dispatcher) {
+        SignOut(storeFor = slowToClear).use { s ->
+            s.server.enqueue(loggedOut())
+            var tokenWhenSignedOut: String? = "the screen never heard"
+            val screen = launch {
+                s.vm.uiState.first { it.signedOut }
+                tokenWhenSignedOut = s.sessions.state.value.token
+            }
+
+            s.vm.onSignOut()
+            awaitInRealTime("the screen heard") { screen.isCompleted }
+
+            assertEquals("Bearer $driver2", s.requests().single().getHeader("Authorization"))
+            assertNull(tokenWhenSignedOut)
+        }
+    }
+
+    @Test fun `a failed end doesn't stop the sign-out`() = runTest(dispatcher) {
+        SignOut(trips = FakeTripStateStore().apply { unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, "2")) }).use { s ->
+            s.server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"failed to end trip"}"""))
+            s.server.enqueue(loggedOut())
+
+            s.signOut()
+
+            assertEquals(listOf("/api/v1/trips/end", "/api/v1/auth/logout"), s.requests().map { it.path })
+            assertEquals(Session(s.serverUrl, null, null), s.sessions.state.value)
+            assertEquals("kept for driver 2's next start", listOf(UnconfirmedEnd(7L, "2")), s.trips.unconfirmedEnds.first())
+        }
+    }
+
+    @Test fun `a failed logout still signs out on this phone`() = runTest(dispatcher) {
+        val failures = mapOf(
+            "500" to MockResponse().setResponseCode(500).setBody("""{"error":"internal server error"}"""),
+            "401" to MockResponse().setResponseCode(401).setBody("""{"error":"invalid or expired token"}"""),
+            "no connection" to MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START),
+        )
+        for ((name, failure) in failures) {
+            SignOut().use { s ->
+                s.server.enqueue(failure)
+
+                s.signOut()
+
+                assertEquals(name, Session(s.serverUrl, null, null), s.sessions.state.value)
+            }
+        }
+    }
+
+    // Out of coverage OkHttp would wait 10 s to connect and 10 more to read, for each call.
+    @Test fun `a server that doesn't answer can't hold the driver up`() = runTest(dispatcher) {
+        SignOut().use { s ->
+            s.server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+
+            s.vm.onSignOut()
+            dispatcher.scheduler.runCurrent()
+            // Real time, without moving the test clock on: the logout is out, and nothing answers it.
+            val deadline = System.nanoTime() + 5_000_000_000
+            while (s.server.requestCount == 0 && System.nanoTime() < deadline) Thread.sleep(5)
+            assertEquals("the logout reached the server", 1, s.server.requestCount)
+
+            dispatcher.scheduler.advanceTimeBy(SIGN_OUT_WAIT_MS - 1)
+            dispatcher.scheduler.runCurrent()
+            assertFalse("still waiting, a moment short of the limit", s.vm.uiState.value.signedOut)
+
+            dispatcher.scheduler.advanceTimeBy(1)
+            awaitInRealTime("signed out at the limit") { s.vm.uiState.value.signedOut }
+            assertEquals(Session(s.serverUrl, null, null), s.sessions.state.value)
+        }
+    }
+
+    @Test fun `a second tap sends one logout`() = runTest(dispatcher) {
+        SignOut().use { s ->
+            s.server.enqueue(loggedOut())
+            s.server.enqueue(loggedOut())
+
+            s.vm.onSignOut()
+            s.signOut()
+
+            assertEquals(listOf("/api/v1/auth/logout"), s.requests().map { it.path })
+        }
+    }
+
+    // They belong to the phone and its vehicles, not to the driver.
+    @Test fun `favourites and recents survive`() = runTest(dispatcher) {
+        val prefs = FakeVehiclePrefsStore().apply {
+            favoritesState.value = setOf("4317")
+            recentsState.value = listOf("4322", "4317")
+        }
+        val trips = FakeTripStateStore().apply { routesState.value = listOf("7", "36") }
+        SignOut(trips = trips, prefs = prefs).use { s ->
+            s.server.enqueue(loggedOut())
+
+            s.signOut()
+
+            assertEquals(setOf("4317"), prefs.favorites.first())
+            assertEquals(listOf("4322", "4317"), prefs.recents.first())
+            assertEquals(listOf("7", "36"), trips.recentRoutes.first())
+        }
+    }
+
+    @Test fun `a store that can't be cleared still reaches Sign in`() = runTest(dispatcher) {
+        val fullDisk = { store: FakeSessionStore -> store.apply { clearFailure = IOException("No space left on device") } }
+        SignOut(storeFor = fullDisk).use { s ->
+            s.server.enqueue(loggedOut())
+
+            s.signOut()
+
+            assertEquals("still stored; the server has ended it", s.signedIn, s.sessions.state.value)
+        }
+    }
+
+    @Test fun `the next driver gets the server line and an empty email`() = runTest(dispatcher) {
+        SignOut().use { s ->
+            s.server.enqueue(loggedOut())
+            s.signOut()
+
+            val signIn = loginViewModel(sessionStore = s.store)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(s.serverUrl, signIn.uiState.value.savedServer)
+            assertNull(signIn.uiState.value.savedEmail)
+            assertEquals("", signIn.email.text.toString())
+            assertFalse(signIn.uiState.value.showsServerField)
+        }
+    }
+
+    // Swiping the app away mid sign-out clears the view model; the driver must not be signed in at the next launch.
+    @Test fun `a sign-out still forgets the driver when its screen goes first`() = runTest(dispatcher) {
+        SignOut(storeFor = slowToClear).use { s ->
+            s.server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+            val owner = ViewModelStore()
+            val vm = ViewModelProvider.create(owner, viewModelFactory { initializer { s.vm } })[AccountViewModel::class]
+
+            vm.onSignOut()
+            dispatcher.scheduler.runCurrent()
+            owner.clear()
+            dispatcher.scheduler.advanceTimeBy(1)
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(Session(s.serverUrl, null, null), s.sessions.state.value)
         }
     }
 
