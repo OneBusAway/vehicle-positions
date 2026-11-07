@@ -10,10 +10,12 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.cash.turbine.test
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -127,15 +129,27 @@ class ViewModelsTest {
         sessionStore: SessionStore = FakeSessionStore(),
         tripState: FakeTripStateStore = FakeTripStateStore(),
         geometryStore: FakeTripGeometryStore = FakeTripGeometryStore(),
+        managed: FakeManagedServerSource = FakeManagedServerSource(),
+        serverSetup: ServerSetup = setupOver(sessionStore, tripState, managed),
+        builtIn: String? = null,
         again: Boolean = false,
     ) = LoginViewModel(
         authOver(sessionStore),
         sessionStore,
         tripState,
         geometryStore,
+        managed,
+        serverSetup,
+        builtIn,
         // As the nav graph writes it: only the route Tracking opens sets it.
         SavedStateHandle(if (again) mapOf(ARG_SIGN_IN_AGAIN to true) else emptyMap()),
     )
+
+    private fun setupOver(
+        sessionStore: SessionStore = FakeSessionStore(),
+        tripState: FakeTripStateStore = FakeTripStateStore(),
+        managed: FakeManagedServerSource = FakeManagedServerSource(),
+    ) = ServerSetup(sessionStore, tripState, managed, debuggable = false, scope = CoroutineScope(dispatcher))
 
     private fun LoginViewModel.fill(server: String, email: String, password: String) {
         this.server.setTextAndPlaceCursorAtEnd(server)
@@ -480,6 +494,302 @@ class ViewModelsTest {
 
         assertEquals("https://typed.example.com", vm.server.text.toString())
         assertEquals("typed@example.com", vm.email.text.toString())
+    }
+
+    // --- The server the agency sets ---
+
+    private fun managedAs(url: String?, invalid: Boolean = false) =
+        FakeManagedServerSource().apply { state.value = ManagedServer(url, invalid) }
+
+    /** The store's first read lands after device management's, as a DataStore read does on a phone. */
+    private fun slowToRead(store: FakeSessionStore): SessionStore = object : SessionStore by store {
+        override val session = store.state.onStart { delay(1) }
+    }
+
+    @Test fun `the first of managed, saved and built-in is used`() = runTest(dispatcher) {
+        val managed = "https://managed.example.org/"
+        val saved = "https://saved.example.org/"
+        val builtIn = "https://built-in.example.org/"
+        data class Case(val managed: String?, val saved: String?, val builtIn: String?, val field: String, val showsField: Boolean)
+        val cases = listOf(
+            Case(managed, saved, builtIn, field = managed, showsField = false),
+            Case(managed, saved, null, field = managed, showsField = false),
+            Case(managed, null, builtIn, field = managed, showsField = false),
+            Case(managed, null, null, field = managed, showsField = false),
+            Case(null, saved, builtIn, field = saved, showsField = false),
+            Case(null, saved, null, field = saved, showsField = false),
+            Case(null, null, builtIn, field = builtIn, showsField = true),
+            Case(null, null, null, field = "", showsField = true),
+        )
+        for (case in cases) {
+            for (managedFirst in listOf(false, true)) {
+                val store = FakeSessionStore().apply { state.value = Session(case.saved, null, null) }
+                val vm = loginViewModel(
+                    if (managedFirst) slowToRead(store) else store,
+                    managed = managedAs(case.managed),
+                    builtIn = case.builtIn,
+                )
+                dispatcher.scheduler.advanceUntilIdle()
+
+                val label = "$case, ${if (managedFirst) "managed" else "saved"} read first"
+                assertEquals(label, case.field, vm.server.text.toString())
+                assertEquals(label, case.managed, vm.uiState.value.managedServer)
+                assertEquals(label, case.saved, vm.uiState.value.savedServer)
+                assertEquals(label, case.showsField, vm.uiState.value.showsServerField)
+            }
+        }
+    }
+
+    @Test fun `a managed server locks the field and is what signs in`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
+        val managed = server.url("/").toString()
+        val sessionStore = FakeSessionStore().apply {
+            state.value = Session(serverUrl = "https://saved.example.org/", token = null, issuedAtEpochSec = null, email = "d@example.com")
+        }
+        val vm = loginViewModel(sessionStore, managed = managedAs(managed))
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.onChangeServer()
+        assertFalse("there is no Change, and nothing opens the field", vm.uiState.value.showsServerField)
+        vm.password.setTextAndPlaceCursorAtEnd("pw")
+        var succeeded = false
+
+        vm.onSignIn { succeeded = true }
+        awaitCondition(description = "sign-in callback invoked") { succeeded }
+
+        assertEquals(1, server.requestCount)
+        assertEquals(managed, sessionStore.state.value.serverUrl)
+        server.shutdown()
+    }
+
+    @Test fun `a failed sign-in doesn't open a managed server's field`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        val managed = server.url("/").toString()
+        val vm = loginViewModel(managed = managedAs(managed))
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill(managed, "d@example.com", "pw")
+
+        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+        assertEquals(LoginError.Unreachable(managed), vm.uiState.value.error)
+        assertFalse("the driver can't change it", vm.uiState.value.changingServer)
+        assertFalse(vm.uiState.value.showsServerField)
+        assertEquals("the banner names the server instead", R.string.login_error_unreachable, bannerOf(vm.uiState.value.error)?.text)
+        server.shutdown()
+    }
+
+    @Test fun `a managed server that changes while Sign in shows is picked up`() = runTest(dispatcher) {
+        val managed = managedAs(null)
+        val vm = loginViewModel(managed = managed)
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.server.setTextAndPlaceCursorAtEnd("https://typed.example.org")
+
+        managed.state.value = ManagedServer("https://a.example.org/", invalid = false)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("https://a.example.org/", vm.server.text.toString())
+        assertFalse(vm.uiState.value.showsServerField)
+
+        managed.state.value = ManagedServer("https://b.example.org/", invalid = false)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("https://b.example.org/", vm.server.text.toString())
+        assertEquals("https://b.example.org/", vm.uiState.value.managedServer)
+
+        managed.state.value = ManagedServer(null, invalid = true)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("the field is the driver's again, and empty", "", vm.server.text.toString())
+        assertNull(vm.uiState.value.managedServer)
+        assertTrue(vm.uiState.value.managedServerInvalid)
+        assertTrue(vm.uiState.value.showsServerField)
+
+        managed.state.value = ManagedServer(null, invalid = false)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertFalse(vm.uiState.value.managedServerInvalid)
+    }
+
+    @Test fun `a managed server that goes away leaves the saved one`() = runTest(dispatcher) {
+        val managed = managedAs("https://managed.example.org/")
+        val sessionStore = FakeSessionStore().apply { state.value = Session("https://saved.example.org/", null, null) }
+        val vm = loginViewModel(sessionStore, managed = managed)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        managed.state.value = ManagedServer(null, invalid = false)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://saved.example.org/", vm.server.text.toString())
+        assertFalse("the saved server is a line again", vm.uiState.value.showsServerField)
+    }
+
+    @Test fun `the built-in address fills only an empty field`() = runTest(dispatcher) {
+        val builtIn = "https://built-in.example.org/"
+
+        val fresh = loginViewModel(builtIn = builtIn)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(builtIn, fresh.server.text.toString())
+        assertNull("it is not the phone's server until a sign-in", fresh.uiState.value.savedServer)
+        assertTrue("the driver can still change it", fresh.uiState.value.showsServerField)
+
+        val returning = loginViewModel(FakeSessionStore().apply { state.value = Session("https://saved.example.org/", null, null) }, builtIn = builtIn)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("https://saved.example.org/", returning.server.text.toString())
+
+        val typing = loginViewModel(builtIn = builtIn)
+        typing.server.setTextAndPlaceCursorAtEnd("https://typed.example.org")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("https://typed.example.org", typing.server.text.toString())
+    }
+
+    @Test fun `a managed server that goes away leaves the built-in one`() = runTest(dispatcher) {
+        val managed = managedAs("https://managed.example.org/")
+        val vm = loginViewModel(managed = managed, builtIn = "https://built-in.example.org/")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        managed.state.value = ManagedServer(null, invalid = false)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://built-in.example.org/", vm.server.text.toString())
+        assertTrue(vm.uiState.value.showsServerField)
+    }
+
+    // --- A setup link ---
+
+    private val setupLink = "obavehicletracker://setup?server=https%3A%2F%2Ftracker.example.org"
+    private val serverInLink = "https://tracker.example.org/"
+
+    /** The driver opens the link and agrees to it. */
+    private fun ServerSetup.agree() {
+        open(setupLink)
+        dispatcher.scheduler.advanceUntilIdle()
+        require(prompt.value == ServerSetupLink.Decision.Confirm(serverInLink, "tracker.example.org")) { "asked ${prompt.value}" }
+        confirm(serverInLink)
+        dispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test fun `a confirmed link fills the field, and leaving Sign in forgets it`() = runTest(dispatcher) {
+        val sessionStore = FakeSessionStore()
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.agree()
+
+        assertEquals(serverInLink, vm.server.text.toString())
+        assertTrue(vm.uiState.value.showsServerField)
+        assertNull("saved by nothing but a sign-in", sessionStore.state.value.serverUrl)
+        val next = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("", next.server.text.toString())
+    }
+
+    @Test fun `a confirmed link opens the field over the saved server`() = runTest(dispatcher) {
+        val sessionStore = FakeSessionStore().apply {
+            state.value = Session(serverUrl = "https://saved.example.org/", token = null, issuedAtEpochSec = null, email = "d@example.com")
+        }
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        require(!vm.uiState.value.showsServerField)
+        vm.onSignIn { fail("there is no password") }
+        require(vm.uiState.value.error == LoginError.MissingField(LoginField.PASSWORD))
+
+        setup.agree()
+
+        assertEquals(serverInLink, vm.server.text.toString())
+        assertTrue(vm.uiState.value.showsServerField)
+        assertNull("the last error was about something else", vm.uiState.value.error)
+        assertEquals("https://saved.example.org/", sessionStore.state.value.serverUrl)
+    }
+
+    @Test fun `agreeing to the same link twice fills it twice`() = runTest(dispatcher) {
+        val setup = setupOver()
+        val vm = loginViewModel(serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        setup.agree()
+        vm.server.setTextAndPlaceCursorAtEnd("https://typed.example.org")
+
+        setup.agree()
+
+        assertEquals(serverInLink, vm.server.text.toString())
+    }
+
+    @Test fun `a link, then a sign-in somewhere else, saves only what was signed in to`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
+        val sessionStore = FakeSessionStore()
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+        setup.agree()
+        vm.fill(server.url("/").toString(), "d@example.com", "pw")
+        var succeeded = false
+
+        vm.onSignIn { succeeded = true }
+        awaitCondition(description = "sign-in callback invoked") { succeeded }
+
+        assertEquals(server.url("/").toString(), sessionStore.state.value.serverUrl)
+        server.shutdown()
+    }
+
+    @Test fun `a token left on the phone is never paired with a link's host`() = runTest(dispatcher) {
+        // Sign in shows, because the token has expired with no refresh token, but it is still stored.
+        val session = Session(serverUrl = "https://positions.example.org/", token = jwtFor("7"), issuedAtEpochSec = 0L, email = "d@example.com")
+        val sessionStore = FakeSessionStore().apply { state.value = session }
+        val setup = setupOver(sessionStore)
+        val vm = loginViewModel(sessionStore, serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.open(setupLink)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(ServerSetupLink.Decision.RefusedSignedIn("positions.example.org"), setup.prompt.value)
+        // Agreed to all the same, as a dialog left up from before could be.
+        setup.confirm(serverInLink)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://positions.example.org/", vm.server.text.toString())
+        assertEquals(session, sessionStore.state.value)
+    }
+
+    @Test fun `a link can't replace the agency's server`() = runTest(dispatcher) {
+        // The link was agreed to just before the agency set the server.
+        val setup = setupOver()
+        val vm = loginViewModel(managed = managedAs("https://managed.example.org/"), serverSetup = setup)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.agree()
+
+        assertEquals("https://managed.example.org/", vm.server.text.toString())
+        assertNull("used up, so it can't fill the field later", setup.linkedServer.value)
+    }
+
+    @Test fun `signing in again ignores a linked server`() = runTest(dispatcher) {
+        // Agreed to on a phone where nothing refuses it, so only Sign in can.
+        val setup = setupOver()
+        val vm = loginViewModel(
+            sessionStore = FakeSessionStore().apply { state.value = Session(serverUrl = "https://saved.example.org/", token = null, issuedAtEpochSec = null, email = "d@example.com") },
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip },
+            serverSetup = setup,
+            again = true,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        setup.agree()
+
+        assertEquals("the open trip is on the saved server", "https://saved.example.org/", vm.server.text.toString())
+        assertFalse(vm.uiState.value.showsServerField)
+    }
+
+    @Test fun `signing in again ignores the managed server`() = runTest(dispatcher) {
+        val vm = loginViewModel(
+            sessionStore = FakeSessionStore().apply { state.value = Session(serverUrl = "https://saved.example.org/", token = null, issuedAtEpochSec = null, email = "d@example.com") },
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip },
+            managed = managedAs("https://managed.example.org/"),
+            again = true,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("the open trip is on the saved server", "https://saved.example.org/", vm.server.text.toString())
+        assertNull(vm.uiState.value.managedServer)
     }
 
     @Test fun `signing in again shows the open trip's route and who signed in last`() = runTest(dispatcher) {

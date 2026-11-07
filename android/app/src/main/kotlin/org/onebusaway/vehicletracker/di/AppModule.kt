@@ -2,6 +2,7 @@ package org.onebusaway.vehicletracker.di
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,7 +21,11 @@ import org.onebusaway.vehicletracker.data.EncryptedSessionStore
 import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.FileTripGeometryStore
+import org.onebusaway.vehicletracker.data.isDebuggable
+import org.onebusaway.vehicletracker.data.presetServerOf
 import org.onebusaway.vehicletracker.data.KeystoreCryptor
+import org.onebusaway.vehicletracker.data.ManagedServerSource
+import org.onebusaway.vehicletracker.data.RestrictionsManagedServerSource
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
@@ -42,6 +47,7 @@ import org.onebusaway.vehicletracker.data.map.TrackerMapServer
 import org.onebusaway.vehicletracker.service.RestartTracking
 import org.onebusaway.vehicletracker.service.ResumeNotifier
 import org.onebusaway.vehicletracker.service.ServiceController
+import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.service.ServiceControllerImpl
 import org.onebusaway.vehicletracker.service.TrackingNotification
 import org.onebusaway.vehicletracker.service.appInFront
@@ -69,6 +75,16 @@ annotation class ElapsedMillisClock
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ServiceAnnounceGrace
+
+/** Qualifies the server an agency built into its own app (`-PdefaultServerUrl`), or null when there is none. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DefaultServerUrl
+
+/** Qualifies whether this is a debug build, whose network config lets plain http reach the developer's machine. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DebugBuild
 
 /**
  * Keeps a `@Volatile` cache of the current auth token + server URL in sync with [SessionStore],
@@ -190,6 +206,25 @@ object AppModule {
     @Singleton
     fun provideVehiclePrefsStore(@ApplicationContext context: Context): VehiclePrefsStore =
         DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore)
+
+    /** The build checks it is https; one the app still can't use, such as one with user info, is ignored. */
+    @Provides
+    @DefaultServerUrl
+    fun provideDefaultServerUrl(@ApplicationContext context: Context): String? {
+        val built = context.getString(R.string.default_server_url)
+        if (built.isEmpty()) return null
+        val server = presetServerOf(built, context.isDebuggable)
+        if (server == null) Log.w("DefaultServerUrl", "Ignoring the built-in defaultServerUrl: not an address the app may use.")
+        return server?.toString()
+    }
+
+    @Provides
+    @DebugBuild
+    fun provideDebugBuild(@ApplicationContext context: Context): Boolean = context.isDebuggable
+
+    @Provides
+    fun provideManagedServerSource(@ApplicationContext context: Context): ManagedServerSource =
+        RestrictionsManagedServerSource(context)
 
     @Provides
     @Singleton

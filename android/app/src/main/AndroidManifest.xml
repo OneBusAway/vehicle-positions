@@ -23,6 +23,10 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true"
         android:theme="@style/Theme.VehicleTracker">
+        <!-- What an agency's device management can set, which is the server address. -->
+        <meta-data
+            android:name="android.content.APP_RESTRICTIONS"
+            android:resource="@xml/app_restrictions" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -32,6 +36,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- A setup link, obavehicletracker://setup?server=..., which only fills in Sign in's server (ServerSetup). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="obavehicletracker" android:host="setup" />
             </intent-filter>
         </activity>
         <service

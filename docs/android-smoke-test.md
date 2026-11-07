@@ -201,7 +201,9 @@ a route or set points interactively.)
 ## The checks
 
 Run checks 1-5 in order against a single trip; check 5 ends it. Check 1b runs
-at Check 1's run step and leaves the same driver signed in. Check 6 tries
+at Check 1's run step and leaves the same driver signed in. Check 1c starts on
+a fresh install, before Check 1 signs in, and finishes at Check 1 and Check 4b.
+Check 6 tries
 to restart the server without a schedule and needs no trip at all. Check 2b
 needs a run scheduled around now, so it has its own setup and its own trips: run
 it on its own, before or after the rest.
@@ -296,6 +298,60 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
 
 Tracking and **Resume your trip?** have no account menu: a driver ends the
 trip first, then signs out.
+
+### Check 1c: A setup link fills in the server
+
+Steps 1 to 3 need **Sign in**, so run them on a fresh install, before Check 1
+signs in. They end with the server filled in for that sign-in. Step 4 runs once
+Check 1 has signed in, and step 5 at Check 4b. The link carries the server
+address percent-encoded, and `am start` opens it as a tapped link or a scanned
+QR code would:
+
+```bash
+LINK="obavehicletracker://setup?server=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' http://10.0.2.2:8081)"
+open_link() { adb shell "am start -a android.intent.action.VIEW -d '$1'"; }
+```
+
+A debug build takes a plain `http://` address only for `10.0.2.2`,
+`localhost` and `127.0.0.1`; a release build takes only `https://`.
+
+1. Open a link to an address with user info, which reads as `10.0.2.2` but goes
+   to `evil.example`:
+
+   ```bash
+   open_link 'obavehicletracker://setup?server=http%3A%2F%2F10.0.2.2%40evil.example'
+   ```
+
+   **Expected outcome:** "This link does not contain a server address the app
+   can use." Tap **OK**: the server field hasn't changed.
+
+2. Open the link: `open_link "$LINK"`.
+
+   **Expected outcome:** **Use 10.0.2.2?** with "Only continue if your agency
+   sent you this link." Tap **Use this server**: the server field shows
+   `http://10.0.2.2:8081/`. Rotate the phone: nothing asks again.
+
+3. Force-stop the app and open it again without signing in:
+
+   ```bash
+   adb shell am force-stop org.onebusaway.vehicletracker
+   adb shell monkey -p org.onebusaway.vehicletracker -c android.intent.category.LAUNCHER 1
+   ```
+
+   **Expected outcome:** the server field is empty again: the address is saved
+   only by a sign-in. Open `$LINK` once more and tap **Use this server**, then
+   sign in as Check 1 says.
+
+4. Once Check 1 has signed in, open `$LINK` again from any step.
+
+   **Expected outcome:** "This phone is signed in to 10.0.2.2. The link was not
+   used." Tap **OK**: the screen behind hasn't changed.
+
+5. At Check 4b, with **Resume your trip?** showing, open `$LINK`.
+
+   **Expected outcome:** the same "This phone is signed in to 10.0.2.2." The
+   stored trip belongs to that server, so a link can't move it, even with no
+   sign-in.
 
 ### Check 2 — GPS playback appears in the feed
 
