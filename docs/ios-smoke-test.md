@@ -598,7 +598,9 @@ playback from step 5 again first, so fixes keep coming during step 3.
    OBA Vehicle Tracker. Turn it on in Settings to start a trip." with an
    **Open Settings** button that opens the app's page in Settings. The `grep`
    count is the same both times: no trip geometry was fetched and no trip was
-   started on the server.
+   started on the server. At the largest text sizes (Settings > Accessibility
+   > Display & Text Size > Larger Text, slider to the end) the banner is still
+   under the title, above the board, with its button on screen.
 
 2. Give location back and start the run again:
 
@@ -619,6 +621,33 @@ playback from step 5 again first, so fixes keep coming during step 3.
    back on there: the next fix clears the line. If it reads **No GPS signal ·
    Position paused** instead, the simulator's playback stopped; start it
    again (step 5). End the trip afterwards.
+
+### Check 6b: Change vehicle after a refused start
+
+A 403 on a start means the driver's vehicles changed after the vehicle screen
+loaded, so **Change vehicle** loads them again. Back does not.
+
+1. Pick `Bus 1` and route **1 Straight**. On **Choose a run**, before tapping
+   a run, take the assignment away:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X DELETE \
+     "$BASE/api/v1/admin/users/$USER_ID/vehicles/bus-1" \
+     -H "Authorization: Bearer $ADMIN_TOKEN"
+   ```
+
+   Tap run **T1**, then **Start trip**.
+
+   **Expected outcome:** a banner under the title reads **You're not assigned
+   to vehicle bus-1.** with a **Change vehicle** button. Tap it: **Choose your
+   vehicle** loads again and says **No vehicles are assigned to you** with
+   **Check again**; the `bus-1` tile is gone.
+
+2. Give the assignment back (the `POST .../admin/assignments` from setup step
+   3), then tap **Check again**.
+
+   **Expected outcome:** with its one vehicle back, the app goes straight on
+   to **Choose a route**, as a fresh sign-in does.
 
 ## CarPlay
 

@@ -541,13 +541,19 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
                     }
                     return
                 }
-                dismissAlert()
-                load {
-                    try await self.session.start(vehicle: vehicle, tripID: trip.id)
-                } then: { [weak self] _ in
-                    self?.interface.popToRootTemplate(animated: true, completion: nil)
-                } failed: { [weak self] error in
-                    CarPlayTemplates.startRefusedAlert(error, vehicleID: vehicle.id) { self?.dismissAlert() }
+                // The start waits for this alert to go: a refusal that came
+                // back fast would present over it, and the car shows one alert
+                // at a time. A dismissal that fails leaves the alert, and its
+                // Start, in place.
+                interface.dismissTemplate(animated: true) { [weak self] done, _ in
+                    guard let self, done else { return }
+                    load {
+                        try await self.session.start(vehicle: vehicle, tripID: trip.id)
+                    } then: { [weak self] _ in
+                        self?.interface.popToRootTemplate(animated: true, completion: nil)
+                    } failed: { [weak self] error in
+                        CarPlayTemplates.startRefusedAlert(error, vehicleID: vehicle.id) { self?.dismissAlert() }
+                    }
                 }
             },
             onCancel: { [weak self] in self?.dismissAlert() }

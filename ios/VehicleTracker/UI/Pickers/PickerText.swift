@@ -151,8 +151,11 @@ nonisolated enum PickerText {
         String(localized: "Route \(name)", comment: "VoiceOver label of a route badge; the argument is the route's number.")
     }
 
+    /// A row as VoiceOver reads it: the number, then the name. A route with
+    /// only one of the two is read once, not as "Route Loop, Loop".
     static func routeRow(_ route: RouteInfo) -> String {
-        String(localized: "Route \(name(of: route)), \(route.longName)", comment: "VoiceOver label of a route row: the route's number, then its name.")
+        if route.shortName.isEmpty || route.longName.isEmpty { return Self.route(name(of: route)) }
+        return String(localized: "Route \(route.shortName), \(route.longName)", comment: "VoiceOver label of a route row: the route's number, then its name.")
     }
 
     // MARK: Choose a run

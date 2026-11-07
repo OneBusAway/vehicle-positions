@@ -284,7 +284,7 @@ final class TripSession {
         do {
             vehicles = try await requireAPI().myVehicles()
         } catch {
-            log.error("could not load the vehicles: \(String(describing: error))")
+            log.error("could not load the vehicles: \(String(describing: error), privacy: .public)")
             throw error
         }
     }
@@ -293,7 +293,7 @@ final class TripSession {
         do {
             return try await requireAPI().routes()
         } catch {
-            log.error("could not load the routes: \(String(describing: error))")
+            log.error("could not load the routes: \(String(describing: error), privacy: .public)")
             throw error
         }
     }
@@ -302,7 +302,7 @@ final class TripSession {
         do {
             return try await requireAPI().trips(routeID: routeID)
         } catch {
-            log.error("could not load the runs of route \(routeID): \(String(describing: error))")
+            log.error("could not load the runs of route \(routeID): \(String(describing: error), privacy: .public)")
             throw error
         }
     }
@@ -343,8 +343,8 @@ final class TripSession {
             try beginTracking(active, evaluator: evaluator)
         } catch {
             // The screens show a fixed sentence for each refusal, never the
-            // server's words, so the cause is only here.
-            log.error("could not start trip \(tripID) on vehicle \(vehicle.id): \(String(describing: error))")
+            // server's words, so the cause is only here, and in the clear.
+            log.error("could not start trip \(tripID) on vehicle \(vehicle.id): \(String(describing: error), privacy: .public)")
             phase = .idle
             throw error
         }

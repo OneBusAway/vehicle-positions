@@ -271,8 +271,8 @@ import Testing
         let page = RouteTripsPage(routeID: "R1", serviceDate: "20260902", timezone: "America/Los_Angeles", trips: TripFixtures.frequentService)
         let items = CarPlayTemplates.tripItems(page, now: TripFixtures.at(14, 3), onSelect: { _ in })
         #expect(items.count == 8, "13:50 to 15:00")
-        #expect(items[0].text?.hasPrefix("1:50") == true)
-        #expect(items[1].text?.hasPrefix("2:00") == true)
+        #expect(items[0].text?.hasPrefix(Formatters.clock(TripFixtures.at(13, 50), timezone: page.timezone)) == true)
+        #expect(items[1].text?.hasPrefix(Formatters.clock(TripFixtures.at(14, 0), timezone: page.timezone)) == true)
         #expect(items[1].detailText == "Now · A → B")
         #expect(items.indices.filter { items[$0].detailText != "A → B" } == [1])
     }
@@ -290,7 +290,7 @@ import Testing
         let list = CarPlayTemplates.list(title: "Choose a run", sections: [(header: nil, items: items)], maxItems: 12, maxSections: 4)
         #expect(list.itemCount == 12)
         let rows = list.sections.flatMap { $0.items.compactMap { $0 as? CPListItem } }
-        #expect(rows.first?.text?.hasPrefix("12:00") == true)
+        #expect(rows.first?.text?.hasPrefix(Formatters.clock(TripFixtures.at(12, 0), timezone: page.timezone)) == true)
         #expect(rows[1].detailText == "Next · A → B")
         #expect(rows.last?.text == "Use iPhone to see more")
     }

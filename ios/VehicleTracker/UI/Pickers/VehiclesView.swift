@@ -15,6 +15,8 @@ struct VehiclesView: View {
     /// Bumped by Check again and Try again, so the load task runs again.
     @State private var loadRequest = 0
     @State private var query = ""
+    /// A pull to refresh failed: the tiles stay, with a line saying so.
+    @State private var refreshFailed = false
     /// This visit to the pickers has skipped past the vehicle screen already.
     @State private var skippedOnce = false
 
@@ -63,18 +65,26 @@ struct VehiclesView: View {
             EmptyState(symbol: "magnifyingglass", title: PickerText.noVehicleMatches(query), detail: PickerText.checkFleetNumber)
         } else {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: VehicleTile.gap) {
-                    ForEach(groups) { group in
-                        Section {
-                            ForEach(PlacedTile.in(group)) { placed in
-                                VehicleTile(tile: placed.tile) {
-                                    path.append(.routes(placed.tile.vehicle))
-                                } onToggleFavorite: {
-                                    toggleFavorite(placed.tile.vehicle.id)
+                VStack(spacing: 0) {
+                    if refreshFailed {
+                        AttentionBanner(symbol: "icloud.slash", text: PickerText.vehiclesLoadFailed, action: PickerText.tryAgain) {
+                            Task { await load() }
+                        }
+                        .padding(.top, 8)
+                    }
+                    LazyVGrid(columns: columns, spacing: VehicleTile.gap) {
+                        ForEach(groups) { group in
+                            Section {
+                                ForEach(PlacedTile.in(group)) { placed in
+                                    VehicleTile(tile: placed.tile) {
+                                        path.append(.routes(placed.tile.vehicle))
+                                    } onToggleFavorite: {
+                                        toggleFavorite(placed.tile.vehicle.id)
+                                    }
                                 }
+                            } header: {
+                                PickerSectionHeader(title: PickerText.section(group.section))
                             }
-                        } header: {
-                            PickerSectionHeader(title: PickerText.section(group.section))
                         }
                     }
                 }
@@ -106,6 +116,7 @@ struct VehiclesView: View {
     private func load() async {
         do {
             try await session.loadVehicles()
+            refreshFailed = false
             load = .loaded(session.vehicles)
             if let only = VehicleAutoSkip.vehicle(toSkipTo: session.vehicles, alreadySkipped: skippedOnce,
                                                   pathIsEmpty: path.isEmpty) {
@@ -116,7 +127,13 @@ struct VehiclesView: View {
             // The view went away mid-load; the next visit loads afresh.
             guard !Task.isCancelled else { return }
             guard !session.handleIfUnauthorized(error) else { return }
-            load = .failed(PickerLoadFailure(error))
+            // A refresh that fails leaves the tiles the driver has; a first
+            // load, or one a button asked for, takes the whole screen.
+            if case .loaded = load {
+                refreshFailed = true
+            } else {
+                load = .failed(PickerLoadFailure(error))
+            }
         }
     }
 }
