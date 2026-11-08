@@ -10,6 +10,7 @@ nonisolated struct BoardRun: Equatable, Identifiable {
     let id: String
     let startsAt: Date
     let headsign: String
+    let label: RunLabel
     /// Gone: every run before the highlighted one, or all of them once the
     /// day's runs are over.
     let past: Bool
@@ -68,7 +69,8 @@ nonisolated struct RunBoards: Equatable {
         // highlighted one has gone.
         let gone = highlighted.flatMap { trips.firstIndex(of: $0) } ?? trips.count
         let runs = trips.enumerated().map { index, trip in
-            BoardRun(id: trip.id, startsAt: trip.startsAt, headsign: trip.headsign, past: index < gone,
+            BoardRun(id: trip.id, startsAt: trip.startsAt, headsign: trip.headsign,
+                     label: RunLabel(number: trip.shortName, block: trip.blockID), past: index < gone,
                      highlight: trip == highlighted ? (trip.startsAt <= now ? .now : .next) : nil)
         }
         return Board(direction: direction, runs: runs, nowAt: gone > 0 ? gone : nil,

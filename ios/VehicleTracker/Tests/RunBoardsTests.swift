@@ -148,4 +148,12 @@ import Testing
         #expect(board.nowAt == 1)
         #expect(board.openAt == "a")
     }
+
+    @Test func aRunsNumberAndBlockReachItsRowOnTheBoard() {
+        var trip = run("a", 7, 0)
+        trip.shortName = "1503"
+        trip.blockID = "599-20"
+        let board = board(at: TripFixtures.at(6, 0), [trip])
+        #expect(board.runs.map(\.label) == [RunLabel(number: "1503", block: "599-20")])
+    }
 }
