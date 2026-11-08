@@ -72,12 +72,13 @@ type LoginRequest struct {
 // LoginResponse is returned by a successful login and by the refresh
 // endpoint, so a client can parse both responses with one model.
 //
-// Token contains the same value as AccessToken but is deprecated.
-// It remains in the response for backward compatibility with older clients.
-// New clients should use access_token instead of token.
-// The Android and iOS apps and the simulator now read access_token.
-// Unlike the mobile apps, the simulator does not refresh expired
-// access tokens.
+// Token repeats AccessToken verbatim and is deprecated. New clients should
+// read access_token, as the Android and iOS apps and the simulator do. Token
+// stays in the response permanently, with no planned removal, so that clients
+// written against older releases, including tools an agency built itself,
+// keep working; TestLoginResponse_BackwardCompatibleJSON holds it there.
+// Unlike the mobile apps, the simulator does not refresh expired access
+// tokens.
 type LoginResponse struct {
 	Token        string `json:"token"`
 	AccessToken  string `json:"access_token"`

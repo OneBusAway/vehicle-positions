@@ -90,12 +90,13 @@ func TestHandleLogin_ReturnsBothTokenAndAccessToken(t *testing.T) {
 	assert.Equal(t, int(defaultAccessTokenTTL.Seconds()), resp.ExpiresIn)
 }
 
-// TestLoginResponse_BackwardCompatibleJSON is the test that stops a future
-// refactor from silently breaking every current client. It asserts on raw
-// JSON rather than the struct, because the struct is exactly what such a
-// refactor would change: main's Android app declares `token` non-nullable
-// (kotlinx.serialization raises MissingFieldException, it does not default to
-// ""), and PR #96's simulator errors when `token` is empty.
+// TestLoginResponse_BackwardCompatibleJSON guards clients this repo cannot
+// test: tools an agency wrote itself, and older app releases, that still read
+// the deprecated `token` field the README promises to keep. The apps and the
+// simulator in this repo read access_token, so none of their tests would
+// notice the field going. It asserts on raw JSON rather than the struct,
+// because the struct is exactly what a refactor dropping the field would
+// change.
 func TestLoginResponse_BackwardCompatibleJSON(t *testing.T) {
 	handler := handleLogin(loginTestUser(), newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "driver@test.com", "password")
