@@ -6,6 +6,7 @@ import org.junit.Test
 import org.onebusaway.vehicletracker.data.api.RouteTripsDto
 import org.onebusaway.vehicletracker.data.api.TripSummaryDto
 import org.onebusaway.vehicletracker.ui.runs.RunHighlight
+import org.onebusaway.vehicletracker.ui.runs.RunLabel
 import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.clockTime
 import org.onebusaway.vehicletracker.ui.runs.highlightOf
@@ -27,7 +28,7 @@ class HighlightedRunTest {
         OffsetDateTime.parse("2026-09-22T00:00:00Z").plusHours(hour.toLong()).plusMinutes(minute.toLong()).toInstant()
 
     private fun run(id: String, start: Instant, end: Instant) =
-        TripRun(id = id, headsign = "North", directionId = 0, firstStop = "A", lastStop = "B", startsAt = start, endsAt = end)
+        TripRun(id = id, headsign = "North", directionId = 0, firstStop = "A", lastStop = "B", startsAt = start, endsAt = end, label = RunLabel("", ""))
 
     /**
      * A frequent route, like the 1 Line in #185: a run every 10 minutes from 13:00 to 15:00, each an hour long, so six

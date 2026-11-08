@@ -351,8 +351,9 @@ private fun LazyListScope.runs(runs: List<BoardRun>, startingRunId: String?, onR
 }
 
 /**
- * One departure: the start time big, where it goes under it, and the Now or Next tag. While a start is in flight the
- * run being started is marked and the rest dim and ignore taps.
+ * One departure: the start time big, where it goes under it, the agency's run and block numbers when the feed gives
+ * them, and the Now or Next tag. While a start is in flight the run being started is marked and the rest dim and
+ * ignore taps.
  */
 @Composable
 private fun RunRow(run: BoardRun, starting: Boolean, dimmed: Boolean, onRunClick: (String) -> Unit) {
@@ -385,6 +386,14 @@ private fun RunRow(run: BoardRun, starting: Boolean, dimmed: Boolean, onRunClick
                 color = if (run.past || dimmed) quiet else MaterialTheme.colorScheme.onSurface,
             )
             Text(text = run.headsign, style = MaterialTheme.typography.bodyMedium, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val label = runLabelText(
+                run.label,
+                number = { stringResource(R.string.runs_row_run, it) },
+                block = { stringResource(R.string.runs_row_block, it) },
+            )
+            if (label != null) {
+                Text(text = label, style = MaterialTheme.typography.bodySmall, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         when {
             // The row says it is starting; the spinner would only repeat it.

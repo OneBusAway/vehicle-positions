@@ -6,7 +6,14 @@ import java.time.format.DateTimeFormatter
 
 /** One run as the departure board draws it, its start already on the agency's clock in [time]. */
 @Immutable
-data class BoardRun(val id: String, val time: String, val headsign: String, val past: Boolean, val highlight: RunHighlight?)
+data class BoardRun(
+    val id: String,
+    val time: String,
+    val headsign: String,
+    val label: RunLabel,
+    val past: Boolean,
+    val highlight: RunHighlight?,
+)
 
 /**
  * One direction's departures, or all of a route's when the runs do not split into two directions; [direction] is
@@ -44,6 +51,7 @@ private fun boardOf(direction: RunDirection?, runs: List<TripRun>, page: RunPage
                 id = run.id,
                 time = timeFormat.format(clockTime(run.startsAt, page.timezone)),
                 headsign = run.headsign,
+                label = run.label,
                 past = index < gone,
                 highlight = if (run == highlighted) highlightOf(run, now) else null,
             )
