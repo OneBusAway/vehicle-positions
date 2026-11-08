@@ -289,7 +289,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideServiceController(@ApplicationContext context: Context): ServiceController =
-        ServiceControllerImpl(context)
+        ServiceControllerImpl(context, cancelResumeNotification = { TrackingNotification(context).cancel() })
 
     @Provides
     fun provideRestartTracking(

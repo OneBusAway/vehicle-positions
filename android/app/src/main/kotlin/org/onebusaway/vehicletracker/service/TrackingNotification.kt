@@ -96,6 +96,7 @@ class TrackingNotification(private val context: Context) {
         baseBuilder(ATTENTION_CHANNEL_ID, NotificationCompat.PRIORITY_DEFAULT)
             .setContentTitle(context.getString(R.string.tracking_notification_resume_title))
             .setContentText(context.getString(R.string.tracking_notification_resume_text))
+            .setAutoCancel(true)
             .build()
 
     /**
@@ -111,6 +112,14 @@ class TrackingNotification(private val context: Context) {
             return
         }
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * Takes down the resume notification, for a trip that has ended. While the service is in the foreground Android
+     * ignores this for its ongoing notification, which goes when the service stops.
+     */
+    fun cancel() {
+        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
 
     private fun title(text: NotificationText): String {
