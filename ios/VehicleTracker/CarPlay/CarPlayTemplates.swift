@@ -31,8 +31,10 @@ enum CarPlayTemplates {
     /// only the phone can resume it (spec §6.2).
     static func pausedBarButtons(onEnd: @escaping () -> Void) -> (leading: [CPBarButton], trailing: [CPBarButton]) {
         let end = CPBarButton(title: String(localized: "End")) { _ in onEnd() }
-        return ([end], [titleButton(String(localized: "Resume on iPhone"))])
+        return ([end], [titleButton(resumeOnIPhone)])
     }
+
+    private static var resumeOnIPhone: String { String(localized: "Resume on iPhone") }
 
     // MARK: Active trip
 
@@ -98,7 +100,7 @@ enum CarPlayTemplates {
         } ?? String(localized: "—")
         let reports: String
         if let problem = status.problem {
-            reports = TripStatusText.pair(problem.what, problem.meaning)
+            reports = TripStatusText.pair(problem.what, carMeaning(problem))
         } else if status.isSignedOut {
             reports = TripStatusText.pair(status.reports.text, String(localized: "Sign in on iPhone"))
         } else {
@@ -116,6 +118,16 @@ enum CarPlayTemplates {
             CPInformationItem(title: TripStatusText.reports, detail: reports),
             CPInformationItem(title: String(localized: "GPS"), detail: gps),
         ]
+    }
+
+    /// The car can't open Settings or resume location, so a problem line whose
+    /// phone form is a tap names the iPhone instead.
+    static func carMeaning(_ problem: TripStatus.Problem) -> String {
+        switch problem.action {
+        case .openSettings: String(localized: "Fix on iPhone", comment: "CarPlay Reports row, after 'Location off' or 'Precise Location off': the fix is in the iPhone's Settings, which the car can't open.")
+        case .resume: resumeOnIPhone
+        case nil: problem.meaning
+        }
     }
 
     /// "Off route · 98 m", the phone's answer. The controller rewrites a

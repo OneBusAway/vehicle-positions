@@ -775,7 +775,7 @@ open the CarPlay window by hand once per Simulator session and take
 screenshots with the same `simctl io ... screenshot --display=external`
 command.
 
-### Three states to check (to verify)
+### Four states to check (to verify)
 
 1. **Idle / signed out.** `/tmp/vt-carplay-idle.png` should show the map
    with a "Sign in on iPhone" bar button — or, after a debug auto-start
@@ -797,6 +797,12 @@ command.
    alert never times out
    on its own and dismissing it silences further alerts until the next
    off-route episode.
+4. **Location off.** With a trip running, set **Privacy & Security >
+   Location Services > OBA Vehicle Tracker** to **Never** in the simulator's
+   Settings app, then click **Details** in the CarPlay window. Expect the
+   **Reports** row to read **Location off · Fix on iPhone**, never "Tap to
+   fix": the car can't open Settings. Set it back to **While Using the App**
+   afterwards.
 
 ### Starting a trip from the car (to verify)
 
