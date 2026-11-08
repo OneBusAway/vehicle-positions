@@ -20,7 +20,7 @@ class AuthRepository @Inject constructor(
     suspend fun login(serverUrl: String, email: String, password: String): Result<Unit> = try {
         val resp = apiFactory.create(serverUrl).login(LoginRequest(email, password))
         sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
-        offlineQueue.claimFor("${serverUrl.trimEnd('/')} ${email.trim().lowercase()}")
+        offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
         Result.success(Unit)
     } catch (e: CancellationException) {
         throw e

@@ -35,9 +35,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.onebusaway.vehicletracker.data.OfflineFixQueue
+import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.offlineQueueAccount
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.di.ServiceAnnounceGrace
 import org.onebusaway.vehicletracker.ui.login.LoginScreen
@@ -156,6 +159,7 @@ class AppNavViewModel @Inject constructor(
     private val sessionStore: SessionStore,
     private val tripStateStore: TripStateStore,
     private val trackingRepository: TrackingRepository,
+    private val offlineQueue: OfflineFixQueue,
     @param:EpochSecondsClock private val clock: () -> Long,
     @param:ServiceAnnounceGrace private val serviceAnnounceGrace: Duration,
 ) : ViewModel() {
@@ -165,6 +169,7 @@ class AppNavViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val session = sessionStore.session.first()
+            claimQueueForRestoredDriver(session)
             val activeTrip = tripStateStore.activeTrip.first()
             _startDestination.value = when {
                 activeTrip != null && serviceIsRunning() -> ROUTE_TRACKING
@@ -173,6 +178,16 @@ class AppNavViewModel @Inject constructor(
                 else -> ROUTE_LOGIN
             }
         }
+    }
+
+    /**
+     * A session signed in before the queue recorded owners has none on file, so this driver's next sign-in would drop
+     * their queued fixes. Done before the first screen shows, so Sign in can't claim the queue first.
+     */
+    private suspend fun claimQueueForRestoredDriver(session: Session) {
+        val serverUrl = session.serverUrl ?: return
+        val email = session.email ?: return
+        offlineQueue.claimIfUnowned(offlineQueueAccount(serverUrl, email))
     }
 
     /**

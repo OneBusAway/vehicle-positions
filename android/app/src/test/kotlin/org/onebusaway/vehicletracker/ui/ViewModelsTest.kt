@@ -42,6 +42,7 @@ import org.junit.Before
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.*
 import org.onebusaway.vehicletracker.data.api.ApiFactory
+import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
@@ -900,10 +901,12 @@ class ViewModelsTest {
         session: Session = freshSession,
         tracking: TrackingRepository = TrackingRepository(),
         sessionStore: SessionStore = FakeSessionStore().apply { state.value = session },
+        queue: OfflineFixQueue = FakeOfflineFixQueue(),
     ) = AppNavViewModel(
         sessionStore,
         FakeTripStateStore().apply { tripState.value = trip },
         tracking,
+        queue,
         clock = { launchNow },
         serviceAnnounceGrace = serviceAnnounceGrace,
     )
@@ -977,6 +980,67 @@ class ViewModelsTest {
         dispatcher.scheduler.runCurrent()
 
         assertEquals("resume", vm.startDestination.value)
+    }
+
+    // --- Launch: an offline queue a build before owners left without one (#237) ---
+
+    private val queuedFix = LocationReportDto(
+        vehicleId = "bus-1", routeId = "R1", startDate = "20260804", latitude = 1.0, longitude = 2.0, timestamp = 1L,
+    )
+
+    private fun unownedQueue() = FakeOfflineFixQueue().apply { queued.addLast(queuedFix) }
+
+    private suspend fun signIn(queue: OfflineFixQueue, server: MockWebServer, email: String) {
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}"""))
+        val auth = AuthRepository(FakeSessionStore(), ApiFactory { null }, TrackerApiProvider { error("no logout") }, queue, clock = { 0L })
+        val result = auth.login(server.url("/").toString(), email, "pw")
+        assertTrue("the sign-in itself must succeed: ${result.exceptionOrNull()}", result.isSuccess)
+    }
+
+    // Saved without the slash and in another case than the sign-in types it: the two still name one account.
+    @Test fun `a restored session keeps its unowned fixes through its driver's next sign-in`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        val queue = unownedQueue()
+        val serverUrl = server.url("/").toString().trimEnd('/')
+        appNavViewModel(session = freshSession.copy(serverUrl = serverUrl, email = "D@example.com"), queue = queue)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        signIn(queue, server, " d@example.com")
+
+        assertEquals(listOf(queuedFix), queue.queued.toList())
+        server.shutdown()
+    }
+
+    @Test fun `another driver signing in still drops a restored session's fixes`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        val queue = unownedQueue()
+        appNavViewModel(session = freshSession.copy(serverUrl = server.url("/").toString(), email = "d@example.com"), queue = queue)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        signIn(queue, server, "e@example.com")
+
+        assertEquals(emptyList<LocationReportDto>(), queue.queued.toList())
+        server.shutdown()
+    }
+
+    @Test fun `launch leaves a queue that has an owner alone`() = runTest(dispatcher) {
+        val owner = "https://other.example e@example.com"
+        val queue = unownedQueue().apply { this.owner = owner }
+        appNavViewModel(session = freshSession.copy(email = "d@example.com"), queue = queue)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(owner, queue.owner)
+        assertEquals(listOf(queuedFix), queue.queued.toList())
+    }
+
+    @Test fun `a restored session with no email claims nothing`() = runTest(dispatcher) {
+        val queue = unownedQueue()
+        val vm = appNavViewModel(session = freshSession.copy(email = null), queue = queue)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("the launch finished", "vehicles", vm.startDestination.value)
+
+        assertNull(queue.owner)
+        assertEquals(listOf(queuedFix), queue.queued.toList())
     }
 
     // --- Vehicle picker: search, favorites and recents (#36) ---

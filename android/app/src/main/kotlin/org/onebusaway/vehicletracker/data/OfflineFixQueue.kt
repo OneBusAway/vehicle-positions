@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -33,7 +34,17 @@ interface OfflineFixQueue {
      * are dropped: they would upload under this driver's token and be stored as this driver's.
      */
     suspend fun claimFor(account: String)
+
+    /**
+     * Hands a queue with no owner to [account], dropping nothing. For the session restored at launch: a build before
+     * owners queued that driver's fixes without recording one, and [claimFor] at their next sign-in would take them for
+     * another account's. A queue that has an owner keeps it.
+     */
+    suspend fun claimIfUnowned(account: String)
 }
+
+/** The account [OfflineFixQueue.claimFor] compares: the same server and email however they were typed. */
+fun offlineQueueAccount(serverUrl: String, email: String) = "${serverUrl.trimEnd('/')} ${email.trim().lowercase()}"
 
 /**
  * Keeps the queue as one JSON report per line in [file], so it survives the tracking service and
@@ -76,6 +87,19 @@ class FileOfflineFixQueue(
             rewrite(q)
         }
         ownerFile.writeText(account)
+    }
+
+    // Leaves the fixes unread: only the owner file matters, and this runs before the first screen shows.
+    override suspend fun claimIfUnowned(account: String) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (ownerFile.exists()) return@withLock
+            try {
+                ownerFile.writeText(account)
+            } catch (e: IOException) {
+                // The next sign-in then drops the fixes, as it would have without this claim.
+                Log.w(TAG, "Could not record who owns the queued fixes", e)
+            }
+        }
     }
 
     private suspend fun <T> locked(block: (ArrayDeque<LocationReportDto>) -> T): T =
