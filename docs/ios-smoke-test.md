@@ -904,6 +904,15 @@ Screenshot the picker: `/tmp/vt-carplay-routes.png`. If clicking cannot be
 scripted, say so; the picker's contents are covered by `CarPlayTemplatesTests`
 instead.
 
+### The Live Activity on the Dashboard (to verify)
+
+With a trip running, open the CarPlay Dashboard, not the app's own screen.
+Since iOS 26 every Live Activity also shows there, and an app can't keep it
+off. Expect the trip on black in three short lines: **1** and the answer, the
+headsign, then **Reporting** or the problem's second line, with no buttons and
+no "Tap". Once the app stops updating it (Check 7c), the third line becomes an
+amber **Reports paused**. Tapping it opens the app's CarPlay screen.
+
 ### Real car and background caveats
 
 - A real car needs Apple's CarPlay navigation entitlement

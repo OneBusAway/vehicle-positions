@@ -44,4 +44,6 @@ nonisolated struct TripActivityAttributes: ActivityAttributes {
     /// "Reports paused · Open the app to keep reporting.": the warning once
     /// the app has stopped updating the activity.
     var staleLine: String
+    /// "Reports paused": the warning where a line has room for no more.
+    var staleTitle: String
 }

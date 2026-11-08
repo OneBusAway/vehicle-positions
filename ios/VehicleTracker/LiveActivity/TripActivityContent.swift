@@ -7,7 +7,8 @@ extension TripActivityAttributes {
         self.init(serverTripID: active.serverTripID, routeName: active.trip.badgeName,
                   routeColor: active.trip.route.color, routeTextColor: active.trip.route.textColor,
                   headsign: active.trip.headsign,
-                  staleLine: TripStatusText.pair(TripStatusText.reportsPaused, TripStatusText.openTheAppToKeepReporting))
+                  staleLine: TripStatusText.pair(TripStatusText.reportsPaused, TripStatusText.openTheAppToKeepReporting),
+                  staleTitle: TripStatusText.reportsPaused)
     }
 }
 
