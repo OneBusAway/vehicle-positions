@@ -554,10 +554,11 @@ Login returns both tokens:
 }
 ```
 
-- `token` is **deprecated** and repeats `access_token` verbatim. It is kept so
-  existing clients keep working; new clients should read `access_token`. It
-  will be removed once the iOS app and the simulator read `access_token`, as
-  the Android app already does.
+- `token` is **deprecated** and repeats `access_token` verbatim. New clients
+  should read `access_token`, as the Android app, the iOS app and the
+  simulator all do. `token` stays in the response permanently, with no
+  planned removal, so that clients written against older releases, including
+  tools an agency built itself, keep working.
 - `expires_in` is the access token's lifetime in seconds.
 - `refresh_token` is an opaque 32-byte random value, not a JWT. Only its
   SHA-256 hash is stored, so a database disclosure yields no usable tokens.
@@ -612,7 +613,11 @@ Response codes:
 unchanged and `token` is still in the login response. Before lowering
 `ACCESS_TOKEN_TTL`, a client must handle `401 → refresh → retry`; the
 deprecated `token` field keeps it compiling and parsing, but does **not**
-protect it from a shorter lifetime. The Android and iOS apps can refresh expired access tokens, but the simulator does not support token refreshing. If a simulation runs longer than the access token's lifetime (`ACCESS_TOKEN_TTL`), authenticated requests may start returning `401 Unauthorized`.
+protect it from a shorter lifetime. The Android and iOS apps can refresh
+expired access tokens, but the simulator does not support token refreshing.
+If a simulation runs longer than the access token's lifetime
+(`ACCESS_TOKEN_TTL`), authenticated requests may start returning
+`401 Unauthorized`.
 
 Both lifetimes are configurable:
 
