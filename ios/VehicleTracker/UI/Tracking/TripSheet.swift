@@ -95,7 +95,7 @@ struct TripSheet: View {
             do {
                 try await session.end()
             } catch {
-                log.error("the server did not confirm the end of the trip: \(String(describing: error))")
+                log.error("the server did not confirm the end of the trip: \(String(describing: error), privacy: .public)")
                 endNotConfirmed = true
             }
         }

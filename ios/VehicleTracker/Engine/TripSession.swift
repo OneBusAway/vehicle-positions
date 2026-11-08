@@ -229,7 +229,7 @@ final class TripSession {
         do {
             try await logIn(serverURL: serverURL, email: email, password: password)
         } catch {
-            log.error("could not sign in to \(serverURL.host() ?? "the server"): \(String(describing: error))")
+            log.error("could not sign in to \(serverURL.host() ?? "the server", privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
         }
     }
@@ -312,7 +312,7 @@ final class TripSession {
             do {
                 try await sendPendingEnds(api)
             } catch {
-                log.notice("could not send the trips ended on this phone; they wait for this driver's next start: \(String(describing: error))")
+                log.notice("could not send the trips ended on this phone; they wait for this driver's next start: \(String(describing: error), privacy: .public)")
             }
             // The client sends the stored token, which is a newer sign-in's
             // if one landed during the ends: this logout would end that
@@ -321,7 +321,7 @@ final class TripSession {
             try await api.logout()
             log.notice("logged out on the server")
         } catch {
-            log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error))")
+            log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -436,7 +436,7 @@ final class TripSession {
             } catch APIError.status(404, _) {
                 log.notice("the server had no open trip \(pendingEnd.serverTripID) to end; forgetting its pending end")
             } catch {
-                log.error("could not send the end of trip \(pendingEnd.serverTripID), which was ended on this phone only: \(String(describing: error))")
+                log.error("could not send the end of trip \(pendingEnd.serverTripID), which was ended on this phone only: \(String(describing: error), privacy: .public)")
                 throw TripSessionError.previousTripNotEnded
             }
             pending.removeAll { $0 == pendingEnd }
@@ -495,7 +495,7 @@ final class TripSession {
         do {
             try beginTracking(active, evaluator: evaluator)
         } catch {
-            log.error("cannot resume without a signed-in account: \(String(describing: error))")
+            log.error("cannot resume without a signed-in account: \(String(describing: error), privacy: .public)")
             phase = .signedOut
         }
     }
@@ -560,7 +560,7 @@ final class TripSession {
             }
             log.notice("remembered the end of trip \(active.serverTripID) for the next start")
         } catch {
-            log.error("could not remember the end of trip \(active.serverTripID); it stays open on the server: \(String(describing: error))")
+            log.error("could not remember the end of trip \(active.serverTripID); it stays open on the server: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -620,7 +620,7 @@ final class TripSession {
         do {
             try store.clear()
         } catch {
-            log.error("failed to clear the stored active trip: \(String(describing: error))")
+            log.error("failed to clear the stored active trip: \(String(describing: error), privacy: .public)")
         }
         phase = .idle
         refreshReporting()
@@ -706,7 +706,7 @@ final class TripSession {
         do {
             try store.saveSent(fixesSent, for: active.serverTripID)
         } catch {
-            log.error("could not keep the sent count of trip \(active.serverTripID): \(String(describing: error))")
+            log.error("could not keep the sent count of trip \(active.serverTripID): \(String(describing: error), privacy: .public)")
         }
     }
 

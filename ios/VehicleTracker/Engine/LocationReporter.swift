@@ -111,14 +111,14 @@ final class LocationReporter {
             case 403, 409:
                 // Every report is refused until dispatch fixes the vehicle or
                 // the trip, so say so rather than stay green.
-                log.warning("location report refused with HTTP \(code): \(message)")
+                log.warning("location report refused with HTTP \(code): \(message, privacy: .public)")
                 problem = .refused
             default:
-                log.warning("dropping location report after HTTP \(code): \(message)")
+                log.warning("dropping location report after HTTP \(code): \(message, privacy: .public)")
             }
         } catch {
             consecutiveTimestampRejects = 0
-            log.warning("dropping location report after transport failure: \(String(describing: error))")
+            log.warning("dropping location report after transport failure: \(String(describing: error), privacy: .public)")
             problem = .noNetwork
         }
     }
