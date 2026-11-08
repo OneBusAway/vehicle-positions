@@ -195,19 +195,24 @@ import VehiclePositionsKit
     }
 
     /// The server must not hear of a trip the phone cannot report: the
-    /// geometry fetch counts too, so a refused start makes no request at all.
+    /// geometry fetch counts too, so a refused start makes no request at all,
+    /// not even the end of a trip this driver ended on this phone only.
     @Test(arguments: [
         (LocationAccessState.denied, TripSessionError.locationDenied),
         (.restricted, .locationDenied),
         (.servicesOff, .locationServicesOff),
     ])
     func aRefusedLocationStopsTheStartBeforeAnyServerCall(state: LocationAccessState, refusal: TripSessionError) async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
         access.state = state
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
         await #expect(throws: refusal) {
             try await s.start(vehicle: bus, tripID: "T1")
         }
+        #expect(api.ends.isEmpty, "the pending end must not have been sent")
+        #expect(try store.loadPendingEnds() == [owed], "kept for the next start")
         #expect(api.tripRequests.isEmpty, "the geometry must not have been fetched")
         #expect(api.starts.isEmpty, "the server trip must not have been started")
         #expect(s.phase == .idle)
@@ -239,6 +244,8 @@ import VehiclePositionsKit
     }
 
     @Test func refusingThePromptStopsTheStartBeforeAnyServerCall() async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
         access.state = .notDetermined
         access.requestAnswer = .denied
         let s = session()
@@ -247,6 +254,8 @@ import VehiclePositionsKit
             try await s.start(vehicle: bus, tripID: "T1")
         }
         #expect(access.requests == 1)
+        #expect(api.ends.isEmpty)
+        #expect(try store.loadPendingEnds() == [owed])
         #expect(api.tripRequests.isEmpty)
         #expect(api.starts.isEmpty)
         #expect(s.phase == .idle)
@@ -277,6 +286,8 @@ import VehiclePositionsKit
     }
 
     @Test func keepingApproximateLocationStopsTheStartBeforeAnyServerCall() async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
         access.state = .approximateOnly
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
@@ -284,6 +295,8 @@ import VehiclePositionsKit
             try await s.start(vehicle: bus, tripID: "T1")
         }
         #expect(access.preciseRequests == 1)
+        #expect(api.ends.isEmpty)
+        #expect(try store.loadPendingEnds() == [owed])
         #expect(api.tripRequests.isEmpty)
         #expect(api.starts.isEmpty)
         #expect(s.phase == .idle)
