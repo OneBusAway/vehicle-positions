@@ -1,3 +1,4 @@
+import ActivityKit
 import Foundation
 import Testing
 import VehiclePositionsKit
@@ -32,6 +33,17 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
         #expect(await eventually { host.requests.count == 1 })
         return (s, c)
+    }
+
+    /// What a relaunch finds: a fresh token, a known server and trip 7 in
+    /// the store, which the session takes up as `.paused`.
+    func relaunched() throws -> TripSession {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set("https://positions.example.org", forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        try store.save(ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1,
+                                  startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com"))
+        return session()
     }
 
     /// At ST1, `secondsLate` behind its 08:00: on time up to five minutes,
@@ -81,6 +93,23 @@ import VehiclePositionsKit
         #expect(host.requests.isEmpty)
         #expect(host.updates.isEmpty)
         withExtendedLifetime(c) {}
+    }
+
+    @Test func startsAtTheNextForegroundOnceTheyAreOn() async throws {
+        host.areActivitiesEnabled = false
+        let s = session()
+        let c = controller(s)
+        try await s.signIn(serverURL: URL(string: "https://positions.example.org")!, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        await emitAndSettle(s, secondsLate: 0)
+
+        // Turned on in Settings: the driver comes back to the app.
+        host.areActivitiesEnabled = true
+        await emitAndSettle(s, secondsLate: 360)
+        #expect(host.requests.isEmpty, "not asked again on every fix")
+        c.sceneBecameActive()
+        #expect(host.requests.count == 1)
+        #expect(host.requests.first?.state.lead == "6 min late")
     }
 
     // MARK: Updating
@@ -172,6 +201,92 @@ import VehiclePositionsKit
         gate.open()
         try await ending.value
         #expect(await eventually { host.ends == ["activity-1"] })
+        withExtendedLifetime(c) {}
+    }
+
+    // MARK: Relaunch, the car and the driver's choice
+
+    /// iOS closed the app during trip 7 and left its activity up: the
+    /// relaunch takes it over, with no second card, and says the trip is
+    /// paused.
+    @Test func adoptsTheActivityForTheStoredTripOnRelaunch() async throws {
+        host.listed = [.init(id: "before", serverTripID: 7, state: .active)]
+        let s = try relaunched()
+        let c = controller(s)
+        #expect(await eventually { host.updates.count == 1 })
+        #expect(host.updates.first?.id == "before")
+        #expect(host.updates.first?.state.lead == "Location stopped")
+
+        s.resume()
+        #expect(await eventually { host.updates.last?.state.lead == "Waiting for GPS" })
+        #expect(host.requests.isEmpty)
+        #expect(host.ends.isEmpty)
+        withExtendedLifetime(c) {}
+    }
+
+    @Test func endsActivitiesForOtherTripsOnRelaunch() async throws {
+        host.listed = [.init(id: "before", serverTripID: 7, state: .active),
+                       .init(id: "stray", serverTripID: 3, state: .active),
+                       .init(id: "swiped", serverTripID: 4, state: .dismissed)]
+        let s = try relaunched()
+        let c = controller(s)
+        #expect(await eventually { host.ends == ["stray"] })
+        #expect(await eventually { host.updates.first?.id == "before" })
+        withExtendedLifetime(c) {}
+    }
+
+    @Test func doesNotRestartATripTheDriverSwipedAway() async throws {
+        let (s, c) = try await started()
+        host.set(.dismissed, of: "activity-1")
+        await emitAndSettle(s, secondsLate: 0)
+        await emitAndSettle(s, secondsLate: 360)
+        #expect(host.requests.count == 1)
+        #expect(host.updates.isEmpty)
+        #expect(host.ends.isEmpty, "it is already gone")
+        withExtendedLifetime(c) {}
+    }
+
+    /// The system ended trip 7's activity at its eight hours while the app
+    /// was closed: resuming the trip doesn't bring it back.
+    @Test func doesNotRestartAfterTheSystemEndedIt() async throws {
+        host.listed = [.init(id: "before", serverTripID: 7, state: .ended)]
+        let s = try relaunched()
+        let c = controller(s)
+        s.resume()
+        await emitAndSettle(s, secondsLate: 0)
+        #expect(host.requests.isEmpty)
+        #expect(host.updates.isEmpty)
+        #expect(host.ends.isEmpty)
+        withExtendedLifetime(c) {}
+    }
+
+    /// Started from the car with the phone app in the background, where
+    /// ActivityKit refuses: tried once more when the phone app comes to the
+    /// front, not on every fix.
+    @Test func retriesAStartTheBackgroundRefusedAtTheNextForeground() async throws {
+        host.inForeground = false
+        let (s, c) = try await started()
+        await emitAndSettle(s, secondsLate: 0)
+        await emitAndSettle(s, secondsLate: 360)
+        #expect(host.requests.count == 1)
+
+        host.inForeground = true
+        c.sceneBecameActive()
+        #expect(host.requests.count == 2)
+        #expect(host.requests.last?.state.lead == "6 min late")
+        c.sceneBecameActive()
+        #expect(host.requests.count == 2, "one activity is enough")
+    }
+
+    @Test func aNewTripAfterADeclinedOneStartsAgain() async throws {
+        let (s, c) = try await started()
+        host.set(.dismissed, of: "activity-1")
+        await emitAndSettle(s, secondsLate: 0)
+        try await s.end()
+        api.startedID = 43
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(await eventually { host.requests.count == 2 })
+        #expect(host.requests.last?.attributes.serverTripID == 43)
         withExtendedLifetime(c) {}
     }
 }

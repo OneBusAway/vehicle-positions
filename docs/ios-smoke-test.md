@@ -778,6 +778,34 @@ playback running.
 
    **Expected outcome:** the card and the Island go at once.
 
+### Check 7b: One card across a relaunch, a start from the car, and the driver's choice
+
+1. During a trip, terminate the app (`xcrun simctl terminate "$UDID"
+   org.onebusaway.vehicletracker`), launch it again and lock the simulator.
+
+   **Expected outcome:** one card, not two, now reading amber **Location
+   stopped** over **Open the app to keep reporting.** Unlock and tap **Resume
+   trip**: the card carries on from **Waiting for GPS**.
+
+2. Swipe the card away on the Lock Screen while the trip runs, and let a few
+   fixes arrive.
+
+   **Expected outcome:** it doesn't come back for that trip. End the trip and
+   start another: the new trip has its card.
+
+3. In Settings, turn off **Live Activities** for OBA Vehicle Tracker, then
+   start a trip.
+
+   **Expected outcome:** nothing shows and nothing is asked. Turn them back
+   on during the trip and return to the app: the card appears.
+
+4. With the CarPlay window open (see "CarPlay" below) and the phone app in the
+   background, start a trip from the car.
+
+   **Expected outcome:** iOS doesn't start a Live Activity for an app in the
+   background, so there is no card yet. Open the app on the phone: the card
+   appears.
+
 ## CarPlay
 
 **Not yet run on this machine.** The steps and expected results below are
