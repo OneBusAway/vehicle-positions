@@ -184,7 +184,7 @@ private fun statusIcon(model: StatusCardModel): Int = when (model) {
 /** The one answer, in the card's largest type. */
 @Composable
 private fun statusAnswer(model: StatusCardModel): String = when (model) {
-    is StatusCardModel.Adherence -> deviationText(model.deviationSec)
+    is StatusCardModel.Adherence -> minutesText(model.answerMinutes)
     is StatusCardModel.OffSchedule -> deviationText(model.deviationSec)
     is StatusCardModel.OffRoute -> stringResource(R.string.tracking_adherence_off_route, distanceText(model.distanceFromRouteM))
     is StatusCardModel.WaitingForGps -> stringResource(R.string.tracking_adherence_waiting_for_gps)

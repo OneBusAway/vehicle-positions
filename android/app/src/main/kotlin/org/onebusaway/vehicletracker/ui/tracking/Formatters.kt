@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.engine.Adherence
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.ui.runs.clockTime
@@ -38,8 +39,16 @@ internal fun adherenceTone(adherence: Adherence): StatusTone = when (adherence.s
     AdherenceStatus.OFF_ROUTE -> StatusTone.NEUTRAL
 }
 
-/** The vehicle's ring on the map: its tone while it has a fix, and grey before the first. */
-internal fun vehicleTone(adherence: Adherence?): StatusTone = adherence?.let(::adherenceTone) ?: StatusTone.NEUTRAL
+/**
+ * The ring round the vehicle, on the map and in the stop list: grey before the first fix, while the position is
+ * paused (no GPS, which location turned off gives too) and while signed out, otherwise the fix's tone. The card
+ * keeps its last answer through both; the grey ring shows that position is no longer live.
+ */
+internal fun vehicleTone(adherence: Adherence?, problem: TrackingProblem): StatusTone = when (problem) {
+    TrackingProblem.NO_GPS, TrackingProblem.AUTH_EXPIRED -> StatusTone.NEUTRAL
+    TrackingProblem.NONE, TrackingProblem.NO_NETWORK, TrackingProblem.CLOCK_SKEW, TrackingProblem.REPORTS_REFUSED ->
+        adherence?.let(::adherenceTone) ?: StatusTone.NEUTRAL
+}
 
 /**
  * A schedule time as the agency's clock shows it, in the same short style as the run list. The
@@ -63,14 +72,16 @@ internal fun formatDuration(totalSeconds: Long): String {
 
 /** "On time" within a minute, otherwise whole minutes late or early. */
 @Composable
-internal fun deviationText(seconds: Double): String {
-    val minutes = deviationMinutes(seconds)
-    return when {
+internal fun deviationText(seconds: Double): String = minutesText(deviationMinutes(seconds))
+
+/** "On time" at 0, otherwise [minutes] late, or early when negative. */
+@Composable
+internal fun minutesText(minutes: Int): String =
+    when {
         minutes > 0 -> pluralStringResource(R.plurals.tracking_adherence_minutes_late, minutes, minutes)
         minutes < 0 -> pluralStringResource(R.plurals.tracking_adherence_minutes_early, -minutes, -minutes)
         else -> stringResource(R.string.tracking_adherence_on_time)
     }
-}
 
 /** Whole metres below a kilometre, kilometres to one decimal place from there. */
 @Composable

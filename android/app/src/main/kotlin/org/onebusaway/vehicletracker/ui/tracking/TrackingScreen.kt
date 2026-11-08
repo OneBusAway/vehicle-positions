@@ -92,7 +92,7 @@ fun TrackingScreen(
             // With no geometry there is no route to draw, and the status card already says so.
             val geometry = state.tracking.geometry
             if (mapSupported && geometry != null) {
-                val ring = AppTheme.statusColors[vehicleTone(state.tracking.adherence)].text
+                val ring = AppTheme.statusColors[vehicleTone(state.tracking.adherence, state.tracking.problem)].text
                 RouteMap(geometry, state.tracking.adherence, state.mapFile, ring.toArgb(), contentPadding, controlsPadding, modifier)
             } else {
                 Spacer(modifier)

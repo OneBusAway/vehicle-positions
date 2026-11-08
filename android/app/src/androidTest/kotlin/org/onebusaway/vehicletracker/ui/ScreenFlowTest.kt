@@ -993,8 +993,27 @@ class ScreenFlowTest {
         row("Stop ST1", "8:00").assertIsDisplayed()
         // 100 s behind ST1 to ST2's schedule, which is on time and reads as 2 min late.
         row("4317", resources.getQuantityString(R.plurals.tracking_adherence_minutes_late, 2, 2)).assertIsDisplayed()
+        // The card above says On time: inside the window, the minutes are the row's alone.
+        answer(getString(R.string.tracking_adherence_on_time)).assertIsDisplayed()
         row("Stop ST2", "8:05").assertIsDisplayed()
         row("Stop ST3", "8:10").assertIsDisplayed()
+    }
+
+    @Test
+    fun tripPanel_foldsThePassedStopsAboveTheLastOneUntilTapped() {
+        // Heading for ST3: ST2 is the stop last passed, and ST1 above it folds into one row.
+        showTracking(onTheRoad.copy(adherence = judged(47.6060, -122.3300, at(8, 7))), activeTrip = trip4317)
+        panelHandle.performSemanticsAction(SemanticsActions.Expand)
+
+        val folded = compose.onNodeWithText(resources.getQuantityString(R.plurals.tracking_stops_passed, 1, 1))
+        folded.assertIsDisplayed()
+        folded.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, getString(R.string.tracking_stops_passed_collapsed)))
+        compose.onNodeWithText("Stop ST1").assertDoesNotExist()
+
+        folded.performClick()
+
+        compose.onNode(hasText("Stop ST1") and hasText("8:00", substring = true)).assertIsDisplayed()
+        folded.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, getString(R.string.tracking_stops_passed_expanded)))
     }
 
     @Test

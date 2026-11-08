@@ -10,6 +10,9 @@ import org.onebusaway.vehicletracker.engine.TripStop
 internal sealed interface StopRow {
     data class Stop(val stop: TripStop, val kind: StopKind) : StopRow
 
+    /** Stands in for the [count] passed stops above the one last passed. */
+    data class Folded(val count: Int) : StopRow
+
     /** The vehicle itself, between the stop it last passed and the next one. */
     data object Vehicle : StopRow
 }
@@ -17,16 +20,22 @@ internal sealed interface StopRow {
 internal enum class StopKind { PASSED, NEXT, UPCOMING, LAST }
 
 /**
- * The panel's stop list: the stop the vehicle last passed, the vehicle, the next stop, and the rest to the
- * end of the line. Before the first fix, [nextStopIndex] is null and there is no vehicle to place: the list
- * is the whole run, from its first stop.
+ * The panel's stop list: the stops passed before the last one, folded into one row (with, [unfolded], the stops
+ * it stands for under it, so that it can fold them again), the stop the vehicle last passed, the vehicle, the
+ * next stop, and the rest to the end of the line. Before the first fix, [nextStopIndex] is null and there is no
+ * vehicle to place: the list is the whole run, from its first stop.
  */
-internal fun stopRows(stops: List<TripStop>, nextStopIndex: Int?): List<StopRow> {
+internal fun stopRows(stops: List<TripStop>, nextStopIndex: Int?, unfolded: Boolean): List<StopRow> {
     if (stops.isEmpty()) return emptyList()
     val next = nextStopIndex?.takeIf { it in stops.indices } ?: return stops.mapIndexed { index, stop ->
         StopRow.Stop(stop, if (index == 0) StopKind.NEXT else upcoming(index, stops))
     }
     val rows = mutableListOf<StopRow>()
+    val hidden = next - 1
+    if (hidden > 0) {
+        rows += StopRow.Folded(hidden)
+        if (unfolded) for (index in 0 until hidden) rows += StopRow.Stop(stops[index], StopKind.PASSED)
+    }
     if (next > 0) rows += StopRow.Stop(stops[next - 1], StopKind.PASSED)
     rows += StopRow.Vehicle
     rows += StopRow.Stop(stops[next], StopKind.NEXT)

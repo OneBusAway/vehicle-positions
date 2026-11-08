@@ -13,6 +13,7 @@ import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripFixtures.at
 import org.onebusaway.vehicletracker.engine.TripFixtures.fix
+import org.onebusaway.vehicletracker.engine.TripStop
 import org.onebusaway.vehicletracker.ui.tracking.Reporting
 import org.onebusaway.vehicletracker.ui.tracking.StopKind
 import org.onebusaway.vehicletracker.ui.tracking.StopRow
@@ -32,38 +33,79 @@ class TripPanelModelTest {
     @Test fun `the vehicle sits between the stop it passed and the next, with the rest after`() {
         assertEquals(
             listOf(StopRow.Stop(st1, StopKind.PASSED), StopRow.Vehicle, StopRow.Stop(st2, StopKind.NEXT), StopRow.Stop(st3, StopKind.LAST)),
-            stopRows(stops, nextStopIndex = 1),
+            stopRows(stops, nextStopIndex = 1, unfolded = false),
         )
     }
 
     @Test fun `before the first stop there is no stop behind the vehicle`() {
         assertEquals(
             listOf(StopRow.Vehicle, StopRow.Stop(st1, StopKind.NEXT), StopRow.Stop(st2, StopKind.UPCOMING), StopRow.Stop(st3, StopKind.LAST)),
-            stopRows(stops, nextStopIndex = 0),
+            stopRows(stops, nextStopIndex = 0, unfolded = false),
         )
     }
 
     @Test fun `heading for the last stop, it is the next stop and nothing follows`() {
         assertEquals(
-            listOf(StopRow.Stop(st2, StopKind.PASSED), StopRow.Vehicle, StopRow.Stop(st3, StopKind.NEXT)),
-            stopRows(stops, nextStopIndex = 2),
+            listOf(StopRow.Folded(1), StopRow.Stop(st2, StopKind.PASSED), StopRow.Vehicle, StopRow.Stop(st3, StopKind.NEXT)),
+            stopRows(stops, nextStopIndex = 2, unfolded = false),
         )
+        // Open, the row stays at the top to fold them again, with the stop it stands for under it.
+        assertEquals(
+            listOf(
+                StopRow.Folded(1),
+                StopRow.Stop(st1, StopKind.PASSED),
+                StopRow.Stop(st2, StopKind.PASSED),
+                StopRow.Vehicle,
+                StopRow.Stop(st3, StopKind.NEXT),
+            ),
+            stopRows(stops, nextStopIndex = 2, unfolded = true),
+        )
+    }
+
+    @Test fun `the passed stops above the last one fold into one row, and open under it in order`() {
+        val long = (1..8).map { n ->
+            TripStop("S$n", "Stop $n", 47.6, -122.33, alongShapeM = n * 100.0, arrivalAt = at(8, n), departureAt = at(8, n))
+        }
+
+        assertEquals(
+            listOf(
+                StopRow.Folded(5),
+                StopRow.Stop(long[5], StopKind.PASSED),
+                StopRow.Vehicle,
+                StopRow.Stop(long[6], StopKind.NEXT),
+                StopRow.Stop(long[7], StopKind.LAST),
+            ),
+            stopRows(long, nextStopIndex = 6, unfolded = false),
+        )
+        assertEquals(
+            listOf(StopRow.Folded(5)) + long.take(6).map { StopRow.Stop(it, StopKind.PASSED) } +
+                listOf(StopRow.Vehicle, StopRow.Stop(long[6], StopKind.NEXT), StopRow.Stop(long[7], StopKind.LAST)),
+            stopRows(long, nextStopIndex = 6, unfolded = true),
+        )
+        // Even one stop above the last passed folds, so the list always opens the same way.
+        assertEquals(
+            listOf(StopRow.Folded(1), StopRow.Stop(long[1], StopKind.PASSED), StopRow.Vehicle),
+            stopRows(long, nextStopIndex = 2, unfolded = false).take(3),
+        )
+        // The last passed stop alone does not fold, and before any stop there is nothing to fold.
+        assertEquals(StopRow.Stop(long[0], StopKind.PASSED), stopRows(long, nextStopIndex = 1, unfolded = false).first())
+        assertEquals(StopRow.Vehicle, stopRows(long, nextStopIndex = 0, unfolded = false).first())
     }
 
     @Test fun `with no fix the whole run shows, from its first stop, and no vehicle`() {
         val whole = listOf(StopRow.Stop(st1, StopKind.NEXT), StopRow.Stop(st2, StopKind.UPCOMING), StopRow.Stop(st3, StopKind.LAST))
 
-        assertEquals(whole, stopRows(stops, nextStopIndex = null))
+        assertEquals(whole, stopRows(stops, nextStopIndex = null, unfolded = false))
         // A stop the trip does not have is no fix to place the vehicle by.
-        assertEquals(whole, stopRows(stops, nextStopIndex = -1))
-        assertEquals(emptyList<StopRow>(), stopRows(emptyList(), nextStopIndex = null))
+        assertEquals(whole, stopRows(stops, nextStopIndex = -1, unfolded = false))
+        assertEquals(emptyList<StopRow>(), stopRows(emptyList(), nextStopIndex = null, unfolded = false))
     }
 
     @Test fun `off the route the vehicle still sits before the stop it is heading for`() {
         val offRoute = requireNotNull(AdherenceEvaluator.of(TripFixtures.t1)).evaluate(fix(47.6045, -122.3200, at(8, 5)), previous = null)
         require(offRoute.status == AdherenceStatus.OFF_ROUTE)
 
-        val rows = stopRows(stops, stops.indexOf(offRoute.nextStop))
+        val rows = stopRows(stops, stops.indexOf(offRoute.nextStop), unfolded = false)
 
         assertEquals(StopRow.Stop(offRoute.nextStop, StopKind.NEXT), rows[rows.indexOf(StopRow.Vehicle) + 1])
     }
