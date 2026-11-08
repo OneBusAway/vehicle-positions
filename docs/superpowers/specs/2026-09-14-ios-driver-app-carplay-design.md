@@ -268,7 +268,9 @@ End ──▶ POST /trips/end ──▶ TripSession.idle
 | `403`/`409` on `/trips/start` | Same, with the server's message ("driver already has an active trip"). |
 | Location POST network failure | Status red "No connection"; fixes keep flowing to the map; dropped; recovers on next success. |
 | `401` mid-trip | Status "Signed out"; phone prompts re-login; trip and location stream continue; sends resume after login. |
-| GPS lost / accuracy limited | Status "No GPS"; adherence frozen at the last fix, marker greyed. |
+| GPS lost | Status "No GPS"; adherence frozen at the last fix, marker greyed. |
+| Precise Location off | Every fix is too coarse to report and is dropped; adherence frozen at the last precise fix, marker greyed. The phone says "Precise Location off · Tap to fix", which opens the app's page in Settings; the car says "Precise Location off · Fix on iPhone", since it can't open Settings. |
+| Location turned off during a trip (for the app or the whole phone) | Adherence frozen at the last fix, marker greyed. The phone says "Location off · Tap to fix", which opens the app's page in Settings; the car says "Location off · Fix on iPhone". |
 | Off route | Map dims the shape, grey marker, one `CPNavigationAlert`; reporting continues (the server does not verify drivers). |
 | Outside the server's schedule window | Status `.offSchedule` in the deviation colour with the window named; reporting continues. |
 | App killed | Relaunch shows Tracking `.paused`; server trip stays open until Resume + End or the operator closes it. |

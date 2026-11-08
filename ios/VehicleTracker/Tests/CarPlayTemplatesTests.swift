@@ -141,8 +141,9 @@ import Testing
     }
 
     /// The Reports row says what the phone's problem line says, from the
-    /// same judgement: a paused trip reads Location stopped though its
-    /// reporting status is still `.connected`.
+    /// same judgement, in the car's own words for a fix only the phone can
+    /// make: a paused trip reads Location stopped though its reporting
+    /// status is still `.connected`.
     @Test func detailItemsCarryThePhonesProblemLine() throws {
         let waiting = CarPlayTemplates.detailItems(status: try status(nil, reporting: .noGPS), adherence: nil, fixesSent: 0)
         #expect(waiting[2].detail == "Waiting for GPS")
@@ -154,13 +155,35 @@ import Testing
         #expect(offline[4].detail == "No connection · Riders can't see you")
 
         let paused = CarPlayTemplates.detailItems(status: try status(nil, phase: .paused(active)), adherence: nil, fixesSent: 3)
-        #expect(paused[4].detail == "Location stopped · Tap Resume")
+        #expect(paused[4].detail == "Location stopped · Resume on iPhone")
 
         let signedOut = CarPlayTemplates.detailItems(status: try status(nil, reporting: .authExpired), adherence: nil, fixesSent: 3)
         #expect(signedOut[4].detail == "Reports stopped · Sign in on iPhone")
 
         let ending = CarPlayTemplates.detailItems(status: try status(nil, phase: .ending(active)), adherence: nil, fixesSent: 3)
         #expect(ending[4].detail == "Ending… · 3 sent", "a paused trip being ended is not Reporting")
+    }
+
+    func reportsRow(_ reporting: TripSession.ReportingStatus = .connected, phase: TripSession.Phase? = nil) throws -> String? {
+        CarPlayTemplates.detailItems(status: try status(nil, reporting: reporting, phase: phase), adherence: nil, fixesSent: 3)[4].detail
+    }
+
+    /// The car can't open Settings or resume location: a problem the phone
+    /// fixes with a tap names the iPhone, as "Sign in on iPhone" does.
+    @Test func theCarNeverOffersATapItCantDo() throws {
+        let everyReporting: [TripSession.ReportingStatus] = [.connected, .noNetwork, .noGPS, .authExpired, .clockSkew,
+                                                              .refused, .needsForeground, .locationLost, .locationDenied, .preciseLocationOff]
+        for reporting in everyReporting {
+            let row = try reportsRow(reporting)
+            #expect(row?.contains("Tap") == false, "\(reporting) reads \(row ?? "nothing")")
+        }
+        let paused = try reportsRow(phase: .paused(active))
+        #expect(paused?.contains("Tap") == false)
+
+        #expect(try reportsRow(.locationDenied) == "Location off · Fix on iPhone")
+        #expect(try reportsRow(.preciseLocationOff) == "Precise Location off · Fix on iPhone")
+        #expect(paused == "Location stopped · Resume on iPhone")
+        #expect(try reportsRow(.locationLost) == "Location stopped · Resume on iPhone")
     }
 
     @Test func offRouteAlertSaysHowFarAndNeverTimesOut() throws {
