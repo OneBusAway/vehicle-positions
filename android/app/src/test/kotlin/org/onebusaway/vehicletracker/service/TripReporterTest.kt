@@ -1,16 +1,21 @@
 package org.onebusaway.vehicletracker.service
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -26,9 +31,13 @@ import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.api.ApiFactory
+import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
+import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ApiHolder
+import retrofit2.HttpException
+import retrofit2.Response
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -522,6 +531,89 @@ class TripReporterTest {
             assertEquals(label, 1, tracking.state.value.fixesSent)
             assertEquals(label, 1, queue.inner.queued.size)
             online.shutdown()
+        }
+    }
+
+    /** Takes each live report at once, and holds each history upload until [finishUploads] completes. */
+    private class SlowHistoryApi(
+        unused: TrackerApi = ApiFactory { "jwt" }.create("http://127.0.0.1/"),
+    ) : TrackerApi by unused {
+        var liveFailure: Exception? = null
+        var liveReports = 0
+        val uploads = mutableListOf<String>()
+        val finishUploads = CompletableDeferred<Unit>()
+
+        override suspend fun postLocation(body: LocationReportDto) {
+            liveFailure?.let { throw it }
+            liveReports++
+        }
+
+        override suspend fun postLocationHistory(body: LocationHistoryDto) {
+            uploads += body.vehicleId
+            finishUploads.await()
+        }
+    }
+
+    private fun queued(vehicleId: String) =
+        LocationReportDto(vehicleId = vehicleId, routeId = "5", startDate = "20260804", latitude = -1.29, longitude = 36.82, timestamp = 1000L)
+
+    private fun slowReporter(api: SlowHistoryApi, queue: OfflineFixQueue) =
+        TripReporter(TrackerApiProvider { api }, TrackingRepository(), steppingClock(), queue)
+
+    // Live fixes that can't go are dropped, not queued, so an upload holding them back loses them.
+    @Test fun `a live fix still goes while a history upload is on its way`() = runTest {
+        val api = SlowHistoryApi()
+        val queue = FakeOfflineFixQueue().apply { add(queued("bus-1")) }
+        val reporter = slowReporter(api, queue)
+
+        val first = launch { reporter.report(trip, fix(ts = 1020L)) }
+        runCurrent()
+        assertEquals("the upload is on its way", listOf("bus-1"), api.uploads)
+
+        val second = launch { reporter.report(trip, fix(ts = 1030L)) }
+        runCurrent()
+        assertEquals(2, api.liveReports)
+
+        api.finishUploads.complete(Unit)
+        joinAll(first, second)
+    }
+
+    @Test fun `reports during an upload start no other, and the next report after it does`() = runTest {
+        val api = SlowHistoryApi()
+        val queue = FakeOfflineFixQueue().apply {
+            add(queued("bus-1"))
+            add(queued("bus-2"))
+        }
+        val reporter = slowReporter(api, queue)
+
+        val reports = (0..2).map { i ->
+            launch { reporter.report(trip, fix(ts = 1020L + 10 * i)) }.also { runCurrent() }
+        }
+        assertEquals(3, api.liveReports)
+        assertEquals(listOf("bus-1"), api.uploads)
+
+        api.finishUploads.complete(Unit)
+        reports.joinAll()
+        reporter.report(trip, fix(ts = 1050L))
+        assertEquals(listOf("bus-1", "bus-2"), api.uploads)
+        assertEquals(0, queue.queued.size)
+    }
+
+    @Test fun `the backlog uploads only after a live report goes through`() = runTest {
+        for (failure in listOf(HttpException(Response.error<Unit>(500, "{}".toResponseBody())), IOException("unreachable"))) {
+            val api = SlowHistoryApi().apply {
+                finishUploads.complete(Unit)
+                liveFailure = failure
+            }
+            val queue = FakeOfflineFixQueue().apply { add(queued("bus-1")) }
+            val reporter = slowReporter(api, queue)
+
+            reporter.report(trip, fix(ts = 1020L))
+            assertEquals("$failure", emptyList<String>(), api.uploads)
+
+            api.liveFailure = null
+            reporter.report(trip, fix(ts = 1030L))
+            assertEquals("$failure", listOf("bus-1"), api.uploads)
         }
     }
 }

@@ -65,6 +65,7 @@ class TripReporter @Inject constructor(
 ) {
     private val lastReportAt = AtomicLong(NEVER_REPORTED)
     private val reportInFlight = AtomicBoolean(false)
+    private val uploadInFlight = AtomicBoolean(false)
     private var gpsAvailable = true
     private var consecutiveTimestampRejects = 0
     private var currentSendProblem = TrackingProblem.NONE
@@ -84,18 +85,35 @@ class TripReporter @Inject constructor(
      * otherwise overtake the first, and the server, which keeps whatever arrived last, would be
      * left with the older position. A fix that arrives meanwhile is dropped rather than queued:
      * by the time it could go it would be stale, and the next one is seconds behind it.
+     *
+     * A report that goes through is followed by one batch of the fixes queued while there was no
+     * connection. That upload is not part of the report: a slow one would otherwise hold back the
+     * live fixes behind it, and those are dropped, not queued.
      */
     suspend fun report(trip: ActiveTrip, fix: LocationFix) {
         if (!reportInFlight.compareAndSet(false, true)) return
-        try {
+        val sent = try {
             send(trip, fix)
         } finally {
             reportInFlight.set(false)
         }
+        // The connection works again, and this report has gone: send one batch of what queued up
+        // while it did not. At most one per report, and one at a time, keeps within the server's
+        // limit on history uploads; a report that goes through while a batch is on its way starts none.
+        if (!sent || !uploadInFlight.compareAndSet(false, true)) return
+        try {
+            uploadOneHistoryBatch(nowEpochSec = fix.timeEpochSec)
+        } catch (e: IOException) {
+            // The upload's own network failures are handled inside; this is the queue's file failing.
+            Log.w(TAG, "Could not read or update the offline queue", e)
+        } finally {
+            uploadInFlight.set(false)
+        }
     }
 
-    private suspend fun send(trip: ActiveTrip, fix: LocationFix) {
-        if (!reportIsDue()) return
+    /** Returns whether the server took [fix]. */
+    private suspend fun send(trip: ActiveTrip, fix: LocationFix): Boolean {
+        if (!reportIsDue()) return false
         val dto = LocationReportDto(
             vehicleId = trip.vehicleId,
             tripId = trip.gtfsTripId.ifBlank { null },
@@ -135,7 +153,7 @@ class TripReporter @Inject constructor(
                 }
                 else -> Log.w(TAG, "Dropping location report after HTTP ${e.code()}", e) // other 4xx/5xx: log-and-drop per spec, keep current status
             }
-            return
+            return false
         } catch (e: IOException) {
             // Too late for the realtime feed by the time it could go, but it is still where the bus
             // was: kept for location history.
@@ -148,16 +166,9 @@ class TripReporter @Inject constructor(
                 Log.w(TAG, "Could not queue location report for history", queueError)
             }
             refreshProblem(sendProblem = TrackingProblem.NO_NETWORK)
-            return
+            return false
         }
-        // The connection works again, and this report has gone: send one batch of what queued up
-        // while it did not. One per report keeps within the server's limit on history uploads.
-        try {
-            uploadOneHistoryBatch(nowEpochSec = fix.timeEpochSec)
-        } catch (e: IOException) {
-            // The upload's own network failures are handled inside; this is the queue's file failing.
-            Log.w(TAG, "Could not read or update the offline queue", e)
-        }
+        return true
     }
 
     /**
