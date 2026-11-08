@@ -3,12 +3,14 @@ package org.onebusaway.vehicletracker.service
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
-import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Inject
 
-/** Real [ServiceController] backed by [LocationTrackingService]. */
-class ServiceControllerImpl @Inject constructor(
-    @param:ApplicationContext private val context: Context,
+/**
+ * Real [ServiceController] backed by [LocationTrackingService]. [cancelResumeNotification] is
+ * [TrackingNotification.cancel].
+ */
+class ServiceControllerImpl(
+    private val context: Context,
+    private val cancelResumeNotification: () -> Unit,
 ) : ServiceController {
 
     override fun startTracking() {
@@ -16,6 +18,9 @@ class ServiceControllerImpl @Inject constructor(
     }
 
     override fun stopTracking() {
+        // Every end of a trip comes here, and the service's stop does not take "Reports paused" down: RestartTracking
+        // posts it with no service running, and the degraded path posts it after detaching from the service.
+        cancelResumeNotification()
         // Plain startService (not startForegroundService): stopTracking() is only ever called
         // while the app is in the foreground, so there's no need to (re-)arm the "must call
         // startForeground() within 5s" contract that startForegroundService imposes. This also
