@@ -1567,6 +1567,16 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          description: |
+            The user is the last active admin, and the update would leave no
+            active admin. A role change alone returns `cannot demote the last
+            active admin`; a deactivation, with or without a role change,
+            returns `cannot deactivate the last active admin`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
     delete:
