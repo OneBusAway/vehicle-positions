@@ -26,14 +26,6 @@ nonisolated final class SnappedAnnotation: NSObject, MKAnnotation {
     @objc dynamic var coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
 }
 
-extension UIColor {
-    /// A GTFS route colour: six hex digits, with or without a leading '#'.
-    convenience init?(hex: String) {
-        guard let rgb = RGB(hex: hex) else { return nil }
-        self.init(red: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
-    }
-}
-
 /// Images for the annotation views, in Android's sizes and colours
 /// (`MapStops.kt`, `RouteMap.kt`, `ic_map_vehicle_puck` and
 /// `ic_map_vehicle_ring`), drawn once per input and kept.

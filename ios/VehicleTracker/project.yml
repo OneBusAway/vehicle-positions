@@ -37,6 +37,7 @@ targets:
       - path: Map
       - path: CarPlay
       - path: Resources
+      - path: Shared
     dependencies:
       - package: VehiclePositionsKit
     preBuildScripts:

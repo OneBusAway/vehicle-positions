@@ -28,6 +28,12 @@ nonisolated struct TripGeometry: Sendable, Codable, Equatable, Identifiable {
     }
 }
 
+extension TripGeometry {
+    /// The route as its badge names it: the short name, or the route's id for
+    /// a feed that gives none (Android's `RouteBadgeModel.forTrip`).
+    nonisolated var badgeName: String { route.shortName.isEmpty ? routeID : route.shortName }
+}
+
 nonisolated struct RouteSummary: Sendable, Codable, Equatable {
     var shortName: String
     var longName: String
