@@ -744,6 +744,21 @@ vehicles reappear in the feed immediately. Rider-mode rides are held in memory
 only and do not survive a restart — every active ride is ended and filed as the
 new process starts.
 
+The upgrade that adds migration 000019 is not slight. It scans all of
+`location_points` for duplicate fixes and builds a unique index on it before the
+server listens, so the feed is down until it finishes. Retention is off by
+default (section 6.5), so the table may hold every fix since you went live, and
+then this can take a while. Check the table's size before you upgrade, and pick
+a quiet hour if it is large:
+
+```bash
+sudo -u postgres psql -d vehicle_positions \
+  -c "SELECT pg_size_pretty(pg_total_relation_size('location_points'))"
+# Docker Compose:
+docker compose exec db psql -U vehicle_positions -d vehicle_positions \
+  -c "SELECT pg_size_pretty(pg_total_relation_size('location_points'))"
+```
+
 Read the release notes for new default-on surfaces before you upgrade. The
 admin UI is the example the README calls out: it did not exist in earlier
 versions and it is **on by default**, so an upgrade exposes `/admin` unless you
