@@ -10,9 +10,7 @@ import WidgetKit
 struct TripActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TripActivityAttributes.self) { context in
-            TripActivityCard(attributes: context.attributes, state: context.state, isStale: context.isStale)
-                .activityBackgroundTint(Color(uiColor: .systemBackground))
-                .activitySystemActionForegroundColor(.primary)
+            TripActivityPresentation(context: context)
         } dynamicIsland: { context in
             let state = context.state
             let isStale = context.isStale
@@ -54,6 +52,33 @@ struct TripActivityWidget: Widget {
                 IslandMinimal(attributes: context.attributes, state: state, isStale: isStale)
             }
             .keylineTint(isStale ? .amber : state.islandColor)
+        }
+        // The Apple Watch Smart Stack and the CarPlay Dashboard ask for
+        // `.small`; without it they fall back to the compact Island's pair.
+        // Since iOS 26 every Live Activity shows on the Dashboard, with no
+        // way to keep it off, so `.small` is made to be read in a car.
+        .supplementalActivityFamilies([.small])
+    }
+}
+
+/// The Lock Screen card on iPhone, or the small layout for the Watch and
+/// the car.
+private struct TripActivityPresentation: View {
+    let context: ActivityViewContext<TripActivityAttributes>
+    @Environment(\.activityFamily) private var family
+
+    var body: some View {
+        if family == .small {
+            // The phone resolves colours in its own appearance, so a phone in
+            // light mode tinted the Watch's card white while the Watch drew
+            // its text for a dark face (OneBusAway iOS #1591).
+            TripActivitySmall(attributes: context.attributes, state: context.state, isStale: context.isStale)
+                .environment(\.colorScheme, .dark)
+                .activityBackgroundTint(.black)
+        } else {
+            TripActivityCard(attributes: context.attributes, state: context.state, isStale: context.isStale)
+                .activityBackgroundTint(Color(uiColor: .systemBackground))
+                .activitySystemActionForegroundColor(.primary)
         }
     }
 }
