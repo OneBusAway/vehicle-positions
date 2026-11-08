@@ -145,10 +145,8 @@ private struct IslandCompactLeading: View {
         Group {
             if isStale {
                 StaleGlyph()
-            } else if #available(iOS 27, *) {
-                LimitedWidth(full: route, limited: Image(systemName: state.symbol).foregroundStyle(state.islandColor))
             } else {
-                route
+                IslandWidth(full: route, limited: Image(systemName: state.symbol).foregroundStyle(state.islandColor))
             }
         }
         .accessibilityLabel(isStale ? TripActivityStaleRow.spoken(attributes, state) : state.spoken)
@@ -170,14 +168,8 @@ private struct IslandCompactTrailing: View {
     let state: TripActivityAttributes.ContentState
 
     var body: some View {
-        Group {
-            if #available(iOS 27, *) {
-                LimitedWidth(full: status, limited: EmptyView())
-            } else {
-                status
-            }
-        }
-        .accessibilityHidden(true)
+        IslandWidth(full: status, limited: EmptyView())
+            .accessibilityHidden(true)
     }
 
     private var status: some View {
@@ -219,7 +211,27 @@ private struct StaleGlyph: View {
     }
 }
 
-/// `full`, or `limited` while the Dynamic Island is limited in width.
+/// `full`, or `limited` while the Dynamic Island is limited in width. Only
+/// the iOS 27 SDK (Swift 6.4) knows that state; an app built with an older
+/// SDK, as CI's Xcode 26 is, always shows `full`.
+private struct IslandWidth<Full: View, Limited: View>: View {
+    let full: Full
+    let limited: Limited
+
+    var body: some View {
+        #if compiler(>=6.4)
+        if #available(iOS 27, *) {
+            LimitedWidth(full: full, limited: limited)
+        } else {
+            full
+        }
+        #else
+        full
+        #endif
+    }
+}
+
+#if compiler(>=6.4)
 @available(iOS 27, *)
 private struct LimitedWidth<Full: View, Limited: View>: View {
     let full: Full
@@ -234,3 +246,4 @@ private struct LimitedWidth<Full: View, Limited: View>: View {
         }
     }
 }
+#endif
