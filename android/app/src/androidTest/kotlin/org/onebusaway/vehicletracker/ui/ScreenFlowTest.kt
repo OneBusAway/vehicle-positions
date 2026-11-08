@@ -1000,6 +1000,23 @@ class ScreenFlowTest {
     }
 
     @Test
+    fun tripPanel_foldsThePassedStopsAboveTheLastOneUntilTapped() {
+        // Heading for ST3: ST2 is the stop last passed, and ST1 above it folds into one row.
+        showTracking(onTheRoad.copy(adherence = judged(47.6060, -122.3300, at(8, 7))), activeTrip = trip4317)
+        panelHandle.performSemanticsAction(SemanticsActions.Expand)
+
+        val folded = compose.onNodeWithText(resources.getQuantityString(R.plurals.tracking_stops_passed, 1, 1))
+        folded.assertIsDisplayed()
+        folded.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, getString(R.string.tracking_stops_passed_collapsed)))
+        compose.onNodeWithText("Stop ST1").assertDoesNotExist()
+
+        folded.performClick()
+
+        compose.onNode(hasText("Stop ST1") and hasText("8:00", substring = true)).assertIsDisplayed()
+        folded.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, getString(R.string.tracking_stops_passed_expanded)))
+    }
+
+    @Test
     fun tripPanel_opensWhenTheBarIsTapped() {
         showTracking(onTheRoad, activeTrip = trip4317)
         val bar = compose.onNodeWithText("Downtown Seattle", substring = true)

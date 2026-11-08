@@ -32,10 +32,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
@@ -48,6 +50,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -97,6 +100,8 @@ internal fun TripPanel(
 ) {
     val geometry = state.tracking.geometry
     val reporting = reporting(state.tracking.problem)
+    // Folded until the driver opens it, and kept as they left it while Tracking stays on screen.
+    var unfolded by rememberSaveable { mutableStateOf(false) }
     Column(modifier) {
         TripBar(
             geometry = geometry,
@@ -137,10 +142,12 @@ internal fun TripPanel(
                 val adherence = state.tracking.adherence
                 StopList(
                     geometry = geometry,
-                    rows = stopRows(geometry.stops, adherence?.let { geometry.stops.indexOf(it.nextStop) }),
+                    rows = stopRows(geometry.stops, adherence?.let { geometry.stops.indexOf(it.nextStop) }, unfolded),
                     vehicleId = state.activeTrip?.vehicleId.orEmpty(),
                     model = model,
                     vehicleTone = vehicleTone(adherence, state.tracking.problem),
+                    unfolded = unfolded,
+                    onFoldedClick = { unfolded = !unfolded },
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
@@ -301,7 +308,7 @@ private fun FactRow(icon: Int, label: String, value: String, problem: Boolean = 
 
 /**
  * The stops along a strip of the route, as on the map: the vehicle between the stop it last passed and the
- * next one, which is orange, and the last stop in an ink ring.
+ * next one, which is orange, the last stop in an ink ring, and the stops passed before folded into one row.
  */
 @Composable
 private fun StopList(
@@ -310,6 +317,8 @@ private fun StopList(
     vehicleId: String,
     model: StatusCardModel,
     vehicleTone: StatusTone,
+    unfolded: Boolean,
+    onFoldedClick: () -> Unit,
     modifier: Modifier,
 ) {
     // As the map draws it, in the same theme.
@@ -327,6 +336,7 @@ private fun StopList(
                     kind = row.kind,
                     strip = strip,
                 )
+                is StopRow.Folded -> FoldedRow(row.count, unfolded, onFoldedClick, strip)
                 StopRow.Vehicle -> VehicleRow(vehicleId, model, vehicleTone, strip)
             }
         }
@@ -370,6 +380,45 @@ private fun StopListRow(name: String, time: String, kind: StopKind, strip: Route
         )
         Text(name, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text(time, style = style, color = if (next) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Stands in for the passed stops above the one last passed: tapping it shows them, and tapping again folds them. */
+@Composable
+private fun FoldedRow(count: Int, unfolded: Boolean, onClick: () -> Unit, strip: RouteStrip) {
+    val colors = MaterialTheme.colorScheme
+    // The panel's own colour, as the vehicle's halo is: three dots cut out of the strip.
+    val dots = colors.surfaceContainerLow
+    val state = stringResource(if (unfolded) R.string.tracking_stops_passed_expanded else R.string.tracking_stops_passed_collapsed)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) { stateDescription = state },
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.width(MarkerColumnWidth).fillMaxHeight().drawBehind {
+                strip.draw(this)
+                for (offset in listOf(-6.dp, 0.dp, 6.dp)) {
+                    drawCircle(dots, 1.5.dp.toPx(), Offset(14.dp.toPx(), size.height / 2 + offset.toPx()))
+                }
+            },
+        )
+        Text(
+            text = pluralStringResource(R.plurals.tracking_stops_passed, count, count),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_expand_more),
+            contentDescription = null,
+            tint = colors.onSurfaceVariant,
+            modifier = Modifier.size(20.dp).rotate(if (unfolded) 180f else 0f),
+        )
     }
 }
 

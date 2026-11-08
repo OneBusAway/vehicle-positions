@@ -193,6 +193,14 @@
     <string name="tracking_street_map_not_downloaded">Not downloaded yet</string>
     <string name="tracking_street_map_no_space">Not enough space</string>
     <string name="tracking_street_map_unusable">Not usable</string>
+    <!-- The stop list's row standing in for the stops passed before the last one, e.g. "6 stops passed". -->
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d stop passed</item>
+        <item quantity="other">%1$d stops passed</item>
+    </plurals>
+    <!-- What TalkBack says after it: whether the stops it stands for are showing. -->
+    <string name="tracking_stops_passed_expanded">expanded</string>
+    <string name="tracking_stops_passed_collapsed">collapsed</string>
     <string name="tracking_end_trip_dialog_title">End this trip?</string>
     <!-- The route's short name, the run's start time in the agency's zone, then how many reports reached the server. -->
     <plurals name="tracking_end_trip_dialog_message">
