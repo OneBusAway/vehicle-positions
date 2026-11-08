@@ -1060,7 +1060,8 @@ func TestHandleUpdateUser_DeactivateLastAdminReturns422(t *testing.T) {
 // code missed: submitting role:"driver" + active:false in one request would
 // demote the admin before the deactivation guard ran, so GetUser saw a
 // driver and skipped the check. The fix validates against the ORIGINAL
-// state, catching demotions that would leave zero active admins.
+// state, catching demotions that would leave zero active admins. A request
+// that does both is reported as a deactivation.
 func TestHandleUpdateUser_DemoteLastAdminReturns422(t *testing.T) {
 	store := &mockUserUpdater{
 		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
@@ -1088,7 +1089,7 @@ func TestHandleUpdateUser_DemoteLastAdminWithoutDeactivateReturns422(t *testing.
 	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"driver"}`)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
-	assert.Equal(t, "cannot deactivate the last active admin", decodeErrorResponse(t, rr))
+	assert.Equal(t, "cannot demote the last active admin", decodeErrorResponse(t, rr))
 	assert.Zero(t, store.updateUserCalls, "no writes must happen when validation fails")
 }
 

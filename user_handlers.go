@@ -242,7 +242,15 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 				return
 			}
 			if admins <= 1 {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "cannot deactivate the last active admin"})
+				// Worded as in the admin UI. When a request does both,
+				// deactivation is named: it locks the account out even with
+				// the admin role kept, so dropping the role change alone
+				// would not make the request acceptable.
+				msg := "cannot demote the last active admin"
+				if !newActive {
+					msg = "cannot deactivate the last active admin"
+				}
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": msg})
 				return
 			}
 		}
