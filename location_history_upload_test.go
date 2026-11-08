@@ -250,3 +250,32 @@ func TestStore_ListTripLocations_LiveFixFromTripBefore(t *testing.T) {
 	require.Len(t, pts, 1, "only the next trip's own fix")
 	assert.Equal(t, 2.0, pts[0].Latitude)
 }
+
+// TestStore_ListTripLocations_BacklogFixInFirstSecond: start_time carries
+// microseconds but timestamp is whole seconds, so a backlog fix recorded in the
+// trip's first second is stamped just before the start and must still count.
+func TestStore_ListTripLocations_BacklogFixInFirstSecond(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	userID := setupTripUser(t, store, "First Second Driver", "firstsecond@test.com", "bus-fs", "Bus FS")
+	driverID := strconv.FormatInt(userID, 10)
+	start := time.Now().Add(-10 * time.Minute).Truncate(time.Second).Add(500 * time.Millisecond)
+
+	trip, err := store.StartTrip(ctx, userID, "bus-fs", "R1", "T1")
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, "UPDATE trips SET start_time = $1 WHERE id = $2", start, trip.ID)
+	require.NoError(t, err)
+
+	firstSecond := &LocationReport{VehicleID: "bus-fs", DriverID: driverID, Latitude: 1, Longitude: 1, Timestamp: start.Unix()}
+	saved, err := store.SaveLocationHistory(ctx, userID, "bus-fs", []*LocationReport{firstSecond})
+	require.NoError(t, err)
+	require.Equal(t, 1, saved)
+
+	pts, err := store.ListTripLocations(ctx, trip.ID)
+	require.NoError(t, err)
+	require.Len(t, pts, 1, "the backlog fix from the trip's first second")
+	assert.Equal(t, 1.0, pts[0].Latitude)
+}
