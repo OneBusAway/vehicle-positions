@@ -54,11 +54,24 @@ class TripStateStoreTest {
 
     @Test fun `a saved trip reads back unchanged`() = runTest {
         val store = DataStoreTripStateStore(newDataStore(), nairobi)
-        val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, driverId = "1")
+        val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, driverId = "1", serverUrl = "https://tracker.example.org/")
 
         store.saveActiveTrip(trip)
 
         assertEquals(trip, store.activeTrip.first())
+    }
+
+    @Test fun `a trip's server goes with it`() = runTest {
+        val dataStore = newDataStore()
+        val store = DataStoreTripStateStore(dataStore, nairobi)
+        store.saveActiveTrip(ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, serverUrl = "https://a.example.org/"))
+
+        store.saveActiveTrip(ActiveTrip(8L, "trip-0900", "bus-1", "5", "20260804", 200L, serverUrl = null))
+        assertNull("not the earlier trip's server", store.activeTrip.first()!!.serverUrl)
+
+        store.saveActiveTrip(ActiveTrip(9L, "trip-0930", "bus-1", "5", "20260804", 300L, serverUrl = "https://a.example.org/"))
+        store.clearActiveTrip()
+        assertFalse(dataStore.data.first().contains(stringPreferencesKey("trip_server_url")))
     }
 
     @Test fun `a trip saved before drivers were recorded reads back with no driver`() = runTest {

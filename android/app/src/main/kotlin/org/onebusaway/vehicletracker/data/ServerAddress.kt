@@ -26,6 +26,18 @@ internal fun presetServerOf(raw: String, debuggable: Boolean): HttpUrl? {
     }
 }
 
+/**
+ * Whether [a] and [b] are the same server, read as addresses: "https://tracker.example.org" is
+ * "https://tracker.example.org/". A sign-in saves the address it went to, and the builds before #188 sent it as typed.
+ * False when either is null.
+ */
+internal fun sameServer(a: String?, b: String?): Boolean {
+    if (a == null || b == null) return false
+    val urlA = a.trim().toHttpUrlOrNull()
+    val urlB = b.trim().toHttpUrlOrNull()
+    return if (urlA != null && urlB != null) urlA == urlB else a.trim() == b.trim()
+}
+
 /** A debug build, whose network config lets plain http reach the hosts above. */
 internal val Context.isDebuggable: Boolean
     get() = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0

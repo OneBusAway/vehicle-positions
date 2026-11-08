@@ -36,7 +36,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody(
             """{"token":"jwt-1","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
+        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -60,7 +60,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody(
             """{"token":"deprecated-copy","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
+        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
 
         repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -72,7 +72,7 @@ class RepositoriesTest {
         val server = MockWebServer().apply { start() }
         repeat(3) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }
         val queue = FakeOfflineFixQueue()
-        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, noLogout, queue, clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, noLogout, queue, clock = { 0L })
         val url = server.url("/").toString()
         val fix = LocationReportDto(vehicleId = "bus-1", routeId = "R1", startDate = "20260804", latitude = 1.0, longitude = 2.0, timestamp = 1L)
 
@@ -85,10 +85,62 @@ class RepositoriesTest {
         server.shutdown()
     }
 
+    @Test fun `signing in to another server drops the trip stored for the old one`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}"""))
+        val sessions = FakeSessionStore().apply { state.value = Session("https://old.example.org/", null, null) }
+        val trips = FakeTripStateStore().apply {
+            tripState.value = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, serverUrl = "https://old.example.org/")
+        }
+        val repo = AuthRepository(sessions, trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+
+        assertTrue(repo.login(server.url("/").toString(), "d@example.com", "bad").isFailure)
+        assertEquals("a refused sign-in changes nothing", 7L, trips.activeTrip.first()?.tripDbId)
+
+        assertTrue(repo.login(server.url("/").toString(), "d@example.com", "pw").isSuccess)
+        assertNull(trips.activeTrip.first())
+        server.shutdown()
+    }
+
+    @Test fun `signing in to the trip's own server keeps it`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}"""))
+        val url = server.url("/").toString()
+        val trips = FakeTripStateStore().apply {
+            // Without the slash, as a build before #188 saved a typed address.
+            tripState.value = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, serverUrl = url.trimEnd('/'))
+        }
+        val repo = AuthRepository(FakeSessionStore(), trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+
+        assertTrue(repo.login(url, "d@example.com", "pw").isSuccess)
+
+        assertEquals(7L, trips.activeTrip.first()?.tripDbId)
+        server.shutdown()
+    }
+
+    @Test fun `an older build's trip, stored with no server, goes by the session's`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(2) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }
+        val url = server.url("/").toString()
+        val olderTrip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L)
+        val trips = FakeTripStateStore().apply { tripState.value = olderTrip }
+        val sessions = FakeSessionStore().apply { state.value = Session(url, null, null) }
+        val repo = AuthRepository(sessions, trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+
+        assertTrue(repo.login(url, "d@example.com", "pw").isSuccess)
+        assertEquals("on the session's server, as the builds before took it", olderTrip, trips.activeTrip.first())
+
+        sessions.state.value = Session("https://old.example.org/", null, null)
+        assertTrue(repo.login(url, "d@example.com", "pw").isSuccess)
+        assertNull(trips.activeTrip.first())
+        server.shutdown()
+    }
+
     @Test fun `login 401 maps to Unauthorized`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
-        val repo = AuthRepository(FakeSessionStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "bad")
 
@@ -195,7 +247,7 @@ class RepositoriesTest {
     private val startedTrip9 =
         """{"id":9,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"","start_time":"2026-08-04T08:30:00Z","status":"active"}"""
 
-    @Test fun `trip start records the signed-in driver on the trip`() = runTest {
+    @Test fun `trip start records the signed-in driver and server on the trip`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(201).setBody(startedTrip9))
         val store = FakeTripStateStore()
@@ -204,6 +256,7 @@ class RepositoriesTest {
         assertTrue(repo.start("bus-1", "5", "", "20260804").isSuccess)
 
         assertEquals("2", store.activeTrip.first()?.driverId)
+        assertEquals("http://localhost/", store.activeTrip.first()?.serverUrl)
         server.shutdown()
     }
 

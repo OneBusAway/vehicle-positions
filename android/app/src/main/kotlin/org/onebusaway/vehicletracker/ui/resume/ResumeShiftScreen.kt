@@ -71,6 +71,7 @@ private const val SECONDS_PER_MINUTE = 60L
 @Composable
 fun ResumeShiftScreen(
     onResumed: () -> Unit,
+    onSignInFirst: () -> Unit,
     onEnded: () -> Unit,
     viewModel: ResumeShiftViewModel = hiltViewModel(),
 ) {
@@ -78,7 +79,7 @@ fun ResumeShiftScreen(
     ResumeShiftScreenContent(
         state = state,
         now = viewModel::nowEpochSec,
-        onResumeClick = { viewModel.onResumeShift(onResumed) },
+        onResumeClick = { viewModel.onResumeShift(onResumed, onSignInFirst) },
         onEndShiftClick = { viewModel.onEndShift(onEnded) },
         onEndShiftLocallyClick = { viewModel.onEndShiftLocally(onEnded) },
         onDismissEndError = viewModel::dismissEndShiftError,

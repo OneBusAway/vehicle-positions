@@ -12,10 +12,13 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.loadFor
+import org.onebusaway.vehicletracker.data.sameServer
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.service.ServiceController
@@ -65,6 +68,7 @@ data class ResumeShiftUiState(
 class ResumeShiftViewModel @Inject constructor(
     tripStateStore: TripStateStore,
     tripGeometryStore: TripGeometryStore,
+    private val sessionStore: SessionStore,
     private val serviceController: ServiceController,
     private val tripEnder: TripEnder,
     @param:EpochSecondsClock private val clock: () -> Long,
@@ -88,10 +92,21 @@ class ResumeShiftViewModel @Inject constructor(
     /**
      * Restarts reporting without telling the server, as iOS does: the trip was never ended there,
      * and a second `/trips/start` would be refused as a trip already active.
+     *
+     * Reports go to the server the phone is signed in to. When that is not the trip's, as on a phone restored from
+     * backup, which keeps the trip but not the session, [onSignInFirst] opens Sign in for the trip's server instead.
      */
-    fun onResumeShift(onResumed: () -> Unit) {
-        serviceController.startTracking()
-        onResumed()
+    fun onResumeShift(onResumed: () -> Unit, onSignInFirst: () -> Unit) {
+        val trip = _uiState.value.trip ?: return
+        viewModelScope.launch {
+            val signedInTo = sessionStore.session.first().serverUrl
+            if (trip.serverUrl != null && !sameServer(trip.serverUrl, signedInTo)) {
+                onSignInFirst()
+            } else {
+                serviceController.startTracking()
+                onResumed()
+            }
+        }
     }
 
     fun onEndShift(onEnded: () -> Unit) {

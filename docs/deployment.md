@@ -1146,8 +1146,10 @@ The app doesn't use the link, and says why, when:
   link was not used." On Android this also covers a phone that still holds a
   sign-in that has run out, or has a trip stored, even one waiting on **Resume
   your trip?** with no sign-in at all: both belong to the server they came
-  from. A phone restored from a backup keeps its trip but not its sign-in or
-  its server, and says "This phone has a trip open. The link was not used.";
+  from. A phone restored from a backup keeps its trip, and the server the trip
+  is on, but not its sign-in, so it names that server too. A trip started by
+  an older version of the app has no server stored, so after a restore the app
+  says "This phone has a trip open. The link was not used.";
 - your device management sets the address: "Your agency sets the server on
   this phone.";
 - the link has no address the app accepts: "This link does not contain a

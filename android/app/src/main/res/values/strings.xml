@@ -54,7 +54,7 @@
     <string name="server_setup_cancel">Cancel</string>
     <!-- Why a setup link was not used. The host of the server the phone is signed in to, e.g. "tracker.example.org". -->
     <string name="server_setup_refused_signed_in">This phone is signed in to %1$s. The link was not used.</string>
-    <!-- A trip is stored, but not which server it is on, as after a restore from backup. -->
+    <!-- A trip is stored, but not which server it is on: one stored by an older build, after a restore from backup. -->
     <string name="server_setup_refused_trip_open">This phone has a trip open. The link was not used.</string>
     <string name="server_setup_refused_managed">Your agency sets the server on this phone.</string>
     <string name="server_setup_invalid">This link does not contain a server address the app can use.</string>
