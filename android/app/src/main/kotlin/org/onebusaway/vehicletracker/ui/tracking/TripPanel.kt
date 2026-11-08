@@ -63,6 +63,7 @@ import org.onebusaway.vehicletracker.ui.map.casingColor
 import org.onebusaway.vehicletracker.ui.map.routeLineColor
 import org.onebusaway.vehicletracker.ui.routes.RouteBadge
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
+import org.onebusaway.vehicletracker.ui.theme.StatusTone
 import org.onebusaway.vehicletracker.ui.theme.tripTitle
 import kotlin.math.roundToInt
 
@@ -139,6 +140,7 @@ internal fun TripPanel(
                     rows = stopRows(geometry.stops, adherence?.let { geometry.stops.indexOf(it.nextStop) }),
                     vehicleId = state.activeTrip?.vehicleId.orEmpty(),
                     model = model,
+                    vehicleTone = vehicleTone(adherence, state.tracking.problem),
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
@@ -302,7 +304,14 @@ private fun FactRow(icon: Int, label: String, value: String, problem: Boolean = 
  * next one, which is orange, and the last stop in an ink ring.
  */
 @Composable
-private fun StopList(geometry: TripGeometry, rows: List<StopRow>, vehicleId: String, model: StatusCardModel, modifier: Modifier) {
+private fun StopList(
+    geometry: TripGeometry,
+    rows: List<StopRow>,
+    vehicleId: String,
+    model: StatusCardModel,
+    vehicleTone: StatusTone,
+    modifier: Modifier,
+) {
     // As the map draws it, in the same theme.
     val dark = isSystemInDarkTheme()
     val routeColor = routeLineColor(geometry.routeColor, dark)
@@ -318,7 +327,7 @@ private fun StopList(geometry: TripGeometry, rows: List<StopRow>, vehicleId: Str
                     kind = row.kind,
                     strip = strip,
                 )
-                StopRow.Vehicle -> VehicleRow(vehicleId, model, strip)
+                StopRow.Vehicle -> VehicleRow(vehicleId, model, vehicleTone, strip)
             }
         }
     }
@@ -364,10 +373,10 @@ private fun StopListRow(name: String, time: String, kind: StopKind, strip: Route
     }
 }
 
-/** The vehicle's row: its id, and how it is keeping to the schedule in the status colour. */
+/** The vehicle's row: its id, and how it is keeping to the schedule, in the colour of its ring on the map. */
 @Composable
-private fun VehicleRow(vehicleId: String, model: StatusCardModel, strip: RouteStrip) {
-    val ring = AppTheme.statusColors[model.tone].text
+private fun VehicleRow(vehicleId: String, model: StatusCardModel, tone: StatusTone, strip: RouteStrip) {
+    val ring = AppTheme.statusColors[tone].text
     val halo = MaterialTheme.colorScheme.surfaceContainerLow
     val inner = MaterialTheme.colorScheme.onSurface
     Row(

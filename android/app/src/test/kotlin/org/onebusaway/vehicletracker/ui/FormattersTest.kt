@@ -3,6 +3,7 @@ package org.onebusaway.vehicletracker.ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.engine.TripFixtures
@@ -63,11 +64,26 @@ class FormattersTest {
     }
 
     @Test fun `the vehicle's ring takes its tone, and is grey before the first fix`() {
-        assertEquals(StatusTone.NEUTRAL, vehicleTone(null))
-        assertEquals(StatusTone.ON_TIME, vehicleTone(atStop1(0)))
-        assertEquals(StatusTone.LATE, vehicleTone(atStop1(400)))
-        assertEquals(StatusTone.EARLY, vehicleTone(atStop1(-1000)))
-        assertEquals(StatusTone.NEUTRAL, vehicleTone(evaluator.evaluate(fix(47.6045, -122.3200, at(8, 5)), previous = null)))
+        assertEquals(StatusTone.NEUTRAL, vehicleTone(null, TrackingProblem.NONE))
+        assertEquals(StatusTone.ON_TIME, vehicleTone(atStop1(0), TrackingProblem.NONE))
+        assertEquals(StatusTone.LATE, vehicleTone(atStop1(400), TrackingProblem.NONE))
+        assertEquals(StatusTone.EARLY, vehicleTone(atStop1(-1000), TrackingProblem.NONE))
+        assertEquals(StatusTone.NEUTRAL, vehicleTone(evaluator.evaluate(fix(47.6045, -122.3200, at(8, 5)), previous = null), TrackingProblem.NONE))
+    }
+
+    @Test fun `the ring goes grey while the position is paused or the driver is signed out, and only then`() {
+        val late = atStop1(400)
+        val cases = listOf(
+            TrackingProblem.NO_GPS to StatusTone.NEUTRAL,
+            TrackingProblem.AUTH_EXPIRED to StatusTone.NEUTRAL,
+            // The position is still live in these: it is the reports that are not reaching riders.
+            TrackingProblem.NO_NETWORK to StatusTone.LATE,
+            TrackingProblem.CLOCK_SKEW to StatusTone.LATE,
+            TrackingProblem.REPORTS_REFUSED to StatusTone.LATE,
+            TrackingProblem.NONE to StatusTone.LATE,
+        )
+        assertEquals("every problem is in the table", TrackingProblem.entries.toSet(), cases.map { it.first }.toSet())
+        for ((problem, tone) in cases) assertEquals("$problem", tone, vehicleTone(late, problem))
     }
 
     @Test fun `off schedule keeps the tone of its direction`() {
