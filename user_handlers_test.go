@@ -1102,7 +1102,9 @@ func TestHandleUpdateUser_DeactivateAdminWithMultipleAdminsAllowed(t *testing.T)
 	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, false, store.activeUpdates[1])
+	active, ok := store.activeUpdates[1]
+	require.True(t, ok, "SetUserActiveAndRevokeSessions must be called")
+	assert.False(t, active)
 }
 
 func TestHandleUpdateUser_DeactivateDriverNotGuarded(t *testing.T) {
@@ -1114,7 +1116,9 @@ func TestHandleUpdateUser_DeactivateDriverNotGuarded(t *testing.T) {
 	rr := putUser(t, store, 2, `{"name":"Driver","email":"driver@test.com","role":"driver","active":false}`)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, false, store.activeUpdates[2])
+	active, ok := store.activeUpdates[2]
+	require.True(t, ok, "SetUserActiveAndRevokeSessions must be called")
+	assert.False(t, active)
 }
 
 func TestHandleUpdateUser_ReactivateNotGuarded(t *testing.T) {
@@ -1173,5 +1177,7 @@ func TestHandleUpdateUser_DeactivateAlreadyInactiveAdminAllowed(t *testing.T) {
 	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, false, store.activeUpdates[1])
+	active, ok := store.activeUpdates[1]
+	require.True(t, ok, "SetUserActiveAndRevokeSessions must be called")
+	assert.False(t, active)
 }
