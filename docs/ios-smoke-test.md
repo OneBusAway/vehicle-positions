@@ -806,6 +806,19 @@ playback running.
    background, so there is no card yet. Open the app on the phone: the card
    appears.
 
+### Check 7c: The card says so when the app stops updating it
+
+1. During a trip, with GPS playback running, terminate the app
+   (`xcrun simctl terminate "$UDID" org.onebusaway.vehicletracker`) and lock
+   the simulator. Wait about two minutes, then wake it.
+
+   **Expected outcome:** the card dims, and in place of **Reporting** an amber
+   line at full strength reads **Reports paused · Open the app to keep
+   reporting.** The compact Island shows an amber warning triangle in place
+   of the route. While the app runs, in front or in the background for
+   location, the card never goes stale: the app sends the same words again a
+   minute after its last update while nothing changes.
+
 ## CarPlay
 
 **Not yet run on this machine.** The steps and expected results below are

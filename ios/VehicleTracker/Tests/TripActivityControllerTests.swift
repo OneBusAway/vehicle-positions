@@ -13,6 +13,8 @@ import VehiclePositionsKit
     let clock = ManualClock(start: TripFixtures.at(8, 0))
     let defaults = UserDefaults(suiteName: "TripActivityControllerTests-\(UUID().uuidString)")!
     let host = FakeActivityHost()
+    /// The heartbeat's wait, which the test ends by hand.
+    let sleeper = ManualSleep()
     let bus = Vehicle(id: "bus-1", label: "Bus 1")
 
     func session() -> TripSession {
@@ -21,7 +23,7 @@ import VehiclePositionsKit
     }
 
     func controller(_ session: TripSession) -> TripActivityController {
-        TripActivityController(session: session, host: host)
+        TripActivityController(session: session, host: host, now: { clock.now }, sleep: sleeper.sleep(for:))
     }
 
     /// The controller is there from launch, as in `AppContainer`; then the
@@ -287,6 +289,70 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
         #expect(await eventually { host.requests.count == 2 })
         #expect(host.requests.last?.attributes.serverTripID == 43)
+        withExtendedLifetime(c) {}
+    }
+
+    // MARK: Stale
+
+    /// The app is the only updater: if it stops, the activity shows it two
+    /// minutes after the last thing it was sent.
+    @Test func everyRequestAndUpdateIsStaleTwoMinutesLater() async throws {
+        let (s, c) = try await started()
+        #expect(host.requests.first?.staleDate == TripFixtures.at(8, 2))
+        clock.advance(10)
+        await emitAndSettle(s, secondsLate: 360)
+        #expect(await eventually { host.updates.count == 1 })
+        #expect(host.updates.first?.staleDate == TripFixtures.at(8, 2, 10))
+        withExtendedLifetime(c) {}
+    }
+
+    @Test func theHeartbeatResendsTheSameStateAfterAMinute() async throws {
+        let (_, c) = try await started()
+        #expect(await eventually { sleeper.asked == [.seconds(60)] })
+        clock.advance(60)
+        sleeper.fire()
+        #expect(await eventually { host.updates.count == 1 })
+        let resent = try #require(host.updates.first)
+        #expect(resent.id == "activity-1")
+        #expect(resent.state == host.requests.first?.state)
+        #expect(resent.staleDate == TripFixtures.at(8, 3))
+        #expect(await eventually { sleeper.asked.count == 2 })
+        #expect(sleeper.asked.last == .seconds(60))
+        withExtendedLifetime(c) {}
+    }
+
+    /// A change half a minute in moves the next heartbeat to a minute after
+    /// it, not after the start.
+    @Test func noHeartbeatWithinAMinuteOfAChange() async throws {
+        let (s, c) = try await started()
+        #expect(await eventually { sleeper.asked.count == 1 })
+        clock.advance(30)
+        await emitAndSettle(s, secondsLate: 360)
+        #expect(await eventually { host.updates.count == 1 })
+
+        clock.advance(30)
+        sleeper.fire()
+        #expect(await eventually { sleeper.asked.count == 2 })
+        #expect(sleeper.asked.last == .seconds(30))
+        #expect(host.updates.count == 1)
+
+        clock.advance(30)
+        sleeper.fire()
+        #expect(await eventually { host.updates.count == 2 })
+        #expect(host.updates.last?.state.lead == "6 min late")
+        withExtendedLifetime(c) {}
+    }
+
+    @Test func theHeartbeatStopsWhenTheTripEnds() async throws {
+        let (s, c) = try await started()
+        #expect(await eventually { sleeper.asked.count == 1 })
+        try await s.end()
+        #expect(await eventually { host.ends == ["activity-1"] })
+        clock.advance(60)
+        sleeper.fire()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(sleeper.asked.count == 1, "no heartbeat waits once the activity is gone")
+        #expect(host.updates.isEmpty)
         withExtendedLifetime(c) {}
     }
 }
