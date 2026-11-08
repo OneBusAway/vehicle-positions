@@ -28,8 +28,8 @@ object ServerSetupLink {
 
         /**
          * A phone that is signed in, or has a trip stored, keeps its server: its token and its trip belong there. [host]
-         * is null for a trip on a phone that doesn't know its server, as after a restore from backup, which keeps the
-         * trip but not the session.
+         * is null for a trip on a phone that doesn't know its server: one stored before trips kept their server, after a
+         * restore from backup, which keeps the trip but not the session.
          */
         data class RefusedSignedIn(val host: String?) : Decision
         data object RefusedManaged : Decision

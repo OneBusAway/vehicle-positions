@@ -81,14 +81,18 @@ class ServerSetup @Inject constructor(
     }
 
     /**
-     * The server this phone belongs to, "" when it doesn't know which, or null when nothing on it belongs to one. A token
-     * belongs to the server that issued it, signed in or not; so does a stored trip, which can wait on Resume with no
-     * token at all.
+     * The server this phone belongs to, "" when it doesn't know which, or null when nothing on it belongs to one. A stored
+     * trip belongs to the server it was started on, and can wait on Resume with no token at all, as after a restore from
+     * backup, which keeps the trip but not the session. A token belongs to the server that issued it, signed in or not.
      */
     private suspend fun signedInTo(): String? {
         val session = sessionStore.session.first()
         val trip = tripStateStore.activeTrip.first()
-        return if (session.token != null || trip != null) session.serverUrl.orEmpty() else null
+        return when {
+            trip != null -> trip.server(session.serverUrl).orEmpty()
+            session.token != null -> session.serverUrl.orEmpty()
+            else -> null
+        }
     }
 
     private suspend fun isManaged(): Boolean = managedServerSource.server.first().url != null

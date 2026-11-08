@@ -50,7 +50,7 @@ class ServerSetupTest {
         assertEquals(session, sessionStore.state.value)
     }
 
-    @Test fun `a stored trip refuses a link, even with no token`() = runTest {
+    @Test fun `a trip from an older build, stored with no server, is refused for the session's`() = runTest {
         sessionStore.state.value = Session(serverUrl = "https://positions.example.org/", token = null, issuedAtEpochSec = null)
         tripState.tripState.value = ActiveTrip(7L, "T1", "bus-1", "R1", "20261107", 100L)
         val setup = serverSetup()
@@ -61,8 +61,18 @@ class ServerSetupTest {
         assertEquals(Decision.RefusedSignedIn("positions.example.org"), setup.prompt.value)
     }
 
-    @Test fun `a trip restored from backup refuses a link without naming a server`() = runTest {
-        // The backup keeps trip_state and leaves out the session, server and all.
+    @Test fun `a trip restored from backup refuses a link for the trip's server, even with no token`() = runTest {
+        // The backup keeps trip_state, the trip's server with it, and leaves out the session.
+        tripState.tripState.value = ActiveTrip(7L, "T1", "bus-1", "R1", "20261107", 100L, serverUrl = "https://positions.example.org/")
+        val setup = serverSetup()
+
+        setup.open(link)
+        advanceUntilIdle()
+
+        assertEquals(Decision.RefusedSignedIn("positions.example.org"), setup.prompt.value)
+    }
+
+    @Test fun `an older build's trip restored from backup refuses a link without naming a server`() = runTest {
         tripState.tripState.value = ActiveTrip(7L, "T1", "bus-1", "R1", "20261107", 100L)
         val setup = serverSetup()
 
