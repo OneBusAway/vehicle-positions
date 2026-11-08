@@ -95,13 +95,15 @@ final class CoreLocationAccess: NSObject, LocationAccess, CLLocationManagerDeleg
 }
 
 /// Callers waiting on the location prompt. Each is released once: by the
-/// answer, or by its own deadline with what iOS says then, because a prompt
-/// can fail to show (from the car, with the phone app in the background) and
-/// then no answer ever comes.
+/// answer, by its own deadline with what iOS says then, because a prompt can
+/// fail to show (from the car, with the phone app in the background) and then
+/// no answer ever comes, or at once with what iOS says when its task is
+/// cancelled.
 final class PromptWait {
     private struct Waiter {
         let continuation: CheckedContinuation<LocationAccessState, Never>
         let deadline: Task<Void, Never>
+        let read: () -> LocationAccessState
     }
 
     private let sleep: (Duration) async throws -> Void
@@ -117,18 +119,25 @@ final class PromptWait {
     /// once still finds it.
     func wait(upTo limit: Duration, read: @escaping () -> LocationAccessState,
               ask: () -> Void) async -> LocationAccessState {
-        await withCheckedContinuation { continuation in
-            let id = nextID
-            nextID += 1
-            let deadline = Task {
-                do { try await sleep(limit) } catch { return }
-                guard let waiter = waiters.removeValue(forKey: id) else { return }
-                let state = read()
-                log.notice("no answer to the location prompt after \(limit, privacy: .public); going on with \(String(describing: state), privacy: .public)")
-                waiter.continuation.resume(returning: state)
+        let id = nextID
+        nextID += 1
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let deadline = Task {
+                    do { try await sleep(limit) } catch { return }
+                    guard let waiter = waiters.removeValue(forKey: id) else { return }
+                    let state = read()
+                    log.notice("no answer to the location prompt after \(limit, privacy: .public); going on with \(String(describing: state), privacy: .public)")
+                    waiter.continuation.resume(returning: state)
+                }
+                waiters[id] = Waiter(continuation: continuation, deadline: deadline, read: read)
+                ask()
             }
-            waiters[id] = Waiter(continuation: continuation, deadline: deadline)
-            ask()
+        } onCancel: {
+            // Runs on the cancelling thread, and the waiters belong to the
+            // main actor. A cancel that comes before the waiter is registered
+            // still finds it: registering never leaves the main actor.
+            Task { @MainActor in self.release(id) }
         }
     }
 
@@ -139,5 +148,13 @@ final class PromptWait {
             waiter.deadline.cancel()
             waiter.continuation.resume(returning: state)
         }
+    }
+
+    /// Every release takes the waiter out first, so the deadline or an answer
+    /// that comes later finds nothing left to resume.
+    private func release(_ id: Int) {
+        guard let waiter = waiters.removeValue(forKey: id) else { return }
+        waiter.deadline.cancel()
+        waiter.continuation.resume(returning: waiter.read())
     }
 }

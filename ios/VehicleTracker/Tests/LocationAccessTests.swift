@@ -97,6 +97,39 @@ import Testing
         #expect(await second.value == .denied, "the late answer is not kept for the next wait")
     }
 
+    /// A cancelled caller has nothing left to wait for: it is released at
+    /// once with what iOS says, not when the deadline fires.
+    @Test(.timeLimit(.minutes(1)))
+    func aCancelledCallerIsReleasedAtOnceWithWhatIOSSays() async {
+        var cancelledSleeps = 0
+        let prompts = PromptWait { duration in
+            do {
+                try await deadline.sleep(for: duration)
+            } catch {
+                cancelledSleeps += 1
+                throw error
+            }
+        }
+        var reads = 0
+        var released: LocationAccessState?
+        let waiting = Task {
+            released = await prompts.wait(upTo: limit, read: { reads += 1; return .denied }) {}
+        }
+        #expect(await eventually { deadline.asked == [limit] })
+        #expect(reads == 0)
+
+        waiting.cancel()
+        #expect(await eventually { released == .denied }, "released before the deadline fires")
+        #expect(reads == 1)
+        #expect(await eventually { cancelledSleeps == 1 }, "the release cancels its deadline")
+
+        deadline.fire()
+        prompts.answer(.allowed)
+        await Task.yield()
+        #expect(released == .denied, "a later deadline or answer resumes nothing")
+        #expect(reads == 1)
+    }
+
     @Test(.timeLimit(.minutes(1)))
     func oneAnswerReleasesEveryWaiter() async {
         let prompts = PromptWait(sleep: deadline.sleep(for:))
