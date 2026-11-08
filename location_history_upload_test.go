@@ -112,6 +112,29 @@ func TestHandlePostLocationHistory_SkipsInvalidPoints(t *testing.T) {
 	assert.Nil(t, store.saved, "nothing to store")
 }
 
+// TestHandlePostLocationHistory_NullReadings: a phone sends null for a reading
+// it did not have, which is stored as unknown, while a real zero (due north,
+// standing still) stays a zero.
+func TestHandlePostLocationHistory_NullReadings(t *testing.T) {
+	ts := strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)
+	body := json.RawMessage(`{"vehicle_id":"bus-1","points":[
+		{"latitude":47.6,"longitude":-122.33,"bearing":null,"speed":null,"accuracy":null,"timestamp":` + ts + `},
+		{"latitude":47.6,"longitude":-122.33,"bearing":0,"speed":0,"accuracy":0,"timestamp":` + ts + `}]}`)
+	store := &fakeHistorySaver{}
+	w := postHistory(t, store, body)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.JSONEq(t, `{"saved":2,"invalid":0}`, w.Body.String())
+	require.Len(t, store.saved, 2)
+	assert.Nil(t, store.saved[0].Bearing)
+	assert.Nil(t, store.saved[0].Speed)
+	assert.Nil(t, store.saved[0].Accuracy)
+	for _, v := range []*float64{store.saved[1].Bearing, store.saved[1].Speed, store.saved[1].Accuracy} {
+		require.NotNil(t, v)
+		assert.Zero(t, *v)
+	}
+}
+
 func TestHandlePostLocationHistory_NotAssigned(t *testing.T) {
 	w := postHistory(t, &fakeHistorySaver{err: ErrNotAssigned}, LocationHistoryRequest{VehicleID: "bus-9", Points: []HistoryPoint{historyPoint(time.Minute)}})
 	assert.Equal(t, http.StatusForbidden, w.Code)
