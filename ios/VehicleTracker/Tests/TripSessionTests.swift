@@ -30,6 +30,12 @@ import VehiclePositionsKit
 
     /// What a relaunch finds: a fresh token, a known server and this driver's
     /// own trip in the store, which the session takes up as `.paused`.
+    /// A session whose sign-out deadline the test fires by hand.
+    func session(deadline: ManualSleep) -> TripSession {
+        TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
+                    access: access, makeAPI: { _, _ in api }, now: { clock.now }, sleep: deadline.sleep(for:))
+    }
+
     func pausedSession(trip: TripGeometry = TripFixtures.t1) throws -> (session: TripSession, active: ActiveTrip) {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")
@@ -1037,7 +1043,7 @@ import VehiclePositionsKit
 
         await s.signOut()
         #expect(startError as? TripSessionError == .notSignedIn)
-        #expect(api.calls.isEmpty, "the server heard nothing of the start")
+        #expect(api.calls == ["logout"], "the server heard nothing of the start")
         #expect(s.phase == .signedOut)
         #expect(try tokens.load() == nil)
         #expect(s.settings.email == "")
@@ -1071,6 +1077,228 @@ import VehiclePositionsKit
         #expect(s.phase == .signedOut)
     }
 
+    /// A 401 while the logout is out ends the session on the phone and shows
+    /// Sign in, so the next driver can sign in before the logout returns. That
+    /// logout was the first driver's: it must not clear the second's session.
+    @Test func aSignInWhileTheLogoutIsOutIsKeptWhenTheLogoutReturns() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "first@test.com", password: "pw")
+        var secondSignInError: (any Error)?
+        var signingOutAfterTheSecondSignIn = true
+        api.whileLoggingOut = {
+            s.handleIfUnauthorized(APIError.status(401, message: "invalid token"))
+            api.tokens = AuthTokens(accessToken: "jwt-2", refreshToken: "refresh-2", expiresIn: 900)
+            do {
+                try await s.signIn(serverURL: server, email: "second@test.com", password: "pw")
+            } catch {
+                secondSignInError = error
+            }
+            signingOutAfterTheSecondSignIn = s.isSigningOut
+        }
+
+        await s.signOut()
+        #expect(secondSignInError == nil)
+        #expect(api.logouts == 1)
+        #expect(!signingOutAfterTheSecondSignIn, "the second driver can start a trip at once")
+        #expect(s.phase == .idle)
+        #expect(try tokens.load()?.token == "jwt-2")
+        #expect(s.settings.email == "second@test.com")
+        #expect(!s.isSigningOut)
+        try await s.loadVehicles()
+    }
+
+    /// The second driver can sign out too while the first logout is still
+    /// out. Theirs is a new sign-out with its own logout, and the first one
+    /// returning must not end it early: a start from the car would then slip
+    /// through while the second logout is revoking the token.
+    @Test func theFirstLogoutReturningDoesNotEndASecondDriversSignOut() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "first@test.com", password: "pw")
+        let (firstReturned, release) = AsyncStream.makeStream(of: Void.self)
+        var second: Task<Void, Never>?
+        var secondSignInError: (any Error)?
+        var secondWasOutWhenTheFirstReturned = false
+        var signingOutWhenTheFirstReturned = false
+        api.whileLoggingOut = {
+            s.handleIfUnauthorized(APIError.status(401, message: "invalid token"))
+            do {
+                try await s.signIn(serverURL: server, email: "second@test.com", password: "pw")
+            } catch {
+                secondSignInError = error
+            }
+            api.whileLoggingOut = {
+                secondWasOutWhenTheFirstReturned = true
+                for await _ in firstReturned { break }
+                signingOutWhenTheFirstReturned = s.isSigningOut
+            }
+            second = Task { await s.signOut() }
+            // Lets the second sign-out reach its logout before the first returns.
+            await Task.yield()
+        }
+
+        await s.signOut()
+        #expect(secondSignInError == nil)
+        #expect(secondWasOutWhenTheFirstReturned)
+        release.yield(())
+        await second?.value
+        #expect(signingOutWhenTheFirstReturned, "the first logout's return did not end the second sign-out")
+        #expect(api.logouts == 2)
+        #expect(s.phase == .signedOut)
+        #expect(try tokens.load() == nil)
+        #expect(s.settings.email == "")
+        #expect(!s.isSigningOut)
+    }
+
+    /// Sign-out is the last moment this driver's token works, so the trips
+    /// they ended on this phone are ended on the server first. Another
+    /// driver's end waits for that driver.
+    @Test func signOutSendsThisDriversPendingEndsBeforeTheLogout() async throws {
+        let theirs = PendingTripEnd(serverTripID: 8, driverEmail: "a@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString), theirs])
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        await s.signOut()
+        #expect(api.calls == ["end 7", "logout"])
+        #expect(try store.loadPendingEnds() == [theirs])
+        #expect(s.phase == .signedOut)
+        #expect(s.settings.email == "")
+    }
+
+    /// An end the server doesn't take is kept for this driver's next start,
+    /// and the sign-out goes on: the logout, then the phone.
+    @Test(arguments: [APIError.transport("offline"), APIError.status(500, message: "")])
+    func aPendingEndThatFailsAtSignOutIsKeptAndTheSignOutGoesOn(_ failure: APIError) async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
+        api.endError = failure
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        await s.signOut()
+        #expect(api.calls == ["end 7", "logout"])
+        #expect(try store.loadPendingEnds() == [owed], "kept for the next start")
+        #expect(s.phase == .signedOut)
+        #expect(try tokens.load() == nil)
+    }
+
+    /// A sign-out sends what this driver owes this server and nothing else,
+    /// as a start does: another driver's end waits for that driver, and an
+    /// end owed to another server for a sign-in there.
+    @Test func aSignOutSendsNoOtherDriversOrServersEnds() async throws {
+        let theirs = PendingTripEnd(serverTripID: 7, driverEmail: "a@test.com", serverURL: server.absoluteString)
+        let elsewhere = PendingTripEnd(serverTripID: 8, driverEmail: "d@test.com", serverURL: "https://other.example.org")
+        try store.savePendingEnds([theirs, elsewhere])
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        await s.signOut()
+        #expect(api.calls == ["logout"])
+        #expect(try store.loadPendingEnds() == [theirs, elsewhere])
+    }
+
+    /// A server that takes the end and never answers holds the sign-out for
+    /// `signOutWait` at most. Then the end is cancelled and no logout goes
+    /// out, and the phone signs out. The end stays stored: a cancelled end
+    /// wasn't sent.
+    @Test(.timeLimit(.minutes(1)))
+    func aServerThatDoesNotAnswerHoldsTheSignOutForTenSecondsAtMost() async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
+        let deadline = ManualSleep()
+        let s = session(deadline: deadline)
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        var endIsOut = false
+        api.whileEnding = {
+            endIsOut = true
+            // Throws when cancelled, as a cancelled request does.
+            try await Task.sleep(for: .seconds(3600))
+        }
+
+        let signingOut = Task { await s.signOut() }
+        try #require(await eventually { endIsOut })
+        deadline.fire()
+        try #require(await eventually { !s.isSigningOut }, "the sign-out returned")
+        await signingOut.value
+        #expect(deadline.asked == [.seconds(10)])
+        #expect(s.phase == .signedOut)
+        #expect(try tokens.load() == nil)
+        #expect(s.settings.email == "")
+        #expect(api.logouts == 0)
+        #expect(try store.loadPendingEnds() == [owed], "a cancelled end was not sent")
+    }
+
+    /// The same limit covers the logout: the ends and the logout share it,
+    /// so one that never answers is cancelled there too.
+    @Test(.timeLimit(.minutes(1)))
+    func aLogoutThatDoesNotAnswerIsCancelledAtTheSameDeadline() async throws {
+        try store.savePendingEnds([PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)])
+        let deadline = ManualSleep()
+        let s = session(deadline: deadline)
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        var logoutIsOut = false
+        api.whileLoggingOut = {
+            logoutIsOut = true
+            try await Task.sleep(for: .seconds(3600))
+        }
+
+        let signingOut = Task { await s.signOut() }
+        try #require(await eventually { logoutIsOut })
+        deadline.fire()
+        try #require(await eventually { !s.isSigningOut }, "the sign-out returned")
+        await signingOut.value
+        #expect(deadline.asked == [.seconds(10)], "one limit for both")
+        #expect(api.calls == ["end 7"])
+        #expect(try store.loadPendingEnds().isEmpty)
+        #expect(s.phase == .signedOut)
+        #expect(try tokens.load() == nil)
+    }
+
+    /// A 401 during the ends shows Sign in, and the next driver can sign in
+    /// before the sign-out goes on. No logout may go out then: the client
+    /// sends the stored token, which is the new driver's by now, so it would
+    /// end their session on the server. The first driver's session is over
+    /// already; the 401 said so.
+    @Test func aSignInDuringThePendingEndsIsNotLoggedOut() async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        var secondSignInError: (any Error)?
+        api.whileEnding = {
+            s.handleIfUnauthorized(APIError.status(401, message: "invalid token"))
+            api.tokens = AuthTokens(accessToken: "jwt-2", refreshToken: "refresh-2", expiresIn: 900)
+            do {
+                try await s.signIn(serverURL: server, email: "second@test.com", password: "pw")
+            } catch {
+                secondSignInError = error
+            }
+            // The end went out with the first driver's token, which is refused.
+            api.endError = APIError.status(401, message: "invalid token")
+        }
+
+        await s.signOut()
+        #expect(secondSignInError == nil)
+        #expect(api.logouts == 0, "a logout now would have gone out with jwt-2")
+        #expect(try tokens.load()?.token == "jwt-2")
+        #expect(s.settings.email == "second@test.com")
+        #expect(s.phase == .idle)
+        #expect(!s.isSigningOut)
+        #expect(try store.loadPendingEnds() == [owed])
+    }
+
+    /// The limit is not a wait: a server that answers at once signs out at
+    /// once, with the real 10 s sleep behind it.
+    @Test func aQuickSignOutDoesNotWaitForTheDeadline() async throws {
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        let started = ContinuousClock.now
+        await s.signOut()
+        #expect(ContinuousClock.now - started < .seconds(2))
+        #expect(s.phase == .signedOut)
+    }
+
     @Test func signOutFromPausedKeepsTheStoredTripForNextSignIn() async throws {
         let (s, active) = try pausedSession()
         #expect(s.phase == .paused(active))
@@ -1097,6 +1325,25 @@ nonisolated final class UnwritablePendingEndsStore: ActiveTripStoring, @unchecke
     func saveSent(_ count: Int, for serverTripID: Int64) throws { try trips.saveSent(count, for: serverTripID) }
     func loadPendingEnds() throws -> [PendingTripEnd] { [] }
     func savePendingEnds(_ ends: [PendingTripEnd]) throws { throw CocoaError(.fileWriteOutOfSpace) }
+}
+
+/// Stands in for `Task.sleep` in the sign-out's deadline: it records what it
+/// was asked for and returns when the test fires it, not 10 s later.
+/// Cancelled first, it throws `CancellationError`, as `Task.sleep` does.
+@MainActor final class ManualSleep {
+    private(set) var asked: [Duration] = []
+    private let fired: AsyncStream<Void>
+    private let continuation: AsyncStream<Void>.Continuation
+
+    init() { (fired, continuation) = AsyncStream.makeStream(of: Void.self) }
+
+    func sleep(for duration: Duration) async throws {
+        asked.append(duration)
+        for await _ in fired { return }
+        throw CancellationError()
+    }
+
+    func fire() { continuation.yield() }
 }
 
 @Suite struct TripSessionErrorTests {

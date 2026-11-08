@@ -126,9 +126,17 @@ final class TripSession {
     /// replaced by it.
     private(set) var fixesSent = 0
     private(set) var vehicles: [Vehicle] = []
-    /// A sign-out is waiting on the server. No trip may start or resume
-    /// meanwhile: the logout is revoking the token it would report with.
-    private(set) var isSigningOut = false
+    /// Bumped by every sign-in. A 401 while a logout is out ends the session
+    /// on the phone and shows Sign in, so the next driver can sign in before
+    /// that logout returns; it then belongs to an earlier generation and must
+    /// leave the new session alone.
+    private var sessionGeneration = 0
+    /// The generation whose sign-out is waiting on the server, if any.
+    private var signingOutGeneration: Int?
+    /// A sign-out is waiting on the server for the current session. No trip
+    /// may start or resume meanwhile: the logout is revoking the token it
+    /// would report with.
+    var isSigningOut: Bool { signingOutGeneration == sessionGeneration }
     let settings: AppSettings
 
     private let tokens: any TokenStoring
@@ -139,6 +147,7 @@ final class TripSession {
     let locationAccess: any LocationAccess
     private let makeAPI: (URL, any TokenStoring) throws -> any TrackerAPI
     private let now: () -> Date
+    private let sleep: (Duration) async throws -> Void
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "trip-session")
 
     private var api: (any TrackerAPI)?
@@ -165,7 +174,8 @@ final class TripSession {
         locations: any LocationSource,
         access: any LocationAccess,
         makeAPI: @escaping (URL, any TokenStoring) throws -> any TrackerAPI,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.settings = settings
         self.tokens = tokens
@@ -174,6 +184,7 @@ final class TripSession {
         self.locationAccess = access
         self.makeAPI = makeAPI
         self.now = now
+        self.sleep = sleep
 
         // A token that can still be used or renewed and a known server mean
         // the driver stays signed in; a stored trip on top of that is one iOS
@@ -227,6 +238,7 @@ final class TripSession {
         let api = try makeAPI(serverURL, tokens)
         let issued = try await api.login(email: email, password: password)
         try tokens.save(StoredToken(issued, receivedAt: now()))
+        sessionGeneration += 1
         settings.serverURLString = serverURL.absoluteString
         settings.email = email
         self.api = api
@@ -247,28 +259,69 @@ final class TripSession {
         refreshReporting()
     }
 
+    /// How long a sign-out waits on the server, for the pending ends and the
+    /// logout together, as Android's `SIGN_OUT_WAIT_MS` does.
+    static let signOutWait: Duration = .seconds(10)
+
     /// The driver's sign-out: ends the session on the server, then on this
     /// phone, from `.idle` or `.paused` only, as `endSessionLocally()` does.
-    /// The logout goes first because the client reads the token from the
-    /// store for every request. A logout that fails still signs out here: a
-    /// driver handing the phone on must never be left signed in. The email
+    /// This driver's pending ends go first and the logout second, because the
+    /// client reads the token from the store for every request. The server
+    /// gets `signOutWait` for both, and a failure of either still signs out
+    /// here: a driver handing the phone on must never be left signed in. An
+    /// end that is not sent waits for this driver's next start. The email
     /// goes too, for the next driver to type their own; the server stays.
     func signOut() async {
         switch phase {
         case .idle, .paused:
             guard !isSigningOut else { return }
-            isSigningOut = true
-            defer { isSigningOut = false }
-            do {
-                try await requireAPI().logout()
-                log.notice("logged out on the server")
-            } catch {
-                log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error))")
+            let generation = sessionGeneration
+            signingOutGeneration = generation
+            // A later sign-out, from a driver who signed in meanwhile, owns
+            // the flag by then and clears it itself.
+            defer { if signingOutGeneration == generation { signingOutGeneration = nil } }
+            let toldServer = Task { await tellServerOfSignOut(generation) }
+            let deadline = Task {
+                try await sleep(Self.signOutWait)
+                toldServer.cancel()
+            }
+            await toldServer.value
+            deadline.cancel()
+            if toldServer.isCancelled {
+                log.notice("the server took longer than \(Self.signOutWait, privacy: .public); signing out on this phone only")
+            }
+            // The driver who asked to sign out is gone if a 401 ended the
+            // session while the server was being told; whoever signed in
+            // since keeps their session.
+            guard generation == sessionGeneration else {
+                log.notice("a new sign-in landed while signing out; leaving it signed in")
+                return
             }
             endSessionLocally()
             settings.email = ""
         default:
             return
+        }
+    }
+
+    /// The server's part of `signOut()`. Each failure is logged and none is
+    /// thrown: the phone signs out whatever the server says.
+    private func tellServerOfSignOut(_ generation: Int) async {
+        do {
+            let api = try requireAPI()
+            do {
+                try await sendPendingEnds(api)
+            } catch {
+                log.notice("could not send the trips ended on this phone; they wait for this driver's next start: \(String(describing: error))")
+            }
+            // The client sends the stored token, which is a newer sign-in's
+            // if one landed during the ends: this logout would end that
+            // driver's session. Past the deadline, nothing more is sent.
+            guard generation == sessionGeneration, !Task.isCancelled else { return }
+            try await api.logout()
+            log.notice("logged out on the server")
+        } catch {
+            log.notice("could not log out on the server; signing out on this phone only: \(String(describing: error))")
         }
     }
 
@@ -364,11 +417,13 @@ final class TripSession {
     }
 
     /// Sends the end of every trip this driver ended on this phone only, in
-    /// the order they were ended: the server still has the trip open and
-    /// would refuse the start. Each is forgotten as soon as its own end is
-    /// confirmed, and a 404 confirms it too. If one cannot be sent the start
-    /// is refused with ``TripSessionError/previousTripNotEnded`` and the rest
-    /// are kept. Other drivers' ends wait for their own next start: their
+    /// the order they were ended: before a start, which the server would
+    /// refuse while the trip is open, and before a sign-out, the last moment
+    /// this driver's token works. Each is forgotten as soon as its own end is
+    /// confirmed, and a 404 confirms it too. If one cannot be sent,
+    /// ``TripSessionError/previousTripNotEnded`` is thrown and the rest are
+    /// kept: a start is refused, and a sign-out goes on without them. Other
+    /// drivers' ends wait for that driver's own next start or sign-out: their
     /// open trips do not block this driver's. Ends owed to another server wait
     /// until the driver signs in there again.
     private func sendPendingEnds(_ api: any TrackerAPI) async throws {
@@ -484,7 +539,7 @@ final class TripSession {
 
     /// Stops tracking without waiting for the server. The end is remembered
     /// under the driver who started the trip and sent before that driver's
-    /// next start (`sendPendingEnds`).
+    /// next start or sign-out (`sendPendingEnds`).
     func endLocally() {
         guard let active = activeTrip else { return }
         rememberEnd(of: active)

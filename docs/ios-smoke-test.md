@@ -561,8 +561,8 @@ after the last report.
 When End trip can't reach the server, **End on this phone** stops the trip
 on the phone only, and the server still has it open. The app remembers the end
 and sends it before the same driver's next start, which the server would
-otherwise refuse with `driver already has an active trip`. This check starts
-trips of its own.
+otherwise refuse with `driver already has an active trip`, or when that driver
+signs out. This check starts trips of its own.
 
 1. Start a run (route **1 Straight**, run **T1**), then stop the server:
 
@@ -616,6 +616,24 @@ trips of its own.
    **Expected outcome:** the app's own end gets a `404` (no open trip under
    that id), and the app treats it as ended: it goes back to **Choose a
    route** for `bus-1`, with no **Trip not ended yet**.
+
+4. Start run **T1** again, stop the server as in step 1, tap **End trip**,
+   confirm, and tap **End on this phone**. Start the server again as in step
+   2, then tap **Sign out** in the account menu.
+
+   **Expected outcome:** the sign-in screen appears. The server log has the
+   trip's end before the logout, and the server has no active trip:
+
+   ```bash
+   grep -E '"path":"/api/v1/(trips/end|auth/logout)"' /tmp/vt-server.log
+   # {...,"msg":"request","method":"POST","path":"/api/v1/trips/end","status":200,...}
+   # {...,"msg":"request","method":"POST","path":"/api/v1/auth/logout","status":204,...}
+   curl -s "$BASE/api/v1/admin/trips?status=active" -H "Authorization: Bearer $ADMIN_TOKEN" \
+     | python3 -c 'import sys,json;print(len(json.load(sys.stdin)["trips"]))'
+   # 0
+   ```
+
+   Sign in again as `driver@example.com`, so Check 6 starts signed in.
 
 ### Check 6: Location access is checked and named
 
