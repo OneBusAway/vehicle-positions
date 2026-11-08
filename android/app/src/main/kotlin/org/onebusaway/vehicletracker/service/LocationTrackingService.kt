@@ -43,10 +43,38 @@ private const val TAG = "LocationTrackingService"
 private const val LIVE_FIX_INTERVAL_MS = 1_000L
 
 /**
+ * Claims foreground status with [startForeground], or asks the driver to open the app when Android refuses it, and
+ * says whether it was claimed.
+ *
+ * Taking location "all the time" away during a trip kills the app, and Android starts the START_STICKY service again
+ * in the background with location only while in use. From Android 14, startForeground throws when Android does not
+ * let that restart use location, as after [RestartTracking] started the service. Android is asked rather than the
+ * permissions checked first: it lets the same restart keep location for a trip started in the app, and the
+ * permissions are the same in both cases.
+ */
+internal fun startForegroundOrAskDriver(startForeground: () -> Unit, resumeNotifier: ResumeNotifier): Boolean {
+    // Only the two ways Android documents refusing the start, as in RestartTracking: anything else is a bug.
+    try {
+        startForeground()
+    } catch (e: IllegalStateException) {
+        // ForegroundServiceStartNotAllowedException, from Android 12, is one.
+        Log.w(TAG, "Android refused the tracking service foreground status", e)
+        resumeNotifier.askToResume()
+        return false
+    } catch (e: SecurityException) {
+        Log.w(TAG, "Android refused the tracking service a permission it needs", e)
+        resumeNotifier.askToResume()
+        return false
+    }
+    return true
+}
+
+/**
  * Foreground service that owns the fused-location request and hands each fix to [TripReporter]
- * and [AdherenceTracker]. Framework-glue shell only — the send loop / status machine lives in
- * [TripReporter] (Task 6) and the per-fix judgement in [AdherenceTracker], both covered by JVM
- * tests; nothing here is separately unit tested.
+ * and [AdherenceTracker]. Framework-glue shell only: the send loop / status machine lives in
+ * [TripReporter] (Task 6), the per-fix judgement in [AdherenceTracker] and the answer to a refused
+ * foreground start in [startForegroundOrAskDriver], all covered by JVM tests; nothing else here
+ * is separately unit tested.
  *
  * It asks for a fix every second while the tracking screen is open, so the map and the panel
  * move with the vehicle, and every [REPORT_INTERVAL_MS] otherwise.
@@ -121,12 +149,28 @@ class LocationTrackingService : Service() {
 
         // Always claim foreground status first, per the location-type FGS contract, before doing
         // anything else — this also restores the "active" notification on a resume-from-degraded.
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            activeNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+        val foreground = startForegroundOrAskDriver(
+            startForeground = {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    activeNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+                )
+            },
+            resumeNotifier = {
+                // Detached first, as in startLocationUpdates: Android keeps the killed service's
+                // notification on it for the restart, and stopping would cancel the one posted here.
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+                notification.postIfPermitted(notification.buildResumeNotification())
+            },
         )
+        if (!foreground) {
+            // Nothing can report without foreground status, so the service stops for good. The
+            // trip stays stored, so the app opens on Resume.
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         if (!initialized) {
             val trip = runBlocking { tripStateStore.activeTrip.first() }
