@@ -18,6 +18,13 @@ import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.ui.tracking.formatClock
 
 const val NOTIFICATION_ID = 1001
+
+/**
+ * "Reports paused" has an id of its own, so it is always a new notification and sounds. Posted over the ongoing one
+ * under its id, it would be an update, which setOnlyAlertOnce keeps silent, and the service cannot reliably cancel the
+ * ongoing one first: Android clears its foreground flag after stopForeground returns, and ignores the cancel until then.
+ */
+const val RESUME_NOTIFICATION_ID = 1002
 private const val CHANNEL_ID = "tracking"
 private const val ATTENTION_CHANNEL_ID = "tracking_attention"
 
@@ -89,37 +96,50 @@ class TrackingNotification(private val context: Context) {
 
     /**
      * Degraded-path variant shown when location updates stopped and need a foreground tap to resume, and by
-     * [RestartTracking] for a trip it did not start again after a reboot or an update. It sounds once: posting it again
-     * while it is still showing stays silent.
+     * [RestartTracking] for a trip it did not start again after a reboot or an update. It sounds once, posted under
+     * [RESUME_NOTIFICATION_ID] rather than over the ongoing notification: posting it again while it is still showing
+     * stays silent.
      */
-    fun buildResumeNotification(): Notification =
+    internal fun buildResumeNotification(): Notification =
         baseBuilder(ATTENTION_CHANNEL_ID, NotificationCompat.PRIORITY_DEFAULT)
             .setContentTitle(context.getString(R.string.tracking_notification_resume_title))
             .setContentText(context.getString(R.string.tracking_notification_resume_text))
             .setAutoCancel(true)
             .build()
 
+    /** Posts [notification], built by [buildActiveNotification], in the ongoing notification's place. */
+    fun postActiveIfPermitted(notification: Notification) = postIfPermitted(NOTIFICATION_ID, notification)
+
+    /** Posts "Reports paused" under [RESUME_NOTIFICATION_ID]. */
+    fun postResumeIfPermitted() = postIfPermitted(RESUME_NOTIFICATION_ID, buildResumeNotification())
+
     /**
-     * Posts [notification] in the tracking notification's place. On Android 13+ a driver who denied notifications has
-     * nothing to replace, and the foreground service keeps running without one, so the post is skipped rather than
-     * handed to a call that requires POST_NOTIFICATIONS.
+     * On Android 13+ a driver who denied notifications has nothing to replace, and the foreground service keeps running
+     * without one, so the post is skipped rather than handed to a call that requires POST_NOTIFICATIONS.
      */
-    fun postIfPermitted(notification: Notification) {
+    private fun postIfPermitted(id: Int, notification: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             return
         }
-        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+        NotificationManagerCompat.from(context).notify(id, notification)
     }
 
     /**
-     * Takes down the resume notification, for a trip that has ended. While the service is in the foreground Android
-     * ignores this for its ongoing notification, which goes when the service stops.
+     * Takes down both notifications, for a trip that has ended. While the service is in the foreground Android ignores
+     * this for its ongoing notification, which goes when the service stops.
      */
     fun cancel() {
-        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+        val manager = NotificationManagerCompat.from(context)
+        manager.cancel(NOTIFICATION_ID)
+        manager.cancel(RESUME_NOTIFICATION_ID)
+    }
+
+    /** Takes down "Reports paused" once the service is reporting again. */
+    fun cancelResume() {
+        NotificationManagerCompat.from(context).cancel(RESUME_NOTIFICATION_ID)
     }
 
     private fun title(text: NotificationText): String {

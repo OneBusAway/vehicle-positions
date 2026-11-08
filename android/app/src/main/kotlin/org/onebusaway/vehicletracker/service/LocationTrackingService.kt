@@ -158,12 +158,7 @@ class LocationTrackingService : Service() {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
                 )
             },
-            resumeNotifier = {
-                // Detached first, as in startLocationUpdates: Android keeps the killed service's
-                // notification on it for the restart, and stopping would cancel the one posted here.
-                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
-                notification.postIfPermitted(notification.buildResumeNotification())
-            },
+            resumeNotifier = ::askToResume,
         )
         if (!foreground) {
             // Nothing can report without foreground status, so the service stops for good. The
@@ -171,6 +166,7 @@ class LocationTrackingService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        notification.cancelResume()
 
         if (!initialized) {
             val trip = runBlocking { tripStateStore.activeTrip.first() }
@@ -207,13 +203,20 @@ class LocationTrackingService : Service() {
             postNotification()
         } catch (e: SecurityException) {
             // Background restart without ACCESS_BACKGROUND_LOCATION granted — the spec's degraded
-            // path. Drop out of foreground state but keep the service (and its notification) alive;
-            // MainActivity calls ServiceController.startTracking() again while it is in the foreground.
+            // path. Drop out of foreground state but keep the service alive; MainActivity calls
+            // ServiceController.startTracking() again while it is in the foreground.
             Log.w(TAG, "Missing location permission for background restart; entering degraded mode", e)
             locationUpdatesActive = false
-            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
-            notification.postIfPermitted(notification.buildResumeNotification())
+            askToResume()
         }
+    }
+
+    // The ongoing notification goes with the foreground status, and "Reports paused", under an id of
+    // its own, takes its place. After a refused restart Android still holds the killed service's
+    // notification on it, so this also takes that down rather than leave "Reporting" showing.
+    private fun askToResume() {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        notification.postResumeIfPermitted()
     }
 
     private fun observeTrackingState() {
@@ -231,7 +234,7 @@ class LocationTrackingService : Service() {
 
     private fun postNotification() {
         if (!locationUpdatesActive) return
-        notification.postIfPermitted(activeNotification())
+        notification.postActiveIfPermitted(activeNotification())
     }
 
     private fun activeNotification(): Notification {
