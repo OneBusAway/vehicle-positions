@@ -34,7 +34,7 @@ enum RouteLineColors {
     /// streets whatever its colour: ink under a bright route, white under a
     /// dark one, with the design's cut-off for each map.
     static func casing(line: RGB, dark: Bool) -> RGB {
-        let luminance = luminance(line)
+        let luminance = line.luminance
         if dark {
             return luminance > darkMapDarkCasingAbove ? nightInk : white
         }
@@ -48,25 +48,11 @@ enum RouteLineColors {
         let (hue, saturation, start) = hsl(color)
         var lightness = start
         var lifted = color
-        while contrast(lifted, nightBackground) < nightContrast && lightness < 1 {
+        while lifted.contrast(with: nightBackground) < nightContrast && lightness < 1 {
             lightness = min(lightness + lightnessStep, 1)
             lifted = fromHSL(hue: hue, saturation: saturation, lightness: lightness)
         }
         return lifted
-    }
-
-    /// WCAG relative luminance, with the cut-off Android uses.
-    static func luminance(_ color: RGB) -> Double {
-        func linear(_ channel: Double) -> Double {
-            channel <= 0.03928 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * linear(color.red) + 0.7152 * linear(color.green) + 0.0722 * linear(color.blue)
-    }
-
-    /// WCAG contrast ratio, 1 to 21.
-    static func contrast(_ a: RGB, _ b: RGB) -> Double {
-        let la = luminance(a), lb = luminance(b)
-        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
     }
 
     private static func hsl(_ color: RGB) -> (hue: Double, saturation: Double, lightness: Double) {
