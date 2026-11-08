@@ -794,6 +794,35 @@ again, so after a force-stop, even a reboot leaves the trip waiting for
 with notifications refused, **Reports paused** cannot be shown, so nothing
 tells the driver until they open the app.
 
+### Check 4d: Taking away "all the time" during a trip
+
+Taking background location away kills the app, and Android starts the tracking
+service again by itself. From Android 14, Android can refuse that restart
+location access, as it does after a reboot or an update restarted reporting
+(Check 4c). The app then posts **Reports paused** and stops the service.
+
+1. With the trip reporting after an update as in Check 4c step 2, and the app
+   not opened since, take background location away (the same as choosing
+   **Allow only while using the app** in Android's settings for the app):
+
+   ```bash
+   adb shell pm revoke org.onebusaway.vehicletracker android.permission.ACCESS_BACKGROUND_LOCATION
+   adb logcat -d -s LocationTrackingService
+   ```
+
+**Expected outcome:** within a few seconds the log shows
+`Android refused the tracking service a permission it needs`, once. The app
+has not crashed (`adb logcat -d -b crash` shows nothing from it), no service is
+running (`adb shell dumpsys activity services LocationTrackingService` is
+empty), and **Reports paused**, "Open the app to keep reporting.", has made a
+sound. Tapping it opens **Resume your trip?**, and **Resume trip** brings the
+reports back with location only while using the app, with no second
+`POST /api/v1/trips/start`.
+
+For a trip started or resumed in the app, Android 16 lets the restart keep
+location and reports carry on; Android may refuse it on other versions, which
+ends as above. Nothing crashes either way.
+
 ### Check 5 — Ending the trip stops everything and the vehicle drops from the feed
 
 1. Reopen the app (if not already open) and tap **End trip** on the trip bar.
