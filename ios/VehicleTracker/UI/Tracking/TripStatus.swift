@@ -204,7 +204,7 @@ struct TripStatus: Equatable {
                 answer: .offSchedule,
                 card: Card(tone: tone, symbol: "calendar.badge.exclamationmark", answer: deviation,
                            label: TripStatusText.offSchedule, emphasis: TripStatusText.rightRun,
-                           line2: TripStatusText.offScheduleNext(name: stop.name, time: time)),
+                           line2: TripStatusText.nextStopAndTime(name: stop.name, time: time)),
                 sentence: TripStatusText.spokenOffSchedule(deviation, name: stop.name, time: time),
                 vehicleRowStatus: deviation
             )

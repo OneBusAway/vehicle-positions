@@ -38,8 +38,10 @@ targets:
       - path: CarPlay
       - path: Resources
       - path: Shared
+      - path: LiveActivity
     dependencies:
       - package: VehiclePositionsKit
+      - target: VehicleTrackerWidgets
     preBuildScripts:
       - name: Check DEFAULT_SERVER_URL
         basedOnDependencyAnalysis: false
@@ -70,6 +72,7 @@ targets:
         NSLocationTemporaryUsageDescriptionDictionary:
           TripReporting: Precise location puts the vehicle on the right street on riders' maps.
         UIBackgroundModes: [location]
+        NSSupportsLiveActivities: true
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         UIApplicationSceneManifest:
@@ -84,6 +87,29 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: YES
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+
+  VehicleTrackerWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+      - path: Shared
+      - path: Resources/Assets.xcassets
+    info:
+      path: WidgetsInfo.plist
+      properties:
+        CFBundleDisplayName: OBA Vehicle Tracker
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.onebusaway.vehicletracker.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        APPLICATION_EXTENSION_API_ONLY: YES
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: YES
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
 

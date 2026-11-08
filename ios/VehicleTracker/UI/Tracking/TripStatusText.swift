@@ -1,8 +1,9 @@
 import Foundation
 
-/// Every word the Tracking screen and CarPlay's Tracking templates show, in
-/// Android's words (`res/values/strings.xml`, `tracking_*`) with "vehicle" for
-/// "bus". One place for all of them, so the phone and the car cannot differ.
+/// Every word the Tracking screen, CarPlay's Tracking templates and the Live
+/// Activity show, in Android's words (`res/values/strings.xml`, `tracking_*`)
+/// with "vehicle" for "bus". One place for all of them, so the phone, the car
+/// and the Lock Screen cannot differ.
 enum TripStatusText {
     // MARK: The status card
 
@@ -65,13 +66,16 @@ enum TripStatusText {
         String(localized: "From", comment: "Status card line 1 while waiting for GPS, before the trip's first stop.")
     }
 
-    /// Two facts on one line: "7:18 AM · 232 m", or "6:58 AM · 4317".
+    /// Two facts on one line: "7:18 AM · 232 m", "6:58 AM · 4317", or "Off
+    /// schedule · Next ST2 · 8:05 AM".
     static func pair(_ first: String, _ second: String) -> String {
-        String(localized: "\(first) · \(second)", comment: "Two facts on one line: a stop's scheduled time then the distance to it, or the run's start time then the vehicle.")
+        String(localized: "\(first) · \(second)", comment: "Two facts on one line: a stop's scheduled time then the distance to it, the run's start time then the vehicle, or 'Off schedule' then the next stop and its time.")
     }
 
-    static func offScheduleNext(name: String, time: String) -> String {
-        String(localized: "Next \(name) · \(time)", comment: "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.")
+    /// The next stop and when it is due: status card line 2 while off
+    /// schedule, and the Live Activity's next-stop line.
+    static func nextStopAndTime(name: String, time: String) -> String {
+        String(localized: "Next \(name) · \(time)", comment: "The next stop's name, then its scheduled time in the agency's zone: status card line 2 while off schedule, and the Live Activity's second line.")
     }
 
     static func runVehicle(time: String, vehicle: String) -> String {
@@ -330,5 +334,32 @@ enum TripStatusText {
 
     static var endOnThisPhone: String {
         String(localized: "End on this phone", comment: "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: stop reporting now; the end is sent before the driver's next start.")
+    }
+
+    // MARK: The Live Activity
+
+    /// What a location problem's line says on the Live Activity, in place of
+    /// "Tap Resume" or "Tap to fix": a Live Activity can't take the tap, and
+    /// the car can't open Settings (Android's resume notification).
+    static var openTheAppToKeepReporting: String {
+        String(localized: "Open the app to keep reporting.", comment: "Live Activity: what to do about a location problem, which can only be fixed in the app.")
+    }
+
+    static var openTheAppToSignIn: String {
+        String(localized: "Open the app to sign in.", comment: "Live Activity, under 'Signed out': the sign-in expired and reports have stopped until the driver signs in again.")
+    }
+
+    /// The minutes off schedule in the compact Dynamic Island: "6 min".
+    static func minutesShort(_ minutes: Int) -> String {
+        String(localized: "\(minutes) min", comment: "Live Activity, the compact Dynamic Island: whole minutes late or early, beside the status symbol.")
+    }
+
+    /// The Live Activity in one sentence: "Route 7 to Downtown Seattle. On
+    /// time. Next stop 3rd Ave and Seneca St, 7:18 AM".
+    static func spokenLiveActivity(route: String, headsign: String, status: String) -> String {
+        if route.isEmpty {
+            return String(localized: "\(headsign). \(status)", comment: "VoiceOver: the Live Activity in one sentence for a route with no short name: the headsign, then the status card's or the problem's sentence.")
+        }
+        return String(localized: "Route \(route) to \(headsign). \(status)", comment: "VoiceOver: the Live Activity in one sentence: the route's short name, the headsign, then the status card's or the problem's sentence.")
     }
 }
