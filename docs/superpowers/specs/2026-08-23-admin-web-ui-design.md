@@ -185,8 +185,12 @@ received_at}, …]}` ordered by `received_at ASC`, capped at 10,000 points.
 `trips.id` reference, so trails are derived instead from columns the server
 controls: points where `vehicle_id = trips.vehicle_id` AND `driver_id =
 trips.user_id::text` (`driver_id` is set server-side from the JWT `sub`)
-AND `received_at` between `trips.start_time` and
-`COALESCE(trips.end_time, NOW())`. The partial unique index
+AND, for a live point (received within five minutes of its `timestamp`),
+`received_at` between `trips.start_time` and
+`COALESCE(trips.end_time, NOW())` and `timestamp` (whole seconds) no
+earlier than the second `trips.start_time` falls in. A backlog point
+(received later than that, through `POST /api/v1/locations/history`) is
+placed by `timestamp` alone, within the same window. The partial unique index
 `idx_trips_one_active_per_user` makes this window exact per driver. The
 existing `idx_location_points_vehicle_received_at (vehicle_id,
 received_at DESC)` index covers the query; **no new index or ingest-path
