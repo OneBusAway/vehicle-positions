@@ -195,7 +195,7 @@ class RepositoriesTest {
     private val startedTrip9 =
         """{"id":9,"user_id":1,"vehicle_id":"bus-1","route_id":"5","gtfs_trip_id":"","start_time":"2026-08-04T08:30:00Z","status":"active"}"""
 
-    @Test fun `trip start records the signed-in driver on the trip`() = runTest {
+    @Test fun `trip start records the signed-in driver and server on the trip`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(201).setBody(startedTrip9))
         val store = FakeTripStateStore()
@@ -204,6 +204,7 @@ class RepositoriesTest {
         assertTrue(repo.start("bus-1", "5", "", "20260804").isSuccess)
 
         assertEquals("2", store.activeTrip.first()?.driverId)
+        assertEquals("http://localhost/", store.activeTrip.first()?.serverUrl)
         server.shutdown()
     }
 

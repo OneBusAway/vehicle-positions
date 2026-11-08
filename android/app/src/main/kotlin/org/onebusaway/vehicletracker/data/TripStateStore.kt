@@ -29,7 +29,15 @@ data class ActiveTrip(
     val startedAtEpochSec: Long,
     /** The driver who started the trip ([Session.driverId]); null for a trip saved before drivers were recorded. */
     val driverId: String? = null,
-)
+    /** The server the trip was started on; null for a trip saved before servers were recorded. Read through [server]. */
+    val serverUrl: String? = null,
+) {
+    /**
+     * The server this trip is open on. A trip saved before servers were recorded is taken to be on [sessionServer], the
+     * one the phone last signed in to, as the builds before did; null when the phone knows neither.
+     */
+    fun server(sessionServer: String?): String? = serverUrl ?: sessionServer
+}
 
 /**
  * A trip ended on this phone only, whose end the server has not confirmed. [driverId] is the
@@ -96,6 +104,7 @@ class DataStoreTripStateStore(
         val TRIP_START_DATE = stringPreferencesKey("trip_start_date")
         val TRIP_STARTED_AT = longPreferencesKey("trip_started_at")
         val TRIP_DRIVER_ID = stringPreferencesKey("trip_driver_id")
+        val TRIP_SERVER_URL = stringPreferencesKey("trip_server_url")
 
         /** A JSON list of [UnconfirmedEnd], oldest first. */
         val UNCONFIRMED_ENDS = stringPreferencesKey("unconfirmed_ends")
@@ -133,6 +142,7 @@ class DataStoreTripStateStore(
                 startDate = prefs[Keys.TRIP_START_DATE] ?: serviceDate(startedAt, zone),
                 startedAtEpochSec = startedAt,
                 driverId = prefs[Keys.TRIP_DRIVER_ID],
+                serverUrl = prefs[Keys.TRIP_SERVER_URL],
             )
         } else {
             null
@@ -157,6 +167,11 @@ class DataStoreTripStateStore(
                 prefs[Keys.TRIP_DRIVER_ID] = trip.driverId
             } else {
                 prefs.remove(Keys.TRIP_DRIVER_ID)
+            }
+            if (trip.serverUrl != null) {
+                prefs[Keys.TRIP_SERVER_URL] = trip.serverUrl
+            } else {
+                prefs.remove(Keys.TRIP_SERVER_URL)
             }
         }
     }
@@ -220,6 +235,7 @@ class DataStoreTripStateStore(
         remove(Keys.TRIP_START_DATE)
         remove(Keys.TRIP_STARTED_AT)
         remove(Keys.TRIP_DRIVER_ID)
+        remove(Keys.TRIP_SERVER_URL)
         remove(Keys.LEGACY_LOCATION_TRIP_ID)
     }
 

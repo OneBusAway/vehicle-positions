@@ -58,7 +58,7 @@ class ServiceControllerImplTest {
         val provider = TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) }
         val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), FakeSessionStore(), clock = { 0L })
         val tripEnder = TripEnder(tripRepository, tripState, geometryStore, serviceController, signedInAs("2"))
-        val vm = ResumeShiftViewModel(tripState, geometryStore, serviceController, tripEnder, clock = { 0L }, phoneZone = ZoneOffset.UTC)
+        val vm = ResumeShiftViewModel(tripState, geometryStore, FakeSessionStore(), serviceController, tripEnder, clock = { 0L }, phoneZone = ZoneOffset.UTC)
         vm.uiState.first { it.trip == trip }
         return vm
     }

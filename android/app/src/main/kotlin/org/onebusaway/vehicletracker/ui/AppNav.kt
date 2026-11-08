@@ -284,8 +284,11 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
             ClearOfSystemBars {
                 LoginScreen(
                     onLoginSuccess = {
-                        // Trip state was never cleared; just return to the still-active Tracking screen.
-                        navController.popBackStack(ROUTE_TRACKING, /* inclusive = */ false)
+                        // Trip state was never cleared; back to the still-active Tracking screen, or to Resume when
+                        // that is where the sign-in was asked for.
+                        if (!navController.popBackStack(ROUTE_TRACKING, /* inclusive = */ false)) {
+                            navController.popBackStack(ROUTE_RESUME, /* inclusive = */ false)
+                        }
                     },
                 )
             }
@@ -364,6 +367,7 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                             popUpTo(ROUTE_RESUME) { inclusive = true }
                         }
                     },
+                    onSignInFirst = dropUnlessResumed { navController.navigate(ROUTE_LOGIN_REAUTH) },
                     // Not a tap: the server confirms the end, perhaps after the driver has locked the phone.
                     onEnded = {
                         navController.navigate(ROUTE_VEHICLES) {

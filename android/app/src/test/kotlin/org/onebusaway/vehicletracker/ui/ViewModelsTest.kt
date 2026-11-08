@@ -811,6 +811,19 @@ class ViewModelsTest {
         assertEquals("maria@metro.example", vm.email.text.toString())
     }
 
+    @Test fun `signing in again after a restore from backup goes to the trip's server`() = runTest(dispatcher) {
+        // The backup kept the trip and its server, but not the session.
+        val vm = loginViewModel(
+            tripState = FakeTripStateStore().apply { tripState.value = t1Trip.copy(serverUrl = "https://trip.example.org/") },
+            again = true,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("https://trip.example.org/", vm.server.text.toString())
+        assertEquals("https://trip.example.org/", vm.uiState.value.savedServer)
+        assertFalse("a line, not for changing during the trip", vm.uiState.value.showsServerField)
+    }
+
     @Test fun `signing in again with no schedule on the phone names the route by its id`() = runTest(dispatcher) {
         val vm = loginViewModel(tripState = FakeTripStateStore().apply { tripState.value = t1Trip }, again = true)
         dispatcher.scheduler.advanceUntilIdle()
@@ -2331,6 +2344,8 @@ class ViewModelsTest {
     private fun withResumeShiftViewModel(
         endResponses: List<MockResponse> = listOf(MockResponse().setBody("""{"status":"trip ended"}""")),
         geometry: TripGeometry? = TripFixtures.t1,
+        trip: ActiveTrip = t1Trip,
+        sessions: SessionStore = FakeSessionStore(),
         block: (ResumeFixture) -> Unit,
     ) {
         val server = MockWebServer().apply { start() }
@@ -2341,13 +2356,13 @@ class ViewModelsTest {
                 apiCalls.incrementAndGet()
                 ApiFactory { "jwt" }.create(server.url("/").toString())
             }
-            val tripState = FakeTripStateStore().apply { tripState.value = t1Trip }
+            val tripState = FakeTripStateStore().apply { tripState.value = trip }
             val geometryStore = FakeTripGeometryStore().apply { stored = geometry }
             val serviceController = FakeServiceController()
             val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), FakeSessionStore(), clock = { 0L })
             val tripEnder = TripEnder(tripRepository, tripState, geometryStore, serviceController, signedInAs("2"))
             val now = t1Trip.startedAtEpochSec + 2 * 3600 + 5 * 60
-            val vm = ResumeShiftViewModel(tripState, geometryStore, serviceController, tripEnder, clock = { now }, phoneZone = ZoneOffset.UTC)
+            val vm = ResumeShiftViewModel(tripState, geometryStore, sessions, serviceController, tripEnder, clock = { now }, phoneZone = ZoneOffset.UTC)
             awaitCondition(description = "stored trip loaded") { vm.uiState.value.card != null }
             block(ResumeFixture(vm, server, apiCalls, tripState, geometryStore, serviceController))
         } finally {
@@ -2396,7 +2411,7 @@ class ViewModelsTest {
     @Test fun resume_startsTheServiceAndMakesNoServerCall() = runTest(dispatcher) {
         withResumeShiftViewModel { f ->
             var resumed = false
-            f.vm.onResumeShift { resumed = true }
+            f.vm.onResumeShift(onResumed = { resumed = true }, onSignInFirst = { fail("an older build's trip is on the saved server") })
             dispatcher.scheduler.advanceUntilIdle()
 
             assertTrue(resumed)
@@ -2407,6 +2422,31 @@ class ViewModelsTest {
             assertEquals(0, f.server.requestCount)
             assertEquals(t1Trip, f.tripState.tripState.value)
             assertEquals(TripFixtures.t1, f.geometryStore.stored)
+        }
+    }
+
+    @Test fun `resuming a trip restored from backup asks for its server first`() = runTest(dispatcher) {
+        // The backup kept the trip and its server, but not the session: reports would have nowhere to go.
+        withResumeShiftViewModel(trip = t1Trip.copy(serverUrl = "https://trip.example.org/")) { f ->
+            var signInFirst = false
+            f.vm.onResumeShift(onResumed = { fail("must not report before signing in to the trip's server") }, onSignInFirst = { signInFirst = true })
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(signInFirst)
+            assertEquals(0, f.serviceController.startCount)
+        }
+    }
+
+    @Test fun `resuming on the trip's own server starts the service`() = runTest(dispatcher) {
+        // Saved without the slash, as a build before #188 saved a typed address.
+        val sessions = FakeSessionStore().apply { state.value = Session("https://trip.example.org", jwtFor("2"), 0L) }
+        withResumeShiftViewModel(trip = t1Trip.copy(serverUrl = "https://trip.example.org/"), sessions = sessions) { f ->
+            var resumed = false
+            f.vm.onResumeShift(onResumed = { resumed = true }, onSignInFirst = { fail("signed in to the trip's server already") })
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertTrue(resumed)
+            assertEquals(1, f.serviceController.startCount)
         }
     }
 

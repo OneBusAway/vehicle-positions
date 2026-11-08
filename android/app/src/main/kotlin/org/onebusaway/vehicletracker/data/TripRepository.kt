@@ -35,9 +35,9 @@ class TripRepository @Inject constructor(
         gtfsTripId: String,
         serviceDate: String,
     ): Result<ActiveTrip> {
-        val driverId = sessionStore.session.first().driverId
-        endUnconfirmedTrips(driverId).onFailure { return Result.failure(it) }
-        return startTrip(vehicleId, routeId, gtfsTripId, serviceDate, driverId)
+        val session = sessionStore.session.first()
+        endUnconfirmedTrips(session.driverId).onFailure { return Result.failure(it) }
+        return startTrip(vehicleId, routeId, gtfsTripId, serviceDate, session.driverId, session.serverUrl)
     }
 
     private suspend fun startTrip(
@@ -46,6 +46,7 @@ class TripRepository @Inject constructor(
         gtfsTripId: String,
         serviceDate: String,
         driverId: String?,
+        serverUrl: String?,
     ): Result<ActiveTrip> = try {
         val cleanedTripId = gtfsTripId.trim()
         val cleanedRouteId = routeId.trim()
@@ -59,6 +60,7 @@ class TripRepository @Inject constructor(
             startDate = serviceDate,
             startedAtEpochSec = startedAt,
             driverId = driverId,
+            serverUrl = serverUrl,
         )
         tripStateStore.saveActiveTrip(activeTrip)
         recordLocally("recent route") { tripStateStore.addRecentRoute(cleanedRouteId) }

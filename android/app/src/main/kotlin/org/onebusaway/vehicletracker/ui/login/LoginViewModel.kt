@@ -67,7 +67,10 @@ data class LoginUiState(
     val openTrip: RouteBadgeModel? = null,
     /** The email this phone last signed in with; null before its first sign-in, or when an older build signed in. */
     val savedEmail: String? = null,
-    /** The server this phone last signed in to; null before its first sign-in. */
+    /**
+     * The server this phone last signed in to, or when signing in [again], the open trip's, which a phone restored from
+     * backup knows without a session. Null before the first sign-in.
+     */
     val savedServer: String? = null,
     /** The server the agency's device management sets, which the driver can't change. Never when signing in [again]. */
     val managedServer: String? = null,
@@ -127,7 +130,8 @@ class LoginViewModel @Inject constructor(
         // started typing.
         viewModelScope.launch {
             val session = sessionStore.session.first()
-            val saved = session.serverUrl?.takeIf { it.isNotBlank() }
+            val openTrip = if (_uiState.value.again) tripStateStore.activeTrip.first() else null
+            val saved = (openTrip?.server(session.serverUrl) ?: session.serverUrl)?.takeIf { it.isNotBlank() }
             if (saved != null) {
                 if (server.text.isEmpty()) server.setTextAndPlaceCursorAtEnd(saved)
                 _uiState.update { it.copy(savedServer = saved) }
@@ -147,8 +151,8 @@ class LoginViewModel @Inject constructor(
                 _uiState.update { it.copy(openTrip = route) }
             }
         } else {
-            // Kept in step while Sign in shows, as is a setup link the driver agrees to. Not when signing in again: the
-            // open trip is on the saved server.
+            // Kept in step while Sign in shows, as is a setup link the driver agrees to. Not when signing in again: that is
+            // to the open trip's server.
             viewModelScope.launch { managedServerSource.server.collect(::useManaged) }
             viewModelScope.launch { serverSetup.linkedServer.filterNotNull().collect(::useLinked) }
         }
