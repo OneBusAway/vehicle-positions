@@ -16,7 +16,10 @@ import OSLog
 /// sent, another request has refreshed in the meantime, and the caller gets
 /// the new token without a call to the server. Only within one sign-in,
 /// though: once another driver has signed in, the caller's request is still
-/// the driver's before, and is never sent with the new driver's token.
+/// the driver's before, and is never sent with the new driver's token. Nor
+/// the other way round: a trade still out for the driver before is not the
+/// new driver's to join, so the new driver's request waits for it to finish
+/// and then starts again from the store.
 actor TokenRefresher {
     /// What the server said to a refresh token.
     nonisolated enum RefreshReply: Sendable, Equatable {
@@ -46,7 +49,8 @@ actor TokenRefresher {
 
     private let tokens: any TokenStoring
     private let now: @Sendable () -> Date
-    private var inFlight: Task<Outcome, Never>?
+    /// The trade running now, and the sign-in it was started for.
+    private var inFlight: (signInID: UUID?, task: Task<Outcome, Never>)?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "token-refresher")
 
     init(tokens: any TokenStoring, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -59,9 +63,10 @@ actor TokenRefresher {
     /// the 401 reaches the caller as it did before refresh: the driver is
     /// asked to sign in, and the trip's record stays.
     func afterUnauthorized(failedToken: String, signInID: UUID?, refresh: @escaping Refresh) async -> Outcome {
-        // Nothing is awaited from reading the store to setting `inFlight`: at
-        // an await the actor takes the next caller, which would find no
-        // refresh running and start a second one.
+        // Nothing is awaited from reading the store to joining or setting
+        // `inFlight`: at an await the actor takes the next caller, which would
+        // find no refresh running and start a second one. Waiting out another
+        // sign-in's trade is the one exception, and starts again from the read.
         let stored: StoredToken?
         do {
             stored = try tokens.load()
@@ -73,11 +78,15 @@ actor TokenRefresher {
         if stored.token != failedToken { return .retry(stored.token) }
         let task: Task<Outcome, Never>
         if let inFlight {
-            task = inFlight
+            guard inFlight.signInID == signInID else {
+                _ = await inFlight.task.value
+                return await afterUnauthorized(failedToken: failedToken, signInID: signInID, refresh: refresh)
+            }
+            task = inFlight.task
         } else {
             guard let refreshToken = stored.refreshToken else { return .refused }
             task = Task { await trade(refreshToken, refresh: refresh) }
-            inFlight = task
+            inFlight = (signInID, task)
         }
         let outcome = await task.value
         // Also when the refused refresh was an early one this request joined,
@@ -101,17 +110,21 @@ actor TokenRefresher {
     /// and a failure reported.
     func beforeExpiry(observedToken: String, signInID: UUID?, refresh: @escaping Refresh) async -> String {
         // As in `afterUnauthorized`, nothing is awaited until a refresh has
-        // been joined or started.
+        // been joined or started, or another sign-in's trade is waited out.
         guard let stored = try? tokens.load(), stored.signInID == signInID else { return observedToken }
         // A token another request has just refreshed is not due.
         if stored.token != observedToken { return stored.token }
         let task: Task<Outcome, Never>
         if let inFlight {
-            task = inFlight
+            guard inFlight.signInID == signInID else {
+                _ = await inFlight.task.value
+                return await beforeExpiry(observedToken: observedToken, signInID: signInID, refresh: refresh)
+            }
+            task = inFlight.task
         } else {
             guard isRefreshDue(stored), let refreshToken = stored.refreshToken else { return observedToken }
             task = Task { await trade(refreshToken, refresh: refresh) }
-            inFlight = task
+            inFlight = (signInID, task)
         }
         if case .retry(let renewed) = await task.value { return renewed }
         return observedToken

@@ -135,6 +135,68 @@ import Testing
         #expect(try store.load() == newSession)
     }
 
+    // MARK: Across a sign-in
+
+    let nextSignIn = UUID()
+    let nextRenewed = AuthTokens(accessToken: "b2", refreshToken: "rb2", expiresIn: 900)
+
+    /// The next driver, signed in with b1 and rb1 while a refresh for the
+    /// driver before was out.
+    var nextDriver: StoredToken {
+        StoredToken(token: "b1", issuedAt: now, refreshToken: "rb1", expiresAt: now.addingTimeInterval(900), signInID: nextSignIn)
+    }
+
+    /// What a refresh of the next driver's token saves.
+    var nextRenewedInItsSignIn: StoredToken {
+        var token = StoredToken(nextRenewed, receivedAt: now)
+        token.signInID = nextSignIn
+        return token
+    }
+
+    /// #285: the driver before's refresh is out when the next driver gets a
+    /// 401 on a new token. Joined, its reply would send the next driver's
+    /// request with the driver before's token.
+    @Test func a401AfterASignInNeverGetsTheDriverBeforesRefreshedToken() async throws {
+        let store = ScriptedTokenStore(signedIn)
+        let refresher = refresher(store)
+        let refresh = ScriptedRefresh()
+        let nextRefresh = ScriptedRefresh(answering: .issued(nextRenewed))
+        async let before = refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
+        #expect(await eventually { refresh.presented.count == 1 })
+        try store.save(nextDriver)
+        async let next = refresher.afterUnauthorized(failedToken: "b1", signInID: nextSignIn, refresh: nextRefresh.call)
+        #expect(await eventually { store.loads == 2 })
+        #expect(nextRefresh.presented.isEmpty, "one trade at a time")
+        refresh.answer(.issued(renewed))
+
+        #expect(await before == .retry("a2"))
+        #expect(await next == .retry("b2"))
+        #expect(refresh.presented == ["r1"])
+        #expect(nextRefresh.presented == ["rb1"])
+        #expect(try store.load() == nextRenewedInItsSignIn)
+        #expect(try store.load()?.signInID == nextSignIn)
+    }
+
+    /// The server refusing the driver before's refresh token says nothing
+    /// about the next driver's, which a joined 401 would drop.
+    @Test func aRefusedRefreshForTheDriverBeforeKeepsTheNextDriversRefreshToken() async throws {
+        let store = ScriptedTokenStore(signedIn)
+        let refresher = refresher(store)
+        let refresh = ScriptedRefresh()
+        let nextRefresh = ScriptedRefresh(answering: .unreachable("offline"))
+        async let before = refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
+        #expect(await eventually { refresh.presented.count == 1 })
+        try store.save(nextDriver)
+        async let next = refresher.afterUnauthorized(failedToken: "b1", signInID: nextSignIn, refresh: nextRefresh.call)
+        #expect(await eventually { store.loads == 2 })
+        refresh.answer(.refused)
+
+        #expect(await before == .refused)
+        #expect(await next == .unreachable("offline"))
+        #expect(nextRefresh.presented == ["rb1"])
+        #expect(try store.load() == nextDriver)
+    }
+
     // MARK: Before expiry
 
     /// Signed in with a1 and r1, thirty seconds from expiry: a refresh is due.
@@ -220,5 +282,55 @@ import Testing
         var dropped = aboutToExpire
         dropped.refreshToken = nil
         #expect(try store.load() == dropped)
+    }
+
+    /// The next driver's token, thirty seconds from expiry: a refresh is due.
+    var nextDriverAboutToExpire: StoredToken {
+        StoredToken(token: "b1", issuedAt: now.addingTimeInterval(-870), refreshToken: "rb1", expiresAt: now.addingTimeInterval(30),
+                    signInID: nextSignIn)
+    }
+
+    /// #285 before a request: the next driver's request never goes out with
+    /// the token of an early refresh made for the driver before.
+    @Test func anEarlyRefreshAfterASignInNeverGetsTheDriverBeforesToken() async throws {
+        let store = ScriptedTokenStore(aboutToExpire)
+        let refresher = refresher(store)
+        let refresh = ScriptedRefresh()
+        let nextRefresh = ScriptedRefresh(answering: .issued(nextRenewed))
+        async let before = refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call)
+        #expect(await eventually { refresh.presented.count == 1 })
+        try store.save(nextDriverAboutToExpire)
+        async let next = refresher.beforeExpiry(observedToken: "b1", signInID: nextSignIn, refresh: nextRefresh.call)
+        #expect(await eventually { store.loads == 2 })
+        #expect(nextRefresh.presented.isEmpty, "one trade at a time")
+        refresh.answer(.issued(renewed))
+
+        #expect(await before == "a2")
+        #expect(await next == "b2")
+        #expect(refresh.presented == ["r1"])
+        #expect(nextRefresh.presented == ["rb1"])
+        #expect(try store.load() == nextRenewedInItsSignIn)
+        #expect(try store.load()?.signInID == nextSignIn)
+    }
+
+    /// An early refresh never drops a refresh token, so here the cost of
+    /// joining a refused one for the driver before is the next driver's own
+    /// refresh, skipped though rb1 is due and still good.
+    @Test func aRefusedEarlyRefreshForTheDriverBeforeLeavesTheNextDriversRefreshDue() async throws {
+        let store = ScriptedTokenStore(aboutToExpire)
+        let refresher = refresher(store)
+        let refresh = ScriptedRefresh()
+        let nextRefresh = ScriptedRefresh(answering: .issued(nextRenewed))
+        async let before = refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call)
+        #expect(await eventually { refresh.presented.count == 1 })
+        try store.save(nextDriverAboutToExpire)
+        async let next = refresher.beforeExpiry(observedToken: "b1", signInID: nextSignIn, refresh: nextRefresh.call)
+        #expect(await eventually { store.loads == 2 })
+        refresh.answer(.refused)
+
+        #expect(await before == "a1")
+        #expect(await next == "b2")
+        #expect(nextRefresh.presented == ["rb1"])
+        #expect(try store.load() == nextRenewedInItsSignIn)
     }
 }
