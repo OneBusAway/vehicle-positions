@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import UIKit
 
 /// Text the driver reads at a glance. Every string here is short on purpose.
@@ -84,16 +83,6 @@ extension URL {
     static var appSettings: URL {
         // A constant iOS defines; it always parses.
         URL(string: UIApplication.openSettingsURLString)!
-    }
-}
-
-extension Color {
-    /// A GTFS route colour: six hex digits, with or without a leading '#'.
-    /// One parser, in `UIColor`, so the badge and the map cannot disagree
-    /// about what a feed's colour means.
-    init?(hex: String) {
-        guard let ui = UIColor(hex: hex) else { return nil }
-        self.init(uiColor: ui)
     }
 }
 
