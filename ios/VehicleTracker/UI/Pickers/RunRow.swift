@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// One departure on the board (DESIGN-iOS §4.4, Android's `RunRow`): the
-/// start time big, where it goes under it, and the Now or Next tag. While a
-/// start is in flight the run being started shows a spinner and the rest
-/// dim and ignore taps. Equatable over what it shows, so a minute tick
-/// redraws only the rows whose tag, dimming or place changed.
+/// start time big, where it goes under it, its run number and block when the
+/// feed gives them, and the Now or Next tag. While a start is in flight the
+/// run being started shows a spinner and the rest dim and ignore taps.
+/// Equatable over what it shows, so a minute tick redraws only the rows whose
+/// tag, dimming or place changed.
 struct RunRow: View, Equatable {
     let run: BoardRun
     let timezone: String
@@ -27,6 +28,12 @@ struct RunRow: View, Equatable {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if let label = run.label.text {
+                        Text(label)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 0)
                 if starting {

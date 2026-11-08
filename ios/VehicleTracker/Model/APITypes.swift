@@ -41,6 +41,10 @@ nonisolated struct TripSummary: Sendable, Codable, Equatable, Identifiable, Hash
     var endsAt: Date
     var firstStop: String
     var lastStop: String
+    /// The run or train number (GTFS's `trip_short_name`), "" when the feed gives none.
+    var shortName: String = ""
+    /// The block the run belongs to (GTFS's `block_id`), "" when the feed gives none.
+    var blockID: String = ""
 
     private enum CodingKeys: String, CodingKey {
         case id, headsign
@@ -49,6 +53,26 @@ nonisolated struct TripSummary: Sendable, Codable, Equatable, Identifiable, Hash
         case endsAt = "ends_at"
         case firstStop = "first_stop"
         case lastStop = "last_stop"
+        case shortName = "short_name"
+        case blockID = "block_id"
+    }
+}
+
+extension TripSummary {
+    /// In an extension, so the memberwise initializer stays. A server older
+    /// than #185 sends neither `short_name` nor `block_id`, and its runs
+    /// decode with both "".
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        headsign = try container.decode(String.self, forKey: .headsign)
+        directionID = try container.decodeIfPresent(Int.self, forKey: .directionID)
+        startsAt = try container.decode(Date.self, forKey: .startsAt)
+        endsAt = try container.decode(Date.self, forKey: .endsAt)
+        firstStop = try container.decode(String.self, forKey: .firstStop)
+        lastStop = try container.decode(String.self, forKey: .lastStop)
+        shortName = try container.decodeIfPresent(String.self, forKey: .shortName) ?? ""
+        blockID = try container.decodeIfPresent(String.self, forKey: .blockID) ?? ""
     }
 }
 
