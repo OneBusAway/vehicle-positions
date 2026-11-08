@@ -539,6 +539,36 @@ class RepositoriesTest {
         server.shutdown()
     }
 
+    @Test fun `catalog trips read each run's number and block`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(
+            MockResponse().setBody(
+                """{"route_id":"R1","service_date":"20260922","timezone":"Africa/Nairobi","trips":[""" +
+                    """{"id":"T1","headsign":"North","short_name":"1503","block_id":"599-20","direction_id":null,""" +
+                    """"starts_at":"2026-09-22T07:02:00+03:00","ends_at":"2026-09-22T07:40:00+03:00",""" +
+                    """"first_stop":"Stop ST1","last_stop":"Stop ST3"}]}""",
+            ),
+        )
+
+        val trip = catalogFor(server).trips("R1").getOrThrow().trips.single()
+
+        assertEquals("1503", trip.shortName)
+        assertEquals("599-20", trip.blockId)
+        server.shutdown()
+    }
+
+    @Test fun `catalog trips from a server without run numbers or blocks still load, with both empty`() = runTest {
+        val server = MockWebServer().apply { start() }
+        // What a server from before #232 sends: neither field.
+        server.enqueue(MockResponse().setBody(oneTripJson))
+
+        val trip = catalogFor(server).trips("R1").getOrThrow().trips.single()
+
+        assertEquals("", trip.shortName)
+        assertEquals("", trip.blockId)
+        server.shutdown()
+    }
+
     @Test fun `catalog trips percent-encode a route id containing a slash and a space`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody(oneTripJson))

@@ -113,6 +113,7 @@ import org.onebusaway.vehicletracker.ui.runs.Board
 import org.onebusaway.vehicletracker.ui.runs.BoardRun
 import org.onebusaway.vehicletracker.ui.runs.RunDirection
 import org.onebusaway.vehicletracker.ui.runs.RunHighlight
+import org.onebusaway.vehicletracker.ui.runs.RunLabel
 import org.onebusaway.vehicletracker.ui.runs.RunPage
 import org.onebusaway.vehicletracker.ui.runs.RunsScreenContent
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
@@ -1376,10 +1377,10 @@ class ScreenFlowTest {
 
     /** Twenty inbound runs, every quarter hour from 5:00, the ninth under way. */
     private val inbound = (0 until 20).map { n ->
-        BoardRun("in$n", "%d:%02d".format(5 + n / 4, n % 4 * 15), "Downtown Seattle", past = n < 8, highlight = if (n == 8) RunHighlight.NOW else null)
+        BoardRun("in$n", "%d:%02d".format(5 + n / 4, n % 4 * 15), "Downtown Seattle", RunLabel("", ""), past = n < 8, highlight = if (n == 8) RunHighlight.NOW else null)
     }
     private val outbound = (0 until 3).map { n ->
-        BoardRun("out$n", "6:%02d".format(5 + n * 20), "Mount Baker", past = false, highlight = if (n == 0) RunHighlight.NEXT else null)
+        BoardRun("out$n", "6:%02d".format(5 + n * 20), "Mount Baker", RunLabel("", ""), past = false, highlight = if (n == 0) RunHighlight.NEXT else null)
     }
     private val inboundBoard = Board(RunDirection(0, "Downtown Seattle", "Mount Baker TC", "4th Ave & Pine St"), inbound, nowAt = 8, openAt = 7)
     private val outboundBoard = Board(RunDirection(1, "Mount Baker", "4th Ave & Pine St", "Mount Baker TC"), outbound, nowAt = null, openAt = 0)
@@ -1389,7 +1390,7 @@ class ScreenFlowTest {
         RunsUiState.Loaded(runPage.copy(runs = listOf(t1Run)), boards, startBoard = 0, startingRunId = startingRunId, error = error)
 
     // Only its being there matters to the screen, which draws the boards.
-    private val t1Run = TripRun("in0", "Downtown Seattle", 0, "A", "B", Instant.EPOCH, Instant.EPOCH)
+    private val t1Run = TripRun("in0", "Downtown Seattle", 0, "A", "B", Instant.EPOCH, Instant.EPOCH, RunLabel("", ""))
 
     private class RunCalls {
         var tapped: String? = null

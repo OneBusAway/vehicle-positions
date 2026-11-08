@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.onebusaway.vehicletracker.ui.runs.RunHighlight
+import org.onebusaway.vehicletracker.ui.runs.RunLabel
 import org.onebusaway.vehicletracker.ui.runs.RunPage
 import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.departureBoardsOf
@@ -20,7 +21,7 @@ class DepartureBoardTest {
 
     /** A ten-minute run, so no two of these overlap. */
     private fun run(id: String, hour: Int, minute: Int, direction: Int? = null, headsign: String = "Downtown") =
-        TripRun(id, headsign, direction, "A", "B", at(hour, minute), at(hour, minute).plusSeconds(600))
+        TripRun(id, headsign, direction, "A", "B", at(hour, minute), at(hour, minute).plusSeconds(600), RunLabel("", ""))
 
     private fun boards(now: Instant, vararg runs: TripRun) = departureBoardsOf(RunPage("20261008", zone, runs.toList()), now, time)
 

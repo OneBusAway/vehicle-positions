@@ -6,6 +6,7 @@ import org.junit.Test
 import org.onebusaway.vehicletracker.data.api.RouteTripsDto
 import org.onebusaway.vehicletracker.data.api.TripSummaryDto
 import org.onebusaway.vehicletracker.ui.runs.RunDirection
+import org.onebusaway.vehicletracker.ui.runs.RunLabel
 import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.directionsOf
 import org.onebusaway.vehicletracker.ui.runs.toRunPage
@@ -15,7 +16,7 @@ class RunDirectionsTest {
     private val start = Instant.parse("2026-10-08T14:00:00Z")
 
     private fun run(id: String, directionId: Int?, headsign: String, firstStop: String = "A", lastStop: String = "B") =
-        TripRun(id, headsign, directionId, firstStop, lastStop, start, start.plusSeconds(1800))
+        TripRun(id, headsign, directionId, firstStop, lastStop, start, start.plusSeconds(1800), RunLabel("", ""))
 
     @Test fun `a route's runs keep the direction the server gives them`() {
         val trip = TripSummaryDto("t1", "Downtown", 1, "2026-10-08T07:00:00-07:00", "2026-10-08T07:30:00-07:00", "A", "B")

@@ -149,6 +149,9 @@
     <string name="runs_direction">To %1$s</string>
     <!-- Under the date: the first stop, then the last stop, of the direction shown. -->
     <string name="runs_row_stops">%1$s \u2192 %2$s</string>
+    <!-- Under a run's destination, the agency's run or train number and its block, joined as "Run 1503 · Block 599-20"; either alone when the feed gives only that one. -->
+    <string name="runs_row_run">Run %1$s</string>
+    <string name="runs_row_block">Block %1$s</string>
     <!-- What TalkBack says on the run being started. -->
     <string name="runs_starting">Starting\u2026</string>
     <string name="runs_error_message">Couldn\'t load the runs</string>

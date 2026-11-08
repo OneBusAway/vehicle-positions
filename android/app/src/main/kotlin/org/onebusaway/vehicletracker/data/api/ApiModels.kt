@@ -93,7 +93,9 @@ fun LocationReportDto.toHistoryPoint() = HistoryPointDto(
 /**
  * One run of a route on a service date. [startsAt] and [endsAt] stay as they arrived — RFC 3339
  * with a zone offset — because only the screen that displays them knows which zone to read them
- * in; see `clockTime` in `ui/runs/HighlightedRun.kt`.
+ * in; see `clockTime` in `ui/runs/HighlightedRun.kt`. [shortName] (GTFS's `trip_short_name`, a
+ * run or train number) and [blockId] are "" when the feed gives none, and also when the server
+ * predates them, so a newer app still loads an older server's runs.
  */
 @Serializable data class TripSummaryDto(
     val id: String,
@@ -103,6 +105,8 @@ fun LocationReportDto.toHistoryPoint() = HistoryPointDto(
     @SerialName("ends_at") val endsAt: String,
     @SerialName("first_stop") val firstStop: String,
     @SerialName("last_stop") val lastStop: String,
+    @SerialName("short_name") val shortName: String = "",
+    @SerialName("block_id") val blockId: String = "",
 )
 
 @Serializable data class RouteTripsDto(
