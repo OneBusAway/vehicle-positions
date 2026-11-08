@@ -63,14 +63,16 @@ internal fun formatDuration(totalSeconds: Long): String {
 
 /** "On time" within a minute, otherwise whole minutes late or early. */
 @Composable
-internal fun deviationText(seconds: Double): String {
-    val minutes = deviationMinutes(seconds)
-    return when {
+internal fun deviationText(seconds: Double): String = minutesText(deviationMinutes(seconds))
+
+/** "On time" at 0, otherwise [minutes] late, or early when negative. */
+@Composable
+internal fun minutesText(minutes: Int): String =
+    when {
         minutes > 0 -> pluralStringResource(R.plurals.tracking_adherence_minutes_late, minutes, minutes)
         minutes < 0 -> pluralStringResource(R.plurals.tracking_adherence_minutes_early, -minutes, -minutes)
         else -> stringResource(R.string.tracking_adherence_on_time)
     }
-}
 
 /** Whole metres below a kilometre, kilometres to one decimal place from there. */
 @Composable

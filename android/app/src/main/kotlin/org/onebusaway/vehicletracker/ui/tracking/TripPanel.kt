@@ -386,7 +386,10 @@ private fun VehicleRow(vehicleId: String, model: StatusCardModel, strip: RouteSt
     }
 }
 
-/** How the vehicle is keeping to the schedule, in a few words: the card's answer without a distance. */
+/**
+ * How the vehicle is keeping to the schedule, in a few words: the exact minutes, "3 min late" even where the card
+ * says On time, and off the route without a distance.
+ */
 @Composable
 private fun statusShort(model: StatusCardModel): String = when (model) {
     is StatusCardModel.Adherence -> deviationText(model.deviationSec)

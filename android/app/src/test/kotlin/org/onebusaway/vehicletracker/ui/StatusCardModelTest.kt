@@ -11,6 +11,7 @@ import org.onebusaway.vehicletracker.engine.TripFixtures.at
 import org.onebusaway.vehicletracker.engine.TripFixtures.fix
 import org.onebusaway.vehicletracker.ui.theme.StatusTone
 import org.onebusaway.vehicletracker.ui.tracking.StatusCardModel
+import org.onebusaway.vehicletracker.ui.tracking.deviationMinutes
 import org.onebusaway.vehicletracker.ui.tracking.statusCardModel
 
 class StatusCardModelTest {
@@ -41,6 +42,29 @@ class StatusCardModelTest {
             assertEquals(tracking.adherence?.scheduleDeviationSec, model.deviationSec)
             assertEquals(t1.stops[1], model.nextStop)
             assertEquals(t1.timezone, model.zone)
+        }
+    }
+
+    @Test fun `inside the on-time window the card says On time, and the minutes are left to the stop list`() {
+        val model = statusCardModel(atStop1(180), vehicleId = "4317") as StatusCardModel.Adherence
+
+        assertEquals(AdherenceStatus.ON_TIME, model.status)
+        assertEquals("the card", 0, model.answerMinutes)
+        assertEquals("the stop list's vehicle row", 3, deviationMinutes(model.deviationSec))
+    }
+
+    @Test fun `the window's edges are the evaluator's, and the first second outside it counts the minutes`() {
+        for ((secondsLate, status, minutes) in listOf(
+            Triple(-60L, AdherenceStatus.ON_TIME, 0),
+            Triple(-61L, AdherenceStatus.EARLY, -1),
+            Triple(300L, AdherenceStatus.ON_TIME, 0),
+            Triple(301L, AdherenceStatus.LATE, 5),
+            Triple(400L, AdherenceStatus.LATE, 7),
+        )) {
+            val model = statusCardModel(atStop1(secondsLate), vehicleId = "4317") as StatusCardModel.Adherence
+
+            assertEquals("$secondsLate s", status, model.status)
+            assertEquals("$secondsLate s", minutes, model.answerMinutes)
         }
     }
 

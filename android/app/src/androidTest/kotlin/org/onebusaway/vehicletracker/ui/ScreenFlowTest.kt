@@ -993,6 +993,8 @@ class ScreenFlowTest {
         row("Stop ST1", "8:00").assertIsDisplayed()
         // 100 s behind ST1 to ST2's schedule, which is on time and reads as 2 min late.
         row("4317", resources.getQuantityString(R.plurals.tracking_adherence_minutes_late, 2, 2)).assertIsDisplayed()
+        // The card above says On time: inside the window, the minutes are the row's alone.
+        answer(getString(R.string.tracking_adherence_on_time)).assertIsDisplayed()
         row("Stop ST2", "8:05").assertIsDisplayed()
         row("Stop ST3", "8:10").assertIsDisplayed()
     }

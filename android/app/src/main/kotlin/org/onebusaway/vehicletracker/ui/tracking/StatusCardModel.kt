@@ -23,7 +23,14 @@ internal sealed interface StatusCardModel {
         val nextStop: TripStop,
         val distanceToNextStopM: Double,
         val zone: ZoneId,
-    ) : StatusCardModel
+    ) : StatusCardModel {
+        /**
+         * The card's answer in whole minutes, positive late. The answer follows the colour: 0, On time, across the
+         * whole on-time window, so a green card never says "3 min late". The stop list's vehicle row keeps the
+         * exact minutes.
+         */
+        val answerMinutes: Int get() = if (status == AdherenceStatus.ON_TIME) 0 else deviationMinutes(deviationSec)
+    }
 
     /** Beyond the server's schedule window, which most often means the driver picked the wrong run. */
     data class OffSchedule(
