@@ -2122,11 +2122,11 @@ components:
         longitude:
           type: number
         bearing:
-          type: number
+          type: [number, 'null']
         speed:
-          type: number
+          type: [number, 'null']
         accuracy:
-          type: number
+          type: [number, 'null']
         timestamp:
           type: integer
           format: int64
