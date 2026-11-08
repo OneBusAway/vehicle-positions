@@ -240,6 +240,24 @@ func TestStore_DeleteUser_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUserNotFound)
 }
 
+// TestStore_DeleteUser_HasTrips runs the delete against the real trips
+// foreign key, which the handler's 409 test can only mock.
+func TestStore_DeleteUser_HasTrips(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := setupTripTestData(t, store)
+
+	_, err := store.StartTrip(ctx, userID, "bus-trip-1", "route-1", "gtfs-1")
+	require.NoError(t, err)
+
+	err = store.DeleteUser(ctx, userID)
+	assert.ErrorIs(t, err, ErrUserHasTrips)
+
+	user, err := store.GetUser(ctx, userID)
+	require.NoError(t, err, "a refused delete must leave the user in place")
+	assert.Equal(t, userID, user.ID)
+}
+
 func TestGetUserByEmailIncludesActive(t *testing.T) {
 	store := newTestStore(t)
 	email := uniqueEmail(t)

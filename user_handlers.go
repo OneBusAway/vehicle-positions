@@ -23,7 +23,7 @@ type UpdateUserRequest struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
 	// Password, when non-empty, replaces the user's password. Blank keeps
-	// the current one â€” the same contract as the admin UI's edit form.
+	// the current one — the same contract as the admin UI's edit form.
 	Password string `json:"password"`
 	// Active, when non-nil, toggles the user's active flag. Deactivation
 	// revokes every refresh token the user holds. Omitting the field
@@ -242,7 +242,15 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 				return
 			}
 			if admins <= 1 {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "cannot deactivate the last active admin"})
+				// Worded as in the admin UI. When a request does both,
+				// deactivation is named: it locks the account out even with
+				// the admin role kept, so dropping the role change alone
+				// would not make the request acceptable.
+				msg := "cannot demote the last active admin"
+				if !newActive {
+					msg = "cannot deactivate the last active admin"
+				}
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": msg})
 				return
 			}
 		}

@@ -28,7 +28,7 @@ type mockUserPager struct {
 	gotFilter UserFilter
 }
 
-// Role, Q and ActiveOnly are recorded rather than applied â€” matching them is
+// Role, Q and ActiveOnly are recorded rather than applied — matching them is
 // the store's job, tested against Postgres.
 func (m *mockUserPager) ListUsersPage(_ context.Context, filter UserFilter) ([]UserResponse, error) {
 	m.gotFilter = filter
@@ -921,7 +921,7 @@ func TestHandleListUsers_FilterParams(t *testing.T) {
 }
 
 // TestHandleListUsers_IncludesInactive pins that the endpoint still lists
-// deactivated users, which it has always done â€” the admin page's active-only
+// deactivated users, which it has always done — the admin page's active-only
 // filter must not leak into the API.
 func TestHandleListUsers_IncludesInactive(t *testing.T) {
 	store := &mockUserPager{users: []UserResponse{
@@ -1060,7 +1060,8 @@ func TestHandleUpdateUser_DeactivateLastAdminReturns422(t *testing.T) {
 // code missed: submitting role:"driver" + active:false in one request would
 // demote the admin before the deactivation guard ran, so GetUser saw a
 // driver and skipped the check. The fix validates against the ORIGINAL
-// state, catching demotions that would leave zero active admins.
+// state, catching demotions that would leave zero active admins. A request
+// that does both is reported as a deactivation.
 func TestHandleUpdateUser_DemoteLastAdminReturns422(t *testing.T) {
 	store := &mockUserUpdater{
 		user:        &UserResponse{ID: 1, Name: "Admin", Email: "admin@test.com", Role: "admin", Active: true},
@@ -1088,7 +1089,7 @@ func TestHandleUpdateUser_DemoteLastAdminWithoutDeactivateReturns422(t *testing.
 	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"driver"}`)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
-	assert.Equal(t, "cannot deactivate the last active admin", decodeErrorResponse(t, rr))
+	assert.Equal(t, "cannot demote the last active admin", decodeErrorResponse(t, rr))
 	assert.Zero(t, store.updateUserCalls, "no writes must happen when validation fails")
 }
 
@@ -1101,7 +1102,9 @@ func TestHandleUpdateUser_DeactivateAdminWithMultipleAdminsAllowed(t *testing.T)
 	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, false, store.activeUpdates[1])
+	active, ok := store.activeUpdates[1]
+	require.True(t, ok, "SetUserActiveAndRevokeSessions must be called")
+	assert.False(t, active)
 }
 
 func TestHandleUpdateUser_DeactivateDriverNotGuarded(t *testing.T) {
@@ -1113,7 +1116,9 @@ func TestHandleUpdateUser_DeactivateDriverNotGuarded(t *testing.T) {
 	rr := putUser(t, store, 2, `{"name":"Driver","email":"driver@test.com","role":"driver","active":false}`)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, false, store.activeUpdates[2])
+	active, ok := store.activeUpdates[2]
+	require.True(t, ok, "SetUserActiveAndRevokeSessions must be called")
+	assert.False(t, active)
 }
 
 func TestHandleUpdateUser_ReactivateNotGuarded(t *testing.T) {
@@ -1172,5 +1177,7 @@ func TestHandleUpdateUser_DeactivateAlreadyInactiveAdminAllowed(t *testing.T) {
 	rr := putUser(t, store, 1, `{"name":"Admin","email":"admin@test.com","role":"admin","active":false}`)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Equal(t, false, store.activeUpdates[1])
+	active, ok := store.activeUpdates[1]
+	require.True(t, ok, "SetUserActiveAndRevokeSessions must be called")
+	assert.False(t, active)
 }
