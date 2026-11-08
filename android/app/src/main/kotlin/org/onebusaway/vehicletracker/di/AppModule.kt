@@ -300,9 +300,7 @@ object AppModule {
     ): RestartTracking = RestartTracking(
         tripStateStore = tripStateStore,
         serviceController = serviceController,
-        resumeNotifier = ResumeNotifier {
-            TrackingNotification(context).run { postIfPermitted(buildResumeNotification()) }
-        },
+        resumeNotifier = ResumeNotifier { TrackingNotification(context).postResumeIfPermitted() },
         clock = clock,
         canReportInBackground = { context.canReportInBackground() },
         appInFront = ::appInFront,
