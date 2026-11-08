@@ -5,10 +5,18 @@ import Testing
 @Suite struct TokenRefresherTests {
     let now = Date(timeIntervalSince1970: 1_792_476_000)
     let renewed = AuthTokens(accessToken: "a2", refreshToken: "r2", expiresIn: 900)
+    let signIn = UUID()
 
     /// Signed in with a1 and r1, the access token just expired.
     var signedIn: StoredToken {
-        StoredToken(token: "a1", issuedAt: now.addingTimeInterval(-900), refreshToken: "r1", expiresAt: now)
+        StoredToken(token: "a1", issuedAt: now.addingTimeInterval(-900), refreshToken: "r1", expiresAt: now, signInID: signIn)
+    }
+
+    /// What a refresh of `signedIn` saves.
+    var renewedInThisSignIn: StoredToken {
+        var token = StoredToken(renewed, receivedAt: now)
+        token.signInID = signIn
+        return token
     }
 
     func refresher(_ tokens: any TokenStoring) -> TokenRefresher {
@@ -23,8 +31,8 @@ import Testing
         let refresher = refresher(store)
         let refresh = ScriptedRefresh()
 
-        async let first = refresher.afterUnauthorized(failedToken: "a1", refresh: refresh.call)
-        async let second = refresher.afterUnauthorized(failedToken: "a1", refresh: refresh.call)
+        async let first = refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
+        async let second = refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
         // Each reads the store, then starts or joins the refresh with no
         // await in between, so after two reads both are in.
         #expect(await eventually { store.loads == 2 && !refresh.presented.isEmpty })
@@ -37,29 +45,42 @@ import Testing
     }
 
     @Test func aRequestThatMissedARefreshGetsTheNewTokenWithoutAnother() async throws {
-        let store = ScriptedTokenStore(StoredToken(renewed, receivedAt: now))
+        let store = ScriptedTokenStore(renewedInThisSignIn)
         let refresh = ScriptedRefresh(answering: .issued(AuthTokens(accessToken: "a3", refreshToken: "r3", expiresIn: 900)))
-        #expect(await refresher(store).afterUnauthorized(failedToken: "a1", refresh: refresh.call) == .retry("a2"))
+        #expect(await refresher(store).afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call) == .retry("a2"))
         #expect(refresh.presented.isEmpty)
+    }
+
+    /// A refresh renews the sign-in it was made for, so a request still out
+    /// with the old access token is sent again with the new one.
+    @Test func aRefreshStaysInTheSameSignIn() async throws {
+        let store = ScriptedTokenStore(signedIn)
+        let refresher = refresher(store)
+        let refresh = ScriptedRefresh(answering: .issued(renewed))
+        #expect(await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call) == .retry("a2"))
+        #expect(try store.load()?.signInID == signIn)
+
+        #expect(await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call) == .retry("a2"))
+        #expect(refresh.presented == ["r1"])
     }
 
     @Test func aRefusedRefreshTokenIsDroppedAndTheAccessTokenKept() async throws {
         let store = ScriptedTokenStore(signedIn)
         let refresher = refresher(store)
         let refresh = ScriptedRefresh(answering: .refused)
-        #expect(await refresher.afterUnauthorized(failedToken: "a1", refresh: refresh.call) == .refused)
+        #expect(await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call) == .refused)
         var dropped = signedIn
         dropped.refreshToken = nil
         #expect(try store.load() == dropped)
 
-        #expect(await refresher.afterUnauthorized(failedToken: "a1", refresh: refresh.call) == .refused)
+        #expect(await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call) == .refused)
         #expect(refresh.presented == ["r1"], "with no refresh token left there is nothing to present")
     }
 
     @Test func anUnreachableServerKeepsBothTokens() async throws {
         let store = ScriptedTokenStore(signedIn)
         let refresh = ScriptedRefresh(answering: .unreachable("offline"))
-        #expect(await refresher(store).afterUnauthorized(failedToken: "a1", refresh: refresh.call) == .unreachable("offline"))
+        #expect(await refresher(store).afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call) == .unreachable("offline"))
         #expect(try store.load() == signedIn)
     }
 
@@ -70,10 +91,10 @@ import Testing
         store.failsSave = true
         let refresher = refresher(store)
         let refresh = ScriptedRefresh(answering: .issued(renewed))
-        #expect(await refresher.afterUnauthorized(failedToken: "a1", refresh: refresh.call) == .retry("a2"))
+        #expect(await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call) == .retry("a2"))
         #expect(try store.load() == nil)
 
-        #expect(await refresher.afterUnauthorized(failedToken: "a2", refresh: refresh.call) == .refused)
+        #expect(await refresher.afterUnauthorized(failedToken: "a2", signInID: signIn, refresh: refresh.call) == .refused)
         #expect(refresh.presented == ["r1"])
     }
 
@@ -81,7 +102,7 @@ import Testing
         let store = ScriptedTokenStore(signedIn)
         store.failsLoad = true
         let refresh = ScriptedRefresh(answering: .issued(renewed))
-        #expect(await refresher(store).afterUnauthorized(failedToken: "a1", refresh: refresh.call)
+        #expect(await refresher(store).afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
             == .unreachable("the stored sign-in could not be read"))
         #expect(refresh.presented.isEmpty)
     }
@@ -91,7 +112,7 @@ import Testing
     @Test func aSignInDuringARefreshIsKept() async throws {
         let store = ScriptedTokenStore(signedIn)
         let refresh = ScriptedRefresh()
-        async let outcome = refresher(store).afterUnauthorized(failedToken: "a1", refresh: refresh.call)
+        async let outcome = refresher(store).afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
         #expect(await eventually { refresh.presented.count == 1 })
         let newSession = StoredToken(token: "b1", issuedAt: now, refreshToken: "rb1", expiresAt: now.addingTimeInterval(900))
         try? store.save(newSession)
@@ -104,7 +125,7 @@ import Testing
     @Test func aSignInDuringARefusedRefreshKeepsItsRefreshToken() async throws {
         let store = ScriptedTokenStore(signedIn)
         let refresh = ScriptedRefresh()
-        async let outcome = refresher(store).afterUnauthorized(failedToken: "a1", refresh: refresh.call)
+        async let outcome = refresher(store).afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
         #expect(await eventually { refresh.presented.count == 1 })
         let newSession = StoredToken(token: "b1", issuedAt: now, refreshToken: "rb1", expiresAt: now.addingTimeInterval(900))
         try? store.save(newSession)
@@ -118,7 +139,8 @@ import Testing
 
     /// Signed in with a1 and r1, thirty seconds from expiry: a refresh is due.
     var aboutToExpire: StoredToken {
-        StoredToken(token: "a1", issuedAt: now.addingTimeInterval(-870), refreshToken: "r1", expiresAt: now.addingTimeInterval(30))
+        StoredToken(token: "a1", issuedAt: now.addingTimeInterval(-870), refreshToken: "r1", expiresAt: now.addingTimeInterval(30),
+                    signInID: signIn)
     }
 
     @Test func aRefreshIsDueFromItsDueTimeOn() {
@@ -134,8 +156,8 @@ import Testing
         let refresher = refresher(store)
         let refresh = ScriptedRefresh()
 
-        async let first = refresher.beforeExpiry(observedToken: "a1", refresh: refresh.call)
-        async let second = refresher.beforeExpiry(observedToken: "a1", refresh: refresh.call)
+        async let first = refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call)
+        async let second = refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call)
         #expect(await eventually { store.loads == 2 && !refresh.presented.isEmpty })
         refresh.answer(.issued(renewed))
 
@@ -145,9 +167,9 @@ import Testing
     }
 
     @Test func aRequestThatMissedAnEarlyRefreshGoesOutWithTheNewToken() async throws {
-        let store = ScriptedTokenStore(StoredToken(renewed, receivedAt: now))
+        let store = ScriptedTokenStore(renewedInThisSignIn)
         let refresh = ScriptedRefresh(answering: .refused)
-        #expect(await refresher(store).beforeExpiry(observedToken: "a1", refresh: refresh.call) == "a2")
+        #expect(await refresher(store).beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call) == "a2")
         #expect(refresh.presented.isEmpty)
     }
 
@@ -155,8 +177,19 @@ import Testing
         var withTimeLeft = aboutToExpire
         withTimeLeft.expiresAt = now.addingTimeInterval(900)
         let refresh = ScriptedRefresh(answering: .issued(renewed))
-        #expect(await refresher(ScriptedTokenStore(withTimeLeft)).beforeExpiry(observedToken: "a1", refresh: refresh.call) == "a1")
+        #expect(await refresher(ScriptedTokenStore(withTimeLeft)).beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call) == "a1")
         #expect(refresh.presented.isEmpty)
+    }
+
+    /// A request about to go out for the driver before keeps that driver's
+    /// token after the next driver has signed in.
+    @Test func anEarlyRefreshNeverHandsOutTheNextDriversToken() async throws {
+        let nextDriver = StoredToken(AuthTokens(accessToken: "b1", refreshToken: "rb1", expiresIn: 900), receivedAt: now)
+        let store = ScriptedTokenStore(nextDriver)
+        let refresh = ScriptedRefresh(answering: .issued(renewed))
+        #expect(await refresher(store).beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call) == "a1")
+        #expect(refresh.presented.isEmpty)
+        #expect(try store.load() == nextDriver)
     }
 
     /// The token still works, so the request goes out with it; the refresh
@@ -164,7 +197,7 @@ import Testing
     @Test func aRefusedEarlyRefreshKeepsTheRefreshToken() async throws {
         let store = ScriptedTokenStore(aboutToExpire)
         let refresh = ScriptedRefresh(answering: .refused)
-        #expect(await refresher(store).beforeExpiry(observedToken: "a1", refresh: refresh.call) == "a1")
+        #expect(await refresher(store).beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call) == "a1")
         #expect(try store.load() == aboutToExpire)
     }
 
@@ -175,9 +208,9 @@ import Testing
         let store = ScriptedTokenStore(aboutToExpire)
         let refresher = refresher(store)
         let refresh = ScriptedRefresh()
-        async let early = refresher.beforeExpiry(observedToken: "a1", refresh: refresh.call)
+        async let early = refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refresh.call)
         #expect(await eventually { refresh.presented.count == 1 })
-        async let turnedAway = refresher.afterUnauthorized(failedToken: "a1", refresh: refresh.call)
+        async let turnedAway = refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: refresh.call)
         #expect(await eventually { store.loads == 2 })
         refresh.answer(.refused)
 

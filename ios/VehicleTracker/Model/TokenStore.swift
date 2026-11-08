@@ -1,14 +1,28 @@
 import Foundation
 import Security
 
-/// The driver's access token (a JWT), when it was issued and expires, and the
-/// refresh token that renews it. `refreshToken` and `expiresAt` are nil for a
-/// token saved by a build that did not keep them.
+/// The driver's access token (a JWT), when it was issued and expires, the
+/// refresh token that renews it, and the sign-in they belong to.
+/// `refreshToken`, `expiresAt` and `signInID` are nil for a token saved by a
+/// build that did not keep them.
 nonisolated struct StoredToken: Sendable, Codable, Equatable {
     var token: String
     var issuedAt: Date
     var refreshToken: String? = nil
     var expiresAt: Date? = nil
+    /// New for each sign-in and kept by every refresh after it, so a request
+    /// can tell a token renewed for its own driver from the next driver's.
+    /// Decoding never makes one up: each read of the same item would then be
+    /// a different sign-in, and every retry would be refused.
+    var signInID: UUID? = UUID()
+
+    /// The same tokens with the same times. The sign-in id is left out: it is
+    /// random, so tokens built from the same reply would never be equal.
+    /// Whether two tokens are from one sign-in is asked of `signInID`.
+    static func == (lhs: StoredToken, rhs: StoredToken) -> Bool {
+        lhs.token == rhs.token && lhs.issuedAt == rhs.issuedAt
+            && lhs.refreshToken == rhs.refreshToken && lhs.expiresAt == rhs.expiresAt
+    }
 
     /// How long builds before refresh took a token to last. A token they saved
     /// has no expiry and no refresh token, so it is held to the same 24 hours

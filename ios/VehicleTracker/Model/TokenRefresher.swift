@@ -14,7 +14,9 @@ import OSLog
 /// Each trade starts from the token store, never from a token a caller
 /// remembered. When the stored access token is no longer the one the caller
 /// sent, another request has refreshed in the meantime, and the caller gets
-/// the new token without a call to the server.
+/// the new token without a call to the server. Only within one sign-in,
+/// though: once another driver has signed in, the caller's request is still
+/// the driver's before, and is never sent with the new driver's token.
 actor TokenRefresher {
     /// What the server said to a refresh token.
     nonisolated enum RefreshReply: Sendable, Equatable {
@@ -52,11 +54,11 @@ actor TokenRefresher {
         self.now = now
     }
 
-    /// After a request sent with `failedToken` got a 401. A refused refresh
-    /// token is dropped and the access token kept, so the 401 reaches the
-    /// caller as it did before refresh: the driver is asked to sign in, and
-    /// the trip's record stays.
-    func afterUnauthorized(failedToken: String, refresh: @escaping Refresh) async -> Outcome {
+    /// After a request sent with `failedToken`, from sign-in `signInID`, got
+    /// a 401. A refused refresh token is dropped and the access token kept, so
+    /// the 401 reaches the caller as it did before refresh: the driver is
+    /// asked to sign in, and the trip's record stays.
+    func afterUnauthorized(failedToken: String, signInID: UUID?, refresh: @escaping Refresh) async -> Outcome {
         // Nothing is awaited from reading the store to setting `inFlight`: at
         // an await the actor takes the next caller, which would find no
         // refresh running and start a second one.
@@ -67,7 +69,7 @@ actor TokenRefresher {
             log.error("could not read the stored sign-in to refresh it: \(String(describing: error), privacy: .public)")
             return .unreachable("the stored sign-in could not be read")
         }
-        guard let stored else { return .refused }
+        guard let stored, stored.signInID == signInID else { return .refused }
         if stored.token != failedToken { return .retry(stored.token) }
         let task: Task<Outcome, Never>
         if let inFlight {
@@ -91,15 +93,16 @@ actor TokenRefresher {
         stored.refreshDueAt.map { now() >= $0 } ?? false
     }
 
-    /// Before a request goes out with `observedToken`: the token to send it
-    /// with, renewed when it is about to expire. An early refresh that fails
-    /// or is refused never fails the request, which goes out with the token it
-    /// has while that still works; the 401 after it expires is where a refused
-    /// refresh token is dropped and a failure reported.
-    func beforeExpiry(observedToken: String, refresh: @escaping Refresh) async -> String {
+    /// Before a request goes out with `observedToken`, from sign-in
+    /// `signInID`: the token to send it with, renewed when it is about to
+    /// expire. An early refresh that fails or is refused never fails the
+    /// request, which goes out with the token it has while that still works;
+    /// the 401 after it expires is where a refused refresh token is dropped
+    /// and a failure reported.
+    func beforeExpiry(observedToken: String, signInID: UUID?, refresh: @escaping Refresh) async -> String {
         // As in `afterUnauthorized`, nothing is awaited until a refresh has
         // been joined or started.
-        guard let stored = try? tokens.load() else { return observedToken }
+        guard let stored = try? tokens.load(), stored.signInID == signInID else { return observedToken }
         // A token another request has just refreshed is not due.
         if stored.token != observedToken { return stored.token }
         let task: Task<Outcome, Never>
@@ -138,8 +141,10 @@ actor TokenRefresher {
         do {
             // A sign-in or a sign-out while the refresh was out has replaced
             // the session that spent the token, and the newer one is kept.
-            guard try tokens.load()?.refreshToken == refreshToken else { return }
-            try tokens.save(StoredToken(issued, receivedAt: now()))
+            guard let spent = try tokens.load(), spent.refreshToken == refreshToken else { return }
+            var renewed = StoredToken(issued, receivedAt: now())
+            renewed.signInID = spent.signInID
+            try tokens.save(renewed)
         } catch {
             log.error("could not save the refreshed tokens; signing out: \(String(describing: error), privacy: .public)")
             try? tokens.clear()

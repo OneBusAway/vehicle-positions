@@ -6,7 +6,7 @@ import Foundation
 /// every request so a re-login mid-trip takes effect at once. Given a
 /// `refresher`, it renews an access token about to expire before the request,
 /// and one the server turned away with a 401 after it, sending the request
-/// again, once.
+/// again, once, and only as the driver who was signed in when it started.
 nonisolated final class TrackerClient: TrackerAPI, Sendable {
     let baseURL: URL
     private let session: URLSession
@@ -87,14 +87,16 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         }
         var token = stored.token
         if let refresher, refresher.isRefreshDue(stored) {
-            token = await refresher.beforeExpiry(observedToken: token, refresh: { [self] in await refresh($0) })
+            token = await refresher.beforeExpiry(observedToken: token, signInID: stored.signInID,
+                                                refresh: { [self] in await refresh($0) })
         }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         do {
             return try await perform(request)
         } catch let error as APIError {
             guard case .status(401, _) = error, let refresher else { throw error }
-            switch await refresher.afterUnauthorized(failedToken: token, refresh: { [self] in await refresh($0) }) {
+            switch await refresher.afterUnauthorized(failedToken: token, signInID: stored.signInID,
+                                                    refresh: { [self] in await refresh($0) }) {
             case .retry(let renewed):
                 request.setValue("Bearer \(renewed)", forHTTPHeaderField: "Authorization")
                 // A 401 on the retry is the caller's: the token is new, so

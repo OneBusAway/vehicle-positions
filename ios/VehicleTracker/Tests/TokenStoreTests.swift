@@ -9,7 +9,7 @@ import Testing
     /// The JSON a build before refresh wrote: no refresh token, no expiry.
     let previousBuildJSON = #"{"token":"jwt","issuedAt":"2026-10-20T06:00:00Z"}"#
     var previousBuildToken: StoredToken {
-        StoredToken(token: "jwt", issuedAt: Date(timeIntervalSince1970: 1_792_476_000))
+        StoredToken(token: "jwt", issuedAt: Date(timeIntervalSince1970: 1_792_476_000), signInID: nil)
     }
 
     @Test func aRefreshTokenKeepsTheDriverSignedInPastExpiry() {
@@ -32,6 +32,18 @@ import Testing
     @Test func aPreviousBuildsTokenDecodes() throws {
         let decoded = try JSONCoding.decoder.decode(StoredToken.self, from: Data(previousBuildJSON.utf8))
         #expect(decoded == previousBuildToken)
+        #expect(decoded.signInID == nil)
+    }
+
+    /// Two sign-ins, even with the same reply, are told apart by their ids
+    /// alone.
+    @Test func eachSignInHasItsOwnID() {
+        let reply = AuthTokens(accessToken: "a1", refreshToken: "r1", expiresIn: 900)
+        let first = StoredToken(reply, receivedAt: issued)
+        let second = StoredToken(reply, receivedAt: issued)
+        #expect(first.signInID != nil)
+        #expect(first.signInID != second.signInID)
+        #expect(first == second)
     }
 
     @Test func expiryIsTimedFromTheReply() {
@@ -65,13 +77,14 @@ import Testing
         #expect(try store.load() == nil)
     }
 
-    @Test func keychainKeepsTheRefreshTokenAndExpiry() throws {
+    @Test func keychainKeepsTheRefreshTokenExpiryAndSignIn() throws {
         let store = KeychainTokenStore(service: "org.onebusaway.vehicletracker.tests", account: "token-\(UUID().uuidString)")
         defer { try? store.clear() }
         let t = StoredToken(token: "a1", issuedAt: Date(timeIntervalSince1970: 1_700_000_000),
                             refreshToken: "r1", expiresAt: Date(timeIntervalSince1970: 1_700_000_900))
         try store.save(t)
         #expect(try store.load() == t)
+        #expect(try store.load()?.signInID == t.signInID)
     }
 
     /// The store deletes an item it cannot decode, so a field the previous
@@ -90,6 +103,7 @@ import Testing
         ] as CFDictionary, nil)
         try #require(added == errSecSuccess)
         #expect(try store.load() == previousBuildToken)
+        #expect(try store.load()?.signInID == nil)
     }
 
     @Test func aRefreshIsDueAMinuteBeforeExpiry() {
