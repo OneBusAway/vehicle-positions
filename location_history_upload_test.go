@@ -192,3 +192,38 @@ func TestStore_SaveLocationHistory(t *testing.T) {
 	assert.Equal(t, []float64{1, 1.5, 1.2, 1.3, 2}, latitudes(trip.ID))
 	assert.Equal(t, []float64{4}, latitudes(next.ID), "no backlog from the trip before")
 }
+
+// TestStore_ListTripLocations_LiveFixFromTripBefore: after a short layover, a
+// fix recorded during the first trip and received two minutes into the next
+// is young enough to count as live, but it was not driven on the next trip.
+func TestStore_ListTripLocations_LiveFixFromTripBefore(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	userID := setupTripUser(t, store, "Layover Driver", "layover@test.com", "bus-lay", "Bus Lay")
+	driverID := strconv.FormatInt(userID, 10)
+	now := time.Now()
+
+	first, err := store.StartTrip(ctx, userID, "bus-lay", "R1", "T1")
+	require.NoError(t, err)
+	require.NoError(t, store.EndTrip(ctx, first.ID, userID))
+	_, err = store.pool.Exec(ctx, "UPDATE trips SET start_time = $1, end_time = $2 WHERE id = $3",
+		now.Add(-10*time.Minute), now.Add(-150*time.Second), first.ID)
+	require.NoError(t, err)
+	next, err := store.StartTrip(ctx, userID, "bus-lay", "R1", "T2")
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, "UPDATE trips SET start_time = $1 WHERE id = $2", now.Add(-2*time.Minute), next.ID)
+	require.NoError(t, err)
+
+	fromFirst := &LocationReport{VehicleID: "bus-lay", DriverID: driverID, Latitude: 1, Longitude: 1, Timestamp: now.Add(-3 * time.Minute).Unix()}
+	require.NoError(t, store.SaveLocation(ctx, fromFirst))
+	own := &LocationReport{VehicleID: "bus-lay", DriverID: driverID, Latitude: 2, Longitude: 2, Timestamp: now.Unix()}
+	require.NoError(t, store.SaveLocation(ctx, own))
+
+	pts, err := store.ListTripLocations(ctx, next.ID)
+	require.NoError(t, err)
+	require.Len(t, pts, 1, "only the next trip's own fix")
+	assert.Equal(t, 2.0, pts[0].Latitude)
+}

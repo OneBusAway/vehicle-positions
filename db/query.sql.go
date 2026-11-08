@@ -1190,7 +1190,8 @@ WHERE lp.vehicle_id = t.vehicle_id
   AND lp.driver_id = t.user_id::text
   AND (
     (lp.received_at >= t.start_time AND lp.received_at <= COALESCE(t.end_time, NOW())
-        AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes')
+        AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes'
+        AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time)))
     OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
         AND lp.timestamp >= EXTRACT(EPOCH FROM t.start_time)
         AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
@@ -1212,12 +1213,15 @@ type ListTripLocationsRow struct {
 
 // Trail derivation per spec §4.5: location_points.trip_id is a client string,
 // not trips.id, so trail points are matched by vehicle + driver + time window.
-// A live point is in the window when it was received during the trip. A
-// backlog point, one received more than five minutes after the phone recorded
-// it (maxTimestampSkew: a live report that late is refused, so only
-// POST /api/v1/locations/history stores one), is placed only by when it was
-// recorded, so a dead zone uploaded later, even during the next trip, lands in
-// the trail where it was driven and in no other.
+// A live point is in the window when it was received during the trip and
+// recorded after it started, so a fix from the trip before, uploaded within
+// five minutes once this trip has begun, stays out. The start is floored
+// because timestamp is whole seconds and a fix from the trip's first second
+// must still count. A backlog point, one received more than five minutes after
+// the phone recorded it (maxTimestampSkew: a live report that late is refused,
+// so only POST /api/v1/locations/history stores one), is placed only by when
+// it was recorded, so a dead zone uploaded later, even during the next trip,
+// lands in the trail where it was driven and in no other.
 func (q *Queries) ListTripLocations(ctx context.Context, id int64) ([]ListTripLocationsRow, error) {
 	rows, err := q.db.Query(ctx, listTripLocations, id)
 	if err != nil {
