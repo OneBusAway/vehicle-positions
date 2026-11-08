@@ -338,11 +338,17 @@ enum TripStatusText {
 
     // MARK: The Live Activity
 
+    /// Once the app has stopped updating the Live Activity: suspended or
+    /// closed, so nothing is being sent (Android's resume notification).
+    static var reportsPaused: String {
+        String(localized: "Reports paused", comment: "Live Activity, once the app has stopped updating it: reports are not being sent. Followed by 'Open the app to keep reporting.'")
+    }
+
     /// What a location problem's line says on the Live Activity, in place of
     /// "Tap Resume" or "Tap to fix": a Live Activity can't take the tap, and
-    /// the car can't open Settings (Android's resume notification).
+    /// the car can't open Settings. Also what to do once reports have paused.
     static var openTheAppToKeepReporting: String {
-        String(localized: "Open the app to keep reporting.", comment: "Live Activity: what to do about a location problem, which can only be fixed in the app.")
+        String(localized: "Open the app to keep reporting.", comment: "Live Activity: what to do about a location problem, or about reports that have paused, which only the app can fix.")
     }
 
     static var openTheAppToSignIn: String {

@@ -28,8 +28,9 @@ nonisolated enum TripActivityError: Error {
     func existing() -> [TripActivitySnapshot]
     /// Starts an activity and returns its id. Throws
     /// `TripActivityError.notInForeground` for ActivityKit's `.visibility`.
-    func request(_ attributes: TripActivityAttributes, _ state: TripActivityAttributes.ContentState) throws -> String
-    func update(id: String, _ state: TripActivityAttributes.ContentState) async
+    /// The activity looks stale from `staleDate` until it is updated.
+    func request(_ attributes: TripActivityAttributes, _ state: TripActivityAttributes.ContentState, staleDate: Date) throws -> String
+    func update(id: String, _ state: TripActivityAttributes.ContentState, staleDate: Date) async
     /// Ends the activity and takes it off the screen at once.
     func end(id: String) async
     /// Yields once when the activity stops being live by someone else's
@@ -62,16 +63,16 @@ nonisolated enum TripActivityError: Error {
     /// No push token: the app runs in the background for location through
     /// the whole trip and is the only thing that knows the next position, so
     /// it updates the activity itself.
-    func request(_ attributes: TripActivityAttributes, _ state: TripActivityAttributes.ContentState) throws -> String {
+    func request(_ attributes: TripActivityAttributes, _ state: TripActivityAttributes.ContentState, staleDate: Date) throws -> String {
         do {
-            return try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: nil), pushType: nil).id
+            return try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: staleDate), pushType: nil).id
         } catch ActivityAuthorizationError.visibility {
             throw TripActivityError.notInForeground
         }
     }
 
-    func update(id: String, _ state: TripActivityAttributes.ContentState) async {
-        await Self.update(id: id, state)
+    func update(id: String, _ state: TripActivityAttributes.ContentState, staleDate: Date) async {
+        await Self.update(id: id, state, staleDate: staleDate)
     }
 
     func end(id: String) async {
@@ -92,12 +93,12 @@ nonisolated enum TripActivityError: Error {
     // An `Activity` is not Sendable, so it is found and used inside one
     // nonisolated function and never handed across.
 
-    @concurrent nonisolated private static func update(id: String, _ state: TripActivityAttributes.ContentState) async {
+    @concurrent nonisolated private static func update(id: String, _ state: TripActivityAttributes.ContentState, staleDate: Date) async {
         guard let activity = activity(id) else {
             log.notice("Live Activity \(id, privacy: .public) is gone; the update was dropped")
             return
         }
-        await activity.update(ActivityContent(state: state, staleDate: nil))
+        await activity.update(ActivityContent(state: state, staleDate: staleDate))
     }
 
     @concurrent nonisolated private static func end(id: String) async {

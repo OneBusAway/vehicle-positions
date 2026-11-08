@@ -14,15 +14,29 @@ import OSLog
 ///
 /// Updates are coalesced as in OneBusAway iOS's `LiveActivityUpdateCoalescer`:
 /// one is in flight at a time, and only the newest state waiting goes next.
+///
+/// The app is the activity's only updater, so every update is marked stale
+/// `staleAfter` later, and while nothing changes a heartbeat sends the same
+/// state again a `heartbeat` after the last send. If iOS suspends or kills the
+/// app, the heartbeat stops and ActivityKit shows the stale look by itself.
 @MainActor final class TripActivityController {
+    /// Well inside the server's five-minute `STALENESS_THRESHOLD`, so the
+    /// driver sees the warning before riders lose the vehicle.
+    static let staleAfter: TimeInterval = 120
+    static let heartbeat: TimeInterval = 60
+
     private let session: TripSession
     private let host: any TripActivityHost
+    private let now: () -> Date
+    private let sleep: (Duration) async throws -> Void
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "live-activity")
 
     /// The activity showing, and the trip it is for.
     private var current: (id: String, serverTripID: Int64)?
-    /// The state last handed to the host, whether or not it has landed yet.
+    /// The state last handed to the host, whether or not it has landed yet,
+    /// and when.
     private var sent: TripActivityAttributes.ContentState?
+    private var sentAt = Date.distantPast
     /// The newest state waiting for the update in flight.
     private var pending: TripActivityAttributes.ContentState?
     private var updating: Task<Void, Never>?
@@ -33,10 +47,14 @@ import OSLog
     /// refused it from the background, or Live Activities were off.
     private var waitsForForeground = false
     private var endings: Task<Void, Never>?
+    private var heartbeats: Task<Void, Never>?
 
-    init(session: TripSession, host: any TripActivityHost) {
+    init(session: TripSession, host: any TripActivityHost, now: @escaping () -> Date = Date.init,
+         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.session = session
         self.host = host
+        self.now = now
+        self.sleep = sleep
         adoptOrEnd()
         observe()
         sync()
@@ -44,6 +62,7 @@ import OSLog
 
     isolated deinit {
         endings?.cancel()
+        heartbeats?.cancel()
     }
 
     /// The phone app's window came to the front: a start that was waiting
@@ -64,6 +83,7 @@ import OSLog
                 if activity.serverTripID == tripID, current == nil {
                     current = (activity.id, activity.serverTripID)
                     watchEndings(activity.id)
+                    startHeartbeat()
                 } else {
                     end(activity.id)
                 }
@@ -114,10 +134,12 @@ import OSLog
             return
         }
         do {
-            let id = try host.request(TripActivityAttributes(trip), state)
+            let id = try host.request(TripActivityAttributes(trip), state, staleDate: now().addingTimeInterval(Self.staleAfter))
             current = (id, trip.serverTripID)
             sent = state
+            sentAt = now()
             watchEndings(id)
+            startHeartbeat()
         } catch TripActivityError.notInForeground {
             log.notice("the Live Activity for trip \(trip.serverTripID, privacy: .public) waits for the app to come to the front")
             waitsForForeground = true
@@ -136,6 +158,10 @@ import OSLog
             pending = nil
             return
         }
+        enqueue(state)
+    }
+
+    private func enqueue(_ state: TripActivityAttributes.ContentState) {
         pending = state
         guard updating == nil else { return }
         updating = Task { [weak self] in await self?.drain() }
@@ -145,9 +171,38 @@ import OSLog
         while let state = pending, let current {
             pending = nil
             sent = state
-            await host.update(id: current.id, state)
+            sentAt = now()
+            await host.update(id: current.id, state, staleDate: sentAt.addingTimeInterval(Self.staleAfter))
         }
         updating = nil
+    }
+
+    private func startHeartbeat() {
+        heartbeats?.cancel()
+        let sleep = sleep
+        heartbeats = Task { [weak self] in
+            while let wait = self?.untilNextBeat() {
+                do {
+                    try await sleep(.seconds(wait))
+                } catch {
+                    return
+                }
+                await self?.beat()
+            }
+        }
+    }
+
+    /// Seconds until a `heartbeat` after the last send, and at least one.
+    private func untilNextBeat() -> TimeInterval {
+        max(sentAt.addingTimeInterval(Self.heartbeat).timeIntervalSince(now()), 1)
+    }
+
+    /// Nothing has gone out for a `heartbeat`: the same state again, with a
+    /// fresh stale date. Returns once it has gone.
+    private func beat() async {
+        guard let sent, updating == nil, now() >= sentAt.addingTimeInterval(Self.heartbeat) else { return }
+        enqueue(sent)
+        await updating?.value
     }
 
     private func watchEndings(_ id: String) {
@@ -178,6 +233,8 @@ import OSLog
     private func forget() {
         endings?.cancel()
         endings = nil
+        heartbeats?.cancel()
+        heartbeats = nil
         current = nil
         sent = nil
         pending = nil
