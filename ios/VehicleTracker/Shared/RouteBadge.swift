@@ -14,6 +14,9 @@ struct RouteBadge: View {
         /// On Resume's trip card: at least a 56 pt square, in larger type still
         /// (Android's `ResumeShiftScreen`).
         case card
+        /// On the Live Activity's Lock Screen card: at least a 48 pt square,
+        /// as OneBusAway iOS's Live Activity badge.
+        case activity
     }
 
     var shortName: String
@@ -37,7 +40,7 @@ struct RouteBadge: View {
     private var font: Font {
         switch size {
         case .row: .title3.bold()
-        case .grid, .trip: .title2.bold()
+        case .grid, .trip, .activity: .title2.bold()
         case .card: .title.bold()
         }
     }
@@ -48,6 +51,7 @@ struct RouteBadge: View {
         case .grid: 0
         case .trip: 44
         case .card: 56
+        case .activity: 48
         }
     }
 
@@ -57,6 +61,7 @@ struct RouteBadge: View {
         case .grid: 56
         case .trip: 44
         case .card: 56
+        case .activity: 48
         }
     }
 }

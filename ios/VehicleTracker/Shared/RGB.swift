@@ -39,6 +39,20 @@ struct RGB: Equatable {
         UIColor(red: red, green: green, blue: blue, alpha: 1)
     }
 
+    /// WCAG relative luminance, with the cut-off Android uses.
+    var luminance: Double {
+        func linear(_ channel: Double) -> Double {
+            channel <= 0.03928 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+    }
+
+    /// WCAG contrast ratio, 1 to 21.
+    func contrast(with other: RGB) -> Double {
+        let a = luminance, b = other.luminance
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
     private static func channel(_ value: Double) -> Int {
         min(255, max(0, Int((value * 255).rounded())))
     }
