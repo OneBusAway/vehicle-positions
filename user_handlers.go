@@ -23,7 +23,7 @@ type UpdateUserRequest struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
 	// Password, when non-empty, replaces the user's password. Blank keeps
-	// the current one â€” the same contract as the admin UI's edit form.
+	// the current one — the same contract as the admin UI's edit form.
 	Password string `json:"password"`
 	// Active, when non-nil, toggles the user's active flag. Deactivation
 	// revokes every refresh token the user holds. Omitting the field

@@ -28,7 +28,7 @@ type mockUserPager struct {
 	gotFilter UserFilter
 }
 
-// Role, Q and ActiveOnly are recorded rather than applied â€” matching them is
+// Role, Q and ActiveOnly are recorded rather than applied — matching them is
 // the store's job, tested against Postgres.
 func (m *mockUserPager) ListUsersPage(_ context.Context, filter UserFilter) ([]UserResponse, error) {
 	m.gotFilter = filter
@@ -921,7 +921,7 @@ func TestHandleListUsers_FilterParams(t *testing.T) {
 }
 
 // TestHandleListUsers_IncludesInactive pins that the endpoint still lists
-// deactivated users, which it has always done â€” the admin page's active-only
+// deactivated users, which it has always done — the admin page's active-only
 // filter must not leak into the API.
 func TestHandleListUsers_IncludesInactive(t *testing.T) {
 	store := &mockUserPager{users: []UserResponse{
