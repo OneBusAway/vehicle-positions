@@ -41,4 +41,7 @@ nonisolated struct TripActivityAttributes: ActivityAttributes {
     var routeColor: String
     var routeTextColor: String
     var headsign: String
+    /// "Reports paused · Open the app to keep reporting.": the warning once
+    /// the app has stopped updating the activity.
+    var staleLine: String
 }

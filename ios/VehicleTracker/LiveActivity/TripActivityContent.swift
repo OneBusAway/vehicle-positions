@@ -1,11 +1,13 @@
 import Foundation
 
 extension TripActivityAttributes {
-    /// The trip's fixed facts, read once when its activity starts.
+    /// The trip's fixed facts, read once when its activity starts. The stale
+    /// words are Android's notification for reports that have stopped.
     init(_ active: ActiveTrip) {
         self.init(serverTripID: active.serverTripID, routeName: active.trip.badgeName,
                   routeColor: active.trip.route.color, routeTextColor: active.trip.route.textColor,
-                  headsign: active.trip.headsign)
+                  headsign: active.trip.headsign,
+                  staleLine: TripStatusText.pair(TripStatusText.reportsPaused, TripStatusText.openTheAppToKeepReporting))
     }
 }
 

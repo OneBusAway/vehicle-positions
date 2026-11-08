@@ -14,11 +14,13 @@ import Foundation
     struct Request {
         var attributes: TripActivityAttributes
         var state: TripActivityAttributes.ContentState
+        var staleDate: Date
     }
 
     struct Update {
         var id: String
         var state: TripActivityAttributes.ContentState
+        var staleDate: Date
     }
 
     struct Listed {
@@ -49,8 +51,8 @@ import Foundation
         listed.map { TripActivitySnapshot(id: $0.id, serverTripID: $0.serverTripID, isLive: ActivityKitHost.isLive($0.state)) }
     }
 
-    func request(_ attributes: TripActivityAttributes, _ state: TripActivityAttributes.ContentState) throws -> String {
-        requests.append(Request(attributes: attributes, state: state))
+    func request(_ attributes: TripActivityAttributes, _ state: TripActivityAttributes.ContentState, staleDate: Date) throws -> String {
+        requests.append(Request(attributes: attributes, state: state, staleDate: staleDate))
         guard areActivitiesEnabled else { throw Refusal.activitiesOff }
         guard inForeground else { throw TripActivityError.notInForeground }
         let id = "activity-\(requests.count)"
@@ -58,10 +60,10 @@ import Foundation
         return id
     }
 
-    func update(id: String, _ state: TripActivityAttributes.ContentState) async {
+    func update(id: String, _ state: TripActivityAttributes.ContentState, staleDate: Date) async {
         overlapped = overlapped || inFlight > 0
         inFlight += 1
-        updates.append(Update(id: id, state: state))
+        updates.append(Update(id: id, state: state, staleDate: staleDate))
         await whileUpdating?()
         inFlight -= 1
     }
