@@ -165,10 +165,12 @@ import Testing
 
     let now = Date(timeIntervalSince1970: 1_792_476_000)
     let busOne = [Vehicle(id: "bus-1", label: "Bus 1")]
+    let signIn = UUID()
 
     /// Signed in with a1 and r1, with no refresh due before the request.
     var signedIn: StoredToken {
-        StoredToken(token: "a1", issuedAt: now.addingTimeInterval(-60), refreshToken: "r1", expiresAt: now.addingTimeInterval(840))
+        StoredToken(token: "a1", issuedAt: now.addingTimeInterval(-60), refreshToken: "r1", expiresAt: now.addingTimeInterval(840),
+                    signInID: signIn)
     }
 
     func refreshingClient(_ tokens: any TokenStoring, refresher: TokenRefresher? = nil) throws -> TrackerClient {
@@ -206,6 +208,58 @@ import Testing
         #expect(try JSONSerialization.jsonObject(with: #require(sent[1].body)) as? [String: String] == ["refresh_token": "r1"])
         #expect(sent[2].headers["Authorization"] == "Bearer a2")
         #expect(try store.load() == StoredToken(token: "a2", issuedAt: now, refreshToken: "r2", expiresAt: now.addingTimeInterval(900)))
+        #expect(try store.load()?.signInID == signIn)
+    }
+
+    /// Driver 1's logout is turned away after driver 2 has signed in. Sent
+    /// again with driver 2's token, it would end their session on the server
+    /// while the phone shows them signed in.
+    @Test func a401AfterANewSignInIsNotSentAgainAsTheNextDriver() async throws {
+        let store = InMemoryTokenStore(signedIn)
+        let nextDriver = StoredToken(AuthTokens(accessToken: "b1", refreshToken: "rb1", expiresIn: 900), receivedAt: now)
+        StubURLProtocol.reset { req in
+            if req.value(forHTTPHeaderField: "Authorization") == "Bearer a1" {
+                try? store.save(nextDriver)
+                return (401, Data(#"{"error":"invalid token"}"#.utf8))
+            }
+            return (204, Data())
+        }
+        await #expect(throws: APIError.status(401, message: "invalid token")) {
+            try await refreshingClient(store).logout()
+        }
+        #expect(requests.map(\.headers["Authorization"]) == ["Bearer a1"])
+        #expect(try store.load() == nextDriver)
+        #expect(try store.load()?.signInID == nextDriver.signInID)
+    }
+
+    /// Another request renewed the token while this one was out, so the 401
+    /// is for the old token and the request goes again with the new one.
+    @Test func a401AfterARefreshInTheSameSignInIsSentAgain() async throws {
+        let store = InMemoryTokenStore(signedIn)
+        var renewed = StoredToken(AuthTokens(accessToken: "a2", refreshToken: "r2", expiresIn: 900), receivedAt: now)
+        renewed.signInID = signIn
+        let renewedByAnotherRequest = renewed
+        StubURLProtocol.reset { req in
+            if req.value(forHTTPHeaderField: "Authorization") == "Bearer a1" {
+                try? store.save(renewedByAnotherRequest)
+                return (401, Data(#"{"error":"invalid token"}"#.utf8))
+            }
+            return (200, Data(#"[{"id":"bus-1","label":"Bus 1"}]"#.utf8))
+        }
+        #expect(try await refreshingClient(store).myVehicles() == busOne)
+        #expect(requests.map(\.headers["Authorization"]) == ["Bearer a1", "Bearer a2"])
+    }
+
+    /// A token saved by a build before sign-in ids has none, and keeps none
+    /// through a refresh: its requests are sent again as before.
+    @Test func a401WithATokenSavedWithoutASignInIDIsStillSentAgain() async throws {
+        serve(refresh: renewedReply)
+        var saved = signedIn
+        saved.signInID = nil
+        let store = InMemoryTokenStore(saved)
+        #expect(try await refreshingClient(store).myVehicles() == busOne)
+        #expect(requests.map(\.url.path) == ["/api/v1/vehicles", "/api/v1/auth/refresh", "/api/v1/vehicles"])
+        #expect(try store.load()?.signInID == nil)
     }
 
     @Test func a401OnTheRetryIsNotRefreshedAgain() async throws {
@@ -274,7 +328,7 @@ import Testing
         let now = now
         let refresher = TokenRefresher(tokens: store, now: { now })
         let held = ScriptedRefresh()
-        async let first = refresher.afterUnauthorized(failedToken: "a1", refresh: held.call)
+        async let first = refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: held.call)
         #expect(await eventually { held.presented.count == 1 })
 
         let reporterClient = try refreshingClient(store, refresher: refresher)
