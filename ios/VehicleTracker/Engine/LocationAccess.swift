@@ -71,7 +71,7 @@ final class CoreLocationAccess: NSObject, LocationAccess, CLLocationManagerDeleg
         do {
             try await manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: Self.precisePurposeKey)
         } catch {
-            log.error("precise location request failed: \(String(describing: error))")
+            log.error("precise location request failed: \(String(describing: error), privacy: .public)")
         }
         return current()
     }

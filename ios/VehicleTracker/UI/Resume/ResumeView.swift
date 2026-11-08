@@ -93,7 +93,7 @@ struct ResumeView: View {
             do {
                 try await session.end()
             } catch {
-                log.error("the server did not confirm the end of the trip: \(String(describing: error))")
+                log.error("the server did not confirm the end of the trip: \(String(describing: error), privacy: .public)")
                 animated { endNotConfirmed = true }
                 // Read out when it appears, as Android's banner is.
                 AccessibilityNotification.Announcement(ResumeText.endNotConfirmed).post()

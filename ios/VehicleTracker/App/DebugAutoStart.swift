@@ -30,7 +30,7 @@ enum DebugAutoStart {
                 let vehicle = session.vehicles.first { $0.id == vehicleID } ?? Vehicle(id: vehicleID, label: vehicleID)
                 try await session.start(vehicle: vehicle, tripID: tripID)
             } catch {
-                log.error("auto-start failed: \(String(describing: error))")
+                log.error("auto-start failed: \(String(describing: error), privacy: .public)")
             }
         }
         #endif

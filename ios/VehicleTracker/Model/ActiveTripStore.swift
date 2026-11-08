@@ -76,7 +76,7 @@ nonisolated final class FileActiveTripStore: ActiveTripStoring, Sendable {
             let sent = try JSONCoding.decoder.decode(SentCount.self, from: Data(contentsOf: sentURL))
             return sent.serverTripID == serverTripID ? sent.count : 0
         } catch {
-            log.error("could not read the sent count; it starts again from 0: \(String(describing: error))")
+            log.error("could not read the sent count; it starts again from 0: \(String(describing: error), privacy: .public)")
             return 0
         }
     }
@@ -93,7 +93,7 @@ nonisolated final class FileActiveTripStore: ActiveTripStoring, Sendable {
         } catch {
             // A trip we cannot name is one this phone cannot end, so say so
             // rather than lose it quietly.
-            log.error("could not read the pending trip ends: \(String(describing: error))")
+            log.error("could not read the pending trip ends: \(String(describing: error), privacy: .public)")
             return []
         }
     }

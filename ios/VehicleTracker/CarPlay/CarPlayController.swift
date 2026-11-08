@@ -579,7 +579,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             do {
                 try await session.end()
             } catch {
-                log.error("the server did not confirm the end of the trip: \(String(describing: error))")
+                log.error("the server did not confirm the end of the trip: \(String(describing: error), privacy: .public)")
                 let alert = CarPlayTemplates.notEndedAlert(onTryAgain: { [weak self] in
                     self?.interface.dismissTemplate(animated: true, completion: nil)
                     self?.endTrip()

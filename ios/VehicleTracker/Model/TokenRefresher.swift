@@ -64,7 +64,7 @@ actor TokenRefresher {
         do {
             stored = try tokens.load()
         } catch {
-            log.error("could not read the stored sign-in to refresh it: \(String(describing: error))")
+            log.error("could not read the stored sign-in to refresh it: \(String(describing: error), privacy: .public)")
             return .unreachable("the stored sign-in could not be read")
         }
         guard let stored else { return .refused }
@@ -125,7 +125,7 @@ actor TokenRefresher {
             log.warning("the server refused the refresh token")
             return .refused
         case .unreachable(let message):
-            log.warning("could not refresh; keeping both tokens for the next request: \(message)")
+            log.warning("could not refresh; keeping both tokens for the next request: \(message, privacy: .public)")
             return .unreachable(message)
         }
     }
@@ -141,7 +141,7 @@ actor TokenRefresher {
             guard try tokens.load()?.refreshToken == refreshToken else { return }
             try tokens.save(StoredToken(issued, receivedAt: now()))
         } catch {
-            log.error("could not save the refreshed tokens; signing out: \(String(describing: error))")
+            log.error("could not save the refreshed tokens; signing out: \(String(describing: error), privacy: .public)")
             try? tokens.clear()
         }
     }
@@ -154,7 +154,7 @@ actor TokenRefresher {
             current.refreshToken = nil
             try tokens.save(current)
         } catch {
-            log.error("could not drop the refused refresh token: \(String(describing: error))")
+            log.error("could not drop the refused refresh token: \(String(describing: error), privacy: .public)")
         }
     }
 }
