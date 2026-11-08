@@ -20,6 +20,10 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     case previousTripNotEnded
     /// Location is refused for this app, or a restriction forbids it.
     case locationDenied
+    /// The location prompt got no answer in time: typically it never showed,
+    /// on a start from the car with the phone app in the background, so the
+    /// driver was never asked and nothing in Settings is off.
+    case locationNotAsked
     /// Location Services are off for the whole phone.
     case locationServicesOff
     /// Precise Location is off, so every fix would be dropped as too coarse.
@@ -37,6 +41,8 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
             String(localized: "Your previous trip could not be ended yet. Check your connection and try again.", comment: "Refusal when the end of a trip ended on this phone only could not be sent before the next start.")
         case .locationDenied:
             String(localized: "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip.", comment: "Refusal when the app has no location access.")
+        case .locationNotAsked:
+            String(localized: "Open OBA Vehicle Tracker on your iPhone to allow location.", comment: "Refusal when the location prompt got no answer, usually because it never showed: the driver was never asked.")
         case .locationServicesOff:
             String(localized: "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services.", comment: "Refusal when Location Services are off for the whole phone.")
         case .preciseLocationOff:
@@ -51,7 +57,7 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     var opensSettings: Bool {
         switch self {
         case .locationDenied, .locationServicesOff, .preciseLocationOff: true
-        case .notSignedIn, .unusableTrip, .busy, .previousTripNotEnded: false
+        case .notSignedIn, .unusableTrip, .busy, .previousTripNotEnded, .locationNotAsked: false
         }
     }
 }
@@ -454,7 +460,8 @@ final class TripSession {
         let refusal: TripSessionError
         switch state {
         case .allowed: return
-        case .notDetermined, .denied, .restricted: refusal = .locationDenied
+        case .notDetermined: refusal = .locationNotAsked
+        case .denied, .restricted: refusal = .locationDenied
         case .servicesOff: refusal = .locationServicesOff
         case .approximateOnly: refusal = .preciseLocationOff
         }

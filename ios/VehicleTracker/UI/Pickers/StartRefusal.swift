@@ -30,6 +30,10 @@ nonisolated struct StartRefusal: Equatable {
         case TripSessionError.unusableTrip:
             // A run with nothing to follow is not fixed by trying it again.
             self.init("mappin.slash", error.localizedDescription, nil)
+        case TripSessionError.locationNotAsked:
+            // Nothing is off in Settings. Trying again asks again, now that
+            // the driver is on the phone to answer.
+            self.init("location.fill", error.localizedDescription, .tryAgain)
         case let refusal as TripSessionError where refusal.opensSettings:
             self.init(refusal == .preciseLocationOff ? "scope" : "location.slash.fill", refusal.localizedDescription, .openSettings)
         default:

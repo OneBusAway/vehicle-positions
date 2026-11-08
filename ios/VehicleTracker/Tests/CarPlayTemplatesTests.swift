@@ -264,6 +264,19 @@ import Testing
         #expect(busy.titleVariants == ["You already have a trip running. End it before starting another."])
     }
 
+    /// The prompt shows only on the phone, so the car names the iPhone, as
+    /// its Reports row does for a fix only the phone can make.
+    @Test func aStartNeverAskedForLocationSendsTheDriverToTheIPhone() {
+        var dismissed = false
+        let alert = CarPlayTemplates.startRefusedAlert(TripSessionError.locationNotAsked, vehicleID: "4317") { dismissed = true }
+        #expect(alert.titleVariants == ["Allow location on iPhone"])
+        #expect(alert.actions.map(\.title) == ["OK"])
+        alert.actions[0].handler(alert.actions[0])
+        #expect(dismissed)
+        let denied = CarPlayTemplates.startRefusedAlert(TripSessionError.locationDenied, vehicleID: "4317") {}
+        #expect(denied.titleVariants == [TripSessionError.locationDenied.localizedDescription], "only the unasked start reads differently")
+    }
+
     @Test func routeSectionsPutRecentFirst() {
         let routes = [RouteInfo(id: "R1", shortName: "1", longName: "Straight", color: "", textColor: "", type: 3),
                       RouteInfo(id: "R2", shortName: "2", longName: "Loop", color: "", textColor: "", type: 3)]
