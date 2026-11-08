@@ -683,6 +683,28 @@ playback from step 5 again first, so fixes keep coming during step 3.
    Position paused** instead, the simulator's playback stopped; start it
    again (step 5). End the trip afterwards.
 
+4. Turn Location Services off for the whole phone, for an app that was never
+   asked. In the simulator's Settings app, open **Privacy & Security >
+   Location Services**, turn **Location Services** off and tap **Turn Off**.
+   Then:
+
+   ```bash
+   xcrun simctl privacy "$UDID" reset location org.onebusaway.vehicletracker
+   grep -cE '"path":"/api/v1/(gtfs/trips/|trips/start)' /tmp/vt-server.log
+   ```
+
+   Open the app again if the reset closed it, start **T1** as before, then
+   run the `grep` again.
+
+   **Expected outcome:** no iOS prompt appears. **Before you start** shows
+   **Location services** with "Location must be on for the whole phone" and
+   **Try again**; **Location** and **Precise location** are not reached,
+   **Continue** is greyed out, and **Cancel** is at the top. The `grep` count
+   is the same both times. Turn Location Services back on in Settings and go
+   back to the app: **Location** reads **Next** and **Cancel** is gone. Tap
+   **Continue**, then **Allow While Using App**: the run starts. End the trip
+   afterwards.
+
 ### Check 6b: Change vehicle after a refused start
 
 A 403 on a start means the driver's vehicles changed after the vehicle screen
