@@ -288,7 +288,10 @@ enum CarPlayTemplates {
     /// A refused start, in the phone's sentence for it and never the
     /// server's. The car offers no fix: that is the phone's job.
     static func startRefusedAlert(_ error: any Error, vehicleID: String, onOK: @escaping () -> Void) -> CPAlertTemplate {
-        errorAlert(StartRefusal(error, vehicleID: vehicleID).text, onOK: onOK)
+        if error as? TripSessionError == .locationNotAsked {
+            return errorAlert(String(localized: "Allow location on iPhone", comment: "CarPlay alert when a start from the car got no answer to the location prompt, which shows only on the iPhone."), onOK: onOK)
+        }
+        return errorAlert(StartRefusal(error, vehicleID: vehicleID).text, onOK: onOK)
     }
 
     static func errorAlert(_ message: String, onOK: @escaping () -> Void) -> CPAlertTemplate {

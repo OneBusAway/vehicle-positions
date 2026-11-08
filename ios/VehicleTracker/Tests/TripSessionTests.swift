@@ -261,17 +261,24 @@ import VehiclePositionsKit
         #expect(s.phase == .idle)
     }
 
-    /// The prompt came and went without an answer that iOS kept: there is
-    /// still no permission, and Settings is where to give it.
-    @Test func aPromptLeftUnansweredRefusesAsDenied() async throws {
+    /// The prompt's wait ran out with the driver still not asked, as on a
+    /// start from the car with the phone app in the background. Nothing is
+    /// off in Settings, so the refusal must not say it is.
+    @Test func aPromptThatTimedOutRefusesAsNotAskedNotDenied() async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
         access.state = .notDetermined
         let s = session()
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
-        await #expect(throws: TripSessionError.locationDenied) {
+        await #expect(throws: TripSessionError.locationNotAsked) {
             try await s.start(vehicle: bus, tripID: "T1")
         }
         #expect(access.requests == 1)
+        #expect(api.ends.isEmpty)
+        #expect(try store.loadPendingEnds() == [owed])
         #expect(api.tripRequests.isEmpty)
+        #expect(api.starts.isEmpty)
+        #expect(s.phase == .idle)
     }
 
     @Test func approximateLocationAsksOnceForPreciseAndTheStartGoesAhead() async throws {
@@ -1368,11 +1375,14 @@ nonisolated final class UnwritablePendingEndsStore: ActiveTripStoring, @unchecke
         #expect(!TripSessionError.unusableTrip.opensSettings)
         #expect(!TripSessionError.busy.opensSettings)
         #expect(!TripSessionError.previousTripNotEnded.opensSettings)
+        #expect(!TripSessionError.locationNotAsked.opensSettings, "nothing in Settings is off")
     }
 
     @Test func eachLocationRefusalSaysWhatToChange() {
         #expect(TripSessionError.locationDenied.localizedDescription
             == "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip.")
+        #expect(TripSessionError.locationNotAsked.localizedDescription
+            == "Open OBA Vehicle Tracker on your iPhone to allow location.")
         #expect(TripSessionError.locationServicesOff.localizedDescription
             == "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services.")
         #expect(TripSessionError.preciseLocationOff.localizedDescription

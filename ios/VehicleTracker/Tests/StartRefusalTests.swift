@@ -32,6 +32,8 @@ import UIKit
             == "calendar.badge.clock | The schedule moved on to a new day. | reload")
         #expect(row(refusal(TripSessionError.locationDenied))
             == "location.slash.fill | Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip. | openSettings")
+        #expect(row(refusal(TripSessionError.locationNotAsked))
+            == "location.fill | Open OBA Vehicle Tracker on your iPhone to allow location. | tryAgain")
         #expect(row(refusal(TripSessionError.locationServicesOff))
             == "location.slash.fill | Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services. | openSettings")
         #expect(row(refusal(TripSessionError.preciseLocationOff))
@@ -59,14 +61,15 @@ import UIKit
 
     /// A session error's sentence lives on the error, so the banner and the
     /// car read the same one.
-    @Test(arguments: [TripSessionError.unusableTrip, .previousTripNotEnded, .locationDenied, .locationServicesOff, .preciseLocationOff])
+    @Test(arguments: [TripSessionError.unusableTrip, .previousTripNotEnded, .locationDenied, .locationNotAsked,
+                      .locationServicesOff, .preciseLocationOff])
     func aSessionErrorsRowReadsItsOwnSentence(error: TripSessionError) {
         #expect(refusal(error).text == error.localizedDescription)
     }
 
     @Test(arguments: [
         "hand.raised.fill", "info.circle.fill", "exclamationmark.arrow.triangle.2.circlepath", "icloud.slash.fill",
-        "mappin.slash", "calendar.badge.clock", "location.slash.fill", "scope", "exclamationmark.circle.fill",
+        "mappin.slash", "calendar.badge.clock", "location.slash.fill", "location.fill", "scope", "exclamationmark.circle.fill",
         // The empty states and the tiles.
         "bus", "icloud.slash", "magnifyingglass", "calendar", "calendar.badge.exclamationmark", "star", "star.fill", "star.slash",
     ])
