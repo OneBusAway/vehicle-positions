@@ -21,12 +21,15 @@ import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FakeSessionStore
+import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.api.ApiFactory
+import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ApiHolder
+import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -42,7 +45,7 @@ class TripReporterTest {
 
     private fun reporterWith(
         server: MockWebServer,
-        queue: FakeOfflineFixQueue = FakeOfflineFixQueue(),
+        queue: OfflineFixQueue = FakeOfflineFixQueue(),
         elapsedMs: () -> Long = steppingClock(),
     ): Pair<TripReporter, TrackingRepository> {
         val tracking = TrackingRepository()
@@ -445,5 +448,80 @@ class TripReporterTest {
         assertEquals(0, queue.queued.size)
         assertEquals(1, server.requestCount)
         server.shutdown()
+    }
+
+    /** A queue on a full disk: the calls switched on throw, as its file would. */
+    private class FailingQueue(val inner: FakeOfflineFixQueue = FakeOfflineFixQueue()) : OfflineFixQueue by inner {
+        var addFails = false
+        var oldestFails = false
+        var removeFails = false
+
+        override suspend fun add(report: LocationReportDto) {
+            if (addFails) throw IOException("No space left on device")
+            inner.add(report)
+        }
+
+        override suspend fun oldest(max: Int): List<LocationReportDto> {
+            if (oldestFails) throw IOException("I/O error")
+            return inner.oldest(max)
+        }
+
+        override suspend fun removeOldest(count: Int) {
+            if (removeFails) throw IOException("No space left on device")
+            inner.removeOldest(count)
+        }
+    }
+
+    // The service launches each report with no exception handler, so a throw here would end
+    // tracking mid-trip. Losing the one fix is better.
+    @Test fun `a fix the queue can't store is lost, not the trip`() = runTest {
+        val queue = FailingQueue().apply { addFails = true }
+        val server = MockWebServer().apply { start() }
+        val (reporter, tracking) = reporterWith(server, queue = queue)
+        server.shutdown()
+
+        reporter.report(trip, fix())
+
+        assertEquals(TrackingProblem.NO_NETWORK, tracking.state.value.problem)
+        assertEquals(0, queue.inner.queued.size)
+    }
+
+    @Test fun `a queue that can't be read doesn't fail the report that went through`() = runTest {
+        val queue = FailingQueue().apply { oldestFails = true }
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        val (reporter, tracking) = reporterWith(server, queue = queue)
+
+        reporter.report(trip, fix())
+
+        assertEquals(1, tracking.state.value.fixesSent)
+        assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
+        assertEquals(1, server.requestCount)
+        server.shutdown()
+    }
+
+    // Both places a batch is dropped: fixes too old to upload, and an upload refused for good.
+    @Test fun `a queue that can't drop fixes doesn't fail the report that went through`() = runTest {
+        for ((label, reportTs, historyCode) in listOf(
+            Triple("too old", 1000L + 25 * 3600L, null),
+            Triple("refused", 1020L, 403),
+        )) {
+            val queue = FailingQueue()
+            val offline = MockWebServer().apply { start() }
+            val (offlineReporter, _) = reporterWith(offline, queue = queue)
+            offline.shutdown()
+            offlineReporter.report(trip, fix(ts = 1000L))
+            queue.removeFails = true
+
+            val online = MockWebServer().apply { start() }
+            online.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+            historyCode?.let { online.enqueue(MockResponse().setResponseCode(it).setBody("""{"error":"x"}""")) }
+            val (reporter, tracking) = reporterWith(online, queue = queue)
+            reporter.report(trip, fix(ts = reportTs))
+
+            assertEquals(label, 1, tracking.state.value.fixesSent)
+            assertEquals(label, 1, queue.inner.queued.size)
+            online.shutdown()
+        }
     }
 }

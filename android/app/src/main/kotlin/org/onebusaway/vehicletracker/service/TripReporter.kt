@@ -140,13 +140,24 @@ class TripReporter @Inject constructor(
             // Too late for the realtime feed by the time it could go, but it is still where the bus
             // was: kept for location history.
             Log.w(TAG, "Queueing location report for history after network failure", e)
-            offlineQueue.add(dto)
+            try {
+                offlineQueue.add(dto)
+            } catch (queueError: IOException) {
+                // A full disk, say. Nothing above this catches it, so it would end tracking mid-trip:
+                // losing one queued fix is the lesser loss.
+                Log.w(TAG, "Could not queue location report for history", queueError)
+            }
             refreshProblem(sendProblem = TrackingProblem.NO_NETWORK)
             return
         }
         // The connection works again, and this report has gone: send one batch of what queued up
         // while it did not. One per report keeps within the server's limit on history uploads.
-        uploadOneHistoryBatch(nowEpochSec = fix.timeEpochSec)
+        try {
+            uploadOneHistoryBatch(nowEpochSec = fix.timeEpochSec)
+        } catch (e: IOException) {
+            // The upload's own network failures are handled inside; this is the queue's file failing.
+            Log.w(TAG, "Could not read or update the offline queue", e)
+        }
     }
 
     /**
