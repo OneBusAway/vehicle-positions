@@ -1,6 +1,8 @@
 package org.onebusaway.vehicletracker.data
 
+import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerializationException
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.LoginRequest
@@ -10,8 +12,11 @@ import retrofit2.HttpException
 import java.net.UnknownServiceException
 import javax.inject.Inject
 
+private const val TAG = "AuthRepository"
+
 class AuthRepository @Inject constructor(
     private val sessionStore: SessionStore,
+    private val tripStateStore: TripStateStore,
     private val apiFactory: ApiFactory,
     private val apiProvider: TrackerApiProvider,
     private val offlineQueue: OfflineFixQueue,
@@ -19,6 +24,7 @@ class AuthRepository @Inject constructor(
 ) {
     suspend fun login(serverUrl: String, email: String, password: String): Result<Unit> = try {
         val resp = apiFactory.create(serverUrl).login(LoginRequest(email, password))
+        dropTripFromAnotherServer(serverUrl)
         sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
         offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
         Result.success(Unit)
@@ -26,6 +32,19 @@ class AuthRepository @Inject constructor(
         throw e
     } catch (e: Exception) {
         Result.failure(mapLoginError(e))
+    }
+
+    /**
+     * A trip stored for another server stays open there, and would otherwise be picked up here: Resume would send its
+     * reports to [serverUrl]. Dropped once the sign-in has worked, and before it is saved, so the new token never sits
+     * next to it. The old server's admin can end it there. Not kept as an end to send, which would go here too.
+     */
+    private suspend fun dropTripFromAnotherServer(serverUrl: String) {
+        val trip = tripStateStore.activeTrip.first() ?: return
+        val tripServer = trip.server(sessionStore.session.first().serverUrl) ?: return
+        if (sameServer(tripServer, serverUrl)) return
+        Log.i(TAG, "Dropped trip ${trip.tripDbId}: it is open on another server than the one signed in to")
+        tripStateStore.clearActiveTrip()
     }
 
     /** Tells the server this session is over. The caller signs out on this phone whatever comes back. */

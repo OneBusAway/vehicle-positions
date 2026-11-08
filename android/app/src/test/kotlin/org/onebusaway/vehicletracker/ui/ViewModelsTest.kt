@@ -121,8 +121,11 @@ class ViewModelsTest {
         if (!condition()) fail("Timed out after ${timeoutMs}ms waiting for: $description")
     }
 
-    private fun authOver(sessionStore: SessionStore, apiProvider: TrackerApiProvider = TrackerApiProvider { error("no server to log out of") }) =
-        AuthRepository(sessionStore, ApiFactory { null }, apiProvider, FakeOfflineFixQueue(), clock = { 0L })
+    private fun authOver(
+        sessionStore: SessionStore,
+        apiProvider: TrackerApiProvider = TrackerApiProvider { error("no server to log out of") },
+        tripState: TripStateStore = FakeTripStateStore(),
+    ) = AuthRepository(sessionStore, tripState, ApiFactory { null }, apiProvider, FakeOfflineFixQueue(), clock = { 0L })
 
     // --- Sign in ---
 
@@ -135,7 +138,7 @@ class ViewModelsTest {
         builtIn: String? = null,
         again: Boolean = false,
     ) = LoginViewModel(
-        authOver(sessionStore),
+        authOver(sessionStore, tripState = tripState),
         sessionStore,
         tripState,
         geometryStore,
@@ -1005,7 +1008,7 @@ class ViewModelsTest {
 
     private suspend fun signIn(queue: OfflineFixQueue, server: MockWebServer, email: String) {
         server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}"""))
-        val auth = AuthRepository(FakeSessionStore(), ApiFactory { null }, TrackerApiProvider { error("no logout") }, queue, clock = { 0L })
+        val auth = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, TrackerApiProvider { error("no logout") }, queue, clock = { 0L })
         val result = auth.login(server.url("/").toString(), email, "pw")
         assertTrue("the sign-in itself must succeed: ${result.exceptionOrNull()}", result.isSuccess)
     }
