@@ -301,6 +301,36 @@ import Testing
         #expect(items[1].detailText == "Now · A → B")
     }
 
+    /// The detail under a plain run and under the run marked Now, both runs
+    /// carrying the given number and block.
+    func runDetails(number: String, block: String) -> [String?] {
+        let trips = [7, 8].map { hour in
+            var trip = TripSummary(id: "\(hour)", headsign: "North", directionID: 0, startsAt: TripFixtures.at(hour, 0),
+                                   endsAt: TripFixtures.at(hour, 30), firstStop: "A", lastStop: "B")
+            trip.shortName = number
+            trip.blockID = block
+            return trip
+        }
+        let page = RouteTripsPage(routeID: "R1", serviceDate: "20260902", timezone: "America/Los_Angeles", trips: trips)
+        return CarPlayTemplates.tripItems(page, now: TripFixtures.at(8, 10), onSelect: { _ in }).map(\.detailText)
+    }
+
+    @Test func aRunWithANumberAndABlockShowsBothInPlaceOfTheStops() {
+        #expect(runDetails(number: "1503", block: "599-20") == ["Run 1503 · Block 599-20", "Now · Run 1503 · Block 599-20"])
+    }
+
+    @Test func aRunWithOnlyANumberShowsTheNumber() {
+        #expect(runDetails(number: "1503", block: "") == ["Run 1503", "Now · Run 1503"])
+    }
+
+    @Test func aRunWithOnlyABlockShowsTheBlock() {
+        #expect(runDetails(number: "", block: "599-20") == ["Block 599-20", "Now · Block 599-20"])
+    }
+
+    @Test func aRunWithNeitherKeepsItsStops() {
+        #expect(runDetails(number: "", block: "") == ["A → B", "Now · A → B"])
+    }
+
     /// The list starts at the run just gone, so the marked run is second
     /// and a long route's morning does not fill the car's cap.
     @Test func tripItemsStartAtTheRunJustGoneAndMarkTheRunStartingNearestNow() {

@@ -254,12 +254,14 @@ enum CarPlayTemplates {
 
     /// The runs from the run just gone, so the run under way or next is
     /// second: the car caps the list from the top, and on a long route the
-    /// runs since the morning would otherwise fill it.
+    /// runs since the morning would otherwise fill it. Under each run, its
+    /// number and block in place of the end stops, which every run in a
+    /// direction shares: one short line for the car, as the phone's row.
     static func tripItems(_ page: RouteTripsPage, now: Date, onSelect: @escaping (TripSummary) -> Void) -> [CPListItem] {
         let highlighted = TripRun.highlighted(in: page.trips, now: now)
         let opening = TripRun.openAt(in: page.trips, now: now).flatMap { id in page.trips.firstIndex { $0.id == id } } ?? 0
         return page.trips[opening...].map { trip in
-            var detail = PickerText.stops(trip.firstStop, trip.lastStop)
+            var detail = RunLabel(number: trip.shortName, block: trip.blockID).text ?? PickerText.stops(trip.firstStop, trip.lastStop)
             if trip.id == highlighted?.id {
                 detail = TripStatusText.pair(trip.startsAt <= now ? PickerText.now : PickerText.next, detail)
             }
