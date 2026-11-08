@@ -612,8 +612,7 @@ Response codes:
 unchanged and `token` is still in the login response. Before lowering
 `ACCESS_TOKEN_TTL`, a client must handle `401 → refresh → retry`; the
 deprecated `token` field keeps it compiling and parsing, but does **not**
-protect it from a shorter lifetime. The Android app handles it. The iOS app
-still needs the same change.
+protect it from a shorter lifetime. The Android and iOS apps can refresh expired access tokens, but the simulator does not support token refreshing. If a simulation runs longer than the access token's lifetime (`ACCESS_TOKEN_TTL`), authenticated requests may start returning `401 Unauthorized`.
 
 Both lifetimes are configurable:
 

@@ -536,15 +536,15 @@ func login(ctx context.Context, client *http.Client, baseURL, email, password st
 	}
 
 	var out struct {
-		Token string `json:"token"`
+		AccessToken string `json:"access_token"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&out); err != nil {
 		return "", fmt.Errorf("decoding login response: %w", err)
 	}
-	if out.Token == "" {
-		return "", errors.New("login response contained no token")
+	if out.AccessToken == "" {
+		return "", errors.New("login response contained no access_token")
 	}
-	return out.Token, nil
+	return out.AccessToken, nil
 }
 
 // fetchRouteIDs lists the route ids in the server's GTFS schedule.

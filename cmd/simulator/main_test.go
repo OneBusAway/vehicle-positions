@@ -308,7 +308,7 @@ func TestSimulateVehicle(t *testing.T) {
 	assert.Greater(t, received.Load(), int64(1))
 }
 
-func TestLoginReturnsToken(t *testing.T) {
+func TestLoginReturnsAccessToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/api/v1/auth/login", r.URL.Path)
@@ -317,7 +317,7 @@ func TestLoginReturnsToken(t *testing.T) {
 		assert.Equal(t, "sim@example.com", body["email"])
 		assert.Equal(t, "hunter2", body["password"])
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"token":"tok-123"}`))
+		_, _ = w.Write([]byte(`{"access_token":"tok-123"}`))
 	}))
 	defer server.Close()
 
@@ -346,7 +346,18 @@ func TestLoginRejectsEmptyToken(t *testing.T) {
 
 	_, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no token")
+	assert.Contains(t, err.Error(), "login response contained no access_token")
+}
+
+func TestLoginRejectsDeprecatedTokenOnly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"token":"old123"}`))
+	}))
+	defer server.Close()
+	token, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
+	require.Error(t, err)
+	assert.Empty(t, token)
 }
 
 // The regression this fixes: reports must carry the session token, because
@@ -462,7 +473,7 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]string{"token": "token-for-" + str("email")})
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "token-for-" + str("email")})
 		case "/api/v1/trips/start":
 			trips[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")] = str("vehicle_id")
 			w.WriteHeader(http.StatusCreated)

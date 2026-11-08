@@ -70,18 +70,14 @@ type LoginRequest struct {
 }
 
 // LoginResponse is returned by a successful login and by the refresh
-// endpoint, so a client can parse both with one model.
+// endpoint, so a client can parse both responses with one model.
 //
-// Token repeats AccessToken verbatim. It is the field the original
-// single-token response returned, and the iOS app and the simulator still
-// read it: the iOS app decodes it as a required field (`var token: String`),
-// so dropping it would not degrade to an empty string, it would fail the
-// next login. The Android app reads access_token. It is deprecated, not
-// supported: new clients should read access_token and refresh before
-// expires_in elapses.
-//
-// TODO: remove the deprecated "token" alias once the iOS app and the
-// simulator read access_token (target: the Milestone 3 release).
+// Token contains the same value as AccessToken but is deprecated.
+// It remains in the response for backward compatibility with older clients.
+// New clients should use access_token instead of token.
+// The Android and iOS apps and the simulator now read access_token.
+// Unlike the mobile apps, the simulator does not refresh expired
+// access tokens.
 type LoginResponse struct {
 	Token        string `json:"token"`
 	AccessToken  string `json:"access_token"`
