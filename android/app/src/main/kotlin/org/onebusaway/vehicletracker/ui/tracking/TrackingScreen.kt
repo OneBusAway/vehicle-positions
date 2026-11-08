@@ -79,6 +79,7 @@ fun TrackingScreen(
         viewModel.onScreenVisible(true)
         onStopOrDispose { viewModel.onScreenVisible(false) }
     }
+    KeepScreenOnWhileCharging()
     val context = LocalContext.current
     val mapSupported = remember { supportsMap(context.glEsVersion()) }
     TrackingScreenContent(
