@@ -2,10 +2,12 @@ package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
+import java.io.File
 
 class FileOfflineFixQueueTest {
     @get:Rule val tmp = TemporaryFolder()
@@ -60,5 +62,60 @@ class FileOfflineFixQueueTest {
         reopened.claimFor("https://vp.example b@example.com")
         assertEquals(emptyList<Long>(), reopened.oldest(10).map { it.timestamp })
         assertEquals(emptyList<Long>(), FileOfflineFixQueue(file).oldest(10).map { it.timestamp })
+    }
+
+    // Fixes queued by a build before owners have no owner file.
+    private val driverA = "https://vp.example a@example.com"
+    private val driverB = "https://vp.example b@example.com"
+
+    @Test fun `an unowned queue claimed for the restored session keeps its fixes at that driver's sign-in`() = runTest {
+        val file = tmp.newFile("offline.jsonl")
+        FileOfflineFixQueue(file).add(report(1))
+
+        FileOfflineFixQueue(file).claimIfUnowned(driverA)
+        val atSignIn = FileOfflineFixQueue(file)
+        atSignIn.claimFor(driverA)
+
+        assertEquals(listOf(1L), atSignIn.oldest(10).map { it.timestamp })
+    }
+
+    @Test fun `another account signing in still drops what the restored session claimed`() = runTest {
+        val file = tmp.newFile("offline.jsonl")
+        FileOfflineFixQueue(file).add(report(1))
+
+        FileOfflineFixQueue(file).claimIfUnowned(driverA)
+        val atSignIn = FileOfflineFixQueue(file)
+        atSignIn.claimFor(driverB)
+
+        assertEquals(emptyList<Long>(), atSignIn.oldest(10).map { it.timestamp })
+    }
+
+    @Test fun `a queue that has an owner keeps it`() = runTest {
+        val file = tmp.newFile("offline.jsonl")
+        val queue = FileOfflineFixQueue(file)
+        queue.claimFor(driverA)
+        queue.add(report(1))
+
+        queue.claimIfUnowned(driverB)
+        assertEquals("nothing is dropped", listOf(1L), queue.oldest(10).map { it.timestamp })
+        val atSignIn = FileOfflineFixQueue(file)
+        atSignIn.claimFor(driverA)
+
+        assertEquals(listOf(1L), atSignIn.oldest(10).map { it.timestamp })
+    }
+
+    @Test fun `an owner that can't be written is logged, not thrown`() = runTest {
+        val dir = tmp.newFolder("queue")
+        val queue = FileOfflineFixQueue(File(dir, "offline.jsonl"))
+        queue.add(report(1))
+        dir.setWritable(false)
+        try {
+            assumeFalse("the folder is still writable, as it is for root", dir.canWrite())
+            queue.claimIfUnowned(driverA)
+        } finally {
+            dir.setWritable(true)
+        }
+
+        assertEquals(listOf(1L), queue.oldest(10).map { it.timestamp })
     }
 }
