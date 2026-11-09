@@ -463,8 +463,9 @@ final class TripSession {
     /// refuse while the trip is open, and before a sign-out, the last moment
     /// this driver's token works. Each is forgotten as soon as its own end is
     /// confirmed, and a 404 confirms it too. If one cannot be sent,
-    /// ``TripSessionError/previousTripNotEnded`` is thrown and the rest are
-    /// kept: a start is refused, and a sign-out goes on without them. Other
+    /// ``TripSessionError/previousTripNotEnded`` is thrown, or the 401 itself
+    /// when the sign-in has ended, and the rest are kept: a start is refused,
+    /// and a sign-out goes on without them. Other
     /// drivers' ends wait for that driver's own next start or sign-out: their
     /// open trips do not block this driver's. Ends owed to another server wait
     /// until the driver signs in there again.
@@ -479,6 +480,10 @@ final class TripSession {
                 log.notice("the server had no open trip \(pendingEnd.serverTripID) to end; forgetting its pending end")
             } catch {
                 log.error("could not send the end of trip \(pendingEnd.serverTripID), which was ended on this phone only: \(String(describing: error), privacy: .public)")
+                // The client has already tried a refresh, so the sign-in is
+                // over: the caller sends the driver to sign in again, which
+                // checking the connection would never fix.
+                if case APIError.status(401, _) = error { throw error }
                 throw TripSessionError.previousTripNotEnded
             }
             pending.removeAll { $0 == pendingEnd }

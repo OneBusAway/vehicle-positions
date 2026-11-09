@@ -722,6 +722,30 @@ import VehiclePositionsKit
         #expect(s.phase == .idle)
     }
 
+    /// A 401 the refresh could not fix means the sign-in is over, so the start
+    /// fails with the 401 itself, which the phone and CarPlay both answer by
+    /// signing out. The end waits for this driver's next sign-in.
+    @Test func aPendingEndRefused401SendsTheDriverToSignIn() async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
+        api.endError = APIError.status(401, message: "invalid token")
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        var refusal: (any Error)?
+        do {
+            try await s.start(vehicle: bus, tripID: "T1")
+        } catch {
+            refusal = error
+        }
+        let error = try #require(refusal)
+        #expect(api.tripRequests.isEmpty)
+        #expect(api.starts.isEmpty)
+        #expect(s.handleIfUnauthorized(error))
+        #expect(s.phase == .signedOut)
+        #expect(try store.loadPendingEnds() == [owed], "kept for the next sign-in")
+    }
+
     /// Another driver's open trip does not block this driver's start, and
     /// their pending end waits for their own next start. The email matches
     /// case-insensitively, as it does for a stored trip.
