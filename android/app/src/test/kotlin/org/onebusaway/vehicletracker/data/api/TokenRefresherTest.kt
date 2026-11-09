@@ -85,8 +85,8 @@ class TokenRefresherTest {
         scopes.forEach { it.cancel() }
     }
 
-    private fun holder(store: SessionStore = sessions, now: Long = NOW) =
-        ApiHolder(store, CoroutineScope(Job().apply { cancel() }), clock = { now })
+    private fun holder(store: SessionStore = sessions, now: Long = NOW, clock: () -> Long = { now }) =
+        ApiHolder(store, CoroutineScope(Job().apply { cancel() }), clock)
 
     private fun newDataStore(): DataStore<Preferences> = PreferenceDataStoreFactory.create(
         scope = CoroutineScope(Job() + Dispatchers.IO).also { scopes += it },
@@ -335,6 +335,105 @@ class TokenRefresherTest {
         assertEquals(Session(serverUrl, "a1", ISSUED_AT, "r1", ISSUED_AT + 900), sessions.state.value)
     }
 
+    // #298: tried again on every report, a refused refresh token or a server that can't be reached
+    // spends the per-IP refresh limit that drivers at a depot share.
+    @Test fun `an early refresh the server refused is not tried again for a minute`() =
+        assertEarlyRefreshHeldForAMinuteAfter(unauthorized("invalid or expired refresh token"))
+
+    @Test fun `an early refresh that couldn't get through is not tried again for a minute`() =
+        assertEarlyRefreshHeldForAMinuteAfter(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+
+    private fun assertEarlyRefreshHeldForAMinuteAfter(failure: MockResponse) = runTest {
+        var now = DUE
+        val api = holder(clock = { now }).api()
+        fake.accepted = "a1"
+        fake.refreshReply = { failure }
+        api.myVehicles()
+
+        now = DUE + 59
+        api.myVehicles()
+
+        now = DUE + 60
+        fake.accepted = "a2"
+        fake.refreshReply = { pair("a2", "r2") }
+        api.myVehicles()
+
+        val requests = recorded()
+        assertEquals(
+            listOf("/api/v1/auth/refresh", "/api/v1/vehicles", "/api/v1/vehicles", "/api/v1/auth/refresh", "/api/v1/vehicles"),
+            requests.map { it.path },
+        )
+        assertEquals(listOf("Bearer a1", "Bearer a1", "Bearer a2"), requests.filter { it.path == "/api/v1/vehicles" }.map { it.getHeader("Authorization") })
+        assertEquals(listOf("""{"refresh_token":"r1"}"""), requests.refreshes().drop(1).map { it.body.readUtf8() })
+    }
+
+    // Without a refresh after a 401 the request can't go at all.
+    @Test fun `a 401 refreshes at once while early refreshes are held back`() = runTest {
+        var now = DUE
+        val api = holder(clock = { now }).api()
+        fake.accepted = "a1"
+        fake.refreshReply = { MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST) }
+        api.myVehicles()
+
+        now = DUE + 30
+        fake.accepted = "a2"
+        fake.refreshReply = { pair("a2", "r2") }
+        assertEquals(emptyList<VehicleDto>(), api.myVehicles())
+
+        val requests = recorded()
+        assertEquals(
+            listOf("/api/v1/auth/refresh", "/api/v1/vehicles", "/api/v1/vehicles", "/api/v1/auth/refresh", "/api/v1/vehicles"),
+            requests.map { it.path },
+        )
+        assertEquals(listOf(null, "Bearer a1", "Bearer a1", null, "Bearer a2"), requests.map { it.getHeader("Authorization") })
+        assertEquals(Session(serverUrl, "a2", DUE + 30, "r2", DUE + 930), sessions.state.value)
+    }
+
+    @Test fun `a new sign-in is not held back by the driver before's failed early refresh`() = runTest {
+        var now = DUE
+        val api = holder(clock = { now }).api()
+        fake.accepted = "a1"
+        fake.refreshReply = { unauthorized("invalid or expired refresh token") }
+        api.myVehicles()
+
+        // A token that lives a minute is due halfway through, so this one is due within the hold.
+        sessions.saveLogin(serverUrl, "next@example.com", IssuedTokens("b1", "rb1", DUE + 65, DUE + 5))
+        now = DUE + 35
+        fake.accepted = "b2"
+        fake.refreshReply = { pair("b2", "rb2") }
+        api.myVehicles()
+
+        // Refreshed before the request, so it never meets the 401 a held-back refresh would.
+        val (refresh, request) = recorded().drop(2)
+        assertEquals("""{"refresh_token":"rb1"}""", refresh.body.readUtf8())
+        assertEquals("/api/v1/vehicles", request.path)
+        assertEquals("Bearer b2", request.getHeader("Authorization"))
+    }
+
+    @Test fun `a refresh that works ends the hold`() = runTest {
+        var now = DUE
+        val api = holder(clock = { now }).api()
+        fake.accepted = "a1"
+        fake.refreshReply = { MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST) }
+        api.myVehicles()
+
+        now = DUE + 10
+        fake.accepted = "a2"
+        fake.refreshReply = { pair("a2", "r2", expiresIn = 60) }
+        api.myVehicles()
+
+        // a2 is due now, and the hold would have run twenty seconds more.
+        now = DUE + 40
+        fake.accepted = "a3"
+        fake.refreshReply = { pair("a3", "r3", expiresIn = 60) }
+        api.myVehicles()
+
+        val (refresh, request) = recorded().drop(5)
+        assertEquals("""{"refresh_token":"r2"}""", refresh.body.readUtf8())
+        assertEquals("/api/v1/vehicles", request.path)
+        assertEquals("Bearer a3", request.getHeader("Authorization"))
+    }
+
     @Test fun `a token due a refresh that another request has already refreshed is swapped without a refresh`() = runTest {
         val holder = holder(now = DUE)
         holder.api() // seeds the cached copy with a1, due now
@@ -451,8 +550,8 @@ class TokenRefresherTest {
         /** When a token issued at [ISSUED_AT] for 900 seconds is refreshed early: a minute before it expires. */
         const val DUE = ISSUED_AT + 840
 
-        fun pair(access: String, refresh: String) = MockResponse().setBody(
-            """{"token":"$access","access_token":"$access","refresh_token":"$refresh","expires_in":900}""")
+        fun pair(access: String, refresh: String, expiresIn: Long = 900) = MockResponse().setBody(
+            """{"token":"$access","access_token":"$access","refresh_token":"$refresh","expires_in":$expiresIn}""")
 
         fun unauthorized(error: String) = MockResponse().setResponseCode(401).setBody("""{"error":"$error"}""")
     }
