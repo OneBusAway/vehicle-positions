@@ -28,14 +28,14 @@ import VehiclePositionsKit
         return trip
     }
 
-    /// What a relaunch finds: a fresh token, a known server and this driver's
-    /// own trip in the store, which the session takes up as `.paused`.
     /// A session whose sign-out deadline the test fires by hand.
     func session(deadline: ManualSleep) -> TripSession {
         TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
                     access: access, makeAPI: { _, _ in api }, now: { clock.now }, sleep: deadline.sleep(for:))
     }
 
+    /// What a relaunch finds: a fresh token, a known server and this driver's
+    /// own trip in the store, which the session takes up as `.paused`.
     func pausedSession(trip: TripGeometry = TripFixtures.t1) throws -> (session: TripSession, active: ActiveTrip) {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")
@@ -720,6 +720,30 @@ import VehiclePositionsKit
         #expect(api.starts.isEmpty)
         #expect(try store.loadPendingEnds() == [owed], "kept for the next start")
         #expect(s.phase == .idle)
+    }
+
+    /// A 401 the refresh could not fix means the sign-in is over, so the start
+    /// fails with the 401 itself, which the phone and CarPlay both answer by
+    /// signing out. The end waits for this driver's next sign-in.
+    @Test func aPendingEndRefused401SendsTheDriverToSignIn() async throws {
+        let owed = PendingTripEnd(serverTripID: 7, driverEmail: "d@test.com", serverURL: server.absoluteString)
+        try store.savePendingEnds([owed])
+        api.endError = APIError.status(401, message: "invalid token")
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+
+        var refusal: (any Error)?
+        do {
+            try await s.start(vehicle: bus, tripID: "T1")
+        } catch {
+            refusal = error
+        }
+        let error = try #require(refusal)
+        #expect(api.tripRequests.isEmpty)
+        #expect(api.starts.isEmpty)
+        #expect(s.handleIfUnauthorized(error))
+        #expect(s.phase == .signedOut)
+        #expect(try store.loadPendingEnds() == [owed], "kept for the next sign-in")
     }
 
     /// Another driver's open trip does not block this driver's start, and
