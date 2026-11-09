@@ -58,7 +58,11 @@ func revokeSessionCookie(r *http.Request, secret []byte, revoker TokenRevoker) e
 		return nil
 	}
 	jti, _ := claims["jti"].(string)
-
+	if jti == "" {
+		slog.Debug("admin logout: session cookie missing jti")
+		return nil
+	}
+	
 	// adminClaimsFromCookie never accepts a token whose sub is not a user ID,
 	// so such a cookie is already dead and the caller may clear it.
 	sub, err := claims.GetSubject()
