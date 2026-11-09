@@ -1425,6 +1425,29 @@ import VehiclePositionsKit
         #expect(moved.phase == .idle)
         #expect(try store.load() == nil)
     }
+
+    /// An older build's trip would go by the new server once the sign-in is
+    /// saved, so a trip that can't be dropped fails the sign-in, with the
+    /// banner any other failure on the phone shows.
+    @Test func aTripThatCannotBeDroppedFailsTheSignInToAnotherServer() async throws {
+        let older = trip(on: nil)
+        let unclearable = UnclearableTripStore(older)
+        defaults.set("https://old.example.org", forKey: "serverURL")
+        let s = TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: unclearable,
+                            locations: locations, access: access, makeAPI: { _, _ in api }, now: { clock.now })
+
+        let error = await #expect(throws: CocoaError.self) {
+            try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        }
+        #expect(try tokens.load() == nil, "no token is saved")
+        #expect(s.settings.serverURLString == "https://old.example.org")
+        #expect(s.phase == .signedOut, "the trip is not taken up")
+        #expect(try unclearable.load() == older)
+
+        var form = SignInForm()
+        form.failed(try #require(error), server: server.absoluteString)
+        #expect(form.failure == .serverError)
+    }
 }
 
 /// Keeps the token in memory and notes, at each save, the trip stored then.
@@ -1454,6 +1477,21 @@ nonisolated final class UnwritablePendingEndsStore: ActiveTripStoring, @unchecke
     func saveSent(_ count: Int, for serverTripID: Int64) throws { try trips.saveSent(count, for: serverTripID) }
     func loadPendingEnds() throws -> [PendingTripEnd] { [] }
     func savePendingEnds(_ ends: [PendingTripEnd]) throws { throw CocoaError(.fileWriteOutOfSpace) }
+}
+
+/// Holds a trip that can't be removed, as a file the app can't delete.
+nonisolated final class UnclearableTripStore: ActiveTripStoring, @unchecked Sendable {
+    private let trips: InMemoryActiveTripStore
+
+    init(_ trip: ActiveTrip) { trips = InMemoryActiveTripStore(trip) }
+
+    func load() throws -> ActiveTrip? { try trips.load() }
+    func save(_ trip: ActiveTrip) throws { try trips.save(trip) }
+    func clear() throws { throw CocoaError(.fileWriteNoPermission) }
+    func loadSent(for serverTripID: Int64) -> Int { trips.loadSent(for: serverTripID) }
+    func saveSent(_ count: Int, for serverTripID: Int64) throws { try trips.saveSent(count, for: serverTripID) }
+    func loadPendingEnds() throws -> [PendingTripEnd] { try trips.loadPendingEnds() }
+    func savePendingEnds(_ ends: [PendingTripEnd]) throws { try trips.savePendingEnds(ends) }
 }
 
 /// Stands in for `Task.sleep` in the sign-out's deadline: it records what it

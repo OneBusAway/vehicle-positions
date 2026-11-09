@@ -258,7 +258,7 @@ final class TripSession {
     private func logIn(serverURL: URL, email: String, password: String) async throws {
         let api = try makeAPI(serverURL, tokens)
         let issued = try await api.login(email: email, password: password)
-        dropTripFromAnotherServer(than: serverURL)
+        try dropTripFromAnotherServer(than: serverURL)
         try tokens.save(StoredToken(issued, receivedAt: now()))
         sessionGeneration += 1
         settings.serverURLString = serverURL.absoluteString
@@ -274,12 +274,19 @@ final class TripSession {
     /// be taken up here, its reports sent to `serverURL`. Dropped once the
     /// sign-in has worked, and before its token is saved, so the new token
     /// never sits next to it. The old server's admin can end it there; it is
-    /// not kept as a pending end, which only that server could take.
-    private func dropTripFromAnotherServer(than serverURL: URL) {
+    /// not kept as a pending end, which only that server could take. A trip
+    /// that can't be dropped fails the sign-in: one saved by an older build
+    /// has no server, and would go by the new one.
+    private func dropTripFromAnotherServer(than serverURL: URL) throws {
         guard let stored = try? store.load(), let tripServer = stored.server(sessionServer: settings.serverURL),
               !isSameServer(tripServer.absoluteString, serverURL.absoluteString) else { return }
         log.notice("dropping trip \(stored.serverTripID): it is open on another server than the one signed in to")
-        try? store.clear()
+        do {
+            try store.clear()
+        } catch {
+            log.error("could not drop trip \(stored.serverTripID), so the sign-in is refused: \(String(describing: error), privacy: .public)")
+            throw error
+        }
     }
 
     /// Signs in again with the stored email, to the trip's server, keeping any

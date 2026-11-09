@@ -28,8 +28,6 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "active-trip.json").path(percentEncoded: false)))
     }
 
-    /// P44: Tracking's count carries on after a relaunch, read by a store
-    /// made afresh, as the next launch's is.
     /// A trip stored by a build before servers were recorded has no
     /// `serverURL` in its file; it still reads back, with no server.
     @Test func aTripSavedByAnOlderBuildReadsBackWithNoServer() throws {
@@ -51,6 +49,8 @@ import Testing
         #expect(try store.load() == active)
     }
 
+    /// P44: Tracking's count carries on after a relaunch, read by a store
+    /// made afresh, as the next launch's is.
     @Test func theSentCountIsKeptForItsOwnTripAndGoesWithIt() throws {
         let directory = URL.temporaryDirectory.appending(path: "Application Support \(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
