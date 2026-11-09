@@ -213,10 +213,43 @@ func (n *noopStore) DeleteRidePointsBefore(_ context.Context, _ time.Time) (int6
 	return 0, nil
 }
 
+// adminRoutes is every /api/v1/admin/* route newMux registers. Both admin
+// route tests below run off this one table, so a new admin route only needs
+// adding here.
+var adminRoutes = []struct {
+	method string
+	path   string
+}{
+	{"GET", "/api/v1/admin/status"},
+	{"GET", "/api/v1/admin/vehicles"},
+	{"GET", "/api/v1/admin/vehicles/live"},
+	{"GET", "/api/v1/admin/vehicles/bus-1"},
+	{"POST", "/api/v1/admin/vehicles"},
+	{"DELETE", "/api/v1/admin/vehicles/bus-1"},
+	{"GET", "/api/v1/admin/vehicles/bus-1/locations"},
+	{"GET", "/api/v1/admin/trips"},
+	{"GET", "/api/v1/admin/trips/1"},
+	{"GET", "/api/v1/admin/trips/1/locations"},
+	{"POST", "/api/v1/admin/trips/1/end"},
+	{"GET", "/api/v1/admin/users"},
+	{"GET", "/api/v1/admin/users/1"},
+	{"POST", "/api/v1/admin/users"},
+	{"PUT", "/api/v1/admin/users/1"},
+	{"DELETE", "/api/v1/admin/users/1"},
+	{"POST", "/api/v1/admin/assignments"},
+	{"DELETE", "/api/v1/admin/users/1/vehicles/bus-1"},
+	{"GET", "/api/v1/admin/users/1/vehicles"},
+	{"GET", "/api/v1/admin/vehicles/bus-1/users"},
+	{"GET", "/api/v1/admin/rider/status"},
+	{"GET", "/api/v1/admin/rider/rides"},
+	{"GET", "/api/v1/admin/api-keys"},
+	{"POST", "/api/v1/admin/api-keys"},
+	{"DELETE", "/api/v1/admin/api-keys/1"},
+}
+
 // TestAdminRoutes_DriverTokenRejected verifies that every /api/v1/admin/* route
 // is wrapped with adminMiddleware. A valid driver-role JWT must receive 403 on
 // all admin routes — not 200, 401, or 404 — proving the middleware is wired.
-// Add new admin routes to the table so this test catches future wiring gaps.
 func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
@@ -225,38 +258,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 	// tokens before any handler body runs, so neither is dereferenced.
 	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil)
 
-	tests := []struct {
-		method string
-		path   string
-	}{
-		{"GET", "/api/v1/admin/status"},
-		{"GET", "/api/v1/admin/vehicles"},
-		{"GET", "/api/v1/admin/vehicles/live"},
-		{"GET", "/api/v1/admin/vehicles/bus-1"},
-		{"POST", "/api/v1/admin/vehicles"},
-		{"DELETE", "/api/v1/admin/vehicles/bus-1"},
-		{"GET", "/api/v1/admin/vehicles/bus-1/locations"},
-		{"GET", "/api/v1/admin/trips"},
-		{"GET", "/api/v1/admin/trips/1"},
-		{"GET", "/api/v1/admin/trips/1/locations"},
-		{"POST", "/api/v1/admin/trips/1/end"},
-		{"GET", "/api/v1/admin/users"},
-		{"GET", "/api/v1/admin/users/1"},
-		{"POST", "/api/v1/admin/users"},
-		{"PUT", "/api/v1/admin/users/1"},
-		{"DELETE", "/api/v1/admin/users/1"},
-		{"POST", "/api/v1/admin/assignments"},
-		{"DELETE", "/api/v1/admin/users/1/vehicles/bus-1"},
-		{"GET", "/api/v1/admin/users/1/vehicles"},
-		{"GET", "/api/v1/admin/vehicles/bus-1/users"},
-		{"GET", "/api/v1/admin/rider/status"},
-		{"GET", "/api/v1/admin/rider/rides"},
-		{"GET", "/api/v1/admin/api-keys"},
-		{"POST", "/api/v1/admin/api-keys"},
-		{"DELETE", "/api/v1/admin/api-keys/1"},
-	}
-
-	for _, tc := range tests {
+	for _, tc := range adminRoutes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			req.Header.Set("Authorization", "Bearer "+driverToken)
@@ -273,9 +275,27 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 	}
 }
 
-// TestAdminRoutes_AdminTokenAllowed verifies that an admin-role JWT is not
-// blocked by adminMiddleware. Handler errors (nil store) are expected and
-// irrelevant — we only assert the middleware itself does not return 403.
+// existingRecordsStore is a noopStore whose vehicle and trip lookups succeed,
+// so no admin handler answers 404 for a missing record and a 404 can only
+// come from the mux.
+type existingRecordsStore struct{ noopStore }
+
+func (s *existingRecordsStore) VehicleExists(_ context.Context, _ string) (bool, error) {
+	return true, nil
+}
+
+func (s *existingRecordsStore) GetTripSummary(_ context.Context, id int64) (*TripSummary, error) {
+	return &TripSummary{ID: id}, nil
+}
+
+func (s *existingRecordsStore) EndTripByID(_ context.Context, id int64) (*TripSummary, error) {
+	return &TripSummary{ID: id}, nil
+}
+
+// TestAdminRoutes_AdminTokenAllowed verifies that every admin route is
+// registered and lets an admin token through both middleware layers. The mux
+// answers an unregistered path with 404 and a registered path with the wrong
+// method with 405, so either code means the route is missing from newMux.
 func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
@@ -283,42 +303,9 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil)
+	mux := newMux(&existingRecordsStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil)
 
-	// Same routes as the driver-rejection table — every admin route must
-	// let a valid admin token through both middleware layers.
-	tests := []struct {
-		method string
-		path   string
-	}{
-		{"GET", "/api/v1/admin/status"},
-		{"GET", "/api/v1/admin/vehicles"},
-		{"GET", "/api/v1/admin/vehicles/live"},
-		{"GET", "/api/v1/admin/vehicles/bus-1"},
-		{"POST", "/api/v1/admin/vehicles"},
-		{"DELETE", "/api/v1/admin/vehicles/bus-1"},
-		{"GET", "/api/v1/admin/vehicles/bus-1/locations"},
-		{"GET", "/api/v1/admin/trips"},
-		{"GET", "/api/v1/admin/trips/1"},
-		{"GET", "/api/v1/admin/trips/1/locations"},
-		{"POST", "/api/v1/admin/trips/1/end"},
-		{"GET", "/api/v1/admin/users"},
-		{"GET", "/api/v1/admin/users/1"},
-		{"POST", "/api/v1/admin/users"},
-		{"PUT", "/api/v1/admin/users/1"},
-		{"DELETE", "/api/v1/admin/users/1"},
-		{"POST", "/api/v1/admin/assignments"},
-		{"DELETE", "/api/v1/admin/users/1/vehicles/bus-1"},
-		{"GET", "/api/v1/admin/users/1/vehicles"},
-		{"GET", "/api/v1/admin/vehicles/bus-1/users"},
-		{"GET", "/api/v1/admin/rider/status"},
-		{"GET", "/api/v1/admin/rider/rides"},
-		{"GET", "/api/v1/admin/api-keys"},
-		{"POST", "/api/v1/admin/api-keys"},
-		{"DELETE", "/api/v1/admin/api-keys/1"},
-	}
-
-	for _, tc := range tests {
+	for _, tc := range adminRoutes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -327,6 +314,8 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 
 			assert.NotEqual(t, http.StatusForbidden, w.Code, "admin token must not be blocked by adminMiddleware on %s %s", tc.method, tc.path)
 			assert.NotEqual(t, http.StatusUnauthorized, w.Code, "admin token must not be rejected by authMiddleware on %s %s", tc.method, tc.path)
+			assert.NotEqual(t, http.StatusNotFound, w.Code, "%s %s must be registered", tc.method, tc.path)
+			assert.NotEqual(t, http.StatusMethodNotAllowed, w.Code, "%s %s must be registered for %s", tc.method, tc.path, tc.method)
 		})
 	}
 }
@@ -371,9 +360,8 @@ func (e *endedTripStore) EndTripByID(_ context.Context, _ int64) (*TripSummary, 
 }
 
 // TestAdminEndTripRoute_Registered verifies POST /api/v1/admin/trips/{id}/end
-// reaches handleAdminEndTrip through the real mux. AdminTokenAllowed only
-// proves the middleware lets the request through, which an unregistered route
-// also passes with the mux's plain-text 404 page. The JSON 404 proves a
+// reaches handleAdminEndTrip through the real mux. AdminTokenAllowed proves
+// the route is registered, not which handler it reaches. The JSON 404 proves a
 // handler answered; the 409 proves it is this one, because handleGetTrip
 // writes the same "trip not found" body.
 func TestAdminEndTripRoute_Registered(t *testing.T) {
