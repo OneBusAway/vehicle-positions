@@ -11,6 +11,15 @@ nonisolated struct ActiveTrip: Sendable, Codable, Equatable {
     /// relaunch only takes up a trip the driver now signed in started; see
     /// `TripSession.adoptStoredTrip`.
     var driverEmail: String
+    /// The server the trip was started on, where its reports and its end go;
+    /// nil for a trip saved before servers were recorded. Read through
+    /// `server(sessionServer:)`.
+    var serverURL: URL?
+
+    /// The server this trip is open on. A trip saved before servers were
+    /// recorded is taken to be on `sessionServer`, the one the phone last
+    /// signed in to, as the builds before did.
+    func server(sessionServer: URL?) -> URL? { serverURL ?? sessionServer }
 }
 
 /// The end of a trip that was ended on this phone only, kept until the server
@@ -29,14 +38,20 @@ nonisolated struct PendingTripEnd: Sendable, Codable, Equatable {
     /// server: a retyped address must not hold the end back, or the next start
     /// is refused again.
     func isOwed(to address: String) -> Bool {
-        Self.serverKey(serverURL) == Self.serverKey(address)
+        isSameServer(serverURL, address)
     }
+}
 
-    private static func serverKey(_ address: String) -> String {
-        guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
-              let scheme = url.scheme?.lowercased(), let host = url.host()?.lowercased() else { return address }
-        let port = url.port ?? (scheme == "http" ? 80 : 443)
-        let path = url.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return "\(host):\(port)/\(path)"
-    }
+/// Whether `a` and `b` name the same server, read as addresses: case, a
+/// trailing slash or a written-out default port don't make it another one.
+nonisolated func isSameServer(_ a: String, _ b: String) -> Bool {
+    serverKey(a) == serverKey(b)
+}
+
+private nonisolated func serverKey(_ address: String) -> String {
+    guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
+          let scheme = url.scheme?.lowercased(), let host = url.host()?.lowercased() else { return address }
+    let port = url.port ?? (scheme == "http" ? 80 : 443)
+    let path = url.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    return "\(host):\(port)/\(path)"
 }

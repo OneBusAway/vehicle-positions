@@ -10,9 +10,10 @@ import Testing
     let linked = URL(string: "https://tracker.example.org")!
     let saved = URL(string: "https://positions.example.org")!
 
-    func makeSession(makeAPI: @escaping (URL, any TokenStoring) throws -> any TrackerAPI) -> TripSession {
+    func makeSession(store: any ActiveTripStoring = InMemoryActiveTripStore(),
+                     makeAPI: @escaping (URL, any TokenStoring) throws -> any TrackerAPI) -> TripSession {
         TripSession(settings: AppSettings(defaults: defaults), tokens: tokens,
-                    store: InMemoryActiveTripStore(), locations: FakeLocationSource(), access: FakeLocationAccess(),
+                    store: store, locations: FakeLocationSource(), access: FakeLocationAccess(),
                     makeAPI: makeAPI)
     }
 
@@ -84,6 +85,20 @@ import Testing
         #expect(setup.prompt == .refusedSignedIn(host: "positions.example.org"))
         #expect(setup.linkedServer == nil)
         #expect(session.settings.serverURLString == saved.absoluteString)
+    }
+
+    /// The trip in hand is open on its own server, which the refusal names.
+    @Test func aLinkDuringATripNamesTheTripsServer() throws {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: Date()))
+        defaults.set(saved.absoluteString, forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        let store = InMemoryActiveTripStore(ActiveTrip(
+            serverTripID: 7, vehicle: Vehicle(id: "bus-1", label: "Bus 1"), trip: TripFixtures.t1,
+            startedAt: Date(), driverEmail: "d@test.com", serverURL: URL(string: "https://trip.example.org")!))
+        let setup = ServerSetup(session: makeSession(store: store) { _, _ in api })
+        setup.open(link)
+        #expect(setup.prompt == .refusedSignedIn(host: "trip.example.org"))
+        #expect(setup.linkedServer == nil)
     }
 
     @Test func aLinkWhileManagedChangesNothing() {

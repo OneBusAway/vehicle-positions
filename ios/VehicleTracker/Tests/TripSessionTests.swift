@@ -123,6 +123,7 @@ import VehiclePositionsKit
         #expect(active.serverTripID == 42)
         #expect(active.vehicle == bus)
         #expect(active.trip == TripFixtures.t1)
+        #expect(active.serverURL == server, "the trip keeps the server it was started on")
         #expect(try store.load() == active)
         #expect(locations.handles.count == 1)
         #expect(locations.subscriptions == 1)
@@ -1332,6 +1333,114 @@ import VehiclePositionsKit
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
         #expect(s.phase == .paused(active))
     }
+
+    // MARK: The trip's server
+
+    let tripServer = URL(string: "https://trip.example.org")!
+
+    func trip(on serverURL: URL?) -> ActiveTrip {
+        ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1, startedAt: clock.now.addingTimeInterval(-600),
+                   driverEmail: "d@test.com", serverURL: serverURL)
+    }
+
+    /// Reports go to the server signed in to. A trip open on another one
+    /// stays paused, and Sign in again goes to the trip's server, after
+    /// which Resume works.
+    @Test func resumingATripOnAnotherServerSignsInToItsServerFirst() async throws {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set(server.absoluteString, forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        let active = trip(on: tripServer)
+        try store.save(active)
+        var servers: [URL] = []
+        let s = TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
+                            access: access, makeAPI: { url, _ in servers.append(url); return api }, now: { clock.now })
+        #expect(s.phase == .paused(active))
+        #expect(s.resumeNeedsSignIn)
+
+        s.resume()
+        #expect(s.phase == .paused(active), "nothing is reported to a server the trip isn't on")
+        #expect(locations.handles.isEmpty)
+
+        try await s.reauthenticate(password: "pw")
+        #expect(servers.last == tripServer)
+        #expect(!s.resumeNeedsSignIn)
+        s.resume()
+        #expect(s.phase == .active(active))
+    }
+
+    /// The trip stays open on the old server; taken up here, its reports
+    /// would come here. A refused sign-in changes nothing, and the trip is
+    /// gone before the new token is saved, so the two never sit together.
+    @Test func signingInToAnotherServerDropsTheTripStoredForTheOldOne() async throws {
+        try store.save(trip(on: tripServer))
+        let watched = TripWatchingTokenStore(trips: store)
+        let s = TripSession(settings: AppSettings(defaults: defaults), tokens: watched, store: store, locations: locations,
+                            access: access, makeAPI: { _, _ in api }, now: { clock.now })
+
+        api.loginError = APIError.status(401, message: "invalid credentials")
+        await #expect(throws: APIError.self) {
+            try await s.signIn(serverURL: server, email: "d@test.com", password: "bad")
+        }
+        #expect(try store.load() == trip(on: tripServer), "a refused sign-in changes nothing")
+
+        api.loginError = nil
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        #expect(s.phase == .idle)
+        #expect(try store.load() == nil)
+        #expect(watched.tripsAtSave == [nil])
+    }
+
+    /// A sign-in saves the address it went to, which may be typed another
+    /// way than the trip's: still the trip's server.
+    @Test func signingInToTheTripsOwnServerKeepsItHoweverItsAddressIsTyped() async throws {
+        let active = trip(on: URL(string: "https://Positions.example.org/")!)
+        try store.save(active)
+        let s = session()
+
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        #expect(s.phase == .paused(active))
+        #expect(!s.resumeNeedsSignIn)
+    }
+
+    /// A trip saved by an older build has no server, and goes by the
+    /// session's, as the builds before took it; with neither known, it is kept.
+    @Test func anOlderBuildsTripGoesByTheSessionsServer() async throws {
+        let older = trip(on: nil)
+        try store.save(older)
+        let first = session()
+        try await first.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        #expect(first.phase == .paused(older), "no server known before this sign-in, so it is kept")
+        #expect(!first.resumeNeedsSignIn)
+        await first.signOut()
+
+        let again = session()
+        try await again.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        #expect(again.phase == .paused(older), "on the session's server")
+        await again.signOut()
+
+        defaults.set("https://old.example.org", forKey: "serverURL")
+        let moved = session()
+        try await moved.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        #expect(moved.phase == .idle)
+        #expect(try store.load() == nil)
+    }
+}
+
+/// Keeps the token in memory and notes, at each save, the trip stored then.
+nonisolated final class TripWatchingTokenStore: TokenStoring, @unchecked Sendable {
+    private let tokens = InMemoryTokenStore()
+    private let trips: any ActiveTripStoring
+    private(set) var tripsAtSave: [ActiveTrip?] = []
+
+    init(trips: any ActiveTripStoring) { self.trips = trips }
+
+    func load() throws -> StoredToken? { try tokens.load() }
+    func save(_ token: StoredToken) throws {
+        tripsAtSave.append(try trips.load())
+        try tokens.save(token)
+    }
+    func clear() throws { try tokens.clear() }
 }
 
 /// Holds the active trip but cannot write pending ends, as a full disk would.

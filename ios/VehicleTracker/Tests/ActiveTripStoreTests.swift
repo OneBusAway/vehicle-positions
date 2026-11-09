@@ -30,6 +30,27 @@ import Testing
 
     /// P44: Tracking's count carries on after a relaunch, read by a store
     /// made afresh, as the next launch's is.
+    /// A trip stored by a build before servers were recorded has no
+    /// `serverURL` in its file; it still reads back, with no server.
+    @Test func aTripSavedByAnOlderBuildReadsBackWithNoServer() throws {
+        let directory = URL.temporaryDirectory.appending(path: "Application Support \(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileActiveTripStore(directory: directory)
+        var active = ActiveTrip(serverTripID: 7, vehicle: Vehicle(id: "bus-1", label: "Bus 1"),
+                                trip: TripFixtures.t1, startedAt: TripFixtures.at(8, 1),
+                                driverEmail: "d@test.com", serverURL: URL(string: "https://positions.example.org")!)
+        try store.save(active)
+        #expect(try store.load() == active, "the server goes with the trip")
+
+        let file = directory.appending(path: "active-trip.json")
+        var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        #expect(json.removeValue(forKey: "serverURL") != nil)
+        try JSONSerialization.data(withJSONObject: json).write(to: file)
+
+        active.serverURL = nil
+        #expect(try store.load() == active)
+    }
+
     @Test func theSentCountIsKeptForItsOwnTripAndGoesWithIt() throws {
         let directory = URL.temporaryDirectory.appending(path: "Application Support \(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
