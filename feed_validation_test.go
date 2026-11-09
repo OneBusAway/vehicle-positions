@@ -458,6 +458,61 @@ func TestFeedValidation_SpeedNonNegative(t *testing.T) {
 	assert.Empty(t, violations, "zero and positive speeds should be valid")
 }
 
+// buildFeed cannot produce any of these, so each case breaks one field of a
+// compliant feed to prove the helper would catch that regression.
+func TestFeedValidation_RejectsBrokenFeed(t *testing.T) {
+	cases := []struct {
+		name      string
+		breakFeed func(*gtfsrt.FeedMessage)
+		want      string
+	}{
+		{
+			name:      "E038 unknown version",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.GtfsRealtimeVersion = proto.String("3.0") },
+			want:      "E038: invalid gtfs_realtime_version: 3.0",
+		},
+		{
+			name:      "E048 header timestamp missing",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.Timestamp = nil },
+			want:      "E048: header timestamp missing or zero",
+		},
+		{
+			name:      "E048 header timestamp zero",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.Timestamp = proto.Uint64(0) },
+			want:      "E048: header timestamp missing or zero",
+		},
+		{
+			name:      "E049 incrementality missing",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.Incrementality = nil },
+			want:      "E049: incrementality missing",
+		},
+		{
+			name:      "E039 is_deleted in a full dataset",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Entity[0].IsDeleted = proto.Bool(true) },
+			want:      `E039: is_deleted set for "bus-1"`,
+		},
+		{
+			name: "E050 header far in future",
+			breakFeed: func(f *gtfsrt.FeedMessage) {
+				f.Header.Timestamp = proto.Uint64(uint64(time.Now().Unix() + 120))
+			},
+			want: "E050: header timestamp >60s in future",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			feed := buildFeed([]*VehicleState{
+				{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
+			}, nil)
+			require.Empty(t, validateFeedCompliance(t, feed), "the feed must be compliant before it is broken")
+
+			tc.breakFeed(feed)
+			assert.Contains(t, validateFeedCompliance(t, feed), tc.want)
+		})
+	}
+}
+
 // --- Composite tests ---
 
 func TestFeedValidation_EmptyFeedValid(t *testing.T) {
