@@ -251,12 +251,26 @@ class TokenRefresherTest {
 
     @Test fun `a refreshed pair the disk can't take drops the spent refresh token and still sends the request`() = runTest {
         val diskFull = object : SessionStore by sessions {
-            override suspend fun saveRefreshed(tokens: IssuedTokens) { throw IOException("No space left on device") }
+            override suspend fun saveRefreshed(tokens: IssuedTokens, spentRefreshToken: String) { throw IOException("No space left on device") }
         }
 
         assertEquals(emptyList<VehicleDto>(), holder(diskFull).api().myVehicles())
 
         assertNull("r1 is spent and must never be presented again", sessions.state.value.refreshToken)
+    }
+
+    @Test fun `a sign-in that lands while a refresh is out keeps the new session`() = runTest {
+        val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
+        store.saveLogin(serverUrl, "d@example.com", IssuedTokens("a1", "r1", ISSUED_AT + 900, ISSUED_AT))
+        // The next driver signs in after the server has taken r1 and before its pair is saved.
+        fake.refreshReply = {
+            runBlocking { store.saveLogin(serverUrl, "next@example.com", IssuedTokens("b1", "rb1", NOW + 900, NOW)) }
+            pair("a2", "r2")
+        }
+
+        holder(store).api().myVehicles()
+
+        assertEquals(Session(serverUrl, "b1", NOW, "rb1", NOW + 900, "next@example.com"), store.session.first())
     }
 
     @Test fun `a refresh token that can't be dropped still lets the 401 through`() = runTest {

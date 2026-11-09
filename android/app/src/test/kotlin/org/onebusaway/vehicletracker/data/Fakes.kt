@@ -71,9 +71,9 @@ class FakeSessionStore : SessionStore {
             email = email,
         )
     }
-    /** Saves nothing once the tokens are cleared, as [EncryptedSessionStore] does. */
-    override suspend fun saveRefreshed(tokens: IssuedTokens) {
-        if (state.value.token == null) return
+    /** Saves nothing once the session that spent the token is gone, as [EncryptedSessionStore] does. */
+    override suspend fun saveRefreshed(tokens: IssuedTokens, spentRefreshToken: String) {
+        if (state.value.token == null || state.value.refreshToken != spentRefreshToken) return
         state.value = state.value.copy(
             token = tokens.accessToken,
             issuedAtEpochSec = tokens.issuedAtEpochSec,

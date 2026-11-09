@@ -87,7 +87,7 @@ class SessionStoreTest {
         val store = EncryptedSessionStore(newDataStore(), FakeCryptor())
         store.saveLogin(SERVER, EMAIL, TOKENS)
 
-        store.saveRefreshed(IssuedTokens("a2", "r2", ISSUED_AT + 1000, ISSUED_AT + 100))
+        store.saveRefreshed(IssuedTokens("a2", "r2", ISSUED_AT + 1000, ISSUED_AT + 100), spentRefreshToken = REFRESH_TOKEN)
 
         assertEquals(
             SIGNED_IN.copy(token = "a2", issuedAtEpochSec = ISSUED_AT + 100, refreshToken = "r2", accessExpiresAtEpochSec = ISSUED_AT + 1000),
@@ -139,7 +139,7 @@ class SessionStoreTest {
             clear(store)
             val cleared = store.session.first()
 
-            store.saveRefreshed(REFRESHED)
+            store.saveRefreshed(REFRESHED, spentRefreshToken = REFRESH_TOKEN)
 
             assertEquals(name, cleared, store.session.first())
             val keys = dataStore.data.first().asMap().keys.map { it.name }
@@ -152,9 +152,24 @@ class SessionStoreTest {
         fake.saveLogin(SERVER, EMAIL, TOKENS)
         fake.clearTokenAndEmail()
 
-        fake.saveRefreshed(REFRESHED)
+        fake.saveRefreshed(REFRESHED, spentRefreshToken = REFRESH_TOKEN)
 
         assertEquals(Session(serverUrl = SERVER, token = null, issuedAtEpochSec = null), fake.session.first())
+    }
+
+    // A refresh still in flight when the next driver signs in would sign the driver before back in over them.
+    @Test fun `a refresh that lands after another sign-in keeps the new session`() = runTest {
+        val next = IssuedTokens("b1", "rb1", EXPIRES_AT + 60, ISSUED_AT + 60)
+        val expected = Session(SERVER, "b1", ISSUED_AT + 60, "rb1", EXPIRES_AT + 60, "next@metro.example")
+        val stores = listOf(EncryptedSessionStore(newDataStore(), FakeCryptor()), FakeSessionStore())
+        for (store in stores) {
+            store.saveLogin(SERVER, EMAIL, TOKENS)
+            store.saveLogin(SERVER, "next@metro.example", next)
+
+            store.saveRefreshed(REFRESHED, spentRefreshToken = REFRESH_TOKEN)
+
+            assertEquals(store::class.simpleName, expected, store.session.first())
+        }
     }
 
     @Test fun `a sign-in after the session is cleared still saves`() = runTest {
