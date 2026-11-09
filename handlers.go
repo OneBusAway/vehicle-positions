@@ -290,6 +290,10 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 
 	// E012 (gtfs-realtime-validator): header.timestamp must be >= all entity timestamps.
 	headerTimestamp := now
+	// E050: no timestamp more than 60s in the future. validate() accepts
+	// reports up to maxTimestampSkew ahead so a phone with a fast clock is not
+	// refused, so the feed caps them here instead.
+	timestampCap := now + 60
 
 	var entities []*gtfsrt.FeedEntity
 	for _, v := range vehicles {
@@ -297,7 +301,7 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 			slog.Warn("buildFeed: skipping vehicle with non-positive timestamp", "vehicle_id", v.VehicleID, "timestamp", v.Timestamp)
 			continue
 		}
-		ts := uint64(v.Timestamp)
+		ts := min(uint64(v.Timestamp), timestampCap)
 		if ts > headerTimestamp {
 			headerTimestamp = ts
 		}

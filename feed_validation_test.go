@@ -308,19 +308,47 @@ func TestFeedValidation_E050_TimestampsNotFarFuture(t *testing.T) {
 func TestFeedValidation_E050_RejectsEntityFarInFuture(t *testing.T) {
 	now := time.Now().Unix()
 	feed := buildFeed([]*VehicleState{
-		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now + 120},
+		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
 	}, nil)
+	// buildFeed caps entity timestamps at now+60, so set this one by hand.
+	feed.Entity[0].Vehicle.Timestamp = proto.Uint64(uint64(now + 120))
+
 	violations := validateFeedCompliance(t, feed)
-	require.NotEmpty(t, violations)
-	joined := strings.Join(violations, "|")
-	assert.Contains(t, joined, "E050:")
+	assert.Contains(t, violations, `E050: entity "bus-1" timestamp >60s in future`)
 }
 
 func TestFeedValidation_E050_IngestWindowGap(t *testing.T) {
-	// Ingest allows now+300s but E050 rejects >now+60s.
-	// A vehicle at now+120 passes ingest but fails E050.
-	// Placeholder documenting the gap; skipped pending follow-up — no assertion is made.
-	t.Skip("known limitation: ingest accepts now+300s but E050 rejects >now+60s — tracked for follow-up")
+	// Ingest accepts a report up to now+300s, but E050 rejects anything past
+	// now+60s, so buildFeed caps the entity and the header follows it.
+	now := time.Now().Unix()
+	fast := &LocationReport{VehicleID: "fast-clock", Latitude: 1, Longitude: 2, Timestamp: now + 120}
+	require.NoError(t, fast.validate(), "ingest must accept a report at now+120")
+	onTime := &LocationReport{VehicleID: "on-time", Latitude: 3, Longitude: 4, Timestamp: now - 10}
+	require.NoError(t, onTime.validate())
+
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	tracker.Update(fast)
+	tracker.Update(onTime)
+
+	before := uint64(time.Now().Unix())
+	feed := buildFeed(tracker.ActiveVehicles(), nil)
+	after := uint64(time.Now().Unix())
+
+	assert.Empty(t, validateFeedCompliance(t, feed))
+	require.Len(t, feed.Entity, 2)
+	for _, e := range feed.Entity {
+		switch e.GetId() {
+		case "fast-clock":
+			ts := e.GetVehicle().GetTimestamp()
+			assert.GreaterOrEqual(t, ts, before+60, "capped at now+60, not pulled back further")
+			assert.LessOrEqual(t, ts, after+60)
+		case "on-time":
+			assert.Equal(t, uint64(now-10), e.GetVehicle().GetTimestamp(), "a timestamp under the cap is left alone")
+		default:
+			t.Errorf("unexpected entity %q", e.GetId())
+		}
+	}
 }
 
 func TestFeedValidation_E052_UniqueVehicleIDs(t *testing.T) {
