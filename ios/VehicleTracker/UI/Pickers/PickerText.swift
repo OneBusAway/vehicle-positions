@@ -72,6 +72,10 @@ nonisolated enum PickerText {
         String(localized: "Try again", comment: "Button that retries a load or a start that failed.")
     }
 
+    static var loading: String {
+        String(localized: "Loading", comment: "What VoiceOver says while a picker's Try again is loading the list again.")
+    }
+
     /// The tile as VoiceOver reads it: the fleet number, then the label when
     /// it says more ("4317, Bus 4317").
     static func vehicleTile(id: String, label: String?) -> String {

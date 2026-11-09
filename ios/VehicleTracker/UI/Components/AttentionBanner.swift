@@ -4,11 +4,17 @@ import SwiftUI
 /// would not start: a symbol, one sentence, and at most one action, the one
 /// that fixes it (DESIGN-iOS §3, Android's `AttentionBanner`). VoiceOver
 /// reads it as one element, with the action as its action.
+///
+/// While `busyLabel` is set the action is running: a spinner takes the
+/// button's place, so a second tap has nothing to hit, and VoiceOver says
+/// `busyLabel`. If the banner is still there when it ends, the action did
+/// not fix it, and VoiceOver reads the sentence again.
 struct AttentionBanner: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let symbol: String
     let text: String
     var action: String? = nil
+    var busyLabel: String? = nil
     var onAction: () -> Void = {}
 
     var body: some View {
@@ -45,6 +51,10 @@ struct AttentionBanner: View {
         .frame(minHeight: 56)
         .background(.attentionContainer, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .accessibilityElement(children: .combine)
+        .accessibilityValue(busyLabel ?? "")
+        .onChange(of: busyLabel) {
+            AccessibilityNotification.Announcement(busyLabel ?? text).post()
+        }
     }
 
     private var icon: some View {
@@ -67,10 +77,21 @@ struct AttentionBanner: View {
     }
 
     private func button(_ action: String) -> some View {
-        Button(action, action: onAction)
-            .buttonStyle(.plain)
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
+        Group {
+            if busyLabel != nil {
+                // The words stay, unseen, so the spinner keeps the button's
+                // size and the sentence does not move.
+                Text(action)
+                    .hidden()
+                    .overlay { ProgressView() }
+                    .accessibilityHidden(true)
+            } else {
+                Button(action, action: onAction)
+                    .buttonStyle(.plain)
+            }
+        }
+        .font(.subheadline.weight(.semibold))
+        .padding(.horizontal, 12)
+        .frame(minHeight: 44)
     }
 }
