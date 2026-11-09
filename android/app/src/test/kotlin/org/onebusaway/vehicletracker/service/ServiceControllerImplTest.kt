@@ -41,7 +41,7 @@ class ServiceControllerImplTest {
     private var cancelled = 0
 
     // Android's own classes return defaults here, so the stop intent is built and sent to no one.
-    private val serviceController = ServiceControllerImpl(ContextWrapper(null), cancelResumeNotification = { cancelled++ })
+    private val serviceController = ServiceControllerImpl(ContextWrapper(null), cancelTripNotifications = { cancelled++ })
 
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
