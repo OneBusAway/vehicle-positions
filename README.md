@@ -52,7 +52,8 @@ Sign in with an existing admin account. To create the first one:
 
 Signing out of the admin UI revokes that session's token server-side, so the
 cookie is dead even if someone copied its value — the same revocation
-`POST /api/v1/auth/logout` performs for API clients.
+`POST /api/v1/auth/logout` performs for API clients. If the revocation can't
+be recorded, you stay signed in and see "Couldn't sign out. Try again."
 
 Deactivating a user blocks new logins immediately and deletes that user's
 refresh tokens, so nothing can be renewed. Changing a user's password (from

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -26,6 +27,7 @@ var flashMessages = map[string]string{
 	"vehicle_unassigned":  "Vehicle unassigned.",
 	"trip_ended":          "Trip ended. The driver can start a new trip.",
 	"trip_already_ended":  "That trip had already ended.",
+	"logout_failed":       "Couldn't sign out. Try again.",
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trustProxy bool) {
@@ -42,45 +44,48 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trus
 
 // revokeSessionCookie revokes the JWT carried by the session cookie, so
 // signing out of the admin UI ends the token itself and not just the browser's
-// copy of it. It is best-effort by design: the caller clears the cookie and
-// redirects regardless, and a cookie that no longer parses has nothing to
-// revoke. Errors are logged rather than returned for the same reason.
-func revokeSessionCookie(r *http.Request, secret []byte, revoker TokenRevoker) {
+// copy of it. It returns an error only when the revocation write fails, the
+// one case where the token is still live and the session must be kept. A
+// missing cookie, or one that no longer validates, has nothing to revoke.
+func revokeSessionCookie(r *http.Request, secret []byte, revoker TokenRevoker) error {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil || c.Value == "" {
-		return
+		return nil
 	}
 	claims, err := parseSessionToken(c.Value, secret)
 	if err != nil {
 		slog.Debug("admin logout: session cookie no longer valid, nothing to revoke", "error", err)
-		return
+		return nil
 	}
 	jti, _ := claims["jti"].(string)
 	if jti == "" {
 		// Pre-revocation token; see checkRevoked.
 		slog.Warn("admin logout: session token has no jti, nothing to revoke", "sub", claims["sub"])
-		return
+		return nil
 	}
+	// adminClaimsFromCookie never accepts a token whose sub is not a user ID,
+	// so such a cookie is already dead and the caller may clear it.
 	sub, err := claims.GetSubject()
 	if err != nil {
 		slog.Warn("admin logout: unreadable sub claim", "error", err)
-		return
+		return nil
 	}
 	userID, err := strconv.ParseInt(sub, 10, 64)
 	if err != nil {
 		slog.Warn("admin logout: sub claim is not a user ID", "sub", sub, "error", err)
-		return
+		return nil
 	}
+	// parseSessionToken requires exp, so a validated token always has one.
 	expiresAt, err := claims.GetExpirationTime()
 	if err != nil || expiresAt == nil {
 		slog.Warn("admin logout: unreadable exp claim", "sub", sub, "error", err)
-		return
+		return nil
 	}
 	if err := revoker.RevokeToken(r.Context(), jti, userID, expiresAt.Time); err != nil {
-		slog.Error("admin logout: failed to revoke session token", "sub", sub, "error", err)
-		return
+		return fmt.Errorf("revoke session token for sub %s: %w", sub, err)
 	}
 	slog.Info("admin session token revoked", "sub", sub)
+	return nil
 }
 
 func clearSessionCookie(w http.ResponseWriter) {

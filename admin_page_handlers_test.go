@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -185,6 +186,52 @@ func TestAdminLogoutRevokesSession(t *testing.T) {
 	mux.ServeHTTP(afterRec, after)
 	assert.Equal(t, http.StatusSeeOther, afterRec.Code, "a replayed cookie must no longer work")
 	assert.Equal(t, "/admin/login", afterRec.Header().Get("Location"))
+}
+
+// TestAdminLogoutKeepsSessionWhenRevocationFails: if the revocation can't be
+// recorded the token is still live, so sign-out must not pretend otherwise.
+// The cookie stays, the admin lands back in the UI, and the flash says why.
+// Not safe for t.Parallel(); uses global logger.
+func TestAdminLogoutKeepsSessionWhenRevocationFails(t *testing.T) {
+	ui := newTestAdminUI(t)
+	revocations := newFakeRevocations()
+	revocations.revokeErr = errors.New("database unavailable")
+	ui.tokenChecker = revocations
+	ui.tokenRevoker = revocations
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	var logs bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	cookie := cookieFor(t, "admin")
+	logout := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
+	logout.AddCookie(cookie)
+	logoutRec := httptest.NewRecorder()
+	mux.ServeHTTP(logoutRec, logout)
+
+	require.Equal(t, http.StatusSeeOther, logoutRec.Code)
+	assert.Equal(t, "/admin/dashboard", logoutRec.Header().Get("Location"))
+	assert.Contains(t, logs.String(), "revocation failed")
+	var flash *http.Cookie
+	for _, c := range logoutRec.Result().Cookies() {
+		assert.NotEqual(t, sessionCookieName, c.Name, "the session cookie must not be cleared")
+		if c.Name == flashCookieName {
+			flash = c
+		}
+	}
+	require.NotNil(t, flash, "the failure must be flashed")
+
+	dashboard := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	dashboard.AddCookie(cookie)
+	dashboard.AddCookie(flash)
+	dashboardRec := httptest.NewRecorder()
+	mux.ServeHTTP(dashboardRec, dashboard)
+
+	require.Equal(t, http.StatusOK, dashboardRec.Code, "the session must still work")
+	assert.Contains(t, html.UnescapeString(dashboardRec.Body.String()), "Couldn't sign out. Try again.")
 }
 
 func TestAdminPagesRedirectWithoutSession(t *testing.T) {

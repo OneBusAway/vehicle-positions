@@ -597,6 +597,7 @@ type fakeRevocations struct {
 	revokeCalls   int
 	inactive      map[int64]bool
 	userErr       error // fails only IsUserActive
+	revokeErr     error // fails only RevokeToken
 }
 
 func newFakeRevocations() *fakeRevocations {
@@ -625,6 +626,9 @@ func (f *fakeRevocations) IsUserActive(_ context.Context, userID int64) (bool, e
 func (f *fakeRevocations) RevokeToken(_ context.Context, jti string, userID int64, expiresAt time.Time) error {
 	if f.err != nil {
 		return f.err
+	}
+	if f.revokeErr != nil {
+		return f.revokeErr
 	}
 	f.revokeCalls++
 	f.lastUserID = userID
