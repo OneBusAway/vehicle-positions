@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -617,6 +618,28 @@ func (f *fakeTripByIDEnder) EndTripByID(_ context.Context, id int64) (*TripSumma
 	return f.trip, f.err
 }
 
+// newTestTracker returns a tracker in which each vehicle in reporting has just
+// reported, so it is in the feed.
+func newTestTracker(t *testing.T, reporting ...string) *Tracker {
+	t.Helper()
+	tracker := NewTracker(5 * time.Minute)
+	t.Cleanup(tracker.Stop)
+	for _, id := range reporting {
+		tracker.Update(&LocationReport{VehicleID: id, Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
+	}
+	return tracker
+}
+
+// feedVehicleIDs returns the ids of the vehicles the feed publishes, sorted.
+func feedVehicleIDs(tracker *Tracker) []string {
+	ids := make([]string, 0)
+	for _, v := range tracker.ActiveVehicles() {
+		ids = append(ids, v.VehicleID)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
 // adminEndTripRequest builds the request as it reaches the handler: the path
 // value set by the mux and admin claims set by requireAuth.
 func adminEndTripRequest(id string) *http.Request {
@@ -642,7 +665,7 @@ func TestHandleAdminEndTrip_EndsTrip(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(original) })
 
 	w := httptest.NewRecorder()
-	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("5"))
+	handleAdminEndTrip(fake, newTestTracker(t)).ServeHTTP(w, adminEndTripRequest("5"))
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, int64(5), fake.id)
 
@@ -667,7 +690,7 @@ func TestHandleAdminEndTrip_InvalidID(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			fake := &fakeTripByIDEnder{}
 			w := httptest.NewRecorder()
-			handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest(id))
+			handleAdminEndTrip(fake, newTestTracker(t)).ServeHTTP(w, adminEndTripRequest(id))
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
 			assert.Equal(t, "trip not found", errorBody(t, w))
@@ -679,7 +702,7 @@ func TestHandleAdminEndTrip_InvalidID(t *testing.T) {
 func TestHandleAdminEndTrip_NoSuchTrip(t *testing.T) {
 	fake := &fakeTripByIDEnder{err: ErrTripNotFound}
 	w := httptest.NewRecorder()
-	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("999"))
+	handleAdminEndTrip(fake, newTestTracker(t)).ServeHTTP(w, adminEndTripRequest("999"))
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.Equal(t, "trip not found", errorBody(t, w))
@@ -690,7 +713,7 @@ func TestHandleAdminEndTrip_NoSuchTrip(t *testing.T) {
 func TestHandleAdminEndTrip_AlreadyEnded(t *testing.T) {
 	fake := &fakeTripByIDEnder{err: ErrTripNotActive}
 	w := httptest.NewRecorder()
-	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("5"))
+	handleAdminEndTrip(fake, newTestTracker(t)).ServeHTTP(w, adminEndTripRequest("5"))
 
 	assert.Equal(t, http.StatusConflict, w.Code)
 	assert.Equal(t, "trip is not active", errorBody(t, w))
@@ -701,9 +724,49 @@ func TestHandleAdminEndTrip_AlreadyEnded(t *testing.T) {
 func TestHandleAdminEndTrip_StoreError(t *testing.T) {
 	fake := &fakeTripByIDEnder{err: errors.New("end trip by id: connection refused")}
 	w := httptest.NewRecorder()
-	handleAdminEndTrip(fake).ServeHTTP(w, adminEndTripRequest("5"))
+	handleAdminEndTrip(fake, newTestTracker(t)).ServeHTTP(w, adminEndTripRequest("5"))
 
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.NotContains(t, w.Body.String(), "connection refused")
 	assert.Equal(t, "internal server error", errorBody(t, w))
+}
+
+// TestHandleAdminEndTrip_RemovesFromFeed verifies the ended trip's vehicle
+// leaves the feed now rather than when its last report goes stale, and no
+// other vehicle goes with it.
+func TestHandleAdminEndTrip_RemovesFromFeed(t *testing.T) {
+	tracker := newTestTracker(t, "bus-1", "bus-2")
+	fake := &fakeTripByIDEnder{trip: &TripSummary{ID: 5, VehicleID: "bus-1", UserID: 7, Status: "completed"}}
+
+	w := httptest.NewRecorder()
+	handleAdminEndTrip(fake, tracker).ServeHTTP(w, adminEndTripRequest("5"))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, []string{"bus-2"}, feedVehicleIDs(tracker))
+}
+
+// TestHandleAdminEndTrip_FailedEndLeavesFeed verifies an end that did not
+// happen leaves the feed alone. An already-ended trip's vehicle may be out on
+// a new trip.
+func TestHandleAdminEndTrip_FailedEndLeavesFeed(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{"no such trip", ErrTripNotFound, http.StatusNotFound},
+		{"already ended", ErrTripNotActive, http.StatusConflict},
+		{"store error", errors.New("end trip by id: connection refused"), http.StatusInternalServerError},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker := newTestTracker(t, "bus-1")
+			w := httptest.NewRecorder()
+			handleAdminEndTrip(&fakeTripByIDEnder{err: tc.err}, tracker).ServeHTTP(w, adminEndTripRequest("5"))
+
+			require.Equal(t, tc.wantStatus, w.Code)
+			assert.Equal(t, []string{"bus-1"}, feedVehicleIDs(tracker))
+		})
+	}
 }

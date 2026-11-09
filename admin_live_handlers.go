@@ -241,7 +241,9 @@ func handleGetTrip(store TripSummaryGetter) http.HandlerFunc {
 // a driver locked out by a trip their phone no longer knows about: every new
 // start answers 409 until that trip ends. A trip that has already ended is a
 // 409 rather than a 404, so a client can tell "already done" from "wrong id".
-func handleAdminEndTrip(store TripByIDEnder) http.HandlerFunc {
+// An ended trip's vehicle leaves the feed now rather than when its last
+// report goes stale.
+func handleAdminEndTrip(store TripByIDEnder, tracker *Tracker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil || id <= 0 {
@@ -266,6 +268,7 @@ func handleAdminEndTrip(store TripByIDEnder) http.HandlerFunc {
 			return
 		}
 
+		tracker.Remove(trip.VehicleID)
 		slog.Info("admin ended trip", "trip_id", trip.ID, "driver_id", trip.UserID, "vehicle_id", trip.VehicleID, "admin_sub", sub)
 		writeJSON(w, http.StatusOK, trip)
 	}

@@ -1748,11 +1748,13 @@ func TestTripsPageShowsTripEndedFlash(t *testing.T) {
 	}
 }
 
-// postTripEnd submits the Trips page's End trip form for id as an admin.
-func postTripEnd(t *testing.T, ender TripByIDEnder, id string) *httptest.ResponseRecorder {
+// postTripEnd submits the Trips page's End trip form for id as an admin, with
+// tracker as the feed.
+func postTripEnd(t *testing.T, ender TripByIDEnder, tracker *Tracker, id string) *httptest.ResponseRecorder {
 	t.Helper()
 	ui := newTestAdminUI(t)
 	ui.tripEnder = ender
+	ui.tracker = tracker
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 
@@ -1784,7 +1786,7 @@ func TestTripEnd_EndsTrip(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(original) })
 
-	w := postTripEnd(t, fake, "5")
+	w := postTripEnd(t, fake, newTestTracker(t), "5")
 
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/admin/trips", w.Header().Get("Location"))
@@ -1798,7 +1800,7 @@ func TestTripEnd_EndsTrip(t *testing.T) {
 // TestTripEnd_AlreadyEnded verifies a trip that ended before the click (a
 // stale page, or the driver ended it) is reported, not treated as an error.
 func TestTripEnd_AlreadyEnded(t *testing.T) {
-	w := postTripEnd(t, &fakeTripByIDEnder{err: ErrTripNotActive}, "5")
+	w := postTripEnd(t, &fakeTripByIDEnder{err: ErrTripNotActive}, newTestTracker(t), "5")
 
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/admin/trips", w.Header().Get("Location"))
@@ -1806,7 +1808,7 @@ func TestTripEnd_AlreadyEnded(t *testing.T) {
 }
 
 func TestTripEnd_NoSuchTrip(t *testing.T) {
-	w := postTripEnd(t, &fakeTripByIDEnder{err: ErrTripNotFound}, "999")
+	w := postTripEnd(t, &fakeTripByIDEnder{err: ErrTripNotFound}, newTestTracker(t), "999")
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.Empty(t, flashCodeSet(w))
@@ -1816,7 +1818,7 @@ func TestTripEnd_InvalidID(t *testing.T) {
 	for _, id := range []string{"abc", "0", "-1"} {
 		t.Run(id, func(t *testing.T) {
 			fake := &fakeTripByIDEnder{}
-			w := postTripEnd(t, fake, id)
+			w := postTripEnd(t, fake, newTestTracker(t), id)
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
 			assert.Zero(t, fake.calls, "the store must not be asked to end trip %q", id)
@@ -1825,11 +1827,50 @@ func TestTripEnd_InvalidID(t *testing.T) {
 }
 
 func TestTripEnd_StoreError(t *testing.T) {
-	w := postTripEnd(t, &fakeTripByIDEnder{err: errors.New("connection refused")}, "5")
+	w := postTripEnd(t, &fakeTripByIDEnder{err: errors.New("connection refused")}, newTestTracker(t), "5")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.NotContains(t, w.Body.String(), "connection refused")
 	assert.Empty(t, flashCodeSet(w))
+}
+
+// TestTripEnd_RemovesFromFeed verifies the ended trip's vehicle leaves the
+// feed now rather than when its last report goes stale, and no other vehicle
+// goes with it.
+func TestTripEnd_RemovesFromFeed(t *testing.T) {
+	tracker := newTestTracker(t, "bus-1", "bus-2")
+	fake := &fakeTripByIDEnder{trip: &TripSummary{ID: 5, VehicleID: "bus-1", UserID: 7, Status: "completed"}}
+
+	w := postTripEnd(t, fake, tracker, "5")
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, []string{"bus-2"}, feedVehicleIDs(tracker))
+}
+
+// TestTripEnd_FailedEndLeavesFeed verifies an end that did not happen leaves
+// the feed alone. A stale page can ask to end a trip the driver already
+// ended, and the vehicle may be out on a new trip.
+func TestTripEnd_FailedEndLeavesFeed(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{"no such trip", ErrTripNotFound, http.StatusNotFound},
+		{"already ended", ErrTripNotActive, http.StatusSeeOther},
+		{"store error", errors.New("connection refused"), http.StatusInternalServerError},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker := newTestTracker(t, "bus-1")
+
+			w := postTripEnd(t, &fakeTripByIDEnder{err: tc.err}, tracker, "5")
+
+			require.Equal(t, tc.wantStatus, w.Code)
+			assert.Equal(t, []string{"bus-1"}, feedVehicleIDs(tracker))
+		})
+	}
 }
 
 // TestVehiclesPageURL_PreservesFilters pins that every vehicle filter is
