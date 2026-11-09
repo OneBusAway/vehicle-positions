@@ -383,7 +383,12 @@ class ViewModelsTest {
             "tracker.example.org:8443/" to "https://tracker.example.org:8443/",
             "http://10.0.2.2:8080" to "http://10.0.2.2:8080/",
             "HTTPS://Tracker.Example.org" to "https://tracker.example.org/",
+            "https.example.org" to "https://https.example.org/",
             "foo bar" to null,
+            "https//tracker.example.org" to null,
+            "http//tracker.example.org" to null,
+            "HTTPS//tracker.example.org" to null,
+            "https:/tracker.example.org" to null,
             "ftp://x" to null,
             "://" to null,
             "https://" to null,
@@ -431,6 +436,18 @@ class ViewModelsTest {
         assertEquals(LoginError.InvalidAddress, vm.uiState.value.error)
         assertFalse(vm.uiState.value.loading)
         assertTrue("the error goes under the server field, so it shows", vm.uiState.value.showsServerField)
+    }
+
+    @Test fun `a scheme typed wrong is an address that can't be one, not a server called https`() = runTest(dispatcher) {
+        val vm = loginViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill("https//tracker.example.org", "d@example.com", "pw")
+
+        vm.onSignIn { fail("there is no server to sign in to") }
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(LoginError.InvalidAddress, vm.uiState.value.error)
+        assertFalse(vm.uiState.value.loading)
     }
 
     @Test fun `the address is saved as it was used`() = runTest(dispatcher) {
