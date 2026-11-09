@@ -28,14 +28,14 @@ import VehiclePositionsKit
         return trip
     }
 
-    /// What a relaunch finds: a fresh token, a known server and this driver's
-    /// own trip in the store, which the session takes up as `.paused`.
     /// A session whose sign-out deadline the test fires by hand.
     func session(deadline: ManualSleep) -> TripSession {
         TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
                     access: access, makeAPI: { _, _ in api }, now: { clock.now }, sleep: deadline.sleep(for:))
     }
 
+    /// What a relaunch finds: a fresh token, a known server and this driver's
+    /// own trip in the store, which the session takes up as `.paused`.
     func pausedSession(trip: TripGeometry = TripFixtures.t1) throws -> (session: TripSession, active: ActiveTrip) {
         try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
         defaults.set("https://positions.example.org", forKey: "serverURL")
