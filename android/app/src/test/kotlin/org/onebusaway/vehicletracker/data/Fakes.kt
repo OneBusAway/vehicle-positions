@@ -167,7 +167,9 @@ class FakeOfflineFixQueue : OfflineFixQueue {
     val queued = ArrayDeque<org.onebusaway.vehicletracker.data.api.LocationReportDto>()
     override suspend fun add(report: org.onebusaway.vehicletracker.data.api.LocationReportDto) { queued.addLast(report) }
     override suspend fun oldest(max: Int) = queued.take(max)
-    override suspend fun removeOldest(count: Int) { repeat(minOf(count, queued.size)) { queued.removeFirst() } }
+    override suspend fun remove(fixes: List<org.onebusaway.vehicletracker.data.api.LocationReportDto>) {
+        fixes.forEach { if (queued.firstOrNull() == it) queued.removeFirst() }
+    }
     var owner: String? = null
     override suspend fun claimFor(account: String) {
         if (owner != account) queued.clear()
