@@ -315,13 +315,11 @@ paths:
       description: |
         Adds the caller's own `jti` to the revocation list, so the token stops
         being accepted before it would otherwise expire. A caller can only
-        revoke the token it presents.
-
-        A token issued before revocation existed carries no `jti`; there is
-        nothing to revoke, so it answers `204` without recording anything.
+        revoke the token it presents. A staff token without a `jti` is
+        rejected with `401` before it gets here.
       responses:
         '204':
-          description: Token revoked, or nothing to revoke.
+          description: Token revoked.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':

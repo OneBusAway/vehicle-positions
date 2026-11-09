@@ -52,7 +52,8 @@ Sign in with an existing admin account. To create the first one:
 
 Signing out of the admin UI revokes that session's token server-side, so the
 cookie is dead even if someone copied its value — the same revocation
-`POST /api/v1/auth/logout` performs for API clients.
+`POST /api/v1/auth/logout` performs for API clients. If the revocation can't
+be recorded, you stay signed in and see "Couldn't sign out. Try again."
 
 Deactivating a user blocks new logins immediately and deletes that user's
 refresh tokens, so nothing can be renewed. Changing a user's password (from
@@ -523,10 +524,9 @@ curl -i http://localhost:8080/api/v1/admin/status \
   -H "Authorization: Bearer $TOKEN"          # -> 401 {"error":"invalid token"}
 ```
 
-Tokens issued before this endpoint existed carry no `jti` and cannot be
-revoked. They are still accepted (so deploying doesn't sign everyone out) and
-logged with a warning; because tokens live 24 hours, that warning stops
-appearing within a day of deploying.
+Every staff token carries a `jti`, and a staff token without one is rejected
+with `401`, since it could never be revoked. Rider tokens carry no `jti` and
+are accepted; there is no rider sign-out to revoke them through yet.
 
 Revocation rows are never deleted — the table grows one row per logout. A
 periodic cleanup job keyed on `expires_at` is a planned follow-up.

@@ -236,11 +236,17 @@ func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email 
 // logout revokes the session's JWT server-side and clears the cookie. The
 // route is deliberately unauthenticated (an expired session must still be
 // able to log out), so a cookie that no longer validates is simply cleared.
-// A revocation failure is logged but still clears the cookie and redirects:
-// leaving the user stuck on an error page would not make the token any less
-// valid.
+// If the revocation can't be recorded the token is still live, so the cookie
+// is kept and the admin is told, matching POST /api/v1/auth/logout's 500:
+// clearing it would only hide a session that someone holding a copy of the
+// cookie could still use.
 func (ui *adminUI) logout(w http.ResponseWriter, r *http.Request) {
-	revokeSessionCookie(r, ui.jwtSecret, ui.tokenRevoker)
+	if err := revokeSessionCookie(r, ui.jwtSecret, ui.tokenRevoker); err != nil {
+		slog.Error("admin logout: kept the session, revocation failed", "error", err)
+		setFlash(w, "logout_failed")
+		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+		return
+	}
 	clearSessionCookie(w)
 	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }

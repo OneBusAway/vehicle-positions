@@ -144,7 +144,7 @@ func TestRevokeSessionCookie(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 		req.AddCookie(cookie)
 
-		revokeSessionCookie(req, testSecret, revocations)
+		require.NoError(t, revokeSessionCookie(req, testSecret, revocations))
 
 		assert.Contains(t, revocations.revoked, jtiOf(t, cookie.Value))
 		assert.Equal(t, int64(9), revocations.lastUserID, "cookieFor issues tokens for user 9")
@@ -154,8 +154,7 @@ func TestRevokeSessionCookie(t *testing.T) {
 		revocations := newFakeRevocations()
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 
-		revokeSessionCookie(req, testSecret, revocations)
-
+		assert.NoError(t, revokeSessionCookie(req, testSecret, revocations))
 		assert.Zero(t, revocations.revokeCalls)
 	})
 
@@ -164,20 +163,21 @@ func TestRevokeSessionCookie(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "garbage"})
 
-		revokeSessionCookie(req, testSecret, revocations)
-
+		assert.NoError(t, revokeSessionCookie(req, testSecret, revocations),
+			"a cookie that no longer validates is dead already, so the caller may clear it")
 		assert.Zero(t, revocations.revokeCalls, "a cookie that no longer validates has no jti to revoke")
 	})
 
-	t.Run("store error still returns", func(t *testing.T) {
+	t.Run("store error is returned", func(t *testing.T) {
+		storeErr := errors.New("database unavailable")
 		revocations := newFakeRevocations()
-		revocations.err = errors.New("database unavailable")
+		revocations.err = storeErr
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 		req.AddCookie(cookie)
 
-		// Best-effort by design: the caller clears the cookie and redirects
-		// regardless, so this must not panic or block.
-		assert.NotPanics(t, func() { revokeSessionCookie(req, testSecret, revocations) })
+		err := revokeSessionCookie(req, testSecret, revocations)
+
+		assert.ErrorIs(t, err, storeErr, "the token is still live, so the caller must keep the session")
 	})
 }
 
