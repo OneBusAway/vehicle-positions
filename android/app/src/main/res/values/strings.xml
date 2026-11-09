@@ -270,8 +270,8 @@
     <string name="tracking_adherence_run_vehicle">%1$s run · %2$s</string>
     <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
     <string name="tracking_adherence_no_schedule">No schedule</string>
-    <string name="tracking_adherence_no_schedule_riders">Riders still see the vehicle</string>
-    <string name="tracking_adherence_no_schedule_detail">This run has no timetable</string>
+    <string name="tracking_adherence_no_schedule_riders">Riders still see you</string>
+    <string name="tracking_adherence_no_schedule_detail">This run has no times</string>
     <!-- On the tracking screen's map, once the driver has dragged it away from the vehicle. -->
     <string name="tracking_map_recenter">Re-center</string>
     <string name="tracking_map_downloading">Downloading map, %1$d%%</string>
