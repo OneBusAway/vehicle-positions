@@ -504,9 +504,9 @@ class TripReporterTest {
             return inner.oldest(max)
         }
 
-        override suspend fun removeOldest(count: Int) {
+        override suspend fun remove(fixes: List<LocationReportDto>) {
             if (removeFails) throw IOException("No space left on device")
-            inner.removeOldest(count)
+            inner.remove(fixes)
         }
     }
 

@@ -46,9 +46,8 @@ enum class HistoryUpload {
 
 /**
  * Uploads the fixes [OfflineFixQueue] holds, one batch per call, for both [TripReporter] and
- * [BacklogUploadJob]. One upload runs at a time across the two: a batch is read, posted and then
- * removed from the front of the queue, so two uploads of the same batch would remove it twice and
- * drop fixes that never went.
+ * [BacklogUploadJob]. One upload runs at a time across the two: a batch stays at the front of the
+ * queue until it has gone, so two uploads at once would both send it.
  */
 @Singleton
 class HistoryUploader @Inject constructor(
@@ -93,7 +92,7 @@ class HistoryUploader @Inject constructor(
         var batch = offlineQueue.oldest(HISTORY_BATCH)
         val expired = batch.takeWhile { nowEpochSec - it.timestamp > MAX_HISTORY_AGE_SEC }.size
         if (expired > 0) {
-            offlineQueue.removeOldest(expired)
+            offlineQueue.remove(batch.take(expired))
             batch = offlineQueue.oldest(HISTORY_BATCH)
         }
         val vehicleId = batch.firstOrNull()?.vehicleId ?: return HistoryUpload.NOTHING_QUEUED
@@ -110,7 +109,7 @@ class HistoryUploader @Inject constructor(
             Log.w(TAG, "Keeping queued fixes after network failure", e)
             return HistoryUpload.KEPT
         }
-        offlineQueue.removeOldest(points.size)
+        offlineQueue.remove(points)
         return HistoryUpload.BATCH_SENT
     }
 }

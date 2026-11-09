@@ -27,7 +27,12 @@ const val OFFLINE_QUEUE_CAPACITY = 8_640
 interface OfflineFixQueue {
     suspend fun add(report: LocationReportDto)
     suspend fun oldest(max: Int): List<LocationReportDto>
-    suspend fun removeOldest(count: Int)
+
+    /**
+     * Removes [fixes], a run [oldest] returned, once they have been sent or dropped. A full queue may have evicted
+     * some of them since; those are skipped, so no fix added since is taken in their place.
+     */
+    suspend fun remove(fixes: List<LocationReportDto>)
 
     /**
      * Hands the queue to [account], the driver who just signed in. Fixes queued under anyone else
@@ -77,8 +82,13 @@ class FileOfflineFixQueue(
 
     override suspend fun oldest(max: Int): List<LocationReportDto> = locked { q -> q.take(max) }
 
-    override suspend fun removeOldest(count: Int) = locked { q ->
-        repeat(minOf(count, q.size)) { q.removeFirst() }
+    // A fix is known by its vehicle and timestamp. The run was the front of the queue when it was read, and fixes
+    // have only left from the front or joined at the back since, so what is left of it is still the front.
+    override suspend fun remove(fixes: List<LocationReportDto>) = locked { q ->
+        for (fix in fixes) {
+            val first = q.firstOrNull() ?: break
+            if (first.vehicleId == fix.vehicleId && first.timestamp == fix.timestamp) q.removeFirst()
+        }
         rewrite(q)
     }
 

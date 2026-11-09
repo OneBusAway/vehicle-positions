@@ -23,7 +23,7 @@ class FileOfflineFixQueueTest {
         first.add(report(1))
         first.add(report(2))
         first.add(report(3))
-        first.removeOldest(1)
+        first.remove(listOf(report(1)))
 
         val reopened = FileOfflineFixQueue(file)
         assertEquals(listOf(2L, 3L), reopened.oldest(10).map { it.timestamp })

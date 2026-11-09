@@ -47,8 +47,8 @@ class BacklogDrainTest {
 
     private fun fix(ts: Long) = LocationFix(-1.29, 36.82, bearing = 180.0, speed = 8.5, accuracy = 12.0, timeEpochSec = ts)
 
-    // Each upload reads the batch at the front of the queue and removes that many once it has gone. Two at once would
-    // send the same batch and remove it twice, dropping the next batch unsent.
+    // Each upload reads the batch at the front of the queue and removes it once it has gone, so two at once would send
+    // the same batch twice.
     @Test fun `a report that goes through while the job uploads starts no upload, and every fix goes once`() = runTest {
         val api = SlowHistoryApi()
         val queue = queueOf("van-1", "van-2", "van-3")
@@ -205,9 +205,9 @@ class BacklogDrainTest {
             return inner.oldest(max)
         }
 
-        override suspend fun removeOldest(count: Int) {
+        override suspend fun remove(fixes: List<LocationReportDto>) {
             if (removeFails) throw IOException("No space left on device")
-            inner.removeOldest(count)
+            inner.remove(fixes)
         }
     }
 
