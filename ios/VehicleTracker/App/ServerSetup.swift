@@ -26,7 +26,8 @@ final class ServerSetup {
         // Cleared first, so agreeing to the same link again still changes it
         // and the sign-in screen fills its field again.
         linkedServer = nil
-        let signedInTo = session.phase == .signedOut ? nil : session.settings.serverURL
+        // A trip in hand names its own server.
+        let signedInTo = session.phase == .signedOut ? nil : session.currentServerURL
         let decision = ServerSetupLink.decide(link, signedInTo: signedInTo, isManaged: session.settings.serverIsManaged)
         switch decision {
         case .confirm: break
