@@ -13,10 +13,11 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 
 class RunLabelTest {
-    private fun text(label: RunLabel) = runLabelText(label, number = { "Run $it" }, block = { "Block $it" })
+    private fun text(label: RunLabel) =
+        runLabelText(label, number = { "Run $it" }, block = { "Block $it" }, both = { number, block -> "$number / $block" })
 
     @Test fun `a run with a number and a block shows both`() {
-        assertEquals("Run 1503 · Block 599-20", text(RunLabel(number = "1503", block = "599-20")))
+        assertEquals("Run 1503 / Block 599-20", text(RunLabel(number = "1503", block = "599-20")))
     }
 
     @Test fun `a run with only a number shows the number`() {

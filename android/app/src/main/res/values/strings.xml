@@ -152,6 +152,8 @@
     <!-- Under a run's destination, the agency's run or train number and its block, joined as "Run 1503 · Block 599-20"; either alone when the feed gives only that one. -->
     <string name="runs_row_run">Run %1$s</string>
     <string name="runs_row_block">Block %1$s</string>
+    <!-- The run number and the block above, when the feed gives both. -->
+    <string name="runs_row_run_block">%1$s · %2$s</string>
     <!-- What TalkBack says on the run being started. -->
     <string name="runs_starting">Starting\u2026</string>
     <string name="runs_error_message">Couldn\'t load the runs</string>

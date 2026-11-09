@@ -31,13 +31,19 @@ data class TripRun(
 data class RunLabel(val number: String, val block: String)
 
 /**
- * The line under a run in the list, "Run 1503 · Block 599-20": [number] and [block] put each id in its words, an id
- * the feed leaves empty is left out, and a run with neither gets no line at all.
+ * The line under a run in the list, "Run 1503 · Block 599-20": [number] and [block] put each id in its words, and
+ * [both] joins the two. An id the feed leaves empty is left out, and a run with neither gets no line at all.
  */
-inline fun runLabelText(label: RunLabel, number: (String) -> String, block: (String) -> String): String? =
-    listOfNotNull(label.number.ifEmpty { null }?.let(number), label.block.ifEmpty { null }?.let(block))
-        .ifEmpty { null }
-        ?.joinToString(" · ")
+inline fun runLabelText(
+    label: RunLabel,
+    number: (String) -> String,
+    block: (String) -> String,
+    both: (String, String) -> String,
+): String? {
+    val numberText = label.number.ifEmpty { null }?.let(number)
+    val blockText = label.block.ifEmpty { null }?.let(block)
+    return if (numberText != null && blockText != null) both(numberText, blockText) else numberText ?: blockText
+}
 
 /** One route's runs on one service date, with the zone their clock times are read in. */
 data class RunPage(
