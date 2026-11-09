@@ -156,18 +156,125 @@ func TestRequireAPIKey_ValidKey(t *testing.T) {
 
 // TestRequireAPIKey_UpdateLastUsedFailure pins that a failed last_used_at
 // write is logged and ignored: it is an audit convenience, and failing it
-// must not deny a consumer whose key already validated.
+// must not deny a consumer whose key already validated. The failed write
+// still uses up the key's minute, so a broken write path costs one write a
+// minute rather than one a request.
 func TestRequireAPIKey_UpdateLastUsedFailure(t *testing.T) {
 	store := storeWithKey("valid-key", true)
 	store.lastUsedErr = errors.New("write failed")
+	start := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	clock := start
+	serve := serveWithStampClock(store, &clock)
 
-	req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
-	req.Header.Set(apiKeyHeader, "valid-key")
+	assert.True(t, serve("valid-key"), "the feed must still be served when last_used_at cannot be written")
+	require.Equal(t, 1, store.lastUsedCalls)
 
-	w, reached := serveFeedAuth(store, req)
+	clock = start.Add(30 * time.Second)
+	assert.True(t, serve("valid-key"))
+	assert.Equal(t, 1, store.lastUsedCalls, "a failed write is not retried within the minute")
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.True(t, reached, "the feed must still be served when last_used_at cannot be written")
+	clock = start.Add(time.Minute)
+	assert.True(t, serve("valid-key"))
+	assert.Equal(t, 2, store.lastUsedCalls, "it is retried once the minute is up")
+}
+
+// serveWithStampClock returns a function that sends one feed request with the
+// given key through a single requireAPIKey middleware whose last_used_at
+// throttle reads the time from clock. It reports whether the feed handler
+// ran, and is safe to call from several goroutines at once.
+func serveWithStampClock(store APIKeyStore, clock *time.Time) func(key string) bool {
+	stamped := newStampedAPIKeys(apiKeyStampInterval)
+	stamped.now = func() time.Time { return *clock }
+	handler := requireAPIKeyWith(store, false, newValidatedAPIKeys(apiKeyGrace), stamped)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	return func(key string) bool {
+		req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
+		req.Header.Set(apiKeyHeader, key)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w.Code == http.StatusNoContent
+	}
+}
+
+// TestRequireAPIKey_StampsLastUsedOncePerMinute: a consumer polling every few
+// seconds used to write the same row on every request. It now writes once a
+// minute, and each key keeps its own minute.
+func TestRequireAPIKey_StampsLastUsedOncePerMinute(t *testing.T) {
+	store := storeWithKey("key-a", true)
+	keyA := store.key
+	start := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	clock := start
+	serve := serveWithStampClock(store, &clock)
+
+	for i := range 10 {
+		clock = start.Add(time.Duration(i) * 5 * time.Second)
+		require.True(t, serve("key-a"), "every request in the burst is served")
+	}
+	assert.Equal(t, 1, store.lastUsedCalls, "a burst of requests writes once")
+
+	clock = start.Add(59 * time.Second)
+	require.True(t, serve("key-a"))
+	assert.Equal(t, 1, store.lastUsedCalls, "59s after the last write is still inside the minute")
+
+	clock = start.Add(time.Minute)
+	require.True(t, serve("key-a"))
+	assert.Equal(t, 2, store.lastUsedCalls, "a request a minute after the last write writes again")
+
+	store.key = &APIKey{ID: 8, Name: "other-consumer", KeyHash: hashAPIKey("key-b"), Active: true}
+	require.True(t, serve("key-b"))
+	assert.Equal(t, 3, store.lastUsedCalls, "another key is not held back by key-a's minute")
+	assert.Equal(t, int64(8), store.lastUsedID)
+
+	store.key = keyA
+	require.True(t, serve("key-a"))
+	assert.Equal(t, 3, store.lastUsedCalls, "nor does key-b's write reset key-a's minute")
+}
+
+// stallingStampStore holds its first last_used_at write until release is
+// closed, so a test can send more requests while that write is in flight.
+type stallingStampStore struct {
+	*fakeAPIKeyStore
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (s *stallingStampStore) UpdateAPIKeyLastUsed(ctx context.Context, id int64) error {
+	err := s.fakeAPIKeyStore.UpdateAPIKeyLastUsed(ctx, id)
+	if s.lastUsedCalls == 1 {
+		close(s.entered)
+		<-s.release
+	}
+	return err
+}
+
+// TestRequireAPIKey_StampInFlightIsNotRepeated: the write is claimed before it
+// starts, so requests that arrive while it is still running are served
+// without writing too.
+func TestRequireAPIKey_StampInFlightIsNotRepeated(t *testing.T) {
+	store := &stallingStampStore{
+		fakeAPIKeyStore: storeWithKey("key-a", true),
+		entered:         make(chan struct{}),
+		release:         make(chan struct{}),
+	}
+	clock := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	serve := serveWithStampClock(store, &clock)
+
+	firstServed := make(chan bool)
+	go func() { firstServed <- serve("key-a") }()
+	select {
+	case <-store.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first request never wrote last_used_at")
+	}
+
+	for range 5 {
+		assert.True(t, serve("key-a"), "a request during the write is served")
+	}
+	close(store.release)
+
+	assert.True(t, <-firstServed, "the request that wrote is served too")
+	assert.Equal(t, 1, store.lastUsedCalls)
 }
 
 // TestRequireAPIKey_RawKeyNeverLogged guards against a denial log leaking the
@@ -235,7 +342,7 @@ func TestRequireAPIKey_ServesRecentKeyThroughDatabaseOutage(t *testing.T) {
 	clock := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 	validated.now = func() time.Time { return clock }
 	reached := false
-	handler := requireAPIKeyWith(store, false, validated)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := requireAPIKeyWith(store, false, validated, newStampedAPIKeys(apiKeyStampInterval))(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		reached = true
 	}))
 	serve := func(key string) int {
@@ -265,7 +372,7 @@ func TestRequireAPIKey_ServesRecentKeyThroughDatabaseOutage(t *testing.T) {
 func TestRequireAPIKey_RevokedKeyIsNotGracedThroughOutage(t *testing.T) {
 	store := storeWithKey("good-key", true)
 	validated := newValidatedAPIKeys(time.Hour)
-	handler := requireAPIKeyWith(store, false, validated)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	handler := requireAPIKeyWith(store, false, validated, newStampedAPIKeys(apiKeyStampInterval))(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	serve := func() int {
 		req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
 		req.Header.Set(apiKeyHeader, "good-key")

@@ -27,6 +27,12 @@ const apiKeyGrace = 15 * time.Minute
 // the consumer gave up, and the grace period would never get its chance.
 const apiKeyLookupTimeout = 2 * time.Second
 
+// apiKeyStampInterval is how often, at most, a key's last_used_at is written.
+// Consumers poll the feed every few seconds, and an UPDATE on the same row for
+// every request is what shows up first under real poll rates. An operator
+// auditing a key needs to know it is in use, not the second it was last used.
+const apiKeyStampInterval = time.Minute
+
 // validatedAPIKeys remembers, by hash, when each key last validated. It is
 // consulted only when the database lookup fails: while the database answers,
 // every request is checked against it, so a revoked key is refused at once.
@@ -64,6 +70,36 @@ func (v *validatedAPIKeys) recent(hash string) bool {
 	return ok && v.now().Sub(at) < v.grace
 }
 
+// stampedAPIKeys remembers, by key ID, when each key's last_used_at write was
+// last attempted, so it is written at most once per interval. It holds at most
+// one entry per key that has validated.
+type stampedAPIKeys struct {
+	mu       sync.Mutex
+	at       map[int64]time.Time
+	interval time.Duration
+	now      func() time.Time
+}
+
+func newStampedAPIKeys(interval time.Duration) *stampedAPIKeys {
+	return &stampedAPIKeys{at: make(map[int64]time.Time), interval: interval, now: time.Now}
+}
+
+// claim reports whether the key's last_used_at is due a write and, if it is,
+// records the attempt before returning, so concurrent requests for the same
+// key do not also write. A failed write is not retried until the interval
+// has passed: retrying on every request would bring back the write load this
+// exists to remove.
+func (s *stampedAPIKeys) claim(id int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	if at, ok := s.at[id]; ok && now.Sub(at) < s.interval {
+		return false
+	}
+	s.at[id] = now
+	return true
+}
+
 // hashAPIKey returns the hex-encoded SHA-256 of a raw key. Keys are
 // high-entropy values from crypto/rand, not user-chosen passwords: bcrypt's
 // work factor exists to slow brute force against low-entropy secrets and
@@ -88,12 +124,13 @@ func generateAPIKey() (string, error) {
 // API key sent in the X-API-Key header. trustProxy selects which address the
 // denial logs attribute a request to, matching the rest of the server. When
 // the key lookup fails, a key that validated within apiKeyGrace is still
-// served.
+// served. Every request is checked against the database, but last_used_at is
+// written at most once per apiKeyStampInterval per key.
 func requireAPIKey(store APIKeyStore, trustProxy bool) func(http.Handler) http.Handler {
-	return requireAPIKeyWith(store, trustProxy, newValidatedAPIKeys(apiKeyGrace))
+	return requireAPIKeyWith(store, trustProxy, newValidatedAPIKeys(apiKeyGrace), newStampedAPIKeys(apiKeyStampInterval))
 }
 
-func requireAPIKeyWith(store APIKeyStore, trustProxy bool, validated *validatedAPIKeys) func(http.Handler) http.Handler {
+func requireAPIKeyWith(store APIKeyStore, trustProxy bool, validated *validatedAPIKeys, stamped *stampedAPIKeys) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rawKey := r.Header.Get(apiKeyHeader)
@@ -136,11 +173,13 @@ func requireAPIKeyWith(store APIKeyStore, trustProxy bool, validated *validatedA
 			// last_used_at is an audit convenience, not a security control:
 			// failing to record it must not deny a consumer whose key already
 			// validated, on the system's hottest endpoint.
-			updateCtx, cancel := context.WithTimeout(r.Context(), apiKeyLookupTimeout)
-			if err := store.UpdateAPIKeyLastUsed(updateCtx, apiKey.ID); err != nil {
-				slog.Error("failed to update api key last_used_at", "api_key_id", apiKey.ID, "error", err)
+			if stamped.claim(apiKey.ID) {
+				updateCtx, cancel := context.WithTimeout(r.Context(), apiKeyLookupTimeout)
+				if err := store.UpdateAPIKeyLastUsed(updateCtx, apiKey.ID); err != nil {
+					slog.Error("failed to update api key last_used_at", "api_key_id", apiKey.ID, "error", err)
+				}
+				cancel()
 			}
-			cancel()
 
 			next.ServeHTTP(w, r)
 		})
