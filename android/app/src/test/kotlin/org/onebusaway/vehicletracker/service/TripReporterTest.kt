@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.service
 
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,7 +30,6 @@ import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.api.ApiFactory
-import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
@@ -52,14 +50,24 @@ class TripReporterTest {
         return { now += REPORT_INTERVAL_MS; now }
     }
 
-    private fun reporterWith(
+    /** A reporter for [signedInDriver], who owns [queue]. */
+    private suspend fun reporterFor(
+        api: TrackerApi,
+        tracking: TrackingRepository = TrackingRepository(),
+        elapsedMs: () -> Long = steppingClock(),
+        queue: OfflineFixQueue = FakeOfflineFixQueue(),
+        scheduler: BacklogUploadScheduler = BacklogUploadScheduler {},
+    ) = TripReporter(TrackerApiProvider { api }, tracking, elapsedMs, queue, uploaderFor(api, queue), scheduler)
+
+    private suspend fun reporterWith(
         server: MockWebServer,
         queue: OfflineFixQueue = FakeOfflineFixQueue(),
+        scheduler: BacklogUploadScheduler = BacklogUploadScheduler {},
         elapsedMs: () -> Long = steppingClock(),
     ): Pair<TripReporter, TrackingRepository> {
         val tracking = TrackingRepository()
         val api = ApiFactory { "jwt" }.create(server.url("/").toString())
-        return TripReporter(TrackerApiProvider { api }, tracking, elapsedMs, queue) to tracking
+        return reporterFor(api, tracking, elapsedMs, queue, scheduler) to tracking
     }
 
     @Test fun `successful send increments counter and clears problem`() = runTest {
@@ -84,8 +92,7 @@ class TripReporterTest {
 
         val server2 = MockWebServer().apply { start() }
         server2.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
-        val api2 = ApiFactory { "jwt" }.create(server2.url("/").toString())
-        val reporter2 = TripReporter(TrackerApiProvider { api2 }, tracking, steppingClock(), FakeOfflineFixQueue())
+        val reporter2 = reporterFor(ApiFactory { "jwt" }.create(server2.url("/").toString()), tracking)
         reporter2.report(trip, fix())
         assertEquals(TrackingProblem.NONE, tracking.state.value.problem)
         server2.shutdown()
@@ -99,7 +106,9 @@ class TripReporterTest {
         val tracking = TrackingRepository()
         val sessions = FakeSessionStore().apply { state.value = session(server.url("/").toString()) }
         val holder = ApiHolder(sessions, CoroutineScope(Job().apply { cancel() }), clock = { 1000L })
-        return TripReporter(TrackerApiProvider(holder::api), tracking, steppingClock(), FakeOfflineFixQueue()) to tracking
+        val api = TrackerApiProvider(holder::api)
+        val queue = FakeOfflineFixQueue()
+        return TripReporter(api, tracking, steppingClock(), queue, HistoryUploader(api, sessions, queue), BacklogUploadScheduler {}) to tracking
     }
 
     @Test fun `401 with no refresh token sets AUTH_EXPIRED`() = runTest {
@@ -413,6 +422,26 @@ class TripReporterTest {
         online.shutdown()
     }
 
+    // Without it the fix waits for a live report, which may be the next trip's.
+    @Test fun `a queued fix schedules the backlog upload, a sent or lost one doesn't`() = runTest {
+        var scheduled = 0
+        val queue = FailingQueue()
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        val (reporter, _) = reporterWith(server, queue = queue, scheduler = { scheduled++ })
+
+        reporter.report(trip, fix())
+        assertEquals("sent", 0, scheduled)
+
+        server.shutdown()
+        reporter.report(trip, fix())
+        assertEquals("queued", 1, scheduled)
+
+        queue.addFails = true
+        reporter.report(trip, fix())
+        assertEquals("lost to a full disk", 1, scheduled)
+    }
+
     @Test fun `a history upload refused for good is dropped, a passing failure is kept`() = runTest {
         for ((code, kept) in listOf(403 to 0, 400 to 0, 429 to 1, 500 to 1)) {
             val queue = FakeOfflineFixQueue()
@@ -534,36 +563,12 @@ class TripReporterTest {
         }
     }
 
-    /** Takes each live report at once, and holds each history upload until [finishUploads] completes. */
-    private class SlowHistoryApi(
-        unused: TrackerApi = ApiFactory { "jwt" }.create("http://127.0.0.1/"),
-    ) : TrackerApi by unused {
-        var liveFailure: Exception? = null
-        var liveReports = 0
-        val uploads = mutableListOf<String>()
-        val finishUploads = CompletableDeferred<Unit>()
-
-        override suspend fun postLocation(body: LocationReportDto) {
-            liveFailure?.let { throw it }
-            liveReports++
-        }
-
-        override suspend fun postLocationHistory(body: LocationHistoryDto) {
-            uploads += body.vehicleId
-            finishUploads.await()
-        }
-    }
-
-    private fun queued(vehicleId: String) =
-        LocationReportDto(vehicleId = vehicleId, routeId = "5", startDate = "20260804", latitude = -1.29, longitude = 36.82, timestamp = 1000L)
-
-    private fun slowReporter(api: SlowHistoryApi, queue: OfflineFixQueue) =
-        TripReporter(TrackerApiProvider { api }, TrackingRepository(), steppingClock(), queue)
+    private suspend fun slowReporter(api: SlowHistoryApi, queue: OfflineFixQueue) = reporterFor(api, queue = queue)
 
     // Live fixes that can't go are dropped, not queued, so an upload holding them back loses them.
     @Test fun `a live fix still goes while a history upload is on its way`() = runTest {
         val api = SlowHistoryApi()
-        val queue = FakeOfflineFixQueue().apply { add(queued("bus-1")) }
+        val queue = FakeOfflineFixQueue().apply { add(queuedFix("bus-1")) }
         val reporter = slowReporter(api, queue)
 
         val first = launch { reporter.report(trip, fix(ts = 1020L)) }
@@ -581,8 +586,8 @@ class TripReporterTest {
     @Test fun `reports during an upload start no other, and the next report after it does`() = runTest {
         val api = SlowHistoryApi()
         val queue = FakeOfflineFixQueue().apply {
-            add(queued("bus-1"))
-            add(queued("bus-2"))
+            add(queuedFix("bus-1"))
+            add(queuedFix("bus-2"))
         }
         val reporter = slowReporter(api, queue)
 
@@ -605,7 +610,7 @@ class TripReporterTest {
                 finishUploads.complete(Unit)
                 liveFailure = failure
             }
-            val queue = FakeOfflineFixQueue().apply { add(queued("bus-1")) }
+            val queue = FakeOfflineFixQueue().apply { add(queuedFix("bus-1")) }
             val reporter = slowReporter(api, queue)
 
             reporter.report(trip, fix(ts = 1020L))

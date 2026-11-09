@@ -176,4 +176,5 @@ class FakeOfflineFixQueue : OfflineFixQueue {
     override suspend fun claimIfUnowned(account: String) {
         if (owner == null) owner = account
     }
+    override suspend fun owner() = owner
 }

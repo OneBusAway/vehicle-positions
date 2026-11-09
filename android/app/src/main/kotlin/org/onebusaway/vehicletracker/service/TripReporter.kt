@@ -5,10 +5,8 @@ import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
-import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
-import org.onebusaway.vehicletracker.data.api.toHistoryPoint
 import org.onebusaway.vehicletracker.di.ElapsedMillisClock
 import retrofit2.HttpException
 import java.io.IOException
@@ -45,27 +43,16 @@ private const val MIN_REPORT_GAP_MS = 8_500L
 
 private const val NEVER_REPORTED = Long.MIN_VALUE
 
-/** The most fixes one history upload carries; the server takes at most 500. */
-private const val HISTORY_BATCH = 500
-
-/**
- * How old a queued fix may be and still be uploaded: the server takes a day, less a margin for the
- * phone's clock and the time the upload takes.
- */
-private const val MAX_HISTORY_AGE_SEC = 24 * 3600L - 600L
-
-/** Refusals a history upload would get again however often it were retried. */
-private val PERMANENT_HISTORY_REFUSALS = setOf(400, 403, 404)
-
 class TripReporter @Inject constructor(
     private val apiProvider: TrackerApiProvider,
     private val tracking: TrackingRepository,
     @param:ElapsedMillisClock private val elapsedMs: () -> Long,
     private val offlineQueue: OfflineFixQueue,
+    private val historyUploader: HistoryUploader,
+    private val backlogScheduler: BacklogUploadScheduler,
 ) {
     private val lastReportAt = AtomicLong(NEVER_REPORTED)
     private val reportInFlight = AtomicBoolean(false)
-    private val uploadInFlight = AtomicBoolean(false)
     private var gpsAvailable = true
     private var consecutiveTimestampRejects = 0
     private var currentSendProblem = TrackingProblem.NONE
@@ -87,8 +74,9 @@ class TripReporter @Inject constructor(
      * by the time it could go it would be stale, and the next one is seconds behind it.
      *
      * A report that goes through is followed by one batch of the fixes queued while there was no
-     * connection. That upload is not part of the report: a slow one would otherwise hold back the
-     * live fixes behind it, and those are dropped, not queued.
+     * connection, unless [BacklogUploadJob] is uploading one. That upload is not part of the
+     * report: a slow one would otherwise hold back the live fixes behind it, and those are
+     * dropped, not queued.
      */
     suspend fun report(trip: ActiveTrip, fix: LocationFix) {
         if (!reportInFlight.compareAndSet(false, true)) return
@@ -100,14 +88,12 @@ class TripReporter @Inject constructor(
         // The connection works again, and this report has gone: send one batch of what queued up
         // while it did not. At most one per report, and one at a time, keeps within the server's
         // limit on history uploads; a report that goes through while a batch is on its way starts none.
-        if (!sent || !uploadInFlight.compareAndSet(false, true)) return
+        if (!sent) return
         try {
-            uploadOneHistoryBatch(nowEpochSec = fix.timeEpochSec)
+            historyUploader.uploadIfIdle(nowEpochSec = fix.timeEpochSec)
         } catch (e: IOException) {
             // The upload's own network failures are handled inside; this is the queue's file failing.
             Log.w(TAG, "Could not read or update the offline queue", e)
-        } finally {
-            uploadInFlight.set(false)
         }
     }
 
@@ -160,6 +146,7 @@ class TripReporter @Inject constructor(
             Log.w(TAG, "Queueing location report for history after network failure", e)
             try {
                 offlineQueue.add(dto)
+                backlogScheduler.schedule()
             } catch (queueError: IOException) {
                 // A full disk, say. Nothing above this catches it, so it would end tracking mid-trip:
                 // losing one queued fix is the lesser loss.
@@ -169,36 +156,6 @@ class TripReporter @Inject constructor(
             return false
         }
         return true
-    }
-
-    /**
-     * Uploads the oldest queued fixes for one vehicle. A batch the server refuses for good (bad
-     * data, a vehicle no longer assigned, a server without the endpoint) is dropped; one that
-     * fails for now (no connection, an expired sign-in, the rate limit, a server error) stays for
-     * the next report to try.
-     */
-    private suspend fun uploadOneHistoryBatch(nowEpochSec: Long) {
-        var batch = offlineQueue.oldest(HISTORY_BATCH)
-        val expired = batch.takeWhile { nowEpochSec - it.timestamp > MAX_HISTORY_AGE_SEC }.size
-        if (expired > 0) {
-            offlineQueue.removeOldest(expired)
-            batch = offlineQueue.oldest(HISTORY_BATCH)
-        }
-        val vehicleId = batch.firstOrNull()?.vehicleId ?: return
-        val points = batch.takeWhile { it.vehicleId == vehicleId }
-        try {
-            apiProvider.get().postLocationHistory(LocationHistoryDto(vehicleId, points.map { it.toHistoryPoint() }))
-            offlineQueue.removeOldest(points.size)
-        } catch (e: HttpException) {
-            if (e.code() in PERMANENT_HISTORY_REFUSALS) {
-                Log.w(TAG, "Dropping ${points.size} queued fixes after HTTP ${e.code()}", e)
-                offlineQueue.removeOldest(points.size)
-            } else {
-                Log.w(TAG, "Keeping queued fixes after HTTP ${e.code()}", e)
-            }
-        } catch (e: IOException) {
-            Log.w(TAG, "Keeping queued fixes after network failure", e)
-        }
     }
 
     /** Claims the next report slot. */
