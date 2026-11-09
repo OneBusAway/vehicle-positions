@@ -51,6 +51,14 @@ actor TokenRefresher {
     private let now: @Sendable () -> Date
     /// The trade running now, and the sign-in it was started for.
     private var inFlight: (signInID: UUID?, task: Task<Outcome, Never>)?
+    /// How long an early trade that was refused or failed holds back the next
+    /// early one. Drivers at a depot share one address, and with it the
+    /// server's per-IP refresh limit, which a retry on every report would spend.
+    private static let earlyRetryDelay: TimeInterval = 60
+    /// Until when no early trade starts, and the sign-in whose early trade was
+    /// refused or failed. Another sign-in's tokens say nothing about that one's,
+    /// so its early trades are not held back.
+    private var earlyTradesHeld: (signInID: UUID?, until: Date)?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "token-refresher")
 
     init(tokens: any TokenStoring, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -107,7 +115,8 @@ actor TokenRefresher {
     /// expire. An early refresh that fails or is refused never fails the
     /// request, which goes out with the token it has while that still works;
     /// the 401 after it expires is where a refused refresh token is dropped
-    /// and a failure reported.
+    /// and a failure reported. It does hold back the next early refresh for a
+    /// minute, though never the refresh after a 401.
     func beforeExpiry(observedToken: String, signInID: UUID?, refresh: @escaping Refresh) async -> String {
         // As in `afterUnauthorized`, nothing is awaited until a refresh has
         // been joined or started, or another sign-in's trade is waited out.
@@ -122,12 +131,30 @@ actor TokenRefresher {
             }
             task = inFlight.task
         } else {
-            guard isRefreshDue(stored), let refreshToken = stored.refreshToken else { return observedToken }
-            task = Task { await trade(refreshToken, refresh: refresh) }
+            guard isRefreshDue(stored), !earlyTradesAreHeld(for: signInID), let refreshToken = stored.refreshToken else {
+                return observedToken
+            }
+            task = Task { await tradeEarly(refreshToken, signInID: signInID, refresh: refresh) }
             inFlight = (signInID, task)
         }
         if case .retry(let renewed) = await task.value { return renewed }
         return observedToken
+    }
+
+    private func earlyTradesAreHeld(for signInID: UUID?) -> Bool {
+        guard let earlyTradesHeld, earlyTradesHeld.signInID == signInID else { return false }
+        return now() < earlyTradesHeld.until
+    }
+
+    /// A trade before expiry, which holds back the next early one when it is
+    /// refused or fails. The hold is set with no await after the trade clears
+    /// `inFlight`, so no request finds neither a trade nor a hold and starts
+    /// another.
+    private func tradeEarly(_ refreshToken: String, signInID: UUID?, refresh: Refresh) async -> Outcome {
+        let outcome = await trade(refreshToken, refresh: refresh)
+        if case .retry = outcome { return outcome }
+        earlyTradesHeld = (signInID, now().addingTimeInterval(Self.earlyRetryDelay))
+        return outcome
     }
 
     /// Presents `refreshToken` once and saves the pair the server hands back.
@@ -135,6 +162,7 @@ actor TokenRefresher {
         defer { inFlight = nil }
         switch await refresh(refreshToken) {
         case .issued(let issued):
+            earlyTradesHeld = nil
             save(issued, spending: refreshToken)
             return .retry(issued.accessToken)
         case .refused:
