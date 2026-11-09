@@ -41,6 +41,9 @@ interface OfflineFixQueue {
      * another account's. A queue that has an owner keeps it.
      */
     suspend fun claimIfUnowned(account: String)
+
+    /** The account the queue was last handed to, or null when it has no owner. */
+    suspend fun owner(): String?
 }
 
 /** The account [OfflineFixQueue.claimFor] compares: the same server and email however they were typed. */
@@ -100,6 +103,10 @@ class FileOfflineFixQueue(
                 Log.w(TAG, "Could not record who owns the queued fixes", e)
             }
         }
+    }
+
+    override suspend fun owner(): String? = withContext(Dispatchers.IO) {
+        mutex.withLock { ownerFile.takeIf { it.exists() }?.readText() }
     }
 
     private suspend fun <T> locked(block: (ArrayDeque<LocationReportDto>) -> T): T =
