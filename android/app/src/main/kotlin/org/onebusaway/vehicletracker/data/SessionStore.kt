@@ -120,10 +120,12 @@ interface SessionStore {
     suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens)
 
     /**
-     * Saves the pair a refresh handed out, keeping the server URL and the email. Once the tokens
-     * are cleared it saves nothing: a refresh still in flight then would sign the phone back in.
+     * Saves the pair a refresh handed out for [spentRefreshToken], keeping the server URL and the
+     * email. It saves nothing unless [spentRefreshToken] is still the stored refresh token: a
+     * sign-out or a sign-in while the refresh was out has replaced the session that spent it, and
+     * saving would bring that session back.
      */
-    suspend fun saveRefreshed(tokens: IssuedTokens)
+    suspend fun saveRefreshed(tokens: IssuedTokens, spentRefreshToken: String)
 
     /** Forgets the refresh token and keeps the access token, which works until it expires. */
     suspend fun dropRefreshToken()
@@ -254,25 +256,33 @@ class EncryptedSessionStore(
     }
 
     override suspend fun saveLogin(serverUrl: String, email: String, tokens: IssuedTokens) =
-        save(serverUrl, email, tokens)
+        save(serverUrl, email, tokens, spentRefreshToken = null)
 
-    override suspend fun saveRefreshed(tokens: IssuedTokens) = save(serverUrl = null, email = null, tokens)
+    override suspend fun saveRefreshed(tokens: IssuedTokens, spentRefreshToken: String) =
+        save(serverUrl = null, email = null, tokens, spentRefreshToken)
 
     /**
-     * Saves [tokens], and [serverUrl] and [email] unless they are null. A refresh, with no
-     * [serverUrl], saves nothing when no access token is stored.
+     * Saves [tokens], and [serverUrl] and [email] unless they are null. A refresh, which passes
+     * the [spentRefreshToken], saves nothing unless the session that spent it is still stored.
      */
-    private suspend fun save(serverUrl: String?, email: String?, tokens: IssuedTokens) {
+    private suspend fun save(serverUrl: String?, email: String?, tokens: IssuedTokens, spentRefreshToken: String?) {
         // Encrypt before opening the transaction, so a Keystore failure reaches the caller without
         // half-writing a session: AuthRepository.login turns it into Result.failure, and
         // TokenRefresher drops the refresh token the server has just spent.
         val access = cryptor.encrypt(tokens.accessToken)
         val refresh = cryptor.encrypt(tokens.refreshToken)
         dataStore.edit { prefs ->
-            // A refresh renews the stored session. With no access token stored, that session was
-            // cleared while the refresh was out, by a sign-out or a 401, and writing the refresh
-            // would sign the old driver back in.
-            if (serverUrl == null && !prefs.contains(Keys.TOKEN)) return@edit
+            // A refresh renews the session that spent the refresh token. With no access token
+            // stored, a sign-out or a 401 cleared that session while the refresh was out; with
+            // another refresh token stored, a sign-in replaced it. Writing the refresh would sign
+            // the old driver back in. Checked inside the transaction, so a sign-in can't land
+            // between the check and the write.
+            if (spentRefreshToken != null &&
+                (!prefs.contains(Keys.TOKEN) || readRefreshToken(prefs) != spentRefreshToken)
+            ) {
+                Log.i(LOG_TAG, "The session changed while a refresh was out; dropping the refreshed tokens.")
+                return@edit
+            }
             if (serverUrl != null) prefs[Keys.SERVER_URL] = serverUrl
             if (email != null) prefs[Keys.EMAIL] = email
             prefs[Keys.TOKEN] = access

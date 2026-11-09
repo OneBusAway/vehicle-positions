@@ -116,7 +116,7 @@ class TokenRefresher(
         val issued = reply.body()
         return when {
             reply.isSuccessful && issued != null -> {
-                save(issued.issuedAt(clock()))
+                save(issued.issuedAt(clock()), spentRefreshToken = refreshToken)
                 issued.accessToken
             }
             reply.code() == 401 -> null
@@ -129,9 +129,9 @@ class TokenRefresher(
      * the old one too: presented again, it would revoke every refresh token the driver holds. The
      * new access token is still returned, for the request that is waiting on it.
      */
-    private fun save(tokens: IssuedTokens) {
+    private fun save(tokens: IssuedTokens, spentRefreshToken: String) {
         try {
-            runBlocking { sessionStore.saveRefreshed(tokens) }
+            runBlocking { sessionStore.saveRefreshed(tokens, spentRefreshToken) }
         } catch (e: GeneralSecurityException) {
             Log.w(TAG, "Could not encrypt the refreshed tokens; dropping the spent refresh token.", e)
             dropRefreshToken()
