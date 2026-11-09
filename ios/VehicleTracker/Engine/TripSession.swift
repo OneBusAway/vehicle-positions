@@ -227,6 +227,21 @@ final class TripSession {
         }
     }
 
+    /// The server the trip in hand is open on, or without one, the session's.
+    /// Sign in again goes there.
+    var currentServerURL: URL? {
+        activeTrip?.server(sessionServer: settings.serverURL) ?? settings.serverURL
+    }
+
+    /// The paused trip is open on another server than the one signed in to,
+    /// which its reports would go to: Resume opens Sign in again for the
+    /// trip's server first. Never for a trip saved before servers were
+    /// recorded, which is on the session's.
+    var resumeNeedsSignIn: Bool {
+        guard case .paused(let active) = phase, let tripServer = active.serverURL else { return false }
+        return !isSameServer(tripServer.absoluteString, settings.serverURLString)
+    }
+
     // MARK: Sign-in
 
     /// The sign-in screens show a fixed sentence for each failure, never the
@@ -254,9 +269,10 @@ final class TripSession {
         }
     }
 
-    /// Signs in again with the stored email, keeping any running trip.
+    /// Signs in again with the stored email, to the trip's server, keeping any
+    /// running trip.
     func reauthenticate(password: String) async throws {
-        guard let url = settings.serverURL else { throw TripSessionError.notSignedIn }
+        guard let url = currentServerURL else { throw TripSessionError.notSignedIn }
         try await signIn(serverURL: url, email: settings.email, password: password)
         // A fresh token clears an auth problem at once; every client reads
         // the store on every request, so the token itself takes effect on the
@@ -400,7 +416,7 @@ final class TripSession {
             }
             let serverID = try await api.startTrip(vehicleID: vehicle.id, routeID: trip.routeID, gtfsTripID: trip.id)
             let active = ActiveTrip(serverTripID: serverID, vehicle: vehicle, trip: trip,
-                                    startedAt: now(), driverEmail: settings.email)
+                                    startedAt: now(), driverEmail: settings.email, serverURL: settings.serverURL)
             do {
                 try store.save(active)
             } catch {
@@ -472,10 +488,13 @@ final class TripSession {
     /// Restarts location delivery: for a trip a relaunch found in the store
     /// (`.paused`), or after the location stream itself ended (`.active`
     /// with `streamEnded`). Neither case makes a server call. Must be called
-    /// from the foreground, as any (re)start must.
+    /// from the foreground, as any (re)start must. A paused trip that
+    /// `resumeNeedsSignIn` stays paused.
     func resume() {
         guard !isSigningOut else { return }
         switch phase {
+        case .paused where resumeNeedsSignIn:
+            log.notice("not resuming: the trip is open on another server than the one signed in to")
         case .paused(let active):
             guard let evaluator = AdherenceEvaluator(trip: active.trip) else {
                 // A trip we cannot judge adherence for is one we cannot

@@ -34,7 +34,7 @@ struct SignInView: View {
 
     /// The server to sign in to: on Sign in, the agency's, the last one or the
     /// built-in one; signing in again, the open trip's.
-    private var savedServer: URL? { isAgain ? settings.serverURL : settings.signInServerURL }
+    private var savedServer: URL? { isAgain ? session.currentServerURL : settings.signInServerURL }
 
     var body: some View {
         ScrollViewReader { proxy in

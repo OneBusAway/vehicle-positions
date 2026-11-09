@@ -6,12 +6,15 @@ import SwiftUI
 /// keep reporting, or end the trip. An end the server doesn't confirm is said
 /// here, under the card, and the buttons then offer to try again or end it on
 /// this phone only; a third goes back, for a driver who didn't mean to end it.
+/// Resume on a phone signed in to another server than the trip's opens Sign
+/// in again for the trip's server, and the driver comes back here after it.
 struct ResumeView: View {
     @Environment(TripSession.self) private var session
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The trip shown, kept while the screen fades out after an end.
     @State private var trip: ActiveTrip?
     @State private var endNotConfirmed = false
+    @State private var showingSignInAgain = false
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "resume")
 
     private var isEnding: Bool { session.phase.isEnding }
@@ -58,6 +61,9 @@ struct ResumeView: View {
             if let active { trip = active }
         }
         .sensoryFeedback(.error, trigger: endNotConfirmed) { _, failed in failed }
+        .sheet(isPresented: $showingSignInAgain) {
+            SignInAgainSheet()
+        }
     }
 
     @ViewBuilder private var buttons: some View {
@@ -75,11 +81,19 @@ struct ResumeView: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                WideButton(title: ResumeText.resumeTrip) { session.resume() }
+                WideButton(title: ResumeText.resumeTrip, action: resume)
                     .disabled(isEnding)
                 // No confirmation, as on Android: this screen asked already.
                 WideButton(title: ResumeText.endTrip, busyTitle: isEnding ? ResumeText.ending : nil, style: .plain, action: end)
             }
+        }
+    }
+
+    private func resume() {
+        if session.resumeNeedsSignIn {
+            showingSignInAgain = true
+        } else {
+            session.resume()
         }
     }
 

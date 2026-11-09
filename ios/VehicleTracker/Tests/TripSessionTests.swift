@@ -123,6 +123,7 @@ import VehiclePositionsKit
         #expect(active.serverTripID == 42)
         #expect(active.vehicle == bus)
         #expect(active.trip == TripFixtures.t1)
+        #expect(active.serverURL == server, "the trip keeps the server it was started on")
         #expect(try store.load() == active)
         #expect(locations.handles.count == 1)
         #expect(locations.subscriptions == 1)
@@ -1331,6 +1332,41 @@ import VehiclePositionsKit
 
         try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
         #expect(s.phase == .paused(active))
+    }
+
+    // MARK: The trip's server
+
+    let tripServer = URL(string: "https://trip.example.org")!
+
+    func trip(on serverURL: URL?) -> ActiveTrip {
+        ActiveTrip(serverTripID: 7, vehicle: bus, trip: TripFixtures.t1, startedAt: clock.now.addingTimeInterval(-600),
+                   driverEmail: "d@test.com", serverURL: serverURL)
+    }
+
+    /// Reports go to the server signed in to. A trip open on another one
+    /// stays paused, and Sign in again goes to the trip's server, after
+    /// which Resume works.
+    @Test func resumingATripOnAnotherServerSignsInToItsServerFirst() async throws {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set(server.absoluteString, forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        let active = trip(on: tripServer)
+        try store.save(active)
+        var servers: [URL] = []
+        let s = TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
+                            access: access, makeAPI: { url, _ in servers.append(url); return api }, now: { clock.now })
+        #expect(s.phase == .paused(active))
+        #expect(s.resumeNeedsSignIn)
+
+        s.resume()
+        #expect(s.phase == .paused(active), "nothing is reported to a server the trip isn't on")
+        #expect(locations.handles.isEmpty)
+
+        try await s.reauthenticate(password: "pw")
+        #expect(servers.last == tripServer)
+        #expect(!s.resumeNeedsSignIn)
+        s.resume()
+        #expect(s.phase == .active(active))
     }
 }
 
