@@ -480,8 +480,10 @@ Notes for operators:
   SHA-256 hash. bcrypt is deliberately not used: its work factor protects
   low-entropy passwords and would add latency to the busiest endpoint in the
   system for no gain against a 256-bit random value.
-- `last_used_at` is best-effort. If that write fails the request is still
-  served and the failure is logged, so an audit column can't take the feed down.
+- `last_used_at` is best-effort and coarse. The server writes it at most once a
+  minute per key, so it can trail a key's latest request by up to a minute. If
+  that write fails the request is still served and the failure is logged, so an
+  audit column can't take the feed down.
 - For local development, [`seed_dev.sql`](seed_dev.sql) seeds the key
   `local-dev-feed-key`. It is public in this repository — never use it anywhere
   but a local machine.

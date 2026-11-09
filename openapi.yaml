@@ -2421,7 +2421,10 @@ components:
         last_used_at:
           type: [string, 'null']
           format: date-time
-          description: Null until the key authenticates a feed request.
+          description: |
+            Null until the key authenticates a feed request. Written at most
+            once a minute, so it can trail the key's latest request by up to
+            a minute.
         created_at:
           type: string
           format: date-time
