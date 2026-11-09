@@ -152,6 +152,8 @@
     <!-- Under a run's destination, the agency's run or train number and its block, joined as "Run 1503 · Block 599-20"; either alone when the feed gives only that one. -->
     <string name="runs_row_run">Run %1$s</string>
     <string name="runs_row_block">Block %1$s</string>
+    <!-- The run number and the block above, when the feed gives both. -->
+    <string name="runs_row_run_block">%1$s · %2$s</string>
     <!-- What TalkBack says on the run being started. -->
     <string name="runs_starting">Starting\u2026</string>
     <string name="runs_error_message">Couldn\'t load the runs</string>
@@ -268,8 +270,8 @@
     <string name="tracking_adherence_run_vehicle">%1$s run · %2$s</string>
     <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
     <string name="tracking_adherence_no_schedule">No schedule</string>
-    <string name="tracking_adherence_no_schedule_riders">Riders still see the vehicle</string>
-    <string name="tracking_adherence_no_schedule_detail">This run has no timetable</string>
+    <string name="tracking_adherence_no_schedule_riders">Riders still see you</string>
+    <string name="tracking_adherence_no_schedule_detail">This run has no times</string>
     <!-- On the tracking screen's map, once the driver has dragged it away from the vehicle. -->
     <string name="tracking_map_recenter">Re-center</string>
     <string name="tracking_map_downloading">Downloading map, %1$d%%</string>

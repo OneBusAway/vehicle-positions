@@ -50,7 +50,8 @@ fun legibleTextOn(background: Color): Color {
 
 /**
  * A route's short name and colours with the feed's hex already read, so a list of badges parses nothing while it
- * scrolls. A null colour leaves the badge on the theme's own, as [routeColorArgb] explains.
+ * scrolls. Either colour is null when the feed gave none, or gave something unreadable. A null [color] leaves the
+ * badge on the theme's own colours; a null [textColor] on a route colour gets black or white, as [foreground] says.
  */
 @Immutable
 data class RouteBadgeModel(val shortName: String, val color: Color?, val textColor: Color?) {

@@ -43,6 +43,8 @@ import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.offlineQueueAccount
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.di.ServiceAnnounceGrace
+import org.onebusaway.vehicletracker.ui.account.AccountUiState
+import org.onebusaway.vehicletracker.ui.account.AccountViewModel
 import org.onebusaway.vehicletracker.ui.login.LoginScreen
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreen
 import org.onebusaway.vehicletracker.ui.routes.RouteItem
@@ -137,9 +139,11 @@ internal fun NavController.toBusStep() {
 
 /**
  * Only the step the app opened by itself skips. One the driver asked for shows the one vehicle, rather than bouncing
- * back.
+ * back. Nor does it skip once the driver has confirmed Sign out: the assignments can land behind the Sign out dialog,
+ * and the skip would take a driver who is signing out on to the route step.
  */
-internal fun skipsOnlyVehicle(route: String?): Boolean = route == ROUTE_VEHICLES
+internal fun skipsOnlyVehicle(route: String?, account: AccountUiState): Boolean =
+    route == ROUTE_VEHICLES && !account.signingOut
 
 /**
  * How the app leaves the bus step when the driver has only one bus: the route step takes its place. Left on the back
@@ -393,6 +397,8 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
 /** The bus step, under either of its routes: they differ only in whether one bus skips it. */
 private fun NavGraphBuilder.vehicleStep(route: String, navController: NavController) {
     composable(route) { backStackEntry ->
+        // The same view model as the account menu's on this step, so it knows when a sign-out has begun.
+        val account: AccountViewModel = hiltViewModel()
         val openRoutes = remember(backStackEntry) {
             backStackEntry.ifResumed<String> { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") }
         }
@@ -402,7 +408,9 @@ private fun NavGraphBuilder.vehicleStep(route: String, navController: NavControl
                 // Not a tap: it fires once the assignments load, which can be while this screen is still sliding in,
                 // and a guard would drop it.
                 onOnlyVehicle = { vehicleId ->
-                    if (skipsOnlyVehicle(route)) navController.navigate("trip/${arg(vehicleId)}", skipBusStep)
+                    if (skipsOnlyVehicle(route, account.uiState.value)) {
+                        navController.navigate("trip/${arg(vehicleId)}", skipBusStep)
+                    }
                 },
                 // Not a tap: it fires when the reply lands, and a guard would drop it.
                 onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },

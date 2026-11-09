@@ -390,6 +390,7 @@ private fun RunRow(run: BoardRun, starting: Boolean, dimmed: Boolean, onRunClick
                 run.label,
                 number = { stringResource(R.string.runs_row_run, it) },
                 block = { stringResource(R.string.runs_row_block, it) },
+                both = { number, block -> stringResource(R.string.runs_row_run_block, number, block) },
             )
             if (label != null) {
                 Text(text = label, style = MaterialTheme.typography.bodySmall, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
