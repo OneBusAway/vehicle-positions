@@ -333,4 +333,102 @@ import Testing
         #expect(nextRefresh.presented == ["rb1"])
         #expect(try store.load() == nextRenewedInItsSignIn)
     }
+
+    // MARK: Holding back early refreshes
+
+    func refresher(_ tokens: any TokenStoring, clock: SettableClock) -> TokenRefresher {
+        TokenRefresher(tokens: tokens, now: { clock.now })
+    }
+
+    /// #298: tried again on every report, a refused refresh token or a server
+    /// that can't be reached spends the per-IP refresh limit that drivers at a
+    /// depot share.
+    @Test(arguments: [TokenRefresher.RefreshReply.refused, .unreachable("offline")])
+    func anEarlyRefreshThatFailedIsNotTriedAgainForAMinute(failure: TokenRefresher.RefreshReply) async {
+        let clock = SettableClock(now)
+        let refresher = refresher(ScriptedTokenStore(aboutToExpire), clock: clock)
+        let failing = ScriptedRefresh(answering: failure)
+        #expect(await refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: failing.call) == "a1")
+
+        clock.advance(59)
+        #expect(await refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: failing.call) == "a1")
+        #expect(failing.presented == ["r1"])
+
+        clock.advance(1)
+        let issuing = ScriptedRefresh(answering: .issued(renewed))
+        #expect(await refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: issuing.call) == "a2")
+        #expect(issuing.presented == ["r1"])
+    }
+
+    /// Without a refresh after a 401 the request can't go at all.
+    @Test func a401RefreshesAtOnceWhileEarlyRefreshesAreHeldBack() async {
+        let clock = SettableClock(now)
+        let refresher = refresher(ScriptedTokenStore(aboutToExpire), clock: clock)
+        let unreachable = ScriptedRefresh(answering: .unreachable("offline"))
+        #expect(await refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: unreachable.call) == "a1")
+
+        clock.advance(31)
+        let issuing = ScriptedRefresh(answering: .issued(renewed))
+        #expect(await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: issuing.call) == .retry("a2"))
+        #expect(issuing.presented == ["r1"])
+    }
+
+    @Test func aNewSignInIsNotHeldBackByTheDriverBeforesFailedEarlyRefresh() async throws {
+        let store = ScriptedTokenStore(aboutToExpire)
+        let clock = SettableClock(now)
+        let refresher = refresher(store, clock: clock)
+        let refusing = ScriptedRefresh(answering: .refused)
+        #expect(await refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: refusing.call) == "a1")
+
+        try store.save(nextDriverAboutToExpire)
+        clock.advance(10)
+        let nextRefresh = ScriptedRefresh(answering: .issued(nextRenewed))
+        #expect(await refresher.beforeExpiry(observedToken: "b1", signInID: nextSignIn, refresh: nextRefresh.call) == "b2")
+        #expect(nextRefresh.presented == ["rb1"])
+    }
+
+    /// A token that lives two minutes or less is due halfway through, so the
+    /// one a 401's refresh hands out can be due again within the minute.
+    @Test func aRefreshThatWorksEndsTheHold() async {
+        let clock = SettableClock(now)
+        let refresher = refresher(ScriptedTokenStore(aboutToExpire), clock: clock)
+        let unreachable = ScriptedRefresh(answering: .unreachable("offline"))
+        #expect(await refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: unreachable.call) == "a1")
+
+        clock.advance(10)
+        let shortLived = ScriptedRefresh(answering: .issued(AuthTokens(accessToken: "a2", refreshToken: "r2", expiresIn: 60)))
+        #expect(await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: shortLived.call) == .retry("a2"))
+
+        // a2 is due now, and the hold would have run twenty seconds more.
+        clock.advance(30)
+        let next = ScriptedRefresh(answering: .issued(AuthTokens(accessToken: "a3", refreshToken: "r3", expiresIn: 60)))
+        #expect(await refresher.beforeExpiry(observedToken: "a2", signInID: signIn, refresh: next.call) == "a3")
+        #expect(next.presented == ["r2"])
+    }
+
+    @Test func anEarlyRefreshThatWorksHoldsNothingBack() async {
+        let clock = SettableClock(now)
+        let refresher = refresher(ScriptedTokenStore(aboutToExpire), clock: clock)
+        let shortLived = ScriptedRefresh(answering: .issued(AuthTokens(accessToken: "a2", refreshToken: "r2", expiresIn: 60)))
+        #expect(await refresher.beforeExpiry(observedToken: "a1", signInID: signIn, refresh: shortLived.call) == "a2")
+
+        clock.advance(30)
+        let next = ScriptedRefresh(answering: .issued(AuthTokens(accessToken: "a3", refreshToken: "r3", expiresIn: 60)))
+        #expect(await refresher.beforeExpiry(observedToken: "a2", signInID: signIn, refresh: next.call) == "a3")
+        #expect(next.presented == ["r2"])
+    }
+}
+
+/// A clock the test moves, which the refresher reads off the main actor.
+nonisolated final class SettableClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _now: Date
+
+    init(_ start: Date) { _now = start }
+
+    var now: Date { lock.withLock { _now } }
+
+    func advance(_ seconds: TimeInterval) {
+        lock.withLock { _now = _now.addingTimeInterval(seconds) }
+    }
 }
