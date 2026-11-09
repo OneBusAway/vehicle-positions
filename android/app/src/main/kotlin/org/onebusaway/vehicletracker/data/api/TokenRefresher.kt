@@ -18,6 +18,13 @@ import java.security.GeneralSecurityException
 private const val TAG = "TokenRefresher"
 
 /**
+ * How long an early trade that was refused or failed holds back the next early one. Drivers at a
+ * depot share one address, and with it the server's per-IP refresh limit, which a retry on every
+ * report would spend.
+ */
+private const val EARLY_RETRY_DELAY_SEC = 60L
+
+/**
  * Trades the stored refresh token for a new access token, for the client [ApiFactory] builds.
  *
  * One trade at a time, starting from the stored session. The server takes a second use of a
@@ -44,10 +51,20 @@ class TokenRefresher(
     private val lock = Any()
 
     /**
+     * The refresh token whose early trade was refused or failed, and until when no early trade
+     * presents it again. Guarded by [lock]. A sign-in, or a trade that works, stores another
+     * refresh token, so either one ends the hold.
+     */
+    private var earlyTradesHeld: EarlyTradesHeld? = null
+
+    private class EarlyTradesHeld(val refreshToken: String, val untilEpochSec: Long)
+
+    /**
      * Before a request goes out with [currentToken]: a new token when the current one is about to
      * expire, otherwise [currentToken]. An early refresh that fails or is refused never fails the
      * request, which goes out with [currentToken] while it still works; the 401 that follows its
-     * expiry is where a refused refresh token is dropped and a failure is reported.
+     * expiry is where a refused refresh token is dropped and a failure is reported. It does hold
+     * back the next early refresh for a minute, though never the refresh after a 401.
      */
     fun beforeExpiry(currentToken: String): String {
         if (!isDue(cachedRefreshDueAt())) return currentToken
@@ -57,16 +74,28 @@ class TokenRefresher(
             // A token another request has just refreshed is not due, so it goes out as it is.
             if (!isDue(stored.refreshDueAtEpochSec)) return current
             val refreshToken = stored.refreshToken ?: return current
+            if (earlyTradesAreHeld(refreshToken)) return current
             val serverUrl = stored.serverUrl ?: return current
             return try {
                 trade(serverUrl, refreshToken) ?: current.also {
                     Log.w(TAG, "The server refused an early refresh; sending the request with the current token.")
+                    holdEarlyTrades(refreshToken)
                 }
             } catch (e: IOException) {
                 Log.w(TAG, "Early refresh failed; sending the request with the current token.", e)
+                holdEarlyTrades(refreshToken)
                 current
             }
         }
+    }
+
+    private fun earlyTradesAreHeld(refreshToken: String): Boolean {
+        val held = earlyTradesHeld ?: return false
+        return held.refreshToken == refreshToken && clock() < held.untilEpochSec
+    }
+
+    private fun holdEarlyTrades(refreshToken: String) {
+        earlyTradesHeld = EarlyTradesHeld(refreshToken, clock() + EARLY_RETRY_DELAY_SEC)
     }
 
     private fun isDue(refreshDueAt: Long?) = refreshDueAt != null && clock() >= refreshDueAt
