@@ -342,30 +342,22 @@ func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecke
 }
 
 // checkJTIRevoked reports whether the token's jti is on the revocation list.
+// Every staff token this server issues carries a jti, so a staff token
+// without one could never be revoked and is rejected as if it had been.
 func checkJTIRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecker) (bool, error) {
 	jti, _ := claims["jti"].(string)
-	if jti == "" {
-		// Intentional backwards compatibility: tokens issued before jti
-		// existed carry no identifier to revoke, so they are accepted rather
-		// than logging every existing session out on deploy. They are also
-		// permanently unrevokable, which is why this is a warning — every
-		// token issued from here on has a jti and tokens live sessionLifetime,
-		// so this should stop appearing within a day of deploying.
-		// TODO: drop this shim and reject tokens without a jti once all
-		// pre-revocation tokens have expired (sessionLifetime after deploy).
-		// generateRiderJWT issues no jti, so a rider token reaching here is
-		// the normal case rather than a leftover — warning per request would
-		// bury the staff signal under the rider API's upload volume. Rider
-		// sessions are consequently not revocable; there is no rider logout
-		// to revoke through today.
-		// TODO: give rider tokens a jti and drop this exemption when the
-		// rider API grows a sign-out.
-		if role, _ := claims["role"].(string); role != roleRider {
-			slog.Warn("accepted token without jti; it cannot be revoked", "sub", claims["sub"])
-		}
+	if jti != "" {
+		return checker.IsTokenRevoked(ctx, jti)
+	}
+	// generateRiderJWT issues no jti, so rider sessions are not revocable;
+	// there is no rider logout to revoke through today.
+	// TODO: give rider tokens a jti and drop this exemption when the
+	// rider API grows a sign-out.
+	if role, _ := claims["role"].(string); role == roleRider {
 		return false, nil
 	}
-	return checker.IsTokenRevoked(ctx, jti)
+	slog.Warn("rejected staff token without jti", "sub", claims["sub"])
+	return true, nil
 }
 
 // requireAuth is middleware that validates the Bearer JWT on the staff API. A
@@ -504,16 +496,8 @@ func handleLogout(revoker TokenRevoker, refreshTokens RefreshTokenDeleter) http.
 			return
 		}
 
+		// requireAuth rejects a staff token without a jti, so one is present.
 		jti, _ := claims["jti"].(string)
-		if jti == "" {
-			// A pre-revocation token (see checkRevoked) has nothing to record.
-			// Report the same 204 so old and new clients see one contract; the
-			// warning marks a session that outlives its logout. The refresh
-			// tokens above are gone either way.
-			slog.Warn("logout: token has no jti, nothing to revoke", "sub", sub)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
 
 		// parseSessionToken requires exp, so a validated token always has one.
 		expiresAt, err := claims.GetExpirationTime()

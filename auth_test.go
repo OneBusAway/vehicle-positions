@@ -749,35 +749,68 @@ func TestRequireAuth_AllowsUnrevokedToken(t *testing.T) {
 	assert.True(t, reached, "the downstream handler must run")
 }
 
-// TestRequireAuth_AllowsTokenWithoutJti covers the backwards-compatibility
-// shim in checkRevoked: tokens issued before jti existed are still accepted
-// (they just can't be revoked), and doing so is logged.
-// Not safe for t.Parallel(); uses global logger.
-func TestRequireAuth_AllowsTokenWithoutJti(t *testing.T) {
+// signedWithoutJti signs a token shaped like generateJWT's output minus the
+// jti claim, as tokens issued before revocation existed were.
+func signedWithoutJti(t *testing.T, role string) string {
+	t.Helper()
 	claims := jwt.MapClaims{
 		"sub":   "1",
-		"email": "driver@test.com",
-		"role":  "driver",
+		"email": role + "@test.com",
+		"role":  role,
 		"exp":   time.Now().Add(time.Hour).Unix(),
 		"iat":   time.Now().Unix(),
 		"iss":   "vehicle-positions-api",
 	}
 	tokenStr, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(testSecret)
 	require.NoError(t, err)
+	return tokenStr
+}
 
-	var logs bytes.Buffer
-	original := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(original) })
+// TestRequireAuth_RejectsStaffTokenWithoutJti: a staff token with no jti
+// could never be revoked, so it is refused on both token paths.
+// Not safe for t.Parallel(); uses global logger.
+func TestRequireAuth_RejectsStaffTokenWithoutJti(t *testing.T) {
+	for _, role := range []string{roleDriver, roleAdmin} {
+		t.Run(role+" header", func(t *testing.T) {
+			var logs bytes.Buffer
+			original := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+			t.Cleanup(func() { slog.SetDefault(original) })
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
-	req.Header.Set("Authorization", "Bearer "+tokenStr)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/locations", nil)
+			req.Header.Set("Authorization", "Bearer "+signedWithoutJti(t, role))
+			w := httptest.NewRecorder()
+			requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Equal(t, "invalid token", errorBody(t, w))
+			assert.Contains(t, logs.String(), "rejected staff token without jti")
+		})
+	}
+
+	t.Run("admin cookie", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: signedWithoutJti(t, roleAdmin)})
+		_, ok := adminClaimsFromCookie(req, testSecret, newFakeRevocations())
+		assert.False(t, ok, "the admin UI must refuse the same token")
+	})
+}
+
+// TestRequireRider_AcceptsTokenWithoutJti: rider tokens carry no jti by
+// design, so the staff rule above must not lock riders out.
+func TestRequireRider_AcceptsTokenWithoutJti(t *testing.T) {
+	tok, err := generateRiderJWT("rider-1", testSecret, time.Hour)
+	require.NoError(t, err)
+	claims, err := parseSessionToken(tok, testSecret)
+	require.NoError(t, err)
+	require.NotContains(t, claims, "jti", "the exemption only matters while rider tokens have no jti")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/rider/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
 	w := httptest.NewRecorder()
-	requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
+	requireRider(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code, "a pre-jti token must not be locked out")
-	assert.Contains(t, logs.String(), "accepted token without jti",
-		"accepting an unrevokable token must be logged")
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestRequireAuth_CheckerErrorFailsClosed(t *testing.T) {
@@ -956,33 +989,6 @@ func TestHandleLogout_MissingClaims(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Equal(t, "unauthorized", errorBody(t, w))
-}
-
-// TestHandleLogout_TokenWithoutJti covers the compatibility shim's logout
-// side: there is nothing to revoke, but the client still gets a 204 so old
-// and new clients see one contract.
-// Not safe for t.Parallel(); uses global logger.
-func TestHandleLogout_TokenWithoutJti(t *testing.T) {
-	claims := jwt.MapClaims{
-		"sub": "5",
-		"exp": time.Now().Add(time.Hour).Unix(),
-		"iss": "vehicle-positions-api",
-	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
-	req = req.WithContext(contextWithClaims(req.Context(), claims))
-
-	var logs bytes.Buffer
-	original := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(original) })
-
-	revocations := newFakeRevocations()
-	w := httptest.NewRecorder()
-	handleLogout(revocations, newFakeRefreshTokens())(w, req)
-
-	assert.Equal(t, http.StatusNoContent, w.Code)
-	assert.Zero(t, revocations.revokeCalls, "there is no jti to record")
-	assert.Contains(t, logs.String(), "nothing to revoke")
 }
 
 // Not safe for t.Parallel(); uses global logger.
