@@ -1015,7 +1015,7 @@ class ViewModelsTest {
         assertEquals("resume", vm.startDestination.value)
     }
 
-    // --- Launch: an offline queue a build before owners left without one (#237) ---
+    // --- Launch: a driver signed in before the offline queue shipped, so it has no owner (#237) ---
 
     private val queuedFix = LocationReportDto(
         vehicleId = "bus-1", routeId = "R1", startDate = "20260804", latitude = 1.0, longitude = 2.0, timestamp = 1L,

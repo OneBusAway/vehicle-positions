@@ -41,9 +41,9 @@ interface OfflineFixQueue {
     suspend fun claimFor(account: String)
 
     /**
-     * Hands a queue with no owner to [account], dropping nothing. For the session restored at launch: a build before
-     * owners queued that driver's fixes without recording one, and [claimFor] at their next sign-in would take them for
-     * another account's. A queue that has an owner keeps it.
+     * Hands a queue with no owner to [account], dropping nothing. For the session restored at launch: a driver who
+     * signed in on a build without the queue was never handed it, so the fixes queued since have no owner, and
+     * [claimFor] at their next sign-in would take them for another account's. A queue that has an owner keeps it.
      */
     suspend fun claimIfUnowned(account: String)
 

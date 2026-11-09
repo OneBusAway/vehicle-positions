@@ -64,7 +64,7 @@ class FileOfflineFixQueueTest {
         assertEquals(emptyList<Long>(), FileOfflineFixQueue(file).oldest(10).map { it.timestamp })
     }
 
-    // Fixes queued by a build before owners have no owner file.
+    // A driver who signed in on a build without the queue was never handed it, so it has no owner file.
     private val driverA = "https://vp.example a@example.com"
     private val driverB = "https://vp.example b@example.com"
 
