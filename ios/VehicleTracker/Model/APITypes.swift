@@ -60,7 +60,7 @@ nonisolated struct TripSummary: Sendable, Codable, Equatable, Identifiable, Hash
 
 extension TripSummary {
     /// In an extension, so the memberwise initializer stays. A server older
-    /// than #185 sends neither `short_name` nor `block_id`, and its runs
+    /// than #232 sends neither `short_name` nor `block_id`, and its runs
     /// decode with both "".
     nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
