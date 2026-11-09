@@ -1386,6 +1386,7 @@ func (ui *adminUI) tripEnd(w http.ResponseWriter, r *http.Request) {
 	trip, err := ui.tripEnder.EndTripByID(r.Context(), id)
 	switch {
 	case err == nil:
+		ui.tracker.Remove(trip.VehicleID)
 		slog.Info("admin ended trip", "trip_id", trip.ID, "driver_id", trip.UserID, "vehicle_id", trip.VehicleID, "admin_sub", sub)
 		setFlash(w, "trip_ended")
 	case errors.Is(err, ErrTripNotActive):
