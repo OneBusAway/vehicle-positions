@@ -52,9 +52,9 @@ private val TileShape = RoundedCornerShape(20.dp)
 private val TileGap = 12.dp
 
 /**
- * [onVehicleSelected] is a tap on a tile. [onOnlyVehicle] is the bus a driver with one assignment never has to
- * choose, and takes the bus step's place: navigating there leaves nothing behind it that would skip forward again.
- * [onSessionEnded] is the server having ended the session, and [onSignedOut] the driver having signed out.
+ * [onVehicleSelected] is a tap on a tile. [onOnlyVehicle] is the vehicle of a driver with one assignment, once the
+ * assignments load; the caller decides whether to skip ahead with it. [onSessionEnded] is the server having ended the
+ * session, and [onSignedOut] the driver having signed out.
  */
 @Composable
 fun VehicleScreen(
@@ -86,9 +86,9 @@ fun VehicleScreen(
 }
 
 /**
- * The bus step: the driver's buses as big tiles, two to a row, under Favorites, Recent and All buses, or under
- * Matches while searching. Under the header with [account], title, search, labels and tiles are all items of one
- * grid, so the page scrolls as one.
+ * The vehicle step: the driver's vehicles as big tiles, two to a row, under Favorites, Recent and All vehicles, or
+ * under Matches while searching. Under the header with [account], title, search, labels and tiles are all items of
+ * one grid, so the page scrolls as one.
  */
 @Composable
 fun VehicleScreenContent(
@@ -222,7 +222,7 @@ private fun sectionLabel(section: BusSection): Int = when (section) {
 }
 
 /**
- * One bus: its fleet number big, the label under it, and the star in the corner. The tile is one button, read as
+ * One vehicle: its fleet number big, the label under it, and the star in the corner. The tile is one button, read as
  * "4317, Bus 4317, Favorite"; the star keeps its own toggle.
  */
 @Composable
