@@ -17,6 +17,7 @@ struct VehiclesView: View {
     @State private var query = ""
     /// A pull to refresh failed: the tiles stay, with a line saying so.
     @State private var refreshFailed = false
+    @State private var refresh = TileRefresh()
     /// This visit to the pickers has skipped past the vehicle screen already.
     @State private var skippedOnce = false
 
@@ -67,8 +68,9 @@ struct VehiclesView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     if refreshFailed {
-                        AttentionBanner(symbol: "icloud.slash", text: PickerText.vehiclesLoadFailed, action: PickerText.tryAgain) {
-                            Task { await load() }
+                        AttentionBanner(symbol: "icloud.slash", text: PickerText.vehiclesLoadFailed, action: PickerText.tryAgain,
+                                        busyLabel: refresh.isRunning ? PickerText.loading : nil) {
+                            Task { await refresh.run(load) }
                         }
                         .padding(.top, 8)
                     }
@@ -92,7 +94,7 @@ struct VehiclesView: View {
                 .padding(.bottom, 24)
             }
             .background(Color(.systemGroupedBackground))
-            .refreshable { await load() }
+            .refreshable { await refresh.run(load) }
         }
     }
 
@@ -146,6 +148,20 @@ nonisolated enum VehicleAutoSkip {
     static func vehicle(toSkipTo vehicles: [Vehicle], alreadySkipped: Bool, pathIsEmpty: Bool) -> Vehicle? {
         guard vehicles.count == 1, !alreadySkipped, pathIsEmpty else { return nil }
         return vehicles[0]
+    }
+}
+
+/// A reload of the tiles the driver already has, from a pull or from the
+/// refresh banner's Try again. One runs at a time, so the banner can show it
+/// running, and a second tap or a pull meanwhile loads nothing more.
+@Observable final class TileRefresh {
+    private(set) var isRunning = false
+
+    func run(_ reload: () async -> Void) async {
+        guard !isRunning else { return }
+        isRunning = true
+        defer { isRunning = false }
+        await reload()
     }
 }
 

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import VehicleTracker
 
-/// The run list's reply with each run's number and block (#185), and the same
+/// The run list's reply with each run's number and block (#232), and the same
 /// reply from a server older than that, which has neither.
 @Suite struct TripSummaryDecodingTests {
     func page(_ extraFields: String) throws -> RouteTripsPage {
