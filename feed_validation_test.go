@@ -308,19 +308,47 @@ func TestFeedValidation_E050_TimestampsNotFarFuture(t *testing.T) {
 func TestFeedValidation_E050_RejectsEntityFarInFuture(t *testing.T) {
 	now := time.Now().Unix()
 	feed := buildFeed([]*VehicleState{
-		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now + 120},
+		{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: now},
 	}, nil)
+	// buildFeed caps entity timestamps at now+60, so set this one by hand.
+	feed.Entity[0].Vehicle.Timestamp = proto.Uint64(uint64(now + 120))
+
 	violations := validateFeedCompliance(t, feed)
-	require.NotEmpty(t, violations)
-	joined := strings.Join(violations, "|")
-	assert.Contains(t, joined, "E050:")
+	assert.Contains(t, violations, `E050: entity "bus-1" timestamp >60s in future`)
 }
 
 func TestFeedValidation_E050_IngestWindowGap(t *testing.T) {
-	// Ingest allows now+300s but E050 rejects >now+60s.
-	// A vehicle at now+120 passes ingest but fails E050.
-	// Placeholder documenting the gap; skipped pending follow-up — no assertion is made.
-	t.Skip("known limitation: ingest accepts now+300s but E050 rejects >now+60s — tracked for follow-up")
+	// Ingest accepts a report up to now+300s, but E050 rejects anything past
+	// now+60s, so buildFeed caps the entity and the header follows it.
+	now := time.Now().Unix()
+	fast := &LocationReport{VehicleID: "fast-clock", Latitude: 1, Longitude: 2, Timestamp: now + 120}
+	require.NoError(t, fast.validate(), "ingest must accept a report at now+120")
+	onTime := &LocationReport{VehicleID: "on-time", Latitude: 3, Longitude: 4, Timestamp: now - 10}
+	require.NoError(t, onTime.validate())
+
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	tracker.Update(fast)
+	tracker.Update(onTime)
+
+	before := uint64(time.Now().Unix())
+	feed := buildFeed(tracker.ActiveVehicles(), nil)
+	after := uint64(time.Now().Unix())
+
+	assert.Empty(t, validateFeedCompliance(t, feed))
+	require.Len(t, feed.Entity, 2)
+	for _, e := range feed.Entity {
+		switch e.GetId() {
+		case "fast-clock":
+			ts := e.GetVehicle().GetTimestamp()
+			assert.GreaterOrEqual(t, ts, before+60, "capped at now+60, not pulled back further")
+			assert.LessOrEqual(t, ts, after+60)
+		case "on-time":
+			assert.Equal(t, uint64(now-10), e.GetVehicle().GetTimestamp(), "a timestamp under the cap is left alone")
+		default:
+			t.Errorf("unexpected entity %q", e.GetId())
+		}
+	}
 }
 
 func TestFeedValidation_E052_UniqueVehicleIDs(t *testing.T) {
@@ -428,6 +456,61 @@ func TestFeedValidation_SpeedNonNegative(t *testing.T) {
 	feed := buildFeed(vehicles, nil)
 	violations := validateFeedCompliance(t, feed)
 	assert.Empty(t, violations, "zero and positive speeds should be valid")
+}
+
+// buildFeed cannot produce any of these, so each case breaks one field of a
+// compliant feed to prove the helper would catch that regression.
+func TestFeedValidation_RejectsBrokenFeed(t *testing.T) {
+	cases := []struct {
+		name      string
+		breakFeed func(*gtfsrt.FeedMessage)
+		want      string
+	}{
+		{
+			name:      "E038 unknown version",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.GtfsRealtimeVersion = proto.String("3.0") },
+			want:      "E038: invalid gtfs_realtime_version: 3.0",
+		},
+		{
+			name:      "E048 header timestamp missing",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.Timestamp = nil },
+			want:      "E048: header timestamp missing or zero",
+		},
+		{
+			name:      "E048 header timestamp zero",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.Timestamp = proto.Uint64(0) },
+			want:      "E048: header timestamp missing or zero",
+		},
+		{
+			name:      "E049 incrementality missing",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Header.Incrementality = nil },
+			want:      "E049: incrementality missing",
+		},
+		{
+			name:      "E039 is_deleted in a full dataset",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Entity[0].IsDeleted = proto.Bool(true) },
+			want:      `E039: is_deleted set for "bus-1"`,
+		},
+		{
+			name: "E050 header far in future",
+			breakFeed: func(f *gtfsrt.FeedMessage) {
+				f.Header.Timestamp = proto.Uint64(uint64(time.Now().Unix() + 120))
+			},
+			want: "E050: header timestamp >60s in future",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			feed := buildFeed([]*VehicleState{
+				{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()},
+			}, nil)
+			require.Empty(t, validateFeedCompliance(t, feed), "the feed must be compliant before it is broken")
+
+			tc.breakFeed(feed)
+			assert.Contains(t, validateFeedCompliance(t, feed), tc.want)
+		})
+	}
 }
 
 // --- Composite tests ---
