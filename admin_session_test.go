@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -178,6 +179,26 @@ func TestRevokeSessionCookie(t *testing.T) {
 		err := revokeSessionCookie(req, testSecret, revocations)
 
 		assert.ErrorIs(t, err, storeErr, "the token is still live, so the caller must keep the session")
+	})
+	t.Run("no jti cookies revokes nothing", func(t *testing.T) {
+		cookie := cookieFor(t, "admin")
+		claims, err := parseSessionToken(cookie.Value, testSecret)
+		require.NoError(t, err)
+		delete(claims, "jti")
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		signedToken, err := token.SignedString(testSecret)
+		require.NoError(t, err)
+		cookie.Value = signedToken
+		revocations := newFakeRevocations()
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/admin/logout",
+			nil,
+		)
+		req.AddCookie(cookie)
+		err = revokeSessionCookie(req, testSecret, revocations)
+		require.NoError(t, err)
+		assert.Zero(t, revocations.revokeCalls)
 	})
 }
 
