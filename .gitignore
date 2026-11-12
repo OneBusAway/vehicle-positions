@@ -50,3 +50,6 @@ android/map-style/node_modules/
 ios/VehicleTracker/VehicleTracker.xcodeproj/
 ios/VehicleTracker/build/
 ios/DerivedData/
+
+# Playwright MCP browser snapshots
+.playwright-mcp/
