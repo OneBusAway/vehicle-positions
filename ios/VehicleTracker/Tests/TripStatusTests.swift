@@ -241,6 +241,8 @@ import Testing
                     what: "No GPS signal", meaning: "Position paused", action: nil, reports: .noGPS, ring: .neutral),
         ProblemCase(reporting: .refused, kind: .refused, symbol: "hand.raised.fill",
                     what: "Reports refused", meaning: "Ask your dispatcher", action: nil, reports: .notReporting, ring: .onTime),
+        ProblemCase(reporting: .serverError, kind: .serverError, symbol: "exclamationmark.icloud.fill",
+                    what: "Server error", meaning: "Riders can't see you", action: nil, reports: .notReporting, ring: .onTime),
         ProblemCase(reporting: .clockSkew, kind: .clockSkew, symbol: "clock.badge.exclamationmark",
                     what: "Phone clock is wrong", meaning: "Set automatic time", action: nil, reports: .notReporting, ring: .onTime),
         ProblemCase(reporting: .noNetwork, kind: .noNetwork, symbol: "icloud.slash.fill",
