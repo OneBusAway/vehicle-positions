@@ -262,6 +262,10 @@ import Testing
         #expect(dismissed)
         let busy = CarPlayTemplates.startRefusedAlert(TripSessionError.busy, vehicleID: "4317") {}
         #expect(busy.titleVariants == ["You already have a trip running. End it before starting another."])
+        let taken = CarPlayTemplates.startRefusedAlert(APIError.status(409, message: "vehicle already has an active trip"), vehicleID: "4317") {}
+        #expect(taken.titleVariants == ["Another driver has a trip running on vehicle 4317. Pick another vehicle or ask your dispatcher."])
+        let retired = CarPlayTemplates.startRefusedAlert(APIError.status(409, message: "vehicle is inactive"), vehicleID: "4317") {}
+        #expect(retired.titleVariants == ["Vehicle 4317 is out of service. Pick another vehicle."])
     }
 
     /// The prompt shows only on the phone, so the car names the iPhone, as

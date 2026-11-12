@@ -116,6 +116,14 @@ func handleStartTrip(store TripStarter, catalog *gtfsCatalog) http.HandlerFunc {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": "driver already has an active trip"})
 				return
 			}
+			if errors.Is(err, ErrVehicleBusy) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "vehicle already has an active trip"})
+				return
+			}
+			if errors.Is(err, ErrVehicleInactive) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "vehicle is inactive"})
+				return
+			}
 			slog.Error("failed to start trip", "user_id", userID, "vehicle_id", req.VehicleID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start trip"})
 			return

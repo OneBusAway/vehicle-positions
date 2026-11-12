@@ -18,6 +18,11 @@ nonisolated struct StartRefusal: Equatable {
         switch error {
         case APIError.status(403, _):
             self.init("hand.raised.fill", PickerText.notAssigned(vehicleID), .changeVehicle)
+        case APIError.status(409, message: "vehicle already has an active trip"):
+            // Another driver's trip: nothing to end on this phone.
+            self.init("person.2.fill", PickerText.vehicleBusy(vehicleID), .changeVehicle)
+        case APIError.status(409, message: "vehicle is inactive"):
+            self.init("nosign", PickerText.vehicleInactive(vehicleID), .changeVehicle)
         case APIError.status(409, _), TripSessionError.busy:
             // An active trip ends on the phone that started it.
             self.init("info.circle.fill", PickerText.tripAlreadyRunning, nil)

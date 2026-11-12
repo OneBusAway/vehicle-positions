@@ -1,11 +1,20 @@
 package org.onebusaway.vehicletracker.data
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import retrofit2.HttpException
 import java.io.IOException
 
 sealed class ApiError : Exception() {
     object NotAssigned : ApiError()
     object TripAlreadyActive : ApiError()
+
+    /** `409 vehicle already has an active trip`: another driver is running a trip on the vehicle. */
+    object VehicleBusy : ApiError()
+
+    /** `409 vehicle is inactive`: dispatch took the vehicle out of service after the list was loaded. */
+    object VehicleInactive : ApiError()
     object Unauthorized : ApiError()
 
     /**
@@ -56,4 +65,21 @@ fun mapHttpError(e: Exception): ApiError = when {
     e is HttpException && e.code() == 409 -> ApiError.TripAlreadyActive
     e is IOException -> ApiError.Other("network")
     else -> ApiError.Other(e.message ?: "unknown")
+}
+
+/**
+ * [mapHttpError] for `POST /api/v1/trips/start`, where a 409 has three causes the server tells apart only by its
+ * `error` text: this driver's own open trip, another driver's trip on the vehicle, or a vehicle taken out of service.
+ * Anything it doesn't recognise stays [ApiError.TripAlreadyActive], what every 409 there meant before.
+ */
+fun mapStartTripError(e: Exception): ApiError {
+    if (e !is HttpException || e.code() != 409) return mapHttpError(e)
+    val message = runCatching {
+        e.response()?.errorBody()?.string()?.let { Json.parseToJsonElement(it).jsonObject["error"]?.jsonPrimitive?.content }
+    }.getOrNull()
+    return when (message) {
+        "vehicle already has an active trip" -> ApiError.VehicleBusy
+        "vehicle is inactive" -> ApiError.VehicleInactive
+        else -> ApiError.TripAlreadyActive
+    }
 }

@@ -1639,6 +1639,28 @@ class ViewModelsTest {
         }
     }
 
+    @Test fun `a start refused because another driver holds the vehicle says so`() = runTest(dispatcher) {
+        val refusal = MockResponse().setResponseCode(409).setBody("""{"error":"vehicle already has an active trip"}""")
+        val store = FakeSessionStore().apply { state.value = signedIn }
+        withRunsViewModel(startResponses = listOf(refusal), sessionStore = store) { vm, _, serviceController, _ ->
+            vm.onStartRun("T1") { fail("a refused start must not leave the screen") }
+            awaitCondition(description = "409 surfaced") { loadedRuns(vm).error != null }
+            assertEquals("not told to end a trip they don't have", TripError.VEHICLE_BUSY, loadedRuns(vm).error)
+            assertEquals(0, serviceController.startCount)
+        }
+    }
+
+    @Test fun `a start refused because the vehicle is out of service says so`() = runTest(dispatcher) {
+        val refusal = MockResponse().setResponseCode(409).setBody("""{"error":"vehicle is inactive"}""")
+        val store = FakeSessionStore().apply { state.value = signedIn }
+        withRunsViewModel(startResponses = listOf(refusal), sessionStore = store) { vm, _, serviceController, _ ->
+            vm.onStartRun("T1") { fail("a refused start must not leave the screen") }
+            awaitCondition(description = "409 surfaced") { loadedRuns(vm).error != null }
+            assertEquals(TripError.VEHICLE_INACTIVE, loadedRuns(vm).error)
+            assertEquals(0, serviceController.startCount)
+        }
+    }
+
     @Test fun `a start the network or the server fails keeps the session and offers Try again`() = runTest(dispatcher) {
         val failures = listOf(
             MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST) to TripError.NETWORK,
