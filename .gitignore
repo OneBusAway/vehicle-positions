@@ -48,6 +48,8 @@ android/map-style/node_modules/
 
 # iOS driver app (XcodeGen-generated project and build products)
 ios/VehicleTracker/VehicleTracker.xcodeproj/
+# An agency's own team, bundle id and app name (ios/VehicleTracker/Config/Agency.xcconfig).
+ios/VehicleTracker/Config/Agency.local.xcconfig
 ios/VehicleTracker/build/
 ios/DerivedData/
 

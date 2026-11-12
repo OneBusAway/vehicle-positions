@@ -21,14 +21,31 @@ android {
         applicationId = "org.onebusaway.vehicletracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Set per build without editing this file: `./gradlew -PversionCode=42 -PversionName=1.2.0`,
+        // or the same keys in ~/.gradle/gradle.properties. The release workflow passes its run number.
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
+        versionName = project.findProperty("versionName") as String? ?: "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue("string", "default_server_url", defaultServerUrl)
     }
 
+    // Used only when a keystore is supplied (docs/deployment.md §12.4), so a build without one,
+    // CI's included, still produces app-release-unsigned.apk as before.
+    val keystorePath = System.getenv("ANDROID_KEYSTORE")
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             // MapLibre's native library is about 10 MB for each ABI. Phones are ARM; the x86 ones are
             // for emulators, which run the debug build.
             ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
