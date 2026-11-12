@@ -577,16 +577,18 @@ func TestHandlePostLocation_ValidVehicleIDBoundary(t *testing.T) {
 }
 
 func TestLocationReport_TimestampSkewBoundary(t *testing.T) {
-	// validate() reads the clock again after this test does, so exactly
-	// -300 s would fail whenever the second ticks over in between. The
-	// accepted cases sit one second inside the window instead.
+	// validate() reads the clock again after this test does, and the second
+	// can tick over in between. A tick moves the report one second further
+	// into the past, so the accepted cases sit one second inside the window
+	// and the rejected-ahead case two seconds outside it: at 301 s a tick
+	// would put it right on the limit, and the limit is accepted.
 	cases := []struct {
 		name    string
 		offset  int64
 		wantErr string
 	}{
 		{name: "299 s ahead accepted", offset: 299},
-		{name: "301 s ahead rejected", offset: 301, wantErr: "timestamp must be within 5 minutes of server time"},
+		{name: "302 s ahead rejected", offset: 302, wantErr: "timestamp must be within 5 minutes of server time"},
 		{name: "299 s behind accepted", offset: -299},
 		{name: "301 s behind rejected", offset: -301, wantErr: "timestamp must be within 5 minutes of server time"},
 	}
