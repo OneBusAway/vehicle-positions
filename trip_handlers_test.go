@@ -34,11 +34,12 @@ func (m *mockTripStarter) StartTrip(ctx context.Context, userID int64, vehicleID
 
 // mockTripEnder implements TripEnder for tests.
 type mockTripEnder struct {
-	err error
+	vehicleID string
+	err       error
 }
 
-func (m *mockTripEnder) EndTrip(ctx context.Context, tripID, userID int64) error {
-	return m.err
+func (m *mockTripEnder) EndTrip(ctx context.Context, tripID, userID int64) (string, error) {
+	return m.vehicleID, m.err
 }
 
 // tripRequest sends a JSON request with JWT claims to the handler.
@@ -160,7 +161,7 @@ func TestHandleStartTrip_MissingClaims(t *testing.T) {
 func TestHandleEndTrip_Success(t *testing.T) {
 	store := &mockTripEnder{}
 
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 1})
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -173,7 +174,7 @@ func TestHandleEndTrip_Success(t *testing.T) {
 func TestHandleEndTrip_NotFound(t *testing.T) {
 	store := &mockTripEnder{err: ErrTripNotFound}
 
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 999})
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -182,7 +183,7 @@ func TestHandleEndTrip_NotFound(t *testing.T) {
 
 func TestHandleEndTrip_Validation(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	tests := []struct {
 		name        string
@@ -212,7 +213,7 @@ func TestHandleEndTrip_Validation(t *testing.T) {
 
 func TestHandleEndTrip_MissingClaims(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	body, _ := json.Marshal(EndTripRequest{TripID: 1})
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
@@ -236,7 +237,7 @@ func TestHandleStartTrip_TrailingJSON(t *testing.T) {
 
 func TestHandleEndTrip_TrailingJSON(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	w := tripRawRequest(t, handler, "42", []byte(`{"trip_id":1}{"extra":true}`))
 
@@ -266,7 +267,7 @@ func TestHandleStartTrip_InvalidSubClaim(t *testing.T) {
 
 func TestHandleEndTrip_InvalidSubClaim(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	w := tripRawRequest(t, handler, "not-a-number", []byte(`{"trip_id":1}`))
 
@@ -300,7 +301,7 @@ func TestHandleStartTrip_WrongContentType(t *testing.T) {
 
 func TestHandleEndTrip_WrongContentType(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	body, _ := json.Marshal(EndTripRequest{TripID: 1})
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
@@ -314,7 +315,7 @@ func TestHandleEndTrip_WrongContentType(t *testing.T) {
 
 func TestHandleEndTrip_EmptySub(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	w := tripRawRequest(t, handler, "", []byte(`{"trip_id":1}`))
 
@@ -324,7 +325,7 @@ func TestHandleEndTrip_EmptySub(t *testing.T) {
 
 func TestHandleEndTrip_UnknownFields(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	w := tripRawRequest(t, handler, "42", []byte(`{"trip_id":1,"unknown_field":"value"}`))
 
@@ -345,7 +346,7 @@ func TestHandleStartTrip_RequestBodyTooLarge(t *testing.T) {
 
 func TestHandleEndTrip_RequestBodyTooLarge(t *testing.T) {
 	store := &mockTripEnder{}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 
 	largeBody := `{"trip_id":1,"padding":"` + strings.Repeat("x", 2048) + `"}`
 	w := tripRawRequest(t, handler, "42", []byte(largeBody))
@@ -414,7 +415,7 @@ func TestHandleStartTrip_InternalServerError(t *testing.T) {
 
 func TestHandleEndTrip_InternalServerError(t *testing.T) {
 	store := &mockTripEnder{err: assert.AnError}
-	handler := handleEndTrip(store)
+	handler := handleEndTrip(store, NewTracker(5*time.Minute))
 	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 1})
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -515,4 +516,35 @@ func TestHandleStartTrip_VehicleBusyOrInactive(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, w.Code)
 		assert.Equal(t, message, decodeError(t, w))
 	}
+}
+
+// TestHandleEndTrip_RemovesVehicleFromFeed: a bus whose trip has ended is out
+// of service, so it must leave the feed now, not when its last report goes
+// stale.
+func TestHandleEndTrip_RemovesVehicleFromFeed(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	now := time.Now().Unix()
+	tracker.Update(&LocationReport{VehicleID: "bus-1", TripID: "T1", Latitude: 1, Longitude: 2, Timestamp: now})
+	tracker.Update(&LocationReport{VehicleID: "bus-2", TripID: "T2", Latitude: 1, Longitude: 2, Timestamp: now})
+
+	handler := handleEndTrip(&mockTripEnder{vehicleID: "bus-1"}, tracker)
+	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 1})
+
+	require.Equal(t, http.StatusOK, w.Code)
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+	assert.Equal(t, "bus-2", active[0].VehicleID)
+}
+
+func TestHandleEndTrip_NotFoundLeavesFeedAlone(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	tracker.Update(&LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
+
+	handler := handleEndTrip(&mockTripEnder{err: ErrTripNotFound}, tracker)
+	w := tripRequest(t, handler, "42", EndTripRequest{TripID: 1})
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Len(t, tracker.ActiveVehicles(), 1)
 }

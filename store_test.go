@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -144,6 +146,39 @@ func TestStore_SaveLocation_UpsertVehicle(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
+// onActiveTrips gives every vehicle in the table an active trip, each under a
+// driver of its own (a driver holds one active trip at a time). A vehicle
+// reports only while one of its trips is active, and GetRecentLocations seeds
+// no other. The trips and drivers are removed when the test ends, so a later
+// test can still clear the vehicles.
+func onActiveTrips(t *testing.T, store *Store) {
+	t.Helper()
+	ctx := context.Background()
+	rows, err := store.pool.Query(ctx, "SELECT id FROM vehicles WHERE id NOT IN (SELECT vehicle_id FROM trips WHERE status = 'active')")
+	require.NoError(t, err)
+	vehicleIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	for _, vehicleID := range vehicleIDs {
+		var userID int64
+		email := fmt.Sprintf("seed-%s-%d@test.com", vehicleID, time.Now().UnixNano())
+		require.NoError(t, store.pool.QueryRow(ctx,
+			"INSERT INTO users (name, email, password_hash) VALUES ('Seed Driver', $1, 'x') RETURNING id", email).Scan(&userID))
+		_, err := store.pool.Exec(ctx, "INSERT INTO trips (user_id, vehicle_id) VALUES ($1, $2)", userID, vehicleID)
+		require.NoError(t, err)
+		// Its own connection: some callers close their store before cleanups run.
+		url := testDatabaseURL(t)
+		t.Cleanup(func() {
+			conn, err := pgx.Connect(context.Background(), url)
+			require.NoError(t, err)
+			defer conn.Close(context.Background())
+			_, err = conn.Exec(context.Background(), "DELETE FROM trips WHERE user_id = $1", userID)
+			require.NoError(t, err)
+			_, err = conn.Exec(context.Background(), "DELETE FROM users WHERE id = $1", userID)
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestStore_GetRecentLocations(t *testing.T) {
 	store := newTestStore(t)
 	url := testDatabaseURL(t)
@@ -179,6 +214,7 @@ func TestStore_GetRecentLocations(t *testing.T) {
 
 	// Query with a 5-minute staleness threshold
 	cutoff := now.Add(-5 * time.Minute)
+	onActiveTrips(t, store)
 	locs, err := store.GetRecentLocations(ctx, cutoff)
 	require.NoError(t, err)
 
@@ -243,6 +279,7 @@ func TestStore_SaveLocation_NullableFieldRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	cutoff := time.Now().Add(-5 * time.Minute)
+	onActiveTrips(t, store)
 	locs, err := store.GetRecentLocations(ctx, cutoff)
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
@@ -342,6 +379,7 @@ func TestStore_GetRecentLocations_ReturnsDriverID(t *testing.T) {
 	require.NoError(t, err)
 
 	cutoff := time.Now().Add(-5 * time.Minute)
+	onActiveTrips(t, store)
 	locs, err := store.GetRecentLocations(ctx, cutoff)
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
@@ -372,6 +410,7 @@ func TestStore_GetRecentLocations_ReturnsTripContext(t *testing.T) {
 	}
 	require.NoError(t, store.SaveLocation(ctx, loc))
 
+	onActiveTrips(t, store)
 	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
@@ -402,6 +441,7 @@ func TestStore_GetRecentLocations_ReturnsRouteOnlyTripContext(t *testing.T) {
 	}
 	require.NoError(t, store.SaveLocation(ctx, loc))
 
+	onActiveTrips(t, store)
 	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
@@ -446,6 +486,7 @@ func TestStore_SaveLocation_MissingOptionalFieldsStoredAsNull(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that the nullable fields are actually null in the database, not just zero
+	onActiveTrips(t, store)
 	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
@@ -479,6 +520,7 @@ func TestStore_SaveLocation_ExplicitZeroOptionalFieldsPreserved(t *testing.T) {
 	err = store.SaveLocation(ctx, loc)
 	require.NoError(t, err)
 
+	onActiveTrips(t, store)
 	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 	require.Len(t, locs, 1)

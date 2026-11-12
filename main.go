@@ -118,7 +118,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	historyLimiter := NewKeyedRateLimiter(historyUploadInterval, historyUploadBurst, false)
 	mux.Handle("POST /api/v1/locations/history", authMiddleware(handlePostLocationHistory(store, historyLimiter)))
 	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store, catalog)))
-	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store)))
+	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store, tracker)))
 	mux.Handle("GET /api/v1/vehicles", authMiddleware(handleListMyVehicles(store)))
 	// Registered whether or not a map file is configured: an unconfigured server
 	// answers with a null URL, so a 404 only ever means one older than this route.

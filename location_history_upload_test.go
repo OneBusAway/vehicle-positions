@@ -231,7 +231,8 @@ func TestStore_ListTripLocations_LiveFixFromTripBefore(t *testing.T) {
 
 	first, err := store.StartTrip(ctx, userID, "bus-lay", "R1", "T1")
 	require.NoError(t, err)
-	require.NoError(t, store.EndTrip(ctx, first.ID, userID))
+	_, err = store.EndTrip(ctx, first.ID, userID)
+	require.NoError(t, err)
 	_, err = store.pool.Exec(ctx, "UPDATE trips SET start_time = $1, end_time = $2 WHERE id = $3",
 		now.Add(-10*time.Minute), now.Add(-150*time.Second), first.ID)
 	require.NoError(t, err)
