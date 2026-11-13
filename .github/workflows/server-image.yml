@@ -38,8 +38,11 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/server-v')
         run: |
           version="${GITHUB_REF_NAME#server-v}"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag $GITHUB_REF_NAME is not server-vX.Y.Z or server-vX.Y.Z-<pre-release>" >&2
+          # No leading zeros: metadata-action skips a version like 01.2.3 with
+          # only a warning, which would push latest with no version tag.
+          part='(0|[1-9][0-9]*)'
+          if ! [[ "$version" =~ ^$part\.$part\.$part(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag $GITHUB_REF_NAME is not server-vX.Y.Z or server-vX.Y.Z-<pre-release>, with no leading zeros in X, Y or Z" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
