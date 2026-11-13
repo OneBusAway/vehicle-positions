@@ -72,20 +72,32 @@ nonisolated struct SignInForm: Equatable {
     }
 
     /// What `begin` checks before anything is sent: a blank field, in the
-    /// order server, email, password; then an address with no http or https
-    /// (nothing could answer at it); then plain http to a host the app won't
-    /// send a token to.
+    /// order server, email, password; then an address that is not an http or
+    /// https one (nothing could answer at it); then plain http to a host the
+    /// app won't send a token to.
     static func check(server: String, email: String, password: String) -> Result<URL, SignInFailure> {
         if isBlank(server) { return .failure(.missing(.server)) }
         if isBlank(email) { return .failure(.missing(.email)) }
         if isBlank(password) { return .failure(.missing(.password)) }
-        let trimmed = server.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
-              url.host()?.isEmpty == false else {
-            return .failure(.unreachable(serverLabel(server)))
-        }
+        guard let url = address(typed: server) else { return .failure(.unreachable(serverLabel(server))) }
         guard ServerURLPolicy.isAllowed(url) else { return .failure(.insecure) }
         return .success(url)
+    }
+
+    /// The address to sign in to, from what was typed: trimmed, and over
+    /// https when no scheme was typed, since that is how a driver is usually
+    /// told the address (Android's `serverAddressOf`). Nil when it is not an
+    /// http or https address at all. With https put in front, "https//host"
+    /// would go to a server called "https", and an email typed in the wrong
+    /// field to its domain with the password, so neither is an address.
+    static func address(typed: String) -> URL? {
+        let trimmed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasScheme = trimmed.contains("://")
+        guard let url = URL(string: hasScheme ? trimmed : "https://\(trimmed)"),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host()?.lowercased(), !host.isEmpty else { return nil }
+        if !hasScheme, host == "http" || host == "https" || url.user() != nil { return nil }
+        return url
     }
 
     /// The sign-in that `begin` let through came back with `error`.
