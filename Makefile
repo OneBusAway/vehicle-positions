@@ -1,4 +1,4 @@
-.PHONY: help generate fmt vet test check up down run smoke simulate ridersim css
+.PHONY: help generate fmt vet test check up down run smoke simulate ridersim css demo demo-down
 
 # Tailwind CSS CLI version pinned for reproducible admin-UI builds. The Go CI
 # workflow (.github/workflows/ci.yml) downloads the linux-x64 binary of this
@@ -7,6 +7,13 @@
 # Port the local server is expected on; `make run` reads PORT from the
 # environment, so the simulator targets default to the same 8080.
 PORT ?= 8080
+
+# The demo stack (docs/demo.md) publishes the server on this port, on loopback.
+# Not 8080, so it can run beside the development stack or a OneBusAway server.
+DEMO_PORT ?= 18080
+export DEMO_PORT
+DEMO_COMPOSE := docker compose -f docker-compose.demo.yml
+DEMO_ENV := .env.demo.local
 
 TAILWIND_VERSION := v4.2.0
 TAILWIND_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/')
@@ -32,6 +39,8 @@ help:
 	@echo "  make smoke     - Post sample location and fetch feed/status (needs ADMIN_BOOTSTRAP_EMAIL/PASSWORD)"
 	@echo "  make simulate  - Run simulator against local server (needs ADMIN_BOOTSTRAP_EMAIL/PASSWORD)"
 	@echo "  make ridersim  - Run rider simulator against local server (rider mode; honours PORT)"
+	@echo "  make demo      - Start the demo: server, sample GTFS and simulated vehicles (docs/demo.md)"
+	@echo "  make demo-down - Stop the demo and remove its containers, volume, images and secrets"
 	@echo "  make generate  - Regenerate sqlc code"
 	@echo "  make check     - Run the formatting and generated-code checks CI runs"
 	@echo "  make fmt       - Format Go code"
@@ -92,6 +101,27 @@ simulate:
 
 ridersim:
 	go run ./cmd/ridersim -url http://localhost:$(PORT) -gtfs rider/testdata/fixture.zip -trip T1 -interval 1s -speed 10 -expect-end arrived
+
+# The demo's JWT secret and admin password are generated on first use and kept
+# in a git-ignored file: nothing secret is checked in, and a second `make demo`
+# still has the password of the admin account already in the demo database.
+$(DEMO_ENV):
+	@secret=$$(openssl rand -hex 32) && password=$$(openssl rand -hex 12) && umask 077 && \
+		printf 'JWT_SECRET=%s\nDEMO_ADMIN_PASSWORD=%s\n' "$$secret" "$$password" > $@
+
+demo: $(DEMO_ENV)
+	$(DEMO_COMPOSE) --env-file $(DEMO_ENV) up --build --detach --wait
+	@. ./$(DEMO_ENV) && echo && \
+		echo "The demo is running. Sign in as admin@demo.example with password $$DEMO_ADMIN_PASSWORD" && \
+		echo "  Admin map:    http://localhost:$(DEMO_PORT)/admin/map" && \
+		echo "  GTFS-RT feed: http://localhost:$(DEMO_PORT)/gtfs-rt/vehicle-positions?format=json" && \
+		echo "Stop it and remove everything it made with: make demo-down"
+
+# `down` still reads the compose file, which refuses to parse without the two
+# secrets, so it gets placeholders: the generated file may already be gone.
+demo-down:
+	JWT_SECRET=unused DEMO_ADMIN_PASSWORD=unused $(DEMO_COMPOSE) down --volumes --rmi local
+	rm -f $(DEMO_ENV)
 
 css: $(TAILWIND_BIN)
 	$(TAILWIND_BIN) -i web/styles/input.css -o web/static/css/admin.css --minify
