@@ -468,10 +468,10 @@ final class TripSession {
     /// confirmed, and a 404 confirms it too. If one cannot be sent,
     /// ``TripSessionError/previousTripNotEnded`` is thrown, or the 401 itself
     /// when the sign-in has ended, and the rest are kept: a start is refused,
-    /// and a sign-out goes on without them. Other
-    /// drivers' ends wait for that driver's own next start or sign-out: their
-    /// open trips do not block this driver's. Ends owed to another server wait
-    /// until the driver signs in there again.
+    /// and a sign-out goes on without them. Other drivers' ends wait for that
+    /// driver's own next start or sign-out: their open trips do not block this
+    /// driver's. Ends owed to another server wait until the driver signs in
+    /// there again.
     private func sendPendingEnds(_ api: any TrackerAPI) async throws {
         var pending = try store.loadPendingEnds()
         for pendingEnd in pending where pendingEnd.isOwed(to: settings.serverURLString)
