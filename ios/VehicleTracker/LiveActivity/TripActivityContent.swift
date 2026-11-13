@@ -35,6 +35,8 @@ extension TripActivityAttributes.ContentState {
             return
         }
 
+        // The sentence before the route and headsign go in front of it.
+        var said: String
         let nextStop = latest.map { (name: $0.nextStop.name, time: Formatters.clock($0.nextStop.arrivalAt, timezone: trip.timezone)) }
         next = nextStop.map { stop in
             let line = TripStatusText.nextStopAndTime(name: stop.name, time: stop.time)
@@ -53,7 +55,7 @@ extension TripActivityAttributes.ContentState {
             minutes = nil
             reportsSymbol = nil
             reports = meaning
-            spoken = speak(TripStatusText.spokenProblem(what: problem.what, meaning: meaning))
+            said = TripStatusText.spokenProblem(what: problem.what, meaning: meaning)
         } else {
             // Off route without its distance, which changes with every fix.
             let answer = status.answer == .offRoute ? TripStatusText.offRouteShort : status.card.answer
@@ -70,18 +72,22 @@ extension TripActivityAttributes.ContentState {
             reports = status.reports.text
             switch (status.answer, nextStop) {
             case (.offSchedule, let stop?):
-                spoken = speak(TripStatusText.spokenOffSchedule(answer, name: stop.name, time: stop.time))
+                said = TripStatusText.spokenOffSchedule(answer, name: stop.name, time: stop.time)
             case (_, let stop?):
-                spoken = speak(TripStatusText.spokenNextStop(answer, name: stop.name, time: stop.time, distance: nil))
+                said = TripStatusText.spokenNextStop(answer, name: stop.name, time: stop.time, distance: nil)
             case (_, nil):
                 // Before the first fix: the first stop and the run, which no fix changes.
-                spoken = speak(status.sentence)
+                said = status.sentence
             }
         }
 
         if status.reports.word == .ending {
             reportsSymbol = status.reports.symbol
             reports = status.reports.text
+            // A problem's second line is what to do about it, which no longer
+            // applies once the trip is ending.
+            said = TripStatusText.pair(status.problem?.what ?? said, status.reports.text)
         }
+        spoken = speak(said)
     }
 }
