@@ -2093,7 +2093,7 @@ components:
           # The example is the server's own default, pinned to
           # defaultAccessTokenTTL by TestOpenAPI_ConstraintsMatchCode. It is the
           # only place this spec states that number.
-          example: 86400
+          example: 900
           description: |
             Access token lifetime in seconds, from `ACCESS_TOKEN_TTL`.
 

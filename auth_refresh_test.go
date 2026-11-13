@@ -666,6 +666,9 @@ func TestValidateTokenTTLs(t *testing.T) {
 		wantErr string
 	}{
 		{"defaults", tokenTTLs{access: defaultAccessTokenTTL, refresh: defaultRefreshTokenTTL}, ""},
+		// docs/configuration.md tells deployments with app builds that cannot
+		// refresh to set ACCESS_TOKEN_TTL=24h; that has to start.
+		{"24h access with the default refresh", tokenTTLs{access: 24 * time.Hour, refresh: defaultRefreshTokenTTL}, ""},
 		{"zero access TTL", tokenTTLs{access: 0, refresh: time.Hour}, "ACCESS_TOKEN_TTL must be positive"},
 		{"negative access TTL", tokenTTLs{access: -time.Minute, refresh: time.Hour}, "ACCESS_TOKEN_TTL must be positive"},
 		{"refresh shorter than access", tokenTTLs{access: time.Hour, refresh: time.Minute}, "must be longer than"},

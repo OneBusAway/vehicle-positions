@@ -179,16 +179,10 @@ func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret 
 const sessionLifetime = 24 * time.Hour
 
 const (
-	// defaultAccessTokenTTL stays at the 24 hours main already issued. The
-	// Android app refreshes, but the iOS app cannot yet: it stops reporting
-	// when its token expires, until the driver signs in again, so a short
-	// default would end its location reports a few minutes into a shift.
-	// Deployments whose drivers all use the Android app can set
-	// ACCESS_TOKEN_TTL=15m today.
-	//
-	// TODO: drop this to 15 * time.Minute once the iOS app refreshes too;
-	// that is the change that makes a short access token safe to default to.
-	defaultAccessTokenTTL  = 24 * time.Hour
+	// defaultAccessTokenTTL bounds how long a copied access token keeps
+	// working. It can be this short because both driver apps renew the access
+	// token with their refresh token before it expires.
+	defaultAccessTokenTTL  = 15 * time.Minute
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
 )
 
