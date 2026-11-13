@@ -73,7 +73,9 @@ final class LocationReporter {
             vehicleID: vehicleID, tripID: gtfsTripID,
             latitude: fix.latitude, longitude: fix.longitude,
             bearing: (0...360).contains(fix.course) ? fix.course : nil,
-            speed: max(fix.speed, 0),
+            // Core Location gives -1 for a speed it does not know. Sent as 0
+            // it would say the vehicle is standing still, so it is left out.
+            speed: fix.speed >= 0 ? fix.speed : nil,
             accuracy: fix.horizontalAccuracy >= 0 ? fix.horizontalAccuracy : nil,
             timestamp: Int64(fix.timestamp.timeIntervalSince1970),
             routeID: routeID.isEmpty ? nil : routeID,
