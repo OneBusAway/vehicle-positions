@@ -14,21 +14,24 @@ ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING;
 -- route_id and start_date are selected because the feed's TripDescriptor is
 -- documented to carry what the driver sent: a seeded vehicle that came back
 -- without them would publish a narrower descriptor than it did before the
--- restart, and a route-only vehicle would publish none at all. A deactivated
--- vehicle, or one with no active trip, is left out, so a restart cannot put it
--- back in the feed: the tracker's record of a just-ended trip is in memory only,
+-- restart, and a route-only vehicle would publish none at all. The vehicle's
+-- label is joined in for the same reason: it is the feed's vehicle.label. A
+-- deactivated vehicle, or one with no active trip, is left out, so a restart
+-- cannot put it back in the feed: the tracker's record of a just-ended trip is
+-- in memory only,
 -- and seeding would otherwise republish its last report for a full staleness
 -- threshold. The latest
 -- is by the fix's own timestamp: a backlog a phone uploads after a dead zone
 -- (POST /api/v1/locations/history) is received after the live reports, and
 -- must not pass for the vehicle's latest position.
-SELECT DISTINCT ON (vehicle_id)
-    vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
-FROM location_points
-WHERE received_at > $1
-  AND vehicle_id IN (SELECT id FROM vehicles WHERE active)
-  AND vehicle_id IN (SELECT vehicle_id FROM trips WHERE status = 'active')
-ORDER BY vehicle_id, timestamp DESC, received_at DESC;
+SELECT DISTINCT ON (lp.vehicle_id)
+    lp.vehicle_id, lp.trip_id, lp.route_id, lp.start_date, lp.latitude, lp.longitude,
+    lp.bearing, lp.speed, lp.accuracy, lp.timestamp, lp.driver_id, v.label AS vehicle_label
+FROM location_points lp
+JOIN vehicles v ON v.id = lp.vehicle_id AND v.active
+WHERE lp.received_at > $1
+  AND lp.vehicle_id IN (SELECT vehicle_id FROM trips WHERE status = 'active')
+ORDER BY lp.vehicle_id, lp.timestamp DESC, lp.received_at DESC;
 
 -- name: ListUsers :many
 -- safety bound; not pagination. Callers that need one page at a time use
@@ -111,11 +114,12 @@ WHERE user_id = $1 AND vehicle_id = $2;
 
 -- name: GetLocationAuthorization :one
 -- One round trip answers every question the location ingest asks before it
--- accepts a report. No row means the vehicle does not exist. A driver has at
--- most one active trip (idx_trips_one_active_per_user), so the join adds at
--- most one row.
+-- accepts a report, and the label the feed publishes for the vehicle. No row
+-- means the vehicle does not exist. A driver has at most one active trip
+-- (idx_trips_one_active_per_user), so the join adds at most one row.
 SELECT
     v.active AS vehicle_active,
+    v.label AS vehicle_label,
     EXISTS (
         SELECT 1 FROM user_vehicles uv
         WHERE uv.user_id = sqlc.arg(user_id) AND uv.vehicle_id = v.id

@@ -41,6 +41,10 @@ type LocationReport struct {
 	Timestamp int64    `json:"timestamp"`
 	// Set server-side from JWT; never decoded from JSON.
 	DriverID string `json:"-"`
+	// VehicleLabel is the vehicles table's label, set server-side by
+	// AuthorizeLocation (or GetRecentLocations for the startup seed); never
+	// decoded from JSON. Empty when the admin has not given the vehicle one.
+	VehicleLabel string `json:"-"`
 }
 
 const maxVehicleIDLength = 50
@@ -124,7 +128,7 @@ type LocationSaver interface {
 
 // LocationAuthorizer decides whether a driver may publish a report. It returns
 // ErrNotAssigned, ErrVehicleInactive, ErrNoActiveTrip or ErrTripMismatch when
-// they may not.
+// they may not, and sets the report's VehicleLabel when they may.
 type LocationAuthorizer interface {
 	AuthorizeLocation(ctx context.Context, loc *LocationReport) error
 }
@@ -320,9 +324,7 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 		entity := &gtfsrt.FeedEntity{
 			Id: proto.String(v.VehicleID),
 			Vehicle: &gtfsrt.VehiclePosition{
-				Vehicle: &gtfsrt.VehicleDescriptor{
-					Id: proto.String(v.VehicleID),
-				},
+				Vehicle:   vehicleDescriptor(v),
 				Position:  position,
 				Timestamp: proto.Uint64(ts),
 			},
@@ -365,6 +367,18 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 		},
 		Entity: entities,
 	}
+}
+
+// vehicleDescriptor identifies a driver-reported vehicle. label is the
+// user-visible name a rider matches against the vehicle in front of them, so a
+// vehicle the admin has not labelled leaves it unset rather than publishing an
+// empty name or repeating the id.
+func vehicleDescriptor(v *VehicleState) *gtfsrt.VehicleDescriptor {
+	d := &gtfsrt.VehicleDescriptor{Id: proto.String(v.VehicleID)}
+	if label := strings.TrimSpace(v.VehicleLabel); label != "" {
+		d.Label = proto.String(label)
+	}
+	return d
 }
 
 // riderEntity renders one rider-consensus trip estimate as a FeedEntity. The

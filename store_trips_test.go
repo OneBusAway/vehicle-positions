@@ -644,6 +644,35 @@ func TestStore_AuthorizeLocation(t *testing.T) {
 	assert.Zero(t, ghosts, "authorizing must never create a vehicle")
 }
 
+// TestStore_AuthorizeLocation_SetsVehicleLabel: authorizing a report already
+// reads the vehicle row, so it hands the feed the label without a query per
+// feed request, and reads it fresh, so a rename shows with the next report.
+func TestStore_AuthorizeLocation_SetsVehicleLabel(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	driver := setupTripUser(t, store, "Label Driver", "label-auth@test.com", "bus-label", "Bus 42")
+	driverID := strconv.FormatInt(driver, 10)
+
+	refused := &LocationReport{DriverID: driverID, VehicleID: "bus-label"}
+	require.ErrorIs(t, store.AuthorizeLocation(ctx, refused), ErrNoActiveTrip)
+	assert.Empty(t, refused.VehicleLabel, "a refused report is not given a label")
+
+	_, err := store.StartTrip(ctx, driver, "bus-label", "route-1", "gtfs-1")
+	require.NoError(t, err)
+	loc := &LocationReport{DriverID: driverID, VehicleID: "bus-label"}
+	require.NoError(t, store.AuthorizeLocation(ctx, loc))
+	assert.Equal(t, "Bus 42", loc.VehicleLabel)
+
+	_, err = store.UpsertVehicle(ctx, "bus-label", "Bus 42A", "")
+	require.NoError(t, err)
+	loc = &LocationReport{DriverID: driverID, VehicleID: "bus-label"}
+	require.NoError(t, store.AuthorizeLocation(ctx, loc))
+	assert.Equal(t, "Bus 42A", loc.VehicleLabel, "a rename shows on the next report")
+}
+
 // TestStore_GetRecentLocations_SkipsInactiveVehicles keeps a restart from
 // putting a deactivated vehicle back in the feed.
 func TestStore_GetRecentLocations_SkipsInactiveVehicles(t *testing.T) {

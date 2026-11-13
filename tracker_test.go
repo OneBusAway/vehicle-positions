@@ -15,20 +15,22 @@ func TestTracker_Update(t *testing.T) {
 	defer tracker.Stop()
 
 	loc := &LocationReport{
-		VehicleID: "bus-1",
-		TripID:    "route-5",
-		Latitude:  -1.29,
-		Longitude: 36.82,
-		Bearing:   float64ptr(180),
-		Speed:     float64ptr(8.5),
-		Accuracy:  float64ptr(12.0),
-		Timestamp: 1000000,
+		VehicleID:    "bus-1",
+		VehicleLabel: "Bus 1",
+		TripID:       "route-5",
+		Latitude:     -1.29,
+		Longitude:    36.82,
+		Bearing:      float64ptr(180),
+		Speed:        float64ptr(8.5),
+		Accuracy:     float64ptr(12.0),
+		Timestamp:    1000000,
 	}
 	tracker.Update(loc)
 
 	active := tracker.ActiveVehicles()
 	require.Len(t, active, 1)
 	assert.Equal(t, "bus-1", active[0].VehicleID)
+	assert.Equal(t, "Bus 1", active[0].VehicleLabel)
 	assert.Equal(t, "route-5", active[0].TripID)
 	assert.Equal(t, -1.29, active[0].Latitude)
 	assert.Equal(t, 36.82, active[0].Longitude)

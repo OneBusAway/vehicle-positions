@@ -555,6 +555,7 @@ func (q *Queries) GetGTFSFeedCacheDigest(ctx context.Context) (GetGTFSFeedCacheD
 const getLocationAuthorization = `-- name: GetLocationAuthorization :one
 SELECT
     v.active AS vehicle_active,
+    v.label AS vehicle_label,
     EXISTS (
         SELECT 1 FROM user_vehicles uv
         WHERE uv.user_id = $1 AND uv.vehicle_id = v.id
@@ -575,6 +576,7 @@ type GetLocationAuthorizationParams struct {
 
 type GetLocationAuthorizationRow struct {
 	VehicleActive  bool
+	VehicleLabel   string
 	Assigned       bool
 	HasActiveTrip  bool
 	TripRouteID    string
@@ -582,14 +584,15 @@ type GetLocationAuthorizationRow struct {
 }
 
 // One round trip answers every question the location ingest asks before it
-// accepts a report. No row means the vehicle does not exist. A driver has at
-// most one active trip (idx_trips_one_active_per_user), so the join adds at
-// most one row.
+// accepts a report, and the label the feed publishes for the vehicle. No row
+// means the vehicle does not exist. A driver has at most one active trip
+// (idx_trips_one_active_per_user), so the join adds at most one row.
 func (q *Queries) GetLocationAuthorization(ctx context.Context, arg GetLocationAuthorizationParams) (GetLocationAuthorizationRow, error) {
 	row := q.db.QueryRow(ctx, getLocationAuthorization, arg.UserID, arg.VehicleID)
 	var i GetLocationAuthorizationRow
 	err := row.Scan(
 		&i.VehicleActive,
+		&i.VehicleLabel,
 		&i.Assigned,
 		&i.HasActiveTrip,
 		&i.TripRouteID,
@@ -661,35 +664,39 @@ func (q *Queries) GetLocationHistory(ctx context.Context, arg GetLocationHistory
 }
 
 const getRecentLocations = `-- name: GetRecentLocations :many
-SELECT DISTINCT ON (vehicle_id)
-    vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id
-FROM location_points
-WHERE received_at > $1
-  AND vehicle_id IN (SELECT id FROM vehicles WHERE active)
-  AND vehicle_id IN (SELECT vehicle_id FROM trips WHERE status = 'active')
-ORDER BY vehicle_id, timestamp DESC, received_at DESC
+SELECT DISTINCT ON (lp.vehicle_id)
+    lp.vehicle_id, lp.trip_id, lp.route_id, lp.start_date, lp.latitude, lp.longitude,
+    lp.bearing, lp.speed, lp.accuracy, lp.timestamp, lp.driver_id, v.label AS vehicle_label
+FROM location_points lp
+JOIN vehicles v ON v.id = lp.vehicle_id AND v.active
+WHERE lp.received_at > $1
+  AND lp.vehicle_id IN (SELECT vehicle_id FROM trips WHERE status = 'active')
+ORDER BY lp.vehicle_id, lp.timestamp DESC, lp.received_at DESC
 `
 
 type GetRecentLocationsRow struct {
-	VehicleID string
-	TripID    string
-	RouteID   string
-	StartDate string
-	Latitude  float64
-	Longitude float64
-	Bearing   pgtype.Float8
-	Speed     pgtype.Float8
-	Accuracy  pgtype.Float8
-	Timestamp int64
-	DriverID  string
+	VehicleID    string
+	TripID       string
+	RouteID      string
+	StartDate    string
+	Latitude     float64
+	Longitude    float64
+	Bearing      pgtype.Float8
+	Speed        pgtype.Float8
+	Accuracy     pgtype.Float8
+	Timestamp    int64
+	DriverID     string
+	VehicleLabel string
 }
 
 // route_id and start_date are selected because the feed's TripDescriptor is
 // documented to carry what the driver sent: a seeded vehicle that came back
 // without them would publish a narrower descriptor than it did before the
-// restart, and a route-only vehicle would publish none at all. A deactivated
-// vehicle, or one with no active trip, is left out, so a restart cannot put it
-// back in the feed: the tracker's record of a just-ended trip is in memory only,
+// restart, and a route-only vehicle would publish none at all. The vehicle's
+// label is joined in for the same reason: it is the feed's vehicle.label. A
+// deactivated vehicle, or one with no active trip, is left out, so a restart
+// cannot put it back in the feed: the tracker's record of a just-ended trip is
+// in memory only,
 // and seeding would otherwise republish its last report for a full staleness
 // threshold. The latest
 // is by the fix's own timestamp: a backlog a phone uploads after a dead zone
@@ -716,6 +723,7 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 			&i.Accuracy,
 			&i.Timestamp,
 			&i.DriverID,
+			&i.VehicleLabel,
 		); err != nil {
 			return nil, err
 		}

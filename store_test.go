@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func testDatabaseURL(t *testing.T) string {
@@ -417,6 +418,44 @@ func TestStore_GetRecentLocations_ReturnsTripContext(t *testing.T) {
 	assert.Equal(t, "T1", locs[0].TripID, "trip_id must round-trip through save and GetRecentLocations")
 	assert.Equal(t, "R1", locs[0].RouteID, "route_id must round-trip through save and GetRecentLocations")
 	assert.Equal(t, "20260906", locs[0].StartDate, "start_date must round-trip through save and GetRecentLocations")
+}
+
+// The tracker is seeded from GetRecentLocations at startup, so a label that
+// does not survive this round trip drops out of the feed after a restart until
+// the vehicle's next report. A vehicle with no label must stay unlabelled.
+func TestStore_GetRecentLocations_ReturnsVehicleLabel(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	_, err := store.UpsertVehicle(ctx, "bus-labelled", "Bus 42", "")
+	require.NoError(t, err)
+	now := time.Now().Unix()
+	for _, id := range []string{"bus-labelled", "bus-unlabelled"} {
+		require.NoError(t, store.SaveLocation(ctx, &LocationReport{VehicleID: id, Latitude: 1, Longitude: 2, Timestamp: now}))
+	}
+	onActiveTrips(t, store)
+
+	locs, err := store.GetRecentLocations(ctx, time.Now().Add(-5*time.Minute))
+	require.NoError(t, err)
+	labels := make(map[string]string, len(locs))
+	for _, loc := range locs {
+		labels[loc.VehicleID] = loc.VehicleLabel
+	}
+	assert.Equal(t, map[string]string{"bus-labelled": "Bus 42", "bus-unlabelled": ""}, labels)
+
+	// main seeds the tracker by passing each of these rows to Update.
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	for _, loc := range locs {
+		tracker.Update(loc)
+	}
+	published := make(map[string]*string)
+	for _, e := range buildFeed(tracker.ActiveVehicles(), nil).Entity {
+		published[e.GetId()] = e.Vehicle.Vehicle.Label
+	}
+	assert.Equal(t, map[string]*string{"bus-labelled": proto.String("Bus 42"), "bus-unlabelled": nil}, published)
 }
 
 // A driver who knows only the route is the case that degrades worst: route_id is
