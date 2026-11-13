@@ -17,15 +17,17 @@ struct VehicleTrackerApp: App {
     }
 }
 
-/// Runs `action` each time the phone app's window comes to the front. Read
-/// inside the window, so the CarPlay scene coming up doesn't count:
-/// ActivityKit starts a Live Activity only while the phone app is in front.
-private struct PhoneWindowCameToFront: ViewModifier {
+/// Runs `action` each time the phone app's window comes to the front, and
+/// when it first appears already there: after a start from the car the
+/// window can come up `.active`, with no change to see. Read inside the
+/// window, so the CarPlay scene coming up doesn't count: ActivityKit starts
+/// a Live Activity only while the phone app is in front.
+struct PhoneWindowCameToFront: ViewModifier {
     @Environment(\.scenePhase) private var phase
     let action: () -> Void
 
     func body(content: Content) -> some View {
-        content.onChange(of: phase) { _, phase in
+        content.onChange(of: phase, initial: true) { _, phase in
             if phase == .active { action() }
         }
     }
