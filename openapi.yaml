@@ -1049,19 +1049,21 @@ paths:
       tags: [admin]
       summary: List vehicles
       description: |
-        Returns one page of active vehicles. Requires the `admin` role.
+        Returns one page of vehicles newest-first, deactivated ones included.
+        Requires the `admin` role.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
       parameters:
         - $ref: '#/components/parameters/ListLimitQuery'
         - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
         '200':
-          description: Vehicles. A bare array — there is no paging envelope.
+          description: One page of vehicles.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Vehicle'
+                $ref: '#/components/schemas/VehicleList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1450,19 +1452,21 @@ paths:
       tags: [admin]
       summary: List users
       description: |
-        Returns one page of users. Requires the `admin` role.
+        Returns one page of users newest-first, deactivated ones included.
+        Requires the `admin` role.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
       parameters:
         - $ref: '#/components/parameters/ListLimitQuery'
         - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
         '200':
-          description: Users. A bare array — there is no paging envelope.
+          description: One page of users.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2219,6 +2223,22 @@ components:
           type: string
           maxLength: 255
 
+    VehicleList:
+      type: object
+      required: [count, has_more, vehicles]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of vehicles in `vehicles`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more vehicles match the filter than this page returned.
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vehicle'
+
     Vehicle:
       type: object
       required: [id, label, agency_tag, active, created_at, updated_at]
@@ -2295,6 +2315,22 @@ components:
       description: |
         At least 8 characters and at most 72 bytes — bcrypt's input limit. A
         multi-byte password can exceed 72 bytes well before 72 characters.
+
+    UserList:
+      type: object
+      required: [count, has_more, users]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of users in `users`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more users match the filter than this page returned.
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
 
     User:
       type: object

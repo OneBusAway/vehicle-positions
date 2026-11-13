@@ -82,6 +82,8 @@ var htmlUIRoutes = map[string]struct{}{
 var schemaStructs = map[string]string{
 	"User":                 "UserResponse",
 	"Vehicle":              "VehicleResponse",
+	"UserList":             "userListResponse",
+	"VehicleList":          "vehicleListResponse",
 	"Trip":                 "TripResponse",
 	"TripSummary":          "TripSummary",
 	"Assignment":           "AssignmentResponse",

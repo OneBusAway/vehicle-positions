@@ -38,6 +38,14 @@ func (m *mockUserPager) ListUsersPage(_ context.Context, filter UserFilter) ([]U
 	return pageSlice(m.users, filter.Limit, filter.Offset), nil
 }
 
+// nilUserPager answers with a nil slice. The real store never does, but the
+// handler must not depend on that to keep "users" from encoding as null.
+type nilUserPager struct{}
+
+func (nilUserPager) ListUsersPage(context.Context, UserFilter) ([]UserResponse, error) {
+	return nil, nil
+}
+
 type mockUserGetter struct {
 	user *UserResponse
 	err  error
@@ -163,19 +171,29 @@ func newSampleUser() *UserResponse {
 
 // --- List Users ---
 
-func TestHandleListUsers_Empty(t *testing.T) {
-	handler := handleListUsers(&mockUserPager{users: make([]UserResponse, 0)})
-	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
-	w := httptest.NewRecorder()
-	handler(w, req)
+// TestHandleListUsers_EmptyPage pins the whole body of an empty page: the
+// three envelope keys and nothing else, with "users" as [] rather than null,
+// whether the store hands back an empty slice or a nil one.
+func TestHandleListUsers_EmptyPage(t *testing.T) {
+	tests := []struct {
+		name  string
+		store UserPager
+	}{
+		{name: "empty slice from the store", store: &mockUserPager{users: make([]UserResponse, 0)}},
+		{name: "nil slice from the store", store: nilUserPager{}},
+	}
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := handleListUsers(tt.store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
 
-	// Must return [] not null
-	var raw json.RawMessage
-	err := json.NewDecoder(w.Body).Decode(&raw)
-	require.NoError(t, err)
-	assert.Equal(t, "[]", string(raw))
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.JSONEq(t, `{"count":0,"has_more":false,"users":[]}`, w.Body.String())
+		})
+	}
 }
 
 func TestHandleListUsers_WithUsers(t *testing.T) {
@@ -190,17 +208,66 @@ func TestHandleListUsers_WithUsers(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var result []UserResponse
-	err := json.NewDecoder(w.Body).Decode(&result)
+	var resp userListResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
-	assert.Len(t, result, 2)
-	assert.Equal(t, "Alice", result[0].Name)
-	assert.Equal(t, "Bob", result[1].Name)
+	assert.Equal(t, 2, resp.Count)
+	assert.False(t, resp.HasMore)
+	require.Len(t, resp.Users, 2)
+	assert.Equal(t, "Alice", resp.Users[0].Name)
+	assert.Equal(t, "Bob", resp.Users[1].Name)
+}
+
+// TestHandleListUsers_HasMore pins the truncation signal at its boundary.
+// The handler asks the store for one row past limit: getting it back sets
+// has_more and the row is trimmed off the page, while exactly limit rows is a
+// complete last page.
+func TestHandleListUsers_HasMore(t *testing.T) {
+	all := []UserResponse{
+		{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin"},
+		{ID: 2, Name: "Bob", Email: "bob@example.com", Role: "driver"},
+		{ID: 3, Name: "Carol", Email: "carol@example.com", Role: "driver"},
+	}
+
+	tests := []struct {
+		name        string
+		rows        int
+		wantHasMore bool
+		wantNames   []string
+	}{
+		{name: "one row past the limit", rows: 3, wantHasMore: true, wantNames: []string{"Alice", "Bob"}},
+		{name: "exactly the limit", rows: 2, wantHasMore: false, wantNames: []string{"Alice", "Bob"}},
+		{name: "below the limit", rows: 1, wantHasMore: false, wantNames: []string{"Alice"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &mockUserPager{users: all[:tt.rows]}
+			handler := handleListUsers(store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/users?limit=2", nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, int32(3), store.gotFilter.Limit, "store must be called with limit+1")
+
+			var resp userListResponse
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+			assert.Equal(t, tt.wantHasMore, resp.HasMore)
+			assert.Equal(t, len(tt.wantNames), resp.Count)
+			gotNames := make([]string, 0, len(resp.Users))
+			for _, u := range resp.Users {
+				gotNames = append(gotNames, u.Name)
+			}
+			assert.Equal(t, tt.wantNames, gotNames, "the page keeps the first limit rows and drops the detection row")
+		})
+	}
 }
 
 // TestHandleListUsers_PagingParams covers the limit/offset contract on the
-// users endpoint: the defaults, the values that reach the store, and the
-// boundary pair at exactly the maximum and one past it. The shared parsing
+// users endpoint: the defaults, the values that reach the store (limit
+// widened by the one row that detects has_more), and the boundary pair at
+// exactly the maximum and one past it. The shared parsing
 // is exercised exhaustively in TestHandleListVehicles_PagingParams; this
 // table pins that this endpoint is wired to the same rules.
 func TestHandleListUsers_PagingParams(t *testing.T) {
@@ -237,7 +304,7 @@ func TestHandleListUsers_PagingParams(t *testing.T) {
 				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
 				return
 			}
-			assert.Equal(t, tt.wantLimit, store.gotFilter.Limit, "limit passed to the store")
+			assert.Equal(t, tt.wantLimit+1, store.gotFilter.Limit, "limit passed to the store, plus the has_more detection row")
 			assert.Equal(t, tt.wantOffset, store.gotFilter.Offset, "offset passed to the store")
 		})
 	}
@@ -257,28 +324,11 @@ func TestHandleListUsers_PagesResults(t *testing.T) {
 	handler(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	var result []UserResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&result))
-	require.Len(t, result, 2)
-	assert.Equal(t, "Bob", result[0].Name)
-	assert.Equal(t, "Carol", result[1].Name)
-}
-
-// TestHandleListUsers_StillReturnsBareArray guards the response shape:
-// paging deliberately did NOT wrap the body in an object, because existing
-// clients and the documented schema index into a bare array.
-func TestHandleListUsers_StillReturnsBareArray(t *testing.T) {
-	users := []UserResponse{{ID: 1, Name: "Alice", Email: "alice@example.com", Role: "admin"}}
-	handler := handleListUsers(&mockUserPager{users: users})
-	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
-	w := httptest.NewRecorder()
-	handler(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var result []UserResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result), "response must unmarshal into a bare array")
-	require.Len(t, result, 1)
-	assert.Equal(t, "Alice", result[0].Name)
+	var resp userListResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.Len(t, resp.Users, 2)
+	assert.Equal(t, "Bob", resp.Users[0].Name)
+	assert.Equal(t, "Carol", resp.Users[1].Name)
 }
 
 func TestHandleListUsers_NoPasswordInResponse(t *testing.T) {
@@ -936,9 +986,9 @@ func TestHandleListUsers_IncludesInactive(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.False(t, store.gotFilter.ActiveOnly, "the API must not narrow to active users only")
-	var users []UserResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&users))
-	assert.Len(t, users, 2)
+	var resp userListResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Len(t, resp.Users, 2)
 }
 
 // TestHandleUpdateUser_PasswordResetFailureIs500 makes the failure loud. An

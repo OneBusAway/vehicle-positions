@@ -307,6 +307,38 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |`POST /api/v1/admin/trips/{id}/end` |POST  |End any driver's active trip (admin)                |
 |`GET /api/v1/admin/status`          |GET   |System health, active vehicles, feed stats          |
 
+**Paged admin lists**
+
+`GET /api/v1/admin/vehicles` and `GET /api/v1/admin/users` return one page at a
+time: 50 rows by default, 200 at most, chosen with `limit` and `offset`. The
+page comes wrapped, in the same shape `GET /api/v1/admin/trips` uses. This is
+`GET /api/v1/admin/vehicles?limit=1` on a fleet of more than one vehicle:
+
+```json
+{
+  "count": 1,
+  "has_more": true,
+  "vehicles": [
+    {
+      "id": "bus-1",
+      "label": "Bus 1",
+      "agency_tag": "nairobi",
+      "active": true,
+      "created_at": "2026-11-13T08:00:00Z",
+      "updated_at": "2026-11-13T08:00:00Z"
+    }
+  ]
+}
+```
+
+The list is under `vehicles` or `users`, `count` is the number of rows in this
+page, and `has_more` is `true` when more rows match than the page returned, so
+a full page is never mistaken for the whole list.
+
+**Upgrade note.** These two endpoints used to return a bare JSON array. A
+client that read the array directly now has to read the `vehicles` or `users`
+key.
+
 **Location Report Payload:**
 
 Each location report is a single point sent directly from the Android app as it receives GPS fixes. The payload is deliberately minimal to reduce bandwidth consumption.

@@ -82,6 +82,14 @@ func (m *mockVehicleStore) ListVehiclesPage(_ context.Context, filter VehicleFil
 	return pageSlice(all, filter.Limit, filter.Offset), nil
 }
 
+// nilVehiclePager answers with a nil slice. The real store never does, but
+// the handler must not depend on that to keep "vehicles" from encoding as null.
+type nilVehiclePager struct{}
+
+func (nilVehiclePager) ListVehiclesPage(context.Context, VehicleFilter) ([]VehicleResponse, error) {
+	return nil, nil
+}
+
 func (m *mockVehicleStore) GetVehicle(_ context.Context, id string) (*VehicleResponse, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -150,34 +158,91 @@ func TestHandleListVehicles_WithVehicles(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var vehicles []VehicleResponse
-	err := json.NewDecoder(w.Body).Decode(&vehicles)
+	var resp vehicleListResponse
+	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
-	assert.Len(t, vehicles, 2)
+	assert.Equal(t, 2, resp.Count)
+	assert.False(t, resp.HasMore)
+	assert.Len(t, resp.Vehicles, 2)
 }
 
-func TestHandleListVehicles_ResponseNotNull(t *testing.T) {
-	store := newMockVehicleStore()
-	handler := handleListVehicles(store)
+// TestHandleListVehicles_EmptyPage pins the whole body of an empty page: the
+// three envelope keys and nothing else, with "vehicles" as [] rather than
+// null, whether the store hands back an empty slice or a nil one.
+func TestHandleListVehicles_EmptyPage(t *testing.T) {
+	tests := []struct {
+		name  string
+		store VehiclePager
+	}{
+		{name: "empty slice from the store", store: newMockVehicleStore()},
+		{name: "nil slice from the store", store: nilVehiclePager{}},
+	}
 
-	req := httptest.NewRequest("GET", "/api/v1/admin/vehicles", nil)
-	w := httptest.NewRecorder()
-	handler(w, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := handleListVehicles(tt.store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/vehicles", nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.JSONEq(t, `{"count":0,"has_more":false,"vehicles":[]}`, w.Body.String())
+		})
+	}
+}
 
-	// Verify raw JSON is [] not null
-	var raw json.RawMessage
-	err := json.NewDecoder(w.Body).Decode(&raw)
-	require.NoError(t, err)
-	assert.Equal(t, "[]", string(raw), "empty vehicle list must be JSON [] not null")
+// TestHandleListVehicles_HasMore pins the truncation signal at its boundary.
+// The handler asks the store for one row past limit: getting it back sets
+// has_more and the row is trimmed off the page, while exactly limit rows is a
+// complete last page.
+func TestHandleListVehicles_HasMore(t *testing.T) {
+	tests := []struct {
+		name        string
+		rows        int
+		wantHasMore bool
+		wantIDs     []string
+	}{
+		{name: "one row past the limit", rows: 3, wantHasMore: true, wantIDs: []string{"bus-1", "bus-2"}},
+		{name: "exactly the limit", rows: 2, wantHasMore: false, wantIDs: []string{"bus-1", "bus-2"}},
+		{name: "below the limit", rows: 1, wantHasMore: false, wantIDs: []string{"bus-1"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockVehicleStore()
+			now := time.Now()
+			for i := 1; i <= tt.rows; i++ {
+				id := fmt.Sprintf("bus-%d", i)
+				store.vehicles[id] = &VehicleResponse{ID: id, Label: id, Active: true, CreatedAt: now, UpdatedAt: now}
+			}
+
+			handler := handleListVehicles(store)
+			req := httptest.NewRequest("GET", "/api/v1/admin/vehicles?limit=2", nil)
+			w := httptest.NewRecorder()
+			handler(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, int32(3), store.gotFilter.Limit, "store must be called with limit+1")
+
+			var resp vehicleListResponse
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+			assert.Equal(t, tt.wantHasMore, resp.HasMore)
+			assert.Equal(t, len(tt.wantIDs), resp.Count)
+			gotIDs := make([]string, 0, len(resp.Vehicles))
+			for _, v := range resp.Vehicles {
+				gotIDs = append(gotIDs, v.ID)
+			}
+			assert.Equal(t, tt.wantIDs, gotIDs, "the page keeps the first limit rows and drops the detection row")
+		})
+	}
 }
 
 // TestHandleListVehicles_PagingParams covers the limit/offset contract: the
 // defaults applied when the params are absent, the values that reach the
-// store, and every rejection — including the pair at exactly the maximum and
-// one past it. Rejections assert the error message, not just the status, so
-// a case can't pass for the wrong reason.
+// store (limit widened by the one row that detects has_more), and every
+// rejection — including the pair at exactly the maximum and one past it.
+// Rejections assert the error message, not just the status, so a case can't
+// pass for the wrong reason.
 func TestHandleListVehicles_PagingParams(t *testing.T) {
 	const limitError = "limit must be between 1 and 200"
 	offsetError := fmt.Sprintf("offset must be between 0 and %d", maxListOffset)
@@ -217,7 +282,7 @@ func TestHandleListVehicles_PagingParams(t *testing.T) {
 				assert.Equal(t, tt.wantError, decodeErrorResponse(t, w))
 				return
 			}
-			assert.Equal(t, tt.wantLimit, store.gotFilter.Limit, "limit passed to the store")
+			assert.Equal(t, tt.wantLimit+1, store.gotFilter.Limit, "limit passed to the store, plus the has_more detection row")
 			assert.Equal(t, tt.wantOffset, store.gotFilter.Offset, "offset passed to the store")
 		})
 	}
@@ -238,11 +303,11 @@ func TestHandleListVehicles_PagesResults(t *testing.T) {
 	handler(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	var vehicles []VehicleResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&vehicles))
-	require.Len(t, vehicles, 2)
-	assert.Equal(t, "bus-2", vehicles[0].ID)
-	assert.Equal(t, "bus-3", vehicles[1].ID)
+	var resp vehicleListResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.Len(t, resp.Vehicles, 2)
+	assert.Equal(t, "bus-2", resp.Vehicles[0].ID)
+	assert.Equal(t, "bus-3", resp.Vehicles[1].ID)
 }
 
 // TestHandleListVehicles_IncludesInactive pins that the endpoint still lists
@@ -261,31 +326,9 @@ func TestHandleListVehicles_IncludesInactive(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, store.gotFilter.IncludeInactive, "the API must ask for deactivated vehicles too")
-	var vehicles []VehicleResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&vehicles))
-	assert.Len(t, vehicles, 2)
-}
-
-// TestHandleListVehicles_StillReturnsBareArray guards the response shape:
-// adding paging deliberately did NOT wrap the body in an object the way the
-// trips and location-history endpoints do, because existing clients and the
-// documented schema index into a bare array. If someone wraps it later, this
-// fails loudly.
-func TestHandleListVehicles_StillReturnsBareArray(t *testing.T) {
-	store := newMockVehicleStore()
-	now := time.Now()
-	store.vehicles["bus-1"] = &VehicleResponse{ID: "bus-1", Label: "Bus 1", Active: true, CreatedAt: now, UpdatedAt: now}
-
-	handler := handleListVehicles(store)
-	req := httptest.NewRequest("GET", "/api/v1/admin/vehicles", nil)
-	w := httptest.NewRecorder()
-	handler(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var vehicles []VehicleResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &vehicles), "response must unmarshal into a bare array")
-	require.Len(t, vehicles, 1)
-	assert.Equal(t, "bus-1", vehicles[0].ID)
+	var resp vehicleListResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Len(t, resp.Vehicles, 2)
 }
 
 func TestHandleListVehicles_StoreError(t *testing.T) {
