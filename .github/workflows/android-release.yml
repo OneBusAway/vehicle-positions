@@ -41,13 +41,22 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        # The version name is the tag without its prefix; the run number only ever goes up, which
-        # is what Android needs of versionCode for an update to install over the previous build.
-        run: >
-          ./gradlew :app:assembleRelease
-          -PversionCode=${{ github.run_number }}
-          -PversionName=${GITHUB_REF_NAME#android-v}
-          -PdefaultServerUrl=${{ vars.DEFAULT_SERVER_URL }}
+          DEFAULT_SERVER_URL: ${{ vars.DEFAULT_SERVER_URL }}
+        # Derive versionCode from semantic versioning (major*10000 + minor*100 + patch) so it
+        # strictly increases with version bumps and stays above CI run numbers.
+        run: |
+          VERSION_NAME="${GITHUB_REF_NAME#android-v}"
+          IFS='.' read -r major minor patch <<< "$VERSION_NAME"
+          patch="${patch%%-*}"
+          if [ "$minor" -ge 100 ] || [ "$patch" -ge 100 ]; then
+            echo "minor and patch must each be under 100 for versionCode encoding" >&2
+            exit 1
+          fi
+          VERSION_CODE=$(( major * 10000 + minor * 100 + patch ))
+          ./gradlew :app:assembleRelease \
+            -PversionCode="$VERSION_CODE" \
+            -PversionName="$VERSION_NAME" \
+            -PdefaultServerUrl="$DEFAULT_SERVER_URL"
       - name: Verify the signature
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
