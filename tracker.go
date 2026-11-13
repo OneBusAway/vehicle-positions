@@ -8,16 +8,19 @@ import (
 // VehicleState holds the latest known position of a vehicle.
 type VehicleState struct {
 	VehicleID string
-	TripID    string
-	RouteID   string
-	StartDate string
-	Latitude  float64
-	Longitude float64
-	Bearing   *float64
-	Speed     *float64
-	Accuracy  *float64
-	Timestamp int64
-	UpdatedAt time.Time // server time when this report was received
+	// VehicleLabel is the vehicle's label as of this report, so an admin
+	// rename reaches the feed with the vehicle's next accepted report.
+	VehicleLabel string
+	TripID       string
+	RouteID      string
+	StartDate    string
+	Latitude     float64
+	Longitude    float64
+	Bearing      *float64
+	Speed        *float64
+	Accuracy     *float64
+	Timestamp    int64
+	UpdatedAt    time.Time // server time when this report was received
 }
 
 // Tracker maintains an in-memory map of current vehicle positions.
@@ -115,17 +118,18 @@ func (t *Tracker) update(loc *LocationReport) {
 	}
 
 	t.vehicles[loc.VehicleID] = &VehicleState{
-		VehicleID: loc.VehicleID,
-		TripID:    loc.TripID,
-		RouteID:   loc.RouteID,
-		StartDate: loc.StartDate,
-		Latitude:  loc.Latitude,
-		Longitude: loc.Longitude,
-		Bearing:   bearing,
-		Speed:     speed,
-		Accuracy:  accuracy,
-		Timestamp: loc.Timestamp,
-		UpdatedAt: time.Now(),
+		VehicleID:    loc.VehicleID,
+		VehicleLabel: loc.VehicleLabel,
+		TripID:       loc.TripID,
+		RouteID:      loc.RouteID,
+		StartDate:    loc.StartDate,
+		Latitude:     loc.Latitude,
+		Longitude:    loc.Longitude,
+		Bearing:      bearing,
+		Speed:        speed,
+		Accuracy:     accuracy,
+		Timestamp:    loc.Timestamp,
+		UpdatedAt:    time.Now(),
 	}
 }
 

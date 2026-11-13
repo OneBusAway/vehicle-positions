@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -136,6 +137,39 @@ func TestBuildFeed_WithVehicles(t *testing.T) {
 	// E012: header timestamp must be >= max entity timestamp.
 	assert.GreaterOrEqual(t, feed.Header.GetTimestamp(), uint64(bus2Ts),
 		"header timestamp must be >= max entity timestamp (E012)")
+}
+
+// TestBuildFeed_VehicleLabel: vehicle.label is the name a rider matches against
+// the vehicle in front of them. A vehicle with no label leaves it unset rather
+// than publishing an empty name or repeating the id.
+func TestBuildFeed_VehicleLabel(t *testing.T) {
+	tests := []struct {
+		name  string
+		label string
+		want  *string
+	}{
+		{"labelled", "Bus 42", proto.String("Bus 42")},
+		{"padded", " Bus 42  ", proto.String("Bus 42")},
+		{"empty", "", nil},
+		{"whitespace only", "   ", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			feed := buildFeed([]*VehicleState{{
+				VehicleID:    "vehicle-042",
+				VehicleLabel: tc.label,
+				Latitude:     -1.2921,
+				Longitude:    36.8219,
+				Timestamp:    time.Now().Unix(),
+			}}, nil)
+			require.Len(t, feed.Entity, 1)
+			descriptor := feed.Entity[0].Vehicle.Vehicle
+			require.NotNil(t, descriptor)
+			assert.Equal(t, "vehicle-042", descriptor.GetId())
+			assert.Equal(t, tc.want, descriptor.Label)
+			assert.Empty(t, validateFeedCompliance(t, feed))
+		})
+	}
 }
 
 func TestBuildFeed_TripDescriptorFields(t *testing.T) {
@@ -941,6 +975,69 @@ func TestHandlePostLocation_DriverIDNotAcceptedFromClient(t *testing.T) {
 	w := postLocationWithBody(handler, body, "application/json")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code, "driver_id in JSON body must be rejected as unknown field")
+}
+
+func TestHandlePostLocation_VehicleLabelNotAcceptedFromClient(t *testing.T) {
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	mStore := &mockStore{}
+	handler := handlePostLocation(mStore, tracker, NewVehicleRateLimiter())
+
+	body := []byte(fmt.Sprintf(`{"vehicle_id":"bus-1","latitude":1,"longitude":2,"timestamp":%d,"VehicleLabel":"Spoofed"}`, time.Now().Unix()))
+	w := postLocationWithBody(handler, body, "application/json")
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, decodeError(t, w), "unknown field", "the label is the admin's, so a driver must not be able to set it")
+	assert.False(t, mStore.saved)
+}
+
+// TestPostLocation_VehicleLabelReachesFeed drives the real store. The label an
+// admin gives a vehicle is published as vehicle.label, as in the README's feed
+// example, and a rename reaches the feed with the vehicle's next accepted
+// report: the feed reads the label off the tracker, not the database.
+func TestPostLocation_VehicleLabelReachesFeed(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	driver := setupTripUser(t, store, "Label Driver", "label-feed@test.com", "vehicle-042", "Bus 42")
+	_, err := store.StartTrip(ctx, driver, "vehicle-042", "5", "t_5_0830")
+	require.NoError(t, err)
+
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	rl := NewKeyedRateLimiter(time.Millisecond, 10, false)
+	defer rl.Stop()
+	post := handlePostLocation(store, tracker, rl)
+	claims := jwt.MapClaims{"sub": strconv.FormatInt(driver, 10)}
+	now := time.Now().Unix()
+	report := func(ts int64) {
+		t.Helper()
+		w := postLocationWithClaims(post, LocationReport{VehicleID: "vehicle-042", Latitude: -1.2921, Longitude: 36.8219, Timestamp: ts}, claims)
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	}
+	feedLabel := func() *string {
+		t.Helper()
+		feed := buildFeed(tracker.ActiveVehicles(), nil)
+		require.Len(t, feed.Entity, 1)
+		require.Empty(t, validateFeedCompliance(t, feed))
+		return feed.Entity[0].Vehicle.Vehicle.Label
+	}
+
+	report(now - 2)
+	assert.Equal(t, proto.String("Bus 42"), feedLabel())
+
+	_, err = store.UpsertVehicle(ctx, "vehicle-042", "Bus 42A", "")
+	require.NoError(t, err)
+	assert.Equal(t, proto.String("Bus 42"), feedLabel(), "a rename waits for the vehicle's next report")
+	report(now - 1)
+	assert.Equal(t, proto.String("Bus 42A"), feedLabel(), "the next report carries the rename")
+
+	_, err = store.UpsertVehicle(ctx, "vehicle-042", "", "")
+	require.NoError(t, err)
+	report(now)
+	assert.Nil(t, feedLabel(), "a cleared label leaves vehicle.label unset, not empty")
 }
 
 // TestHandlePostLocation_RateLimitBlocksSecondRequest uses postLocationWithClaims
