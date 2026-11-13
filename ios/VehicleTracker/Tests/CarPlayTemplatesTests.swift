@@ -127,6 +127,22 @@ import Testing
         #expect(items[5].detail == "±7 m")
     }
 
+    /// A feed may give a route only one of its two names, as King County's
+    /// gives no long names: the Route row shows the one, with nothing dangling.
+    @Test func detailItemsNameARouteWithOneNameOnce() throws {
+        let a = evaluator.evaluate(TripFixtures.fix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5)), previous: nil)
+        func routeRow(shortName: String, longName: String) throws -> String? {
+            var trip = TripFixtures.t1
+            trip.route.shortName = shortName
+            trip.route.longName = longName
+            let onTrip = ActiveTrip(serverTripID: 1, vehicle: active.vehicle, trip: trip, startedAt: active.startedAt, driverEmail: active.driverEmail)
+            return CarPlayTemplates.detailItems(status: try status(a, phase: .active(onTrip)), adherence: a, fixesSent: 0)[0].detail
+        }
+        #expect(try routeRow(shortName: "7", longName: "") == "7")
+        #expect(try routeRow(shortName: "", longName: "Loop") == "Loop")
+        #expect(try routeRow(shortName: "7", longName: "Rainier Beach") == "7 · Rainier Beach")
+    }
+
     /// Off schedule, the Schedule row keeps the words main showed with the
     /// deviation, and the Next stop row stays a stop with its time and
     /// distance: the card's question never lands under "Next stop".
@@ -291,6 +307,16 @@ import Testing
         #expect(sections[1].items.map(\.text) == ["1", "2"])
         let none = CarPlayTemplates.routeSections(routes, recentIDs: [], onSelect: { _ in })
         #expect(none.map(\.header) == ["All routes"])
+    }
+
+    /// The name goes under the number. A route with only one of the two is
+    /// listed by it, with no second line repeating it or left empty.
+    @Test func aRouteWithOneNameIsListedByItAlone() {
+        let routes = [RouteInfo(id: "R7", shortName: "7", longName: "", color: "", textColor: "", type: 3),
+                      RouteInfo(id: "RL", shortName: "", longName: "Loop", color: "", textColor: "", type: 3)]
+        let items = CarPlayTemplates.routeSections(routes, recentIDs: [], onSelect: { _ in })[0].items
+        #expect(items.map(\.text) == ["7", "Loop"])
+        #expect(items.map(\.detailText) == [nil, nil])
     }
 
     @Test func tripItemsMarkTheCurrentRun() {

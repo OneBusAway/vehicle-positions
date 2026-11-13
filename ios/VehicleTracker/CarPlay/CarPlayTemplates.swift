@@ -111,7 +111,8 @@ enum CarPlayTemplates {
             return "±\(Int(a.fix.horizontalAccuracy.rounded())) m"
         }()
         return [
-            CPInformationItem(title: String(localized: "Route"), detail: "\(route.shortName) · \(route.longName)"),
+            // A feed may give a route only one of its two names.
+            CPInformationItem(title: String(localized: "Route"), detail: [route.shortName, route.longName].filter { !$0.isEmpty }.joined(separator: " · ")),
             CPInformationItem(title: String(localized: "Trip"), detail: "\(active.trip.headsign) · \(Formatters.clock(active.trip.stops.first?.departureAt ?? active.startedAt, timezone: tz))"),
             CPInformationItem(title: String(localized: "Schedule"), detail: schedule),
             CPInformationItem(title: String(localized: "Next stop"), detail: next),
@@ -233,10 +234,12 @@ enum CarPlayTemplates {
         }
     }
 
-    /// Recent and All routes, as the phone lists them.
+    /// Recent and All routes, as the phone lists them: the name under the
+    /// number, and a route with only one of the two listed by it alone.
     static func routeSections(_ routes: [RouteInfo], recentIDs: [String], onSelect: @escaping (RouteInfo) -> Void) -> [(header: String?, items: [CPListItem])] {
         func item(_ route: RouteInfo) -> CPListItem {
-            let item = CPListItem(text: PickerText.name(of: route), detailText: route.longName)
+            let name = route.shortName.isEmpty || route.longName.isEmpty ? nil : route.longName
+            let item = CPListItem(text: PickerText.name(of: route), detailText: name)
             item.handler = { _, done in
                 onSelect(route)
                 done()
