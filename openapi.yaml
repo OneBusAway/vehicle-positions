@@ -1504,7 +1504,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: |
+            Invalid request. An email that is not a bare address, such as
+            `Name <driver@example.com>` or one with surrounding spaces, returns
+            `email is not valid`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1564,7 +1571,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: |
+            Invalid request. An email that is not a bare address, such as
+            `Name <driver@example.com>` or one with surrounding spaces, returns
+            `email is not valid`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':

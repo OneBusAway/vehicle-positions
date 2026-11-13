@@ -1191,6 +1191,20 @@ func TestUserCreate(t *testing.T) {
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 	})
 
+	t.Run("invalid email 422s without creating", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		users := newFakeUserStore()
+		wireFakeUserStore(ui, users, newFakeAssignmentStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		w := post(mux, "New Guy", "newguy@", "longenoughpassword", "driver")
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "email is not valid")
+		assert.Contains(t, w.Body.String(), `value="newguy@"`)
+		assert.Empty(t, users.users)
+	})
+
 	t.Run("duplicate email 422s", func(t *testing.T) {
 		ui := newTestAdminUI(t)
 		wireFakeUserStore(ui, newFakeUserStore(UserResponse{ID: 1, Name: "Existing", Email: "dupe@test.com", Role: "driver", Active: true}), newFakeAssignmentStore())
@@ -1324,6 +1338,22 @@ func TestUserUpdate(t *testing.T) {
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		assert.Contains(t, w.Body.String(), "password must be at least 8 characters")
 		assert.Empty(t, users.passwordUpdates)
+	})
+
+	t.Run("invalid email 422s without updating", func(t *testing.T) {
+		ui := newTestAdminUI(t)
+		users := newFakeUserStore(UserResponse{ID: 1, Name: "Old Name", Email: "old@test.com", Role: "driver", Active: true})
+		wireFakeUserStore(ui, users, newFakeAssignmentStore())
+		wireFakeVehicleStore(ui, newFakeVehicleStore())
+		mux := http.NewServeMux()
+		registerAdminUI(mux, ui)
+
+		form := url.Values{"name": {"New Name"}, "email": {"new@ test.com"}, "role": {"driver"}, "password": {""}}
+		w := postTo(mux, "/admin/users/1", form)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "email is not valid")
+		assert.Equal(t, "Old Name", users.users[1].Name)
+		assert.Equal(t, "old@test.com", users.users[1].Email)
 	})
 
 	t.Run("unknown id 404s", func(t *testing.T) {

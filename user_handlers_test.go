@@ -491,6 +491,11 @@ func TestHandleCreateUser_Validation(t *testing.T) {
 			wantErr: "email is required",
 		},
 		{
+			name:    "email with a display name",
+			body:    `{"name":"Alice","email":"Alice <a@b.com>","password":"securepass","role":"driver"}`,
+			wantErr: "email is not valid",
+		},
+		{
 			name:    "missing password",
 			body:    `{"name":"Alice","email":"a@b.com","role":"driver"}`,
 			wantErr: "password is required",
@@ -759,6 +764,47 @@ func TestHandleUpdateUser_MissingEmail(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, "email is required", decodeErrorResponse(t, w))
+}
+
+func TestHandleUpdateUser_InvalidEmail(t *testing.T) {
+	store := &mockUserUpdater{getUserResp: newSampleUser()}
+	rr := putUser(t, store, 1, `{"name":"Alice","email":"alice","role":"driver"}`)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "email is not valid", decodeErrorResponse(t, rr))
+	assert.Empty(t, store.calls, "nothing may be read or written for an invalid email")
+}
+
+func TestValidEmail(t *testing.T) {
+	tests := []struct {
+		email string
+		want  bool
+	}{
+		{"driver@example.com", true},
+		{"first.last+tag@example.co.uk", true},
+		{"DRIVER@EXAMPLE.COM", true},
+		{"driver@localhost", true},
+		{"driver", false},
+		{"@example.com", false},
+		{"driver@", false},
+		{"driver@@example.com", false},
+		{"driver@example..com", false},
+		{"a@example.com, b@example.com", false},
+		{"   ", false},
+		// ParseAddress accepts each of these and returns the bare address
+		// inside, so only the comparison with the input refuses them.
+		{"Driver <driver@example.com>", false},
+		{"<driver@example.com>", false},
+		{"driver@example.com (comment)", false},
+		{" driver@example.com", false},
+		{"driver@example.com ", false},
+		{"driver@ example.com", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.email, func(t *testing.T) {
+			assert.Equal(t, tc.want, validEmail(tc.email))
+		})
+	}
 }
 
 func TestHandleUpdateUser_TrailingJSONRejected(t *testing.T) {
