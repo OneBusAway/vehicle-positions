@@ -29,8 +29,8 @@ jobs:
       - name: Lint
         run: ./gradlew :app:lintDebug
       - name: Build release
-        run: ./gradlew :app:assembleRelease -PversionCode=${{ github.run_number }}
-      # Unsigned: CI has no keystore. android-release.yml publishes signed builds.
+        run: ./gradlew :app:assembleRelease -PversionCode=1
+      # Unsigned: CI has no keystore and uses versionCode 1 for testing. android-release.yml publishes signed releases.
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
