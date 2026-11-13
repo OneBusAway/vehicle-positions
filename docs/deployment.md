@@ -846,7 +846,8 @@ is **unsigned**: `android/app/build/outputs/apk/release/app-release-unsigned.apk
 Android will not install an unsigned APK; sign it by hand (12.3), or let Gradle
 or CI sign it (12.4).
 
-Every CI run (on `main` and on pull requests) also uploads that unsigned APK as the
+Every CI run (on `main` and on pull requests) also uploads that unsigned APK
+(built with `versionCode = 1` and `versionName = ci-<run_number>` for testing) as the
 `app-release-unsigned` artifact of the **Android CI** workflow run, so you can
 download a build without a local toolchain and sign it yourself.
 
@@ -959,10 +960,11 @@ Give every build you hand out a higher `versionCode`: pass
 `-PversionCode=<n>` (and `-PversionName=<x.y.z>`) to Gradle, or put the same
 keys in `~/.gradle/gradle.properties`; without them it is `1`. The release
 workflow derives `versionCode` from the tag (`major * 10000 + minor * 100 + patch`),
-which increases with each release and stays well above CI run numbers. Android refuses
-to install an APK whose `versionCode` is lower than the installed one, and identical codes
-make it impossible to tell which build a driver is running when you are
-debugging a report from the field.
+guaranteeing that each new release tag gets a higher code than earlier releases.
+CI test artifacts use `versionCode = 1` (with `versionName = ci-<run_number>` for
+identification). Android refuses to install an APK whose `versionCode` is lower
+than the installed one, and identical codes make it impossible to tell which
+build a driver is running when you are debugging a report from the field.
 
 Then tell drivers three things: the server URL, their email, and their password.
 Section 13 covers giving them the server URL without typing it.
