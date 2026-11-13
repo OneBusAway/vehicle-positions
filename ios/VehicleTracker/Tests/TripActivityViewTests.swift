@@ -27,7 +27,8 @@ import UIKit
 
     /// The route's name in the black Island: its own colour only where that
     /// reads, white otherwise.
-    @Test(arguments: [("000080", "FFFFFF"), ("9C182F", "FFFFFF"), ("FFD700", "FFD700"), ("0077C0", "0077C0"), ("", "FFFFFF"), ("GGGGGG", "FFFFFF")])
+    @Test(arguments: [("000080", "FFFFFF"), ("9C182F", "FFFFFF"), ("FFD700", "FFD700"), ("0077C0", "FFFFFF"),
+                      ("666666", "FFFFFF"), ("777777", "777777"), ("", "FFFFFF"), ("GGGGGG", "FFFFFF")])
     func routeColourOnBlack(route: String, shown: String) {
         #expect(TripActivityColors.routeOnBlack(route).hex == shown)
     }
