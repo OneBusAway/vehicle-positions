@@ -51,11 +51,11 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
     }
 
     func trips(routeID: String) async throws -> RouteTripsPage {
-        try decode(RouteTripsPage.self, try await send("GET", "api/v1/gtfs/routes/\(routeID)/trips"))
+        try decode(RouteTripsPage.self, try await send("GET", url("api/v1/gtfs/routes", id: routeID).appending(path: "trips")))
     }
 
     func trip(id: String) async throws -> TripGeometry {
-        try decode(TripGeometry.self, try await send("GET", "api/v1/gtfs/trips/\(id)"))
+        try decode(TripGeometry.self, try await send("GET", url("api/v1/gtfs/trips", id: id)))
     }
 
     func startTrip(vehicleID: String, routeID: String, gtfsTripID: String) async throws -> Int64 {
@@ -71,8 +71,19 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
         _ = try await send("POST", "api/v1/locations", body: try encode(report))
     }
 
+    /// `path` with `id` after it as one segment. A GTFS id can hold a "/",
+    /// which `appending(path:)` leaves as a separator, so the server sees
+    /// another path and answers 404; it reads "%2F" back as part of the id.
+    private func url(_ path: String, id: String) -> URL {
+        baseURL.appending(path: path).appending(component: id)
+    }
+
     private func send(_ method: String, _ path: String, body: Data? = nil, authorized: Bool = true) async throws -> Data {
-        var request = URLRequest(url: baseURL.appending(path: path))
+        try await send(method, baseURL.appending(path: path), body: body, authorized: authorized)
+    }
+
+    private func send(_ method: String, _ url: URL, body: Data? = nil, authorized: Bool = true) async throws -> Data {
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {

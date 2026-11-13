@@ -68,6 +68,25 @@ import Testing
         #expect(StubURLProtocol.last?.url.path == "/api/v1/gtfs/trips/T1")
     }
 
+    /// A GTFS id may hold a "/". The server's mux reads "%2F" as part of one
+    /// segment and 404s the split path, so the stub answers the same way.
+    @Test func anIDWithASlashGoesAsOneSegment() async throws {
+        StubURLProtocol.reset { req in
+            switch req.url!.path(percentEncoded: true) {
+            case "/api/v1/gtfs/routes/6641%2FWE/trips":
+                return (200, Data(#"{"route_id":"6641/WE","service_date":"20260902","timezone":"America/Los_Angeles","trips":[]}"#.utf8))
+            case "/api/v1/gtfs/trips/T%201%2FN":
+                return (200, Data(TripFixtures.tripJSON.utf8))
+            default:
+                return (404, Data(#"{"error":"404 page not found"}"#.utf8))
+            }
+        }
+        let page = try await client().trips(routeID: "6641/WE")
+        #expect(page.routeID == "6641/WE")
+        let trip = try await client().trip(id: "T 1/N")
+        #expect(trip.id == "T1")
+    }
+
     @Test func startTripReturnsTheServerID() async throws {
         StubURLProtocol.reset { _ in (201, Data(#"{"id":42,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-02T15:00:00Z","status":"active"}"#.utf8)) }
         let id = try await client().startTrip(vehicleID: "bus-1", routeID: "R1", gtfsTripID: "T1")
