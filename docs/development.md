@@ -159,6 +159,56 @@ Notes:
 - most tests are unit tests and run without external services
 - DB integration tests in `store_test.go` require `DATABASE_URL` and are skipped when it is not set
 
+## Validating the Feed with gtfs-realtime-validator
+
+CI runs MobilityData's [gtfs-realtime-validator](https://github.com/MobilityData/gtfs-realtime-validator)
+against the feed on every pull request that touches Go code
+(`.github/workflows/gtfs-rt-validator.yml`). It fails on any error rule
+(`E...`) and prints the warnings (`W...`). To run the same check locally you
+need JDK 17, Maven and `jq`; no database or Docker.
+
+1. Write the feed snapshots. `TestWriteFeedSnapshots` runs the server's real
+   routes in-process with the test feed `rider/testdata/fixture.zip` loaded:
+   three drivers report, a rider's trip is published, and the feed is fetched
+   four times, five seconds apart. The directory must be empty or not exist:
+
+   ```bash
+   FEED_SNAPSHOT_DIR=/tmp/feed-snapshots go test -run '^TestWriteFeedSnapshots$' -count=1 .
+   ```
+
+2. Build the validator's batch jar. It has no release to download, so CI
+   builds it from a pinned commit; use the same one (`VALIDATOR_COMMIT` in the
+   workflow, and bump both together):
+
+   ```bash
+   git clone https://github.com/MobilityData/gtfs-realtime-validator /tmp/gtfs-realtime-validator
+   cd /tmp/gtfs-realtime-validator
+   git checkout 7041fa3fcaf674bf730e17325c179d329cdff6f2
+   mvn --batch-mode --strict-checksums -DskipTests -pl gtfs-realtime-validator-lib package
+   cd -
+   ```
+
+3. Run it. `-sort name` makes it read each snapshot's fetch time from the
+   file name instead of the file's modified time:
+
+   ```bash
+   java -jar /tmp/gtfs-realtime-validator/gtfs-realtime-validator-lib/target/gtfs-realtime-validator-lib-1.0.0-SNAPSHOT-withAllDependencies.jar \
+     -gtfs rider/testdata/fixture.zip -gtfsRealtimePath /tmp/feed-snapshots -sort name
+   ```
+
+4. Read the findings. The validator writes one `.results.json` next to each
+   snapshot and exits 0 whatever it found:
+
+   ```bash
+   jq -r '.[] | .errorMessage.validationRule as $rule | .occurrenceList[]
+     | "\($rule.errorId) \($rule.title): \(.prefix) \($rule.occurrenceSuffix)"' \
+     /tmp/feed-snapshots/*.results.json | sort | uniq -c
+   ```
+
+Two warnings are expected today: `W006` for the vehicle whose driver knows
+only the route, and `W009` because the feed does not set
+`schedule_relationship`. Any line starting with `E` is what fails CI.
+
 ## Simulating Vehicle Traffic
 
 Use the built-in simulator to generate multiple moving vehicles:

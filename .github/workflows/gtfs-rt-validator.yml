@@ -1,0 +1,127 @@
+name: GTFS-RT validator
+
+# Runs MobilityData's gtfs-realtime-validator against feed snapshots this
+# server produced. docs/development.md has the same steps for a local run.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - go.mod
+      - go.sum
+      - migrations/**
+      - rider/testdata/**
+      - .github/workflows/gtfs-rt-validator.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - go.mod
+      - go.sum
+      - migrations/**
+      - rider/testdata/**
+      - .github/workflows/gtfs-rt-validator.yml
+
+permissions:
+  contents: read
+
+env:
+  # The validator has no release, and its GitHub Packages jar is a 2022
+  # snapshot that needs a token to download, so the batch jar is built from
+  # this commit. docs/development.md names the same commit; bump both together.
+  # The jar cannot have a pinned SHA-256: every build stamps its entries with
+  # the build time. The commit is the pin, and --strict-checksums below fails
+  # the build on any dependency that does not match its published checksum.
+  VALIDATOR_COMMIT: 7041fa3fcaf674bf730e17325c179d329cdff6f2
+  VALIDATOR_JAR: gtfs-realtime-validator/gtfs-realtime-validator-lib/target/gtfs-realtime-validator-lib-1.0.0-SNAPSHOT-withAllDependencies.jar
+  FEED_SNAPSHOT_DIR: feed-snapshots
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Write feed snapshots
+        run: go test -run '^TestWriteFeedSnapshots$' -count=1 .
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The pushes to main keep this cache warm: a pull request can read main's
+      # cache but not another pull request's.
+      - name: Restore the validator jar
+        id: validator-jar
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VALIDATOR_JAR }}
+          key: gtfs-rt-validator-${{ env.VALIDATOR_COMMIT }}
+
+      - name: Check out the validator
+        if: steps.validator-jar.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: MobilityData/gtfs-realtime-validator
+          ref: ${{ env.VALIDATOR_COMMIT }}
+          path: gtfs-realtime-validator
+          persist-credentials: false
+
+      - name: Build the validator
+        if: steps.validator-jar.outputs.cache-hit != 'true'
+        working-directory: gtfs-realtime-validator
+        run: mvn --batch-mode --no-transfer-progress --strict-checksums -DskipTests -pl gtfs-realtime-validator-lib package
+
+      - name: Run the validator
+        run: |
+          sha256sum "$VALIDATOR_JAR"
+          java -jar "$VALIDATOR_JAR" -gtfs rider/testdata/fixture.zip -gtfsRealtimePath "$FEED_SNAPSHOT_DIR" -sort name
+
+      - name: Fail on validator errors
+        run: |
+          shopt -s nullglob
+          snapshots=("$FEED_SNAPSHOT_DIR"/*.pb)
+          results=("$FEED_SNAPSHOT_DIR"/*.pb.results.json)
+          # The validator skips a file it cannot read, so a missing result is
+          # a snapshot nothing checked.
+          if [ "${#snapshots[@]}" -eq 0 ] || [ "${#results[@]}" -ne "${#snapshots[@]}" ]; then
+            echo "::error::${#snapshots[@]} snapshots but ${#results[@]} result files"
+            exit 1
+          fi
+
+          findings=$(jq -r '
+            (input_filename | sub(".*/"; "") | sub("\\.results\\.json$"; "")) as $snapshot
+            | .[]
+            | .errorMessage.validationRule as $rule
+            | .occurrenceList[]
+            | "\($rule.errorId) \($rule.title): \(.prefix) \($rule.occurrenceSuffix)\t\($snapshot)"
+          ' "${results[@]}")
+
+          echo "Warnings in ${#snapshots[@]} snapshots (count, rule, occurrence):"
+          warnings=$(grep '^W' <<<"$findings" | cut -f1 | sort | uniq -c || true)
+          echo "${warnings:-  none}"
+
+          # Anything that is not a warning fails, so a rule id this step does
+          # not know is not waved through.
+          errors=$(grep -v -e '^W' -e '^$' <<<"$findings" || true)
+          if [ -n "$errors" ]; then
+            echo "::error::gtfs-realtime-validator reported errors"
+            echo "$errors"
+            exit 1
+          fi
+          echo "No errors."
+
+      - name: Upload snapshots and results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtfs-rt-validator-results
+          path: ${{ env.FEED_SNAPSHOT_DIR }}
