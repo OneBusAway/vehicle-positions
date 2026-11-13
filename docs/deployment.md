@@ -933,6 +933,8 @@ Release named after the tag. To build your server's address into it
 (section 13.2), add a repository variable (the **Variables** tab beside the
 secrets) named `DEFAULT_SERVER_URL`, such as `https://tracker.example.org`.
 Without it, Sign in starts empty.
+Prerelease tags (e.g. `1.2.0-rc1`) strip the suffix and share the same code;
+bump the patch for each prerelease you hand out.
 
 ### 12.5 Get it onto driver phones
 
