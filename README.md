@@ -339,6 +339,12 @@ a full page is never mistaken for the whole list.
 client that read the array directly now has to read the `vehicles` or `users`
 key.
 
+`GET /api/v1/admin/vehicles/{vehicleID}/locations` carries the same `has_more`
+field in its JSON body. Its CSV export (`?format=csv`) has no field to put it
+in, so it sends an `X-Has-More: true` or `X-Has-More: false` response header
+instead. A CSV with `X-Has-More: true` was cut off at `limit`: narrow the time
+window or raise `limit` (1000 at most) to get the rest.
+
 **Location Report Payload:**
 
 Each location report is a single point sent directly from the Android app as it receives GPS fixes. The payload is deliberately minimal to reduce bandwidth consumption.

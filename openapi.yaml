@@ -1194,7 +1194,8 @@ paths:
 
         Results are capped by `limit`. The handler reads one row beyond the
         cap to set `has_more`, so a truncated response is distinguishable
-        from an exact fit.
+        from an exact fit. A CSV body has no field to carry that in, so the
+        CSV variant reports it in the `X-Has-More` response header.
       parameters:
         - in: query
           name: from
@@ -1237,6 +1238,15 @@ paths:
             absent `bearing` / `speed` / `accuracy` render as empty cells, and
             `trip_id` is prefixed with `'` when it starts with a character a
             spreadsheet would treat as a formula.
+          headers:
+            X-Has-More:
+              description: |
+                Sent with the CSV variant, where it stands in for the JSON
+                body's `has_more`: `true` when more fixes exist in the window
+                than `limit` allowed, `false` when the file is complete.
+              schema:
+                type: string
+                enum: ['true', 'false']
           content:
             application/json:
               schema:

@@ -515,10 +515,30 @@ func TestHandleGetLocationHistory_HasMore(t *testing.T) {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, newHistoryRequest("bus-1", "limit=2&format=csv"))
 
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "true", w.Header().Get("X-Has-More"), "a truncated CSV must say so in the header")
+
 		reader := csv.NewReader(w.Body)
 		records, err := reader.ReadAll()
 		require.NoError(t, err)
 		assert.Len(t, records, 3, "header + limit rows, extra detection row trimmed")
+	})
+
+	t.Run("csv not truncated", func(t *testing.T) {
+		lister := &mockLocationHistoryLister{points: points}
+		checker := &mockVehicleChecker{exists: true}
+		handler := handleGetLocationHistory(lister, checker)
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, newHistoryRequest("bus-1", "limit=3&format=csv"))
+
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "false", w.Header().Get("X-Has-More"), "a complete CSV must say so too, not leave the header out")
+
+		reader := csv.NewReader(w.Body)
+		records, err := reader.ReadAll()
+		require.NoError(t, err)
+		assert.Len(t, records, 4, "header + all 3 rows")
 	})
 }
 
