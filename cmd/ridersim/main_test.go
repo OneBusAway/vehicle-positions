@@ -46,8 +46,8 @@ func TestPickTrips(t *testing.T) {
 	got, err = pickTrips(ix, nil, 2, "20260902")
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
-	_, err = pickTrips(ix, nil, 1, "20271231")
-	assert.Error(t, err, "outside calendar range: nothing active")
+	_, err = pickTrips(ix, nil, 1, "20251231")
+	assert.Error(t, err, "before the calendar starts: nothing active")
 }
 
 // newFlushRun builds a riderRun wired to a test server, with one fix buffered.

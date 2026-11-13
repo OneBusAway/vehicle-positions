@@ -134,8 +134,8 @@ func fixtureFiles(timezone string, distScale float64) []fixtureFile {
 			"R2,A,2,Loop,3,1,,\n"},
 
 		{"calendar.txt", "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n" +
-			"WEEKDAY,1,1,1,1,1,0,0,20260101,20261231\n" +
-			"SAT,0,0,0,0,0,1,0,20260101,20261231\n"},
+			"WEEKDAY,1,1,1,1,1,0,0,20260101,20351231\n" +
+			"SAT,0,0,0,0,0,1,0,20260101,20351231\n"},
 
 		// 2026-09-07 is Labor Day: weekday service is removed and Saturday
 		// service is added.
@@ -214,4 +214,29 @@ func TestWriteFixture(t *testing.T) {
 	onDisk, err := os.ReadFile(path)
 	require.NoError(t, err, "run WRITE_FIXTURE=1 go test ./rider -run TestWriteFixture")
 	assert.Equal(t, b, onDisk, "committed fixture drifted; regenerate it")
+}
+
+// TestFixtureCalendarRunsAYearAhead: make ridersim, and make simulate or make
+// smoke against a server loaded with the fixture, run it on today's date, so
+// every trip in it must still run a year from now. When this fails, move
+// end_date in calendar.txt above and regenerate the fixture.
+func TestFixtureCalendarRunsAYearAhead(t *testing.T) {
+	ix, err := LoadIndex(t.Context(), filepath.Join("testdata", "fixture.zip"), nil, fixtureLoadedAt)
+	require.NoError(t, err)
+	tripIDs := ix.TripIDs()
+	require.NotEmpty(t, tripIDs)
+
+	yearAhead := time.Now().In(ix.Timezone()).AddDate(1, 0, 0)
+	for _, id := range tripIDs {
+		trip, ok := ix.Trip(id)
+		require.True(t, ok)
+		runs := false
+		for day := range 7 {
+			if ix.ActiveOn(trip, yearAhead.AddDate(0, 0, day).Format(serviceDateLayout)) {
+				runs = true
+				break
+			}
+		}
+		assert.True(t, runs, "trip %s does not run in the week from %s", id, yearAhead.Format(serviceDateLayout))
+	}
 }

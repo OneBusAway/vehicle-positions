@@ -142,7 +142,7 @@ func TestActiveOn(t *testing.T) {
 	assert.True(t, ix.ActiveOn(t2, "20260905"))
 	assert.False(t, ix.ActiveOn(t1, "20260907")) // Labor Day removed
 	assert.True(t, ix.ActiveOn(t2, "20260907"))  // added
-	assert.False(t, ix.ActiveOn(t1, "20270106")) // outside range
+	assert.False(t, ix.ActiveOn(t1, "20251231")) // Wednesday before the calendar starts
 	assert.False(t, ix.ActiveOn(t1, "garbage"))
 }
 
