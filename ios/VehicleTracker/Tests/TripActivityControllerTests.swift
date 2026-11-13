@@ -280,6 +280,24 @@ import VehiclePositionsKit
         #expect(host.requests.count == 2, "one activity is enough")
     }
 
+    /// The window's first appearance counts as coming to the front, so this
+    /// is called at every launch, with nothing waiting for it.
+    @Test func comingToTheFrontWithNoStartWaitingAsksNothing() async throws {
+        let s = session()
+        let c = controller(s)
+        c.sceneBecameActive()
+        #expect(host.requests.isEmpty, "no trip, no activity")
+
+        try await s.signIn(serverURL: URL(string: "https://positions.example.org")!, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(await eventually { host.requests.count == 1 })
+        c.sceneBecameActive()
+        await emitAndSettle(s, secondsLate: 360)
+        #expect(await eventually { host.updates.count == 1 })
+        #expect(host.requests.count == 1, "the trip already has its activity")
+        #expect(host.ends.isEmpty)
+    }
+
     @Test func aNewTripAfterADeclinedOneStartsAgain() async throws {
         let (s, c) = try await started()
         host.set(.dismissed, of: "activity-1")
