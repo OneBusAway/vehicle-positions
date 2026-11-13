@@ -71,8 +71,8 @@ must be at least 8 characters and no more than 72 bytes — in practice 72
 letters, or fewer if you use accented letters or other non-English characters.
 
 Once signed in, the left sidebar takes you to **Live Map**, **Dashboard**,
-**Vehicles**, **Users** and **Trips**. **Sign out** is at the top right of every
-page.
+**Vehicles**, **Users**, **Trips** and **Feed API keys**. **Sign out** is at the
+top right of every page.
 
 ---
 
@@ -484,8 +484,33 @@ vehicle has reported inside the staleness window.
 If your server administrator has turned on feed authentication, opening either
 address in a browser shows `missing API key` instead — a browser cannot send the
 key the feed now requires. That is expected, and it does not mean the feed is
-down. Ask your administrator for a key and check the feed with
+down. Make yourself a key (see [Feed API keys](#feed-api-keys) below) and check
+the feed with
 `curl -H "X-API-Key: <your key>" "https://your-server/gtfs-rt/vehicle-positions?format=json"`.
+
+### Feed API keys
+
+When feed authentication is on, every consumer of the feed needs a key, and
+you make and revoke those keys on the **Feed API keys** page. With it off the
+page still works, but the feed does not ask for a key.
+
+To give a consumer a key, type who it is for into **New key for** and click
+**Create key**. The name is only a label for you, for example "OneBusAway". The
+page then shows the key under **Copy it now. It cannot be shown again.** Copy it
+before you leave the page and pass it to the consumer privately; they send it in
+an `X-API-Key` header on every request. The server keeps no readable copy, so a
+lost key cannot be looked up: make a new one and deactivate the old one.
+
+Give each consumer its own key. The list shows each key's name, when it was
+created, when it was last used and whether it is **Active**, so separate keys
+tell you who is still reading the feed and let you cut one consumer off without
+touching the others. **Last used** says **never** until the key's first request
+and is updated at most once a minute after that.
+
+To cut a consumer off, click **Deactivate** on its row and confirm **Deactivate
+this key? It cannot be turned back on.** The feed refuses that key from its next
+request. There is no reactivate: if the consumer should have access again, make
+it a new key.
 
 ---
 
