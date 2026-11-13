@@ -360,6 +360,9 @@ func main() {
 		riderSvc = rt.svc
 	}
 	catalog := newGTFSCatalog(schedule.Index, riderCfg.Thresholds)
+	// Driver vehicles are placed on their trips against the same schedule, and
+	// called off route at the same distance the catalog gives the driver apps.
+	tracker.SetTripLocator(newTripLocator(schedule.Index, riderCfg.Thresholds.MaxShapeDistance))
 
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)

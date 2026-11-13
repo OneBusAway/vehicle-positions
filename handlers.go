@@ -343,6 +343,17 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 			}
 			entity.Vehicle.Trip = trip
 		}
+		// Placed when the report was accepted (Tracker.UpdateAuthorized); the
+		// feed only reads it.
+		if v.StopID != "" {
+			status := gtfsrt.VehiclePosition_IN_TRANSIT_TO
+			if v.StoppedAt {
+				status = gtfsrt.VehiclePosition_STOPPED_AT
+			}
+			entity.Vehicle.StopId = proto.String(v.StopID)
+			entity.Vehicle.CurrentStopSequence = proto.Uint32(uint32(v.StopSequence))
+			entity.Vehicle.CurrentStatus = status.Enum()
+		}
 		entities = append(entities, entity)
 	}
 

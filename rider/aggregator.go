@@ -543,7 +543,7 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
 		Timestamp: newestTimestamp(members, now),
 		Riders:    distinctRiders(members),
 	}
-	if stop, ok := nextStop(g.trip, median); ok {
+	if stop, ok := NextStop(g.trip, median); ok {
 		est.StopID, est.StopSequence = stop.StopID, stop.Sequence
 	}
 	return est, true
@@ -636,9 +636,9 @@ func distinctRiders(members []estimateMember) int {
 	return len(seen)
 }
 
-// nextStop is the first stop of the trip at or ahead of `along`; there is none
+// NextStop is the first stop of the trip at or ahead of `along`; there is none
 // once the vehicle is past the last stop.
-func nextStop(trip *TripInfo, along float64) (StopTimeInfo, bool) {
+func NextStop(trip *TripInfo, along float64) (StopTimeInfo, bool) {
 	for _, st := range trip.StopTimes {
 		if st.AlongShape >= along {
 			return st, true
