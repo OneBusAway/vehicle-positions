@@ -843,10 +843,10 @@ ls app/build/outputs/apk/release/app-release-unsigned.apk
 JDK 17 is what CI uses (`.github/workflows/android.yml`), and the Gradle build
 targets Java 17, so build with a JDK 17 toolchain. Without a keystore the output
 is **unsigned**: `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
-Android will not install an unsigned APK; sign it by hand (12.3), let Gradle sign
-it (12.4), or let CI publish a signed build (12.4).
+Android will not install an unsigned APK; sign it by hand (12.3), or let Gradle
+or CI sign it (12.4).
 
-Every CI run on `main` also uploads that unsigned APK as the
+Every CI run (on `main` and on pull requests) also uploads that unsigned APK as the
 `app-release-unsigned` artifact of the **Android CI** workflow run, so you can
 download a build without a local toolchain and sign it yourself.
 
@@ -926,12 +926,13 @@ git push origin android-v1.2.0
 ```
 
 The **Android release** workflow (`.github/workflows/android-release.yml`)
-builds the APK signed with your key, versioned `1.2.0` with the workflow's run
-number as its `versionCode`, checks the signature, and attaches
-`vehicle-tracker-1.2.0.apk` to a GitHub Release named after the tag. To build
-your server's address into it (section 13.2), add a repository variable (the
-**Variables** tab beside the secrets) named `DEFAULT_SERVER_URL`, such as
-`https://tracker.example.org`. Without it, Sign in starts empty.
+builds the APK signed with your key, versioned `1.2.0` with its `versionCode`
+derived from the tag (`major * 10000 + minor * 100 + patch`, e.g. `10200`),
+checks the signature, and attaches `vehicle-tracker-1.2.0.apk` to a GitHub
+Release named after the tag. To build your server's address into it
+(section 13.2), add a repository variable (the **Variables** tab beside the
+secrets) named `DEFAULT_SERVER_URL`, such as `https://tracker.example.org`.
+Without it, Sign in starts empty.
 
 ### 12.5 Get it onto driver phones
 
@@ -955,8 +956,9 @@ Most agencies deploying this have no Play Store presence, so sideload:
 Give every build you hand out a higher `versionCode`: pass
 `-PversionCode=<n>` (and `-PversionName=<x.y.z>`) to Gradle, or put the same
 keys in `~/.gradle/gradle.properties`; without them it is `1`. The release
-workflow uses its run number, which only goes up. Android refuses to install an
-APK whose `versionCode` is lower than the installed one, and identical codes
+workflow derives `versionCode` from the tag (`major * 10000 + minor * 100 + patch`),
+which increases with each release and stays well above CI run numbers. Android refuses
+to install an APK whose `versionCode` is lower than the installed one, and identical codes
 make it impossible to tell which build a driver is running when you are
 debugging a report from the field.
 
