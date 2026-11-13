@@ -310,6 +310,21 @@ import VehiclePositionsKit
         withExtendedLifetime(c) {}
     }
 
+    /// Trip ids are numbered per server: trip 42 swiped away on one server
+    /// doesn't stop trip 42 on another, once the driver signs in there.
+    @Test func theSameTripIDOnAnotherServerStartsAgain() async throws {
+        let (s, c) = try await started()
+        host.set(.dismissed, of: "activity-1")
+        await emitAndSettle(s, secondsLate: 0)
+        try await s.end()
+        await s.signOut()
+        try await s.signIn(serverURL: URL(string: "https://other.example.org")!, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(await eventually { host.requests.count == 2 })
+        #expect(host.requests.last?.attributes.serverTripID == 42)
+        withExtendedLifetime(c) {}
+    }
+
     // MARK: Stale
 
     /// The app is the only updater: if it stops, the activity shows it two

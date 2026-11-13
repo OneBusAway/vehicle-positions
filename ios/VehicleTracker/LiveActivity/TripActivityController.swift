@@ -32,7 +32,7 @@ import OSLog
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "live-activity")
 
     /// The activity showing, and the trip it is for.
-    private var current: (id: String, serverTripID: Int64)?
+    private var current: (id: String, trip: TripKey)?
     /// The state last handed to the host, whether or not it has landed yet,
     /// and when.
     private var sent: TripActivityAttributes.ContentState?
@@ -42,7 +42,7 @@ import OSLog
     private var updating: Task<Void, Never>?
     /// A trip whose activity is not started again: the driver swiped it
     /// away, the system ended it, or its start failed.
-    private var declinedTripID: Int64?
+    private var declined: TripKey?
     /// A start waits for the phone app to come to the front: ActivityKit
     /// refused it from the background, or Live Activities were off.
     private var waitsForForeground = false
@@ -77,18 +77,19 @@ import OSLog
     /// other is ended (Apple: end any Live Activity that's no longer
     /// relevant). One the driver swiped away or the system ended stays gone.
     private func adoptOrEnd() {
-        let tripID = session.activeTrip?.serverTripID
+        let stored = session.activeTrip
         for activity in host.existing() {
+            let isStored = activity.serverTripID == stored?.serverTripID
             if activity.isLive {
-                if activity.serverTripID == tripID, current == nil {
-                    current = (activity.id, activity.serverTripID)
+                if let stored, isStored, current == nil {
+                    current = (activity.id, key(stored))
                     watchEndings(activity.id)
                     startHeartbeat()
                 } else {
                     end(activity.id)
                 }
-            } else if activity.serverTripID == tripID {
-                declinedTripID = tripID
+            } else if let stored, isStored {
+                declined = key(stored)
             }
         }
     }
@@ -116,7 +117,7 @@ import OSLog
             return
         }
         let state = TripActivityAttributes.ContentState(status: status, latest: session.latest)
-        guard let current, current.serverTripID == status.active.serverTripID else {
+        guard let current, current.trip == key(status.active) else {
             endCurrent()
             if case .active = session.phase { start(status.active, state) }
             return
@@ -125,7 +126,7 @@ import OSLog
     }
 
     private func start(_ trip: ActiveTrip, _ state: TripActivityAttributes.ContentState) {
-        guard trip.serverTripID != declinedTripID, !waitsForForeground else { return }
+        guard key(trip) != declined, !waitsForForeground else { return }
         guard host.areActivitiesEnabled else {
             // Nothing is asked. Turning them on takes Settings, so the
             // driver's next return to the app tries again.
@@ -135,7 +136,7 @@ import OSLog
         }
         do {
             let id = try host.request(TripActivityAttributes(trip), state, staleDate: now().addingTimeInterval(Self.staleAfter))
-            current = (id, trip.serverTripID)
+            current = (id, key(trip))
             sent = state
             sentAt = now()
             watchEndings(id)
@@ -146,7 +147,7 @@ import OSLog
         } catch {
             // Asking again with every fix would fail the same way; the next
             // trip asks afresh.
-            declinedTripID = trip.serverTripID
+            declined = key(trip)
             log.error("could not start the Live Activity for trip \(trip.serverTripID, privacy: .public): \(String(describing: error), privacy: .public)")
         }
     }
@@ -220,7 +221,7 @@ import OSLog
     /// hours): not started again for this trip.
     private func endedElsewhere(_ id: String) {
         guard let current, current.id == id else { return }
-        declinedTripID = current.serverTripID
+        declined = current.trip
         forget()
     }
 
@@ -240,8 +241,24 @@ import OSLog
         pending = nil
     }
 
+    private func key(_ trip: ActiveTrip) -> TripKey {
+        TripKey(server: trip.server(sessionServer: session.settings.serverURL)?.absoluteString ?? "", tripID: trip.serverTripID)
+    }
+
     private func end(_ id: String) {
         let host = host
         Task { await host.end(id: id) }
+    }
+}
+
+/// A trip as the controller tells trips apart. Trip ids are numbered per
+/// server, so a driver who signs in to another server can meet the same id
+/// again: the server the trip is open on is part of it.
+private struct TripKey: Equatable {
+    let server: String
+    let tripID: Int64
+
+    static func == (a: TripKey, b: TripKey) -> Bool {
+        a.tripID == b.tripID && isSameServer(a.server, b.server)
     }
 }
