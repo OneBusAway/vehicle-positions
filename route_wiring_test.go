@@ -433,6 +433,9 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 		{"POST", "/admin/users/1/vehicles/bus-1/remove"},
 		{"GET", "/admin/trips"},
 		{"POST", "/admin/trips/1/end"},
+		{"GET", "/admin/api-keys"},
+		{"POST", "/admin/api-keys"},
+		{"POST", "/admin/api-keys/1/deactivate"},
 	}
 
 	for _, tc := range tests {
