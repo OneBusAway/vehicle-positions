@@ -39,6 +39,13 @@ class TripEnder @Inject constructor(
     suspend fun end(trip: ActiveTrip, onEnded: () -> Unit) {
         if (_state.value.ending) return
         _state.value = EndTripState(ending = true)
+        // The server ends a trip only for the driver who started it. It answers anyone else 404, which reads as a trip
+        // already ended and would clear one that is still open. Another driver's trip is ended on this phone instead,
+        // which keeps its end for its own driver.
+        if (startedByAnotherDriver(trip)) {
+            endOnThisPhone(onEnded)
+            return
+        }
         tripRepository.end(trip.tripDbId).fold(
             onSuccess = {
                 tripGeometryStore.clear()
@@ -61,6 +68,10 @@ class TripEnder @Inject constructor(
         // As for [end]: a second tap while the first is still writing would leave the screen twice.
         if (_state.value.ending) return
         _state.update { it.copy(ending = true) }
+        endOnThisPhone(onEnded)
+    }
+
+    private suspend fun endOnThisPhone(onEnded: () -> Unit) {
         try {
             tripStateStore.endActiveTripLocally(sessionStore.session.first().driverId)
             tripGeometryStore.clear()
@@ -76,6 +87,16 @@ class TripEnder @Inject constructor(
         }
         _state.value = EndTripState()
         onEnded()
+    }
+
+    /**
+     * Whether a driver is signed in who is not the one who started [trip]. Not for a trip saved before drivers were
+     * recorded, nor with nobody signed in: both go to the server as before.
+     */
+    private suspend fun startedByAnotherDriver(trip: ActiveTrip): Boolean {
+        val startedBy = trip.driverId
+        val signedIn = sessionStore.session.first().driverId
+        return startedBy != null && signedIn != null && startedBy != signedIn
     }
 
     fun dismissError() = _state.update { it.copy(failed = false) }
