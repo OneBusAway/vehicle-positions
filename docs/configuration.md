@@ -1,10 +1,11 @@
 # Configuration reference
 
 Every environment variable the server reads, what it defaults to, and what
-happens when it is set wrong. This is the complete list — it is checked against
-the source by `TestConfigDoc_AllVariablesDocumented`, which fails the build if a
-variable is added to the code without a row here, or if a row here names a
-variable nothing reads any more.
+happens when it is set wrong. This is the complete list, and two tests check it
+against the source: `TestConfigDoc_AllVariablesDocumented` fails the build if a
+variable is added to the code without a row here, and
+`TestConfigDoc_NoStaleVariables` fails it if a row here names a variable
+nothing reads any more.
 
 ## How values are read
 
