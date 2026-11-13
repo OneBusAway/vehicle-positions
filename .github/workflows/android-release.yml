@@ -53,6 +53,10 @@ jobs:
             exit 1
           fi
           VERSION_CODE=$(( major * 10000 + minor * 100 + patch ))
+          if [ "$VERSION_CODE" -lt 100 ]; then
+            echo "versionCode must be at least 100 (tag >= android-v0.1.0) so release builds outrank CI test artifacts" >&2
+            exit 1
+          fi
           ./gradlew :app:assembleRelease \
             -PversionCode="$VERSION_CODE" \
             -PversionName="$VERSION_NAME" \
