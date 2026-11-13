@@ -739,6 +739,7 @@ import VehiclePositionsKit
             refusal = error
         }
         let error = try #require(refusal)
+        #expect(api.ends == [7])
         #expect(api.tripRequests.isEmpty)
         #expect(api.starts.isEmpty)
         #expect(s.handleIfUnauthorized(error))
