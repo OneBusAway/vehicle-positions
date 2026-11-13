@@ -163,7 +163,7 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 			DirectionID:    directionID(trip.DirectionId),
 			Shape:          shape,
 			ShapeFromStops: fromStops,
-			StopTimes:      stopTimesAlong(trip.StopTimes, shape, !fromStops),
+			StopTimes:      stopTimesAlong(trip.StopTimes, shape, feedShapeEnd(trip.Shape), !fromStops),
 		}
 		if fromStops {
 			stopShapes++
@@ -474,11 +474,12 @@ func sortedBySequence(stopTimes []gtfs.ScheduledStopTime) []gtfs.ScheduledStopTi
 // stopTimesAlong positions a trip's stop times along its shape, in stop
 // sequence order. shape_dist_traveled is honoured only when shapeDist is set:
 // it is measured along the feed's shape, so it means nothing on a shape drawn
-// through the stops.
-func stopTimesAlong(stopTimes []gtfs.ScheduledStopTime, shape *ShapeGeom, shapeDist bool) []StopTimeInfo {
+// through the stops. shapeEnd is the shape's own last shape_dist_traveled
+// from shapes.txt, 0 when it has none.
+func stopTimesAlong(stopTimes []gtfs.ScheduledStopTime, shape *ShapeGeom, shapeEnd float64, shapeDist bool) []StopTimeInfo {
 	sorted := sortedBySequence(stopTimes)
 
-	scale, useDist := shapeDistScale(sorted, shape.Length)
+	scale, useDist := shapeDistScale(sorted, shape.Length, shapeEnd)
 	useDist = useDist && shapeDist
 	out := make([]StopTimeInfo, 0, len(sorted))
 	for i, st := range sorted {
@@ -518,9 +519,11 @@ func stopTimesAlong(stopTimes []gtfs.ScheduledStopTime, shape *ShapeGeom, shapeD
 
 // shapeDistScale reports whether every stop time carries shape_dist_traveled
 // and, if so, the factor converting those values to metres along the shape.
-// Feeds publish them in kilometres, feet or miles as often as in metres, so the
-// last value is compared with the shape length to recover the unit.
-func shapeDistScale(stopTimes []gtfs.ScheduledStopTime, shapeLength float64) (float64, bool) {
+// Feeds publish them in kilometres, feet or miles as often as in metres. When
+// shapes.txt gives the shape's own distances, shapeEnd, its last one, is the
+// end of the shape and settles the unit outright; otherwise the last stop's
+// value is compared with the shape length to recover it.
+func shapeDistScale(stopTimes []gtfs.ScheduledStopTime, shapeLength, shapeEnd float64) (float64, bool) {
 	if len(stopTimes) == 0 {
 		return 0, false
 	}
@@ -538,6 +541,9 @@ func shapeDistScale(stopTimes []gtfs.ScheduledStopTime, shapeLength float64) (fl
 	}
 	if shapeLength <= 0 {
 		return 1, true
+	}
+	if unit, ok := shapeEndUnit(shapeEnd, shapeLength); ok && last*unit <= shapeLength*shapeDistMaxFraction {
+		return unit, true
 	}
 	// The last stop's distance over the shape length gives the unit only if the
 	// stop is also the end of the shape, and GTFS does not require that: a trip
@@ -559,6 +565,36 @@ func shapeDistScale(stopTimes []gtfs.ScheduledStopTime, shapeLength float64) (fl
 		return 0, false
 	}
 	return best, true
+}
+
+// shapeEndUnit returns the unit in which shapeEnd, the shape's last
+// shape_dist_traveled, measures the shape's length. Unlike the last stop, which
+// a short-turn trip leaves partway along a shared shape, it is the end of the
+// shape, so only the true unit fits. It reports false when shapes.txt gave no
+// distances or none of the units fits.
+func shapeEndUnit(shapeEnd, shapeLength float64) (float64, bool) {
+	if shapeEnd <= 0 {
+		return 0, false
+	}
+	for _, unit := range shapeDistUnits {
+		fraction := shapeEnd * unit / shapeLength
+		if fraction >= 1/shapeDistMaxFraction && fraction <= shapeDistMaxFraction {
+			return unit, true
+		}
+	}
+	return 0, false
+}
+
+// feedShapeEnd is the shape_dist_traveled shapes.txt gives the last point of
+// shape, or 0 when it gives none.
+func feedShapeEnd(shape *gtfs.Shape) float64 {
+	if shape == nil || len(shape.Points) == 0 {
+		return 0
+	}
+	if d := shape.Points[len(shape.Points)-1].Distance; d != nil {
+		return *d
+	}
+	return 0
 }
 
 // stopPos returns the coordinates of a stop, if it has any.
