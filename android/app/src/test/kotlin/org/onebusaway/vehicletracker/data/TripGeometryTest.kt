@@ -6,6 +6,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -13,10 +14,14 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.engine.Adherence
+import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
+import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.engine.AdherenceThresholds
 import org.onebusaway.vehicletracker.engine.GeoPoint
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripFixtures.at
+import org.onebusaway.vehicletracker.engine.TripFixtures.fix
 import org.onebusaway.vehicletracker.engine.TripFixtures.tripJson
 import java.io.File
 
@@ -57,7 +62,22 @@ class TripGeometryTest {
         assertEquals("1", trip.routeShortName)
         assertEquals("FFFFFF", trip.routeTextColor)
         assertEquals("North", trip.headsign)
+        assertFalse(trip.shapeFromStops)
         assertEquals("/api/v1/gtfs/trips/T1", server.takeRequest().path)
+    }
+
+    @Test fun `a shape drawn through the stops is read as one`() = runTest {
+        server.enqueue(MockResponse().setBody(tripJson(fromStops = true)))
+
+        assertTrue(catalog.trip("T1").getOrThrow().shapeFromStops)
+    }
+
+    @Test fun `a server that predates shapes drawn through the stops still decodes`() = runTest {
+        val payload = tripJson()
+        require(""","from_stops":false""" in payload) { "the fixture no longer writes the mark where this test strips it" }
+        server.enqueue(MockResponse().setBody(payload.replace(""","from_stops":false""", "")))
+
+        assertFalse(catalog.trip("T1").getOrThrow().shapeFromStops)
     }
 
     @Test fun `a null direction id still decodes`() = runTest {
@@ -76,6 +96,29 @@ class TripGeometryTest {
         val trip = catalog.trip("T1").getOrThrow()
 
         assertEquals(listOf(GeoPoint(1.0, 2.0), GeoPoint(7.0, 8.0)), trip.shapePoints)
+    }
+
+    /**
+     * `shapes.txt` is optional, and the server draws a trip that has none as straight lines through its stops, marked
+     * `shape.from_stops`. The road runs where it runs between two stops, so distance from those lines is not off route.
+     */
+    @Test fun `a fix far from a shape drawn through the stops is not off route`() = runTest {
+        // The two stops ten minutes apart, so halfway along is due at 08:05.
+        val stops = TripFixtures.T1_STOPS_JSON.replace("2026-09-03T01:10:00-07:00", "2026-09-02T08:10:00-07:00")
+        // 150 m east of the line, halfway along it.
+        val offTheLine = fix(47.6045, -122.3280, at(8, 5))
+        suspend fun judgedOn(payload: String): Adherence {
+            server.enqueue(MockResponse().setBody(payload))
+            return requireNotNull(AdherenceEvaluator.of(catalog.trip("T1").getOrThrow())).evaluate(offTheLine, previous = null)
+        }
+
+        val fromTheFeed = judgedOn(tripJson(stops = stops))
+        val throughTheStops = judgedOn(tripJson(stops = stops, fromStops = true))
+
+        assertEquals(150.0, throughTheStops.projection.distanceToShape, 3.0)
+        assertEquals(AdherenceStatus.OFF_ROUTE, fromTheFeed.status)
+        assertTrue(throughTheStops.isOnRoute)
+        assertEquals("judged on the schedule instead", AdherenceStatus.ON_TIME, throughTheStops.status)
     }
 
     @Test fun `offset and Z timestamps both parse to the same instant`() = runTest {

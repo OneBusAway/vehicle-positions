@@ -109,4 +109,5 @@ private fun TripGeometryDto.toTripGeometry() = TripGeometry(
     routeShortName = route.shortName,
     routeTextColor = route.textColor,
     headsign = headsign,
+    shapeFromStops = shape.fromStops,
 )

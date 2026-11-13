@@ -145,6 +145,11 @@ fun LocationReportDto.toHistoryPoint() = HistoryPointDto(
     @SerialName("length_m") val lengthM: Double,
     /** `[lat, lon]` pairs in shape order. */
     val points: List<List<Double>>,
+    /**
+     * True when the feed gives the trip no shape and the server drew this one as straight lines through its stops.
+     * False from a server that predates it, which leaves such trips out of the catalog.
+     */
+    @SerialName("from_stops") val fromStops: Boolean = false,
 )
 
 @Serializable data class TripStopDto(
