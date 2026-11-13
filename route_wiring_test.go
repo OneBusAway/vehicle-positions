@@ -590,9 +590,8 @@ func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
 	ix, err := rider.LoadIndex(context.Background(), "rider/testdata/fixture.zip", nil, time.Now())
 	require.NoError(t, err)
 	catalog := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
-	// T1 is weekday-only in the fixture calendar (2026 only): pin the clock so
-	// this test never depends on the day of the week it happens to run on, or
-	// on the year still being 2026.
+	// T1 is weekday-only in the fixture calendar: pin the clock so this test
+	// never depends on the day of the week it happens to run on.
 	catalog.now = func() time.Time { return catalogNow }
 	with := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, catalog, nil)
 

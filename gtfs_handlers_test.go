@@ -170,7 +170,7 @@ func TestCatalogRouteTrips_Errors(t *testing.T) {
 	assert.Equal(t, "date must be YYYYMMDD", body["error"])
 
 	// A date with no service is an empty list, not an error.
-	code, body = catalogGet(t, c.handleRouteTrips(), "/api/v1/gtfs/routes/R1/trips?date=20270106", map[string]string{"route_id": "R1"})
+	code, body = catalogGet(t, c.handleRouteTrips(), "/api/v1/gtfs/routes/R1/trips?date=20251231", map[string]string{"route_id": "R1"})
 	assert.Equal(t, http.StatusOK, code)
 	assert.Empty(t, body["trips"])
 }
