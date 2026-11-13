@@ -43,7 +43,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           DEFAULT_SERVER_URL: ${{ vars.DEFAULT_SERVER_URL }}
         # Derive versionCode from semantic versioning (major*10000 + minor*100 + patch) so it
-        # strictly increases with version bumps and stays above CI run numbers.
+        # strictly increases with version bumps across releases.
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#android-v}"
           IFS='.' read -r major minor patch <<< "$VERSION_NAME"
