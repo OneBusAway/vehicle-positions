@@ -223,10 +223,6 @@ For a deployed server rather than this demo, see
 
 ## Limits
 
-- **It stops moving after 24 hours.** The simulator's driver tokens last for
-  `ACCESS_TOKEN_TTL` (24 hours by default) and it does not renew them. After
-  that its reports are refused with `401`. `make demo-down` and `make demo`
-  start a fresh one.
 - **Restarting it leaves accounts behind.** Every start of the simulator
   creates nine new vehicles and nine new driver accounts, named
   `sim-<run id>-NNN` and `sim-driver-NNN-<run id>@simulator.invalid`. If the
