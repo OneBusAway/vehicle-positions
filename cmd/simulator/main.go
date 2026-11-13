@@ -25,7 +25,9 @@ import (
 
 type locationReport struct {
 	VehicleID string  `json:"vehicle_id"`
+	TripID    string  `json:"trip_id"`
 	RouteID   string  `json:"route_id"`
+	StartDate string  `json:"start_date"`
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 	Bearing   float64 `json:"bearing"`
@@ -156,22 +158,24 @@ func main() {
 	if err != nil {
 		log.Fatalf("listing GTFS routes: %v", err)
 	}
+	if len(scheduleRoutes) == 0 {
+		log.Fatal("the server's GTFS schedule lists no routes, so there is no trip to drive a vehicle along")
+	}
 
 	log.Printf("provisioning %d driver accounts", *numVehicles)
-	drivers, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles, scheduleRoutes)
+	tokens, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles)
 	if err != nil {
-		endTrips(bootstrap, *baseURL, drivers)
 		log.Fatalf("provisioning drivers: %v", err)
 	}
 
 	// One client per vehicle, each carrying its own driver's token. The tokens
 	// are good for 24h and are never refreshed, so a -duration 0 run left going
 	// for longer than that will start seeing 401s.
-	clients := make([]*http.Client, len(drivers))
-	for i, d := range drivers {
+	clients := make([]*http.Client, len(tokens))
+	for i, token := range tokens {
 		clients[i] = &http.Client{
 			Timeout:       10 * time.Second,
-			Transport:     bearerTransport{token: d.token, base: http.DefaultTransport},
+			Transport:     bearerTransport{token: token, base: http.DefaultTransport},
 			CheckRedirect: sameOriginOnly(*baseURL),
 		}
 	}
@@ -185,18 +189,26 @@ func main() {
 
 	log.Printf("starting simulator: %d vehicles, interval=%s, duration=%s", *numVehicles, *interval, *duration)
 
+	claims := newTripClaims()
+	var stopped atomic.Int64
 	var wg sync.WaitGroup
 	for i := 0; i < *numVehicles; i++ {
 		wg.Add(1)
-		vehicleID, routeID := simVehicle(runID, i, scheduleRoutes)
-		route := routes[i%len(routes)]
+		// Routes are taken in turn, so the vehicles are spread over the schedule.
+		v := &vehicle{
+			id: simVehicleID(runID, i), routeID: scheduleRoutes[i%len(scheduleRoutes)],
+			baseURL: *baseURL, token: tokens[i], client: clients[i],
+			interval: *interval, claims: claims, stats: s,
+		}
 		go func() {
 			defer wg.Done()
-			simulateVehicle(ctx, clients[i], *baseURL, vehicleID, route, routeID, *interval, s)
+			if err := v.drive(ctx); err != nil {
+				log.Printf("%s: stopped: %v", v.id, err)
+				stopped.Add(1)
+			}
 		}()
 	}
 	wg.Wait()
-	endTrips(bootstrap, *baseURL, drivers)
 
 	ok := s.succeeded.Load()
 	fail := s.failed.Load()
@@ -205,61 +217,8 @@ func main() {
 		avgMS = s.totalMS.Load() / ok
 	}
 	log.Printf("simulation complete: %d requests, %d ok, %d failed, avg=%dms", ok+fail, ok, fail, avgMS)
-}
-
-func simulateVehicle(ctx context.Context, client *http.Client, baseURL, vehicleID string, route []Waypoint, routeID string, interval time.Duration, s *stats) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	waypointIdx := 0
-	segmentStart := time.Now()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case now := <-ticker.C:
-			from := route[waypointIdx]
-			to := route[(waypointIdx+1)%len(route)]
-
-			segmentDist := haversineDistance(from, to)
-			segmentDuration := segmentDist / 8.0 // assume ~8 m/s (~29 km/h, realistic urban bus)
-			if segmentDuration <= 0 {
-				segmentDuration = 1
-			}
-
-			elapsed := now.Sub(segmentStart).Seconds()
-			t := elapsed / segmentDuration
-			if t >= 1.0 {
-				waypointIdx = (waypointIdx + 1) % len(route)
-				segmentStart = now
-				t = 0
-				from = route[waypointIdx]
-				to = route[(waypointIdx+1)%len(route)]
-				segmentDist = haversineDistance(from, to)
-				segmentDuration = segmentDist / 8.0
-				if segmentDuration <= 0 {
-					segmentDuration = 1
-				}
-			}
-
-			pos := interpolate(from, to, t)
-			brng := bearing(from, to)
-			spd := speed(segmentDist, segmentDuration)
-
-			report := locationReport{
-				VehicleID: vehicleID,
-				RouteID:   routeID,
-				Latitude:  pos.Lat,
-				Longitude: pos.Lon,
-				Bearing:   brng,
-				Speed:     spd,
-				Accuracy:  5.0, // assume ~5m GPS accuracy for simulated reports
-				Timestamp: now.Unix(),
-			}
-
-			sendReport(ctx, client, baseURL, vehicleID, &report, s)
-		}
+	if n := stopped.Load(); n > 0 {
+		log.Fatalf("%d of %d vehicles stopped before the run ended", n, *numVehicles)
 	}
 }
 
@@ -285,47 +244,11 @@ type createUserRequest struct {
 	Role     string `json:"role"`
 }
 
-// simVehicle names the i-th (0-based) simulated vehicle of a run and the route
-// it drives, taken in turn from the schedule's route ids. The run id is in the
-// vehicle id because a vehicle runs one trip at a time, and an earlier run's
-// trips are still active on its vehicles. The server refuses a trip on a route
-// its GTFS schedule does not have, and then every report whose route is not
-// the trip's, so the route is a real one; none at all when the schedule has
-// no routes.
-func simVehicle(runID string, i int, scheduleRoutes []string) (vehicleID, routeID string) {
-	vehicleID = fmt.Sprintf("sim-%s-%03d", runID, i+1)
-	if len(scheduleRoutes) > 0 {
-		routeID = scheduleRoutes[i%len(scheduleRoutes)]
-	}
-	return vehicleID, routeID
-}
-
-// simDriver is one provisioned driver: the token its vehicle reports with, and
-// the trip it started, which endTrips ends when the run stops.
-type simDriver struct {
-	token  string
-	tripID int64
-}
-
-// endTrips ends the trips a run started. Without it every run left its
-// drivers' trips active on the server, and repeated runs piled them up. It has
-// its own deadline, since the run's context is usually done by now (the
-// -duration ran out, or Ctrl+C).
-func endTrips(client *http.Client, baseURL string, drivers []simDriver) {
-	if len(drivers) == 0 {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	ended := 0
-	for _, d := range drivers {
-		if err := postJSON(ctx, client, baseURL+"/api/v1/trips/end", d.token, map[string]int64{"trip_id": d.tripID}, nil); err != nil {
-			log.Printf("ending trip %d: %v", d.tripID, err)
-			continue
-		}
-		ended++
-	}
-	log.Printf("ended %d of %d trips", ended, len(drivers))
+// simVehicleID names the i-th (0-based) simulated vehicle of a run. The run id
+// is in it because a vehicle has one active trip at a time, and the vehicles of
+// a concurrent run are busy with theirs.
+func simVehicleID(runID string, i int) string {
+	return fmt.Sprintf("sim-%s-%03d", runID, i+1)
 }
 
 // provisionDrivers creates one driver account per vehicle and logs each in, so
@@ -334,51 +257,43 @@ func endTrips(client *http.Client, baseURL string, drivers []simDriver) {
 // and turn most reports into 429s.
 //
 // The server accepts a report only from a driver assigned to an active
-// vehicle with an active trip on it, so each driver also gets their vehicle,
-// an assignment to it, and a started trip, the same way a driver app does.
+// vehicle, so each driver also gets their vehicle and an assignment to it.
+// The trip a report needs as well is started by the vehicle as it drives.
 //
 // runID keeps the accounts of concurrent or repeated runs from colliding.
 //
-// On an error it returns the drivers provisioned so far with it, so their
-// trips can still be ended.
-func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int, scheduleRoutes []string) ([]simDriver, error) {
-	drivers := make([]simDriver, 0, n)
+// It returns each driver's token, in vehicle order.
+func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]string, error) {
+	tokens := make([]string, 0, n)
 	for i := 0; i < n; i++ {
-		vehicleID, routeID := simVehicle(runID, i, scheduleRoutes)
+		vehicleID := simVehicleID(runID, i)
 		email := fmt.Sprintf("sim-driver-%03d-%s@simulator.invalid", i+1, runID)
 		password, err := randomSecret()
 		if err != nil {
-			return drivers, err
+			return nil, err
 		}
 		if err := postJSON(ctx, client, baseURL+"/api/v1/admin/vehicles", adminToken,
 			map[string]string{"id": vehicleID, "label": fmt.Sprintf("Simulated Vehicle %03d", i+1)}, nil); err != nil {
-			return drivers, fmt.Errorf("creating vehicle %s: %w", vehicleID, err)
+			return nil, fmt.Errorf("creating vehicle %s: %w", vehicleID, err)
 		}
 		userID, err := createDriver(ctx, client, baseURL, adminToken, email, password, i+1)
 		if err != nil {
-			return drivers, err
+			return nil, err
 		}
 		if err := postJSON(ctx, client, baseURL+"/api/v1/admin/assignments", adminToken,
 			map[string]any{"user_id": userID, "vehicle_id": vehicleID}, nil); err != nil {
-			return drivers, fmt.Errorf("assigning driver %d to %s: %w", i+1, vehicleID, err)
+			return nil, fmt.Errorf("assigning driver %d to %s: %w", i+1, vehicleID, err)
 		}
 		token, err := loginWithRetry(ctx, client, baseURL, email, password)
 		if err != nil {
-			return drivers, fmt.Errorf("driver %d: %w", i+1, err)
+			return nil, fmt.Errorf("driver %d: %w", i+1, err)
 		}
-		var trip struct {
-			ID int64 `json:"id"`
-		}
-		if err := postJSON(ctx, client, baseURL+"/api/v1/trips/start", token,
-			map[string]string{"vehicle_id": vehicleID, "route_id": routeID}, &trip); err != nil {
-			return drivers, fmt.Errorf("starting a trip for driver %d on %s: %w", i+1, vehicleID, err)
-		}
-		drivers = append(drivers, simDriver{token: token, tripID: trip.ID})
+		tokens = append(tokens, token)
 		if i < n-1 && !sleepCtx(ctx, provisionStagger) {
-			return drivers, ctx.Err()
+			return nil, ctx.Err()
 		}
 	}
-	return drivers, nil
+	return tokens, nil
 }
 
 // createDriver creates a driver account and returns its user id.

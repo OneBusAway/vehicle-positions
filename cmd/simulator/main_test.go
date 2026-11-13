@@ -3,13 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,144 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBearing(t *testing.T) {
-	tests := []struct {
-		name     string
-		from     Waypoint
-		to       Waypoint
-		expected float64
-		delta    float64
-	}{
-		{
-			name:     "due north",
-			from:     Waypoint{Lat: 0, Lon: 0},
-			to:       Waypoint{Lat: 1, Lon: 0},
-			expected: 0,
-			delta:    0.5,
-		},
-		{
-			name:     "due east",
-			from:     Waypoint{Lat: 0, Lon: 0},
-			to:       Waypoint{Lat: 0, Lon: 1},
-			expected: 90,
-			delta:    0.5,
-		},
-		{
-			name:     "due south",
-			from:     Waypoint{Lat: 1, Lon: 0},
-			to:       Waypoint{Lat: 0, Lon: 0},
-			expected: 180,
-			delta:    0.5,
-		},
-		{
-			name:     "due west",
-			from:     Waypoint{Lat: 0, Lon: 0},
-			to:       Waypoint{Lat: 0, Lon: -1},
-			expected: 270,
-			delta:    0.5,
-		},
-		{
-			name:     "nairobi CBD to Westlands (roughly northwest)",
-			from:     Waypoint{Lat: -1.2864, Lon: 36.8172},
-			to:       Waypoint{Lat: -1.2638, Lon: 36.8028},
-			expected: 327,
-			delta:    5,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := bearing(tt.from, tt.to)
-			assert.InDelta(t, tt.expected, got, tt.delta, "bearing from %v to %v", tt.from, tt.to)
-		})
-	}
-}
-
-func TestHaversineDistance(t *testing.T) {
-	tests := []struct {
-		name    string
-		from    Waypoint
-		to      Waypoint
-		minDist float64
-		maxDist float64
-	}{
-		{
-			name:    "same point",
-			from:    Waypoint{Lat: -1.2864, Lon: 36.8172},
-			to:      Waypoint{Lat: -1.2864, Lon: 36.8172},
-			minDist: 0,
-			maxDist: 0,
-		},
-		{
-			name:    "nairobi CBD to Westlands (~3km)",
-			from:    Waypoint{Lat: -1.2864, Lon: 36.8172},
-			to:      Waypoint{Lat: -1.2638, Lon: 36.8028},
-			minDist: 2500,
-			maxDist: 3500,
-		},
-		{
-			name:    "one degree latitude at equator (~111km)",
-			from:    Waypoint{Lat: 0, Lon: 0},
-			to:      Waypoint{Lat: 1, Lon: 0},
-			minDist: 110000,
-			maxDist: 112000,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := haversineDistance(tt.from, tt.to)
-			assert.GreaterOrEqual(t, got, tt.minDist)
-			assert.LessOrEqual(t, got, tt.maxDist)
-		})
-	}
-}
-
-func TestSpeed(t *testing.T) {
-	dist := haversineDistance(
-		Waypoint{Lat: -1.2864, Lon: 36.8172},
-		Waypoint{Lat: -1.2638, Lon: 36.8028},
-	)
-	require.Greater(t, dist, 0.0)
-
-	s := speed(dist, 10.0)
-	assert.Greater(t, s, 0.0)
-	assert.InDelta(t, dist/10.0, s, 0.001)
-
-	assert.Equal(t, 0.0, speed(100, 0))
-	assert.Equal(t, 0.0, speed(100, -1))
-}
-
-func TestInterpolate(t *testing.T) {
-	a := Waypoint{Lat: 0, Lon: 0}
-	b := Waypoint{Lat: 10, Lon: 20}
-
-	tests := []struct {
-		name string
-		t    float64
-		want Waypoint
-	}{
-		{"start", 0.0, a},
-		{"end", 1.0, b},
-		{"midpoint", 0.5, Waypoint{Lat: 5, Lon: 10}},
-		{"quarter", 0.25, Waypoint{Lat: 2.5, Lon: 5}},
-		{"clamp below zero", -0.5, a},
-		{"clamp above one", 1.5, b},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := interpolate(a, b, tt.t)
-			assert.InDelta(t, tt.want.Lat, got.Lat, 0.0001)
-			assert.InDelta(t, tt.want.Lon, got.Lon, 0.0001)
-		})
-	}
-}
-
 func TestLocationReportJSONRoundTrip(t *testing.T) {
 	report := locationReport{
 		VehicleID: "sim-vehicle-001",
+		TripID:    "sim-trip-1",
 		RouteID:   "sim-route-1",
+		StartDate: "20261113",
 		Latitude:  -1.2864,
 		Longitude: 36.8172,
 		Bearing:   327.5,
@@ -170,7 +35,7 @@ func TestLocationReportJSONRoundTrip(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &raw))
 
-	expectedFields := []string{"vehicle_id", "route_id", "latitude", "longitude", "bearing", "speed", "accuracy", "timestamp"}
+	expectedFields := []string{"vehicle_id", "trip_id", "route_id", "start_date", "latitude", "longitude", "bearing", "speed", "accuracy", "timestamp"}
 	for _, field := range expectedFields {
 		assert.Contains(t, raw, field, "missing JSON field %q", field)
 	}
@@ -182,37 +47,6 @@ func TestLocationReportJSONRoundTrip(t *testing.T) {
 	assert.Equal(t, report, decoded)
 	assert.Equal(t, "sim-route-1", decoded.RouteID)
 	assert.Contains(t, string(data), `"route_id":"sim-route-1"`)
-}
-
-func TestRouteWraparound(t *testing.T) {
-	route := []Waypoint{
-		{Lat: 0, Lon: 0},
-		{Lat: 1, Lon: 1},
-		{Lat: 2, Lon: 2},
-	}
-
-	for i := 0; i < 10; i++ {
-		idx := i % len(route)
-		nextIdx := (i + 1) % len(route)
-		from := route[idx]
-		to := route[nextIdx]
-		pos := interpolate(from, to, 0.5)
-		assert.False(t, math.IsNaN(pos.Lat), "NaN at wraparound index %d", i)
-		assert.False(t, math.IsNaN(pos.Lon), "NaN at wraparound index %d", i)
-	}
-}
-
-func TestRoutesNotEmpty(t *testing.T) {
-	require.NotEmpty(t, routes, "predefined routes must not be empty")
-	for i, route := range routes {
-		require.GreaterOrEqual(t, len(route), 2, "route %d must have at least 2 waypoints", i)
-		for j, wp := range route {
-			assert.GreaterOrEqual(t, wp.Lat, -90.0, "route %d waypoint %d lat", i, j)
-			assert.LessOrEqual(t, wp.Lat, 90.0, "route %d waypoint %d lat", i, j)
-			assert.GreaterOrEqual(t, wp.Lon, -180.0, "route %d waypoint %d lon", i, j)
-			assert.LessOrEqual(t, wp.Lon, 180.0, "route %d waypoint %d lon", i, j)
-		}
-	}
 }
 
 func TestSendReport_Success(t *testing.T) {
@@ -280,32 +114,6 @@ func TestSendReport_CancelledContext(t *testing.T) {
 	// Cancelled context should not count as a failure
 	assert.Equal(t, int64(0), s.succeeded.Load())
 	assert.Equal(t, int64(0), s.failed.Load())
-}
-
-func TestSimulateVehicle(t *testing.T) {
-	var received atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		received.Add(1)
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer server.Close()
-
-	route := []Waypoint{
-		{Lat: -1.2864, Lon: 36.8172},
-		{Lat: -1.2833, Lon: 36.8158},
-	}
-
-	s := &stats{}
-	ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
-	defer cancel()
-
-	simulateVehicle(ctx, server.Client(), server.URL, "test-sim", route, "sim-route-1", 100*time.Millisecond, s)
-
-	assert.Eventually(t, func() bool {
-		return s.succeeded.Load() >= 2
-	}, time.Second, 10*time.Millisecond, "expected at least 2 successful requests")
-	assert.Equal(t, int64(0), s.failed.Load())
-	assert.Greater(t, received.Load(), int64(1))
 }
 
 func TestLoginReturnsAccessToken(t *testing.T) {
@@ -437,7 +245,6 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 	roles := map[string]string{}
 	vehicles := map[string]bool{}
 	assigned := map[float64]string{} // user id -> vehicle id
-	trips := map[string]string{}     // token -> vehicle id
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
@@ -447,7 +254,7 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 		str := func(k string) string { s, _ := body[k].(string); return s }
 		mu.Lock()
 		defer mu.Unlock()
-		if r.URL.Path != "/api/v1/auth/login" && r.URL.Path != "/api/v1/trips/start" {
+		if r.URL.Path != "/api/v1/auth/login" {
 			if got := r.Header.Get("Authorization"); got != "Bearer admin-token" {
 				t.Errorf("%s Authorization = %q, want the admin token", r.URL.Path, got)
 			}
@@ -474,29 +281,18 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 				return
 			}
 			json.NewEncoder(w).Encode(map[string]string{"access_token": "token-for-" + str("email")})
-		case "/api/v1/trips/start":
-			trips[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")] = str("vehicle_id")
-			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]any{"id": len(trips)})
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
 	}))
 	defer srv.Close()
 
-	drivers, err := provisionDrivers(t.Context(), srv.Client(), srv.URL, "admin-token", "runid123", 3, []string{"R1", "R2"})
+	tokens, err := provisionDrivers(t.Context(), srv.Client(), srv.URL, "admin-token", "runid123", 3)
 	if err != nil {
 		t.Fatalf("provisionDrivers: %v", err)
 	}
-	if len(drivers) != 3 {
-		t.Fatalf("got %d drivers, want 3", len(drivers))
-	}
-	tokens := make([]string, len(drivers))
-	for i, d := range drivers {
-		tokens[i] = d.token
-		if d.tripID != int64(i+1) {
-			t.Errorf("driver %d kept trip %d, want %d", i+1, d.tripID, i+1)
-		}
+	if len(tokens) != 3 {
+		t.Fatalf("got %d tokens, want 3", len(tokens))
 	}
 	seen := map[string]bool{}
 	for _, tk := range tokens {
@@ -508,15 +304,19 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 	if len(created) != 3 {
 		t.Errorf("created %d accounts, want 3", len(created))
 	}
-	// The server only accepts reports from an assigned driver with an active
-	// trip, so every driver needs both before its first report.
+	// The server only accepts reports from a driver assigned to the vehicle,
+	// so every driver needs their own vehicle before starting a trip on it.
 	if len(vehicles) != 3 || len(assigned) != 3 {
 		t.Errorf("created %d vehicles and %d assignments, want 3 each", len(vehicles), len(assigned))
 	}
-	for i, tk := range tokens {
-		want, _ := simVehicle("runid123", i, []string{"R1", "R2"})
-		if trips[tk] != want {
-			t.Errorf("driver %d started a trip on %q, want %q", i+1, trips[tk], want)
+	for i := range tokens {
+		if id := simVehicleID("runid123", i); !vehicles[id] {
+			t.Errorf("vehicle %s was not created", id)
+		}
+	}
+	for userID, vehicleID := range assigned {
+		if want := simVehicleID("runid123", int(userID)-1); vehicleID != want {
+			t.Errorf("driver %v was assigned %q, want %q", userID, vehicleID, want)
 		}
 	}
 	for email, role := range roles {
@@ -601,33 +401,6 @@ func mustParse(t *testing.T, raw string) *url.URL {
 		t.Fatalf("parsing %s: %v", raw, err)
 	}
 	return u
-}
-
-// TestEndTripsEndsEveryTrip: a run must not leave its drivers' trips active,
-// or repeated runs pile them up on the server.
-func TestEndTripsEndsEveryTrip(t *testing.T) {
-	var mu sync.Mutex
-	ended := map[string]float64{} // token -> trip id
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/trips/end" {
-			t.Errorf("unexpected path %s", r.URL.Path)
-			return
-		}
-		var body map[string]float64
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Errorf("decoding trips/end: %v", err)
-		}
-		mu.Lock()
-		ended[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")] = body["trip_id"]
-		mu.Unlock()
-		w.Write([]byte(`{"status":"trip ended"}`))
-	}))
-	defer srv.Close()
-
-	endTrips(srv.Client(), srv.URL, []simDriver{{token: "a", tripID: 7}, {token: "b", tripID: 8}})
-	if ended["a"] != 7 || ended["b"] != 8 {
-		t.Errorf("ended %v, want trip 7 by a and 8 by b", ended)
-	}
 }
 
 // TestFetchRouteIDs pins why it exists: the server rejects a route_id its
