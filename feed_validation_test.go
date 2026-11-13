@@ -134,6 +134,16 @@ func validateFeedCompliance(t *testing.T, feed *gtfsrt.FeedMessage) []string {
 				violations = append(violations, fmt.Sprintf("entity %s: start_date %q is not YYYYMMDD", id, sd))
 			}
 		}
+
+		// Project rules: current_stop_sequence indexes the trip's stop_times,
+		// so without a trip_id no consumer can tell which stop it names, and
+		// gtfs-realtime.proto ignores current_status without it.
+		if vp.CurrentStopSequence != nil && vp.GetTrip().GetTripId() == "" {
+			violations = append(violations, fmt.Sprintf("entity %s: current_stop_sequence without a trip_id", id))
+		}
+		if vp.CurrentStatus != nil && vp.CurrentStopSequence == nil {
+			violations = append(violations, fmt.Sprintf("entity %s: current_status without current_stop_sequence", id))
+		}
 	}
 
 	// E050: header timestamp not >60s in future
@@ -498,6 +508,18 @@ func TestFeedValidation_RejectsBrokenFeed(t *testing.T) {
 			},
 			want: "E050: header timestamp >60s in future",
 		},
+		{
+			name:      "stop sequence without a trip",
+			breakFeed: func(f *gtfsrt.FeedMessage) { f.Entity[0].Vehicle.CurrentStopSequence = proto.Uint32(2) },
+			want:      "entity bus-1: current_stop_sequence without a trip_id",
+		},
+		{
+			name: "stop status without a stop sequence",
+			breakFeed: func(f *gtfsrt.FeedMessage) {
+				f.Entity[0].Vehicle.CurrentStatus = gtfsrt.VehiclePosition_STOPPED_AT.Enum()
+			},
+			want: "entity bus-1: current_status without current_stop_sequence",
+		},
 	}
 
 	for _, tc := range cases {
@@ -580,6 +602,38 @@ func TestFeedValidation_FullFeedCompliance(t *testing.T) {
 	}
 	assert.Equal(t, 2, withTrip, "two vehicles should have trips")
 	assert.Equal(t, 1, withoutTrip, "one vehicle should have no trip")
+}
+
+func TestFeedValidation_DriverStopFields(t *testing.T) {
+	now := time.Now().Unix()
+	vehicles := []*VehicleState{
+		{VehicleID: "in-transit", TripID: "T1", RouteID: "R1", StartDate: "20260902", Latitude: 47.602, Longitude: -122.33,
+			StopID: "ST2", StopSequence: 2, Timestamp: now},
+		{VehicleID: "stopped", TripID: "T1", RouteID: "R1", StartDate: "20260902", Latitude: 47.6045, Longitude: -122.33,
+			StopID: "ST2", StopSequence: 2, StoppedAt: true, Timestamp: now},
+		// A GTFS stop_sequence may be 0; StopID, not the sequence, says
+		// whether the vehicle was placed.
+		{VehicleID: "first-stop", TripID: "T1", Latitude: 47.6, Longitude: -122.33,
+			StopID: "ST1", StopSequence: 0, StoppedAt: true, Timestamp: now},
+		{VehicleID: "unplaced", TripID: "T1", Latitude: 47.7, Longitude: -122.33, Timestamp: now},
+	}
+	feed := buildFeed(vehicles, []rider.TripEstimate{sampleEstimate()})
+	assert.Empty(t, validateFeedCompliance(t, feed))
+
+	byID := make(map[string]*gtfsrt.VehiclePosition)
+	for _, e := range feed.Entity {
+		byID[e.GetId()] = e.GetVehicle()
+	}
+	require.Len(t, byID, 5)
+	assert.Equal(t, "ST2", byID["in-transit"].GetStopId())
+	assert.Equal(t, uint32(2), byID["in-transit"].GetCurrentStopSequence())
+	assert.Equal(t, gtfsrt.VehiclePosition_IN_TRANSIT_TO.Enum(), byID["in-transit"].CurrentStatus)
+	assert.Equal(t, gtfsrt.VehiclePosition_STOPPED_AT.Enum(), byID["stopped"].CurrentStatus)
+	assert.Equal(t, proto.Uint32(0), byID["first-stop"].CurrentStopSequence)
+	assert.Equal(t, gtfsrt.VehiclePosition_STOPPED_AT.Enum(), byID["first-stop"].CurrentStatus)
+	assert.Nil(t, byID["unplaced"].StopId)
+	assert.Nil(t, byID["unplaced"].CurrentStopSequence)
+	assert.Nil(t, byID["unplaced"].CurrentStatus)
 }
 
 func TestFeedValidation_ZeroTimestampVehicleSkipped(t *testing.T) {

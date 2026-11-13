@@ -21,6 +21,18 @@ type VehicleState struct {
 	Accuracy     *float64
 	Timestamp    int64
 	UpdatedAt    time.Time // server time when this report was received
+	// StopID and StopSequence are the stop of its trip that the vehicle's
+	// latest report put it at (StoppedAt) or heading to. StopID is "" when that
+	// report named no stop (tripLocator.locate says when), and for a vehicle
+	// seeded at startup until it next reports.
+	StopID       string
+	StopSequence int
+	StoppedAt    bool
+	// alongShape is how far along its trip's shape the vehicle was last
+	// placed, in metres: the projection hint for its next report on that trip.
+	// It is 0, the start of the shape, until the vehicle has been placed on
+	// its current trip.
+	alongShape float64
 }
 
 // Tracker maintains an in-memory map of current vehicle positions.
@@ -31,9 +43,12 @@ type Tracker struct {
 	// removedAt is when Remove last dropped each vehicle, so UpdateAuthorized
 	// can tell a report that raced a removal from one that came after it.
 	removedAt map[string]time.Time
-	maxAge    time.Duration
-	done      chan struct{}
-	stopOnce  sync.Once
+	// locator places each accepted report on its GTFS trip; nil places none,
+	// which leaves every vehicle's stop fields unset.
+	locator  *tripLocator
+	maxAge   time.Duration
+	done     chan struct{}
+	stopOnce sync.Once
 }
 
 // NewTracker creates a Tracker with the given staleness threshold.
@@ -72,31 +87,64 @@ func (t *Tracker) Stop() {
 	})
 }
 
-// Update stores or replaces the latest position for a vehicle.
+// SetTripLocator makes UpdateAuthorized place each vehicle on its GTFS trip
+// with l, which is where the feed's stop fields come from.
+func (t *Tracker) SetTripLocator(l *tripLocator) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.locator = l
+}
+
+// Update stores or replaces the latest position for a vehicle. It names no
+// stop: it is how the tracker is seeded at startup, and a seeded vehicle is
+// placed on its trip by its next report.
 func (t *Tracker) Update(loc *LocationReport) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.update(loc)
+	t.update(loc, tripPlace{})
 }
 
 // UpdateAuthorized is Update for a report whose authorization began at
-// authorizedAt. A Remove since then wins and the report is not applied: the
-// vehicle was deactivated while the report was being authorized and saved, and
-// publishing it would put the vehicle back in the feed until it went stale. A
-// vehicle removed before authorizedAt and reactivated since is updated as
-// usual. It reports whether the update was applied.
+// authorizedAt, placing the vehicle on its trip when a locator is set. A
+// Remove since then wins and the report is not applied: the vehicle was
+// deactivated while the report was being authorized and saved, and publishing
+// it would put the vehicle back in the feed until it went stale. A vehicle
+// removed before authorizedAt and reactivated since is updated as usual. It
+// reports whether the update was applied.
 func (t *Tracker) UpdateAuthorized(loc *LocationReport, authorizedAt time.Time) bool {
+	place := t.place(loc)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if removed, ok := t.removedAt[loc.VehicleID]; ok && !removed.Before(authorizedAt) {
 		return false
 	}
-	t.update(loc)
+	t.update(loc, place)
 	return true
 }
 
-// update is Update with t.mu already held.
-func (t *Tracker) update(loc *LocationReport) {
+// place is where loc puts its vehicle on its trip. Only the hint is read under
+// the lock: the projection is a pass over every segment of the shape, and the
+// feed reads the tracker on every request.
+func (t *Tracker) place(loc *LocationReport) tripPlace {
+	t.mu.RLock()
+	locator := t.locator
+	// The hint is the vehicle's last place on this same trip instance. A new
+	// trip, or the same trip on another service date, starts from the
+	// beginning of its shape.
+	var hint float64
+	if prev, ok := t.vehicles[loc.VehicleID]; ok && prev.TripID == loc.TripID && prev.StartDate == loc.StartDate {
+		hint = prev.alongShape
+	}
+	t.mu.RUnlock()
+	if locator == nil {
+		return tripPlace{}
+	}
+	return locator.locate(loc, hint)
+}
+
+// update is Update with t.mu already held, recording place as the vehicle's
+// place on its trip.
+func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 	t.seen[loc.VehicleID] = struct{}{}
 
 	var bearing *float64
@@ -130,6 +178,10 @@ func (t *Tracker) update(loc *LocationReport) {
 		Accuracy:     accuracy,
 		Timestamp:    loc.Timestamp,
 		UpdatedAt:    time.Now(),
+		StopID:       place.stopID,
+		StopSequence: place.stopSequence,
+		StoppedAt:    place.stoppedAt,
+		alongShape:   place.alongShape,
 	}
 }
 
