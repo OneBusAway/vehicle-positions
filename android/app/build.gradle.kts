@@ -22,7 +22,9 @@ android {
         minSdk = 26
         targetSdk = 36
         // Set per build without editing this file: `./gradlew -PversionCode=42 -PversionName=1.2.0`,
-        // or the same keys in ~/.gradle/gradle.properties. The release workflow passes its run number.
+        // or the same keys in ~/.gradle/gradle.properties. CI builds pass -PversionCode=1 with
+        // -PversionName=ci-<run_number>. The release workflow derives versionCode from the tag
+        // (major * 10000 + minor * 100 + patch).
         versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
         versionName = project.findProperty("versionName") as String? ?: "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

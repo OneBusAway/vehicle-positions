@@ -975,7 +975,9 @@ The **Android release** workflow (`.github/workflows/android-release.yml`)
 builds the APK signed with your key, versioned `1.2.0` with its `versionCode`
 derived from the tag (`major * 10000 + minor * 100 + patch`, e.g. `10200`),
 checks the signature, and attaches `vehicle-tracker-1.2.0.apk` to a GitHub
-Release named after the tag. To build your server's address into it
+Release named after the tag. Release tags must be `android-v0.1.0` or higher
+(`versionCode >= 100`) so release builds strictly outrank CI test artifacts
+(`versionCode = 1`). To build your server's address into it
 (section 13.2), add a repository variable (the **Variables** tab beside the
 secrets) named `DEFAULT_SERVER_URL`, such as `https://tracker.example.org`.
 Without it, Sign in starts empty.
