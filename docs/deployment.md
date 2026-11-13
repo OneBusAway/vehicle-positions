@@ -531,6 +531,51 @@ each of those and the privacy reasoning behind them. Pick a period consistent
 with local law and your agency's driver-privacy policy, and export anything you
 want to keep before you turn it on.
 
+### 6.6 If the retention index build was interrupted
+
+Migration 000011 builds the index the pruner relies on,
+`idx_location_points_received_at`, with `CREATE INDEX CONCURRENTLY` so drivers
+can keep reporting while it runs. If that build is interrupted (the server is
+killed mid-upgrade, the database restarts, a timeout cancels it), Postgres
+keeps the half-built index and marks it invalid. Queries never use an invalid
+index, and the migration's `IF NOT EXISTS` sees the name and skips the build,
+so running the migration again does not repair it. The pruner then scans all
+of `location_points` on every sweep, and nothing in the logs says so.
+
+An interrupted upgrade shows up at the next start: the server exits 1 and logs
+`could not run migrations` with `Dirty database version 11`. Drop the index,
+mark 000010 as the last migration applied, and start the server again. It
+reruns 000011 and then any later migrations. Do this only when the dirty
+version is 11.
+
+```bash
+sudo -u postgres psql -d vehicle_positions \
+  -c "DROP INDEX CONCURRENTLY IF EXISTS idx_location_points_received_at" \
+  -c "UPDATE schema_migrations SET version = 10, dirty = false"
+```
+
+If the server is already running past that point, for example because someone
+marked 000011 as applied to get it started, check for invalid indexes:
+
+```bash
+sudo -u postgres psql -d vehicle_positions \
+  -c "SELECT indexrelid::regclass AS index FROM pg_index WHERE NOT indisvalid"
+```
+
+No rows is the healthy answer. If `idx_location_points_received_at` is listed,
+drop it and build it again. Keep the two statements as separate `-c` flags:
+neither `CONCURRENTLY` statement can run inside a transaction, and one `-c`
+with both would be one.
+
+```bash
+sudo -u postgres psql -d vehicle_positions \
+  -c "DROP INDEX CONCURRENTLY IF EXISTS idx_location_points_received_at" \
+  -c "CREATE INDEX CONCURRENTLY idx_location_points_received_at ON location_points (received_at)"
+```
+
+On Docker Compose, replace `sudo -u postgres psql -d vehicle_positions` with
+`docker compose exec db psql -U vehicle_positions -d vehicle_positions`.
+
 ## 7. Reverse proxy and TLS
 
 Terminate TLS in nginx and forward to the server on loopback.

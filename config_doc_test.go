@@ -113,9 +113,9 @@ func envVarsReadInTests(t *testing.T) map[string]struct{} {
 }
 
 // parseModule parses every .go file in this module, either the test files or
-// the production ones. Nested modules (maglev/ has its own go.mod) and testdata
-// directories are skipped for the same reason the Go toolchain skips them:
-// their contents are not part of this module's build.
+// the production ones. Nested modules (any directory with its own go.mod) and
+// testdata directories are skipped for the same reason the Go toolchain skips
+// them: their contents are not part of this module's build.
 func parseModule(t *testing.T, testFiles bool) []*ast.File {
 	t.Helper()
 
