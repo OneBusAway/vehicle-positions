@@ -34,7 +34,7 @@ few seconds of feed continuity.
 | PostgreSQL | 15 or newer. The project's own stack runs `postgres:17-alpine` (`docker-compose.yml`), so 17 is the best-tested choice for a new install. It may run on the same host or a managed service. |
 | GTFS schedule | Your agency's GTFS static zip, at a URL the server can download or as a file on the host. The server will not start without one: drivers pick their route and run from it. Use the same feed OneBusAway uses (section 11). |
 | DNS + TLS | A hostname (`tracker.example.org` throughout this guide) pointing at the host, and a certificate. Section 7 uses Let's Encrypt. |
-| Build tooling | Either Docker (option A) **or** Go 1.25 or newer (option B, `go.mod` declares `go 1.25.0`). There is no published container image — agencies build from this repository. |
+| Build tooling | Either Docker (option A) **or** Go 1.25 or newer (option B, `go.mod` declares `go 1.25.0`). Option A can pull the published image, `ghcr.io/onebusaway/vehicle-positions`, instead of building one. |
 | Ports | 80 and 443 open to the internet. Port 8080 (the app) and 5432 (PostgreSQL) must **not** be reachable from the internet. |
 
 `shapes.txt` is optional in the feed. A trip with no shape gets one drawn as
@@ -170,10 +170,51 @@ the API and the verification model.
 
 The `docker-compose.yml` in the repository root is the **development** stack: it
 publishes PostgreSQL on port 5432 and uses the password `postgres`. Do not
-deploy it as-is. Build an image from the repository and run the file below
-instead.
+deploy it as-is. Pull the published image (or build your own) and run the file
+below instead.
 
-### 4.1 Build a pinned image
+### 4.1 Pull a pinned image
+
+Each server release is published to the GitHub Container Registry as
+`ghcr.io/onebusaway/vehicle-positions`, for `linux/amd64` and `linux/arm64`, so
+a small ARM machine works as well as an x86 one. Pull a full `X.Y.Z` version:
+
+```bash
+docker pull ghcr.io/onebusaway/vehicle-positions:X.Y.Z
+```
+
+The [package page](https://github.com/OneBusAway/vehicle-positions/pkgs/container/vehicle-positions)
+lists every published tag. Versions come from the repository's `server-vX.Y.Z`
+git tags (`server-v1.2.3` publishes `1.2.3`), so this lists them as well:
+
+```bash
+git ls-remote --tags https://github.com/OneBusAway/vehicle-positions.git 'server-v*'
+```
+
+`.github/workflows/server-image.yml` publishes the image only when the project
+pushes a `server-v*` tag (a version) or a commit to `main` (`edge`), so there
+is nothing to pull until the first of those. If neither list shows a version
+yet, build your own (below) rather than running `edge` in production.
+
+| Tag | Points at |
+|-----|-----------|
+| `X.Y.Z` | That release |
+| `X.Y` | The most recent `X.Y.*` release |
+| `latest` | The most recent release |
+| `X.Y.Z-rc.1` and other pre-releases | That pre-release only; it never moves `X.Y` or `latest` |
+| `edge`, `sha-<short sha>` | Builds of `main`, for testing only |
+
+Pin the full `X.Y.Z` in production, not `latest`. A tag that does not move is
+what makes a rollback possible: you can always start the previous version
+again.
+
+The image is multi-stage (`golang:1.25-alpine` builds a static binary,
+`alpine:3.21` runs it), exposes port 8080, and has `vehicle-positions` as its
+entrypoint.
+
+To run modified code, or before any version is published, build the image from
+the repository instead, and tag it with the commit SHA for the same rollback
+reason:
 
 ```bash
 git clone https://github.com/OneBusAway/vehicle-positions.git
@@ -181,15 +222,10 @@ cd vehicle-positions
 docker build -t vehicle-positions:$(git rev-parse --short HEAD) .
 ```
 
-The `Dockerfile` is multi-stage (`golang:1.25-alpine` builds a static binary,
-`alpine:3.21` runs it), exposes port 8080, and has `vehicle-positions` as its
-entrypoint. Tagging with the commit SHA rather than `latest` is what makes a
-rollback possible: you can always start the previous tag again.
-
 The repository's development `docker-compose.yml` builds this same image through
-its `build: .` line, which is why the production file below refers to a tag you
-built yourself instead: an explicit tag is what lets you roll back to the
-previous build, and it keeps the image pinned when you edit the compose file.
+its `build: .` line, which is why the production file below refers to an
+explicit tag instead: it is what lets you roll back, and it keeps the image
+pinned when you edit the compose file.
 
 ### 4.2 The environment file
 
@@ -219,7 +255,8 @@ who can read this file can mint an administrator session for your server.
 ### 4.3 `compose.yaml`
 
 Save this next to the `.env` file as `/srv/vehicle-positions/compose.yaml`,
-replacing `<SHA>` with the tag you built.
+replacing `X.Y.Z` with the version you pulled (or the whole `image:` value with
+`vehicle-positions:<SHA>` if you built your own).
 
 ```yaml
 services:
@@ -241,7 +278,7 @@ services:
       retries: 5
 
   server:
-    image: vehicle-positions:<SHA>
+    image: ghcr.io/onebusaway/vehicle-positions:X.Y.Z
     restart: unless-stopped
     # Bound to loopback: nginx on the host reaches it, the internet does not.
     ports:
