@@ -100,6 +100,7 @@ import Testing
         (.noGPS, "No GPS signal", "Position paused"),
         (.clockSkew, "Phone clock is wrong", "Set automatic time"),
         (.refused, "Reports refused", "Ask your dispatcher"),
+        (.serverError, "Server error", "Riders can't see you"),
         (.needsForeground, "Open the app on iPhone", "Reports start when you do"),
         (.locationLost, "Location stopped", "Open the app to keep reporting."),
         (.locationDenied, "Location off", "Open the app to keep reporting."),
@@ -123,7 +124,7 @@ import Testing
     /// The car can't open Settings, and a Live Activity can't take a tap
     /// (#236): no word on it asks for one.
     @Test(arguments: [TripSession.ReportingStatus.connected, .noNetwork, .noGPS, .authExpired, .clockSkew, .refused,
-                      .needsForeground, .locationLost, .locationDenied, .preciseLocationOff])
+                      .serverError, .needsForeground, .locationLost, .locationDenied, .preciseLocationOff])
     func noLiveActivityTextSaysTap(reporting: TripSession.ReportingStatus) throws {
         let fixes: [Adherence?] = [nil, judged(secondsLate: 0), judged(secondsLate: 360), judged(secondsLate: -360),
                                    judged(secondsLate: -1260), offRoute()]
