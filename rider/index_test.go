@@ -206,7 +206,7 @@ func TestShapeDistScale_RecoversUnit(t *testing.T) {
 		{"past the end of the shape in every unit", 40000, 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			scale, ok := shapeDistScale(stopsEndingAt(tc.last), shape)
+			scale, ok := shapeDistScale(stopsEndingAt(tc.last), shape, 0)
 			assert.Equal(t, tc.ok, ok)
 			if tc.ok {
 				assert.InDelta(t, tc.scale, scale, 1e-9)
@@ -215,12 +215,65 @@ func TestShapeDistScale_RecoversUnit(t *testing.T) {
 	}
 }
 
+// TestShapeDistScale_ShapeEndSettlesUnit: a short-turn trip ends partway along
+// a shared shape, so its last stop alone fits a larger unit too. The shape's
+// own last shape_dist_traveled is the end of the shape and fits only the true
+// one.
+func TestShapeDistScale_ShapeEndSettlesUnit(t *testing.T) {
+	const shape = 10000.0 // metres
+	stopsEndingAt := func(last float64) []gtfs.ScheduledStopTime {
+		return []gtfs.ScheduledStopTime{{ShapeDistanceTraveled: ptr(0.0)}, {ShapeDistanceTraveled: ptr(last)}}
+	}
+	for _, tc := range []struct {
+		name           string
+		last, shapeEnd float64
+		scale          float64
+	}{
+		{"kilometres, last stop halfway along", 5, 10, 1000},
+		{"feet, last stop at a fifth", 2000 / 0.3048, shape / 0.3048, 0.3048},
+		{"metres, last stop at a twentieth", 500, shape, 1},
+		{"a shape end no unit fits falls back to the last stop", 9.8, 3, 1000},
+		{"stops running past the shape end fall back to the last stop", 9800, 10, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scale, ok := shapeDistScale(stopsEndingAt(tc.last), shape, tc.shapeEnd)
+			require.True(t, ok)
+			assert.InDelta(t, tc.scale, scale, 1e-9)
+		})
+	}
+}
+
+// TestBuildIndex_ShortTurnTripInKilometres: a trip that turns back halfway
+// along a shape published in kilometres has its stops placed in metres, not
+// read as miles.
+func TestBuildIndex_ShortTurnTripInKilometres(t *testing.T) {
+	ix := fixtureIndexEditedFiles(t, map[string]string{
+		"shapes.txt": "shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n" +
+			shapeRows("S1", straightShape().Points, []string{"0", "0.5", "1.001"}) +
+			shapeRows("S2", loopShape().Points, nil),
+		"stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n" +
+			stopTimeRow("T1", "08:00:00", "ST1", 1, "0") +
+			stopTimeRow("T1", "08:05:00", "ST2", 2, "0.25") +
+			stopTimeRow("T1", "08:10:00", "ST3", 3, "0.5") +
+			stopTimeRow("T3", "25:00:00", "LP1", 1, "") +
+			stopTimeRow("T3", "25:20:00", "LP1", 4, ""),
+		"trips.txt": "route_id,service_id,trip_id,shape_id,trip_headsign,direction_id\n" +
+			"R1,WEEKDAY,T1,S1,North,0\n" +
+			"R2,WEEKDAY,T3,S2,Loop,1\n",
+	})
+	trip, ok := ix.Trip("T1")
+	require.True(t, ok)
+	require.Len(t, trip.StopTimes, 3)
+	assert.InDelta(t, 250, trip.StopTimes[1].AlongShape, 2)
+	assert.InDelta(t, 500, trip.StopTimes[2].AlongShape, 2)
+}
+
 func TestShapeDistScale_RequiresEveryStopTime(t *testing.T) {
 	stops := []gtfs.ScheduledStopTime{{ShapeDistanceTraveled: ptr(0.0)}, {}}
-	_, ok := shapeDistScale(stops, 1000)
+	_, ok := shapeDistScale(stops, 1000, 0)
 	assert.False(t, ok, "a missing value makes the whole column unusable")
 
-	_, ok = shapeDistScale([]gtfs.ScheduledStopTime{{ShapeDistanceTraveled: ptr(0.0)}}, 1000)
+	_, ok = shapeDistScale([]gtfs.ScheduledStopTime{{ShapeDistanceTraveled: ptr(0.0)}}, 1000, 0)
 	assert.False(t, ok, "all-zero values say nothing about the unit")
 }
 
