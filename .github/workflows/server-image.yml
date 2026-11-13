@@ -1,0 +1,88 @@
+name: Server image
+
+# Publishes the server image to ghcr.io/onebusaway/vehicle-positions for
+# linux/amd64 and linux/arm64.
+#   A tag like `server-v1.2.3` pushes 1.2.3, 1.2 and latest. A pre-release
+#   tag (`server-v1.3.0-rc.1`) pushes only its own version.
+#   A push to main pushes edge and sha-<short sha>.
+# Pull requests never push; ci.yml builds the image as a check.
+on:
+  push:
+    branches: [main]
+    tags: ['server-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/onebusaway/vehicle-positions
+
+jobs:
+  publish:
+    # Forks have no access to this package.
+    if: github.repository == 'OneBusAway/vehicle-positions'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the version from the tag
+        id: version
+        if: startsWith(github.ref, 'refs/tags/server-v')
+        run: |
+          version="${GITHUB_REF_NAME#server-v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag $GITHUB_REF_NAME is not server-vX.Y.Z or server-vX.Y.Z-<pre-release>" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          # Annotate the multi-arch index too, so ghcr.io links the package
+          # to this repository and shows its description.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.version != '' }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.version != '' && !contains(steps.version.outputs.version, '-') }}
+            type=edge,branch=main
+            type=sha,prefix=sha-,format=short,enable=${{ github.ref == 'refs/heads/main' }}
+          labels: |
+            org.opencontainers.image.licenses=Apache-2.0
+          annotations: |
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
