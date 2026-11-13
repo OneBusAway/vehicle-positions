@@ -38,14 +38,25 @@ import VehiclePositionsKit
         #expect(r.fixesSent == 143)
     }
 
-    @Test func dropsUnknownBearingSpeedAndAccuracy() async {
+    @Test func dropsUnknownBearingSpeedAndAccuracy() async throws {
         let r = reporter()
         r.report(fix(bearing: -1, speed: -1, accuracy: -1), vehicleID: "bus-1", gtfsTripID: "T1")
         await r.waitForInFlightSend()
-        let p = api.posted[0]
+        let p = try #require(api.posted.first)
         #expect(p.bearing == nil)
-        #expect(p.speed == 0, "an unknown speed is sent as 0, the server's floor")
+        #expect(p.speed == nil, "Core Location's -1 is no speed at all, not a vehicle standing still")
         #expect(p.accuracy == nil)
+        // Left out of the body, so the server keeps no speed and the feed gives none.
+        let body = try #require(JSONSerialization.jsonObject(with: JSONCoding.encoder.encode(p)) as? [String: Any])
+        #expect(body["speed"] == nil)
+    }
+
+    /// Standing still is a speed, and the feed should say so.
+    @Test func aVehicleStandingStillReportsItsSpeed() async throws {
+        let r = reporter()
+        r.report(fix(speed: 0), vehicleID: "bus-1", gtfsTripID: "T1")
+        await r.waitForInFlightSend()
+        #expect(try #require(api.posted.first).speed == 0)
     }
 
     @Test func throttlesToOneReportPerFiveSeconds() async {
