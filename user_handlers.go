@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/mail"
 	"strconv"
 	"strings"
 )
@@ -146,6 +147,10 @@ func handleCreateUser(store UserCreator) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email is required"})
 			return
 		}
+		if !validEmail(req.Email) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email is not valid"})
+			return
+		}
 		if req.Password == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password is required"})
 			return
@@ -211,6 +216,10 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 		}
 		if req.Email == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email is required"})
+			return
+		}
+		if !validEmail(req.Email) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email is not valid"})
 			return
 		}
 		if !validUserRole(req.Role) {
@@ -350,6 +359,15 @@ func handleDeleteUser(store UserDeleter) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// validEmail reports whether email is a bare address that net/mail parses
+// back unchanged. ParseAddress also accepts "Name <a@example.com>", a
+// "(comment)" or surrounding spaces and returns only the address inside, so
+// comparing the two refuses anything but the address itself.
+func validEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
 }
 
 func parseUserID(r *http.Request) (int64, error) {

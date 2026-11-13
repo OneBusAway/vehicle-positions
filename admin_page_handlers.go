@@ -908,6 +908,10 @@ func (ui *adminUI) userCreate(w http.ResponseWriter, r *http.Request) {
 		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email is required"})
 		return
 	}
+	if !validEmail(email) {
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email is not valid"})
+		return
+	}
 	if err := validatePassword(password); err != nil {
 		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: err.Error()})
 		return
@@ -1045,6 +1049,10 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if email == "" {
 		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email is required")
+		return
+	}
+	if !validEmail(email) {
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email is not valid")
 		return
 	}
 	if !validUserRole(role) {
