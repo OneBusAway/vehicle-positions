@@ -156,12 +156,14 @@ import Testing
         #expect(!onTime.attention)
         #expect(onTime.reportsSymbol == "hourglass")
         #expect(onTime.reports == "Ending…")
+        #expect(onTime.spoken == "Route 1 to North. On time. Next stop Stop ST2, \(eightOFive) · Ending…")
 
         let offline = try content(judged(secondsLate: 0), reporting: .noNetwork, phase: .ending(active))
         #expect(offline.lead == "No connection")
         #expect(offline.attention)
         #expect(offline.reportsSymbol == "hourglass")
         #expect(offline.reports == "Ending…")
+        #expect(offline.spoken == "Route 1 to North. No connection · Ending…", "not what to do about the problem, which no longer applies")
     }
 
     // MARK: When it changes
