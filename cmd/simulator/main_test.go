@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -116,7 +119,7 @@ func TestSendReport_CancelledContext(t *testing.T) {
 	assert.Equal(t, int64(0), s.failed.Load())
 }
 
-func TestLoginReturnsAccessToken(t *testing.T) {
+func TestLoginReturnsTokens(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/api/v1/auth/login", r.URL.Path)
@@ -125,13 +128,36 @@ func TestLoginReturnsAccessToken(t *testing.T) {
 		assert.Equal(t, "sim@example.com", body["email"])
 		assert.Equal(t, "hunter2", body["password"])
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"tok-123"}`))
+		_, _ = w.Write([]byte(`{"access_token":"tok-123","refresh_token":"ref-123","expires_in":900}`))
 	}))
 	defer server.Close()
 
-	token, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
+	tokens, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
 	require.NoError(t, err)
-	assert.Equal(t, "tok-123", token)
+	assert.Equal(t, tokenResponse{AccessToken: "tok-123", RefreshToken: "ref-123", ExpiresIn: 900}, tokens)
+}
+
+// A vehicle signed in without a refresh token or a lifetime could not renew
+// its access token, so it would stop reporting partway through the run.
+func TestLoginRejectsIncompleteTokens(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want string
+	}{
+		{`{"access_token":"a","expires_in":900}`, "no refresh_token"},
+		{`{"access_token":"a","refresh_token":"r"}`, "no positive expires_in"},
+		{`{"access_token":"a","refresh_token":"r","expires_in":0}`, "no positive expires_in"},
+		{`{"access_token":"a","refresh_token":"r","expires_in":-900}`, "no positive expires_in"},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		_, err := login(t.Context(), server.Client(), server.URL, "sim@example.com", "hunter2")
+		server.Close()
+		if assert.Error(t, err, tc.body) {
+			assert.Contains(t, err.Error(), tc.want, tc.body)
+		}
+	}
 }
 
 func TestLoginRejectsBadCredentials(t *testing.T) {
@@ -163,9 +189,9 @@ func TestLoginRejectsDeprecatedTokenOnly(t *testing.T) {
 		_, _ = w.Write([]byte(`{"token":"old123"}`))
 	}))
 	defer server.Close()
-	token, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
+	tokens, err := login(context.Background(), server.Client(), server.URL, "sim@example.com", "hunter2")
 	require.Error(t, err)
-	assert.Empty(t, token)
+	assert.Empty(t, tokens.AccessToken)
 }
 
 // The regression this fixes: reports must carry the session token, because
@@ -182,6 +208,239 @@ func TestBearerTransportSetsAuthorizationHeader(t *testing.T) {
 	sendReport(context.Background(), client, server.URL, "sim-vehicle-001", &locationReport{}, &stats{})
 
 	assert.Equal(t, "Bearer tok-123", gotAuth)
+}
+
+// authServer stands in for the server's side of token refresh. The driver
+// signs in with a1/r1, POST /api/v1/auth/refresh trades r<n> for a<n+1>/r<n+1>
+// and refuses any other refresh token, as the real server refuses a spent one,
+// and every other request is accepted only with the newest access token
+// before it expires. The session under test reads the same clock.
+type authServer struct {
+	*httptest.Server
+
+	mu            sync.Mutex
+	clock         time.Time
+	generation    int
+	expiresAt     time.Time
+	refreshStatus int      // anything other than 200 is answered instead of a rotation
+	presented     []string // refresh tokens sent to POST /api/v1/auth/refresh
+	received      int      // requests other than refreshes
+	accepted      int
+}
+
+const testTokenLifetime = 15 * time.Minute
+
+func newAuthServer(t *testing.T) *authServer {
+	a := &authServer{clock: time.Date(2026, 11, 13, 6, 0, 0, 0, time.UTC), generation: 1, refreshStatus: http.StatusOK}
+	a.expiresAt = a.clock.Add(testTokenLifetime)
+	a.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if r.URL.Path != "/api/v1/auth/refresh" {
+			a.received++
+			if r.Header.Get("Authorization") != fmt.Sprintf("Bearer a%d", a.generation) || !a.clock.Before(a.expiresAt) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			a.accepted++
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		var body map[string]string
+		if r.Header.Get("Content-Type") != "application/json" || json.NewDecoder(r.Body).Decode(&body) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		a.presented = append(a.presented, body["refresh_token"])
+		if a.refreshStatus != http.StatusOK {
+			w.WriteHeader(a.refreshStatus)
+			return
+		}
+		if body["refresh_token"] != fmt.Sprintf("r%d", a.generation) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		a.generation++
+		a.expiresAt = a.clock.Add(testTokenLifetime)
+		json.NewEncoder(w).Encode(tokenResponse{
+			AccessToken:  fmt.Sprintf("a%d", a.generation),
+			RefreshToken: fmt.Sprintf("r%d", a.generation),
+			ExpiresIn:    int(testTokenLifetime.Seconds()),
+		})
+	}))
+	t.Cleanup(a.Close)
+	return a
+}
+
+func (a *authServer) now() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.clock
+}
+
+func (a *authServer) advance(d time.Duration) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.clock = a.clock.Add(d)
+}
+
+func (a *authServer) answerRefreshWith(status int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.refreshStatus = status
+}
+
+func (a *authServer) counts() (presented []string, received, accepted int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.presented...), a.received, a.accepted
+}
+
+// signIn returns the session provisionDrivers would make from the driver's
+// login, and the vehicle's client that carries it.
+func (a *authServer) signIn() (*session, *http.Client) {
+	s := newSession("sim-test-001", a.URL, a.Client(),
+		tokenResponse{AccessToken: "a1", RefreshToken: "r1", ExpiresIn: int(testTokenLifetime.Seconds())}, a.now)
+	return s, &http.Client{Transport: sessionTransport{session: s, base: http.DefaultTransport}}
+}
+
+// TestSessionRefreshesBeforeTheAccessTokenExpires pins what the session is
+// for: a vehicle keeps reporting for longer than one access token lasts.
+func TestSessionRefreshesBeforeTheAccessTokenExpires(t *testing.T) {
+	a := newAuthServer(t)
+	_, client := a.signIn()
+	st := &stats{}
+	report := func() { sendReport(t.Context(), client, a.URL, "sim-test-001", &locationReport{}, st) }
+
+	a.advance(testTokenLifetime - refreshMargin - time.Second)
+	report()
+	presented, _, _ := a.counts()
+	assert.Empty(t, presented, "refreshed earlier than refreshMargin before expiry")
+
+	a.advance(time.Second)
+	report()
+	presented, _, _ = a.counts()
+	assert.Equal(t, []string{"r1"}, presented)
+
+	// The new token's lifetime runs from the refresh, so the next refresh is
+	// due a whole lifetime later and presents the rotated refresh token.
+	a.advance(testTokenLifetime - refreshMargin - time.Second)
+	report()
+	presented, _, _ = a.counts()
+	assert.Equal(t, []string{"r1"}, presented)
+
+	a.advance(time.Second)
+	report()
+	presented, received, accepted := a.counts()
+	assert.Equal(t, []string{"r1", "r2"}, presented)
+	assert.Equal(t, 4, received)
+	assert.Equal(t, 4, accepted, "28 minutes in, long after the sign-in token expired, every report is still accepted")
+	assert.Equal(t, int64(4), st.succeeded.Load())
+	assert.Equal(t, int64(0), st.failed.Load())
+
+	// Starting and ending a trip pass vehicle.token, the token the driver
+	// signed in with, to postJSON. It was refreshed away long ago, so the
+	// transport has to send the current one in its place.
+	require.NoError(t, postJSON(t.Context(), client, a.URL+"/api/v1/trips/start", "a1", map[string]string{}, nil))
+}
+
+// A refresh that fails for a reason that may pass (here the per-IP limit)
+// must not cost reports while the old token still works, and must be tried
+// again rather than given up on.
+func TestSessionKeepsItsTokenWhileARefreshFails(t *testing.T) {
+	a := newAuthServer(t)
+	_, client := a.signIn()
+	st := &stats{}
+	report := func() { sendReport(t.Context(), client, a.URL, "sim-test-001", &locationReport{}, st) }
+
+	a.answerRefreshWith(http.StatusTooManyRequests)
+	a.advance(testTokenLifetime - refreshMargin)
+	report()
+	a.advance(refreshMargin / 2)
+	report()
+	presented, received, accepted := a.counts()
+	assert.Equal(t, []string{"r1", "r1"}, presented, "each request inside the margin tries the refresh again")
+	assert.Equal(t, 2, received)
+	assert.Equal(t, 2, accepted, "both reports went out with a1, which had not expired")
+
+	// a1 expires. A report that cannot get a new token is not sent with the
+	// expired one.
+	a.advance(refreshMargin / 2)
+	report()
+	presented, received, accepted = a.counts()
+	assert.Len(t, presented, 3)
+	assert.Equal(t, 2, received, "a report was sent with an expired token")
+	assert.Equal(t, 2, accepted)
+	assert.Equal(t, int64(1), st.failed.Load())
+
+	a.answerRefreshWith(http.StatusOK)
+	report()
+	presented, received, accepted = a.counts()
+	assert.Equal(t, []string{"r1", "r1", "r1", "r1"}, presented)
+	assert.Equal(t, 3, received)
+	assert.Equal(t, 3, accepted)
+}
+
+type closeRecorder struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closeRecorder) Close() error {
+	c.closed = true
+	return nil
+}
+
+// A 401 from the refresh endpoint means the refresh token is spent, expired or
+// revoked. Presenting it again cannot work, and a spent one makes the server
+// revoke the driver's other tokens, so the session ends instead.
+func TestSessionEndsWhenTheServerRefusesTheRefresh(t *testing.T) {
+	a := newAuthServer(t)
+	s, _ := a.signIn()
+	a.answerRefreshWith(http.StatusUnauthorized)
+	a.advance(testTokenLifetime - refreshMargin)
+
+	body := &closeRecorder{Reader: strings.NewReader(`{}`)}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL+"/api/v1/locations", body)
+	require.NoError(t, err)
+	_, err = sessionTransport{session: s, base: http.DefaultTransport}.RoundTrip(req)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "signed out")
+	assert.Contains(t, err.Error(), "401")
+	assert.True(t, body.closed, "RoundTrip must close the request body when it fails")
+
+	_, err = s.accessToken(t.Context())
+	require.Error(t, err)
+	presented, received, _ := a.counts()
+	assert.Equal(t, []string{"r1"}, presented, "the refused refresh token was sent again")
+	assert.Zero(t, received)
+}
+
+// The server takes a second use of a refresh token as theft and revokes every
+// token the driver holds, so requests that find the token due together must
+// share one refresh.
+func TestSessionRefreshesOnceForConcurrentRequests(t *testing.T) {
+	a := newAuthServer(t)
+	_, client := a.signIn()
+	a.advance(testTokenLifetime - refreshMargin)
+
+	st := &stats{}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			sendReport(t.Context(), client, a.URL, "sim-test-001", &locationReport{}, st)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	presented, _, accepted := a.counts()
+	assert.Equal(t, []string{"r1"}, presented)
+	assert.Equal(t, 8, accepted)
 }
 
 func TestCheckBaseURL(t *testing.T) {
@@ -280,26 +539,28 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]string{"access_token": "token-for-" + str("email")})
+			json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "token-for-" + str("email"), "refresh_token": "refresh-for-" + str("email"), "expires_in": 900,
+			})
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
 	}))
 	defer srv.Close()
 
-	tokens, err := provisionDrivers(t.Context(), srv.Client(), srv.URL, "admin-token", "runid123", 3)
+	sessions, err := provisionDrivers(t.Context(), srv.Client(), srv.URL, "admin-token", "runid123", 3)
 	if err != nil {
 		t.Fatalf("provisionDrivers: %v", err)
 	}
-	if len(tokens) != 3 {
-		t.Fatalf("got %d tokens, want 3", len(tokens))
+	if len(sessions) != 3 {
+		t.Fatalf("got %d sessions, want 3", len(sessions))
 	}
 	seen := map[string]bool{}
-	for _, tk := range tokens {
-		if seen[tk] {
-			t.Errorf("token %q reused; every vehicle needs its own rate-limit bucket", tk)
+	for _, s := range sessions {
+		if seen[s.access] {
+			t.Errorf("token %q reused; every vehicle needs its own rate-limit bucket", s.access)
 		}
-		seen[tk] = true
+		seen[s.access] = true
 	}
 	if len(created) != 3 {
 		t.Errorf("created %d accounts, want 3", len(created))
@@ -309,7 +570,7 @@ func TestProvisionDriversGivesEachVehicleItsOwnIdentity(t *testing.T) {
 	if len(vehicles) != 3 || len(assigned) != 3 {
 		t.Errorf("created %d vehicles and %d assignments, want 3 each", len(vehicles), len(assigned))
 	}
-	for i := range tokens {
+	for i := range sessions {
 		if id := simVehicleID("runid123", i); !vehicles[id] {
 			t.Errorf("vehicle %s was not created", id)
 		}

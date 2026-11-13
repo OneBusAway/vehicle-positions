@@ -55,6 +55,12 @@ const (
 	provisionAttempts = 10
 )
 
+// refreshMargin is how long before its access token expires a vehicle
+// refreshes it, as the driver apps do. When a refresh fails for a reason that
+// may pass, such as a 429 or a dropped connection, the vehicle's requests in
+// the rest of that minute try again while the old token still works.
+const refreshMargin = time.Minute
+
 // reportBudgetWarning explains the shortfall when a single vehicle reports
 // faster than the server's per-driver allowance. Each vehicle authenticates as
 // its own driver, so the budget is per vehicle and does not shrink as more are
@@ -143,10 +149,11 @@ func main() {
 	}
 
 	bootstrap := &http.Client{Timeout: 10 * time.Second, CheckRedirect: sameOriginOnly(*baseURL)}
-	adminToken, err := login(ctx, bootstrap, *baseURL, *email, *password)
+	admin, err := login(ctx, bootstrap, *baseURL, *email, *password)
 	if err != nil {
 		log.Fatalf("login failed: %v", err)
 	}
+	adminToken := admin.AccessToken
 
 	runID, err := randomSecret()
 	if err != nil {
@@ -163,19 +170,18 @@ func main() {
 	}
 
 	log.Printf("provisioning %d driver accounts", *numVehicles)
-	tokens, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles)
+	sessions, err := provisionDrivers(ctx, bootstrap, *baseURL, adminToken, runID, *numVehicles)
 	if err != nil {
 		log.Fatalf("provisioning drivers: %v", err)
 	}
 
-	// One client per vehicle, each carrying its own driver's token. The tokens
-	// are good for 24h and are never refreshed, so a -duration 0 run left going
-	// for longer than that will start seeing 401s.
-	clients := make([]*http.Client, len(tokens))
-	for i, token := range tokens {
+	// One client per vehicle, each carrying its own driver's access token and
+	// refreshing it before it expires, so a run can outlast ACCESS_TOKEN_TTL.
+	clients := make([]*http.Client, len(sessions))
+	for i, s := range sessions {
 		clients[i] = &http.Client{
 			Timeout:       10 * time.Second,
-			Transport:     bearerTransport{token: token, base: http.DefaultTransport},
+			Transport:     sessionTransport{session: s, base: http.DefaultTransport},
 			CheckRedirect: sameOriginOnly(*baseURL),
 		}
 	}
@@ -195,9 +201,12 @@ func main() {
 	for i := 0; i < *numVehicles; i++ {
 		wg.Add(1)
 		// Routes are taken in turn, so the vehicles are spread over the schedule.
+		// token is the access token the driver signed in with. Starting and
+		// ending a trip pass it to postJSON, but the client's transport
+		// replaces that header with the session's current token.
 		v := &vehicle{
 			id: simVehicleID(runID, i), routeID: scheduleRoutes[i%len(scheduleRoutes)],
-			baseURL: *baseURL, token: tokens[i], client: clients[i],
+			baseURL: *baseURL, token: sessions[i].access, client: clients[i],
 			interval: *interval, claims: claims, stats: s,
 		}
 		go func() {
@@ -236,6 +245,95 @@ func (t bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
+// sessionTransport sends each of a vehicle's requests with its driver's
+// current access token, which the session refreshes before it expires.
+type sessionTransport struct {
+	session *session
+	base    http.RoundTripper
+}
+
+func (t sessionTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	token, err := t.session.accessToken(req.Context())
+	if err != nil {
+		// A RoundTripper must close the request body even when it fails.
+		if req.Body != nil {
+			req.Body.Close()
+		}
+		return nil, err
+	}
+	return bearerTransport{token: token, base: t.base}.RoundTrip(req)
+}
+
+// session is one driver's sign-in. Like the driver apps, it refreshes the
+// access token refreshMargin before the token expires, so the vehicle keeps
+// reporting for as long as the run lasts.
+type session struct {
+	vehicleID string
+	baseURL   string
+	// client sends the refresh. It must not be a client whose transport is
+	// this session's sessionTransport, or the refresh would wait on itself.
+	client *http.Client
+	now    func() time.Time
+
+	// mu makes the refresh single-flight. The server takes a second use of a
+	// refresh token as theft and revokes every token the driver holds.
+	mu        sync.Mutex
+	access    string
+	refresh   string
+	expiresAt time.Time
+	// refused is set when the server answers a refresh with 401. The refresh
+	// token can never work again, so the session ends rather than sending it
+	// on every request.
+	refused error
+}
+
+func newSession(vehicleID, baseURL string, client *http.Client, tokens tokenResponse, now func() time.Time) *session {
+	s := &session{vehicleID: vehicleID, baseURL: baseURL, client: client, now: now}
+	s.store(tokens, now())
+	return s
+}
+
+// store keeps a token pair issued at about issued. expires_in is relative, so
+// the expiry is counted on the simulator's own clock and skew between it and
+// the server's does not matter.
+func (s *session) store(tokens tokenResponse, issued time.Time) {
+	s.access = tokens.AccessToken
+	s.refresh = tokens.RefreshToken
+	s.expiresAt = issued.Add(time.Duration(tokens.ExpiresIn) * time.Second)
+}
+
+// accessToken returns the token to send, refreshing it first once it is
+// within refreshMargin of expiring. If the refresh fails for a reason that may
+// pass, a token that has not expired is still returned, and the next request
+// tries the refresh again.
+func (s *session) accessToken(ctx context.Context) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refused != nil {
+		return "", s.refused
+	}
+	now := s.now()
+	if now.Before(s.expiresAt.Add(-refreshMargin)) {
+		return s.access, nil
+	}
+	tokens, err := postForTokens(ctx, s.client, s.baseURL+"/api/v1/auth/refresh",
+		map[string]string{"refresh_token": s.refresh})
+	if err == nil {
+		s.store(tokens, now)
+		return s.access, nil
+	}
+	var status *statusError
+	if errors.As(err, &status) && status.code == http.StatusUnauthorized {
+		s.refused = fmt.Errorf("the driver is signed out: %w", err)
+		return "", s.refused
+	}
+	if now.Before(s.expiresAt) {
+		log.Printf("%s: refreshing the access token failed, will try again on the next request: %v", s.vehicleID, err)
+		return s.access, nil
+	}
+	return "", fmt.Errorf("refreshing the expired access token: %w", err)
+}
+
 // createUserRequest is the POST /api/v1/admin/users body.
 type createUserRequest struct {
 	Name     string `json:"name"`
@@ -262,9 +360,10 @@ func simVehicleID(runID string, i int) string {
 //
 // runID keeps the accounts of concurrent or repeated runs from colliding.
 //
-// It returns each driver's token, in vehicle order.
-func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]string, error) {
-	tokens := make([]string, 0, n)
+// It returns each driver's session, in vehicle order. The sessions refresh
+// through client, so it must not carry a driver's token itself.
+func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminToken, runID string, n int) ([]*session, error) {
+	sessions := make([]*session, 0, n)
 	for i := 0; i < n; i++ {
 		vehicleID := simVehicleID(runID, i)
 		email := fmt.Sprintf("sim-driver-%03d-%s@simulator.invalid", i+1, runID)
@@ -284,16 +383,16 @@ func provisionDrivers(ctx context.Context, client *http.Client, baseURL, adminTo
 			map[string]any{"user_id": userID, "vehicle_id": vehicleID}, nil); err != nil {
 			return nil, fmt.Errorf("assigning driver %d to %s: %w", i+1, vehicleID, err)
 		}
-		token, err := loginWithRetry(ctx, client, baseURL, email, password)
+		tokens, err := loginWithRetry(ctx, client, baseURL, email, password)
 		if err != nil {
 			return nil, fmt.Errorf("driver %d: %w", i+1, err)
 		}
-		tokens = append(tokens, token)
+		sessions = append(sessions, newSession(vehicleID, baseURL, client, tokens, time.Now))
 		if i < n-1 && !sleepCtx(ctx, provisionStagger) {
 			return nil, ctx.Err()
 		}
 	}
-	return tokens, nil
+	return sessions, nil
 }
 
 // createDriver creates a driver account and returns its user id.
@@ -348,26 +447,26 @@ func postJSON(ctx context.Context, client *http.Client, url, token string, body,
 
 // loginWithRetry backs off past a 429 from the per-IP login limiter, which one
 // login per vehicle will reach on a run with more than ten of them.
-func loginWithRetry(ctx context.Context, client *http.Client, baseURL, email, password string) (string, error) {
+func loginWithRetry(ctx context.Context, client *http.Client, baseURL, email, password string) (tokenResponse, error) {
 	var lastErr error
 	for attempt := 1; attempt <= provisionAttempts; attempt++ {
-		token, err := login(ctx, client, baseURL, email, password)
+		tokens, err := login(ctx, client, baseURL, email, password)
 		if err == nil {
-			return token, nil
+			return tokens, nil
 		}
 		lastErr = err
 		if !strings.Contains(err.Error(), "429") {
-			return "", err
+			return tokenResponse{}, err
 		}
 		if attempt == provisionAttempts {
 			break
 		}
 		log.Printf("login refused (429), waiting %s (attempt %d/%d)", provisionBackoff, attempt, provisionAttempts)
 		if !sleepCtx(ctx, provisionBackoff) {
-			return "", ctx.Err()
+			return tokenResponse{}, ctx.Err()
 		}
 	}
-	return "", lastErr
+	return tokenResponse{}, lastErr
 }
 
 // randomSecret returns a password for an account that only this run uses.
@@ -428,40 +527,71 @@ func sameOriginOnly(base string) func(*http.Request, []*http.Request) error {
 	}
 }
 
-// login exchanges credentials for a session token via POST /api/v1/auth/login.
-func login(ctx context.Context, client *http.Client, baseURL, email, password string) (string, error) {
-	body, err := json.Marshal(map[string]string{"email": email, "password": password})
+// login exchanges credentials for tokens via POST /api/v1/auth/login.
+func login(ctx context.Context, client *http.Client, baseURL, email, password string) (tokenResponse, error) {
+	return postForTokens(ctx, client, baseURL+"/api/v1/auth/login",
+		map[string]string{"email": email, "password": password})
+}
+
+// tokenResponse is the part of a login or refresh response the simulator
+// uses; both endpoints answer with the same shape.
+type tokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+// statusError is an answer other than 200 from the login or refresh endpoint.
+type statusError struct {
+	path string
+	code int
+	body []byte
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("POST %s returned %d: %s", e.path, e.code, e.body)
+}
+
+// postForTokens POSTs body to the login or the refresh endpoint and returns
+// the tokens it answers with. A vehicle needs all three fields to keep
+// reporting past its first access token, so a response missing one is an
+// error.
+func postForTokens(ctx context.Context, client *http.Client, endpoint string, body map[string]string) (tokenResponse, error) {
+	data, err := json.Marshal(body)
 	if err != nil {
-		return "", err
+		return tokenResponse{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/auth/login", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
-		return "", err
+		return tokenResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return tokenResponse{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("POST /api/v1/auth/login returned %d: %s", resp.StatusCode, bytes.TrimSpace(msg))
+		return tokenResponse{}, &statusError{path: req.URL.Path, code: resp.StatusCode, body: bytes.TrimSpace(msg)}
 	}
 
-	var out struct {
-		AccessToken string `json:"access_token"`
-	}
+	var out tokenResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&out); err != nil {
-		return "", fmt.Errorf("decoding login response: %w", err)
+		return tokenResponse{}, fmt.Errorf("decoding POST %s response: %w", req.URL.Path, err)
 	}
-	if out.AccessToken == "" {
-		return "", errors.New("login response contained no access_token")
+	switch {
+	case out.AccessToken == "":
+		return tokenResponse{}, fmt.Errorf("POST %s response contained no access_token", req.URL.Path)
+	case out.RefreshToken == "":
+		return tokenResponse{}, fmt.Errorf("POST %s response contained no refresh_token", req.URL.Path)
+	case out.ExpiresIn <= 0:
+		return tokenResponse{}, fmt.Errorf("POST %s response contained no positive expires_in", req.URL.Path)
 	}
-	return out.AccessToken, nil
+	return out, nil
 }
 
 // fetchRouteIDs lists the route ids in the server's GTFS schedule.

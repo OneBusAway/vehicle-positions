@@ -577,11 +577,9 @@ re-authenticating mid-shift. Refresh tokens separate the two lifetimes: a
 renewable access token plus a long-lived, revocable, hashed-at-rest refresh
 token.
 
-`ACCESS_TOKEN_TTL` still defaults to **24h**, unchanged from before, because
-the iOS driver app cannot refresh yet: when its token expires it stops reporting
-until the driver signs in again, so a short default would cut its reports off
-mid-shift. The Android app refreshes. Once the iOS app does too, lowering the
-default is a one-variable change; `15m` is the intended destination.
+`ACCESS_TOKEN_TTL` defaults to **15m**. The Android and iOS driver apps and the
+simulator all refresh the access token before it expires, so a short token does
+not cut off a driver's reports mid-shift.
 
 Login returns both tokens:
 
@@ -590,7 +588,7 @@ Login returns both tokens:
   "token": "<deprecated alias for access_token>",
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "refresh_token": "3f9a...c1",
-  "expires_in": 86400
+  "expires_in": 900
 }
 ```
 
@@ -629,8 +627,8 @@ the winner was just given is revoked with the rest. Make refresh single-flight.
 When a request gets a `401`, start one refresh, and have any request that fails
 while it is running wait for its result instead of starting another. A lost
 response is different: if the server processed the refresh and the reply never
-arrived, the retry presents a spent token and the user has to log in again. The
-Android app refreshes this way, a minute before the access token expires and
+arrived, the retry presents a spent token and the user has to log in again. Both
+driver apps refresh this way, a minute before the access token expires and
 again after a `401`.
 
 Response codes:
@@ -649,21 +647,18 @@ Response codes:
 - `500 Internal Server Error` — the token could not be read or rotated, or
   revoking the user's tokens after a replay failed.
 
-**Upgrading:** nothing breaks on deploy — the default access token lifetime is
-unchanged and `token` is still in the login response. Before lowering
-`ACCESS_TOKEN_TTL`, a client must handle `401 → refresh → retry`; the
-deprecated `token` field keeps it compiling and parsing, but does **not**
-protect it from a shorter lifetime. The Android and iOS apps can refresh
-expired access tokens, but the simulator does not support token refreshing.
-If a simulation runs longer than the access token's lifetime
-(`ACCESS_TOKEN_TTL`), authenticated requests may start returning
-`401 Unauthorized`.
+**Upgrading:** the default access token lifetime is now 15 minutes, down from
+24 hours. A client that cannot refresh gets a `401` once its access token is 15
+minutes old; the deprecated `token` field keeps it compiling and parsing, but
+does **not** protect it from the shorter lifetime. Older builds of the driver
+apps are such clients: see `ACCESS_TOKEN_TTL` in
+[`docs/configuration.md`](docs/configuration.md) before upgrading the server.
 
 Both lifetimes are configurable:
 
 |Variable            |Default|Purpose                                   |
 |--------------------|-------|------------------------------------------|
-|`ACCESS_TOKEN_TTL`  |`24h`  |How long an API access token stays valid  |
+|`ACCESS_TOKEN_TTL`  |`15m`  |How long an API access token stays valid  |
 |`REFRESH_TOKEN_TTL` |`168h` |How long a refresh token stays valid (7d) |
 
 The server refuses to start if `ACCESS_TOKEN_TTL` is not positive or
