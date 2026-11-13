@@ -35,7 +35,7 @@ internal data class NotificationText(
 internal fun notificationText(tracking: TrackingState, trip: ActiveTrip?): NotificationText {
     val model = statusCardModel(tracking, trip?.vehicleId)
     val status = when (model) {
-        is StatusCardModel.Adherence -> NotificationStatus.Minutes(deviationMinutes(model.deviationSec))
+        is StatusCardModel.Adherence -> NotificationStatus.Minutes(model.answerMinutes)
         is StatusCardModel.OffSchedule -> NotificationStatus.Minutes(deviationMinutes(model.deviationSec))
         // Without the distance, which changes with every fix.
         is StatusCardModel.OffRoute -> NotificationStatus.OffRoute

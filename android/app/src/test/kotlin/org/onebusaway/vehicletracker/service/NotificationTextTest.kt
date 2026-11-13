@@ -26,7 +26,8 @@ class NotificationTextTest {
     )
 
     @Test fun `on time, late and early are the card's whole minutes, with the route and the next stop`() {
-        for ((secondsLate, minutes) in listOf(0L to 0, 400L to 7, -120L to -2, 6000L to 100)) {
+        // Up to 5 min behind is the on-time window, where the card says On time in green.
+        for ((secondsLate, minutes) in listOf(0L to 0, 240L to 0, 300L to 0, 301L to 5, 400L to 7, -120L to -2, 6000L to 100)) {
             assertEquals(
                 "$secondsLate s late",
                 NotificationText("7", NotificationStatus.Minutes(minutes), t1.stops[1], t1.timezone, TrackingProblem.NONE),
