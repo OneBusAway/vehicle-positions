@@ -79,6 +79,7 @@ type adminUI struct {
 	vehicleCreator VehicleCreator
 	userManager    userManager
 	assignments    assignmentManager
+	apiKeys        APIKeyManager
 	tokenChecker   TokenChecker
 	tokenRevoker   TokenRevoker
 	jwtSecret      []byte
@@ -111,6 +112,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		vehicleCreator: store,
 		userManager:    store,
 		assignments:    store,
+		apiKeys:        store,
 		tokenChecker:   store,
 		tokenRevoker:   store,
 		jwtSecret:      jwtSecret,
@@ -150,6 +152,9 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("POST /admin/users/{id}/vehicles/{vehicleID}/remove", protect(http.HandlerFunc(ui.userUnassignVehicle)))
 	mux.Handle("GET /admin/trips", protect(http.HandlerFunc(ui.tripsPage)))
 	mux.Handle("POST /admin/trips/{id}/end", protect(http.HandlerFunc(ui.tripEnd)))
+	mux.Handle("GET /admin/api-keys", protect(http.HandlerFunc(ui.apiKeysPage)))
+	mux.Handle("POST /admin/api-keys", protect(http.HandlerFunc(ui.apiKeyCreate)))
+	mux.Handle("POST /admin/api-keys/{id}/deactivate", protect(http.HandlerFunc(ui.apiKeyDeactivate)))
 }
 
 func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {

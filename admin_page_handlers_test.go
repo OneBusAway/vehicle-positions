@@ -238,7 +238,7 @@ func TestAdminPagesRedirectWithoutSession(t *testing.T) {
 	ui := newTestAdminUI(t)
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
-	for _, path := range []string{"/admin", "/admin/dashboard", "/admin/map", "/admin/vehicles", "/admin/users", "/admin/trips"} {
+	for _, path := range []string{"/admin", "/admin/dashboard", "/admin/map", "/admin/vehicles", "/admin/users", "/admin/trips", "/admin/api-keys"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
@@ -265,6 +265,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		{"users", "/admin/users", "New user"},
 		{"trips", "/admin/trips", "No trips found."},
 		{"map", "/admin/map", "Live Map"},
+		{"api keys", "/admin/api-keys", "No feed API keys yet."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

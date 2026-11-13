@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,25 @@ func (r *createAPIKeyRequest) validate() error {
 type createAPIKeyResponse struct {
 	APIKey
 	Key string `json:"key"`
+}
+
+// issueAPIKey makes a new key called name and stores its hash. The JSON API
+// and the admin page both make keys through it, so a key is generated, hashed
+// and logged the same way whichever one an admin uses. The raw key is returned
+// for the caller to show once: it is not stored, and it is not logged here.
+func issueAPIKey(ctx context.Context, store APIKeyManager, name string) (*APIKey, string, error) {
+	rawKey, err := generateAPIKey()
+	if err != nil {
+		return nil, "", err
+	}
+
+	key, err := store.CreateAPIKey(ctx, name, hashAPIKey(rawKey))
+	if err != nil {
+		return nil, "", err
+	}
+
+	slog.Info("api key created", "api_key_id", key.ID, "name", key.Name)
+	return key, rawKey, nil
 }
 
 func handleListAPIKeys(store APIKeyManager) http.HandlerFunc {
@@ -81,21 +101,13 @@ func handleCreateAPIKey(store APIKeyManager) http.HandlerFunc {
 			return
 		}
 
-		rawKey, err := generateAPIKey()
-		if err != nil {
-			slog.Error("failed to generate api key", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-			return
-		}
-
-		key, err := store.CreateAPIKey(r.Context(), req.Name, hashAPIKey(rawKey))
+		key, rawKey, err := issueAPIKey(r.Context(), store, req.Name)
 		if err != nil {
 			slog.Error("failed to create api key", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
 
-		slog.Info("api key created", "api_key_id", key.ID, "name", key.Name)
 		writeJSON(w, http.StatusCreated, createAPIKeyResponse{APIKey: *key, Key: rawKey})
 	}
 }
