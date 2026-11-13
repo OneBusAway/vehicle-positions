@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.service
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -40,9 +41,14 @@ class BacklogDrainTest {
     private fun drainWith(uploader: HistoryUploader) = BacklogDrain(uploader, clock = { 1020L })
 
     /** A reporter sharing [uploader] with the job, as Hilt's singleton has it. */
-    private fun reporterSharing(api: SlowHistoryApi, queue: OfflineFixQueue, uploader: HistoryUploader): TripReporter {
+    private fun reporterSharing(
+        api: SlowHistoryApi,
+        queue: OfflineFixQueue,
+        uploader: HistoryUploader,
+        scheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
+    ): TripReporter {
         var now = 0L
-        return TripReporter(TrackerApiProvider { api }, TrackingRepository(), { now += REPORT_INTERVAL_MS; now }, queue, uploader, BacklogUploadScheduler {})
+        return TripReporter(TrackerApiProvider { api }, TrackingRepository(), { now += REPORT_INTERVAL_MS; now }, queue, uploader, scheduler)
     }
 
     private fun fix(ts: Long) = LocationFix(-1.29, 36.82, bearing = 180.0, speed = 8.5, accuracy = 12.0, timeEpochSec = ts)
@@ -90,6 +96,42 @@ class BacklogDrainTest {
         assertFalse(job.await())
         assertEquals(listOf("van-1", "van-2"), api.uploads)
         assertEquals(0, queue.oldest(10).size)
+    }
+
+    // Scheduling over a running job stops it part way through the queue.
+    @Test fun `a report while the job is running does not schedule over it, and one after it has finished does`() = runTest {
+        val api = SlowHistoryApi().apply { finishUploads.complete(Unit) }
+        val queue = queueOf("van-1", "van-2", "van-3", "van-4")
+        val uploader = uploaderFor(api, queue)
+        val scheduler = FakeBacklogUploadScheduler()
+        val reporter = reporterSharing(api, queue, uploader, scheduler)
+
+        val job = async { drainWith(uploader).run() }
+        runCurrent()
+        assertEquals("the job is between batches", listOf("van-1"), api.uploads)
+
+        reporter.report(trip, fix(ts = 1020L))
+        assertEquals("the reporter's batch went, with more queued behind it", listOf("van-1", "van-2"), api.uploads)
+        assertEquals(2, queue.oldest(10).size)
+        assertEquals(0, scheduler.scheduledAfresh)
+
+        assertFalse(job.await())
+        queueOf("van-5", "van-6", queue = queue)
+        reporter.report(trip, fix(ts = 1030L))
+        assertEquals(1, scheduler.scheduledAfresh)
+    }
+
+    // JobScheduler stops the job when the connection goes, and cancels it there.
+    @Test fun `a job stopped part way is no longer running`() = runTest {
+        val api = SlowHistoryApi().apply { finishUploads.complete(Unit) }
+        val uploader = uploaderFor(api, queueOf("van-1", "van-2"))
+
+        val job = launch { drainWith(uploader).run() }
+        runCurrent()
+        assertTrue(uploader.jobRunning)
+
+        job.cancelAndJoin()
+        assertFalse(uploader.jobRunning)
     }
 
     @Test fun `the job sends the whole backlog, a batch every five seconds`() = runTest {

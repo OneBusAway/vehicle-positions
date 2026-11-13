@@ -57,11 +57,18 @@ class HistoryUploader @Inject constructor(
 ) {
     private val lock = Mutex()
 
-    /** Uploads one batch, unless another upload is on its way. */
-    suspend fun uploadIfIdle(nowEpochSec: Long) {
-        if (!lock.tryLock()) return
+    /**
+     * Whether [BacklogUploadJob] is working through the queue, the pauses between its batches included. The job
+     * says so here because JobScheduler, before Android 14, can't tell a job that is running from one that is waiting.
+     */
+    @Volatile
+    var jobRunning = false
+
+    /** Uploads one batch, unless another upload is on its way: null then. */
+    suspend fun uploadIfIdle(nowEpochSec: Long): HistoryUpload? {
+        if (!lock.tryLock()) return null
         try {
-            uploadOneBatch(nowEpochSec)
+            return uploadOneBatch(nowEpochSec)
         } finally {
             lock.unlock()
         }

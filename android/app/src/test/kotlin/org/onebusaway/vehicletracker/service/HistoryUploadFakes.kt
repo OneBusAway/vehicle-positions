@@ -29,6 +29,14 @@ suspend fun uploaderFor(
     return HistoryUploader(TrackerApiProvider { api }, sessions, queue)
 }
 
+/** Counts what was asked of the backlog job. */
+class FakeBacklogUploadScheduler : BacklogUploadScheduler {
+    var scheduled = 0
+    var scheduledAfresh = 0
+    override fun schedule() { scheduled++ }
+    override fun scheduleAfresh() { scheduledAfresh++ }
+}
+
 /**
  * Takes each live report at once, and holds each history upload until [finishUploads] completes. [historyFailure]
  * picks what the upload with that index (from 0) throws once it is let through, or null when it goes through.

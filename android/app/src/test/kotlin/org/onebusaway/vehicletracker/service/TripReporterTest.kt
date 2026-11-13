@@ -56,13 +56,13 @@ class TripReporterTest {
         tracking: TrackingRepository = TrackingRepository(),
         elapsedMs: () -> Long = steppingClock(),
         queue: OfflineFixQueue = FakeOfflineFixQueue(),
-        scheduler: BacklogUploadScheduler = BacklogUploadScheduler {},
+        scheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
     ) = TripReporter(TrackerApiProvider { api }, tracking, elapsedMs, queue, uploaderFor(api, queue), scheduler)
 
     private suspend fun reporterWith(
         server: MockWebServer,
         queue: OfflineFixQueue = FakeOfflineFixQueue(),
-        scheduler: BacklogUploadScheduler = BacklogUploadScheduler {},
+        scheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
         elapsedMs: () -> Long = steppingClock(),
     ): Pair<TripReporter, TrackingRepository> {
         val tracking = TrackingRepository()
@@ -108,7 +108,7 @@ class TripReporterTest {
         val holder = ApiHolder(sessions, CoroutineScope(Job().apply { cancel() }), clock = { 1000L })
         val api = TrackerApiProvider(holder::api)
         val queue = FakeOfflineFixQueue()
-        return TripReporter(api, tracking, steppingClock(), queue, HistoryUploader(api, sessions, queue), BacklogUploadScheduler {}) to tracking
+        return TripReporter(api, tracking, steppingClock(), queue, HistoryUploader(api, sessions, queue), FakeBacklogUploadScheduler()) to tracking
     }
 
     @Test fun `401 with no refresh token sets AUTH_EXPIRED`() = runTest {
@@ -424,22 +424,22 @@ class TripReporterTest {
 
     // Without it the fix waits for a live report, which may be the next trip's.
     @Test fun `a queued fix schedules the backlog upload, a sent or lost one doesn't`() = runTest {
-        var scheduled = 0
+        val scheduler = FakeBacklogUploadScheduler()
         val queue = FailingQueue()
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
-        val (reporter, _) = reporterWith(server, queue = queue, scheduler = { scheduled++ })
+        val (reporter, _) = reporterWith(server, queue = queue, scheduler = scheduler)
 
         reporter.report(trip, fix())
-        assertEquals("sent", 0, scheduled)
+        assertEquals("sent", 0, scheduler.scheduled)
 
         server.shutdown()
         reporter.report(trip, fix())
-        assertEquals("queued", 1, scheduled)
+        assertEquals("queued", 1, scheduler.scheduled)
 
         queue.addFails = true
         reporter.report(trip, fix())
-        assertEquals("lost to a full disk", 1, scheduled)
+        assertEquals("lost to a full disk", 1, scheduler.scheduled)
     }
 
     @Test fun `a history upload refused for good is dropped, a passing failure is kept`() = runTest {
@@ -563,7 +563,11 @@ class TripReporterTest {
         }
     }
 
-    private suspend fun slowReporter(api: SlowHistoryApi, queue: OfflineFixQueue) = reporterFor(api, queue = queue)
+    private suspend fun slowReporter(
+        api: SlowHistoryApi,
+        queue: OfflineFixQueue,
+        scheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
+    ) = reporterFor(api, queue = queue, scheduler = scheduler)
 
     // Live fixes that can't go are dropped, not queued, so an upload holding them back loses them.
     @Test fun `a live fix still goes while a history upload is on its way`() = runTest {
@@ -589,13 +593,15 @@ class TripReporterTest {
             add(queuedFix("bus-1"))
             add(queuedFix("bus-2"))
         }
-        val reporter = slowReporter(api, queue)
+        val scheduler = FakeBacklogUploadScheduler()
+        val reporter = slowReporter(api, queue, scheduler)
 
         val reports = (0..2).map { i ->
             launch { reporter.report(trip, fix(ts = 1020L + 10 * i)) }.also { runCurrent() }
         }
         assertEquals(3, api.liveReports)
         assertEquals(listOf("bus-1"), api.uploads)
+        assertEquals("no batch has gone yet", 0, scheduler.scheduledAfresh)
 
         api.finishUploads.complete(Unit)
         reports.joinAll()
@@ -620,5 +626,86 @@ class TripReporterTest {
             reporter.report(trip, fix(ts = 1030L))
             assertEquals("$failure", listOf("bus-1"), api.uploads)
         }
+    }
+
+    // JobScheduler puts a job that keeps failing off for longer each time, for hours in the end. A batch that goes
+    // shows the server is taking uploads again, so the job starts over without that wait.
+    @Test fun `a batch that goes with more queued behind it schedules the backlog job afresh`() = runTest {
+        val api = SlowHistoryApi().apply { finishUploads.complete(Unit) }
+        val queue = FakeOfflineFixQueue().apply {
+            add(queuedFix("bus-1"))
+            add(queuedFix("bus-2"))
+        }
+        val scheduler = FakeBacklogUploadScheduler()
+        val reporter = reporterFor(api, queue = queue, scheduler = scheduler)
+
+        reporter.report(trip, fix(ts = 1020L))
+        assertEquals(listOf("bus-1"), api.uploads)
+        assertEquals("bus-2 is still queued", 1, scheduler.scheduledAfresh)
+
+        reporter.report(trip, fix(ts = 1030L))
+        assertEquals(listOf("bus-1", "bus-2"), api.uploads)
+        assertEquals("nothing is left for the job", 1, scheduler.scheduledAfresh)
+        assertEquals("only a fix just queued leaves a waiting job as it is", 0, scheduler.scheduled)
+    }
+
+    // The upload has just been refused, so the job's wait may still be earned. The next report tries a batch anyway.
+    @Test fun `a batch that stays queued leaves the backlog job as it is`() = runTest {
+        for (failure in listOf(HttpException(Response.error<Unit>(429, "{}".toResponseBody())), HttpException(Response.error<Unit>(500, "{}".toResponseBody())), IOException("unreachable"))) {
+            val api = SlowHistoryApi().apply {
+                finishUploads.complete(Unit)
+                historyFailure = { failure }
+            }
+            val queue = FakeOfflineFixQueue().apply {
+                add(queuedFix("bus-1"))
+                add(queuedFix("bus-2"))
+            }
+            val scheduler = FakeBacklogUploadScheduler()
+            val reporter = reporterFor(api, queue = queue, scheduler = scheduler)
+
+            reporter.report(trip, fix(ts = 1020L))
+
+            assertEquals("$failure", listOf("bus-1"), api.uploads)
+            assertEquals("$failure", 2, queue.queued.size)
+            assertEquals("$failure", 0, scheduler.scheduledAfresh)
+        }
+    }
+
+    // The job would give up at once: nobody is signed in to the account these fixes were queued under.
+    @Test fun `fixes queued under another account do not schedule the backlog job afresh`() = runTest {
+        val api = SlowHistoryApi().apply { finishUploads.complete(Unit) }
+        val queue = FakeOfflineFixQueue().apply {
+            claimFor("http://localhost other@example.com")
+            add(queuedFix("bus-1"))
+        }
+        val scheduler = FakeBacklogUploadScheduler()
+        val reporter = reporterFor(api, queue = queue, scheduler = scheduler)
+
+        reporter.report(trip, fix(ts = 1020L))
+
+        assertEquals(1, api.liveReports)
+        assertEquals(emptyList<String>(), api.uploads)
+        assertEquals(0, scheduler.scheduledAfresh)
+    }
+
+    @Test fun `a queue that can't be read once the batch has gone doesn't fail the report`() = runTest {
+        val api = SlowHistoryApi().apply { finishUploads.complete(Unit) }
+        val inner = FakeOfflineFixQueue().apply {
+            add(queuedFix("bus-1"))
+            add(queuedFix("bus-2"))
+        }
+        val queue = object : OfflineFixQueue by inner {
+            var reads = 0
+            override suspend fun oldest(max: Int) = if (reads++ == 0) inner.oldest(max) else throw IOException("I/O error")
+        }
+        val tracking = TrackingRepository()
+        val scheduler = FakeBacklogUploadScheduler()
+        val reporter = reporterFor(api, tracking, queue = queue, scheduler = scheduler)
+
+        reporter.report(trip, fix(ts = 1020L))
+
+        assertEquals(1, tracking.state.value.fixesSent)
+        assertEquals("the batch went before the read failed", listOf("bus-2"), inner.queued.map { it.vehicleId })
+        assertEquals(0, scheduler.scheduledAfresh)
     }
 }
