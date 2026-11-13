@@ -109,7 +109,7 @@ func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleCheck
 		}
 
 		if format == "csv" {
-			writeCSV(w, vehicleID, points)
+			writeCSV(w, vehicleID, points, hasMore)
 			return
 		}
 
@@ -136,9 +136,12 @@ func handleGetLocationHistory(lister LocationHistoryLister, checker VehicleCheck
 	}
 }
 
-func writeCSV(w http.ResponseWriter, vehicleID string, points []LocationPoint) {
+// writeCSV reports hasMore in the X-Has-More header, because a CSV body has
+// nowhere to carry the has_more field the JSON response has.
+func writeCSV(w http.ResponseWriter, vehicleID string, points []LocationPoint, hasMore bool) {
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s_locations.csv"`, vehicleID))
+	w.Header().Set("X-Has-More", strconv.FormatBool(hasMore))
 	w.WriteHeader(http.StatusOK)
 
 	writer := csv.NewWriter(w)

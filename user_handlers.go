@@ -31,11 +31,17 @@ type UpdateUserRequest struct {
 	Active *bool `json:"active,omitempty"`
 }
 
+type userListResponse struct {
+	Count   int            `json:"count"`
+	HasMore bool           `json:"has_more"`
+	Users   []UserResponse `json:"users"`
+}
+
 // handleListUsers returns one page of users, newest first, bounded by the
 // limit/offset query params and narrowed by the optional q and role filters.
-// Deactivated users are included, as they always have been. The response
-// stays a bare JSON array rather than a paging envelope so existing clients
-// keep working.
+// Deactivated users are included, as they always have been. It fetches
+// limit+1 rows from the store to detect has_more without a separate count
+// query, as handleListTrips does.
 func handleListUsers(store UserPager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit, offset, ok := parseListPageParams(w, r)
@@ -56,9 +62,10 @@ func handleListUsers(store UserPager) http.HandlerFunc {
 		}
 
 		users, err := store.ListUsersPage(r.Context(), UserFilter{
-			Role:   role,
-			Q:      q,
-			Limit:  int32(limit),
+			Role: role,
+			Q:    q,
+			// Fetch one extra row to detect whether results were truncated at limit.
+			Limit:  int32(limit) + 1,
 			Offset: int32(offset),
 		})
 		if err != nil {
@@ -66,7 +73,20 @@ func handleListUsers(store UserPager) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
-		writeJSON(w, http.StatusOK, users)
+
+		hasMore := len(users) > limit
+		if hasMore {
+			users = users[:limit]
+		}
+		if users == nil {
+			users = make([]UserResponse, 0)
+		}
+
+		writeJSON(w, http.StatusOK, userListResponse{
+			Count:   len(users),
+			HasMore: hasMore,
+			Users:   users,
+		})
 	}
 }
 

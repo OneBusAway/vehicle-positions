@@ -48,11 +48,17 @@ func (r *upsertVehicleRequest) validate() error {
 	return nil
 }
 
+type vehicleListResponse struct {
+	Count    int               `json:"count"`
+	HasMore  bool              `json:"has_more"`
+	Vehicles []VehicleResponse `json:"vehicles"`
+}
+
 // handleListVehicles returns one page of vehicles, newest first, bounded by
 // the limit/offset query params and narrowed by the optional q and
 // agency_tag filters. Deactivated vehicles are included, as they always have
-// been. The response stays a bare JSON array rather than a paging envelope
-// so existing clients keep working.
+// been. It fetches limit+1 rows from the store to detect has_more without a
+// separate count query, as handleListTrips does.
 func handleListVehicles(store VehiclePager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit, offset, ok := parseListPageParams(w, r)
@@ -71,15 +77,29 @@ func handleListVehicles(store VehiclePager) http.HandlerFunc {
 			IncludeInactive: true,
 			AgencyTag:       query.Get("agency_tag"),
 			Q:               q,
-			Limit:           int32(limit),
-			Offset:          int32(offset),
+			// Fetch one extra row to detect whether results were truncated at limit.
+			Limit:  int32(limit) + 1,
+			Offset: int32(offset),
 		})
 		if err != nil {
 			slog.Error("failed to list vehicles", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list vehicles"})
 			return
 		}
-		writeJSON(w, http.StatusOK, vehicles)
+
+		hasMore := len(vehicles) > limit
+		if hasMore {
+			vehicles = vehicles[:limit]
+		}
+		if vehicles == nil {
+			vehicles = make([]VehicleResponse, 0)
+		}
+
+		writeJSON(w, http.StatusOK, vehicleListResponse{
+			Count:    len(vehicles),
+			HasMore:  hasMore,
+			Vehicles: vehicles,
+		})
 	}
 }
 

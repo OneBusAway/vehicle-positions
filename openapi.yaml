@@ -1049,19 +1049,21 @@ paths:
       tags: [admin]
       summary: List vehicles
       description: |
-        Returns one page of active vehicles. Requires the `admin` role.
+        Returns one page of vehicles newest-first, deactivated ones included.
+        Requires the `admin` role.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
       parameters:
         - $ref: '#/components/parameters/ListLimitQuery'
         - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
         '200':
-          description: Vehicles. A bare array — there is no paging envelope.
+          description: One page of vehicles.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Vehicle'
+                $ref: '#/components/schemas/VehicleList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1192,7 +1194,8 @@ paths:
 
         Results are capped by `limit`. The handler reads one row beyond the
         cap to set `has_more`, so a truncated response is distinguishable
-        from an exact fit.
+        from an exact fit. A CSV body has no field to carry that in, so the
+        CSV variant reports it in the `X-Has-More` response header.
       parameters:
         - in: query
           name: from
@@ -1235,6 +1238,15 @@ paths:
             absent `bearing` / `speed` / `accuracy` render as empty cells, and
             `trip_id` is prefixed with `'` when it starts with a character a
             spreadsheet would treat as a formula.
+          headers:
+            X-Has-More:
+              description: |
+                Sent with the CSV variant, where it stands in for the JSON
+                body's `has_more`: `true` when more fixes exist in the window
+                than `limit` allowed, `false` when the file is complete.
+              schema:
+                type: string
+                enum: ['true', 'false']
           content:
             application/json:
               schema:
@@ -1450,19 +1462,21 @@ paths:
       tags: [admin]
       summary: List users
       description: |
-        Returns one page of users. Requires the `admin` role.
+        Returns one page of users newest-first, deactivated ones included.
+        Requires the `admin` role.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
       parameters:
         - $ref: '#/components/parameters/ListLimitQuery'
         - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
         '200':
-          description: Users. A bare array — there is no paging envelope.
+          description: One page of users.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2219,6 +2233,22 @@ components:
           type: string
           maxLength: 255
 
+    VehicleList:
+      type: object
+      required: [count, has_more, vehicles]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of vehicles in `vehicles`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more vehicles match the filter than this page returned.
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vehicle'
+
     Vehicle:
       type: object
       required: [id, label, agency_tag, active, created_at, updated_at]
@@ -2295,6 +2325,22 @@ components:
       description: |
         At least 8 characters and at most 72 bytes — bcrypt's input limit. A
         multi-byte password can exceed 72 bytes well before 72 characters.
+
+    UserList:
+      type: object
+      required: [count, has_more, users]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of users in `users`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more users match the filter than this page returned.
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
 
     User:
       type: object
