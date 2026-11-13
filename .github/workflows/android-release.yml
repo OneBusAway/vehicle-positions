@@ -29,13 +29,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Restore the keystore
+            - name: Restore the keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64" || { echo "ANDROID_KEYSTORE_BASE64 is not set; see docs/deployment.md §12.4" >&2; exit 1; }
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            - name: Build signed release
+      - name: Build signed release
         env:
           ANDROID_KEYSTORE: ${{ runner.temp }}/release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -48,6 +48,10 @@ jobs:
           VERSION_NAME="${GITHUB_REF_NAME#android-v}"
           IFS='.' read -r major minor patch <<< "$VERSION_NAME"
           patch="${patch%%-*}"
+          if [ "$minor" -ge 100 ] || [ "$patch" -ge 100 ]; then
+            echo "minor and patch must each be under 100 for versionCode encoding" >&2
+            exit 1
+          fi
           VERSION_CODE=$(( major * 10000 + minor * 100 + patch ))
           ./gradlew :app:assembleRelease \
             -PversionCode="$VERSION_CODE" \
