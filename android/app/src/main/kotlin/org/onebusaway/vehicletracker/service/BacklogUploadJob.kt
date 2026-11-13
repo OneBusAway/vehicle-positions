@@ -28,18 +28,31 @@ private const val BACKLOG_UPLOAD_JOB_ID = 1
 internal const val HISTORY_UPLOAD_INTERVAL_MS = 5_000L
 
 /** Asks for the queued fixes to be uploaded once there is a connection, whether or not a trip is running. */
-fun interface BacklogUploadScheduler {
+interface BacklogUploadScheduler {
+    /** For a fix that has just been queued. A job that is waiting or running will get to it, and is left as it is. */
     fun schedule()
+
+    /**
+     * For when the server has just answered an upload. JobScheduler makes a job that keeps failing wait longer each
+     * time, in the end for hours, and [schedule] leaves that wait in place. This puts a new job in its place, which
+     * starts with no wait. It also stops a job that is running, so the caller checks [HistoryUploader.jobRunning].
+     */
+    fun scheduleAfresh()
 }
 
 class JobBacklogUploadScheduler @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) : BacklogUploadScheduler {
+    private val jobs: JobScheduler get() = context.getSystemService(JobScheduler::class.java)
+
     override fun schedule() {
-        val jobs = context.getSystemService(JobScheduler::class.java)
         // Scheduling again would stop a job that is already uploading, and one that is waiting
         // will pick up this fix too.
         if (jobs.getPendingJob(BACKLOG_UPLOAD_JOB_ID) != null) return
+        scheduleAfresh()
+    }
+
+    override fun scheduleAfresh() {
         val job = JobInfo.Builder(BACKLOG_UPLOAD_JOB_ID, ComponentName(context, BacklogUploadJob::class.java))
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setPersisted(true)
@@ -61,6 +74,15 @@ class BacklogDrain @Inject constructor(
 ) {
     /** Returns whether to try again later: true when fixes are left that failed only for now. */
     suspend fun run(): Boolean {
+        uploader.jobRunning = true
+        try {
+            return uploadAll()
+        } finally {
+            uploader.jobRunning = false
+        }
+    }
+
+    private suspend fun uploadAll(): Boolean {
         while (true) {
             val outcome = try {
                 uploader.upload(nowEpochSec = clock())

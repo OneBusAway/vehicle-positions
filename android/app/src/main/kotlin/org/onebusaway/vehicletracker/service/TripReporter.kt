@@ -76,7 +76,8 @@ class TripReporter @Inject constructor(
      * A report that goes through is followed by one batch of the fixes queued while there was no
      * connection, unless [BacklogUploadJob] is uploading one. That upload is not part of the
      * report: a slow one would otherwise hold back the live fixes behind it, and those are
-     * dropped, not queued.
+     * dropped, not queued. When the batch goes and more is queued, the job is scheduled afresh to
+     * take the rest, unless it is running.
      */
     suspend fun report(trip: ActiveTrip, fix: LocationFix) {
         if (!reportInFlight.compareAndSet(false, true)) return
@@ -90,7 +91,12 @@ class TripReporter @Inject constructor(
         // limit on history uploads; a report that goes through while a batch is on its way starts none.
         if (!sent) return
         try {
-            historyUploader.uploadIfIdle(nowEpochSec = fix.timeEpochSec)
+            val upload = historyUploader.uploadIfIdle(nowEpochSec = fix.timeEpochSec)
+            // The server has just answered an upload, so a job put off after earlier failures, by hours
+            // in the end, has nothing left to wait for. A running one would be stopped, so it is left alone.
+            if (upload == HistoryUpload.BATCH_SENT && !historyUploader.jobRunning && offlineQueue.oldest(1).isNotEmpty()) {
+                backlogScheduler.scheduleAfresh()
+            }
         } catch (e: IOException) {
             // The upload's own network failures are handled inside; this is the queue's file failing.
             Log.w(TAG, "Could not read or update the offline queue", e)
