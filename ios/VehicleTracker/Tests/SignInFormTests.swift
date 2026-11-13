@@ -32,13 +32,30 @@ import Testing
         #expect(checked(server, " \n", "pw") == .missing(.email))
     }
 
-    @Test func anAddressWithNoHttpOrHttpsIsUnreachableAndNothingIsSent() {
+    /// A driver is usually told the address without its "https://", as
+    /// Android's `serverAddressOf` allows for.
+    @Test func anAddressTypedWithNoSchemeIsSignedInToOverHttps() {
         var form = SignInForm()
-        #expect(form.begin(server: "tracker.example.org", email: email, password: "pw") == nil)
-        #expect(form.failure == .unreachable("tracker.example.org"))
+        #expect(form.begin(server: " tracker.example.org ", email: email, password: "pw") == URL(string: "https://tracker.example.org")!)
+        #expect(form.isSigningIn)
+        #expect(form.failure == nil)
+        #expect(SignInForm.check(server: "tracker.example.org:8443", email: email, password: "pw")
+            == .success(URL(string: "https://tracker.example.org:8443")!))
+        #expect(SignInForm.check(server: "192.168.1.20:8080", email: email, password: "pw")
+            == .success(URL(string: "https://192.168.1.20:8080")!))
+    }
+
+    @Test func whatIsNotAnHttpOrHttpsAddressIsUnreachableAndNothingIsSent() {
+        var form = SignInForm()
+        #expect(form.begin(server: "ftp://tracker.example.org", email: email, password: "pw") == nil)
+        #expect(form.failure == .unreachable("ftp://tracker.example.org"))
         #expect(!form.isSigningIn)
-        #expect(checked("ftp://tracker.example.org", email, "pw") == .unreachable("ftp://tracker.example.org"))
         #expect(checked("https://", email, "pw") == .unreachable("https://"))
+        // A scheme typed wrong must not go to a server called "https".
+        #expect(checked("https//tracker.example.org", email, "pw") == .unreachable("https//tracker.example.org"))
+        #expect(checked("http//tracker.example.org", email, "pw") == .unreachable("http//tracker.example.org"))
+        // Nor an email typed in the wrong field to its domain, with the password.
+        #expect(checked(email, email, "pw") == .unreachable(email))
     }
 
     @Test func plainHttpIsRefusedExceptOnThisPhoneOrTheLocalNetwork() {
