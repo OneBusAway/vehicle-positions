@@ -206,7 +206,10 @@ class LoginViewModel @Inject constructor(
         }
         _uiState.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            authRepository.login(serverUrl, email.text.toString(), password.text.toString()).fold(
+            // The server compares the email exactly as sent, so a space typed or pasted around it would be refused as a
+            // wrong password. The password goes as typed.
+            val typedEmail = email.text.toString().trim()
+            authRepository.login(serverUrl, typedEmail, password.text.toString()).fold(
                 onSuccess = {
                     _uiState.update { it.copy(loading = false) }
                     onSuccess()

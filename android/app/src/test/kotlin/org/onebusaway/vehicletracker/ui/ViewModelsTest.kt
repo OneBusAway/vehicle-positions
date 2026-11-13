@@ -197,6 +197,25 @@ class ViewModelsTest {
         server.shutdown()
     }
 
+    @Test fun `spaces around the email are neither sent nor saved`() = runTest(dispatcher) {
+        // The server compares the email exactly as sent, so the space would be refused as a wrong password.
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
+        val sessions = FakeSessionStore()
+        val vm = loginViewModel(sessions)
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill(server.url("/").toString(), " d@example.com ", " p w ")
+        var succeeded = false
+        vm.onSignIn { succeeded = true }
+        awaitCondition(description = "sign-in callback invoked") { succeeded }
+
+        val sent = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("d@example.com", sent["email"]?.jsonPrimitive?.content)
+        assertEquals("a password goes as typed", " p w ", sent["password"]?.jsonPrimitive?.content)
+        assertEquals("d@example.com", sessions.state.value.email)
+        server.shutdown()
+    }
+
     @Test fun `a second press while signing in sends nothing more`() = runTest(dispatcher) {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
