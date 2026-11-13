@@ -41,8 +41,10 @@ class AdherenceEvaluator private constructor(
         val hint = previous?.takeIf { it.isOnRoute }?.projection?.alongShape
         val projection = shape.project(GeoPoint(fix.latitude, fix.longitude), hint)
 
+        // A shape drawn through the stops says nothing about how far from it the route runs, so it gets no distance
+        // test, as in the server's `rider.Verify`. Progress along it and the schedule are still judged.
         val tolerance = trip.thresholds.maxShapeDistanceM + max(fix.accuracy ?: 0.0, 0.0)
-        val isOnRoute = projection.distanceToShape <= tolerance
+        val isOnRoute = trip.shapeFromStops || projection.distanceToShape <= tolerance
 
         val fixTime = Instant.ofEpochSecond(fix.timeEpochSec)
         val scheduledTime = ScheduleInterpolator.scheduledTime(projection.alongShape, trip.stops) ?: fixTime

@@ -97,6 +97,18 @@ class FileTripGeometryStoreTest {
         assertEquals(TripFixtures.t1, storeIn(dir).load())
     }
 
+    /** And for the mark on a shape drawn through the stops: a trip stored before it has a shape from the feed. */
+    @Test fun `a geometry stored before shapes drawn through the stops were marked still loads`() = runTest {
+        val dir = tempFolder.newFolder()
+        val file = File(dir, "active_trip_geometry.json")
+        storeIn(dir).save(TripFixtures.t1.copy(shapeFromStops = true))
+        val stored = file.readText()
+        require(""","shapeFromStops":true""" in stored) { "the fixture no longer writes the mark where this test strips it" }
+        file.writeText(stored.replace(""","shapeFromStops":true""", ""))
+
+        assertEquals(TripFixtures.t1, storeIn(dir).load())
+    }
+
     @Test fun `a geometry is loaded only for the trip it was saved for`() = runTest {
         val store = storeIn(tempFolder.newFolder())
         store.save(TripFixtures.t1)

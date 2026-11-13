@@ -74,6 +74,20 @@ class AdherenceEvaluatorTest {
         assertEquals(75.0, precise.projection.distanceToShape, 3.0)
     }
 
+    @Test fun `a shape drawn through the stops has no off-route distance`() {
+        val throughTheStops = requireNotNull(AdherenceEvaluator.of(TripFixtures.t1.copy(shapeFromStops = true)))
+
+        // The fix that is off route above, 75 m from the line.
+        val a = throughTheStops.evaluate(fix(47.60225, -122.3290, at(8, 2, 30), accuracy = 5.0), previous = null)
+        assertTrue(a.isOnRoute)
+        assertEquals(AdherenceStatus.ON_TIME, a.status)
+        assertEquals("still placed along the shape", 250.0, a.projection.alongShape, 3.0)
+
+        // The schedule is judged as on any other shape.
+        val late = throughTheStops.evaluate(fix(47.60225, -122.3290, at(8, 8, 30), accuracy = 5.0), previous = null)
+        assertEquals(AdherenceStatus.LATE, late.status)
+    }
+
     @Test fun `unknown accuracy adds nothing`() {
         val unknown = evaluator.evaluate(fix(47.60225, -122.3290, at(8, 2, 30), accuracy = null), previous = null)
         assertFalse(unknown.isOnRoute)

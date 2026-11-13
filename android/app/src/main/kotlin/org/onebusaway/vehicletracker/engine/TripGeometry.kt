@@ -39,6 +39,12 @@ data class TripGeometry(
     val routeShortName: String = "",
     val routeTextColor: String = "",
     val headsign: String = "",
+    /**
+     * Whether [shapePoints] are straight lines the server drew through the stops, for a trip the feed gives no shape.
+     * The route curves away from those lines between stops, so a fix is never off route by its distance from them.
+     * False by default for the reason [routeColor] gives.
+     */
+    val shapeFromStops: Boolean = false,
 )
 
 @Serializable
