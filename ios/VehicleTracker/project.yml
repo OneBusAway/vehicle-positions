@@ -97,6 +97,10 @@ targets:
       - path: Widgets
       - path: Shared
       - path: Resources/Assets.xcassets
+    # The agency's team, and its bundle id with ".widgets" on the end.
+    configFiles:
+      Debug: Config/Widgets.xcconfig
+      Release: Config/Widgets.xcconfig
     info:
       path: WidgetsInfo.plist
       properties:
@@ -107,7 +111,6 @@ targets:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.onebusaway.vehicletracker.widgets
         TARGETED_DEVICE_FAMILY: "1"
         APPLICATION_EXTENSION_API_ONLY: YES
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: YES
