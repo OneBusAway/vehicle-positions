@@ -47,6 +47,7 @@ import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.VehicleRepository
 import org.onebusaway.vehicletracker.di.ApiHolder
+import org.onebusaway.vehicletracker.service.FakeBacklogUploadScheduler
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
 import org.onebusaway.vehicletracker.ui.vehicles.VehiclesUiState
 import retrofit2.HttpException
@@ -204,7 +205,7 @@ class TokenRefresherTest {
     // A driver signing out at the end of a shift has often outlived the access token.
     @Test fun `logout with an expired token refreshes and logs out`() = runTest {
         val holder = holder()
-        val auth = AuthRepository(sessions, FakeTripStateStore(), holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), clock = { NOW })
+        val auth = AuthRepository(sessions, FakeTripStateStore(), holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { NOW })
 
         val result = auth.logout()
 
@@ -217,7 +218,7 @@ class TokenRefresherTest {
     @Test fun `a wrong password with a session stored sends no token and refreshes nothing`() = runTest {
         val holder = holder()
         holder.api() // seeds the cached copy with a1, the token AuthInterceptor would otherwise send
-        val auth = AuthRepository(sessions, FakeTripStateStore(), holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), clock = { NOW })
+        val auth = AuthRepository(sessions, FakeTripStateStore(), holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { NOW })
 
         val result = auth.login(serverUrl, "d@example.com", "wrong")
 
@@ -483,7 +484,7 @@ class TokenRefresherTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         try {
             val holder = holder()
-            val auth = AuthRepository(sessions, FakeTripStateStore(), holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), clock = { NOW })
+            val auth = AuthRepository(sessions, FakeTripStateStore(), holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { NOW })
             val vm = VehicleViewModel(VehicleRepository(TrackerApiProvider(holder::api)), FakeVehiclePrefsStore(), auth)
             withTimeout(5_000) { vm.uiState.first { it !is VehiclesUiState.Loading } }
         } finally {

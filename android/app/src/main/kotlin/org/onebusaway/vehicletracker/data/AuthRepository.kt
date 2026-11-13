@@ -8,7 +8,9 @@ import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.LoginRequest
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
+import org.onebusaway.vehicletracker.service.BacklogUploadScheduler
 import retrofit2.HttpException
+import java.io.IOException
 import java.net.UnknownServiceException
 import javax.inject.Inject
 
@@ -20,6 +22,7 @@ class AuthRepository @Inject constructor(
     private val apiFactory: ApiFactory,
     private val apiProvider: TrackerApiProvider,
     private val offlineQueue: OfflineFixQueue,
+    private val backlogScheduler: BacklogUploadScheduler,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) {
     suspend fun login(serverUrl: String, email: String, password: String): Result<Unit> = try {
@@ -27,11 +30,25 @@ class AuthRepository @Inject constructor(
         dropTripFromAnotherServer(serverUrl)
         sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
         offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
+        scheduleBacklogUpload()
         Result.success(Unit)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         Result.failure(mapLoginError(e))
+    }
+
+    /**
+     * The fixes left in the queue now are this driver's. A backlog job that ran while nobody was signed in to them
+     * gave up and won't run again until another fix is queued, which may be the next trip's.
+     */
+    private suspend fun scheduleBacklogUpload() {
+        try {
+            if (offlineQueue.oldest(1).isNotEmpty()) backlogScheduler.schedule()
+        } catch (e: IOException) {
+            // The sign-in has worked. The next live report still uploads a batch.
+            Log.w(TAG, "Could not read the offline queue", e)
+        }
     }
 
     /**

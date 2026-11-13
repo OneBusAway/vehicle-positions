@@ -49,6 +49,7 @@ import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.service.FakeBacklogUploadScheduler
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
 import org.onebusaway.vehicletracker.ui.account.SIGN_OUT_WAIT_MS
@@ -125,7 +126,7 @@ class ViewModelsTest {
         sessionStore: SessionStore,
         apiProvider: TrackerApiProvider = TrackerApiProvider { error("no server to log out of") },
         tripState: TripStateStore = FakeTripStateStore(),
-    ) = AuthRepository(sessionStore, tripState, ApiFactory { null }, apiProvider, FakeOfflineFixQueue(), clock = { 0L })
+    ) = AuthRepository(sessionStore, tripState, ApiFactory { null }, apiProvider, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
 
     // --- Sign in ---
 
@@ -1025,7 +1026,7 @@ class ViewModelsTest {
 
     private suspend fun signIn(queue: OfflineFixQueue, server: MockWebServer, email: String) {
         server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}"""))
-        val auth = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, TrackerApiProvider { error("no logout") }, queue, clock = { 0L })
+        val auth = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, TrackerApiProvider { error("no logout") }, queue, FakeBacklogUploadScheduler(), clock = { 0L })
         val result = auth.login(server.url("/").toString(), email, "pw")
         assertTrue("the sign-in itself must succeed: ${result.exceptionOrNull()}", result.isSuccess)
     }

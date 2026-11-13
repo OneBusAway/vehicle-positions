@@ -20,6 +20,8 @@ import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ApiHolder
+import org.onebusaway.vehicletracker.service.FakeBacklogUploadScheduler
+import org.onebusaway.vehicletracker.service.queuedFix
 import java.io.IOException
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -36,7 +38,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody(
             """{"token":"jwt-1","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
+        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 1000L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -60,7 +62,7 @@ class RepositoriesTest {
         server.enqueue(MockResponse().setBody(
             """{"token":"deprecated-copy","access_token":"jwt-1","refresh_token":"r1","expires_in":900}"""))
         val sessions = FakeSessionStore()
-        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 1000L })
+        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 1000L })
 
         repo.login(server.url("/").toString(), "d@example.com", "pw")
 
@@ -72,7 +74,7 @@ class RepositoriesTest {
         val server = MockWebServer().apply { start() }
         repeat(3) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }
         val queue = FakeOfflineFixQueue()
-        val repo = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, noLogout, queue, clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, noLogout, queue, FakeBacklogUploadScheduler(), clock = { 0L })
         val url = server.url("/").toString()
         val fix = LocationReportDto(vehicleId = "bus-1", routeId = "R1", startDate = "20260804", latitude = 1.0, longitude = 2.0, timestamp = 1L)
 
@@ -85,6 +87,52 @@ class RepositoriesTest {
         server.shutdown()
     }
 
+    // A backlog job that ran while nobody was signed in to the queue's account gave up, and nothing else would bring it
+    // back until another fix was queued.
+    @Test fun `signing in schedules the backlog upload when the queue holds that driver's fixes`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(3) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
+        val queue = FakeOfflineFixQueue()
+        val scheduler = FakeBacklogUploadScheduler()
+        val repo = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, noLogout, queue, scheduler, clock = { 0L })
+        val url = server.url("/").toString()
+
+        repo.login(url, "a@example.com", "pw")
+        assertEquals("nothing queued", 0, scheduler.scheduled)
+
+        queue.add(queuedFix("bus-1"))
+        repo.login(url, " A@example.com", "pw")
+        assertEquals("the same driver, with fixes queued", 1, scheduler.scheduled)
+        assertEquals("a waiting or running job is left as it is", 0, scheduler.scheduledAfresh)
+
+        repo.login(url, "b@example.com", "pw")
+        assertEquals("another driver: the fixes were dropped", 1, scheduler.scheduled)
+
+        queue.add(queuedFix("bus-1"))
+        assertTrue(repo.login(url, "b@example.com", "bad").isFailure)
+        assertEquals("a sign-in that failed", 1, scheduler.scheduled)
+        server.shutdown()
+    }
+
+    @Test fun `a queue that can't be read after sign-in doesn't fail the sign-in`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}"""))
+        val queue = object : OfflineFixQueue by FakeOfflineFixQueue() {
+            override suspend fun oldest(max: Int): List<LocationReportDto> = throw IOException("I/O error")
+        }
+        val sessions = FakeSessionStore()
+        val scheduler = FakeBacklogUploadScheduler()
+        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, queue, scheduler, clock = { 0L })
+
+        val result = repo.login(server.url("/").toString(), "a@example.com", "pw")
+
+        assertTrue(result.isSuccess)
+        assertEquals("jwt", sessions.session.first().token)
+        assertEquals(0, scheduler.scheduled)
+        server.shutdown()
+    }
+
     @Test fun `signing in to another server drops the trip stored for the old one`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
@@ -93,7 +141,7 @@ class RepositoriesTest {
         val trips = FakeTripStateStore().apply {
             tripState.value = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, serverUrl = "https://old.example.org/")
         }
-        val repo = AuthRepository(sessions, trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+        val repo = AuthRepository(sessions, trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
 
         assertTrue(repo.login(server.url("/").toString(), "d@example.com", "bad").isFailure)
         assertEquals("a refused sign-in changes nothing", 7L, trips.activeTrip.first()?.tripDbId)
@@ -111,7 +159,7 @@ class RepositoriesTest {
             // Without the slash, as a build before #188 saved a typed address.
             tripState.value = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, serverUrl = url.trimEnd('/'))
         }
-        val repo = AuthRepository(FakeSessionStore(), trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
 
         assertTrue(repo.login(url, "d@example.com", "pw").isSuccess)
 
@@ -126,7 +174,7 @@ class RepositoriesTest {
         val olderTrip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L)
         val trips = FakeTripStateStore().apply { tripState.value = olderTrip }
         val sessions = FakeSessionStore().apply { state.value = Session(url, null, null) }
-        val repo = AuthRepository(sessions, trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+        val repo = AuthRepository(sessions, trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
 
         assertTrue(repo.login(url, "d@example.com", "pw").isSuccess)
         assertEquals("on the session's server, as the builds before took it", olderTrip, trips.activeTrip.first())
@@ -140,7 +188,7 @@ class RepositoriesTest {
     @Test fun `login 401 maps to Unauthorized`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"invalid email or password"}"""))
-        val repo = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), clock = { 0L })
+        val repo = AuthRepository(FakeSessionStore(), FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
 
         val result = repo.login(server.url("/").toString(), "d@example.com", "bad")
 
