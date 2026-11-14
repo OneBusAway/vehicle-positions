@@ -245,6 +245,44 @@ func TestAlerts_NewTripIgnoresTheLastTripsReports(t *testing.T) {
 	assert.Empty(t, w.alerts([]TripSummary{alertTrip("bus-7", secondTrip)}, now))
 }
 
+// TestAlerts_StopCarriesIntoTheNextTrip covers a vehicle that stays at the
+// terminal from the end of one trip into the next, with no alerts worked out
+// in between to clear its history. The full history pins a sample from the
+// first trip, which the second trip cannot use, and the second trip's own
+// oldest samples are the ones that make way: the stop has to count from the
+// second trip's start all the same.
+func TestAlerts_StopCarriesIntoTheNextTrip(t *testing.T) {
+	stoppedAfter := testAlertSettings.stoppedAfter
+	secondTrip := alertT0.Add(30 * time.Minute)
+
+	tests := []struct {
+		name  string
+		after time.Duration
+		want  bool
+	}{
+		{"just under", stoppedAfter - time.Second, false},
+		{"exactly at", stoppedAfter, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newTestWatcher()
+			reportEvery(w, "bus-7", alertStop, alertT0, secondTrip.Add(-5*time.Second), 5*time.Second)
+			now := secondTrip.Add(tc.after)
+			reportEvery(w, "bus-7", alertStop, secondTrip, now, 5*time.Second)
+
+			got := w.alerts([]TripSummary{alertTrip("bus-7", secondTrip)}, now)
+
+			if !tc.want {
+				assert.Empty(t, got)
+				return
+			}
+			require.Len(t, got, 1)
+			assert.Equal(t, alertNotMoving, got[0].Kind)
+			assert.Equal(t, secondTrip, got[0].Since)
+		})
+	}
+}
+
 func TestAlerts_HistoryStaysBounded(t *testing.T) {
 	t.Run("a moving vehicle", func(t *testing.T) {
 		w := newTestWatcher()

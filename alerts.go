@@ -200,7 +200,7 @@ func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bo
 	samples := w.history[trip.VehicleID]
 	// Samples from before the trip started belong to the vehicle's last trip.
 	first := sort.Search(len(samples), func(i int) bool { return !samples[i].at.Before(trip.StartTime) })
-	samples = samples[first:]
+	onTrip := samples[first:]
 
 	// With no report on this trip yet, the vehicle is quiet from the trip's
 	// start, or from when the watcher started if that is later.
@@ -208,17 +208,26 @@ func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bo
 	if w.watchingSince.After(heard) {
 		heard = w.watchingSince
 	}
-	if n := len(samples); n > 0 && samples[n-1].at.After(heard) {
-		heard = samples[n-1].at
+	if n := len(onTrip); n > 0 && onTrip[n-1].at.After(heard) {
+		heard = onTrip[n-1].at
 	}
 	if now.Sub(heard) > w.settings.quietAfter {
 		return newAlert(alertQuiet, heard, trip, now), true
 	}
 
-	if len(samples) == 0 {
+	if len(onTrip) == 0 {
 		return alertEntry{}, false
 	}
-	if since := stillSince(samples); now.Sub(since) >= w.settings.stoppedAfter {
+	// The stop is worked out over the whole history and then counted from the
+	// trip's start at the earliest. A vehicle that stays put from one trip into
+	// the next keeps a sample from the last trip at the head of a full history
+	// (makeRoom), and this trip's oldest samples are the ones that make way, so
+	// this trip's samples alone would never reach back to its start.
+	since := stillSince(samples)
+	if since.Before(trip.StartTime) {
+		since = trip.StartTime
+	}
+	if now.Sub(since) >= w.settings.stoppedAfter {
 		return newAlert(alertNotMoving, since, trip, now), true
 	}
 	return alertEntry{}, false
@@ -245,9 +254,11 @@ func (w *alertWatcher) list(ctx context.Context, now time.Time) ([]alertEntry, e
 }
 
 // alertFeed is the LocationStore that POST /api/v1/locations saves through, so
-// the watcher sees every report the server accepts. A report is recorded only
-// once it is saved: one refused or not saved was answered with an error and
-// moved nothing.
+// the watcher sees every report the server saves. One refused or not saved was
+// answered with an error and is not recorded. A saved report is recorded even
+// when the tracker then refuses it because the vehicle was removed while it was
+// being handled: the report did happen, and the watcher only uses it while the
+// vehicle has an active trip.
 type alertFeed struct {
 	LocationStore
 	alerts *alertWatcher
