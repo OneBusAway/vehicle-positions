@@ -69,6 +69,7 @@ type adminUI struct {
 	users          UserFetcher
 	tracker        *Tracker
 	alerts         *alertWatcher
+	reports        *serviceReporter
 	stats          adminStatsStore
 	activeTrips    ActiveTripLister
 	trips          TripLister
@@ -93,7 +94,7 @@ type adminUI struct {
 // it with context and exit cleanly. store supplies the user, stats, active
 // trips, and vehicle dependencies (it implements appStore, a superset of all
 // of them).
-func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, jwtSecret []byte, limiter *LoginRateLimiter, cfg adminUIConfig) (*adminUI, error) {
+func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports *serviceReporter, jwtSecret []byte, limiter *LoginRateLimiter, cfg adminUIConfig) (*adminUI, error) {
 	tmpl, err := loadTemplates()
 	if err != nil {
 		return nil, err
@@ -103,6 +104,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, jwtSecre
 		users:          store,
 		tracker:        tracker,
 		alerts:         alerts,
+		reports:        reports,
 		stats:          store,
 		activeTrips:    store,
 		trips:          store,
@@ -154,6 +156,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("POST /admin/users/{id}/vehicles", protect(http.HandlerFunc(ui.userAssignVehicle)))
 	mux.Handle("POST /admin/users/{id}/vehicles/{vehicleID}/remove", protect(http.HandlerFunc(ui.userUnassignVehicle)))
 	mux.Handle("GET /admin/trips", protect(http.HandlerFunc(ui.tripsPage)))
+	mux.Handle("GET /admin/reports", protect(http.HandlerFunc(ui.reportsPage)))
 	mux.Handle("POST /admin/trips/{id}/end", protect(http.HandlerFunc(ui.tripEnd)))
 	mux.Handle("GET /admin/api-keys", protect(http.HandlerFunc(ui.apiKeysPage)))
 	mux.Handle("POST /admin/api-keys", protect(http.HandlerFunc(ui.apiKeyCreate)))

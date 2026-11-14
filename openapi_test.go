@@ -54,6 +54,7 @@ var htmlUIRoutes = map[string]struct{}{
 	"GET /admin/map":                                     {},
 	"GET /admin/alerts":                                  {},
 	"GET /admin/trips":                                   {},
+	"GET /admin/reports":                                 {},
 	"POST /admin/trips/{id}/end":                         {},
 	"GET /admin/api-keys":                                {},
 	"POST /admin/api-keys":                               {},
@@ -100,6 +101,10 @@ var schemaStructs = map[string]string{
 	"LocationHistoryEntry": "locationEntry",
 	"AlertList":            "alertListResponse",
 	"Alert":                "alertEntry",
+	"ServiceReport":        "serviceReport",
+	"RouteServiceReport":   "routeReport",
+	"ScheduledTripReport":  "tripReport",
+	"ServiceReportRun":     "tripRun",
 
 	// Rider mode (#94).
 	"RiderRegisterResponse": "riderRegisterResponse",

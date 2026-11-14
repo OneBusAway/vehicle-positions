@@ -56,6 +56,13 @@
       <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128339;</span>
       Trips
     </a>
+    <a href="/admin/reports"
+       data-active="{{if eq .Page "reports"}}true{{else}}false{{end}}"
+       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
+              {{if eq .Page "reports"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
+      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128202;</span>
+      Reports
+    </a>
     <a href="/admin/api-keys"
        data-active="{{if eq .Page "api-keys"}}true{{else}}false{{end}}"
        class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
