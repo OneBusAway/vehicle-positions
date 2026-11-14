@@ -1,7 +1,6 @@
 package org.onebusaway.vehicletracker.service
 
 import android.content.ContextWrapper
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -13,6 +12,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
@@ -24,6 +24,7 @@ import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.signedInAs
+import org.onebusaway.vehicletracker.ui.resume.ResumeOutcome
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TripEnder
 import java.time.ZoneOffset
@@ -75,10 +76,9 @@ class ServiceControllerImplTest {
     @Test fun `ending the trip from Resume takes Reports paused down`() = runTest(dispatcher) {
         server.enqueue(MockResponse().setBody("""{"status":"trip ended"}"""))
         val vm = resume()
-        val ended = CompletableDeferred<Unit>()
 
-        vm.onEndShift { ended.complete(Unit) }
-        ended.await()
+        vm.onEndShift()
+        vm.uiState.first { it.outcome == ResumeOutcome.ENDED }
 
         assertEquals(1, cancelled)
         assertEquals("/api/v1/trips/end", server.takeRequest().path)
@@ -86,10 +86,9 @@ class ServiceControllerImplTest {
 
     @Test fun `ending it on this phone from Resume takes it down too`() = runTest(dispatcher) {
         val vm = resume()
-        val ended = CompletableDeferred<Unit>()
 
-        vm.onEndShiftLocally { ended.complete(Unit) }
-        ended.await()
+        vm.onEndShiftLocally()
+        vm.uiState.first { it.outcome == ResumeOutcome.ENDED }
 
         assertEquals(1, cancelled)
         assertEquals(0, server.requestCount)
@@ -99,9 +98,10 @@ class ServiceControllerImplTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"internal error"}"""))
         val vm = resume()
 
-        vm.onEndShift { error("a refused end must not leave Resume") }
+        vm.onEndShift()
         vm.uiState.first { it.endTripError }
 
+        assertNull("a refused end must not leave Resume", vm.uiState.value.outcome)
         assertEquals(1, server.requestCount)
         assertEquals(0, cancelled)
         assertNotNull(tripState.tripState.value)

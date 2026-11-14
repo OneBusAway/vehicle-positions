@@ -105,12 +105,20 @@ fun RunsScreen(
         viewModel.onScreenVisible(true)
         onStopOrDispose { viewModel.onScreenVisible(false) }
     }
+    // Read off the state, so a start the server confirms after a rotation goes on from the screen showing then.
+    val started = (state as? RunsUiState.Loaded)?.started == true
+    LaunchedEffect(started) {
+        if (started) {
+            onTripStarted()
+            viewModel.onNavigated()
+        }
+    }
 
     // The permission sequence has no argument to carry the tapped run through, so the run waits
     // here until it comes back ready. Try again on a refused start reuses it.
     var pendingRunId by rememberSaveable { mutableStateOf<String?>(null) }
     val permissionFlow = rememberPermissionFlow(
-        onReady = { pendingRunId?.let { viewModel.onStartRun(it, onTripStarted) } },
+        onReady = { pendingRunId?.let(viewModel::onStartRun) },
     )
     BackHandler(enabled = permissionFlow.visible) { permissionFlow.cancel() }
 
@@ -130,7 +138,7 @@ fun RunsScreen(
                     permissionFlow.start()
                 },
                 onReload = viewModel::retry,
-                onTryAgain = { pendingRunId?.let { viewModel.onStartRun(it, onTripStarted) } },
+                onTryAgain = { pendingRunId?.let(viewModel::onStartRun) },
                 onChangeBus = onChangeBus,
                 onChooseAnotherRoute = onChooseAnotherRoute,
                 onSessionEnded = onSessionEnded,

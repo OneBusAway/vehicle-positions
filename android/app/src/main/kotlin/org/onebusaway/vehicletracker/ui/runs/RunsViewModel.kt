@@ -75,6 +75,8 @@ sealed interface RunsUiState {
         /** The run a start is in flight for, or null. */
         val startingRunId: String?,
         val error: TripError?,
+        /** The trip has started and reports, and the screen goes on to Tracking. */
+        val started: Boolean = false,
     ) : RunsUiState {
         val starting: Boolean get() = startingRunId != null
     }
@@ -121,9 +123,10 @@ class RunsViewModel @Inject constructor(
     private val startingRun = MutableStateFlow<String?>(null)
     private val startError = MutableStateFlow<TripError?>(null)
     private val sessionEnded = MutableStateFlow(false)
+    private val tripStarted = MutableStateFlow(false)
 
-    /** Where a started trip goes once this step is back on screen, while Android will not start its reports. */
-    private var reportsWaiting: (() -> Unit)? = null
+    /** The server has started the trip but Android would not start its reports, which start once this step is back. */
+    private var reportsWaiting = false
 
     private val boards = combine(loadResult, now) { result, now ->
         result?.mapCatching { page -> page to departureBoardsOf(page, now, timeFormat) }
@@ -134,7 +137,8 @@ class RunsViewModel @Inject constructor(
         boards,
         startingRun,
         startError,
-    ) { ended, result, startingRunId, error ->
+        tripStarted,
+    ) { ended, result, startingRunId, error, started ->
         when {
             ended -> RunsUiState.SessionEnded
             result == null -> RunsUiState.Loading
@@ -146,6 +150,7 @@ class RunsViewModel @Inject constructor(
                     startBoard = boards.start,
                     startingRunId = startingRunId,
                     error = error,
+                    started = started,
                 )
             }
             else -> RunsUiState.Error
@@ -165,7 +170,7 @@ class RunsViewModel @Inject constructor(
     fun onScreenVisible(visible: Boolean) {
         ticking?.cancel()
         ticking = if (visible) viewModelScope.launch { tickEachMinute() } else null
-        if (visible) reportsWaiting?.let(::startReporting)
+        if (visible && reportsWaiting) startReporting()
     }
 
     private suspend fun tickEachMinute() {
@@ -202,8 +207,11 @@ class RunsViewModel @Inject constructor(
     /**
      * Starts [runId] on the route the catalog listed it under, on the service date the catalog
      * dated the list — the three things the feed's `TripDescriptor` ends up carrying.
+     *
+     * Ends in [RunsUiState.Loaded.started] rather than calling the screen back: the server can answer after a rotation,
+     * and the screen that asked is gone by then. The one showing then is the one to go on.
      */
-    fun onStartRun(runId: String, onStarted: () -> Unit) {
+    fun onStartRun(runId: String) {
         // A second tap on a list whose rows are still enabled would come back 409.
         if (startingRun.value != null) return
         val serviceDate = (uiState.value as? RunsUiState.Loaded)?.page?.serviceDate ?: return
@@ -211,7 +219,7 @@ class RunsViewModel @Inject constructor(
         startError.value = null
         viewModelScope.launch {
             when (val outcome = startRun(runId, serviceDate)) {
-                StartOutcome.Started -> startReporting(onStarted)
+                StartOutcome.Started -> startReporting()
                 is StartOutcome.Refused -> {
                     startingRun.value = null
                     startError.value = outcome.error
@@ -224,25 +232,30 @@ class RunsViewModel @Inject constructor(
         }
     }
 
+    /** The screen has gone on to Tracking, so one recreated later does not go on again. */
+    fun onNavigated() {
+        tripStarted.value = false
+    }
+
     /**
      * Starts reporting the trip the server has started, and leaves for Tracking. The server can answer after the driver
      * has locked the phone, and from Android 12 Android refuses the tracking service once the app has left the front.
      * The trip is open on the server by then, so the run stays Starting, Reports paused asks the driver to open the
      * app, and the reports start once this step is back on screen.
      */
-    private fun startReporting(onStarted: () -> Unit) {
+    private fun startReporting() {
         try {
             serviceController.startTracking()
         } catch (e: IllegalStateException) {
             // ForegroundServiceStartNotAllowedException, from Android 12, is one.
             Log.w(TAG, "Android refused to start the tracking service from the background", e)
-            reportsWaiting = onStarted
+            reportsWaiting = true
             serviceController.askToResume()
             return
         }
-        reportsWaiting = null
+        reportsWaiting = false
         startingRun.value = null
-        onStarted()
+        tripStarted.value = true
     }
 
     /**

@@ -79,13 +79,20 @@ fun TrackingScreen(
         viewModel.onScreenVisible(true)
         onStopOrDispose { viewModel.onScreenVisible(false) }
     }
+    // Read off the state, so an end the server confirms after a rotation goes on from the screen showing then.
+    LaunchedEffect(state.ended) {
+        if (state.ended) {
+            onTripEnded()
+            viewModel.onNavigated()
+        }
+    }
     KeepScreenOnWhileCharging()
     val context = LocalContext.current
     val mapSupported = remember { supportsMap(context.glEsVersion()) }
     TrackingScreenContent(
         state = state,
-        onEndTripClick = { viewModel.onEndTrip(onTripEnded) },
-        onEndTripLocallyClick = { viewModel.onEndTripLocally(onTripEnded) },
+        onEndTripClick = viewModel::onEndTrip,
+        onEndTripLocallyClick = viewModel::onEndTripLocally,
         onDismissError = viewModel::dismissEndTripError,
         onReauthClick = onReauthRequired,
         map = { modifier, contentPadding, controlsPadding ->

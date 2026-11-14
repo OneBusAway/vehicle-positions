@@ -24,6 +24,8 @@ data class TrackingUiState(
     val ending: Boolean = false,
     val endTripError: Boolean = false,
     val mapFile: MapFileState = MapFileState.None,
+    /** The trip has ended, and the screen goes on to choose the next one. */
+    val ended: Boolean = false,
 )
 
 @HiltViewModel
@@ -38,22 +40,32 @@ class TrackingViewModel @Inject constructor(
 
     init {
         combine(trackingRepository.state, tripStateStore.activeTrip, tripEnder.state, mapFiles.state) { tracking, trip, end, mapFile ->
-            TrackingUiState(tracking = tracking, activeTrip = trip, ending = end.ending, endTripError = end.failed, mapFile = mapFile)
+            TrackingUiState(
+                tracking = tracking,
+                activeTrip = trip,
+                ending = end.ending,
+                endTripError = end.failed,
+                mapFile = mapFile,
+                ended = end.ended,
+            )
         }
             .onEach { _uiState.value = it }
             .launchIn(viewModelScope)
     }
 
-    fun onEndTrip(onEnded: () -> Unit) {
+    fun onEndTrip() {
         val trip = _uiState.value.activeTrip ?: return
-        viewModelScope.launch { tripEnder.end(trip, onEnded) }
+        viewModelScope.launch { tripEnder.end(trip) }
     }
 
-    fun onEndTripLocally(onEnded: () -> Unit) {
-        viewModelScope.launch { tripEnder.endLocally(onEnded) }
+    fun onEndTripLocally() {
+        viewModelScope.launch { tripEnder.endLocally() }
     }
 
     fun dismissEndTripError() = tripEnder.dismissError()
+
+    /** The screen has gone on from the ended trip, so one recreated later does not go on again. */
+    fun onNavigated() = tripEnder.onNavigated()
 
     /** The tracking service takes a fix every second only while this screen is there to show it. */
     fun onScreenVisible(visible: Boolean) = trackingRepository.setLiveView(visible)

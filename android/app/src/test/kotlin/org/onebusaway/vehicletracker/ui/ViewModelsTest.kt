@@ -75,6 +75,7 @@ import org.onebusaway.vehicletracker.ui.runs.RunsViewModel
 import org.onebusaway.vehicletracker.ui.runs.TripError
 import org.onebusaway.vehicletracker.ui.runs.canSignOut
 import org.onebusaway.vehicletracker.ui.resume.ResumeCard
+import org.onebusaway.vehicletracker.ui.resume.ResumeOutcome
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TrackingViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TripEnder
@@ -1495,6 +1496,9 @@ class ViewModelsTest {
         return state as RunsUiState.Loaded
     }
 
+    /** Whether the step says to go on to Tracking. */
+    private fun tripStarted(vm: RunsViewModel): Boolean = (vm.uiState.value as? RunsUiState.Loaded)?.started == true
+
     @Test fun `the run under way is badged Now`() = runTest(dispatcher) {
         withRunsViewModel(now = "2026-09-22T08:05:00-07:00") { vm, _, _, _ ->
             val state = loadedRuns(vm)
@@ -1608,9 +1612,8 @@ class ViewModelsTest {
             geometry = { MockResponse().setBody(TripFixtures.tripJson(id = "T3", serviceDate = "20260921")) },
             startResponses = listOf(started),
         ) { vm, _, _, tripState ->
-            var navigated = false
-            vm.onStartRun("T3") { navigated = true }
-            awaitCondition(description = "trip started") { navigated }
+            vm.onStartRun("T3")
+            awaitCondition(description = "trip started") { tripStarted(vm) }
 
             assertEquals("20260921", tripState.tripState.value!!.startDate)
         }
@@ -1621,9 +1624,8 @@ class ViewModelsTest {
             """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-22T15:00:00Z","status":"active"}""",
         )
         withRunsViewModel(startResponses = listOf(started)) { vm, server, serviceController, _ ->
-            var navigated = false
-            vm.onStartRun("T1") { navigated = true }
-            awaitCondition(description = "trip started") { navigated }
+            vm.onStartRun("T1")
+            awaitCondition(description = "trip started") { tripStarted(vm) }
 
             assertEquals(1, serviceController.startCount)
             server.takeRequest() // the trips call
@@ -1635,6 +1637,20 @@ class ViewModelsTest {
         }
     }
 
+    @Test fun `a started trip says to go on to Tracking until the screen has`() = runTest(dispatcher) {
+        withRunsViewModel(startResponses = listOf(t1Started)) { vm, _, serviceController, _ ->
+            assertFalse("before the tap", tripStarted(vm))
+
+            vm.onStartRun("T1")
+            awaitCondition(description = "trip started") { tripStarted(vm) }
+            assertNull("no longer Starting", loadedRuns(vm).startingRunId)
+
+            vm.onNavigated()
+            assertFalse("a screen recreated after it has gone on must not go on again", loadedRuns(vm).started)
+            assertEquals(1, serviceController.startCount)
+        }
+    }
+
     @Test fun `starting a run maps 403 to NOT_ASSIGNED and 409 to TRIP_ACTIVE`() = runTest(dispatcher) {
         val refusals = listOf(
             MockResponse().setResponseCode(403).setBody("""{"error":"driver is not assigned to this vehicle"}"""),
@@ -1642,11 +1658,11 @@ class ViewModelsTest {
         )
         val store = FakeSessionStore().apply { state.value = signedIn }
         withRunsViewModel(startResponses = refusals, sessionStore = store) { vm, _, serviceController, _ ->
-            vm.onStartRun("T1") { }
+            vm.onStartRun("T1")
             awaitCondition(description = "403 surfaced") { loadedRuns(vm).error != null }
             assertEquals(TripError.NOT_ASSIGNED, loadedRuns(vm).error)
 
-            vm.onStartRun("T1") { }
+            vm.onStartRun("T1")
             awaitCondition(description = "409 surfaced") { loadedRuns(vm).error == TripError.TRIP_ACTIVE }
             assertEquals(0, serviceController.startCount)
             assertEquals("a refusal is not the end of the session", signedIn, store.state.value)
@@ -1657,8 +1673,9 @@ class ViewModelsTest {
         val refusal = MockResponse().setResponseCode(409).setBody("""{"error":"vehicle already has an active trip"}""")
         val store = FakeSessionStore().apply { state.value = signedIn }
         withRunsViewModel(startResponses = listOf(refusal), sessionStore = store) { vm, _, serviceController, _ ->
-            vm.onStartRun("T1") { fail("a refused start must not leave the screen") }
+            vm.onStartRun("T1")
             awaitCondition(description = "409 surfaced") { loadedRuns(vm).error != null }
+            assertFalse("a refused start must not leave the screen", tripStarted(vm))
             assertEquals("not told to end a trip they don't have", TripError.VEHICLE_BUSY, loadedRuns(vm).error)
             assertEquals(0, serviceController.startCount)
         }
@@ -1668,8 +1685,9 @@ class ViewModelsTest {
         val refusal = MockResponse().setResponseCode(409).setBody("""{"error":"vehicle is inactive"}""")
         val store = FakeSessionStore().apply { state.value = signedIn }
         withRunsViewModel(startResponses = listOf(refusal), sessionStore = store) { vm, _, serviceController, _ ->
-            vm.onStartRun("T1") { fail("a refused start must not leave the screen") }
+            vm.onStartRun("T1")
             awaitCondition(description = "409 surfaced") { loadedRuns(vm).error != null }
+            assertFalse("a refused start must not leave the screen", tripStarted(vm))
             assertEquals(TripError.VEHICLE_INACTIVE, loadedRuns(vm).error)
             assertEquals(0, serviceController.startCount)
         }
@@ -1683,8 +1701,9 @@ class ViewModelsTest {
         for ((failure, error) in failures) {
             val store = FakeSessionStore().apply { state.value = signedIn }
             withRunsViewModel(startResponses = listOf(failure), sessionStore = store) { vm, _, _, _ ->
-                vm.onStartRun("T1") { fail("a start that failed must not leave the screen") }
+                vm.onStartRun("T1")
                 awaitCondition(description = "$error surfaced") { loadedRuns(vm).error != null }
+                assertFalse("a start that failed must not leave the screen", tripStarted(vm))
 
                 assertEquals(error, loadedRuns(vm).error)
                 assertEquals(signedIn, store.state.value)
@@ -1695,7 +1714,7 @@ class ViewModelsTest {
     @Test fun `a geometry fetch that gets a 401 ends the session and starts nothing`() = runTest(dispatcher) {
         val store = FakeSessionStore().apply { state.value = signedIn }
         withRunsViewModel(geometry = ::unauthorized, sessionStore = store) { vm, server, serviceController, tripState ->
-            vm.onStartRun("T1") { fail("nothing may start once the server has ended the session") }
+            vm.onStartRun("T1")
             awaitCondition(description = "session ended") { vm.uiState.value == RunsUiState.SessionEnded }
 
             assertEquals(Session(signedIn.serverUrl, null, null, email = signedIn.email), store.state.value)
@@ -1708,7 +1727,7 @@ class ViewModelsTest {
     @Test fun `a start that gets a 401 ends the session`() = runTest(dispatcher) {
         val store = FakeSessionStore().apply { state.value = signedIn }
         withRunsViewModel(startResponses = listOf(unauthorized()), sessionStore = store) { vm, server, serviceController, tripState ->
-            vm.onStartRun("T1") { fail("nothing may start once the server has ended the session") }
+            vm.onStartRun("T1")
             awaitCondition(description = "session ended") { vm.uiState.value == RunsUiState.SessionEnded }
 
             assertEquals(Session(signedIn.serverUrl, null, null, email = signedIn.email), store.state.value)
@@ -1722,7 +1741,7 @@ class ViewModelsTest {
         val store = FakeSessionStore().apply { state.value = signedIn }
         withRunsViewModel(endResponse = ::unauthorized, sessionStore = store) { vm, server, serviceController, tripState ->
             tripState.unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, null))
-            vm.onStartRun("T1") { fail("nothing may start while the previous trip is open") }
+            vm.onStartRun("T1")
             awaitCondition(description = "session ended") { vm.uiState.value == RunsUiState.SessionEnded }
 
             assertEquals(Session(signedIn.serverUrl, null, null, email = signedIn.email), store.state.value)
@@ -1736,8 +1755,9 @@ class ViewModelsTest {
         val refused = { MockResponse().setResponseCode(500).setBody("""{"error":"failed to end trip"}""") }
         withRunsViewModel(endResponse = refused) { vm, server, serviceController, tripState ->
             tripState.unconfirmedEndsState.value = listOf(UnconfirmedEnd(7L, null))
-            vm.onStartRun("T1") { fail("nothing may start while the previous trip is open") }
+            vm.onStartRun("T1")
             awaitCondition(description = "start failure surfaced") { loadedRuns(vm).error != null }
+            assertFalse("nothing may start while the previous trip is open", tripStarted(vm))
 
             assertEquals(TripError.PREVIOUS_TRIP_NOT_ENDED, loadedRuns(vm).error)
             assertEquals(0, serviceController.startCount)
@@ -1749,12 +1769,11 @@ class ViewModelsTest {
             """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-22T15:00:00Z","status":"active"}""",
         )
         withRunsViewModel(startResponses = listOf(started)) { vm, server, _, _ ->
-            var navigated = false
-            vm.onStartRun("T1") { navigated = true }
+            vm.onStartRun("T1")
             // The rows are disabled while a start is in flight, but a tap already on its way in
             // must not turn into a second POST — the server would answer that one 409.
-            vm.onStartRun("T4") { navigated = true }
-            awaitCondition(description = "trip started") { navigated }
+            vm.onStartRun("T4")
+            awaitCondition(description = "trip started") { tripStarted(vm) }
 
             // The list, then one geometry fetch and one POST: T1's alone.
             assertEquals(3, server.requestCount)
@@ -1768,7 +1787,7 @@ class ViewModelsTest {
         withRunsViewModel(geometry = { held.await(5, TimeUnit.SECONDS); MockResponse().setBody(t1GeometryJson) }) { vm, _, _, _ ->
             assertTrue("before the tap", canSignOut(vm.uiState.value))
 
-            vm.onStartRun("T1") {}
+            vm.onStartRun("T1")
             dispatcher.scheduler.runCurrent()
             assertFalse("while the start is out", canSignOut(vm.uiState.value))
 
@@ -1789,9 +1808,8 @@ class ViewModelsTest {
             """{"id":7,"user_id":1,"vehicle_id":"bus-1","route_id":"R1","gtfs_trip_id":"T1","start_time":"2026-09-22T15:00:00Z","status":"active"}""",
         )
         withRunsViewModel(startResponses = listOf(started)) { vm, server, _, _ ->
-            var navigated = false
-            vm.onStartRun("T1") { navigated = true }
-            awaitCondition(description = "trip started") { navigated }
+            vm.onStartRun("T1")
+            awaitCondition(description = "trip started") { tripStarted(vm) }
 
             assertEquals(
                 listOf("/api/v1/gtfs/routes/R1/trips", "/api/v1/gtfs/trips/T1", "/api/v1/trips/start"),
@@ -1807,8 +1825,9 @@ class ViewModelsTest {
             geometry = { MockResponse().setBody(onePoint) },
             geometryStore = geometryStore,
         ) { vm, server, serviceController, tripState ->
-            vm.onStartRun("T1") { fail("a run with nothing to judge against must not start") }
+            vm.onStartRun("T1")
             awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+            assertFalse("a run with nothing to judge against must not start", tripStarted(vm))
 
             assertEquals(TripError.NO_GEOMETRY, loadedRuns(vm).error)
             assertTrue("/api/v1/trips/start" !in requestPaths(server))
@@ -1821,8 +1840,9 @@ class ViewModelsTest {
     @Test fun `a run with no stops is refused before the server is told`() = runTest(dispatcher) {
         val noStops = TripFixtures.tripJson(serviceDate = "20260922", stops = "[]")
         withRunsViewModel(geometry = { MockResponse().setBody(noStops) }) { vm, server, _, _ ->
-            vm.onStartRun("T1") { fail("a run with nothing to judge against must not start") }
+            vm.onStartRun("T1")
             awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+            assertFalse("a run with nothing to judge against must not start", tripStarted(vm))
 
             assertEquals(TripError.NO_GEOMETRY, loadedRuns(vm).error)
             assertTrue("/api/v1/trips/start" !in requestPaths(server))
@@ -1832,8 +1852,9 @@ class ViewModelsTest {
     @Test fun `a run gone out of service is refused, and a reload clears the refusal`() = runTest(dispatcher) {
         val notActive = MockResponse().setResponseCode(422).setBody("""{"error":"trip not active on date"}""")
         withRunsViewModel(geometry = { notActive }) { vm, server, _, _ ->
-            vm.onStartRun("T1") { fail("a run not in service must not start") }
+            vm.onStartRun("T1")
             awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+            assertFalse("a run not in service must not start", tripStarted(vm))
             assertEquals(TripError.TRIP_NOT_ACTIVE, loadedRuns(vm).error)
 
             vm.retry()
@@ -1852,8 +1873,9 @@ class ViewModelsTest {
         // run to the 23rd, which the list's service date would then misreport in the feed.
         val nextDay = TripFixtures.tripJson(serviceDate = "20260923")
         withRunsViewModel(geometry = { MockResponse().setBody(nextDay) }) { vm, server, _, _ ->
-            vm.onStartRun("T1") { fail("a run dated to another day must not start") }
+            vm.onStartRun("T1")
             awaitCondition(description = "refusal surfaced") { loadedRuns(vm).error != null }
+            assertFalse("a run dated to another day must not start", tripStarted(vm))
 
             assertEquals(TripError.TRIP_NOT_ACTIVE, loadedRuns(vm).error)
             assertTrue("/api/v1/trips/start" !in requestPaths(server))
@@ -1867,9 +1889,8 @@ class ViewModelsTest {
     @Test fun `a started run's geometry is saved for the tracking service`() = runTest(dispatcher) {
         val geometryStore = FakeTripGeometryStore()
         withRunsViewModel(startResponses = listOf(t1Started), geometryStore = geometryStore) { vm, _, _, _ ->
-            var navigated = false
-            vm.onStartRun("T1") { navigated = true }
-            awaitCondition(description = "trip started") { navigated }
+            vm.onStartRun("T1")
+            awaitCondition(description = "trip started") { tripStarted(vm) }
 
             val saved = requireNotNull(geometryStore.stored)
             assertEquals("T1", saved.tripId)
@@ -1887,9 +1908,8 @@ class ViewModelsTest {
             override suspend fun clear() = Unit
         }
         withRunsViewModel(startResponses = listOf(t1Started), geometryStore = failingStore) { vm, _, serviceController, tripState ->
-            var navigated = false
-            vm.onStartRun("T1") { navigated = true }
-            awaitCondition(description = "trip started") { navigated }
+            vm.onStartRun("T1")
+            awaitCondition(description = "trip started") { tripStarted(vm) }
 
             assertEquals(1, serviceController.startCount)
             assertEquals("T1", tripState.tripState.value?.gtfsTripId)
@@ -2342,18 +2362,31 @@ class ViewModelsTest {
 
     @Test fun `ending a trip clears its stored geometry`() = runTest(dispatcher) {
         withTrackingViewModel { vm, _, geometryStore ->
-            var ended = false
-            vm.onEndTrip { ended = true }
-            awaitCondition(description = "trip ended") { ended }
+            vm.onEndTrip()
+            awaitCondition(description = "trip ended") { vm.uiState.value.ended }
 
             assertNull(geometryStore.stored)
         }
     }
 
+    @Test fun `a trip ended from Tracking says to go on until the screen has`() = runTest(dispatcher) {
+        withTrackingViewModel { vm, _, _ ->
+            assertFalse("before the tap", vm.uiState.value.ended)
+
+            vm.onEndTrip()
+            awaitCondition(description = "trip ended") { vm.uiState.value.ended }
+            assertFalse(vm.uiState.value.ending)
+
+            vm.onNavigated()
+            awaitCondition(description = "the screen has gone on") { !vm.uiState.value.ended }
+        }
+    }
+
     @Test fun `a trip the server did not confirm ended keeps its geometry`() = runTest(dispatcher) {
         withTrackingViewModel(endResponse = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)) { vm, _, geometryStore ->
-            vm.onEndTrip { fail("an unconfirmed end must not leave the screen") }
+            vm.onEndTrip()
             awaitCondition(description = "end failure surfaced") { vm.uiState.value.endTripError }
+            assertFalse("an unconfirmed end must not leave the screen", vm.uiState.value.ended)
 
             // Still running, so still judged: the driver can retry or end locally from here.
             assertEquals(TripFixtures.t1, geometryStore.stored)
@@ -2362,9 +2395,8 @@ class ViewModelsTest {
 
     @Test fun `ending a trip on this device only clears its stored geometry`() = runTest(dispatcher) {
         withTrackingViewModel { vm, _, geometryStore ->
-            var ended = false
-            vm.onEndTripLocally { ended = true }
-            awaitCondition(description = "trip ended locally") { ended }
+            vm.onEndTripLocally()
+            awaitCondition(description = "trip ended locally") { vm.uiState.value.ended }
 
             assertNull(geometryStore.stored)
         }
@@ -2373,9 +2405,8 @@ class ViewModelsTest {
     @Test fun `a trip ended on this device only after another driver signs in is kept for its own driver`() = runTest(dispatcher) {
         val tripState = FakeTripStateStore().apply { tripState.value = t1Trip.copy(driverId = "1") }
         withTrackingViewModel(tripState = tripState, sessions = signedInAs("2")) { vm, _, _ ->
-            var ended = false
-            vm.onEndTripLocally { ended = true }
-            awaitCondition(description = "trip ended locally") { ended }
+            vm.onEndTripLocally()
+            awaitCondition(description = "trip ended locally") { vm.uiState.value.ended }
 
             assertEquals(listOf(UnconfirmedEnd(t1Trip.tripDbId, "1")), tripState.unconfirmedEndsState.value)
         }
@@ -2466,11 +2497,10 @@ class ViewModelsTest {
 
     @Test fun resume_startsTheServiceAndMakesNoServerCall() = runTest(dispatcher) {
         withResumeShiftViewModel { f ->
-            var resumed = false
-            f.vm.onResumeShift(onResumed = { resumed = true }, onSignInFirst = { fail("an older build's trip is on the saved server") })
+            f.vm.onResumeShift()
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertTrue(resumed)
+            assertEquals("an older build's trip is on the saved server", ResumeOutcome.RESUMED, f.vm.uiState.value.outcome)
             assertEquals(1, f.serviceController.startCount)
             // The trip is still open on the server, as on iOS: resuming neither starts it again
             // (that would be a 409) nor ends it, and what the phone stored stays as it was.
@@ -2484,12 +2514,11 @@ class ViewModelsTest {
     @Test fun `resuming a trip restored from backup asks for its server first`() = runTest(dispatcher) {
         // The backup kept the trip and its server, but not the session: reports would have nowhere to go.
         withResumeShiftViewModel(trip = t1Trip.copy(serverUrl = "https://trip.example.org/")) { f ->
-            var signInFirst = false
-            f.vm.onResumeShift(onResumed = { fail("must not report before signing in to the trip's server") }, onSignInFirst = { signInFirst = true })
+            f.vm.onResumeShift()
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertTrue(signInFirst)
-            assertEquals(0, f.serviceController.startCount)
+            assertEquals(ResumeOutcome.SIGN_IN_FIRST, f.vm.uiState.value.outcome)
+            assertEquals("must not report before signing in to the trip's server", 0, f.serviceController.startCount)
         }
     }
 
@@ -2497,20 +2526,54 @@ class ViewModelsTest {
         // Saved without the slash, as a build before #188 saved a typed address.
         val sessions = FakeSessionStore().apply { state.value = Session("https://trip.example.org", jwtFor("2"), 0L) }
         withResumeShiftViewModel(trip = t1Trip.copy(serverUrl = "https://trip.example.org/"), sessions = sessions) { f ->
-            var resumed = false
-            f.vm.onResumeShift(onResumed = { resumed = true }, onSignInFirst = { fail("signed in to the trip's server already") })
+            f.vm.onResumeShift()
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertTrue(resumed)
+            assertEquals("signed in to the trip's server already", ResumeOutcome.RESUMED, f.vm.uiState.value.outcome)
+            assertEquals(1, f.serviceController.startCount)
+        }
+    }
+
+    @Test fun `a resumed trip says to go on until the screen has, and a tap on its way out does nothing`() = runTest(dispatcher) {
+        withResumeShiftViewModel { f ->
+            f.vm.onResumeShift()
+            // The second tap of a double tap, before the screen has gone on.
+            f.vm.onResumeShift()
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(ResumeOutcome.RESUMED, f.vm.uiState.value.outcome)
+
+            f.vm.onNavigated()
+            f.vm.onResumeShift()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertNull("a screen recreated after it has gone on must not go on again", f.vm.uiState.value.outcome)
+            assertEquals("reports start once", 1, f.serviceController.startCount)
+        }
+    }
+
+    @Test fun `back from signing in to the trip's server, Resume starts the reports`() = runTest(dispatcher) {
+        val sessions = FakeSessionStore()
+        withResumeShiftViewModel(trip = t1Trip.copy(serverUrl = "https://trip.example.org/"), sessions = sessions) { f ->
+            f.vm.onResumeShift()
+            dispatcher.scheduler.advanceUntilIdle()
+            require(f.vm.uiState.value.outcome == ResumeOutcome.SIGN_IN_FIRST)
+            f.vm.onNavigated()
+            dispatcher.scheduler.advanceUntilIdle()
+            assertNull("back from Sign in the prompt stays", f.vm.uiState.value.outcome)
+
+            sessions.state.value = Session("https://trip.example.org/", jwtFor("2"), 0L)
+            f.vm.onResumeShift()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(ResumeOutcome.RESUMED, f.vm.uiState.value.outcome)
             assertEquals(1, f.serviceController.startCount)
         }
     }
 
     @Test fun endShift_callsEndAndClearsTheTrip() = runTest(dispatcher) {
         withResumeShiftViewModel { f ->
-            var ended = false
-            f.vm.onEndShift { ended = true }
-            awaitCondition(description = "shift ended") { ended }
+            f.vm.onEndShift()
+            awaitCondition(description = "shift ended") { f.vm.uiState.value.outcome == ResumeOutcome.ENDED }
 
             val request = f.server.takeRequest()
             assertEquals("/api/v1/trips/end", request.path)
@@ -2523,20 +2586,31 @@ class ViewModelsTest {
         }
     }
 
+    @Test fun `a trip ended from Resume says to go on until the screen has`() = runTest(dispatcher) {
+        withResumeShiftViewModel { f ->
+            f.vm.onEndShift()
+            awaitCondition(description = "shift ended") { f.vm.uiState.value.outcome == ResumeOutcome.ENDED }
+
+            f.vm.onNavigated()
+
+            awaitCondition(description = "the screen has gone on") { f.vm.uiState.value.outcome == null }
+        }
+    }
+
     @Test fun endShift_failure_surfacesTheSameErrorAsTracking() = runTest(dispatcher) {
         val refused = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)
         withResumeShiftViewModel(endResponses = listOf(refused)) { f ->
-            f.vm.onEndShift { fail("an unconfirmed end must not leave the prompt") }
+            f.vm.onEndShift()
             awaitCondition(description = "end failure surfaced") { f.vm.uiState.value.endTripError }
 
+            assertNull("an unconfirmed end must not leave the prompt", f.vm.uiState.value.outcome)
             assertTrue(!f.vm.uiState.value.ending)
             assertEquals(t1Trip, f.tripState.tripState.value)
             assertEquals(TripFixtures.t1, f.geometryStore.stored)
 
             // And the same way out as the tracking screen offers: end it on this device only.
-            var ended = false
-            f.vm.onEndShiftLocally { ended = true }
-            awaitCondition(description = "shift ended locally") { ended }
+            f.vm.onEndShiftLocally()
+            awaitCondition(description = "shift ended locally") { f.vm.uiState.value.outcome == ResumeOutcome.ENDED }
             assertTrue(!f.vm.uiState.value.endTripError)
             assertNull(f.tripState.tripState.value)
             // The server still has it open, so its id is kept for the next start to end it, with
@@ -2550,7 +2624,7 @@ class ViewModelsTest {
     @Test fun `a driver who did not mean to end goes back to Resume with the trip as it was`() = runTest(dispatcher) {
         val refused = MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)
         withResumeShiftViewModel(endResponses = listOf(refused)) { f ->
-            f.vm.onEndShift { fail("an unconfirmed end must not leave the prompt") }
+            f.vm.onEndShift()
             awaitCondition(description = "end failure surfaced") { f.vm.uiState.value.endTripError }
 
             f.vm.dismissEndShiftError()
@@ -2565,15 +2639,14 @@ class ViewModelsTest {
 
     @Test fun `a second end while one is in flight is ignored`() = runTest(dispatcher) {
         withResumeShiftViewModel { f ->
-            var ends = 0
-            f.vm.onEndShift { ends++ }
+            f.vm.onEndShift()
             // The buttons are disabled while an end is in flight, but a tap already on its way in
             // must not turn into a second POST.
-            f.vm.onEndShift { ends++ }
-            awaitCondition(description = "shift ended") { ends > 0 }
+            f.vm.onEndShift()
+            awaitCondition(description = "shift ended") { f.vm.uiState.value.outcome == ResumeOutcome.ENDED }
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertEquals(1, ends)
+            assertEquals(1, f.serviceController.stopCount)
             assertEquals(1, f.apiCalls.get())
         }
     }
@@ -2599,16 +2672,15 @@ class ViewModelsTest {
         }
         val serviceController = FakeServiceController()
         val ender = localEnder(slowTrips, serviceController)
-        var ends = 0
 
-        launch { ender.endLocally { ends++ } }
-        launch { ender.endLocally { ends++ } }
+        launch { ender.endLocally() }
+        launch { ender.endLocally() }
         dispatcher.scheduler.advanceUntilIdle()
         assertTrue("both buttons wait while it is written", ender.state.value.ending)
         written.complete(Unit)
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, ends)
+        assertTrue(ender.state.value.ended)
         assertEquals(1, serviceController.stopCount)
         assertFalse(ender.state.value.ending)
     }
@@ -2621,8 +2693,9 @@ class ViewModelsTest {
         val ender = localEnder(brokenTrips)
 
         // Returning at all is the point: both callers launch this with no handler, so a throw would crash the app.
-        ender.endLocally { fail("an end that was not written must not leave the screen") }
+        ender.endLocally()
 
+        assertFalse("an end that was not written must not leave the screen", ender.state.value.ended)
         assertTrue(ender.state.value.failed)
         assertFalse(ender.state.value.ending)
     }
@@ -2634,9 +2707,10 @@ class ViewModelsTest {
         }
         val ender = localEnder(cancelledTrips)
 
-        val failure = runCatching { ender.endLocally { fail("a cancelled end must not leave the screen") } }.exceptionOrNull()
+        val failure = runCatching { ender.endLocally() }.exceptionOrNull()
 
         assertTrue("expected the cancellation, got $failure", failure is CancellationException)
+        assertFalse("a cancelled end must not leave the screen", ender.state.value.ended)
         assertFalse(ender.state.value.failed)
     }
 }

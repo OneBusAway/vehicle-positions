@@ -12,7 +12,9 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.AuthRepository
@@ -91,14 +93,14 @@ class RunStartRefusedTest {
             clock,
         )
         awaitCondition("runs loaded") { vm.uiState.value is RunsUiState.Loaded }
-        var left = 0
+        fun loaded() = vm.uiState.value as RunsUiState.Loaded
 
-        vm.onStartRun("T1") { left++ }
+        vm.onStartRun("T1")
         awaitCondition("start refused") { services.startCount == 1 }
 
         assertNotNull("the trip is open on the server", trips.tripState.value)
-        assertEquals(0, left)
-        assertEquals("T1", (vm.uiState.value as RunsUiState.Loaded).startingRunId)
+        assertFalse("the step stays until the reports start", loaded().started)
+        assertEquals("T1", loaded().startingRunId)
         assertEquals("Reports paused", 1, services.askCount)
 
         services.startFailure = null
@@ -106,9 +108,16 @@ class RunStartRefusedTest {
         try {
             dispatcher.scheduler.runCurrent()
             assertEquals(2, services.startCount)
-            assertEquals(1, left)
-            assertEquals(null, (vm.uiState.value as RunsUiState.Loaded).startingRunId)
+            assertTrue("on to Tracking", loaded().started)
+            assertEquals(null, loaded().startingRunId)
             assertEquals(1, services.askCount)
+
+            vm.onNavigated()
+            vm.onScreenVisible(false)
+            vm.onScreenVisible(true)
+            dispatcher.scheduler.runCurrent()
+            assertEquals("the reports started once", 2, services.startCount)
+            assertFalse(loaded().started)
         } finally {
             vm.onScreenVisible(false)
         }
