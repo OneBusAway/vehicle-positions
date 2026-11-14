@@ -36,8 +36,9 @@ func newTripLocator(index func() *rider.Index, maxShapeDistance float64) *tripLo
 // tripPlace is where a report put its vehicle on its trip.
 type tripPlace struct {
 	// alongShape is metres along the trip's shape: the projection hint for the
-	// vehicle's next report on the same trip.
-	alongShape   float64
+	// vehicle's next report on the same trip. It is nil until the vehicle has
+	// been placed on that trip.
+	alongShape   *float64
 	stopID       string // "" when the report names no stop
 	stopSequence int
 	stoppedAt    bool
@@ -47,7 +48,8 @@ type tripPlace struct {
 // vehicle was last placed on the same trip. The hint keeps a loop or an
 // out-and-back on the pass the vehicle is on rather than the nearest one. 0,
 // the start of the shape, is the hint for a trip just begun: a loop passes its
-// first stop again at the end, and the vehicle is at the start.
+// first stop again at the end, and the vehicle is at the start. With no hint
+// the nearest pass wins: nothing is known about where the vehicle is.
 //
 // No stop is named when no schedule is loaded, the trip is not in it, the
 // trip's shape was drawn through its stops (it cuts every corner between them,
@@ -55,7 +57,7 @@ type tripPlace struct {
 // is further from the shape than the off-route distance, or the vehicle is
 // past the last stop. In all but the last the report is not placed at all and
 // the hint carries forward, so a detour does not cost the vehicle its pass.
-func (l *tripLocator) locate(loc *LocationReport, hint float64) tripPlace {
+func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 	unplaced := tripPlace{alongShape: hint}
 	ix := l.index()
 	if ix == nil {
@@ -66,7 +68,8 @@ func (l *tripLocator) locate(loc *LocationReport, hint float64) tripPlace {
 		return unplaced
 	}
 
-	proj := trip.Shape.Project(rider.LatLon{Lat: loc.Latitude, Lon: loc.Longitude}, &hint)
+	pos := rider.LatLon{Lat: loc.Latitude, Lon: loc.Longitude}
+	proj := trip.Shape.Project(pos, hint)
 	// The rider engine's off-route test, which the driver apps apply as well:
 	// the shape distance plus the fix's own accuracy.
 	tolerance := l.maxShapeDistance
@@ -77,12 +80,40 @@ func (l *tripLocator) locate(loc *LocationReport, hint float64) tripPlace {
 		return unplaced
 	}
 
-	place := tripPlace{alongShape: proj.AlongShape}
+	place := tripPlace{alongShape: &proj.AlongShape}
+	along := stopSearchPosition(trip.Shape, pos, proj.AlongShape)
 	// Looking from stoppedAtDistance back keeps a stop the vehicle has pulled
 	// up just past as the one it is at, not the one after it.
-	if stop, ok := rider.NextStop(trip, proj.AlongShape-stoppedAtDistance); ok {
+	if stop, ok := rider.NextStop(trip, along-stoppedAtDistance); ok {
 		place.stopID, place.stopSequence = stop.StopID, stop.Sequence
-		place.stoppedAt = stop.AlongShape-proj.AlongShape <= stoppedAtDistance
+		place.stoppedAt = stop.AlongShape-along <= stoppedAtDistance
 	}
 	return place
+}
+
+// stopSearchPosition is where along shape to look for the stop of a fix at pos
+// that projected to along. The projection clamps a fix beyond either end of
+// the shape onto that end, which would make a vehicle parked 50 m past its
+// terminal STOPPED_AT it. Such a fix is put as far past the end as it lies
+// along the line the shape takes through the stoppedAtDistance metres nearest
+// that end, so the radius means the same past a terminal as between stops.
+func stopSearchPosition(shape *rider.ShapeGeom, pos rider.LatLon, along float64) float64 {
+	switch {
+	case along >= shape.Length-stoppedAtDistance:
+		if past := distancePast(shape.PointAt(shape.Length-stoppedAtDistance), shape.PointAt(shape.Length), pos); past > 0 {
+			return shape.Length + past
+		}
+	case along <= stoppedAtDistance:
+		if before := distancePast(shape.PointAt(stoppedAtDistance), shape.PointAt(0), pos); before > 0 {
+			return -before
+		}
+	}
+	return along
+}
+
+// distancePast is how far pos lies beyond end on the line from from to end:
+// positive past end, negative short of it.
+func distancePast(from, end, pos rider.LatLon) float64 {
+	angle := (rider.InitialBearing(end, pos) - rider.InitialBearing(from, end)) * math.Pi / 180
+	return rider.Distance(end, pos) * math.Cos(angle)
 }

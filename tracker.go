@@ -33,9 +33,8 @@ type VehicleState struct {
 	StoppedAt    bool
 	// alongShape is how far along its trip's shape the vehicle was last
 	// placed, in metres: the projection hint for its next report on that trip.
-	// It is 0, the start of the shape, until the vehicle has been placed on
-	// its current trip.
-	alongShape float64
+	// It is nil until the vehicle has been placed on its current trip.
+	alongShape *float64
 }
 
 // Tracker maintains an in-memory map of current vehicle positions.
@@ -131,18 +130,31 @@ func (t *Tracker) UpdateAuthorized(loc *LocationReport, authorizedAt time.Time) 
 func (t *Tracker) place(loc *LocationReport) tripPlace {
 	t.mu.RLock()
 	locator := t.locator
-	// The hint is the vehicle's last place on this same trip instance. A new
-	// trip, or the same trip on another service date, starts from the
-	// beginning of its shape.
-	var hint float64
-	if prev, ok := t.vehicles[loc.VehicleID]; ok && prev.TripID == loc.TripID && prev.StartDate == loc.StartDate {
-		hint = prev.alongShape
-	}
+	hint := t.hint(loc)
 	t.mu.RUnlock()
 	if locator == nil {
 		return tripPlace{}
 	}
 	return locator.locate(loc, hint)
+}
+
+// hint is where to project loc from, with t.mu held: the vehicle's last place
+// on this same trip instance, or 0, the start of the shape, when the vehicle
+// has just moved on to a new trip or to the same trip on another service date.
+// It is nil, no hint, when the vehicle has no recent place: a vehicle seeded
+// at startup or back from going stale may be anywhere along its trip, and
+// assuming the start would put one on the return leg of an out-and-back on
+// the outbound pass beside it.
+func (t *Tracker) hint(loc *LocationReport) *float64 {
+	prev, ok := t.vehicles[loc.VehicleID]
+	if !ok || !prev.UpdatedAt.After(time.Now().Add(-t.maxAge)) {
+		return nil
+	}
+	if prev.TripID != loc.TripID || prev.StartDate != loc.StartDate {
+		start := 0.0
+		return &start
+	}
+	return prev.alongShape
 }
 
 // update is Update with t.mu already held, recording place as the vehicle's

@@ -87,8 +87,9 @@ func TestTracker_TripChangeResetsTheHint(t *testing.T) {
 			finished := reportOn(t, tracker, "T3", "20260902", loopClosingCorner(t3))
 			require.Equal(t, 4, finished.StopSequence, "the run ends at its last stop")
 
-			// The next run starts where the last one ended.
-			started := reportOn(t, tracker, tc.tripID, tc.startDate, loopClosingCorner(t3))
+			// The next run starts where the last one ended, from a fix nearer
+			// the closing pass than the opening one.
+			started := reportOn(t, tracker, tc.tripID, tc.startDate, loopOpeningCorner(t3))
 			assert.Equal(t, "LP1", started.StopID)
 			assert.Equal(t, 1, started.StopSequence, "a new trip starts at its first stop, not the old trip's last")
 			assert.True(t, started.StoppedAt)
@@ -110,6 +111,59 @@ func TestTracker_SeedLeavesStopFieldsUnsetUntilNextReport(t *testing.T) {
 	next := reportOn(t, tracker, "T1", "", t1.Shape.PointAt(260))
 	assert.Equal(t, "ST2", next.StopID, "the vehicle's next report places it")
 	assert.Equal(t, 2, next.StopSequence)
+}
+
+// On T6 the return leg runs 15 m east of the outbound one, and 1450 m along
+// is beside 567 m along the outbound pass. A vehicle placed from the start of
+// the shape there lands on the outbound pass, heading for ST3, and the hint
+// keeps it there.
+func TestTracker_SeededVehicleOnReturnLegStaysOnIt(t *testing.T) {
+	ix := locatorFixtureIndex(t)
+	t6 := mustTrip(t, ix, "T6")
+	tracker := newPlacingTracker(t, ix)
+
+	pos := t6.Shape.PointAt(1400)
+	tracker.Update(&LocationReport{VehicleID: "bus-1", TripID: "T6", StartDate: "20260902",
+		Latitude: pos.Lat, Longitude: pos.Lon, Timestamp: time.Now().Unix()})
+
+	next := reportOn(t, tracker, "T6", "20260902", t6.Shape.PointAt(1450))
+	assert.Equal(t, "RT2", next.StopID, "a seeded vehicle has no place yet, not a place at the start of the shape")
+	assert.Equal(t, 4, next.StopSequence)
+
+	later := reportOn(t, tracker, "T6", "20260902", t6.Shape.PointAt(1600))
+	assert.Equal(t, "RT1", later.StopID)
+	assert.Equal(t, 5, later.StopSequence)
+}
+
+func TestTracker_StaleVehicleOnReturnLegStaysOnIt(t *testing.T) {
+	ix := locatorFixtureIndex(t)
+	t6 := mustTrip(t, ix, "T6")
+
+	cases := []struct {
+		name    string
+		cleanup bool
+	}{
+		{"its stale place still held", false},
+		{"its stale place cleaned up", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker := newPlacingTracker(t, ix)
+			outbound := reportOn(t, tracker, "T6", "20260902", t6.Shape.PointAt(300))
+			require.Equal(t, "ST2", outbound.StopID)
+
+			tracker.mu.Lock()
+			tracker.vehicles["bus-1"].UpdatedAt = time.Now().Add(-10 * time.Minute)
+			tracker.mu.Unlock()
+			if tc.cleanup {
+				tracker.cleanup()
+			}
+
+			back := reportOn(t, tracker, "T6", "20260902", t6.Shape.PointAt(1450))
+			assert.Equal(t, "RT2", back.StopID, "a place from before the vehicle went stale is not its hint")
+			assert.Equal(t, 4, back.StopSequence)
+		})
+	}
 }
 
 func TestTracker_NoLocatorLeavesStopFieldsUnset(t *testing.T) {
