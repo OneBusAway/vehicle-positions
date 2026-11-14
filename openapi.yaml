@@ -1492,6 +1492,85 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/admin/reports/service:
+    get:
+      tags: [admin]
+      summary: One service day's report of trips run and on-time performance
+      description: |
+        The same report the admin UI's Reports page shows: for each route with
+        service that day, the trips the GTFS calendar and calendar_dates
+        schedule, how many a driver ran, and how close to schedule they ran.
+        It is worked out on request from the stored trips and location points
+        and the loaded schedule. Requires the `admin` role.
+
+        A driver's trip counts as a run of its GTFS trip on the service day
+        whose scheduled run is nearest to when the driver started it, within
+        12 hours. Several driver trips of one GTFS trip are judged at each
+        stop on the first of them known to have passed it.
+
+        Each run is judged at its trip's timepoints, or at every stop when the
+        feed marks none. A stop is judged on departure, when the vehicle is
+        more than 30 m past it, and the last stop on arrival, when the vehicle
+        comes within 30 m of it. The time is interpolated between the fixes
+        either side; with no fix within 2 minutes on either side the stop is
+        unknown. A stop passed from `on_time_early_s` early to
+        `on_time_late_s` late (`REPORT_ON_TIME_EARLY` and
+        `REPORT_ON_TIME_LATE`) is on time. A trip whose shape the feed does
+        not give is unknown at every stop.
+
+        A day before today's service date is kept in memory once its last
+        scheduled arrival is an hour past, until the schedule is next
+        reloaded; today is worked out again on every request.
+      parameters:
+        - in: query
+          name: date
+          required: false
+          schema:
+            type: string
+            format: date
+          description: The service day, `YYYY-MM-DD`. Defaults to yesterday in the agency's timezone.
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+          description: |
+            Response encoding. `csv` returns `text/csv` with a
+            `Content-Disposition: attachment` header naming the file
+            `service-report-<date>.csv`.
+      responses:
+        '200':
+          description: |
+            The report. The CSV variant has one line per route under the header
+            `date,route_id,short_name,long_name,trips_scheduled,trips_run,stops_on_time,stops_early,stops_late,stops_unknown,on_time_percent,unknown_percent`,
+            the percentages to one decimal place and empty where the JSON has
+            null. A route id or name starting with a character a spreadsheet
+            would treat as a formula is prefixed with `'`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceReport'
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          description: No GTFS schedule is loaded (`schedule data unavailable`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/admin/users:
     get:
       tags: [admin]
@@ -3294,6 +3373,164 @@ components:
           description: Whole seconds from `since` to when the list was worked out.
         trip:
           $ref: '#/components/schemas/TripSummary'
+
+    ServiceReport:
+      type: object
+      required: [date, timezone, on_time_early_s, on_time_late_s, routes]
+      properties:
+        date:
+          type: string
+          format: date
+          description: The service day reported on.
+        timezone:
+          type: string
+          description: The agency timezone the schedule's times are in, such as `Africa/Nairobi`.
+        on_time_early_s:
+          type: integer
+          minimum: 0
+          description: How early, in seconds, a stop may be passed and still be on time.
+        on_time_late_s:
+          type: integer
+          minimum: 0
+          description: How late, in seconds, a stop may be passed and still be on time.
+        routes:
+          type: array
+          description: |
+            Each route with at least one trip scheduled that day, in the
+            catalog's display order. Empty when nothing is scheduled.
+          items:
+            $ref: '#/components/schemas/RouteServiceReport'
+
+    RouteServiceReport:
+      type: object
+      required:
+        - route_id
+        - short_name
+        - long_name
+        - trips_scheduled
+        - trips_run
+        - stops_on_time
+        - stops_early
+        - stops_late
+        - stops_unknown
+        - on_time_percent
+        - unknown_percent
+        - trips
+      properties:
+        route_id:
+          type: string
+        short_name:
+          type: string
+        long_name:
+          type: string
+        trips_scheduled:
+          type: integer
+          minimum: 0
+        trips_run:
+          type: integer
+          minimum: 0
+          description: Scheduled trips a driver ran at least once.
+        stops_on_time:
+          type: integer
+          minimum: 0
+          description: Judged stops of the trips run that were passed on time; the four stop counts add up to every judged stop.
+        stops_early:
+          type: integer
+          minimum: 0
+        stops_late:
+          type: integer
+          minimum: 0
+        stops_unknown:
+          type: integer
+          minimum: 0
+          description: Judged stops with no fix within 2 minutes either side of the vehicle passing them.
+        on_time_percent:
+          type: [number, 'null']
+          description: |
+            `stops_on_time` as a percentage of the stops with a known time, to
+            one decimal place. Null when no stop time is known.
+        unknown_percent:
+          type: [number, 'null']
+          description: |
+            `stops_unknown` as a percentage of every judged stop, to one decimal
+            place. Null when no trip ran.
+        trips:
+          type: array
+          description: Every scheduled trip of the route that day, by first departure.
+          items:
+            $ref: '#/components/schemas/ScheduledTripReport'
+
+    ScheduledTripReport:
+      type: object
+      required:
+        - gtfs_trip_id
+        - headsign
+        - scheduled_departure
+        - scheduled_arrival
+        - runs
+        - departure_deviation_s
+        - arrival_deviation_s
+        - stops_on_time
+        - stops_early
+        - stops_late
+        - stops_unknown
+        - on_time_percent
+        - unknown_percent
+      properties:
+        gtfs_trip_id:
+          type: string
+        headsign:
+          type: string
+        scheduled_departure:
+          type: string
+          format: date-time
+          description: Departure from the first stop, with the agency's UTC offset.
+        scheduled_arrival:
+          type: string
+          format: date-time
+          description: Arrival at the last stop, with the agency's UTC offset.
+        runs:
+          type: array
+          description: The driver trips that ran it. Empty when it was not run.
+          items:
+            $ref: '#/components/schemas/ServiceReportRun'
+        departure_deviation_s:
+          type: [integer, 'null']
+          description: Seconds from the scheduled departure from the first stop, late positive. Null when not run or unknown.
+        arrival_deviation_s:
+          type: [integer, 'null']
+          description: Seconds from the scheduled arrival at the last stop, late positive. Null when not run or unknown.
+        stops_on_time:
+          type: integer
+          minimum: 0
+        stops_early:
+          type: integer
+          minimum: 0
+        stops_late:
+          type: integer
+          minimum: 0
+        stops_unknown:
+          type: integer
+          minimum: 0
+        on_time_percent:
+          type: [number, 'null']
+        unknown_percent:
+          type: [number, 'null']
+
+    ServiceReportRun:
+      type: object
+      required: [id, vehicle_id, vehicle_label, driver_name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The trip's id, as in `GET /api/v1/admin/trips/{id}`.
+        vehicle_id:
+          type: string
+        vehicle_label:
+          type: string
+        driver_name:
+          type: string
 
     TripTrail:
       type: object

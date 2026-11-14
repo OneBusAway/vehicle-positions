@@ -40,7 +40,7 @@ func newTestAdminUI(t *testing.T) *adminUI {
 	t.Helper()
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
-	ui, err := newAdminUI(&noopStore{}, tracker, newAlertWatcher(&noopStore{}, testAlertSettings), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
+	ui, err := newAdminUI(&noopStore{}, tracker, newAlertWatcher(&noopStore{}, testAlertSettings), nil, testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
 	require.NoError(t, err)
 	t.Cleanup(ui.loginLimiter.Stop)
 	return ui

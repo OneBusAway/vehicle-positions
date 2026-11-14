@@ -76,7 +76,7 @@ func TestWriteFeedSnapshots(t *testing.T) {
 	const rideID = "snapshot-ride"
 	agg.Add(rider.NewSession(rideID, "snapshot-rider", rider.TripKey{TripID: t1.ID, StartDate: startDate}, t1, rider.TierTrusted, time.Now()))
 
-	srv := httptest.NewServer(newMux(&noopStore{}, tracker, limiter, testSecret, testTTLs, time.Now(), nil, nil, false, false, riderSvc, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings)))
+	srv := httptest.NewServer(newMux(&noopStore{}, tracker, limiter, testSecret, testTTLs, time.Now(), nil, nil, false, false, riderSvc, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil))
 	t.Cleanup(srv.Close)
 
 	// One driver per vehicle: the report limiter is keyed on the token's subject.

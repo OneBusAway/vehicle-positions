@@ -480,7 +480,7 @@ func TestLocationRoute_FeedsAlerts(t *testing.T) {
 	limiter := NewVehicleRateLimiter()
 	defer limiter.Stop()
 	alerts := newAlertWatcher(&noopStore{}, testAlertSettings)
-	mux := newMux(&noopStore{}, tracker, limiter, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, alerts)
+	mux := newMux(&noopStore{}, tracker, limiter, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, alerts, nil)
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 

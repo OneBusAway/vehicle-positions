@@ -80,7 +80,7 @@ type appStore interface {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
@@ -108,6 +108,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/trips/{id}/locations", authMiddleware(adminMiddleware(handleTripLocations(store))))
 	mux.Handle("POST /api/v1/admin/trips/{id}/end", authMiddleware(adminMiddleware(handleAdminEndTrip(store, tracker))))
 	mux.Handle("GET /api/v1/admin/alerts", authMiddleware(adminMiddleware(handleListAlerts(alerts))))
+	mux.Handle("GET /api/v1/admin/reports/service", authMiddleware(adminMiddleware(handleServiceReport(reports))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -168,12 +169,12 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter, adminLoginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
-	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports)
 
 	if cfg.enabled {
-		ui, err := newAdminUI(store, tracker, alerts, jwtSecret, adminLoginLimiter, cfg)
+		ui, err := newAdminUI(store, tracker, alerts, reports, jwtSecret, adminLoginLimiter, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("init admin UI: %w", err)
 		}
@@ -369,6 +370,11 @@ func main() {
 	// Driver vehicles are placed on their trips against the same schedule, and
 	// called off route at the same distance the catalog gives the driver apps.
 	tracker.SetTripLocator(newTripLocator(schedule.Index, riderCfg.Thresholds.MaxShapeDistance))
+	reports := newServiceReporter(store, schedule.Index, reportSettings{
+		onTimeEarly:      envNonNegativeDurationOrDefault("REPORT_ON_TIME_EARLY", defaultReportOnTimeEarly),
+		onTimeLate:       envNonNegativeDurationOrDefault("REPORT_ON_TIME_LATE", defaultReportOnTimeLate),
+		maxShapeDistance: riderCfg.Thresholds.MaxShapeDistance,
+	})
 
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)
@@ -391,7 +397,7 @@ func main() {
 	startTime := time.Now()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)

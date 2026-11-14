@@ -50,6 +50,10 @@ type StopTimeInfo struct {
 	Arrival    time.Duration // since service-day midnight (may exceed 24h)
 	Departure  time.Duration
 	Pos        LatLon
+	// Timepoint is whether the feed holds the trip to this stop's times.
+	// The GTFS parser reads a timepoint of 1, or a feed with no timepoint
+	// column, as yes, and 0 or an empty cell as no.
+	Timepoint bool
 }
 
 // TripInfo is one scheduled trip with its shape geometry and stop times.
@@ -557,6 +561,7 @@ func stopTimesAlong(stopTimes []gtfs.ScheduledStopTime, shape *ShapeGeom, shapeE
 			Arrival:    st.ArrivalTime,
 			Departure:  st.DepartureTime,
 			Pos:        pos,
+			Timepoint:  st.ExactTimes,
 		})
 	}
 	return out

@@ -71,8 +71,8 @@ must be at least 8 characters and no more than 72 bytes — in practice 72
 letters, or fewer if you use accented letters or other non-English characters.
 
 Once signed in, the left sidebar takes you to **Live Map**, **Dashboard**,
-**Alerts**, **Vehicles**, **Users**, **Trips** and **Feed API keys**. **Sign
-out** is at the top right of every page.
+**Alerts**, **Vehicles**, **Users**, **Trips**, **Reports** and **Feed API
+keys**. **Sign out** is at the top right of every page.
 
 ---
 
@@ -484,6 +484,43 @@ the driver taps the run again. If a phone does still show the trip, ending it
 there is safe: on Android **End trip** finishes as usual, and on an iPhone
 **End locally anyway** is right when the app says **Could not end the trip**,
 because the server has already ended it.
+
+### Reports
+
+**Reports** answers two questions about a day of service: did the scheduled
+trips run, and did they run on time. It opens on yesterday. Pick another day
+with the date box and **Show**, or step through days with **Previous day** and
+**Next day**.
+
+Each route with service that day has a row:
+
+- **Scheduled**: the trips the schedule has on that day, holidays included.
+- **Ran**: how many of them a driver ran. A driver's trip counts for the run
+  of its GTFS trip nearest to when the driver started it, so a trip started a
+  few minutes before midnight, or run after midnight, lands on the right day.
+- **On time**: the share of stops the vehicles passed from 1 minute early to 5
+  minutes late, with how many stops were early and late under it. A stop
+  counts when the vehicle leaves it, the last stop when the vehicle reaches it,
+  so a driver waiting at the first stop before departure is not early. When
+  the agency's schedule marks timepoints, only those stops are counted.
+- **Unknown**: the share of stops the report cannot judge, because the phone
+  sent nothing within 2 minutes either side of the vehicle passing the stop.
+  They are left out of **On time** rather than counted late. A high number
+  usually means phones losing signal or the app being stopped. A trip whose
+  schedule has no route shape is unknown everywhere.
+
+**Trips →** opens the route's trips for the day, by departure. Each shows
+when it was scheduled, the vehicle and driver that ran it (**Not run** if
+none), how early or late it left the first stop and reached the last, and its
+own on-time share. **View trail** opens the trip's trail on the map.
+
+**Download CSV** saves the route rows for the day as a spreadsheet. Today's
+report is worked out again each time you open it, so it fills in as the day
+goes on. A past day is kept once its service has ended, so points a phone
+uploads later from its offline queue show in it only after the server next
+reloads the schedule, daily by default. Your server administrator can change
+the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and `REPORT_ON_TIME_LATE`, see
+[`configuration.md`](configuration.md)).
 
 ### The feed itself
 

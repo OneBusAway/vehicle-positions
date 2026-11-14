@@ -30,6 +30,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 		"api_keys.html",
 		"dashboard.html",
 		"map.html",
+		"reports.html",
 		"trips.html",
 		"users.html",
 		"vehicles.html",

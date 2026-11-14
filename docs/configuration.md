@@ -118,6 +118,22 @@ The server keeps what the alerts need in memory, from the reports it accepts.
 After a restart it counts a quiet vehicle from the restart, and a vehicle that
 is not moving from its first report since.
 
+## Service reports
+
+The on-time window behind the admin UI's **Reports** page and
+`GET /api/v1/admin/reports/service`. A vehicle that passes a stop from
+`REPORT_ON_TIME_EARLY` early to `REPORT_ON_TIME_LATE` late is on time. The
+defaults are the cut-offs the Android driver app shows its driver.
+
+| Variable | Default | Status | Purpose |
+|---|---|---|---|
+| `REPORT_ON_TIME_EARLY` | `1m` | Optional | How early a vehicle may pass a stop and still be on time. `0` is accepted and allows no early running at all. Negative or unparseable warns and defaults. |
+| `REPORT_ON_TIME_LATE` | `5m` | Optional | How late a vehicle may pass a stop and still be on time. `0` is accepted. Negative or unparseable warns and defaults. |
+
+A report places each fix on its trip's shape the way the feed places a driver
+vehicle, so a fix further from the route than `RIDER_MAX_SHAPE_DISTANCE` plus
+its own accuracy is left out of reports too.
+
 ## Security and proxying
 
 | Variable | Default | Status | Purpose |
