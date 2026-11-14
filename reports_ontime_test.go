@@ -126,7 +126,7 @@ func TestEvaluateRun_FixtureDay(t *testing.T) {
 	for i, run := range reportFixtureRuns {
 		t.Run(run.tripID, func(t *testing.T) {
 			trip := mustTrip(t, ix, run.tripID)
-			got := evaluateRun(trip, reportDayStart, trails[trips[i].ID], testReportSettings)
+			got := evaluateRuns(trip, reportDayStart, [][]LocationPoint{trails[trips[i].ID]}, testReportSettings)
 			assert.Equal(t, want[run.tripID], got)
 		})
 	}
@@ -176,7 +176,7 @@ func TestEvaluateRun_Timepoints(t *testing.T) {
 	marked := *rl
 	marked.StopTimes = slices.Clone(rl.StopTimes)
 	marked.StopTimes[1].Timepoint = false
-	got := evaluateRun(&marked, reportDayStart, points, testReportSettings)
+	got := evaluateRuns(&marked, reportDayStart, [][]LocationPoint{points}, testReportSettings)
 	assert.Equal(t, stopCounts{late: 1, onTime: 1}, got.counts)
 }
 
@@ -191,14 +191,71 @@ func TestEvaluateRun_EndsShortOfTheLastStop(t *testing.T) {
 		{hms(8, 9, 50), t1.StopTimes[2].AlongShape - 15}, {hms(8, 15, 0), t1.StopTimes[2].AlongShape - 15},
 	}
 
-	got := evaluateRun(t1, reportDayStart, driveTrip(t1, reportDayStart, legs, nil), testReportSettings)
+	got := evaluateRuns(t1, reportDayStart, [][]LocationPoint{driveTrip(t1, reportDayStart, legs, nil)}, testReportSettings)
 	require.NotNil(t, got.arrival)
 	assert.Equal(t, stopCounts{onTime: 3}, got.counts)
 }
 
+// TestEvaluateRuns_DoesNotJoinTwoVehicles: one vehicle stops reporting 400 m
+// along and another starts 600 m along ten seconds later. Nobody was seen
+// passing ST2 at 500 m, and a time worked out between the two vehicles would
+// call it known.
+func TestEvaluateRuns_DoesNotJoinTwoVehicles(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	t1 := mustTrip(t, ix, "T1")
+	first := driveTrip(t1, reportDayStart, []reportLeg{
+		{hms(7, 57, 0), 0}, {hms(8, 0, 0), 0}, {hms(8, 1, 20), 400},
+	}, nil)
+	second := driveTrip(t1, reportDayStart, []reportLeg{
+		{hms(8, 1, 30), 600}, {hms(8, 2, 50), t1.Shape.Length}, {hms(8, 5, 0), t1.Shape.Length},
+	}, nil)
+
+	got := evaluateRuns(t1, reportDayStart, [][]LocationPoint{first, second}, testReportSettings)
+	require.NotNil(t, got.departure, "the first vehicle left ST1")
+	require.NotNil(t, got.arrival, "the second vehicle reached ST3")
+	// ST1 on time from the first vehicle, ST3 early from the second, and ST2
+	// unknown.
+	assert.Equal(t, stopCounts{onTime: 1, early: 1, unknown: 1}, got.counts)
+}
+
+// TestEvaluateRuns_TakesTheFirstRunToPassEachStop: T1 run on time and run
+// again an hour later is on time, whichever run the store lists first.
+func TestEvaluateRuns_TakesTheFirstRunToPassEachStop(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	t1 := mustTrip(t, ix, "T1")
+	onTime := driveTrip(t1, reportDayStart, straightLegs(hms(7, 57, 0), hms(8, 0, 0), hms(8, 8, 10))(t1), nil)
+	anHourLater := driveTrip(t1, reportDayStart, straightLegs(hms(8, 57, 0), hms(9, 0, 0), hms(9, 8, 10))(t1), nil)
+
+	for _, trails := range [][][]LocationPoint{{onTime, anHourLater}, {anHourLater, onTime}} {
+		got := evaluateRuns(t1, reportDayStart, trails, testReportSettings)
+		require.NotNil(t, got.departure)
+		assert.Equal(t, 6*time.Second, *got.departure)
+		assert.Equal(t, stopCounts{onTime: 3}, got.counts)
+	}
+}
+
+// TestEvaluateRuns_ASecondVehicleFinishesTheTrip: the first vehicle breaks
+// down past ST2 and a second one, starting short of where it stopped, takes
+// the trip on to ST3 late. Each stop is judged on the vehicle that passed it.
+func TestEvaluateRuns_ASecondVehicleFinishesTheTrip(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	t1 := mustTrip(t, ix, "T1")
+	brokeDown := driveTrip(t1, reportDayStart, []reportLeg{
+		{hms(7, 57, 0), 0}, {hms(8, 0, 0), 0}, {hms(8, 1, 40), 500}, {hms(8, 5, 0), 500}, {hms(8, 5, 40), 700},
+	}, nil)
+	replacement := driveTrip(t1, reportDayStart, []reportLeg{
+		{hms(8, 20, 0), 650}, {hms(8, 21, 10), t1.Shape.Length}, {hms(8, 23, 0), t1.Shape.Length},
+	}, nil)
+
+	got := evaluateRuns(t1, reportDayStart, [][]LocationPoint{brokeDown, replacement}, testReportSettings)
+	require.NotNil(t, got.arrival)
+	assert.Greater(t, *got.arrival, 10*time.Minute)
+	assert.Equal(t, stopCounts{onTime: 2, late: 1}, got.counts)
+}
+
 func TestEvaluateRun_NoPoints(t *testing.T) {
 	ix := reportFixtureIndex(t)
-	got := evaluateRun(mustTrip(t, ix, "T1"), reportDayStart, nil, testReportSettings)
+	got := evaluateRuns(mustTrip(t, ix, "T1"), reportDayStart, nil, testReportSettings)
 	assert.Equal(t, runEvaluation{counts: stopCounts{unknown: 3}}, got)
 }
 
@@ -212,7 +269,7 @@ func TestEvaluateRun_ShapeDrawnThroughStops(t *testing.T) {
 	points := driveTrip(t4, reportDayStart, stopLegs(hms(9, 58, 0), hms(10, 0, 0))(t4), nil)
 	require.NotEmpty(t, points)
 
-	got := evaluateRun(t4, reportDayStart, points, testReportSettings)
+	got := evaluateRuns(t4, reportDayStart, [][]LocationPoint{points}, testReportSettings)
 	assert.Equal(t, runEvaluation{counts: stopCounts{unknown: 2}}, got)
 }
 

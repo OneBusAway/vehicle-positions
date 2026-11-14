@@ -104,8 +104,8 @@ type routeReport struct {
 }
 
 // tripReport is one scheduled trip of a route, run or not. A trip run more
-// than once, say by a second vehicle after a breakdown, is judged on every
-// run's points together.
+// than once, say by a second vehicle after a breakdown, is judged at each stop
+// on the first run known to have passed it.
 type tripReport struct {
 	GtfsTripID          string    `json:"gtfs_trip_id"`
 	Headsign            string    `json:"headsign"`
@@ -278,22 +278,22 @@ func (r *serviceReporter) compute(ctx context.Context, ix *rider.Index, day time
 		}
 	}
 
-	points := make(map[string][]LocationPoint, len(runs))
+	trails := make(map[string][][]LocationPoint, len(runs))
 	for tripID, tripRuns := range runs {
 		for _, t := range tripRuns {
 			trail, err := r.store.ListTripLocations(ctx, t.ID)
 			if err != nil {
 				return nil, fmt.Errorf("trail of trip %d: %w", t.ID, err)
 			}
-			points[tripID] = append(points[tripID], trail...)
+			trails[tripID] = append(trails[tripID], trail)
 		}
 	}
-	return buildServiceReport(ix, day, runs, points, r.settings)
+	return buildServiceReport(ix, day, runs, trails, r.settings)
 }
 
 // buildServiceReport is a day's report from the driver trips that ran its
-// scheduled trips and their points, both keyed by GTFS trip id.
-func buildServiceReport(ix *rider.Index, day time.Time, runs map[string][]TripSummary, points map[string][]LocationPoint, s reportSettings) (*serviceReport, error) {
+// scheduled trips and the trail of each, both keyed by GTFS trip id.
+func buildServiceReport(ix *rider.Index, day time.Time, runs map[string][]TripSummary, trails map[string][][]LocationPoint, s reportSettings) (*serviceReport, error) {
 	date := day.Format(gtfsDateLayout)
 	dayStart, err := rider.ServiceDayStart(date, ix.Timezone())
 	if err != nil {
@@ -329,7 +329,7 @@ func buildServiceReport(ix *rider.Index, day time.Time, runs map[string][]TripSu
 			}
 			if len(tr.Runs) > 0 {
 				row.TripsRun++
-				eval := evaluateRun(trip, dayStart, points[trip.ID], s)
+				eval := evaluateRuns(trip, dayStart, trails[trip.ID], s)
 				tr.setEvaluation(eval)
 				counts.merge(eval.counts)
 			}

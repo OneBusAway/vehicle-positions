@@ -1505,7 +1505,8 @@ paths:
 
         A driver's trip counts as a run of its GTFS trip on the service day
         whose scheduled run is nearest to when the driver started it, within
-        12 hours. Several driver trips of one GTFS trip are judged together.
+        12 hours. Several driver trips of one GTFS trip are judged at each
+        stop on the first of them known to have passed it.
 
         Each run is judged at its trip's timepoints, or at every stop when the
         feed marks none. A stop is judged on departure, when the vehicle is

@@ -102,8 +102,8 @@ func (s reportSettings) verdict(deviation time.Duration) stopVerdict {
 	return stopOnTime
 }
 
-// evaluateRun judges one run of trip on the service day starting at dayStart
-// from its location points. It leaves the first stop when it is more than
+// evaluateRuns judges trip on the service day starting at dayStart from the
+// trails of the driver trips that ran it, one trail a run. A run leaves the first stop when it is more than
 // stoppedAtDistance past it, the distance at which the feed stops calling it
 // STOPPED_AT the stop, so a driver waiting at the first stop before departure
 // is not counted early; it reaches the last stop when it comes within that
@@ -113,21 +113,28 @@ func (s reportSettings) verdict(deviation time.Duration) stopVerdict {
 // The stops judged are the trip's timepoints, or every stop when the feed
 // marks none of them. A trip whose shape was drawn through its stops is not
 // placed at all, as tripLocator does not place one, so every stop is unknown.
-func evaluateRun(trip *rider.TripInfo, dayStart time.Time, points []LocationPoint, s reportSettings) runEvaluation {
-	var fixes []placedFix
+//
+// A trip run more than once is judged at each stop on the first run known to
+// have passed it. Each run is placed and followed on its own: two vehicles'
+// points put together read as one vehicle jumping between them, and a time
+// worked out across the jump is one that neither vehicle kept.
+func evaluateRuns(trip *rider.TripInfo, dayStart time.Time, trails [][]LocationPoint, s reportSettings) runEvaluation {
+	var runs [][]placedFix
 	if !trip.ShapeFromStops {
-		fixes = placeFixes(trip, points, s.maxShapeDistance)
+		for _, points := range trails {
+			runs = append(runs, placeFixes(trip, points, s.maxShapeDistance))
+		}
 	}
 
 	last := len(trip.StopTimes) - 1
 	departure := func(i int) (time.Duration, bool) {
 		stop := trip.StopTimes[i]
-		at, ok := passedAt(fixes, math.Min(stop.AlongShape+stoppedAtDistance, trip.Shape.Length))
+		at, ok := firstPassedAt(runs, math.Min(stop.AlongShape+stoppedAtDistance, trip.Shape.Length))
 		return at.Sub(dayStart.Add(stop.Departure)), ok
 	}
 	arrival := func(i int) (time.Duration, bool) {
 		stop := trip.StopTimes[i]
-		at, ok := passedAt(fixes, math.Max(stop.AlongShape-stoppedAtDistance, 0))
+		at, ok := firstPassedAt(runs, math.Max(stop.AlongShape-stoppedAtDistance, 0))
 		return at.Sub(dayStart.Add(stop.Arrival)), ok
 	}
 
@@ -195,6 +202,19 @@ func placeFixes(trip *rider.TripInfo, points []LocationPoint, maxShapeDistance f
 		hint = proj.AlongShape
 	}
 	return fixes
+}
+
+// firstPassedAt is when the first of a trip's runs got target metres along
+// the shape, unknown when no run's passing time is known.
+func firstPassedAt(runs [][]placedFix, target float64) (time.Time, bool) {
+	var first time.Time
+	known := false
+	for _, fixes := range runs {
+		if at, ok := passedAt(fixes, target); ok && (!known || at.Before(first)) {
+			first, known = at, true
+		}
+	}
+	return first, known
 }
 
 // passedAt is when the vehicle first got target metres along the shape,

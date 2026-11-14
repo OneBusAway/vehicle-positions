@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -129,6 +130,43 @@ func TestServiceReporter_CalendarDates(t *testing.T) {
 	assert.Equal(t, "T2", rep.Routes[0].Trips[0].GtfsTripID)
 	assert.Nil(t, rep.Routes[0].OnTimePercent)
 	assert.Nil(t, rep.Routes[0].UnknownPercent)
+}
+
+// TestServiceReporter_KeepsTheRunsOfOneTripApart: two driver trips of T1 on
+// the day, one vehicle stopping 400 m along and another starting 600 m along
+// just after. The report lists both runs and does not make up a time at ST2,
+// which neither was seen passing.
+func TestServiceReporter_KeepsTheRunsOfOneTripApart(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	t1 := mustTrip(t, ix, "T1")
+	run := func(id int64, legs []reportLeg) (TripSummary, []LocationPoint) {
+		return TripSummary{
+			ID: id, VehicleID: "bus-" + strconv.FormatInt(id, 10), RouteID: t1.RouteID, GtfsTripID: "T1",
+			StartTime: reportDayStart.Add(legs[0].at), Status: "completed",
+		}, driveTrip(t1, reportDayStart, legs, nil)
+	}
+	first, firstTrail := run(1, []reportLeg{{hms(7, 57, 0), 0}, {hms(8, 0, 0), 0}, {hms(8, 1, 20), 400}})
+	second, secondTrail := run(2, []reportLeg{{hms(8, 1, 30), 600}, {hms(8, 2, 50), t1.Shape.Length}, {hms(8, 5, 0), t1.Shape.Length}})
+	store := &fakeReportStore{
+		trips:  []TripSummary{first, second},
+		trails: map[int64][]LocationPoint{1: firstTrail, 2: secondTrail},
+	}
+	r := newServiceReporter(store, func() *rider.Index { return ix }, testReportSettings)
+	r.now = func() time.Time { return reportFixtureNow }
+
+	rep, err := r.report(context.Background(), "2026-09-02")
+	require.NoError(t, err)
+	for _, route := range rep.Routes {
+		for _, trip := range route.Trips {
+			if trip.GtfsTripID != "T1" {
+				continue
+			}
+			assert.Len(t, trip.Runs, 2)
+			assert.Equal(t, [4]int{1, 1, 0, 1}, [4]int{trip.StopsOnTime, trip.StopsEarly, trip.StopsLate, trip.StopsUnknown})
+			return
+		}
+	}
+	t.Fatal("T1 is not in the report")
 }
 
 func TestServiceReporter_EmptyDay(t *testing.T) {
