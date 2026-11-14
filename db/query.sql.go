@@ -1237,7 +1237,9 @@ JOIN trips t ON t.id = $1
 WHERE lp.vehicle_id = t.vehicle_id
   AND lp.driver_id = t.user_id::text
   AND (
-    (lp.received_at >= t.start_time AND lp.received_at <= COALESCE(t.end_time, NOW())
+    (lp.received_at >= t.start_time
+        AND (lp.received_at <= COALESCE(t.end_time, NOW())
+            OR lp.timestamp < FLOOR(EXTRACT(EPOCH FROM t.end_time)))
         AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes'
         AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time)))
     OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
@@ -1261,9 +1263,12 @@ type ListTripLocationsRow struct {
 
 // Trail derivation per spec §4.5: location_points.trip_id is a client string,
 // not trips.id, so trail points are matched by vehicle + driver + time window.
-// A live point is in the window when it was received during the trip and
-// recorded after it started, so a fix from the trip before, uploaded within
-// five minutes once this trip has begun, stays out. A backlog point, one
+// A live point is in the window when it was recorded after the trip started
+// and either received during the trip or recorded before the second it ended
+// in, so a fix from the trip before, uploaded within five minutes once this
+// trip has begun, lands in that trip and not in this one. A fix stamped with
+// the second the trip ended in may be from after the end, so it counts only if
+// it was received before the end. A backlog point, one
 // received more than five minutes after the phone recorded it
 // (maxTimestampSkew: a live report that late is refused, so only
 // POST /api/v1/locations/history stores one), is placed only by when it was
