@@ -39,9 +39,11 @@ class ServiceControllerImplTest {
     private val tripState = FakeTripStateStore().apply { tripState.value = trip }
     private val geometryStore = FakeTripGeometryStore()
     private var cancelled = 0
+    private var posted = 0
 
     // Android's own classes return defaults here, so the stop intent is built and sent to no one.
-    private val serviceController = ServiceControllerImpl(ContextWrapper(null), cancelTripNotifications = { cancelled++ })
+    private val serviceController =
+        ServiceControllerImpl(ContextWrapper(null), cancelTripNotifications = { cancelled++ }, postResume = { posted++ })
 
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
@@ -61,6 +63,13 @@ class ServiceControllerImplTest {
         val vm = ResumeShiftViewModel(tripState, geometryStore, FakeSessionStore(), serviceController, tripEnder, clock = { 0L }, phoneZone = ZoneOffset.UTC)
         vm.uiState.first { it.trip == trip }
         return vm
+    }
+
+    @Test fun `asking the driver to resume posts Reports paused`() {
+        serviceController.askToResume()
+
+        assertEquals(1, posted)
+        assertEquals(0, cancelled)
     }
 
     @Test fun `ending the trip from Resume takes Reports paused down`() = runTest(dispatcher) {
