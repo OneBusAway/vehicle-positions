@@ -28,6 +28,7 @@ class AuthRepository @Inject constructor(
     suspend fun login(serverUrl: String, email: String, password: String): Result<Unit> = try {
         val resp = apiFactory.create(serverUrl).login(LoginRequest(email, password))
         dropTripFromAnotherServer(serverUrl)
+        dropOccupancyForAnotherDriver(jwtSubject(resp.accessToken))
         sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
         offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
         scheduleBacklogUpload()
@@ -62,6 +63,17 @@ class AuthRepository @Inject constructor(
         if (sameServer(tripServer, serverUrl)) return
         Log.i(TAG, "Dropped trip ${trip.tripDbId}: it is open on another server than the one signed in to")
         tripStateStore.clearActiveTrip()
+    }
+
+    /**
+     * Sign in again takes any driver's email, and goes back to the open trip. How full the vehicle is was said by
+     * whoever had it before, so it stays only for the driver who started the trip, as its end does, and not when
+     * either is unknown: a trip with none sends none, where a stale one would tell riders the wrong thing.
+     */
+    private suspend fun dropOccupancyForAnotherDriver(driverId: String?) {
+        val trip = tripStateStore.activeTrip.first() ?: return
+        if (trip.occupancy == null || (driverId != null && driverId == trip.driverId)) return
+        tripStateStore.setOccupancy(trip.tripDbId, null)
     }
 
     /** Tells the server this session is over. The caller signs out on this phone whatever comes back. */

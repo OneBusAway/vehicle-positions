@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -284,5 +285,80 @@ class TripStateStoreTest {
         assertEquals("", legacyGtfsTripId(legacy = "5", routeId = "5"))
         assertEquals("", legacyGtfsTripId(legacy = null, routeId = "5"))
         assertEquals("trip-0830", legacyGtfsTripId(legacy = "trip-0830", routeId = "5"))
+    }
+
+    // --- How full the vehicle is, which belongs to the trip ---
+
+    private val trip7 = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L)
+    private val occupancyKey = stringPreferencesKey("trip_occupancy")
+
+    @Test fun `occupancy is set, changed and cleared on the active trip`() = runTest {
+        val store = DataStoreTripStateStore(newDataStore(), nairobi)
+        store.saveActiveTrip(trip7)
+        assertNull("nothing is chosen when a trip starts", store.activeTrip.first()!!.occupancy)
+
+        store.setOccupancy(7L, OccupancyStatus.FEW_SEATS_AVAILABLE)
+        assertEquals(trip7.copy(occupancy = OccupancyStatus.FEW_SEATS_AVAILABLE), store.activeTrip.first())
+
+        store.setOccupancy(7L, OccupancyStatus.FULL)
+        assertEquals(OccupancyStatus.FULL, store.activeTrip.first()!!.occupancy)
+
+        store.setOccupancy(7L, null)
+        assertEquals(trip7, store.activeTrip.first())
+    }
+
+    @Test fun `occupancy goes with the trip, however it ends`() = runTest {
+        val dataStore = newDataStore()
+        val store = DataStoreTripStateStore(dataStore, nairobi)
+
+        store.saveActiveTrip(trip7)
+        store.setOccupancy(7L, OccupancyStatus.FULL)
+        store.clearActiveTrip()
+        assertFalse("ended on the server", dataStore.data.first().contains(occupancyKey))
+
+        store.saveActiveTrip(trip7)
+        store.setOccupancy(7L, OccupancyStatus.FULL)
+        store.endActiveTripLocally(signedInDriverId = "1")
+        assertFalse("ended on this phone", dataStore.data.first().contains(occupancyKey))
+    }
+
+    @Test fun `the next trip starts with no occupancy`() = runTest {
+        val store = DataStoreTripStateStore(newDataStore(), nairobi)
+        store.saveActiveTrip(trip7)
+        store.setOccupancy(7L, OccupancyStatus.FULL)
+
+        store.saveActiveTrip(ActiveTrip(8L, "trip-0900", "bus-1", "5", "20260804", 200L))
+
+        assertNull(store.activeTrip.first()!!.occupancy)
+    }
+
+    @Test fun `a tap that lands after its trip ended writes nothing`() = runTest {
+        val dataStore = newDataStore()
+        val store = DataStoreTripStateStore(dataStore, nairobi)
+        store.saveActiveTrip(trip7)
+        store.clearActiveTrip()
+
+        store.setOccupancy(7L, OccupancyStatus.FULL)
+        assertNull("the ended trip is not brought back", store.activeTrip.first())
+        assertFalse(dataStore.data.first().contains(occupancyKey))
+
+        store.saveActiveTrip(ActiveTrip(8L, "trip-0900", "bus-1", "5", "20260804", 200L))
+        store.setOccupancy(7L, OccupancyStatus.FULL)
+        assertNull("nor set on the trip after it", store.activeTrip.first()!!.occupancy)
+    }
+
+    @Test fun `occupancy is still there after the process is killed`() = runTest {
+        val file = File(tempFolder.newFolder(), "trip_state.preferences_pb")
+        val before = CoroutineScope(Job() + Dispatchers.IO)
+        val store = DataStoreTripStateStore(PreferenceDataStoreFactory.create(scope = before, produceFile = { file }), nairobi)
+        store.saveActiveTrip(trip7)
+        store.setOccupancy(7L, OccupancyStatus.STANDING_ROOM_ONLY)
+        // DataStore takes a file only once the instance before it has let go.
+        before.coroutineContext[Job]!!.cancelAndJoin()
+
+        val after = CoroutineScope(Job() + Dispatchers.IO).also { scopes += it }
+        val restored = DataStoreTripStateStore(PreferenceDataStoreFactory.create(scope = after, produceFile = { file }), nairobi)
+
+        assertEquals(trip7.copy(occupancy = OccupancyStatus.STANDING_ROOM_ONLY), restored.activeTrip.first())
     }
 }

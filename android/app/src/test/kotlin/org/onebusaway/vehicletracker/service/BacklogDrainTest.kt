@@ -16,6 +16,7 @@ import org.junit.rules.TemporaryFolder
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FakeSessionStore
+import org.onebusaway.vehicletracker.data.FakeTripStateStore
 import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.TrackingRepository
@@ -48,7 +49,7 @@ class BacklogDrainTest {
         scheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
     ): TripReporter {
         var now = 0L
-        return TripReporter(TrackerApiProvider { api }, TrackingRepository(), { now += REPORT_INTERVAL_MS; now }, queue, uploader, scheduler)
+        return TripReporter(TrackerApiProvider { api }, TrackingRepository(), { now += REPORT_INTERVAL_MS; now }, queue, uploader, scheduler, FakeTripStateStore())
     }
 
     private fun fix(ts: Long) = LocationFix(-1.29, 36.82, bearing = 180.0, speed = 8.5, accuracy = 12.0, timeEpochSec = ts)

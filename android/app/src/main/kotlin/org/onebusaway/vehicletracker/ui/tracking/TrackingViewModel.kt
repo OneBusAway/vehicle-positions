@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui.tracking
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,12 +12,16 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.map.MapFileSource
 import org.onebusaway.vehicletracker.data.map.MapFileState
+import java.io.IOException
 import javax.inject.Inject
+
+private const val TAG = "TrackingViewModel"
 
 data class TrackingUiState(
     val tracking: TrackingState = TrackingState(),
@@ -31,7 +36,7 @@ data class TrackingUiState(
 @HiltViewModel
 class TrackingViewModel @Inject constructor(
     private val trackingRepository: TrackingRepository,
-    tripStateStore: TripStateStore,
+    private val tripStateStore: TripStateStore,
     private val tripEnder: TripEnder,
     mapFiles: MapFileSource,
 ) : ViewModel() {
@@ -66,6 +71,23 @@ class TrackingViewModel @Inject constructor(
 
     /** The screen has gone on from the ended trip, so one recreated later does not go on again. */
     fun onNavigated() = tripEnder.onNavigated()
+
+    /**
+     * The driver tapped [tapped] in the occupancy row: it becomes the trip's, or is cleared when it already is. Read
+     * against what the screen shows, which is what the driver tapped.
+     */
+    fun onOccupancyClick(tapped: OccupancyStatus) {
+        val trip = _uiState.value.activeTrip ?: return
+        val occupancy = tapped.takeUnless { it == trip.occupancy }
+        viewModelScope.launch {
+            try {
+                tripStateStore.setOccupancy(trip.tripDbId, occupancy)
+            } catch (e: IOException) {
+                // A full disk, say. The row shows what is stored, so the driver sees that the tap did not take.
+                Log.w(TAG, "Could not store the occupancy", e)
+            }
+        }
+    }
 
     /** The tracking service takes a fix every second only while this screen is there to show it. */
     fun onScreenVisible(visible: Boolean) = trackingRepository.setLiveView(visible)

@@ -29,6 +29,17 @@ class FileOfflineFixQueueTest {
         assertEquals(listOf(2L, 3L), reopened.oldest(10).map { it.timestamp })
     }
 
+    // Recorded with how full the driver said the vehicle was then, whatever they say by the time it is uploaded.
+    @Test fun `a queued fix keeps its occupancy through a reopen`() = runTest {
+        val file = tmp.newFile("offline.jsonl")
+        val queue = FileOfflineFixQueue(file)
+        queue.add(report(1).copy(occupancyStatus = OccupancyStatus.FULL))
+        queue.add(report(2))
+
+        val reopened = FileOfflineFixQueue(file)
+        assertEquals(listOf(OccupancyStatus.FULL, null), reopened.oldest(10).map { it.occupancyStatus })
+    }
+
     @Test fun `over capacity the oldest fixes go first`() = runTest {
         val queue = FileOfflineFixQueue(tmp.newFile("offline.jsonl"), capacity = 3)
         (1L..5L).forEach { queue.add(report(it)) }

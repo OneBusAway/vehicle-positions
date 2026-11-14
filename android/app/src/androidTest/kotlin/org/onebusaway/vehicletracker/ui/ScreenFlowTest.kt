@@ -39,6 +39,7 @@ import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isDisplayed
@@ -53,6 +54,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
@@ -996,7 +998,11 @@ class ScreenFlowTest {
         // The card above says On time: inside the window, the minutes are the row's alone.
         answer(getString(R.string.tracking_adherence_on_time)).assertIsDisplayed()
         row("Stop ST2", "8:05").assertIsDisplayed()
-        row("Stop ST3", "8:10").assertIsDisplayed()
+        // Under the occupancy row, a 640 dp screen leaves the end of the line just past the panel's
+        // edge: the stops scroll, as a real run's always do.
+        val endOfTheLine = hasText("Stop ST3") and hasText("8:10", substring = true)
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(endOfTheLine)
+        compose.onNode(endOfTheLine).assertIsDisplayed()
     }
 
     @Test
@@ -1040,6 +1046,7 @@ class ScreenFlowTest {
                 model = statusCardModel(onTheRoad, vehicleId = "4317"),
                 onEndTripClick = {},
                 onBarClick = {},
+                onOccupancyClick = {},
                 onBarHeightChanged = {},
                 rowsAlpha = { shown },
                 navigationBarPx = with(LocalDensity.current) { navigationBar.roundToPx() },

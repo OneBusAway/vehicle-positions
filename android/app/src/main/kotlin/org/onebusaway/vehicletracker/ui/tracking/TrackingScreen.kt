@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.ui.components.InkButton
 import org.onebusaway.vehicletracker.ui.components.QuietButton
@@ -95,6 +96,7 @@ fun TrackingScreen(
         onEndTripLocallyClick = viewModel::onEndTripLocally,
         onDismissError = viewModel::dismissEndTripError,
         onReauthClick = onReauthRequired,
+        onOccupancyClick = viewModel::onOccupancyClick,
         map = { modifier, contentPadding, controlsPadding ->
             // With no geometry there is no route to draw, and the status card already says so.
             val geometry = state.tracking.geometry
@@ -116,6 +118,8 @@ fun TrackingScreenContent(
     onEndTripLocallyClick: () -> Unit,
     onDismissError: () -> Unit,
     onReauthClick: () -> Unit,
+    // A default for the tests of the rest of the screen, which tap nothing in the occupancy row.
+    onOccupancyClick: (OccupancyStatus) -> Unit = {},
     // The map is handed in so that this screen can be shown, in tests and previews, with no
     // OpenGL behind it. It fills the screen: its content padding says how much of it the status
     // card and the trip panel cover, and its controls padding where its own buttons go, above
@@ -178,6 +182,7 @@ fun TrackingScreenContent(
                     model = model,
                     onEndTripClick = { showConfirmDialog = true },
                     onBarClick = { scope.launch { sheetState.expand() } },
+                    onOccupancyClick = onOccupancyClick,
                     onBarHeightChanged = { barHeight = it },
                     // Before the panel's first placement there is no offset to read.
                     rowsAlpha = { panelRowsAlpha(collapsedTop, runCatching { sheetState.requireOffset() }.getOrNull(), rowsFade) },
