@@ -16,6 +16,10 @@ var (
 	ErrAssignmentNotFound = errors.New("assignment not found")
 	ErrUserNotFoundFK     = errors.New("user not found")
 	ErrVehicleNotFoundFK  = errors.New("vehicle not found")
+	// ErrAssignmentInUse is returned when an unassign would leave the driver on
+	// a running trip on the vehicle, one the location ingest would refuse every
+	// report for.
+	ErrAssignmentInUse = errors.New("driver has an active trip on this vehicle")
 )
 
 // AssignmentResponse is the API representation of a user-vehicle assignment.
@@ -110,9 +114,20 @@ func classifyAssignmentError(err error) error {
 	return fmt.Errorf("create assignment: %w", err)
 }
 
-// DeleteAssignment removes a user-vehicle assignment. Returns ErrAssignmentNotFound if no row matched.
+// DeleteAssignment removes a user-vehicle assignment. Returns
+// ErrAssignmentNotFound if no row matched, and ErrAssignmentInUse, keeping the
+// assignment, while the driver has an active trip on the vehicle.
 func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID string) error {
-	rowsAffected, err := s.queries.UnassignUserVehicle(ctx, db.UnassignUserVehicleParams{
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer rollbackTx(tx)
+	qtx := s.queries.WithTx(tx)
+
+	// The delete comes first: it waits for any trip start holding the
+	// assignment, so a trip that start commits is visible to the check below.
+	rowsAffected, err := qtx.UnassignUserVehicle(ctx, db.UnassignUserVehicleParams{
 		UserID:    userID,
 		VehicleID: vehicleID,
 	})
@@ -121,6 +136,18 @@ func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID st
 	}
 	if rowsAffected == 0 {
 		return ErrAssignmentNotFound
+	}
+
+	trip, err := qtx.GetActiveTripByVehicle(ctx, vehicleID)
+	if err == nil && trip.UserID == userID {
+		return ErrAssignmentInUse
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check active trip: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
 	}
 	return nil
 }

@@ -1752,6 +1752,10 @@ paths:
         Deletes the assignment linking a driver to a vehicle. Requires the
         `admin` role. Unlike the other delete endpoints in this API, this one
         answers `200` with a status body rather than `204`.
+
+        While the driver has an active trip on the vehicle the assignment is
+        kept and the answer is `409`: without it, every location report from
+        that trip would be refused. End the trip first.
       responses:
         '200':
           description: Assignment removed.
@@ -1767,6 +1771,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           description: No assignment links this driver to this vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The driver has an active trip on this vehicle.
           content:
             application/json:
               schema:

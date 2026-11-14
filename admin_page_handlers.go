@@ -1241,7 +1241,9 @@ func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 
 // userUnassignVehicle removes a vehicle assignment (vehicleID from the URL)
 // and redirects back to the edit page. An assignment that's already gone
-// (e.g. a double-submitted remove) 404s rather than silently succeeding.
+// (e.g. a double-submitted remove) 404s rather than silently succeeding, and
+// one the driver is running a trip on is kept, with a flash saying to end the
+// trip first.
 func (ui *adminUI) userUnassignVehicle(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -1253,6 +1255,11 @@ func (ui *adminUI) userUnassignVehicle(w http.ResponseWriter, r *http.Request) {
 	if err := ui.assignments.DeleteAssignment(r.Context(), id, vehicleID); err != nil {
 		if errors.Is(err, ErrAssignmentNotFound) {
 			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, ErrAssignmentInUse) {
+			setFlash(w, "unassign_on_trip")
+			http.Redirect(w, r, "/admin/users/"+idStr+"/edit", http.StatusSeeOther)
 			return
 		}
 		slog.Error("user unassign vehicle", "user_id", id, "vehicle_id", vehicleID, "error", err)

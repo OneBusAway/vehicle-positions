@@ -114,6 +114,15 @@ SELECT user_id, vehicle_id
 FROM user_vehicles
 WHERE user_id = $1 AND vehicle_id = $2;
 
+-- name: CheckUserVehicleAssignmentForShare :one
+-- FOR SHARE makes an unassign wait until the caller's transaction commits, so
+-- the unassign sees a trip the caller starts and refuses, rather than leaving
+-- a running trip on a vehicle the driver is no longer assigned to.
+SELECT user_id, vehicle_id
+FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2
+FOR SHARE;
+
 -- name: GetLocationAuthorization :one
 -- One round trip answers every question the location ingest asks before it
 -- accepts a report, and the label the feed publishes for the vehicle. No row

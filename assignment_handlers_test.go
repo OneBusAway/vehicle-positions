@@ -397,6 +397,15 @@ func TestHandleDeleteAssignment_NotFound(t *testing.T) {
 	assert.Equal(t, "assignment not found", errMsg)
 }
 
+func TestHandleDeleteAssignment_ActiveTrip(t *testing.T) {
+	handler := handleDeleteAssignment(&mockAssignmentDeleter{err: ErrAssignmentInUse})
+
+	w := deleteAssignment(handler, "1", "bus-1")
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Equal(t, "driver has an active trip on this vehicle", decodeAssignmentError(t, w))
+}
+
 func TestHandleDeleteAssignment_InvalidUserID(t *testing.T) {
 	handler := handleDeleteAssignment(&mockAssignmentDeleter{})
 
