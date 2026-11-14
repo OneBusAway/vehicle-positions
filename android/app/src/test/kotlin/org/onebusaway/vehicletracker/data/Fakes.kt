@@ -111,6 +111,11 @@ class FakeTripStateStore : TripStateStore {
     override suspend fun saveActiveTrip(trip: ActiveTrip) { tripState.value = trip }
     override suspend fun clearActiveTrip() { tripState.value = null }
 
+    /** Writes only to the trip that is still active, as [DataStoreTripStateStore] does. */
+    override suspend fun setOccupancy(tripDbId: Long, occupancy: OccupancyStatus?) {
+        tripState.value?.takeIf { it.tripDbId == tripDbId }?.let { tripState.value = it.copy(occupancy = occupancy) }
+    }
+
     /** Keeps the end under the trip's own driver, as [DataStoreTripStateStore] does. */
     override suspend fun endActiveTripLocally(signedInDriverId: String?) {
         tripState.value?.let { trip ->

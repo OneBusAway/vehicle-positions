@@ -1,12 +1,15 @@
 package org.onebusaway.vehicletracker.ui.tracking
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,15 +53,19 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.ui.map.MARKER_INK
 import org.onebusaway.vehicletracker.ui.map.NEXT_STOP_FILL
@@ -81,11 +90,11 @@ private val CompactBarWidth = 380.dp
 
 /**
  * What the trip bar pulls up into. The bar stays its top row, so End trip and the sent count never move;
- * under it are the run, how reporting is going and the street map, then the stops from the one last passed
- * to the end of the line. [onBarHeightChanged] hands back the bar's height, which is what the panel shows
- * while it is down, and [rowsAlpha] how much of the rest shows, read as it is placed and drawn. The panel
- * runs under the navigation bar, [navigationBarPx] tall, where the rows would otherwise sit while it is
- * down: they are held that far below the screen instead, and rise and fade in with the pull.
+ * under it are how full the vehicle is, the run, how reporting is going and the street map, then the stops
+ * from the one last passed to the end of the line. [onBarHeightChanged] hands back the bar's height, which is
+ * what the panel shows while it is down, and [rowsAlpha] how much of the rest shows, read as it is placed and
+ * drawn. The panel runs under the navigation bar, [navigationBarPx] tall, where the rows would otherwise sit
+ * while it is down: they are held that far below the screen instead, and rise and fade in with the pull.
  */
 @Composable
 internal fun TripPanel(
@@ -93,6 +102,7 @@ internal fun TripPanel(
     model: StatusCardModel,
     onEndTripClick: () -> Unit,
     onBarClick: () -> Unit,
+    onOccupancyClick: (OccupancyStatus) -> Unit,
     onBarHeightChanged: (Int) -> Unit,
     rowsAlpha: () -> Float,
     navigationBarPx: Int,
@@ -119,6 +129,7 @@ internal fun TripPanel(
                 .offset { IntOffset(0, (navigationBarPx * (1f - rowsAlpha())).roundToInt()) }
                 .graphicsLayer { alpha = rowsAlpha() },
         ) {
+            OccupancyRow(selected = state.activeTrip?.occupancy, onClick = onOccupancyClick)
             val firstStop = geometry?.stops?.firstOrNull()
             if (geometry != null && firstStop != null) {
                 val startsAt = formatClock(firstStop.departureAt, geometry.timezone)
@@ -253,6 +264,73 @@ private fun EndTripButton(ending: Boolean, compact: Boolean, onClick: () -> Unit
             style = MaterialTheme.typography.titleMedium,
         )
     }
+}
+
+/**
+ * How full the vehicle is, under its question: four buttons big enough to hit at a stop. The trip's choice is filled
+ * in ink, and tapping it again clears it. TalkBack reads the question, then the four as one choice, each with whether
+ * it is the one chosen.
+ */
+@Composable
+private fun OccupancyRow(selected: OccupancyStatus?, onClick: (OccupancyStatus) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = SidePadding, end = SidePadding, top = 4.dp, bottom = 12.dp)
+            .selectableGroup(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.tracking_occupancy_question),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // As tall as the tallest button, so a label that wraps on a narrow phone leaves them all one height.
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (occupancy in OccupancyStatus.entries) {
+                OccupancyButton(
+                    text = stringResource(occupancyText(occupancy)),
+                    selected = occupancy == selected,
+                    onClick = { onClick(occupancy) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/** Outlined, or filled in ink while chosen; not in the status colours, which say how the trip keeps to time here. */
+@Composable
+private fun OccupancyButton(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val shape = MaterialTheme.shapes.medium
+    val clear = stringResource(R.string.tracking_occupancy_clear)
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .heightIn(min = 56.dp)
+            .clip(shape)
+            .background(if (selected) colors.onSurface else Color.Transparent)
+            .border(1.5.dp, if (selected) colors.onSurface else colors.outline, shape)
+            .clickable(onClickLabel = if (selected) clear else null, role = Role.RadioButton, onClick = onClick)
+            .semantics { this.selected = selected }
+            .padding(horizontal = 2.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (selected) colors.surface else colors.onSurface,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+private fun occupancyText(occupancy: OccupancyStatus): Int = when (occupancy) {
+    OccupancyStatus.MANY_SEATS_AVAILABLE -> R.string.tracking_occupancy_many_seats
+    OccupancyStatus.FEW_SEATS_AVAILABLE -> R.string.tracking_occupancy_few_seats
+    OccupancyStatus.STANDING_ROOM_ONLY -> R.string.tracking_occupancy_standing
+    OccupancyStatus.FULL -> R.string.tracking_occupancy_full
 }
 
 private fun reportingIcon(reporting: Reporting): Int = when (reporting) {

@@ -1,10 +1,13 @@
 package org.onebusaway.vehicletracker.service
 
 import android.util.Log
+import kotlinx.coroutines.flow.first
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
+import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.ElapsedMillisClock
@@ -50,6 +53,7 @@ class TripReporter @Inject constructor(
     private val offlineQueue: OfflineFixQueue,
     private val historyUploader: HistoryUploader,
     private val backlogScheduler: BacklogUploadScheduler,
+    private val tripStateStore: TripStateStore,
 ) {
     private val lastReportAt = AtomicLong(NEVER_REPORTED)
     private val reportInFlight = AtomicBoolean(false)
@@ -117,6 +121,7 @@ class TripReporter @Inject constructor(
             speed = fix.speed?.coerceAtLeast(0.0),
             accuracy = fix.accuracy,
             timestamp = fix.timeEpochSec,
+            occupancyStatus = occupancy(trip),
         )
         try {
             apiProvider.get().postLocation(dto)
@@ -162,6 +167,18 @@ class TripReporter @Inject constructor(
             return false
         }
         return true
+    }
+
+    /**
+     * How full the driver says the vehicle is on [trip], as the trip is stored now: the driver can change it at any time
+     * after the service read the trip. Null once the trip is no longer the stored one.
+     */
+    private suspend fun occupancy(trip: ActiveTrip): OccupancyStatus? = try {
+        tripStateStore.activeTrip.first()?.takeIf { it.tripDbId == trip.tripDbId }?.occupancy
+    } catch (e: IOException) {
+        // Nothing above this catches it, so it would end tracking mid-trip: the report goes without it instead.
+        Log.w(TAG, "Could not read the trip's occupancy", e)
+        null
     }
 
     /** Claims the next report slot. */

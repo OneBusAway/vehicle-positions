@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -20,15 +21,19 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FakeSessionStore
+import org.onebusaway.vehicletracker.data.FakeTripStateStore
+import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
+import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
 import org.onebusaway.vehicletracker.data.api.TrackerApi
@@ -57,17 +62,19 @@ class TripReporterTest {
         elapsedMs: () -> Long = steppingClock(),
         queue: OfflineFixQueue = FakeOfflineFixQueue(),
         scheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
-    ) = TripReporter(TrackerApiProvider { api }, tracking, elapsedMs, queue, uploaderFor(api, queue), scheduler)
+        trips: TripStateStore = FakeTripStateStore(),
+    ) = TripReporter(TrackerApiProvider { api }, tracking, elapsedMs, queue, uploaderFor(api, queue), scheduler, trips)
 
     private suspend fun reporterWith(
         server: MockWebServer,
         queue: OfflineFixQueue = FakeOfflineFixQueue(),
         scheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
+        trips: TripStateStore = FakeTripStateStore(),
         elapsedMs: () -> Long = steppingClock(),
     ): Pair<TripReporter, TrackingRepository> {
         val tracking = TrackingRepository()
         val api = ApiFactory { "jwt" }.create(server.url("/").toString())
-        return reporterFor(api, tracking, elapsedMs, queue, scheduler) to tracking
+        return reporterFor(api, tracking, elapsedMs, queue, scheduler, trips) to tracking
     }
 
     @Test fun `successful send increments counter and clears problem`() = runTest {
@@ -108,7 +115,7 @@ class TripReporterTest {
         val holder = ApiHolder(sessions, CoroutineScope(Job().apply { cancel() }), clock = { 1000L })
         val api = TrackerApiProvider(holder::api)
         val queue = FakeOfflineFixQueue()
-        return TripReporter(api, tracking, steppingClock(), queue, HistoryUploader(api, sessions, queue), FakeBacklogUploadScheduler()) to tracking
+        return TripReporter(api, tracking, steppingClock(), queue, HistoryUploader(api, sessions, queue), FakeBacklogUploadScheduler(), FakeTripStateStore()) to tracking
     }
 
     @Test fun `401 with no refresh token sets AUTH_EXPIRED`() = runTest {
@@ -707,5 +714,77 @@ class TripReporterTest {
         assertEquals(1, tracking.state.value.fixesSent)
         assertEquals("the batch went before the read failed", listOf("bus-2"), inner.queued.map { it.vehicleId })
         assertEquals(0, scheduler.scheduledAfresh)
+    }
+
+    // --- How full the vehicle is, which the driver can change at any time during the trip ---
+
+    private fun MockWebServer.reportBodies() = List(requestCount) { Json.parseToJsonElement(takeRequest().body.readUtf8()).jsonObject }
+
+    // The feed keeps what the latest report says, so a report that leaves it out clears it there.
+    @Test fun `every report carries the trip's occupancy as it stands then`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}""")) }
+        // The service read the trip before the driver chose; the store has what they chose since.
+        val trips = FakeTripStateStore().apply { tripState.value = trip }
+        val (reporter, _) = reporterWith(server, trips = trips)
+
+        trips.setOccupancy(7L, OccupancyStatus.STANDING_ROOM_ONLY)
+        reporter.report(trip, fix(ts = 1000L))
+        trips.setOccupancy(7L, OccupancyStatus.FULL)
+        reporter.report(trip, fix(ts = 1010L))
+        trips.setOccupancy(7L, null)
+        reporter.report(trip, fix(ts = 1020L))
+
+        val sent = server.reportBodies()
+        assertEquals(3, sent.size)
+        assertEquals("STANDING_ROOM_ONLY", sent[0]["occupancy_status"]?.jsonPrimitive?.content)
+        assertEquals("FULL", sent[1]["occupancy_status"]?.jsonPrimitive?.content)
+        assertFalse("cleared, so left out", sent[2].containsKey("occupancy_status"))
+        server.shutdown()
+    }
+
+    @Test fun `a report carries no occupancy but its own trip's`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(2) { server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}""")) }
+        val trips = FakeTripStateStore().apply { tripState.value = trip.copy(tripDbId = 8L, occupancy = OccupancyStatus.FULL) }
+        val (reporter, _) = reporterWith(server, trips = trips)
+
+        reporter.report(trip, fix(ts = 1000L))
+        trips.tripState.value = null
+        reporter.report(trip, fix(ts = 1010L))
+
+        val sent = server.reportBodies()
+        assertEquals(2, sent.size)
+        sent.forEach { assertFalse(it.containsKey("occupancy_status")) }
+        server.shutdown()
+    }
+
+    @Test fun `a fix queued offline keeps the occupancy it was recorded with`() = runTest {
+        val server = MockWebServer().apply { start() }
+        val trips = FakeTripStateStore().apply { tripState.value = trip.copy(occupancy = OccupancyStatus.FEW_SEATS_AVAILABLE) }
+        val queue = FakeOfflineFixQueue()
+        val (reporter, _) = reporterWith(server, queue = queue, trips = trips)
+        server.shutdown()
+
+        reporter.report(trip, fix())
+        trips.setOccupancy(7L, OccupancyStatus.FULL)
+
+        assertEquals(listOf(OccupancyStatus.FEW_SEATS_AVAILABLE), queue.queued.map { it.occupancyStatus })
+    }
+
+    @Test fun `a trip store that cannot be read sends the report without occupancy`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+        val unreadable = object : TripStateStore by FakeTripStateStore() {
+            override val activeTrip = flow<ActiveTrip?> { throw IOException("unreadable") }
+        }
+        val (reporter, _) = reporterWith(server, trips = unreadable)
+
+        reporter.report(trip, fix())
+
+        val sent = server.reportBodies()
+        assertEquals(1, sent.size)
+        assertFalse(sent[0].containsKey("occupancy_status"))
+        server.shutdown()
     }
 }

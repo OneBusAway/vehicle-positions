@@ -2,6 +2,7 @@ package org.onebusaway.vehicletracker.data.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.onebusaway.vehicletracker.data.OccupancyStatus
 
 @Serializable data class LoginRequest(val email: String, val password: String)
 
@@ -50,9 +51,17 @@ import kotlinx.serialization.Serializable
     val speed: Double? = null,
     val accuracy: Double? = null,
     val timestamp: Long,
+    /**
+     * How full the driver says the vehicle is; null (omitted on the wire) when they have not said. The feed keeps only
+     * what the latest report says, so a report without it clears it there.
+     */
+    @SerialName("occupancy_status") val occupancyStatus: OccupancyStatus? = null,
 )
 
-/** One fix in a history upload: a [LocationReportDto] without the vehicle, which the batch names once. */
+/**
+ * One fix in a history upload: a [LocationReportDto] without the vehicle, which the batch names once, and without its
+ * occupancy, which the history endpoint does not take: it refuses a field it does not know with a 400.
+ */
 @Serializable data class HistoryPointDto(
     @SerialName("trip_id") val tripId: String? = null,
     @SerialName("route_id") val routeId: String,

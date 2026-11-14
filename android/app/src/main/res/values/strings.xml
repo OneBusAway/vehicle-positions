@@ -182,6 +182,14 @@
     <string name="tracking_bar_click_label">Show trip details</string>
     <string name="tracking_end_trip_button">End trip</string>
     <string name="tracking_end_trip_ending">Ending…</string>
+    <!-- At the top of the panel the trip bar pulls up into: how full the vehicle is, which riders' apps show. -->
+    <string name="tracking_occupancy_question">How full is the vehicle?</string>
+    <string name="tracking_occupancy_many_seats">Seats free</string>
+    <string name="tracking_occupancy_few_seats">Few seats</string>
+    <string name="tracking_occupancy_standing">Standing</string>
+    <string name="tracking_occupancy_full">Full</string>
+    <!-- What tapping the one already chosen does, for TalkBack. -->
+    <string name="tracking_occupancy_clear">Clear</string>
     <!-- The rows at the top of the panel the trip bar pulls up into. -->
     <string name="tracking_fact_run">Run</string>
     <!-- The run's start time in the agency's zone, then the vehicle, e.g. "6:58 AM · 4317". -->

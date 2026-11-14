@@ -167,6 +167,41 @@ class RepositoriesTest {
         server.shutdown()
     }
 
+    // Sign in again takes any email, and goes back to the trip that is still open.
+    @Test fun `another driver signing in over the open trip keeps it but not how full the vehicle was said to be`() = runTest {
+        val server = MockWebServer().apply { start() }
+        listOf("driver-a", "driver-b").forEach { driver ->
+            server.enqueue(MockResponse().setBody("""{"access_token":"${jwtFor(driver)}","refresh_token":"r","expires_in":900}"""))
+        }
+        val url = server.url("/").toString()
+        val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, "driver-a", url, OccupancyStatus.FULL)
+        val trips = FakeTripStateStore().apply { tripState.value = trip }
+        val repo = AuthRepository(FakeSessionStore(), trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
+
+        assertTrue(repo.login(url, "a@example.com", "pw").isSuccess)
+        assertEquals("the driver who started it, signing in again", trip, trips.activeTrip.first())
+
+        assertTrue(repo.login(url, "b@example.com", "pw").isSuccess)
+        assertEquals(trip.copy(occupancy = null), trips.activeTrip.first())
+        server.shutdown()
+    }
+
+    // A token with no driver in it, or a trip saved before drivers were recorded, can't say who it is.
+    @Test fun `an occupancy is dropped at sign-in when either driver is unknown`() = runTest {
+        val server = MockWebServer().apply { start() }
+        val url = server.url("/").toString()
+        val trips = FakeTripStateStore()
+        val repo = AuthRepository(FakeSessionStore(), trips, ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
+
+        for ((token, startedBy) in listOf("jwt" to "driver-a", jwtFor("driver-a") to null, "jwt" to null)) {
+            server.enqueue(MockResponse().setBody("""{"access_token":"$token","refresh_token":"r","expires_in":900}"""))
+            trips.tripState.value = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, startedBy, url, OccupancyStatus.FULL)
+            assertTrue(repo.login(url, "a@example.com", "pw").isSuccess)
+            assertNull("$token over a trip started by $startedBy", trips.activeTrip.first()?.occupancy)
+        }
+        server.shutdown()
+    }
+
     @Test fun `an older build's trip, stored with no server, goes by the session's`() = runTest {
         val server = MockWebServer().apply { start() }
         repeat(2) { server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r","expires_in":900}""")) }

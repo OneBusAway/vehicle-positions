@@ -31,6 +31,8 @@ data class ActiveTrip(
     val driverId: String? = null,
     /** The server the trip was started on; null for a trip saved before servers were recorded. Read through [server]. */
     val serverUrl: String? = null,
+    /** How full the driver last said the vehicle is on this trip; null until they say, and when they clear it. */
+    val occupancy: OccupancyStatus? = null,
 ) {
     /**
      * The server this trip is open on. A trip saved before servers were recorded is taken to be on [sessionServer], the
@@ -63,6 +65,12 @@ interface TripStateStore {
     val recentRoutes: Flow<List<String>>
     suspend fun saveActiveTrip(trip: ActiveTrip)
     suspend fun clearActiveTrip()
+
+    /**
+     * Sets how full the vehicle is on trip [tripDbId], or clears it when [occupancy] is null. Nothing is written once
+     * that trip is no longer the active one: a tap that lands as the trip ends must not bring it back.
+     */
+    suspend fun setOccupancy(tripDbId: Long, occupancy: OccupancyStatus?)
 
     /**
      * Clears the active trip but keeps its server id in [unconfirmedEnds], under the driver who
@@ -106,6 +114,9 @@ class DataStoreTripStateStore(
         val TRIP_DRIVER_ID = stringPreferencesKey("trip_driver_id")
         val TRIP_SERVER_URL = stringPreferencesKey("trip_server_url")
 
+        /** An [OccupancyStatus] name. */
+        val TRIP_OCCUPANCY = stringPreferencesKey("trip_occupancy")
+
         /** A JSON list of [UnconfirmedEnd], oldest first. */
         val UNCONFIRMED_ENDS = stringPreferencesKey("unconfirmed_ends")
         val RECENT_ROUTES = stringPreferencesKey("recent_routes")
@@ -143,6 +154,7 @@ class DataStoreTripStateStore(
                 startedAtEpochSec = startedAt,
                 driverId = prefs[Keys.TRIP_DRIVER_ID],
                 serverUrl = prefs[Keys.TRIP_SERVER_URL],
+                occupancy = prefs[Keys.TRIP_OCCUPANCY]?.let { name -> OccupancyStatus.entries.firstOrNull { it.name == name } },
             )
         } else {
             null
@@ -173,11 +185,26 @@ class DataStoreTripStateStore(
             } else {
                 prefs.remove(Keys.TRIP_SERVER_URL)
             }
+            prefs.writeOccupancy(trip.occupancy)
         }
     }
 
     override suspend fun clearActiveTrip() {
         dataStore.edit { it.removeActiveTrip() }
+    }
+
+    override suspend fun setOccupancy(tripDbId: Long, occupancy: OccupancyStatus?) {
+        dataStore.edit { prefs ->
+            if (prefs[Keys.TRIP_DB_ID] == tripDbId) prefs.writeOccupancy(occupancy)
+        }
+    }
+
+    private fun MutablePreferences.writeOccupancy(occupancy: OccupancyStatus?) {
+        if (occupancy != null) {
+            this[Keys.TRIP_OCCUPANCY] = occupancy.name
+        } else {
+            remove(Keys.TRIP_OCCUPANCY)
+        }
     }
 
     override suspend fun endActiveTripLocally(signedInDriverId: String?) {
@@ -236,6 +263,7 @@ class DataStoreTripStateStore(
         remove(Keys.TRIP_STARTED_AT)
         remove(Keys.TRIP_DRIVER_ID)
         remove(Keys.TRIP_SERVER_URL)
+        remove(Keys.TRIP_OCCUPANCY)
         remove(Keys.LEGACY_LOCATION_TRIP_ID)
     }
 
