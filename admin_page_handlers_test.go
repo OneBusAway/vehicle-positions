@@ -991,6 +991,7 @@ func (f *fakeUserStore) CountActiveUsersByRole(_ context.Context, role string) (
 type fakeAssignmentStore struct {
 	byUser         map[int64]map[string]bool
 	missingVehicle map[string]bool
+	deleteErr      error // returned by DeleteAssignment in place of deleting
 
 	// listCalls counts ListAssignmentsByUser calls, so the users page's
 	// per-user lookup can be asserted to run once per row on the page
@@ -1021,6 +1022,9 @@ func (f *fakeAssignmentStore) CreateAssignment(_ context.Context, userID int64, 
 }
 
 func (f *fakeAssignmentStore) DeleteAssignment(_ context.Context, userID int64, vehicleID string) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
 	if f.byUser[userID] == nil || !f.byUser[userID][vehicleID] {
 		return ErrAssignmentNotFound
 	}
@@ -1513,6 +1517,36 @@ func TestUserAssignUnassignVehicle(t *testing.T) {
 		}
 	}
 	assert.True(t, flashed, "expected vehicle_unassigned flash")
+}
+
+// TestUserUnassignVehicle_TripRunning: removing a vehicle the driver is on a
+// trip on keeps it and sends the admin back to the edit page told to end the
+// trip, rather than a 500.
+func TestUserUnassignVehicle_TripRunning(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 1, Name: "Ada Admin", Email: "ada@test.com", Role: "admin", Active: true})
+	assignments := newFakeAssignmentStore()
+	assignments.byUser[1] = map[string]bool{"bus-1": true}
+	assignments.deleteErr = ErrAssignmentInUse
+	wireFakeUserStore(ui, users, assignments)
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/vehicles/bus-1/remove", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/users/1/edit", w.Header().Get("Location"))
+	assert.True(t, assignments.byUser[1]["bus-1"])
+	var flashed bool
+	for _, c := range w.Result().Cookies() {
+		if c.Name == flashCookieName && c.Value == "unassign_on_trip" {
+			flashed = true
+		}
+	}
+	assert.True(t, flashed, "expected unassign_on_trip flash")
 }
 
 // TestUserAssignVehicle_AlreadyAssigned verifies that a double-submit (or a

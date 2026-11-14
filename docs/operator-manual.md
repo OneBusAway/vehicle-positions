@@ -273,7 +273,9 @@ on the user's edit page.
    assigned.** Only active vehicles appear in the dropdown; if there are none,
    you see **No active vehicles available to assign.**
 4. To take one away, click **Remove** beside it and confirm **Remove this
-   vehicle assignment?** You get **Vehicle unassigned.**
+   vehicle assignment?** You get **Vehicle unassigned.** If the driver is on a
+   trip on that vehicle, it stays assigned and you get **The driver is on a
+   trip on this vehicle. End it on Trips, then remove the vehicle.**
 
 A driver may hold several assignments — useful when the same person drives
 whichever bus is free — and a vehicle may be assigned to several drivers.
@@ -281,10 +283,9 @@ whichever bus is free — and a vehicle may be assigned to several drivers.
 If a driver tries to start a trip on a vehicle that is not assigned to them, the
 server refuses (`403 driver is not assigned to this vehicle`) and the app shows
 **You're not assigned to vehicle 4317.**, with the vehicle's number, and a **Change
-vehicle** button. Note the one thing this does *not*
-cover: the assignment is checked when a trip is started, not on each individual
-location report. In normal use that is the same thing, because the app only
-reports while a trip is running.
+vehicle** button. The server checks the assignment on every location report
+too, which is why **Remove** refuses while the driver is on a trip on that
+vehicle: the trip would keep running with every report refused.
 
 ---
 

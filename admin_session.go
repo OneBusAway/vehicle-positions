@@ -25,6 +25,7 @@ var flashMessages = map[string]string{
 	"user_activated":      "User reactivated.",
 	"vehicle_assigned":    "Vehicle assigned.",
 	"vehicle_unassigned":  "Vehicle unassigned.",
+	"unassign_on_trip":    "The driver is on a trip on this vehicle. End it on Trips, then remove the vehicle.",
 	"api_key_deactivated": "API key deactivated.",
 	"trip_ended":          "Trip ended. The driver can start a new trip.",
 	"trip_already_ended":  "That trip had already ended.",
