@@ -26,6 +26,7 @@ type embeddedTemplates struct {
 // handling.
 func loadTemplates() (*embeddedTemplates, error) {
 	adminViews := []string{
+		"alerts.html",
 		"api_keys.html",
 		"dashboard.html",
 		"map.html",

@@ -1,0 +1,55 @@
+{{define "content"}}
+<div class="p-4 lg:p-5">
+  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="border-b border-slate-200/60 px-5 py-4">
+      <h3 class="display-font text-lg font-bold text-slate-900">Alerts</h3>
+      <p class="mt-0.5 text-xs text-slate-400">Vehicles on a running trip that have sent no report for over {{.QuietAfter}}, or have moved under {{.StoppedRadius}} in {{.StoppedAfter}}. This page reloads every 30 seconds.</p>
+    </div>
+    {{if not .Alerts}}
+    <p class="px-5 py-6 text-center text-sm text-slate-400">No alerts. Every vehicle on a running trip is reporting and moving.</p>
+    {{else}}
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50/80">
+          <tr class="text-left">
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Alert</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Driver</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">GTFS trip</th>
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {{range .Alerts}}
+          <tr class="transition-colors hover:bg-slate-50/60">
+            <td class="px-5 py-4">
+              {{if .Quiet}}
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>{{.Kind}}</span>
+              {{else}}
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>{{.Kind}}</span>
+              {{end}}
+              <p class="mt-1.5 whitespace-nowrap text-xs text-slate-500">{{.Detail}}</p>
+            </td>
+            <td class="px-5 py-4">
+              <p class="font-semibold text-slate-900">{{.VehicleLabel}}</p>
+              <p class="font-mono text-xs text-slate-400">{{.VehicleID}}</p>
+            </td>
+            <td class="px-5 py-4 text-slate-500">{{.DriverName}}</td>
+            <td class="px-5 py-4 text-slate-500">{{.RouteID}}</td>
+            <td class="px-5 py-4 font-mono text-xs text-slate-400">{{.GtfsTripID}}</td>
+            <td class="px-5 py-4">
+              <div class="flex items-center gap-3 whitespace-nowrap text-xs font-semibold">
+                <a href="{{.MapURL}}" class="text-sky-600 hover:text-sky-800">View on map</a>
+                <a href="{{.TripURL}}" class="text-sky-600 hover:text-sky-800">View trip</a>
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}

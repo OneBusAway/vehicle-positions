@@ -68,6 +68,7 @@ type adminUI struct {
 	tmpl           *embeddedTemplates
 	users          UserFetcher
 	tracker        *Tracker
+	alerts         *alertWatcher
 	stats          adminStatsStore
 	activeTrips    ActiveTripLister
 	trips          TripLister
@@ -92,7 +93,7 @@ type adminUI struct {
 // it with context and exit cleanly. store supplies the user, stats, active
 // trips, and vehicle dependencies (it implements appStore, a superset of all
 // of them).
-func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *LoginRateLimiter, cfg adminUIConfig) (*adminUI, error) {
+func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, jwtSecret []byte, limiter *LoginRateLimiter, cfg adminUIConfig) (*adminUI, error) {
 	tmpl, err := loadTemplates()
 	if err != nil {
 		return nil, err
@@ -101,6 +102,7 @@ func newAdminUI(store appStore, tracker *Tracker, jwtSecret []byte, limiter *Log
 		tmpl:           tmpl,
 		users:          store,
 		tracker:        tracker,
+		alerts:         alerts,
 		stats:          store,
 		activeTrips:    store,
 		trips:          store,
@@ -134,6 +136,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.HandleFunc("GET /admin/{$}", ui.rootRedirect)
 	mux.Handle("GET /admin/dashboard", protect(http.HandlerFunc(ui.dashboardPage)))
 	mux.Handle("GET /admin/map", protect(http.HandlerFunc(ui.mapPage)))
+	mux.Handle("GET /admin/alerts", protect(http.HandlerFunc(ui.alertsPage)))
 	mux.Handle("GET /admin/vehicles", protect(http.HandlerFunc(ui.vehiclesPage)))
 	mux.Handle("GET /admin/vehicles/new", protect(http.HandlerFunc(ui.vehicleNewPage)))
 	mux.Handle("POST /admin/vehicles", protect(http.HandlerFunc(ui.vehicleCreate)))
@@ -258,11 +261,15 @@ func (ui *adminUI) logout(w http.ResponseWriter, r *http.Request) {
 
 // renderAdmin renders an admin page through the shared base.html layout,
 // which pulls in the view's {{define "content"}} block, and threads through
-// any pending flash message. takeFlash's clearing Set-Cookie must land before
-// the status line is committed, which renderInto guarantees by calling
+// any pending flash message and the sidebar's alert count, unless the page
+// has worked that out already. takeFlash's clearing Set-Cookie must land
+// before the status line is committed, which renderInto guarantees by calling
 // WriteHeader(status) only after the template has rendered successfully.
 func (ui *adminUI) renderAdmin(w http.ResponseWriter, r *http.Request, status int, view string, data map[string]interface{}) {
 	data["Flash"] = takeFlash(w, r)
+	if _, ok := data["AlertCount"]; !ok {
+		data["AlertCount"] = ui.alertCount(r.Context())
+	}
 	renderInto(w, status, ui.tmpl.admin, view, "base.html", data)
 }
 

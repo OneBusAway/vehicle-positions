@@ -52,6 +52,7 @@ var htmlUIRoutes = map[string]struct{}{
 	"POST /admin/logout":                                 {},
 	"GET /admin/dashboard":                               {},
 	"GET /admin/map":                                     {},
+	"GET /admin/alerts":                                  {},
 	"GET /admin/trips":                                   {},
 	"POST /admin/trips/{id}/end":                         {},
 	"GET /admin/api-keys":                                {},
@@ -97,6 +98,8 @@ var schemaStructs = map[string]string{
 	"TripTrailPoint":       "tripTrailPoint",
 	"LocationHistory":      "locationHistoryResponse",
 	"LocationHistoryEntry": "locationEntry",
+	"AlertList":            "alertListResponse",
+	"Alert":                "alertEntry",
 
 	// Rider mode (#94).
 	"RiderRegisterResponse": "riderRegisterResponse",

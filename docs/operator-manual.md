@@ -71,8 +71,8 @@ must be at least 8 characters and no more than 72 bytes — in practice 72
 letters, or fewer if you use accented letters or other non-English characters.
 
 Once signed in, the left sidebar takes you to **Live Map**, **Dashboard**,
-**Vehicles**, **Users**, **Trips** and **Feed API keys**. **Sign out** is at the
-top right of every page.
+**Alerts**, **Vehicles**, **Users**, **Trips** and **Feed API keys**. **Sign
+out** is at the top right of every page.
 
 ---
 
@@ -431,6 +431,32 @@ driver-reported vehicles only.
 - **Fleet Status** on the right lists the same vehicles as rows.
 - If nothing is reporting you get the banner **No vehicles to show right now.**
   and **No vehicles reporting.** in the sidebar.
+
+### Alerts
+
+**Alerts** lists the vehicles on a running trip that need a look. There are two
+kinds:
+
+- **Gone quiet**: the vehicle has sent no report for over 3 minutes. The phone
+  may have lost signal or been switched off, or the app may have stopped. At 5
+  minutes the vehicle also drops off the Live Map and out of the feed.
+- **Not moving**: the vehicle is still reporting but has moved under 50 m in 10
+  minutes. It may have broken down or be stuck in traffic. A driver waiting at
+  the first stop before departure shows here too.
+
+Each row names the vehicle, driver, route and GTFS trip, and says how long:
+**No report for 7 min** or **Under 50 m in 12 min**. The longest-running alert
+is at the top. **View on map** opens the trip's trail, whose **End** marker is
+where the vehicle last reported, even after it has dropped off the Live Map.
+**View trip** opens **Trips** on that trip, where **End trip** is.
+
+An alert clears by itself when the vehicle reports again or moves on, and when
+its trip ends. The page reloads every 30 seconds. The **Alerts** item in the
+sidebar shows how many there are on every page, counted when that page loaded.
+Nothing is emailed or pushed, so keep the page open during service. Your server
+administrator can change the 3 and 10 minutes (`ALERT_QUIET_AFTER` and
+`ALERT_STOPPED_AFTER`, see [`configuration.md`](configuration.md)). After the
+server restarts, a vehicle is counted as quiet from the restart.
 
 ### Trips and trails
 
