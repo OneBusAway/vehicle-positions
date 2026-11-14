@@ -115,8 +115,9 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 
 	qtx := s.queries.WithTx(tx)
 
-	// Verify driver is assigned to this vehicle.
-	_, err = qtx.CheckUserVehicleAssignment(ctx, db.CheckUserVehicleAssignmentParams{
+	// Verify driver is assigned to this vehicle, and keep the assignment until
+	// the trip is committed.
+	_, err = qtx.CheckUserVehicleAssignmentForShare(ctx, db.CheckUserVehicleAssignmentForShareParams{
 		UserID:    userID,
 		VehicleID: vehicleID,
 	})

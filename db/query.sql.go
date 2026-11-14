@@ -96,6 +96,33 @@ func (q *Queries) CheckUserVehicleAssignment(ctx context.Context, arg CheckUserV
 	return i, err
 }
 
+const checkUserVehicleAssignmentForShare = `-- name: CheckUserVehicleAssignmentForShare :one
+SELECT user_id, vehicle_id
+FROM user_vehicles
+WHERE user_id = $1 AND vehicle_id = $2
+FOR SHARE
+`
+
+type CheckUserVehicleAssignmentForShareParams struct {
+	UserID    int64
+	VehicleID string
+}
+
+type CheckUserVehicleAssignmentForShareRow struct {
+	UserID    int64
+	VehicleID string
+}
+
+// FOR SHARE makes an unassign wait until the caller's transaction commits, so
+// the unassign sees a trip the caller starts and refuses, rather than leaving
+// a running trip on a vehicle the driver is no longer assigned to.
+func (q *Queries) CheckUserVehicleAssignmentForShare(ctx context.Context, arg CheckUserVehicleAssignmentForShareParams) (CheckUserVehicleAssignmentForShareRow, error) {
+	row := q.db.QueryRow(ctx, checkUserVehicleAssignmentForShare, arg.UserID, arg.VehicleID)
+	var i CheckUserVehicleAssignmentForShareRow
+	err := row.Scan(&i.UserID, &i.VehicleID)
+	return i, err
+}
+
 const countActiveTrips = `-- name: CountActiveTrips :one
 SELECT COUNT(*) FROM trips WHERE status = 'active'
 `

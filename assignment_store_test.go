@@ -124,6 +124,56 @@ func TestStore_DeleteAssignment_Success(t *testing.T) {
 	assert.Empty(t, byUser)
 }
 
+// TestStore_DeleteAssignment_ActiveTrip covers which running trips stop an
+// unassign: only the driver's own, on that vehicle.
+func TestStore_DeleteAssignment_ActiveTrip(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		otherDriver bool   // the trip is another driver's, not the unassigned driver's
+		vehicleID   string // the vehicle the trip runs on
+		ended       bool
+		wantErr     error
+	}{
+		{name: "driver's running trip on the vehicle", vehicleID: "bus-unassign", wantErr: ErrAssignmentInUse},
+		{name: "driver's ended trip on the vehicle", vehicleID: "bus-unassign", ended: true},
+		{name: "driver's running trip on another vehicle", vehicleID: "bus-elsewhere"},
+		{name: "another driver's running trip on the vehicle", otherDriver: true, vehicleID: "bus-unassign"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clearTripTestData(t, store)
+			t.Cleanup(func() { clearTripTestData(t, store) })
+			driver := setupTripUser(t, store, "Unassign Driver", "unassign-driver@test.com", "bus-unassign", "Bus U")
+			createTestVehicleForAssignment(t, store, "bus-elsewhere")
+			_, err := store.CreateAssignment(ctx, driver, "bus-elsewhere")
+			require.NoError(t, err)
+			other := setupTripUser(t, store, "Other Driver", "unassign-other@test.com", "bus-unassign", "Bus U")
+
+			tripDriver := driver
+			if tc.otherDriver {
+				tripDriver = other
+			}
+			trip, err := store.StartTrip(ctx, tripDriver, tc.vehicleID, "R1", "T1")
+			require.NoError(t, err)
+			if tc.ended {
+				mustEndTrip(t, store, ctx, trip.ID, tripDriver)
+			}
+
+			err = store.DeleteAssignment(ctx, driver, "bus-unassign")
+			if tc.wantErr != nil {
+				assert.ErrorIs(t, err, tc.wantErr)
+				assert.True(t, assignmentExists(t, store, driver, "bus-unassign"), "a refused unassign must keep the assignment")
+				return
+			}
+			require.NoError(t, err)
+			assert.False(t, assignmentExists(t, store, driver, "bus-unassign"))
+		})
+	}
+}
+
 func TestStore_DeleteAssignment_NotFound(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()

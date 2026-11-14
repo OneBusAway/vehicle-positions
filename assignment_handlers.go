@@ -105,6 +105,10 @@ func handleDeleteAssignment(store AssignmentDeleter) http.HandlerFunc {
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "assignment not found"})
 				return
 			}
+			if errors.Is(err, ErrAssignmentInUse) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "driver has an active trip on this vehicle"})
+				return
+			}
 			slog.Error("failed to delete assignment", "user_id", userID, "vehicle_id", vehicleID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return

@@ -790,3 +790,197 @@ func mustEndTrip(t *testing.T, store *Store, ctx context.Context, tripID, userID
 	_, err := store.EndTrip(ctx, tripID, userID)
 	require.NoError(t, err)
 }
+
+// holdVehicle parks every StartTrip on vehicleID between its assignment check
+// and its insert, the window an unassign can land in: the holder transaction
+// takes the vehicle row FOR UPDATE, so the start's FOR SHARE read of the
+// vehicle, the step after its assignment check, waits for it. It returns the
+// holder's backend pid, for blockedBehind, and release, which rolls the holder
+// back and lets everything run on.
+func holdVehicle(t *testing.T, store *Store, vehicleID string) (pid int, release func()) {
+	t.Helper()
+	ctx := context.Background()
+
+	holder, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	_, err = holder.Exec(ctx, "SELECT 1 FROM vehicles WHERE id = $1 FOR UPDATE", vehicleID)
+	require.NoError(t, err)
+	require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+	return pid, func() { require.NoError(t, holder.Rollback(ctx)) }
+}
+
+// blockedBehind counts the backends blocked depth hops away from pid: 1 is
+// whatever waits on pid itself, 2 is whatever waits on one of those. It polls
+// through the pool, not pid's own connection, because pg_stat_activity is
+// snapshotted once per transaction and that connection's would never update.
+func blockedBehind(store *Store, pid, depth int) int {
+	query := "SELECT count(*) FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))"
+	if depth == 2 {
+		query = `SELECT count(DISTINCT waiter.pid)
+			FROM pg_stat_activity waiter, unnest(pg_blocking_pids(waiter.pid)) AS holder(pid)
+			WHERE $1 = ANY(pg_blocking_pids(holder.pid))`
+	}
+	var n int
+	if err := store.pool.QueryRow(context.Background(), query, pid).Scan(&n); err != nil {
+		return 0
+	}
+	return n
+}
+
+// unassignDuringStart removes userID's assignment to vehicleID while a
+// StartTrip for that pair is parked between its assignment check and its
+// insert, then lets both finish. queued reports whether the unassign was seen
+// waiting behind the start rather than finishing inside its window.
+func unassignDuringStart(t *testing.T, store *Store, userID int64, vehicleID string) (startErr, unassignErr error, queued bool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	holder, release := holdVehicle(t, store, vehicleID)
+
+	started := make(chan error, 1)
+	go func() {
+		_, err := store.StartTrip(ctx, userID, vehicleID, "R1", "T1")
+		started <- err
+	}()
+	require.Eventually(t, func() bool { return blockedBehind(store, holder, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the start never got past its assignment check")
+
+	unassigned := make(chan error, 1)
+	go func() { unassigned <- store.DeleteAssignment(ctx, userID, vehicleID) }()
+	require.Eventually(t, func() bool { return len(unassigned) == 1 || blockedBehind(store, holder, 2) == 1 },
+		5*time.Second, 10*time.Millisecond, "the unassign neither finished nor queued behind the start")
+	// A queued unassign cannot finish while the start is parked.
+	queued = len(unassigned) == 0
+
+	release()
+	return <-started, <-unassigned, queued
+}
+
+func assignmentExists(t *testing.T, store *Store, userID int64, vehicleID string) bool {
+	t.Helper()
+	var exists bool
+	require.NoError(t, store.pool.QueryRow(context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM user_vehicles WHERE user_id = $1 AND vehicle_id = $2)",
+		userID, vehicleID).Scan(&exists))
+	return exists
+}
+
+func activeTripExists(t *testing.T, store *Store, userID int64, vehicleID string) bool {
+	t.Helper()
+	var exists bool
+	require.NoError(t, store.pool.QueryRow(context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM trips WHERE user_id = $1 AND vehicle_id = $2 AND status = 'active')",
+		userID, vehicleID).Scan(&exists))
+	return exists
+}
+
+// TestStore_StartTrip_UnassignDuringStart lands an unassign between a trip
+// start's assignment check and its insert. Whichever wins, the driver must not
+// be left on a running trip on a vehicle they are no longer assigned to: the
+// location ingest refuses every report from it, and the trip holds the driver
+// and the vehicle until someone ends it.
+func TestStore_StartTrip_UnassignDuringStart(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+
+	unassignDuringStart(t, store, userID, "bus-trip-1")
+
+	assert.False(t,
+		activeTripExists(t, store, userID, "bus-trip-1") && !assignmentExists(t, store, userID, "bus-trip-1"),
+		"the driver is on an active trip on a vehicle they are no longer assigned to")
+}
+
+// TestStore_DeleteAssignment_WaitsForAStartingTrip pins down how the test
+// above passes: the unassign waits for the start holding the assignment, then
+// sees the trip it committed and keeps the assignment.
+func TestStore_DeleteAssignment_WaitsForAStartingTrip(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+
+	startErr, unassignErr, queued := unassignDuringStart(t, store, userID, "bus-trip-1")
+
+	assert.True(t, queued, "the unassign finished inside the start's window instead of waiting for it")
+	require.NoError(t, startErr)
+	assert.ErrorIs(t, unassignErr, ErrAssignmentInUse)
+	assert.True(t, assignmentExists(t, store, userID, "bus-trip-1"), "a refused unassign must keep the assignment")
+	assert.True(t, activeTripExists(t, store, userID, "bus-trip-1"))
+}
+
+// TestStore_StartTrip_WaitsForAnUncommittedUnassign is the other order: the
+// unassign has deleted the assignment but not committed when the start checks
+// it. The start waits for the unassign, then finds the assignment gone.
+func TestStore_StartTrip_WaitsForAnUncommittedUnassign(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// unassign is DeleteAssignment stopped between its delete and its commit.
+	unassign, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = unassign.Rollback(context.Background()) })
+	_, err = unassign.Exec(ctx, "DELETE FROM user_vehicles WHERE user_id = $1 AND vehicle_id = 'bus-trip-1'", userID)
+	require.NoError(t, err)
+	var unassignPID int
+	require.NoError(t, unassign.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&unassignPID))
+
+	started := make(chan error, 1)
+	go func() {
+		_, err := store.StartTrip(ctx, userID, "bus-trip-1", "R1", "T1")
+		started <- err
+	}()
+	require.Eventually(t, func() bool { return len(started) == 1 || blockedBehind(store, unassignPID, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the start neither finished nor waited for the unassign")
+	require.NoError(t, unassign.Commit(ctx))
+
+	assert.ErrorIs(t, <-started, ErrNotAssigned)
+	assert.False(t, activeTripExists(t, store, userID, "bus-trip-1"))
+}
+
+// TestStore_StartTrip_TwoStartsAndAnUnassignDoNotDeadlock overlaps two starts
+// by one driver, from two phones, with an unassign of that driver. Both starts
+// share-lock the same assignment row and the unassign waits on the pair. When
+// they run on, one trip starts, the other start is told the driver already
+// has one, and the unassign is refused, with no deadlock among the three.
+func TestStore_StartTrip_TwoStartsAndAnUnassignDoNotDeadlock(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	holder, release := holdVehicle(t, store, "bus-trip-1")
+
+	started := make(chan error, 2)
+	for range 2 {
+		go func() {
+			_, err := store.StartTrip(ctx, userID, "bus-trip-1", "R1", "T1")
+			started <- err
+		}()
+	}
+	require.Eventually(t, func() bool { return blockedBehind(store, holder, 1) == 2 },
+		5*time.Second, 10*time.Millisecond, "the starts never both got past their assignment checks")
+
+	unassigned := make(chan error, 1)
+	go func() { unassigned <- store.DeleteAssignment(ctx, userID, "bus-trip-1") }()
+	require.Eventually(t, func() bool { return blockedBehind(store, holder, 2) == 1 },
+		5*time.Second, 10*time.Millisecond, "the unassign never queued behind the starts")
+
+	release()
+
+	// A deadlock would come back here as an error with SQLSTATE 40P01.
+	var ok, alreadyActive int
+	for range 2 {
+		switch err := <-started; {
+		case err == nil:
+			ok++
+		case errors.Is(err, ErrActiveTripExists):
+			alreadyActive++
+		default:
+			t.Errorf("unexpected start error: %v", err)
+		}
+	}
+	assert.Equal(t, 1, ok)
+	assert.Equal(t, 1, alreadyActive)
+	assert.ErrorIs(t, <-unassigned, ErrAssignmentInUse)
+	assert.True(t, assignmentExists(t, store, userID, "bus-trip-1"))
+}
