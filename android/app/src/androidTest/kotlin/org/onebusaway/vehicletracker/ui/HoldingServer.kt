@@ -5,6 +5,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -26,6 +27,7 @@ internal class HoldingServer(
     /** Counted down once the held request has arrived. */
     val heldArrived = CountDownLatch(1)
     private val released = CountDownLatch(1)
+    private val clients = ConcurrentHashMap.newKeySet<Socket>()
 
     init {
         thread(isDaemon = true) {
@@ -35,7 +37,15 @@ internal class HoldingServer(
                 } catch (e: IOException) {
                     break
                 }
-                thread(isDaemon = true) { client.use(::answer) }
+                clients += client
+                thread(isDaemon = true) {
+                    try {
+                        client.use(::answer)
+                    } catch (e: IOException) {
+                        // The app hung up first, at its read timeout or as the test ended. Escaping this thread, the
+                        // exception would end the whole test process.
+                    }
+                }
             }
         }
     }
@@ -65,5 +75,10 @@ internal class HoldingServer(
         }
     }
 
-    override fun close() = socket.close()
+    /** Hangs up on the requests still open, the held one too, so none is answered after the test. */
+    override fun close() {
+        socket.close()
+        clients.forEach(Socket::close)
+        released.countDown()
+    }
 }
