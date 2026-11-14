@@ -262,16 +262,20 @@ The server is a standalone Go application, independent from the existing Maglev 
 
 **GTFS-RT Feed Generation:**
 
-The server produces a standard `FeedMessage` containing `VehiclePosition` entities per the [GTFS-RT specification](https://gtfs.org/documentation/realtime/proto/). Each entity includes:
+The server produces a standard `FeedMessage` containing `VehiclePosition` entities per the [GTFS-RT specification](https://gtfs.org/documentation/realtime/proto/). This is the entity for a driver's vehicle on a scheduled trip, with occupancy reported:
 
 ```protobuf
+id: "vehicle-042"
 vehicle {
   trip {
     trip_id: "t_5_0830"
     route_id: "5"
-    start_time: "08:30:00"
     start_date: "20260715"
     schedule_relationship: SCHEDULED
+  }
+  vehicle {
+    id: "vehicle-042"
+    label: "Bus 42"
   }
   position {
     latitude: -1.2921
@@ -279,14 +283,15 @@ vehicle {
     bearing: 180.0
     speed: 8.5
   }
-  timestamp: 1752566400
-  vehicle {
-    id: "vehicle-042"
-    label: "Bus 42"
-  }
+  current_stop_sequence: 7
+  stop_id: "s_5_07"
+  current_status: IN_TRANSIT_TO
+  timestamp: 1784094120
   occupancy_status: MANY_SEATS_AVAILABLE
 }
 ```
+
+`stop_id` and `current_stop_sequence` name the trip's next stop in the loaded GTFS, and `current_status` is `STOPPED_AT` instead when the vehicle is within 30 m of it. The three are left out when the vehicle can't be placed on the trip's shape. `trip` is left out when the driver gave neither a trip nor a route, `schedule_relationship` when the driver gave only a route, `label` when the vehicle has none, and `occupancy_status` when the latest report didn't say how full the vehicle is.
 
 The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-positions`) and returns the protobuf binary by default, with an optional `?format=json` parameter for debugging. The feed uses `incrementality: FULL_DATASET` and includes all currently-active vehicles.
 
