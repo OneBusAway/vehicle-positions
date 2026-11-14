@@ -308,8 +308,11 @@ func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error)
 
 // checkRevoked reports whether the token behind claims can no longer be used:
 // it was logged out, or it is a staff token whose user has since been
-// deactivated or deleted. Deactivation and deletion stop new logins, but an
-// access token already issued would otherwise keep working until it expires.
+// deactivated, deleted, or given another role. Those changes stop new logins
+// or change what a new login gets, but an access token already issued would
+// otherwise keep its old powers until it expires: a demoted admin's token
+// would still pass requireAdmin. A client turned away for a role change
+// refreshes and gets a token for the role the user holds now.
 // It is the second half of validation, kept out of parseSessionToken so that
 // function stays pure; both token paths (the API's Authorization header and
 // the admin UI's vp_session cookie) must call it, and
@@ -320,7 +323,8 @@ func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecke
 		return revoked, err
 	}
 	// A rider's sub names a rider, not a users row.
-	if role, _ := claims["role"].(string); role == roleRider {
+	role, _ := claims["role"].(string)
+	if role == roleRider {
 		return false, nil
 	}
 	sub, _ := claims["sub"].(string)
@@ -328,7 +332,7 @@ func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecke
 	if err != nil {
 		return true, nil
 	}
-	active, err := checker.IsUserActive(ctx, userID)
+	active, err := checker.IsUserActiveInRole(ctx, userID, role)
 	if err != nil {
 		return false, err
 	}

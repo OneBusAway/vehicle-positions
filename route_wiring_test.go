@@ -162,7 +162,7 @@ func (n *noopStore) RevokeToken(_ context.Context, _ string, _ int64, _ time.Tim
 func (n *noopStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
-func (n *noopStore) IsUserActive(_ context.Context, _ int64) (bool, error) {
+func (n *noopStore) IsUserActiveInRole(_ context.Context, _ int64, _ string) (bool, error) {
 	return true, nil
 }
 func (n *noopStore) CreateRefreshToken(_ context.Context, _ string, _ int64, _ time.Time) error {

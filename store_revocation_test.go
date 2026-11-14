@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -158,7 +160,7 @@ func TestStore_RevokeToken_SurvivesUserDelete(t *testing.T) {
 	assert.Nil(t, ownerID, "user_id must be NULLed, not carry a dangling id")
 }
 
-func TestStore_IsUserActive(t *testing.T) {
+func TestStore_IsUserActiveInRole(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
@@ -166,18 +168,66 @@ func TestStore_IsUserActive(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.DeleteUser(context.Background(), user.ID) })
 
-	active, err := store.IsUserActive(ctx, user.ID)
+	active, err := store.IsUserActiveInRole(ctx, user.ID, roleDriver)
 	require.NoError(t, err)
 	assert.True(t, active)
 
+	active, err = store.IsUserActiveInRole(ctx, user.ID, roleAdmin)
+	require.NoError(t, err)
+	assert.False(t, active, "a role the user does not hold")
+
 	_, err = store.pool.Exec(ctx, "UPDATE users SET active = false WHERE id = $1", user.ID)
 	require.NoError(t, err)
-	active, err = store.IsUserActive(ctx, user.ID)
+	active, err = store.IsUserActiveInRole(ctx, user.ID, roleDriver)
 	require.NoError(t, err)
 	assert.False(t, active, "deactivated")
 
 	require.NoError(t, store.DeleteUser(ctx, user.ID))
-	active, err = store.IsUserActive(ctx, user.ID)
+	active, err = store.IsUserActiveInRole(ctx, user.ID, roleDriver)
 	require.NoError(t, err)
 	assert.False(t, active, "deleted")
+}
+
+// TestDemotedAdmin_LosesAdminAccessAtOnce: an admin demoted to driver keeps
+// the token issued while they were an admin, and it must stop opening admin
+// routes and admin pages now, not when it expires up to a day later.
+func TestDemotedAdmin_LosesAdminAccessAtOnce(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+	user, err := store.CreateUser(ctx, "Demoted Admin", email, "password123", roleAdmin)
+	require.NoError(t, err)
+	token, err := generateJWT(&User{ID: user.ID, Email: user.Email, Role: roleAdmin}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+
+	_, err = store.UpdateUser(ctx, user.ID, user.Name, user.Email, roleDriver)
+	require.NoError(t, err)
+
+	t.Run("API", func(t *testing.T) {
+		reached := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true })
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		requireAuth(testSecret, store)(requireAdmin()(next)).ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Equal(t, "invalid token", errorBody(t, w))
+		assert.False(t, reached)
+	})
+
+	t.Run("admin UI", func(t *testing.T) {
+		reached := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true })
+		req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		w := httptest.NewRecorder()
+		requireAdminPage(testSecret, store)(next).ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusSeeOther, w.Code)
+		assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+		assert.False(t, reached)
+	})
 }

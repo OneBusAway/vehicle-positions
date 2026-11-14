@@ -63,7 +63,10 @@ reset an effective response to a stolen phone.
 
 Deactivating or deleting a user also ends the access tokens and admin UI
 session cookies already issued to them: every authenticated request checks
-that the user still exists and is active. A password change does not end an
+that the user still exists, is active, and holds the role the token was
+issued for. Changing a user's role ends them the same way, so a demoted admin
+loses admin access at once; a refresh then issues a token for the new role.
+A password change does not end an
 access token that has already been issued: it stays valid until it expires or
 until that session is logged out, which is up to `ACCESS_TOKEN_TTL` for API
 clients and up to 24 hours for the admin UI's session cookie.
