@@ -78,6 +78,16 @@ func TestResetAdmin_RejectsWeakPassword(t *testing.T) {
 	assert.Empty(t, store.calls)
 }
 
+// TestResetAdmin_RejectsInvalidEmail: an admin whose address the admin sign-in
+// form cannot submit is no way back in.
+func TestResetAdmin_RejectsInvalidEmail(t *testing.T) {
+	store := &fakeResetAdminStore{}
+	err := resetAdmin(context.Background(), store, "admin", "new-password")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not valid")
+	assert.Empty(t, store.calls)
+}
+
 func TestReadPassword(t *testing.T) {
 	pw, err := readPassword(strings.NewReader("s3cret-pass\nignored\n"))
 	require.NoError(t, err)

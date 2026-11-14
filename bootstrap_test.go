@@ -58,6 +58,36 @@ func TestBootstrapAdminRejectsShortPassword(t *testing.T) {
 	assert.Empty(t, store.created, "must not create an admin when the password is rejected")
 }
 
+// TestBootstrapAdminRejectsInvalidEmail: the admin sign-in form is
+// type="email", so a browser will not submit "admin" and strips the spaces
+// and line breaks around an address. An account created with any of these
+// could not sign in to the admin UI, and bootstrap would never run again.
+func TestBootstrapAdminRejectsInvalidEmail(t *testing.T) {
+	cases := []struct{ name, email string }{
+		{"no domain", "admin"},
+		{"leading space", " ops@example.org"},
+		{"trailing newline", "ops@example.org\n"},
+		{"display name", "Ops <ops@example.org>"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeBootstrapStore{adminCount: 0}
+			err := bootstrapAdmin(context.Background(), store, tc.email, "supersecret123")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "is not valid")
+			assert.Empty(t, store.created, "must not create an admin when the email is rejected")
+		})
+	}
+}
+
+// Once an admin exists the bootstrap variables do nothing, so a bad email left
+// in the environment must not stop a later boot.
+func TestBootstrapAdminIgnoresInvalidEmailOnceAdminsExist(t *testing.T) {
+	store := &fakeBootstrapStore{adminCount: 1}
+	require.NoError(t, bootstrapAdmin(context.Background(), store, "admin", "supersecret123"))
+	assert.Empty(t, store.created)
+}
+
 func TestBootstrapAdminPropagatesCountError(t *testing.T) {
 	store := &fakeBootstrapStore{countErr: assert.AnError}
 	err := bootstrapAdmin(context.Background(), store, "admin@example.com", "supersecret123")

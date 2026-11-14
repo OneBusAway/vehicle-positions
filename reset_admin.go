@@ -29,6 +29,9 @@ type resetAdminStore interface {
 // issued keeps working until it expires. Signing everyone out at once takes
 // rotating JWT_SECRET (docs/operator-manual.md, "Deactivate an account").
 func resetAdmin(ctx context.Context, store resetAdminStore, email, password string) error {
+	if !validEmail(email) {
+		return fmt.Errorf("email %q is not valid", email)
+	}
 	if err := validatePassword(password); err != nil {
 		return err
 	}

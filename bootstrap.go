@@ -24,6 +24,12 @@ func bootstrapAdmin(ctx context.Context, store adminBootstrapStore, email, passw
 		slog.Info("admin bootstrap skipped: admin users already exist", "count", n)
 		return nil
 	}
+	// Held to the check every other way of creating a user applies. An
+	// address the admin sign-in form cannot submit would leave an admin
+	// nobody can sign in as, and bootstrap never runs again once one exists.
+	if !validEmail(email) {
+		return fmt.Errorf("bootstrap admin: email %q is not valid", email)
+	}
 	if err := validatePassword(password); err != nil {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
