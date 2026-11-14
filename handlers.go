@@ -39,6 +39,9 @@ type LocationReport struct {
 	Speed     *float64 `json:"speed,omitempty"`
 	Accuracy  *float64 `json:"accuracy,omitempty"`
 	Timestamp int64    `json:"timestamp"`
+	// OccupancyStatus is how full the driver says the vehicle is, one of the
+	// occupancyStatuses names. nil when the report does not say.
+	OccupancyStatus *string `json:"occupancy_status,omitempty"`
 	// Set server-side from JWT; never decoded from JSON.
 	DriverID string `json:"-"`
 	// VehicleLabel is the vehicles table's label, set server-side by
@@ -54,6 +57,31 @@ const maxVehicleIDLength = 50
 const maxTripFieldLength = 100
 
 var vehicleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// occupancyStatuses are the GTFS-RT OccupancyStatus values a driver may
+// report, in the spec's order. NO_DATA_AVAILABLE is left out because leaving
+// occupancy_status out already says it, and NOT_BOARDABLE because it describes
+// a vehicle that never takes passengers, such as an engine, not how full one is.
+var occupancyStatuses = []gtfsrt.VehiclePosition_OccupancyStatus{
+	gtfsrt.VehiclePosition_EMPTY,
+	gtfsrt.VehiclePosition_MANY_SEATS_AVAILABLE,
+	gtfsrt.VehiclePosition_FEW_SEATS_AVAILABLE,
+	gtfsrt.VehiclePosition_STANDING_ROOM_ONLY,
+	gtfsrt.VehiclePosition_CRUSHED_STANDING_ROOM_ONLY,
+	gtfsrt.VehiclePosition_FULL,
+	gtfsrt.VehiclePosition_NOT_ACCEPTING_PASSENGERS,
+}
+
+// parseOccupancyStatus returns the occupancyStatuses value named name, which
+// must be spelled exactly as GTFS-RT spells it.
+func parseOccupancyStatus(name string) (gtfsrt.VehiclePosition_OccupancyStatus, bool) {
+	for _, status := range occupancyStatuses {
+		if status.String() == name {
+			return status, true
+		}
+	}
+	return 0, false
+}
 
 const maxTimestampSkew = 5 * time.Minute
 
@@ -117,6 +145,15 @@ func (r *LocationReport) validateWithin(maxAge time.Duration) error {
 		}
 		if r.TripID == "" && r.RouteID == "" {
 			return fmt.Errorf("start_date requires trip_id or route_id")
+		}
+	}
+	if r.OccupancyStatus != nil {
+		if _, ok := parseOccupancyStatus(*r.OccupancyStatus); !ok {
+			names := make([]string, len(occupancyStatuses))
+			for i, status := range occupancyStatuses {
+				names[i] = status.String()
+			}
+			return fmt.Errorf("occupancy_status must be one of %s", strings.Join(names, ", "))
 		}
 	}
 	return nil
@@ -353,6 +390,10 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 			entity.Vehicle.StopId = proto.String(v.StopID)
 			entity.Vehicle.CurrentStopSequence = proto.Uint32(uint32(v.StopSequence))
 			entity.Vehicle.CurrentStatus = status.Enum()
+		}
+		// Unset when the vehicle's latest report did not say how full it is.
+		if occupancy, ok := parseOccupancyStatus(v.OccupancyStatus); ok {
+			entity.Vehicle.OccupancyStatus = occupancy.Enum()
 		}
 		entities = append(entities, entity)
 	}

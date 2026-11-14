@@ -6,8 +6,8 @@ ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
 -- name: InsertLocationPoint :execrows
 -- A fix already stored (the same vehicle, driver and timestamp) is not stored
 -- again: a phone retries an upload or report whose reply it never got.
-INSERT INTO location_points (vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+INSERT INTO location_points (vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id, occupancy_status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING;
 
 -- name: GetRecentLocations :many
@@ -15,7 +15,8 @@ ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING;
 -- documented to carry what the driver sent: a seeded vehicle that came back
 -- without them would publish a narrower descriptor than it did before the
 -- restart, and a route-only vehicle would publish none at all. The vehicle's
--- label is joined in for the same reason: it is the feed's vehicle.label. A
+-- label is joined in for the same reason: it is the feed's vehicle.label, as
+-- the latest report's occupancy_status is the feed's occupancy_status. A
 -- deactivated vehicle, or one with no active trip, is left out, so a restart
 -- cannot put it back in the feed: the tracker's record of a just-ended trip is
 -- in memory only,
@@ -26,7 +27,8 @@ ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING;
 -- must not pass for the vehicle's latest position.
 SELECT DISTINCT ON (lp.vehicle_id)
     lp.vehicle_id, lp.trip_id, lp.route_id, lp.start_date, lp.latitude, lp.longitude,
-    lp.bearing, lp.speed, lp.accuracy, lp.timestamp, lp.driver_id, v.label AS vehicle_label
+    lp.bearing, lp.speed, lp.accuracy, lp.timestamp, lp.driver_id, lp.occupancy_status,
+    v.label AS vehicle_label
 FROM location_points lp
 JOIN vehicles v ON v.id = lp.vehicle_id AND v.active
 WHERE lp.received_at > $1
