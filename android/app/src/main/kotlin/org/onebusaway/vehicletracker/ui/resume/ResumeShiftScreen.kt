@@ -68,20 +68,32 @@ private val CardShape = RoundedCornerShape(24.dp)
 private val BadgeShape = RoundedCornerShape(14.dp)
 private const val SECONDS_PER_MINUTE = 60L
 
+/** [onEnded] suspends: where the app goes after the end is read off the phone. */
 @Composable
 fun ResumeShiftScreen(
     onResumed: () -> Unit,
     onSignInFirst: () -> Unit,
-    onEnded: () -> Unit,
+    onEnded: suspend () -> Unit,
     viewModel: ResumeShiftViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // Read off the state, so an end the server confirms after a rotation goes on from the screen showing then. The view
+    // model hears only once the screen has gone on: a rotation while the screen after an end is read starts this over.
+    LaunchedEffect(state.outcome) {
+        when (state.outcome) {
+            ResumeOutcome.RESUMED -> onResumed()
+            ResumeOutcome.SIGN_IN_FIRST -> onSignInFirst()
+            ResumeOutcome.ENDED -> onEnded()
+            null -> return@LaunchedEffect
+        }
+        viewModel.onNavigated()
+    }
     ResumeShiftScreenContent(
         state = state,
         now = viewModel::nowEpochSec,
-        onResumeClick = { viewModel.onResumeShift(onResumed, onSignInFirst) },
-        onEndShiftClick = { viewModel.onEndShift(onEnded) },
-        onEndShiftLocallyClick = { viewModel.onEndShiftLocally(onEnded) },
+        onResumeClick = viewModel::onResumeShift,
+        onEndShiftClick = viewModel::onEndShift,
+        onEndShiftLocallyClick = viewModel::onEndShiftLocally,
         onDismissEndError = viewModel::dismissEndShiftError,
     )
 }

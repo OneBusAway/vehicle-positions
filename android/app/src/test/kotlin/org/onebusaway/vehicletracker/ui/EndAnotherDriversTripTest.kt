@@ -10,7 +10,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
@@ -56,11 +55,11 @@ class EndAnotherDriversTripTest {
         // What the server answers an end from anyone but the trip's driver. The trip stays open there.
         server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"active trip not found"}"""))
         val trip = tripStartedBy("1")
-        var ended = false
+        val ender = enderFor(signedInAs("2"))
 
-        enderFor(signedInAs("2")).end(trip) { ended = true }
+        ender.end(trip)
 
-        assertTrue("reports stop on this phone either way", ended)
+        assertTrue("reports stop on this phone either way", ender.state.value.ended)
         assertEquals(listOf(UnconfirmedEnd(7L, "1")), trips.unconfirmedEndsState.value)
         assertEquals("the server could only have answered 404", 0, server.requestCount)
         assertNull(trips.tripState.value)
@@ -71,11 +70,11 @@ class EndAnotherDriversTripTest {
     @Test fun `the trip's own driver still ends it on the server`() = runTest {
         server.enqueue(MockResponse().setBody("""{"status":"trip ended"}"""))
         val trip = tripStartedBy("1")
-        var ended = false
+        val ender = enderFor(signedInAs("1"))
 
-        enderFor(signedInAs("1")).end(trip) { ended = true }
+        ender.end(trip)
 
-        assertTrue(ended)
+        assertTrue(ender.state.value.ended)
         // Counted before the request is taken, which would wait for ever for one that was never sent.
         assertEquals(1, server.requestCount)
         assertEquals("/api/v1/trips/end", server.takeRequest().path)
@@ -86,11 +85,11 @@ class EndAnotherDriversTripTest {
     @Test fun `a trip stored before drivers were recorded still goes to the server under whoever is signed in`() = runTest {
         server.enqueue(MockResponse().setBody("""{"status":"trip ended"}"""))
         val trip = tripStartedBy(null)
-        var ended = false
+        val ender = enderFor(signedInAs("2"))
 
-        enderFor(signedInAs("2")).end(trip) { ended = true }
+        ender.end(trip)
 
-        assertTrue(ended)
+        assertTrue(ender.state.value.ended)
         assertEquals(1, server.requestCount)
         assertEquals(emptyList<UnconfirmedEnd>(), trips.unconfirmedEndsState.value)
     }
@@ -100,8 +99,9 @@ class EndAnotherDriversTripTest {
         val trip = tripStartedBy("1")
         val ender = enderFor(FakeSessionStore())
 
-        ender.end(trip) { fail("an end the server refused must not leave the screen") }
+        ender.end(trip)
 
+        assertFalse("an end the server refused must not leave the screen", ender.state.value.ended)
         assertEquals(1, server.requestCount)
         assertTrue(ender.state.value.failed)
         assertEquals(trip, trips.tripState.value)
@@ -119,16 +119,15 @@ class EndAnotherDriversTripTest {
             }
         }
         val ender = enderFor(signedInAs("2"), slowTrips)
-        var ends = 0
 
-        launch { ender.end(trip) { ends++ } }
-        launch { ender.end(trip) { ends++ } }
+        launch { ender.end(trip) }
+        launch { ender.end(trip) }
         testScheduler.advanceUntilIdle()
         assertTrue("the buttons wait while it is written", ender.state.value.ending)
         written.complete(Unit)
         testScheduler.advanceUntilIdle()
 
-        assertEquals(1, ends)
+        assertTrue(ender.state.value.ended)
         assertEquals(1, service.stopCount)
         assertFalse(ender.state.value.ending)
     }

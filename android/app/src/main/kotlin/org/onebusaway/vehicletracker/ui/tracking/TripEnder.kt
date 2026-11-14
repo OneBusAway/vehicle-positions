@@ -17,7 +17,12 @@ import javax.inject.Inject
 
 private const val TAG = "TripEnder"
 
-data class EndTripState(val ending: Boolean = false, val failed: Boolean = false)
+data class EndTripState(
+    val ending: Boolean = false,
+    val failed: Boolean = false,
+    /** The trip has ended, and the screen goes on, until it says it has with [TripEnder.onNavigated]. */
+    val ended: Boolean = false,
+)
 
 /**
  * Ends the active trip for every screen that offers to: the tracking screen and the prompt after
@@ -25,6 +30,9 @@ data class EndTripState(val ending: Boolean = false, val failed: Boolean = false
  * same way from either: retry, or end on this device only.
  *
  * Unscoped, so each ViewModel gets its own and one screen's failed end never shows on another.
+ *
+ * An end finishes in [EndTripState.ended] rather than calling the screen back: the server can answer after a rotation,
+ * and the screen that asked is gone by then. The one showing then is the one to go on.
  */
 class TripEnder @Inject constructor(
     private val tripRepository: TripRepository,
@@ -36,22 +44,21 @@ class TripEnder @Inject constructor(
     private val _state = MutableStateFlow(EndTripState())
     val state: StateFlow<EndTripState> = _state.asStateFlow()
 
-    suspend fun end(trip: ActiveTrip, onEnded: () -> Unit) {
+    suspend fun end(trip: ActiveTrip) {
         if (_state.value.ending) return
         _state.value = EndTripState(ending = true)
         // The server ends a trip only for the driver who started it. It answers anyone else 404, which reads as a trip
         // already ended and would clear one that is still open. Another driver's trip is ended on this phone instead,
         // which keeps its end for its own driver.
         if (startedByAnotherDriver(trip)) {
-            endOnThisPhone(onEnded)
+            endOnThisPhone()
             return
         }
         tripRepository.end(trip.tripDbId).fold(
             onSuccess = {
                 tripGeometryStore.clear()
                 serviceController.stopTracking()
-                _state.value = EndTripState()
-                onEnded()
+                _state.value = EndTripState(ended = true)
             },
             onFailure = {
                 _state.value = EndTripState(failed = true)
@@ -64,14 +71,14 @@ class TripEnder @Inject constructor(
      * next start. The store keeps the end under the driver who started the trip, and under the
      * driver signed in now only for a trip saved before drivers were recorded.
      */
-    suspend fun endLocally(onEnded: () -> Unit) {
-        // As for [end]: a second tap while the first is still writing would leave the screen twice.
+    suspend fun endLocally() {
+        // As for [end]: a second tap while the first is still writing would end the trip twice.
         if (_state.value.ending) return
         _state.update { it.copy(ending = true) }
-        endOnThisPhone(onEnded)
+        endOnThisPhone()
     }
 
-    private suspend fun endOnThisPhone(onEnded: () -> Unit) {
+    private suspend fun endOnThisPhone() {
         try {
             tripStateStore.endActiveTripLocally(sessionStore.session.first().driverId)
             tripGeometryStore.clear()
@@ -85,8 +92,7 @@ class TripEnder @Inject constructor(
             _state.value = EndTripState(failed = true)
             return
         }
-        _state.value = EndTripState()
-        onEnded()
+        _state.value = EndTripState(ended = true)
     }
 
     /**
@@ -100,4 +106,7 @@ class TripEnder @Inject constructor(
     }
 
     fun dismissError() = _state.update { it.copy(failed = false) }
+
+    /** The screen has gone on from the end, so one recreated later does not go on again. */
+    fun onNavigated() = _state.update { it.copy(ended = false) }
 }

@@ -55,15 +55,33 @@ data class ResumeCard(
     }
 }
 
+/** Where the prompt goes once the driver's choice has played out. */
+enum class ResumeOutcome {
+    /** Reporting again: on to Tracking. */
+    RESUMED,
+
+    /** Signed in to another server than the trip's: Sign in for the trip's server first, then back here. */
+    SIGN_IN_FIRST,
+
+    /** The trip has ended: on as the app would open with no trip. */
+    ENDED,
+}
+
 data class ResumeShiftUiState(
     val trip: ActiveTrip? = null,
     /** Null until the stored trip and its schedule are read off the phone. */
     val card: ResumeCard? = null,
     val ending: Boolean = false,
     val endTripError: Boolean = false,
+    /** Where the screen goes on to, until it says it has with [ResumeShiftViewModel.onNavigated]. */
+    val outcome: ResumeOutcome? = null,
 )
 
-/** The prompt for a stored trip whose tracking service is not running: resume it, or end it. */
+/**
+ * The prompt for a stored trip whose tracking service is not running: resume it, or end it. Each choice ends in
+ * [ResumeShiftUiState.outcome] rather than calling the screen back: an end can be confirmed after a rotation, and the
+ * screen that asked is gone by then. The one showing then is the one to go on.
+ */
 @HiltViewModel
 class ResumeShiftViewModel @Inject constructor(
     tripStateStore: TripStateStore,
@@ -77,10 +95,21 @@ class ResumeShiftViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ResumeShiftUiState())
     val uiState: StateFlow<ResumeShiftUiState> = _uiState.asStateFlow()
 
+    private val resumeOutcome = MutableStateFlow<ResumeOutcome?>(null)
+
+    /** From a tap on Resume until it has led to Sign in, or for good once reporting has started again. */
+    private var resuming = false
+
     init {
         val trips = tripStateStore.activeTrip.map { trip -> trip to trip?.let { ResumeCard.of(it, tripGeometryStore.loadFor(it), phoneZone) } }
-        combine(trips, tripEnder.state) { (trip, card), end ->
-            ResumeShiftUiState(trip = trip, card = card, ending = end.ending, endTripError = end.failed)
+        combine(trips, tripEnder.state, resumeOutcome) { (trip, card), end, resumed ->
+            ResumeShiftUiState(
+                trip = trip,
+                card = card,
+                ending = end.ending,
+                endTripError = end.failed,
+                outcome = if (end.ended) ResumeOutcome.ENDED else resumed,
+            )
         }
             .onEach { _uiState.value = it }
             .launchIn(viewModelScope)
@@ -94,30 +123,41 @@ class ResumeShiftViewModel @Inject constructor(
      * and a second `/trips/start` would be refused as a trip already active.
      *
      * Reports go to the server the phone is signed in to. When that is not the trip's, as on a phone restored from
-     * backup, which keeps the trip but not the session, [onSignInFirst] opens Sign in for the trip's server instead.
+     * backup, which keeps the trip but not the session, the prompt opens Sign in for the trip's server instead.
      */
-    fun onResumeShift(onResumed: () -> Unit, onSignInFirst: () -> Unit) {
+    fun onResumeShift() {
         val trip = _uiState.value.trip ?: return
+        // A second tap, or one on the screen on its way out to Tracking, must not start the reports again.
+        if (resuming) return
+        resuming = true
         viewModelScope.launch {
             val signedInTo = sessionStore.session.first().serverUrl
             if (trip.serverUrl != null && !sameServer(trip.serverUrl, signedInTo)) {
-                onSignInFirst()
+                // Back from Sign in, the driver taps Resume again.
+                resuming = false
+                resumeOutcome.value = ResumeOutcome.SIGN_IN_FIRST
             } else {
                 serviceController.startTracking()
-                onResumed()
+                resumeOutcome.value = ResumeOutcome.RESUMED
             }
         }
     }
 
-    fun onEndShift(onEnded: () -> Unit) {
+    fun onEndShift() {
         val trip = _uiState.value.trip ?: return
-        viewModelScope.launch { tripEnder.end(trip, onEnded) }
+        viewModelScope.launch { tripEnder.end(trip) }
     }
 
-    fun onEndShiftLocally(onEnded: () -> Unit) {
-        viewModelScope.launch { tripEnder.endLocally(onEnded) }
+    fun onEndShiftLocally() {
+        viewModelScope.launch { tripEnder.endLocally() }
     }
 
     /** Back from a failed end to Resume and End trip, with the trip still open. */
     fun dismissEndShiftError() = tripEnder.dismissError()
+
+    /** The screen has gone on, so one recreated later, or shown again after Sign in, does not go on again. */
+    fun onNavigated() {
+        resumeOutcome.value = null
+        tripEnder.onNavigated()
+    }
 }

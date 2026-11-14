@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -372,21 +371,20 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
             }
         }
         composable(ROUTE_RESUME) {
-            val scope = rememberCoroutineScope()
             ClearOfSystemBars {
+                // Not taps: each follows the driver's choice once it has played out, perhaps after a rotation, and a
+                // guard would drop it. The prompt ignores a second Resume itself.
                 ResumeShiftScreen(
-                    onResumed = dropUnlessResumed {
+                    onResumed = {
                         navController.navigate(ROUTE_TRACKING) {
                             popUpTo(ROUTE_RESUME) { inclusive = true }
                         }
                     },
-                    onSignInFirst = dropUnlessResumed { navController.navigate(ROUTE_LOGIN_REAUTH) },
-                    // Not a tap: the server confirms the end, perhaps after the driver has locked the phone.
+                    onSignInFirst = { navController.navigate(ROUTE_LOGIN_REAUTH) },
+                    // The server confirms the end, perhaps after the driver has locked the phone.
                     onEnded = {
-                        scope.launch {
-                            navController.navigate(navViewModel.routeAfterResumeEnds()) {
-                                popUpTo(0) { inclusive = true }
-                            }
+                        navController.navigate(navViewModel.routeAfterResumeEnds()) {
+                            popUpTo(0) { inclusive = true }
                         }
                     },
                 )
