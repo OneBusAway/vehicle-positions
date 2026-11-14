@@ -240,6 +240,13 @@ func TestCatalogTrip_Errors(t *testing.T) {
 	code, body = catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T1?date=nope", map[string]string{"trip_id": "T1"})
 	assert.Equal(t, http.StatusBadRequest, code)
 	assert.Equal(t, "date must be YYYYMMDD", body["error"])
+
+	// No date on Saturday mid-morning: T1 runs on weekdays and Friday's run
+	// ended a day ago, so it is not served as the trip's run.
+	c.now = func() time.Time { return time.Date(2026, 9, 5, 17, 0, 0, 0, time.UTC) } // 10:00 PDT
+	code, body = catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T1", map[string]string{"trip_id": "T1"})
+	assert.Equal(t, http.StatusUnprocessableEntity, code)
+	assert.Equal(t, "trip not active on date", body["error"])
 }
 
 func TestCatalog_NoIndexIs503(t *testing.T) {

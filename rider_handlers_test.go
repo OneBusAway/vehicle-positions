@@ -401,6 +401,20 @@ func TestStartRide(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
+// TestStartRide_NoStartDateRefusesFridaysRunOnSaturday: T1 runs on weekdays at
+// 08:00. On Saturday mid-morning Friday's run ended a day ago, so a start that
+// names no start_date is refused rather than matched to that run.
+func TestStartRide_NoStartDateRefusesFridaysRunOnSaturday(t *testing.T) {
+	env := newRiderTestEnv(t)
+	env.now = time.Date(2026, 9, 5, 10, 0, 0, 0, env.index.Timezone())
+	_, tok := env.register(t)
+
+	w := env.do(t, "POST", "/api/v1/rider/rides", tok, map[string]any{"trip_id": "T1"})
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "trip not active on start_date")
+	assert.Empty(t, env.store.rides)
+}
+
 func TestEndRide(t *testing.T) {
 	env := newRiderTestEnv(t)
 	riderID, tok := env.register(t)
