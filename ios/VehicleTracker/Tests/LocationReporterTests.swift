@@ -206,6 +206,49 @@ import VehiclePositionsKit
         await r.waitForInFlightSend()
         #expect(api.posted.count == 2)
     }
+
+    /// The feed keeps occupancy from the latest report alone, so while the
+    /// driver has one set every report carries it, and once it is cleared
+    /// they leave it out.
+    @Test func everyReportCarriesTheTripsOccupancy() async throws {
+        let name = "LocationReporterTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let choice = OccupancyChoice(defaults: defaults)
+        let r = LocationReporter(api: api, now: { clock.now }, occupancy: choice)
+        func send() async {
+            clock.advance(5)
+            r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1", startDate: "20260902")
+            await r.waitForInFlightSend()
+        }
+
+        await send()
+        choice.choose(.full, tripID: "T1", serviceDate: "20260902")
+        await send()
+        await send()
+        choice.choose(.full, tripID: "T1", serviceDate: "20260902")
+        await send()
+        #expect(api.posted.map(\.occupancyStatus) == [nil, .full, .full, nil])
+
+        let body = { (i: Int) throws -> [String: Any] in
+            try #require(JSONSerialization.jsonObject(with: JSONCoding.encoder.encode(api.posted[i])) as? [String: Any])
+        }
+        #expect(try body(1)["occupancy_status"] as? String == "FULL")
+        #expect(try body(3)["occupancy_status"] == nil, "left out, not sent as null")
+    }
+
+    /// A choice made on another trip is not this one's.
+    @Test func anotherTripsOccupancyIsNotSent() async throws {
+        let name = "LocationReporterTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let choice = OccupancyChoice(defaults: defaults)
+        choice.choose(.full, tripID: "T0", serviceDate: "20260902")
+        let r = LocationReporter(api: api, now: { clock.now }, occupancy: choice)
+        r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1", startDate: "20260902")
+        await r.waitForInFlightSend()
+        #expect(try #require(api.posted.first).occupancyStatus == nil)
+    }
 }
 
 /// A clock the test moves by hand.

@@ -30,6 +30,9 @@ final class LocationReporter {
 
     private let api: any TrackerAPI
     private let now: () -> Date
+    /// Read at each report, so every report carries the choice standing when
+    /// its fix came in.
+    private let occupancy: OccupancyChoice
     /// Called after every send outcome, so the session can republish its
     /// reporting status without having waited for the POST.
     private let onChange: @MainActor () -> Void
@@ -43,9 +46,11 @@ final class LocationReporter {
 
     /// `sent` is how many reports of this trip the server already accepted,
     /// before a relaunch: the count carries on from there.
-    init(api: any TrackerAPI, now: @escaping () -> Date, sent: Int = 0, onChange: @escaping @MainActor () -> Void = {}) {
+    init(api: any TrackerAPI, now: @escaping () -> Date, sent: Int = 0, occupancy: OccupancyChoice = .shared,
+         onChange: @escaping @MainActor () -> Void = {}) {
         self.api = api
         self.now = now
+        self.occupancy = occupancy
         fixesSent = sent
         self.onChange = onChange
     }
@@ -79,7 +84,8 @@ final class LocationReporter {
             accuracy: fix.horizontalAccuracy >= 0 ? fix.horizontalAccuracy : nil,
             timestamp: Int64(fix.timestamp.timeIntervalSince1970),
             routeID: routeID.isEmpty ? nil : routeID,
-            startDate: startDate.isEmpty ? nil : startDate
+            startDate: startDate.isEmpty ? nil : startDate,
+            occupancyStatus: occupancy.occupancy(tripID: gtfsTripID, serviceDate: startDate)
         )
         isSending = true
         sendTask = Task { [weak self] in
