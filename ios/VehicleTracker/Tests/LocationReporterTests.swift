@@ -214,7 +214,7 @@ import VehiclePositionsKit
         let name = "LocationReporterTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
-        let choice = OccupancyChoice(defaults: defaults)
+        let choice = OccupancyChoice(defaults: defaults, settings: .signedIn(defaults))
         let r = LocationReporter(api: api, now: { clock.now }, occupancy: choice)
         func send() async {
             clock.advance(5)
@@ -242,12 +242,39 @@ import VehiclePositionsKit
         let name = "LocationReporterTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
-        let choice = OccupancyChoice(defaults: defaults)
+        let choice = OccupancyChoice(defaults: defaults, settings: .signedIn(defaults))
         choice.choose(.full, tripID: "T0", serviceDate: "20260902")
         let r = LocationReporter(api: api, now: { clock.now }, occupancy: choice)
         r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1", startDate: "20260902")
         await r.waitForInFlightSend()
         #expect(try #require(api.posted.first).occupancyStatus == nil)
+    }
+
+    /// A phone handed on mid-day: the next driver on the same trip sends no
+    /// occupancy until they choose one.
+    @Test func theNextDriversReportsCarryNoOccupancy() async throws {
+        let name = "LocationReporterTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let settings = AppSettings.signedIn(defaults)
+        let choice = OccupancyChoice(defaults: defaults, settings: settings)
+        choice.choose(.full, tripID: "T1", serviceDate: "20260902")
+        let first = LocationReporter(api: api, now: { clock.now }, occupancy: choice)
+        first.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1", startDate: "20260902")
+        await first.waitForInFlightSend()
+
+        settings.email = "ben@example.org"
+        clock.advance(5)
+        let next = LocationReporter(api: api, now: { clock.now }, occupancy: choice)
+        next.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1", startDate: "20260902")
+        await next.waitForInFlightSend()
+
+        try #require(api.posted.count == 2)
+        let body = { (i: Int) throws -> [String: Any] in
+            try #require(JSONSerialization.jsonObject(with: JSONCoding.encoder.encode(api.posted[i])) as? [String: Any])
+        }
+        #expect(try body(0)["occupancy_status"] as? String == "FULL", "the driver who chose it sends it")
+        #expect(try body(1)["occupancy_status"] == nil)
     }
 }
 
