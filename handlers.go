@@ -332,8 +332,12 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 
 		if v.TripID != "" || v.RouteID != "" {
 			trip := &gtfsrt.TripDescriptor{}
+			// A trip_id was checked against the schedule when its trip was
+			// started, so it names a scheduled trip. A route-only report
+			// names no trip instance, so it claims no relationship to one.
 			if v.TripID != "" {
 				trip.TripId = proto.String(v.TripID)
+				trip.ScheduleRelationship = gtfsrt.TripDescriptor_SCHEDULED.Enum()
 			}
 			if v.RouteID != "" {
 				trip.RouteId = proto.String(v.RouteID)
@@ -409,8 +413,9 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 	}
 
 	trip := &gtfsrt.TripDescriptor{
-		TripId:    proto.String(est.Key.TripID),
-		StartDate: proto.String(est.Key.StartDate),
+		TripId:               proto.String(est.Key.TripID),
+		StartDate:            proto.String(est.Key.StartDate),
+		ScheduleRelationship: gtfsrt.TripDescriptor_SCHEDULED.Enum(),
 	}
 	if est.RouteID != "" {
 		trip.RouteId = proto.String(est.RouteID)
