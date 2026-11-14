@@ -474,9 +474,34 @@ them, so leave `ACCESS_TOKEN_TTL` set.
 closed while this trip was running. Reports are paused until you choose." and
 a card: the route badge `1`, "North", "8:00 AM run", **Vehicle bus-1**, and
 "Started N min ago, at" the time the trip began, which moves on once a
-minute. Under it, **Resume trip** and **End trip**. iOS only lets the location
-session start again from the foreground, which is why a relaunch asks rather
-than resuming by itself.
+minute. Under it, **Resume trip** and **End trip**. A launch the driver makes
+asks rather than resuming by itself, so a trip left open by mistake isn't
+reported.
+
+When iOS itself relaunches the app in the background after terminating it
+mid-trip (memory pressure or a crash), no one is there to ask. The app
+recreates the background location session at once and carries on reporting,
+with no second `/api/v1/trips/start`; opening the app later shows the Tracking
+screen, not **Resume your trip?**. If iOS refuses the session, or the location
+stream stops, a notification, **Not reporting your position**, asks the driver
+to open the app (allow notifications when the first trip starts). The
+notification goes away by itself once reporting recovers, the trip resumes or
+ends, or the driver signs out.
+
+A simulator can't be made to relaunch the app this way, so check it on an
+iPhone with a trip open, watching the device in Console.app with the filter
+`category:launch`. Each launch logs one line, `launch: application <state>,
+scenes [<states>], background relaunch <true|false>`:
+
+- **Cold launch from the home screen:** terminate the app from the app
+  switcher, then tap its icon. Expect `background relaunch false` and **Resume
+  your trip?**.
+- **Cold launch from a locked phone:** terminate the app, lock the phone, then
+  open the app from the lock screen (a notification or Siri suggestion).
+  Expect `background relaunch false` and **Resume your trip?**.
+- **Background relaunch:** start a trip, lock the phone, and open enough other
+  apps that iOS terminates this one. Expect `background relaunch true`, and
+  `/api/v1/locations` carrying on in the server log without opening the app.
 
 2. Stop the server (`kill %1`), tap **End trip**, then start the server again.
 

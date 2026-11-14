@@ -1561,3 +1561,200 @@ nonisolated final class UnclearableTripStore: ActiveTripStoring, @unchecked Send
             == "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street.")
     }
 }
+
+/// Records what the session asked the driver alerts to do.
+@MainActor
+final class RecordingDriverAlerts: DriverAlerting {
+    var permissionRequests = 0
+    var stops: [TripSession.ReportingStatus] = []
+    var needsResume = 0
+    var withdrawals = 0
+    func requestPermission() { permissionRequests += 1 }
+    func reportingStopped(_ status: TripSession.ReportingStatus) { stops.append(status) }
+    func tripNeedsResume() { needsResume += 1 }
+    func reportingRecovered() { withdrawals += 1 }
+}
+
+@Suite struct TripSessionBackgroundRelaunchTests {
+    let api = FakeTrackerAPI()
+    let locations = FakeLocationSource()
+    let access = FakeLocationAccess()
+    let tokens = InMemoryTokenStore()
+    let store = InMemoryActiveTripStore()
+    let clock = ManualClock(start: TripFixtures.at(8, 0))
+    let defaults = UserDefaults(suiteName: "TripSessionBackgroundRelaunchTests-\(UUID().uuidString)")!
+    let alerts = RecordingDriverAlerts()
+    let bus = Vehicle(id: "bus-1", label: "Bus 1")
+
+    func session() -> TripSession {
+        TripSession(settings: AppSettings(defaults: defaults), tokens: tokens, store: store, locations: locations,
+                    access: access, makeAPI: { _, _ in api }, now: { clock.now }, alerts: alerts)
+    }
+
+    /// What iOS relaunching the app mid-trip finds: a usable token, a known
+    /// server and this driver's trip in the store.
+    func relaunched(serverURL: URL? = nil, trip: TripGeometry = TripFixtures.t1) throws -> (session: TripSession, active: ActiveTrip) {
+        try tokens.save(StoredToken(token: "jwt", issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set("https://positions.example.org", forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        let active = ActiveTrip(serverTripID: 7, vehicle: bus, trip: trip,
+                                startedAt: clock.now.addingTimeInterval(-600), driverEmail: "d@test.com",
+                                serverURL: serverURL)
+        try store.save(active)
+        return (session(), active)
+    }
+
+    @Test func aBackgroundRelaunchCarriesOnReportingTheStoredTrip() async throws {
+        let (s, active) = try relaunched()
+        #expect(s.phase == .paused(active), "a launch still takes the trip up paused")
+
+        s.resumeAfterBackgroundLaunch()
+        #expect(s.phase == .active(active), "no tap on Resume needed")
+        #expect(locations.handles.count == 1, "the background session is recreated")
+        #expect(api.starts.isEmpty, "the server trip is the one already running")
+
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        #expect(await eventually { api.posted.count == 1 })
+        #expect(alerts.stops.isEmpty)
+        #expect(alerts.needsResume == 0)
+    }
+
+    /// If iOS will not let the session be recreated from the background, the
+    /// driver is told once, outside the app.
+    @Test func aRefusedSessionAlertsTheDriverOnce() async throws {
+        let (s, _) = try relaunched()
+        s.resumeAfterBackgroundLaunch()
+
+        locations.emit(LocationSample(fix: nil, diagnostic: .insufficientlyInUse))
+        #expect(await eventually { s.reporting == .needsForeground })
+        locations.emit(LocationSample(fix: nil, diagnostic: .insufficientlyInUse))
+        // Samples are handled in order: once the fix behind it has cleared
+        // the status, the second refusal has been handled too.
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        #expect(await eventually { s.reporting != .needsForeground })
+        #expect(alerts.stops == [.needsForeground])
+    }
+
+    /// The lock screen must not keep saying the bus isn't reporting once it
+    /// is: a good fix after the refusal takes the alert back down.
+    @Test func recoveringWithdrawsTheAlert() async throws {
+        let (s, _) = try relaunched()
+        s.resumeAfterBackgroundLaunch()
+        locations.emit(LocationSample(fix: nil, diagnostic: .insufficientlyInUse))
+        #expect(await eventually { s.reporting == .needsForeground })
+        let before = alerts.withdrawals
+
+        locations.emitFix(lat: 47.6045, lon: -122.3300, at: TripFixtures.at(8, 5))
+        #expect(await eventually { s.reporting == .connected })
+        #expect(alerts.withdrawals == before + 1)
+    }
+
+    /// The driver opens the app and taps Resume after the stream stopped.
+    @Test func resumingWithdrawsTheAlert() async throws {
+        let (s, _) = try relaunched()
+        s.resumeAfterBackgroundLaunch()
+        locations.finish(throwing: APIError.transport("dropped"))
+        #expect(await eventually { s.reporting == .locationLost })
+        let before = alerts.withdrawals
+
+        s.resume()
+        #expect(alerts.withdrawals > before)
+        #expect(s.reporting != .locationLost)
+    }
+
+    @Test func endingTheTripWithdrawsTheAlert() async throws {
+        let (s, _) = try relaunched()
+        s.resumeAfterBackgroundLaunch()
+        locations.emit(LocationSample(fix: nil, diagnostic: .insufficientlyInUse))
+        #expect(await eventually { s.reporting == .needsForeground })
+        let before = alerts.withdrawals
+
+        try await s.end()
+        #expect(s.phase == .idle)
+        #expect(alerts.withdrawals > before)
+    }
+
+    /// The trip that could not be carried on is still waiting in the store
+    /// when the driver signs out; its alert goes with the session.
+    @Test func signingOutWithdrawsTheAlert() async throws {
+        let (s, _) = try relaunched(serverURL: URL(string: "https://other.example.org")!)
+        s.resumeAfterBackgroundLaunch()
+        #expect(alerts.needsResume == 1)
+        let before = alerts.withdrawals
+
+        await s.signOut()
+        #expect(s.phase == .signedOut)
+        #expect(alerts.withdrawals == before + 1)
+    }
+
+    /// `resume()` drops a trip it can't judge adherence for: there is no trip
+    /// left, so nothing asks the driver to resume one.
+    @Test func aDroppedTripSendsNoResumeAlert() throws {
+        var unusable = TripFixtures.t1
+        unusable.stops = []
+        let (s, _) = try relaunched(trip: unusable)
+        s.resumeAfterBackgroundLaunch()
+        #expect(s.phase == .idle)
+        #expect(alerts.needsResume == 0)
+    }
+
+    @Test func aStreamThatEndsAlertsTheDriver() async throws {
+        let (s, _) = try relaunched()
+        s.resumeAfterBackgroundLaunch()
+
+        locations.finish(throwing: APIError.transport("dropped"))
+        #expect(await eventually { s.reporting == .locationLost })
+        #expect(alerts.stops == [.locationLost])
+    }
+
+    /// Resume on another server than the trip's opens Sign in again first,
+    /// which needs the driver: the trip stays paused and they are asked to
+    /// open the app.
+    @Test func aTripThatCantBeCarriedOnAsksTheDriverToOpenTheApp() throws {
+        let (s, active) = try relaunched(serverURL: URL(string: "https://other.example.org")!)
+        s.resumeAfterBackgroundLaunch()
+        #expect(s.phase == .paused(active))
+        #expect(locations.handles.isEmpty)
+        #expect(alerts.needsResume == 1)
+    }
+
+    @Test func aRelaunchWithNoStoredTripDoesNothing() {
+        let s = session()
+        s.resumeAfterBackgroundLaunch()
+        #expect(s.phase == .signedOut)
+        #expect(locations.handles.isEmpty)
+        #expect(alerts.needsResume == 0)
+    }
+
+    /// A launch the driver makes never calls it, but a trip already running
+    /// must not be touched if it were.
+    @Test func aRunningTripIsLeftAlone() throws {
+        let (s, active) = try relaunched()
+        s.resume()
+        s.resumeAfterBackgroundLaunch()
+        #expect(s.phase == .active(active))
+        #expect(locations.handles.count == 1, "no second session")
+    }
+
+    @Test func startingATripAsksForAlertPermission() async throws {
+        let s = session()
+        try await s.signIn(serverURL: URL(string: "https://positions.example.org")!, email: "d@test.com", password: "pw")
+        try await s.start(vehicle: bus, tripID: "T1")
+        #expect(alerts.permissionRequests == 1)
+    }
+}
+
+@Suite struct BackgroundRelaunchTests {
+    @Test func onlyALaunchNoOneCanSeeIsInTheBackground() {
+        #expect(BackgroundRelaunch.isInBackground(application: .background, scenes: []))
+        #expect(BackgroundRelaunch.isInBackground(application: .background, scenes: [.background]))
+        #expect(BackgroundRelaunch.isInBackground(application: .background, scenes: [.background, .background]))
+
+        #expect(!BackgroundRelaunch.isInBackground(application: .inactive, scenes: []))
+        #expect(!BackgroundRelaunch.isInBackground(application: .active, scenes: [.foregroundActive]))
+        #expect(!BackgroundRelaunch.isInBackground(application: .background, scenes: [.unattached]),
+                "a scene being connected is coming to the foreground")
+        #expect(!BackgroundRelaunch.isInBackground(application: .background, scenes: [.background, .foregroundInactive]),
+                "the car's scene in the foreground is someone looking")
+    }
+}
