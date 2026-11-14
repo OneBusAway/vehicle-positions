@@ -27,19 +27,20 @@ type GtfsFeedCache struct {
 }
 
 type LocationPoint struct {
-	ID         int64
-	VehicleID  string
-	TripID     string
-	Latitude   float64
-	Longitude  float64
-	Bearing    pgtype.Float8
-	Speed      pgtype.Float8
-	Accuracy   pgtype.Float8
-	Timestamp  int64
-	ReceivedAt pgtype.Timestamptz
-	DriverID   string
-	RouteID    string
-	StartDate  string
+	ID              int64
+	VehicleID       string
+	TripID          string
+	Latitude        float64
+	Longitude       float64
+	Bearing         pgtype.Float8
+	Speed           pgtype.Float8
+	Accuracy        pgtype.Float8
+	Timestamp       int64
+	ReceivedAt      pgtype.Timestamptz
+	DriverID        string
+	RouteID         string
+	StartDate       string
+	OccupancyStatus pgtype.Text
 }
 
 type RefreshToken struct {

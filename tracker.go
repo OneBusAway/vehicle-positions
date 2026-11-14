@@ -21,6 +21,9 @@ type VehicleState struct {
 	Accuracy     *float64
 	Timestamp    int64
 	UpdatedAt    time.Time // server time when this report was received
+	// OccupancyStatus is the occupancy_status this report carried, "" when it
+	// carried none.
+	OccupancyStatus string
 	// StopID and StopSequence are the stop of its trip that the vehicle's
 	// latest report put it at (StoppedAt) or heading to. StopID is "" when that
 	// report named no stop (tripLocator.locate says when), and for a vehicle
@@ -165,6 +168,11 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 		accuracy = &v
 	}
 
+	var occupancy string
+	if loc.OccupancyStatus != nil {
+		occupancy = *loc.OccupancyStatus
+	}
+
 	t.vehicles[loc.VehicleID] = &VehicleState{
 		VehicleID:    loc.VehicleID,
 		VehicleLabel: loc.VehicleLabel,
@@ -182,6 +190,10 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 		StopSequence: place.stopSequence,
 		StoppedAt:    place.stoppedAt,
 		alongShape:   place.alongShape,
+		// Not carried over from the vehicle's previous report: a driver app
+		// is to send it with every report while the driver has one set, so a
+		// report without it means the driver has cleared it.
+		OccupancyStatus: occupancy,
 	}
 }
 

@@ -138,17 +138,18 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 	}
 
 	if _, err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
-		VehicleID: loc.VehicleID,
-		TripID:    loc.TripID,
-		RouteID:   loc.RouteID,
-		StartDate: loc.StartDate,
-		Latitude:  loc.Latitude,
-		Longitude: loc.Longitude,
-		Bearing:   optionalFloat(loc.Bearing),
-		Speed:     optionalFloat(loc.Speed),
-		Accuracy:  optionalFloat(loc.Accuracy),
-		Timestamp: loc.Timestamp,
-		DriverID:  loc.DriverID,
+		VehicleID:       loc.VehicleID,
+		TripID:          loc.TripID,
+		RouteID:         loc.RouteID,
+		StartDate:       loc.StartDate,
+		Latitude:        loc.Latitude,
+		Longitude:       loc.Longitude,
+		Bearing:         optionalFloat(loc.Bearing),
+		Speed:           optionalFloat(loc.Speed),
+		Accuracy:        optionalFloat(loc.Accuracy),
+		Timestamp:       loc.Timestamp,
+		DriverID:        loc.DriverID,
+		OccupancyStatus: optionalText(loc.OccupancyStatus),
 	}); err != nil {
 		return fmt.Errorf("insert location: %w", err)
 	}
@@ -181,17 +182,18 @@ func (s *Store) SaveLocationHistory(ctx context.Context, userID int64, vehicleID
 	saved := 0
 	for _, loc := range points {
 		n, err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
-			VehicleID: vehicleID,
-			TripID:    loc.TripID,
-			RouteID:   loc.RouteID,
-			StartDate: loc.StartDate,
-			Latitude:  loc.Latitude,
-			Longitude: loc.Longitude,
-			Bearing:   optionalFloat(loc.Bearing),
-			Speed:     optionalFloat(loc.Speed),
-			Accuracy:  optionalFloat(loc.Accuracy),
-			Timestamp: loc.Timestamp,
-			DriverID:  loc.DriverID,
+			VehicleID:       vehicleID,
+			TripID:          loc.TripID,
+			RouteID:         loc.RouteID,
+			StartDate:       loc.StartDate,
+			Latitude:        loc.Latitude,
+			Longitude:       loc.Longitude,
+			Bearing:         optionalFloat(loc.Bearing),
+			Speed:           optionalFloat(loc.Speed),
+			Accuracy:        optionalFloat(loc.Accuracy),
+			Timestamp:       loc.Timestamp,
+			DriverID:        loc.DriverID,
+			OccupancyStatus: optionalText(loc.OccupancyStatus),
 		})
 		if err != nil {
 			return 0, fmt.Errorf("insert location: %w", err)
@@ -231,6 +233,7 @@ func (s *Store) GetRecentLocations(ctx context.Context, cutoff time.Time) ([]*Lo
 		loc.Bearing = nullableFloat(row.Bearing)
 		loc.Speed = nullableFloat(row.Speed)
 		loc.Accuracy = nullableFloat(row.Accuracy)
+		loc.OccupancyStatus = nullableText(row.OccupancyStatus)
 		locations = append(locations, loc)
 	}
 
@@ -262,6 +265,23 @@ func optionalFloat(v *float64) pgtype.Float8 {
 		return pgtype.Float8{}
 	}
 	return pgtype.Float8{Float64: *v, Valid: true}
+}
+
+// nullableText converts a pgtype.Text to a *string (nil when NULL).
+func nullableText(v pgtype.Text) *string {
+	if !v.Valid {
+		return nil
+	}
+	s := v.String
+	return &s
+}
+
+// optionalText converts a *string to a pgtype.Text (NULL when nil).
+func optionalText(v *string) pgtype.Text {
+	if v == nil {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *v, Valid: true}
 }
 
 // rollbackTx undoes a transaction that was not committed. An already-committed

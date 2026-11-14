@@ -2232,6 +2232,24 @@ components:
             Unix seconds. Must be positive and within 5 minutes of the server
             clock in either direction; reports outside that window are
             rejected with 400.
+        occupancy_status:
+          type: string
+          enum:
+            - EMPTY
+            - MANY_SEATS_AVAILABLE
+            - FEW_SEATS_AVAILABLE
+            - STANDING_ROOM_ONLY
+            - CRUSHED_STANDING_ROOM_ONLY
+            - FULL
+            - NOT_ACCEPTING_PASSENGERS
+          description: |
+            How full the vehicle is, as the driver sees it: a GTFS-RT
+            `OccupancyStatus` name, spelled exactly as listed. Omit it when
+            the driver has not said; any other value is rejected with 400.
+            The feed publishes it as `occupancy_status` on the vehicle's
+            entity while the vehicle's latest report carries it, so a client
+            sends it with every report for as long as the driver's choice
+            stands. A report without it clears it from the feed.
 
     UpsertVehicleRequest:
       type: object

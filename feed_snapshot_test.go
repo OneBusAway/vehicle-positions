@@ -120,13 +120,14 @@ func TestWriteFeedSnapshots(t *testing.T) {
 		onTrip := t3.Shape.PointAt(along)
 		onRoute := t1.Shape.PointAt(t1.Shape.Length/2 + along)
 		parked := t3.Shape.PointAt(t3.Shape.Length / 2)
-		// A driver on a trip, a driver who knows only the route, and a vehicle
-		// that is not in service and sends no bearing or speed.
+		// A driver on a trip who says how full the vehicle is, a driver who
+		// knows only the route, and a vehicle that is not in service and sends
+		// no bearing or speed.
 		postLocation(LocationReport{
 			VehicleID: "bus-101", TripID: t3.ID, RouteID: t3.RouteID, StartDate: startDate,
 			Latitude: onTrip.Lat, Longitude: onTrip.Lon,
 			Bearing: float64ptr(t3.Shape.BearingAt(along)), Speed: float64ptr(feedSnapshotSpeed),
-			Timestamp: now.Unix(),
+			Timestamp: now.Unix(), OccupancyStatus: stringptr("FEW_SEATS_AVAILABLE"),
 		})
 		postLocation(LocationReport{
 			VehicleID: "bus-102", RouteID: t1.RouteID, StartDate: startDate,

@@ -666,7 +666,8 @@ func (q *Queries) GetLocationHistory(ctx context.Context, arg GetLocationHistory
 const getRecentLocations = `-- name: GetRecentLocations :many
 SELECT DISTINCT ON (lp.vehicle_id)
     lp.vehicle_id, lp.trip_id, lp.route_id, lp.start_date, lp.latitude, lp.longitude,
-    lp.bearing, lp.speed, lp.accuracy, lp.timestamp, lp.driver_id, v.label AS vehicle_label
+    lp.bearing, lp.speed, lp.accuracy, lp.timestamp, lp.driver_id, lp.occupancy_status,
+    v.label AS vehicle_label
 FROM location_points lp
 JOIN vehicles v ON v.id = lp.vehicle_id AND v.active
 WHERE lp.received_at > $1
@@ -675,25 +676,27 @@ ORDER BY lp.vehicle_id, lp.timestamp DESC, lp.received_at DESC
 `
 
 type GetRecentLocationsRow struct {
-	VehicleID    string
-	TripID       string
-	RouteID      string
-	StartDate    string
-	Latitude     float64
-	Longitude    float64
-	Bearing      pgtype.Float8
-	Speed        pgtype.Float8
-	Accuracy     pgtype.Float8
-	Timestamp    int64
-	DriverID     string
-	VehicleLabel string
+	VehicleID       string
+	TripID          string
+	RouteID         string
+	StartDate       string
+	Latitude        float64
+	Longitude       float64
+	Bearing         pgtype.Float8
+	Speed           pgtype.Float8
+	Accuracy        pgtype.Float8
+	Timestamp       int64
+	DriverID        string
+	OccupancyStatus pgtype.Text
+	VehicleLabel    string
 }
 
 // route_id and start_date are selected because the feed's TripDescriptor is
 // documented to carry what the driver sent: a seeded vehicle that came back
 // without them would publish a narrower descriptor than it did before the
 // restart, and a route-only vehicle would publish none at all. The vehicle's
-// label is joined in for the same reason: it is the feed's vehicle.label. A
+// label is joined in for the same reason: it is the feed's vehicle.label, as
+// the latest report's occupancy_status is the feed's occupancy_status. A
 // deactivated vehicle, or one with no active trip, is left out, so a restart
 // cannot put it back in the feed: the tracker's record of a just-ended trip is
 // in memory only,
@@ -723,6 +726,7 @@ func (q *Queries) GetRecentLocations(ctx context.Context, receivedAt pgtype.Time
 			&i.Accuracy,
 			&i.Timestamp,
 			&i.DriverID,
+			&i.OccupancyStatus,
 			&i.VehicleLabel,
 		); err != nil {
 			return nil, err
@@ -937,23 +941,24 @@ func (q *Queries) GetVehicleByID(ctx context.Context, id string) (GetVehicleByID
 }
 
 const insertLocationPoint = `-- name: InsertLocationPoint :execrows
-INSERT INTO location_points (vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+INSERT INTO location_points (vehicle_id, trip_id, route_id, start_date, latitude, longitude, bearing, speed, accuracy, timestamp, driver_id, occupancy_status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (vehicle_id, driver_id, timestamp) DO NOTHING
 `
 
 type InsertLocationPointParams struct {
-	VehicleID string
-	TripID    string
-	RouteID   string
-	StartDate string
-	Latitude  float64
-	Longitude float64
-	Bearing   pgtype.Float8
-	Speed     pgtype.Float8
-	Accuracy  pgtype.Float8
-	Timestamp int64
-	DriverID  string
+	VehicleID       string
+	TripID          string
+	RouteID         string
+	StartDate       string
+	Latitude        float64
+	Longitude       float64
+	Bearing         pgtype.Float8
+	Speed           pgtype.Float8
+	Accuracy        pgtype.Float8
+	Timestamp       int64
+	DriverID        string
+	OccupancyStatus pgtype.Text
 }
 
 // A fix already stored (the same vehicle, driver and timestamp) is not stored
@@ -971,6 +976,7 @@ func (q *Queries) InsertLocationPoint(ctx context.Context, arg InsertLocationPoi
 		arg.Accuracy,
 		arg.Timestamp,
 		arg.DriverID,
+		arg.OccupancyStatus,
 	)
 	if err != nil {
 		return 0, err

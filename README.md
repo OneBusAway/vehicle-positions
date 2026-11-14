@@ -281,6 +281,7 @@ vehicle {
     id: "vehicle-042"
     label: "Bus 42"
   }
+  occupancy_status: MANY_SEATS_AVAILABLE
 }
 ```
 
@@ -360,13 +361,16 @@ Each location report is a single point sent directly from the Android app as it 
   "bearing": 180.0,
   "speed": 8.5,
   "accuracy": 12.0,
-  "timestamp": 1752566400
+  "timestamp": 1752566400,
+  "occupancy_status": "MANY_SEATS_AVAILABLE"
 }
 ```
 
 The server updates its in-memory state with the latest position and persists the point to the database. Points older than a configurable staleness threshold (default 5 minutes) are excluded from the GTFS-RT feed.
 
 > `trip_id`, `route_id` and `start_date` are all optional. `trip_id` is the GTFS `trip_id` and must be left empty when the driver only knows the route — never send a route id in `trip_id`. `route_id` is the GTFS `route_id`; when `trip_id` is empty it is the only thing a consumer can match on. `start_date` is the service date, `YYYYMMDD`, and is accepted only alongside `trip_id` or `route_id`. The feed's `TripDescriptor` carries exactly the fields that were sent, and is omitted entirely when both `trip_id` and `route_id` are empty.
+
+> `occupancy_status` is optional too: how full the vehicle is, as the driver sees it. It is one of the GTFS-RT `OccupancyStatus` names `EMPTY`, `MANY_SEATS_AVAILABLE`, `FEW_SEATS_AVAILABLE`, `STANDING_ROOM_ONLY`, `CRUSHED_STANDING_ROOM_ONLY`, `FULL` or `NOT_ACCEPTING_PASSENGERS`, spelled exactly so; leave it out when the driver has not said. The feed's `occupancy_status` comes from the vehicle's latest report alone, so a driver app sends it with every report while the driver's choice stands, and a report without it clears it from the feed. Rider-reported vehicles never carry one.
 
 **`POST /api/v1/locations` validation and error contract**
 
@@ -378,6 +382,7 @@ and performs strict request validation before writing data:
 - Unknown JSON fields are rejected.
 - Standard payload validation still applies (`vehicle_id`, coordinates, timestamp).
 - `trip_id` and `route_id` are capped at 100 characters; `start_date` must be a real `YYYYMMDD` date.
+- `occupancy_status`, when sent, must be one of the seven names above.
 - Reports are rate limited to one per five seconds per driver.
 - The driver must be assigned to `vehicle_id`, the vehicle must be active, and
   the driver must have an active trip on it.
