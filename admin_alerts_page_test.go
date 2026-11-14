@@ -98,6 +98,7 @@ func TestAlertsPage_ListError(t *testing.T) {
 	w := requestAdminPage(t, mux, "/admin/alerts")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, alertsPageRefresh, w.Header().Get("Refresh"), "the error page keeps reloading")
 	assert.Contains(t, logs.String(), "database down")
 }
 

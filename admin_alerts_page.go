@@ -56,6 +56,9 @@ func newAlertRow(a alertEntry) alertRow {
 
 // alertsPage renders the current alerts, longest-running first.
 func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
+	// Set before the list, so a page left open keeps reloading through a
+	// database outage and recovers when it ends.
+	w.Header().Set("Refresh", alertsPageRefresh)
 	alerts, err := ui.alerts.list(r.Context(), time.Now())
 	if err != nil {
 		slog.Error("alerts: list alerts", "error", err)
@@ -68,7 +71,6 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, newAlertRow(a))
 	}
 
-	w.Header().Set("Refresh", alertsPageRefresh)
 	ui.renderAdmin(w, r, http.StatusOK, "alerts.html", map[string]interface{}{
 		"Title":         "Alerts",
 		"Page":          "alerts",
