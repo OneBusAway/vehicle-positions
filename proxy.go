@@ -11,7 +11,10 @@ import (
 // reverse proxy. Without it, only the direct connection is trusted (spec §4.10).
 func clientIP(r *http.Request, trustProxy bool) string {
 	if trustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Several X-Forwarded-For lines are one list (RFC 9110 section 5.3),
+		// and a proxy may append its hop as a line of its own after the
+		// client's (HAProxy does), so the rightmost hop ends the last line.
+		if xff := strings.Join(r.Header.Values("X-Forwarded-For"), ","); xff != "" {
 			parts := strings.Split(xff, ",")
 			if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
 				return ip
