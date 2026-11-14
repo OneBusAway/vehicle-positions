@@ -107,6 +107,9 @@ nonisolated struct LocationReport: Sendable, Codable, Equatable {
     var routeID: String? = nil
     /// The trip's service date, YYYYMMDD in the agency's local time.
     var startDate: String? = nil
+    /// How full the driver says the vehicle is. The feed takes it from the
+    /// latest report alone, so a report without it clears it there.
+    var occupancyStatus: Occupancy? = nil
 
     private enum CodingKeys: String, CodingKey {
         case latitude, longitude, bearing, speed, accuracy, timestamp
@@ -114,6 +117,7 @@ nonisolated struct LocationReport: Sendable, Codable, Equatable {
         case tripID = "trip_id"
         case routeID = "route_id"
         case startDate = "start_date"
+        case occupancyStatus = "occupancy_status"
     }
 }
 

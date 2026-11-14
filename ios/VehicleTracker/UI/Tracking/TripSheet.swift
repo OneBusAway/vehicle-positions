@@ -35,10 +35,11 @@ struct TripSheet: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 0) {
+                            OccupancyRow(trip: status.active.trip)
+                                .id(ScrollAnchor.top)
                             FactRow(symbol: "bus.fill", label: TripStatusText.run,
                                     value: status.runTime.map { TripStatusText.pair($0, status.vehicleName) } ?? status.vehicleName,
                                     isProblem: false)
-                                .id(ScrollAnchor.top)
                             FactRow(symbol: status.reports.symbol, label: TripStatusText.reports,
                                     value: status.reports.text, isProblem: status.reports.isProblem)
                             Divider()
