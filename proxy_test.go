@@ -21,6 +21,23 @@ func TestClientIP(t *testing.T) {
 	assert.Equal(t, "203.0.113.9", clientIP(req2, true), "trusted but no header: RemoteAddr")
 }
 
+// TestClientIP_ProxyHopOnItsOwnLine is a proxy that adds its hop as a second
+// X-Forwarded-For line instead of appending to the client's, as HAProxy does.
+// The client's line is whatever the client sent, so reading it would let one
+// address pick a new rate-limit bucket for every request.
+func TestClientIP_ProxyHopOnItsOwnLine(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.9:4567"
+	req.Header.Add("X-Forwarded-For", "198.51.100.66")
+	req.Header.Add("X-Forwarded-For", "192.0.2.7")
+
+	assert.Equal(t, "192.0.2.7", clientIP(req, true))
+
+	req.Header.Set("X-Forwarded-For", "198.51.100.66, 198.51.100.1")
+	req.Header.Add("X-Forwarded-For", "10.0.0.5, 192.0.2.7")
+	assert.Equal(t, "192.0.2.7", clientIP(req, true), "the last hop of the last line")
+}
+
 func TestRequestIsSecure(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	assert.False(t, requestIsSecure(req, false))
