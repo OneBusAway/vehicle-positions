@@ -796,10 +796,28 @@ running on stale data). `location retention prune failed` is logged at `ERROR`.
 
 ## 10. Upgrading
 
-Take a backup first (section 6.3); migrations run automatically and are not
-reversed automatically.
+The server runs any new migrations itself when it starts (section 6.2), and
+nothing ever runs them backwards. Take a backup before every upgrade (section
+6.3): if the new version changes the schema, that backup is the only way back
+to the old one (see [Rolling back](#rolling-back)).
 
-Docker Compose:
+Docker Compose with the published image (section 4.1). Pick the new `X.Y.Z`
+from the
+[package page](https://github.com/OneBusAway/vehicle-positions/pkgs/container/vehicle-positions)
+or the `server-v*` tags, and note the tag you are running now: it is the one
+you put back to roll back. After the backup, change the `server` service's
+`image:` line in `/srv/vehicle-positions/compose.yaml` to
+`ghcr.io/onebusaway/vehicle-positions:X.Y.Z`, then pull it and restart only
+that service. The database container keeps running.
+
+```bash
+git ls-remote --tags https://github.com/OneBusAway/vehicle-positions.git 'server-v*'
+cd /srv/vehicle-positions
+docker compose pull server && docker compose up -d server
+docker compose logs -f server
+```
+
+Docker Compose with an image you build yourself:
 
 ```bash
 cd /path/to/checkout && git pull
@@ -851,9 +869,23 @@ required. Add it to `.env` and `compose.yaml` (option A) or the environment
 file (option B) **before** you restart onto the new version, or the server
 exits 1 at startup and the feed stays down until you do.
 
-To roll back, start the previous image tag (Compose) or reinstall the previous
-binary (systemd). If the newer version applied a migration, restore the pre-
-upgrade dump as well.
+### Rolling back
+
+Put back what you ran before. With Compose, put the previous tag back on the
+`image:` line and run `docker compose up -d server`; Compose pulls a published
+tag again if it is no longer on the host. With systemd, reinstall the previous
+binary and run `sudo systemctl restart vehicle-positions`.
+
+That is the whole rollback only if the new version added no migration.
+Migrations are not rolled back, so after one the previous version does not
+start on the upgraded database: it logs `could not run migrations` with
+`no migration found for version N` and exits, and Compose
+(`restart: unless-stopped`) or systemd (`Restart=on-failure`) restarts it into
+the same error. Rolling back across
+a migration means restoring the backup you took before the upgrade
+(section 6.4), then starting the previous version on it. Everything written
+since the upgrade, such as positions, trips and account changes, is lost with
+that restore.
 
 ## 11. Connecting the feed to OneBusAway
 
