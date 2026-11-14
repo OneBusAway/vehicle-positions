@@ -40,6 +40,22 @@ import Testing
         #expect(abs(precise.projection.distanceToShape - 75) <= 3)
     }
 
+    @Test func aShapeDrawnThroughTheStopsHasNoOffRouteDistance() throws {
+        var trip = TripFixtures.t1
+        trip.shape.fromStops = true
+        let throughTheStops = try #require(AdherenceEvaluator(trip: trip))
+
+        // The fix that is off route above, 75 m from the line.
+        let a = throughTheStops.evaluate(TripFixtures.fix(lat: 47.60225, lon: -122.3290, at: TripFixtures.at(8, 2, 30), accuracy: 5), previous: nil)
+        #expect(a.isOnRoute)
+        #expect(a.status == .onTime)
+        #expect(abs(a.projection.alongShape - 250) <= 3, "still placed along the shape")
+
+        // The schedule is judged as on any other shape.
+        let late = throughTheStops.evaluate(TripFixtures.fix(lat: 47.60225, lon: -122.3290, at: TripFixtures.at(8, 8, 30), accuracy: 5), previous: nil)
+        #expect(late.status == .late)
+    }
+
     @Test func unknownAccuracyAddsNothing() {
         let a = evaluator.evaluate(TripFixtures.fix(lat: 47.60225, lon: -122.3290, at: TripFixtures.at(8, 2, 30), accuracy: -1), previous: nil)
         #expect(!a.isOnRoute)
