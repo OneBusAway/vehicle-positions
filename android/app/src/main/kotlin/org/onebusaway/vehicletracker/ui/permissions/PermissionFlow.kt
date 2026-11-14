@@ -144,8 +144,14 @@ private fun grantsOf(context: Context): Grants = Grants(
  */
 @Composable
 fun rememberPermissionFlow(onReady: () -> Unit): PermissionFlowController {
-    val context = LocalContext.current
     val activity = LocalActivity.current
+    return rememberPermissionFlow(onReady, showsLocationRationale = { activity.showsLocationRationale() })
+}
+
+/** [showsLocationRationale] is Android's rationale for location, which a test cannot set by refusing a real prompt. */
+@Composable
+internal fun rememberPermissionFlow(onReady: () -> Unit, showsLocationRationale: () -> Boolean): PermissionFlowController {
+    val context = LocalContext.current
     val controller = rememberSaveable(saver = permissionFlowSaver { grantsOf(context) }) {
         PermissionFlowController { grantsOf(context) }
     }
@@ -157,7 +163,8 @@ fun rememberPermissionFlow(onReady: () -> Unit): PermissionFlowController {
     val settingsClient = remember { LocationServices.getSettingsClient(context) }
 
     // Read as each ask goes out: with the one read after the answer, it tells a refusal for good from a dismissed prompt.
-    var rationaleBeforeAsk by remember { mutableStateOf(false) }
+    // Saved with the controller, since a restored step that is still asking does not read it again.
+    var rationaleBeforeAsk by rememberSaveable { mutableStateOf(false) }
     val locationPermsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
@@ -166,7 +173,7 @@ fun rememberPermissionFlow(onReady: () -> Unit): PermissionFlowController {
                 fine = results[Manifest.permission.ACCESS_FINE_LOCATION] == true,
                 coarse = results[Manifest.permission.ACCESS_COARSE_LOCATION] == true,
                 rationaleBefore = rationaleBeforeAsk,
-                rationaleAfter = activity.showsLocationRationale(),
+                rationaleAfter = showsLocationRationale(),
             ),
         )
     }
@@ -201,7 +208,7 @@ fun rememberPermissionFlow(onReady: () -> Unit): PermissionFlowController {
         if (controller.asking) return@LaunchedEffect
         when (controller.flow.step) {
             PermissionStep.REQUEST_LOCATION -> {
-                rationaleBeforeAsk = activity.showsLocationRationale()
+                rationaleBeforeAsk = showsLocationRationale()
                 controller.ask(locationPermsLauncher, LOCATION_PERMISSIONS)
             }
             PermissionStep.OPEN_APP_SETTINGS -> controller.ask(appSettingsLauncher, appDetailsIntent(context))

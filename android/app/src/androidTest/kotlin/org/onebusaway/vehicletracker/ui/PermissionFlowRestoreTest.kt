@@ -17,7 +17,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.onebusaway.vehicletracker.ui.permissions.PermissionFlowController
+import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.PermissionStep
+import org.onebusaway.vehicletracker.ui.permissions.RowState
 import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFlow
 
 /**
@@ -47,6 +49,9 @@ class PermissionFlowRestoreTest {
     private val restoration = StateRestorationTester(compose)
     private lateinit var flow: PermissionFlowController
 
+    /** Whether Android would show a rationale for location: true once it has been refused, false once refused for good. */
+    private var rationale = false
+
     /** A run tapped on a phone that has not granted everything yet. */
     private fun showChecklist() {
         val owner = object : ActivityResultRegistryOwner {
@@ -54,7 +59,7 @@ class PermissionFlowRestoreTest {
         }
         restoration.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
-                flow = rememberPermissionFlow(onReady = {})
+                flow = rememberPermissionFlow(onReady = {}, showsLocationRationale = { rationale })
             }
         }
         compose.runOnIdle { flow.start() }
@@ -93,6 +98,29 @@ class PermissionFlowRestoreTest {
         compose.runOnIdle {
             assertNotEquals(PermissionStep.REQUEST_LOCATION, flow.flow.step)
             assertEquals("the next step is asked", 2, prompts.asked.size)
+        }
+    }
+
+    @Test
+    fun aSecondRefusalAnsweredAfterARotationIsForGood() {
+        rationale = true
+        showChecklist()
+        compose.runOnIdle { flow.onContinue() }
+        val (requestCode, _) = compose.runOnIdle { prompts.asked.single() }
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        // Refused a second time, so Android stops showing the rationale and will not ask again.
+        rationale = false
+        val answer = mapOf(Manifest.permission.ACCESS_FINE_LOCATION to false, Manifest.permission.ACCESS_COARSE_LOCATION to false)
+        compose.runOnIdle { assertTrue("the answer has a screen to go to", prompts.dispatchResult(requestCode, answer)) }
+        compose.runOnIdle {
+            assertEquals(PermissionStep.LOCATION_DENIED, flow.flow.step)
+            assertEquals(
+                "needed in settings, not asked again",
+                RowState.NEEDED_IN_SETTINGS,
+                flow.checklist.single { it.row == PermissionRow.LOCATION }.state,
+            )
         }
     }
 }
