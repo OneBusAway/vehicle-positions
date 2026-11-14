@@ -2522,6 +2522,23 @@ class ViewModelsTest {
         }
     }
 
+    @Test fun `a second Resume before the screen has gone on to Sign in does not open it twice`() = runTest(dispatcher) {
+        withResumeShiftViewModel(trip = t1Trip.copy(serverUrl = "https://trip.example.org/")) { f ->
+            f.vm.onResumeShift()
+            dispatcher.scheduler.advanceUntilIdle()
+            require(f.vm.uiState.value.outcome == ResumeOutcome.SIGN_IN_FIRST)
+
+            // The second tap of a double tap, in the frame before the screen goes on. The screen goes on to Sign in
+            // before that tap's read of the session comes back.
+            f.vm.onResumeShift()
+            f.vm.onNavigated()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertNull("one Sign in, not a second on top of it", f.vm.uiState.value.outcome)
+            assertEquals(0, f.serviceController.startCount)
+        }
+    }
+
     @Test fun `resuming on the trip's own server starts the service`() = runTest(dispatcher) {
         // Saved without the slash, as a build before #188 saved a typed address.
         val sessions = FakeSessionStore().apply { state.value = Session("https://trip.example.org", jwtFor("2"), 0L) }

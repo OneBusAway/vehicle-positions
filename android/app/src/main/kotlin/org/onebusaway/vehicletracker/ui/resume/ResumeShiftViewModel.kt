@@ -97,7 +97,7 @@ class ResumeShiftViewModel @Inject constructor(
 
     private val resumeOutcome = MutableStateFlow<ResumeOutcome?>(null)
 
-    /** From a tap on Resume until it has led to Sign in, or for good once reporting has started again. */
+    /** From a tap on Resume until the screen has gone on to Sign in, or for good once reporting has started again. */
     private var resuming = false
 
     init {
@@ -133,8 +133,6 @@ class ResumeShiftViewModel @Inject constructor(
         viewModelScope.launch {
             val signedInTo = sessionStore.session.first().serverUrl
             if (trip.serverUrl != null && !sameServer(trip.serverUrl, signedInTo)) {
-                // Back from Sign in, the driver taps Resume again.
-                resuming = false
                 resumeOutcome.value = ResumeOutcome.SIGN_IN_FIRST
             } else {
                 serviceController.startTracking()
@@ -157,6 +155,8 @@ class ResumeShiftViewModel @Inject constructor(
 
     /** The screen has gone on, so one recreated later, or shown again after Sign in, does not go on again. */
     fun onNavigated() {
+        // Back from Sign in, the driver taps Resume again.
+        if (resumeOutcome.value == ResumeOutcome.SIGN_IN_FIRST) resuming = false
         resumeOutcome.value = null
         tripEnder.onNavigated()
     }
