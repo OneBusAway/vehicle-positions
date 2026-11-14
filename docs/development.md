@@ -118,11 +118,13 @@ for API clients) revokes that session's JWT server-side, so the token is
 rejected from then on rather than merely dropped by the client. Both surfaces
 share one token, so logging out of either ends both.
 
-Deactivating a user blocks new logins immediately, but existing sessions and
-tokens for that user remain valid until they expire (up to 24 hours) or are
-logged out — deactivation still isn't instant revocation. That needs a
-per-user cutoff rather than the per-token blocklist logout uses, and is a
-planned follow-up.
+Deactivating or deleting a user, or changing their role, ends the access
+tokens and admin UI session cookies already issued to them at once: every
+authenticated request checks that the user still exists, is active, and holds
+the role the token was issued for. A password change does not end an access
+token that has already been issued: it stays valid until it expires or that
+session is logged out, which is up to `ACCESS_TOKEN_TTL` for API clients and
+up to 24 hours for the admin UI's session cookie.
 
 If you're changing anything under `web/templates` or `web/styles/input.css`,
 rebuild the compiled Tailwind CSS before checking your changes in the

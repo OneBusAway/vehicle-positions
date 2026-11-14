@@ -210,14 +210,17 @@ password reset.
 Click **Deactivate** on the row and confirm **Deactivate this user?** The person
 can no longer sign in — to the admin UI or the app. **Activate** puts them back.
 
-**Important:** deactivating blocks *new* sign-ins immediately, but it does not
-cut off a session that is already open. A phone or browser that signed in
-earlier keeps working until its session expires, which can be up to 24 hours.
-Changing someone's password has the same limit. If you need someone locked out
-right now — a phone was stolen, a driver was dismissed — deactivate the account
-*and* tell your IT contact — signing everyone out at once is a server-side
-change (rotating the token-signing key and restarting), not something the admin
-UI can do.
+**Important:** deactivating cuts off sessions that are already open, as well
+as blocking new sign-ins. A phone or browser that signed in earlier is refused
+on its next request, so this is the right response when a phone was stolen or
+a driver was dismissed. Changing someone's **Role** takes effect at once too:
+an admin changed to a driver loses the admin UI straight away.
+
+Changing someone's password is different: it only applies from the next
+sign-in. A session that is already open keeps working until it expires, which
+is 15 minutes for the app unless your IT contact has changed it, and can be up
+to 24 hours for the admin UI in a browser. To lock someone out right now,
+deactivate the account; a new password alone does not do it.
 
 ### The last-admin protection
 
@@ -254,7 +257,7 @@ afterwards.
 The account can no longer renew a session it already had, so it has to sign in
 with the new password once that session expires. But a session that is already
 open, in a browser or an app, keeps working until then, which can be up to 24
-hours: the same limit as [deactivating an account](#deactivate-an-account). If
+hours: the same limit as [any password change](#deactivate-an-account). If
 the reset is because someone else had the account and they must be out right
 now, also have your IT contact rotate the token-signing key and restart the
 server, which signs everyone out.
@@ -658,7 +661,7 @@ points are.
 | Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Dashboard**: if **Feed last updated** says **never** (nothing has reported for several minutes) and **Active Trips** is 0, it is the phones — start with two or three drivers. If **Active Trips** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |
 | Driver phone shows **Signed out** | The sign-in could not be renewed: the account was deactivated or deleted, or its password changed, the phone went a week without using the app, or the driver signed out on another phone. | Have the driver tap **Sign in** on that card and sign in again. If you have since deactivated the account, sign-in is refused, which is the intended outcome. |
 | A driver or admin cannot sign in and insists the password is right | The account is deactivated. Deactivation is deliberately indistinguishable from a wrong password on the sign-in screen. | **Users** → find the row → if **Status** reads **Deactivated**, click **Activate** and confirm **Reactivate this user?** |
-| Someone you deactivated is still reporting, or their phone still works | Deactivation blocks new sign-ins; it does not end a session already in progress, and that session can last up to 24 hours. | Confirm the row shows **Deactivated** on **Users** — that is enough to stop them signing in again. If they must be cut off this minute, tell your IT contact; only a server-side change ends live sessions. |
+| Someone you deactivated is still reporting, or their phone still works | Deactivating cuts off open sessions at once, so either the account is not deactivated or the phone is signed in with another account. | Confirm the row shows **Deactivated** on **Users**. Then find the vehicle's trip on **Trips** and read its **Driver** column to see which account is reporting. |
 | Driver phone shows **Phone clock is wrong** | The phone's clock is wrong, so the server is rejecting its reports. | On the phone, turn on automatic date and time in Android settings, then restart the app. The line under the status card goes away once reports are accepted again. |
 | Vehicles show on your **Live Map** but not in OneBusAway | The server and OneBusAway are using different GTFS schedules. Drivers pick their route and run from the server's schedule, so the ids they send are that schedule's, and OBA can only match ids from its own. | Ask your IT contact to check that the server's `GTFS_STATIC_URL` and OneBusAway use the same GTFS static feed, and that OBA is pointed at the feed address. |
 | **Deactivate** on a user returns a plain page saying **cannot deactivate the last active admin** | It is the only active admin account left. | Use your browser's Back button, create or reactivate another admin, then try again. |
