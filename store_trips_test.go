@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -791,6 +792,18 @@ func mustEndTrip(t *testing.T, store *Store, ctx context.Context, tripID, userID
 	require.NoError(t, err)
 }
 
+// dedicatedConn opens a connection outside the store's pool, for a
+// transaction a test parks. pgxpool sizes the pool at max(4, CPUs), so on a
+// small CI runner a parked transaction taken from the pool would leave the
+// starts and unassigns under test waiting for a connection instead of a lock.
+func dedicatedConn(t *testing.T) *pgx.Conn {
+	t.Helper()
+	conn, err := pgx.Connect(context.Background(), testDatabaseURL(t))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close(context.Background()) })
+	return conn
+}
+
 // holdVehicle parks every StartTrip on vehicleID between its assignment check
 // and its insert, the window an unassign can land in: the holder transaction
 // takes the vehicle row FOR UPDATE, so the start's FOR SHARE read of the
@@ -801,7 +814,7 @@ func holdVehicle(t *testing.T, store *Store, vehicleID string) (pid int, release
 	t.Helper()
 	ctx := context.Background()
 
-	holder, err := store.pool.Begin(ctx)
+	holder, err := dedicatedConn(t).Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
 	_, err = holder.Exec(ctx, "SELECT 1 FROM vehicles WHERE id = $1 FOR UPDATE", vehicleID)
@@ -917,7 +930,7 @@ func TestStore_StartTrip_WaitsForAnUncommittedUnassign(t *testing.T) {
 	defer cancel()
 
 	// unassign is DeleteAssignment stopped between its delete and its commit.
-	unassign, err := store.pool.Begin(ctx)
+	unassign, err := dedicatedConn(t).Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = unassign.Rollback(context.Background()) })
 	_, err = unassign.Exec(ctx, "DELETE FROM user_vehicles WHERE user_id = $1 AND vehicle_id = 'bus-trip-1'", userID)
