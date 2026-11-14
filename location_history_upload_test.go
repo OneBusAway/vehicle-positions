@@ -250,6 +250,52 @@ func TestStore_ListTripLocations_LiveFixFromTripBefore(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pts, 1, "only the next trip's own fix")
 	assert.Equal(t, 2.0, pts[0].Latitude)
+
+	pts, err = store.ListTripLocations(ctx, first.ID)
+	require.NoError(t, err)
+	require.Len(t, pts, 1, "the fix recorded during the first trip")
+	assert.Equal(t, 1.0, pts[0].Latitude)
+}
+
+// TestStore_ListTripLocations_UploadJustAfterEnd: the driver ends the trip as
+// the phone comes back into coverage, and the queued fixes go up through
+// POST /api/v1/locations/history a minute later. They are young enough to
+// count as live but were received after the trip ended. timestamp is whole
+// seconds, so a fix stamped with the second the trip ended in may be from
+// after the end and stays out, as does one plainly recorded after it.
+func TestStore_ListTripLocations_UploadJustAfterEnd(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	userID := setupTripUser(t, store, "Gap Driver", "gap@test.com", "bus-gap", "Bus Gap")
+	driverID := strconv.FormatInt(userID, 10)
+	now := time.Now()
+	end := now.Add(-time.Minute).Truncate(time.Second).Add(500 * time.Millisecond)
+
+	trip, err := store.StartTrip(ctx, userID, "bus-gap", "R1", "T1")
+	require.NoError(t, err)
+	_, err = store.EndTrip(ctx, trip.ID, userID)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, "UPDATE trips SET start_time = $1, end_time = $2 WHERE id = $3",
+		now.Add(-20*time.Minute), end, trip.ID)
+	require.NoError(t, err)
+
+	fix := func(lat float64, at int64) *LocationReport {
+		return &LocationReport{VehicleID: "bus-gap", DriverID: driverID, Latitude: lat, Longitude: lat, Timestamp: at}
+	}
+	inDeadZone := fix(1, end.Add(-time.Minute).Unix())
+	inEndSecond := fix(2, end.Unix())
+	afterEnd := fix(3, end.Add(30*time.Second).Unix())
+	saved, err := store.SaveLocationHistory(ctx, userID, "bus-gap", []*LocationReport{inDeadZone, inEndSecond, afterEnd})
+	require.NoError(t, err)
+	require.Equal(t, 3, saved)
+
+	pts, err := store.ListTripLocations(ctx, trip.ID)
+	require.NoError(t, err)
+	require.Len(t, pts, 1, "only the fix recorded before the trip ended")
+	assert.Equal(t, 1.0, pts[0].Latitude)
 }
 
 // TestStore_ListTripLocations_BacklogFixInFirstSecond: start_time carries
