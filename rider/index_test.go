@@ -155,6 +155,55 @@ func TestServiceDate_ThreeAMBoundary(t *testing.T) {
 	assert.Equal(t, "20260901", ix.ServiceDate(time.Date(2026, 9, 2, 9, 30, 0, 0, time.UTC)))
 }
 
+// TestServiceDateFor_PicksTheNearestRun: a trip on a daily calendar runs on
+// both the calendar day and the day before, so neither the 03:00 cutoff nor
+// the calendar day alone names the run in progress.
+func TestServiceDateFor_PicksTheNearestRun(t *testing.T) {
+	ix := fixtureIndexEditedFiles(t, map[string]string{
+		"calendar.txt": "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n" +
+			"WEEKDAY,1,1,1,1,1,0,0,20260101,20261231\n" +
+			"SAT,0,0,0,0,0,1,0,20260101,20261231\n" +
+			"DAILY,1,1,1,1,1,1,1,20260101,20261231\n",
+		"trips.txt": "route_id,service_id,trip_id,shape_id,trip_headsign,direction_id\n" +
+			"R1,WEEKDAY,T1,S1,North,0\n" +
+			"R2,WEEKDAY,T3,S2,Loop,1\n" +
+			"R1,WEEKDAY,EARLY_WEEKDAY,S1,North,0\n" +
+			"R1,DAILY,EARLY_DAILY,S1,North,0\n" +
+			"R1,DAILY,LATE_DAILY,S1,North,0\n",
+		"stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n" +
+			stopTimeRow("T1", "08:00:00", "ST1", 1, "0") +
+			stopTimeRow("T1", "08:10:00", "ST3", 3, "1001") +
+			stopTimeRow("T3", "25:00:00", "LP1", 1, "") +
+			stopTimeRow("T3", "25:20:00", "LP1", 4, "") +
+			stopTimeRow("EARLY_WEEKDAY", "00:30:00", "ST1", 1, "0") +
+			stopTimeRow("EARLY_WEEKDAY", "00:40:00", "ST3", 3, "1001") +
+			stopTimeRow("EARLY_DAILY", "00:30:00", "ST1", 1, "0") +
+			stopTimeRow("EARLY_DAILY", "00:40:00", "ST3", 3, "1001") +
+			stopTimeRow("LATE_DAILY", "27:30:00", "ST1", 1, "0") +
+			stopTimeRow("LATE_DAILY", "27:40:00", "ST3", 3, "1001"),
+	})
+	la := ix.Timezone()
+	cases := []struct {
+		name, trip string
+		now        time.Time
+		want       string
+	}{
+		{"00:30 daily run on its own day, before the cutoff", "EARLY_DAILY", time.Date(2026, 9, 2, 0, 32, 0, 0, la), "20260902"},
+		{"27:30 daily run of the day before, after the cutoff", "LATE_DAILY", time.Date(2026, 9, 2, 3, 32, 0, 0, la), "20260901"},
+		{"25:00 run of the day before", "T3", time.Date(2026, 9, 2, 1, 5, 0, 0, la), "20260901"},
+		{"00:30 weekday run on Monday, Sunday has none", "EARLY_WEEKDAY", time.Date(2026, 9, 14, 0, 32, 0, 0, la), "20260914"},
+		{"daytime run later today, before the cutoff", "T1", time.Date(2026, 9, 2, 1, 0, 0, 0, la), "20260902"},
+		{"no run on either day falls back to ServiceDate", "T1", time.Date(2026, 9, 6, 10, 0, 0, 0, la), "20260906"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			trip, ok := ix.Trip(tc.trip)
+			require.True(t, ok)
+			assert.Equal(t, tc.want, ix.ServiceDateFor(trip, tc.now))
+		})
+	}
+}
+
 func TestServiceDayStart(t *testing.T) {
 	la, _ := time.LoadLocation("America/Los_Angeles")
 	start, err := ServiceDayStart("20260902", la)

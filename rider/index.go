@@ -311,22 +311,49 @@ func (ix *Index) ServiceDate(now time.Time) string {
 	return local.Format(serviceDateLayout)
 }
 
-// ServiceDateFor is ServiceDate narrowed to one trip. The 03:00 cutoff assumes
-// a trip running after midnight belongs to the previous service day, which is
-// right for one whose stop times run past 24:00 and wrong for one genuinely
-// scheduled at, say, 00:30 on a calendar the previous day does not include. So
-// when the trip does not run on the derived date, the calendar day is offered
-// instead; when neither runs it, the derived date is returned and the caller
-// refuses the start as it would have anyway.
+// ServiceDateFor is ServiceDate narrowed to one trip: of the calendar day and
+// the day before, the one the trip runs on whose run, from first departure to
+// last arrival, is nearest now. The 03:00 cutoff alone cannot say: a trip on a
+// daily calendar runs on both days, and its run in progress at 00:32 is
+// today's if it is scheduled at 00:30 but yesterday's if at 24:30, while one
+// scheduled at 27:30 is still yesterday's at 03:32. When neither day runs it,
+// ServiceDate's date is returned and the caller refuses the start as it would
+// have anyway.
 func (ix *Index) ServiceDateFor(trip *TripInfo, now time.Time) string {
-	date := ix.ServiceDate(now)
-	if ix.ActiveOn(trip, date) {
-		return date
+	calendarDay := now.In(ix.tz)
+	best, bestGap := "", time.Duration(0)
+	for _, day := range []time.Time{calendarDay.AddDate(0, 0, -1), calendarDay} {
+		date := day.Format(serviceDateLayout)
+		if !ix.ActiveOn(trip, date) {
+			continue
+		}
+		dayStart, err := ServiceDayStart(date, ix.tz)
+		if err != nil {
+			continue
+		}
+		if gap := runGap(trip, dayStart, now); best == "" || gap < bestGap {
+			best, bestGap = date, gap
+		}
 	}
-	if calendarDay := now.In(ix.tz).Format(serviceDateLayout); ix.ActiveOn(trip, calendarDay) {
-		return calendarDay
+	if best == "" {
+		return ix.ServiceDate(now)
 	}
-	return date
+	return best
+}
+
+// runGap is how far now is from the trip's run on the service day starting at
+// dayStart: zero while it runs, otherwise the time to its first departure or
+// since its last arrival. An indexed trip always has stop times.
+func runGap(trip *TripInfo, dayStart, now time.Time) time.Duration {
+	first := dayStart.Add(trip.StopTimes[0].Departure)
+	last := dayStart.Add(trip.StopTimes[len(trip.StopTimes)-1].Arrival)
+	switch {
+	case now.Before(first):
+		return first.Sub(now)
+	case now.After(last):
+		return now.Sub(last)
+	}
+	return 0
 }
 
 // ServiceDayStart returns the instant a "YYYYMMDD" service day starts: noon
