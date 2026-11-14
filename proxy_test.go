@@ -38,6 +38,32 @@ func TestClientIP_ProxyHopOnItsOwnLine(t *testing.T) {
 	assert.Equal(t, "192.0.2.7", clientIP(req, true), "the last hop of the last line")
 }
 
+// TestClientIP_HopWithPort is a proxy that sends its hop as IP:port, as Azure
+// Application Gateway does by default. The port is the client's source port,
+// so keeping it would give every connection a fresh rate-limit bucket.
+func TestClientIP_HopWithPort(t *testing.T) {
+	tests := []struct {
+		name string
+		xff  string
+		want string
+	}{
+		{"IPv4 with port", "192.0.2.7:51234", "192.0.2.7"},
+		{"IPv4 with port after other hops", "198.51.100.1, 192.0.2.7:51234", "192.0.2.7"},
+		{"IPv6 with port", "[2001:db8::7]:51234", "2001:db8::7"},
+		{"bare IPv6", "2001:db8::7", "2001:db8::7"},
+		{"bare IPv4", "192.0.2.7", "192.0.2.7"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.RemoteAddr = "203.0.113.9:4567"
+			req.Header.Set("X-Forwarded-For", tt.xff)
+
+			assert.Equal(t, tt.want, clientIP(req, true))
+		})
+	}
+}
+
 func TestRequestIsSecure(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	assert.False(t, requestIsSecure(req, false))

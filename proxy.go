@@ -17,6 +17,14 @@ func clientIP(r *http.Request, trustProxy bool) string {
 		if xff := strings.Join(r.Header.Values("X-Forwarded-For"), ","); xff != "" {
 			parts := strings.Split(xff, ",")
 			if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
+				// Some proxies send the hop as IP:port (Azure Application
+				// Gateway does by default). The port changes with every
+				// connection, so keeping it would give each one its own
+				// rate-limit bucket. A bare IPv6 address has no port and
+				// fails SplitHostPort, so it is kept as it is.
+				if host, _, err := net.SplitHostPort(ip); err == nil {
+					return host
+				}
 				return ip
 			}
 		}
