@@ -54,8 +54,11 @@ nonisolated struct AdherenceEvaluator: Sendable {
         let hint = (previous?.isOnRoute == true) ? previous?.projection.alongShape : nil
         let projection = shape.project(GeoPoint(fix.latitude, fix.longitude), hint: hint)
 
+        // A shape drawn through the stops says nothing about how far from it
+        // the route runs, so it gets no distance test, as in the server's
+        // `rider.Verify`. Progress along it and the schedule are still judged.
         let tolerance = trip.thresholds.maxShapeDistanceM + max(fix.horizontalAccuracy, 0)
-        let isOnRoute = projection.distanceToShape <= tolerance
+        let isOnRoute = trip.shape.fromStops || projection.distanceToShape <= tolerance
 
         let scheduledTime = ScheduleInterpolator.scheduledTime(at: projection.alongShape, stops: trip.stops) ?? fix.timestamp
         let deviation = fix.timestamp.timeIntervalSince(scheduledTime)

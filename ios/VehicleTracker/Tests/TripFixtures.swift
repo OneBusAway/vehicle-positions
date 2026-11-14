@@ -57,12 +57,14 @@ nonisolated enum TripFixtures {
         LocationFix(latitude: lat, longitude: lon, horizontalAccuracy: accuracy, speed: speed, course: course, timestamp: time)
     }
 
-    /// The catalog's trip payload as the server renders it (spec §4.3).
+    /// The catalog's trip payload as the server renders it (spec §4.3), for a
+    /// shape from the feed. One the server drew through the stops says
+    /// `"from_stops":true`.
     static let tripJSON = """
     {"id":"T1","route_id":"R1","headsign":"North","direction_id":0,
      "service_date":"20260902","timezone":"America/Los_Angeles",
      "route":{"short_name":"1","long_name":"Straight","color":"0077C0","text_color":"FFFFFF"},
-     "shape":{"length_m":1001.2,"points":[[47.6,-122.33],[47.6045,-122.33],[47.609,-122.33]]},
+     "shape":{"length_m":1001.2,"points":[[47.6,-122.33],[47.6045,-122.33],[47.609,-122.33]],"from_stops":false},
      "stops":[{"id":"ST1","name":"Stop ST1","sequence":1,"lat":47.6,"lon":-122.33,"along_shape_m":0,
                "arrival_at":"2026-09-02T08:00:00-07:00","departure_at":"2026-09-02T08:00:00-07:00"},
               {"id":"ST3","name":"Stop ST3","sequence":3,"lat":47.609,"lon":-122.33,"along_shape_m":1001.2,

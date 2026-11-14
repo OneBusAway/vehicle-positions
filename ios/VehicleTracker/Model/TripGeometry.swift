@@ -47,10 +47,28 @@ nonisolated struct ShapePayload: Sendable, Codable, Equatable {
     var lengthM: Double
     /// [lat, lon] pairs in shape order.
     var points: [[Double]]
+    /// The feed gives the trip no shape, and the server drew this one as
+    /// straight lines through its stops. The route curves away from those
+    /// lines between stops, so a fix is never off route by its distance from
+    /// them.
+    var fromStops = false
 
     private enum CodingKeys: String, CodingKey {
         case points
         case lengthM = "length_m"
+        case fromStops = "from_stops"
+    }
+}
+
+extension ShapePayload {
+    /// `from_stops` is false when absent: a server from before it leaves such
+    /// trips out of the catalog, and a trip stored by an older build has a
+    /// shape from the feed. In an extension, so the memberwise init stays.
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        lengthM = try container.decode(Double.self, forKey: .lengthM)
+        points = try container.decode([[Double]].self, forKey: .points)
+        fromStops = try container.decodeIfPresent(Bool.self, forKey: .fromStops) ?? false
     }
 }
 

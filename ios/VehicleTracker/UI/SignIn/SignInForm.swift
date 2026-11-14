@@ -25,6 +25,14 @@ nonisolated enum SignInFailure: Error, Equatable {
     case serverError
 }
 
+/// What a sign-in that `SignInForm.begin` let through is sent with, and what
+/// the session saves of it.
+nonisolated struct SignInAttempt: Equatable {
+    let server: URL
+    let email: String
+    let password: String
+}
+
 /// A banner above the button, for a failure no one field is to blame for.
 nonisolated struct SignInBanner: Equatable {
     let symbol: String
@@ -56,15 +64,18 @@ nonisolated struct SignInForm: Equatable {
     }
 
     /// Checks what was typed and, if it can go, marks the form as signing in
-    /// and returns the address to sign in to. Nil while a sign-in is already
-    /// out (a second tap), or when a check failed, which is then `failure`.
-    mutating func begin(server: String, email: String, password: String) -> URL? {
+    /// and returns what to sign in with. Nil while a sign-in is already out
+    /// (a second tap), or when a check failed, which is then `failure`.
+    mutating func begin(server: String, email: String, password: String) -> SignInAttempt? {
         guard !isSigningIn else { return nil }
         switch Self.check(server: server, email: email, password: password) {
         case .success(let url):
             failure = nil
             isSigningIn = true
-            return url
+            // The server compares the email exactly as sent, so a space typed
+            // or pasted around it would be refused as a wrong password. The
+            // password goes as typed.
+            return SignInAttempt(server: url, email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
         case .failure(let failure):
             fail(failure)
             return nil
