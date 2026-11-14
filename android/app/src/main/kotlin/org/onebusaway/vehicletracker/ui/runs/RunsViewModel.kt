@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui.runs
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -32,6 +33,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import javax.inject.Inject
 
+private const val TAG = "RunsViewModel"
 private const val SECONDS_PER_MINUTE = 60
 private const val MILLIS_PER_SECOND = 1000L
 
@@ -120,6 +122,9 @@ class RunsViewModel @Inject constructor(
     private val startError = MutableStateFlow<TripError?>(null)
     private val sessionEnded = MutableStateFlow(false)
 
+    /** Where a started trip goes once this step is back on screen, while Android will not start its reports. */
+    private var reportsWaiting: (() -> Unit)? = null
+
     private val boards = combine(loadResult, now) { result, now ->
         result?.mapCatching { page -> page to departureBoardsOf(page, now, timeFormat) }
     }
@@ -160,6 +165,7 @@ class RunsViewModel @Inject constructor(
     fun onScreenVisible(visible: Boolean) {
         ticking?.cancel()
         ticking = if (visible) viewModelScope.launch { tickEachMinute() } else null
+        if (visible) reportsWaiting?.let(::startReporting)
     }
 
     private suspend fun tickEachMinute() {
@@ -205,11 +211,7 @@ class RunsViewModel @Inject constructor(
         startError.value = null
         viewModelScope.launch {
             when (val outcome = startRun(runId, serviceDate)) {
-                StartOutcome.Started -> {
-                    serviceController.startTracking()
-                    startingRun.value = null
-                    onStarted()
-                }
+                StartOutcome.Started -> startReporting(onStarted)
                 is StartOutcome.Refused -> {
                     startingRun.value = null
                     startError.value = outcome.error
@@ -220,6 +222,27 @@ class RunsViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Starts reporting the trip the server has started, and leaves for Tracking. The server can answer after the driver
+     * has locked the phone, and from Android 12 Android refuses the tracking service once the app has left the front.
+     * The trip is open on the server by then, so the run stays Starting, Reports paused asks the driver to open the
+     * app, and the reports start once this step is back on screen.
+     */
+    private fun startReporting(onStarted: () -> Unit) {
+        try {
+            serviceController.startTracking()
+        } catch (e: IllegalStateException) {
+            // ForegroundServiceStartNotAllowedException, from Android 12, is one.
+            Log.w(TAG, "Android refused to start the tracking service from the background", e)
+            reportsWaiting = onStarted
+            serviceController.askToResume()
+            return
+        }
+        reportsWaiting = null
+        startingRun.value = null
+        onStarted()
     }
 
     /**

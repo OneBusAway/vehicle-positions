@@ -7,4 +7,7 @@ package org.onebusaway.vehicletracker.service
 interface ServiceController {
     fun startTracking()
     fun stopTracking()
+
+    /** Posts Reports paused, which asks the driver to open the app, for a trip whose reports Android would not start. */
+    fun askToResume()
 }

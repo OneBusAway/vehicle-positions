@@ -6,11 +6,13 @@ import androidx.core.content.ContextCompat
 
 /**
  * Real [ServiceController] backed by [LocationTrackingService]. [cancelTripNotifications] is
- * [TrackingNotification.cancel], which takes down both the ongoing notification and "Reports paused".
+ * [TrackingNotification.cancel], which takes down both the ongoing notification and "Reports paused", and
+ * [postResume] is [TrackingNotification.postResumeIfPermitted].
  */
 class ServiceControllerImpl(
     private val context: Context,
     private val cancelTripNotifications: () -> Unit,
+    private val postResume: () -> Unit,
 ) : ServiceController {
 
     override fun startTracking() {
@@ -34,4 +36,6 @@ class ServiceControllerImpl(
         }
         context.startService(intent)
     }
+
+    override fun askToResume() = postResume()
 }

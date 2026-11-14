@@ -160,6 +160,9 @@ class FakeServiceController : ServiceController {
         startFailure?.let { throw it }
     }
     override fun stopTracking() { stopCount++ }
+
+    var askCount = 0
+    override fun askToResume() { askCount++ }
 }
 
 /** An [OfflineFixQueue] in memory, oldest first. */
