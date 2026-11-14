@@ -81,6 +81,9 @@ func TestTripLocator_Locate(t *testing.T) {
 	require.True(t, t4.ShapeFromStops, "T4 has no shape_id, so its shape is drawn through its stops")
 	st2 := t1.StopTimes[1]
 	require.Equal(t, "ST2", st2.StopID)
+	st3 := t1.StopTimes[2]
+	require.Equal(t, "ST3", st3.StopID)
+	require.InDelta(t, t1.Shape.Length, st3.AlongShape, 0.5, "T1 ends at ST3, the end of its shape")
 	loopEnd := t3.Shape.Length
 
 	report := func(tripID string, pos rider.LatLon, accuracy *float64) *LocationReport {
@@ -89,6 +92,10 @@ func TestTripLocator_Locate(t *testing.T) {
 	east := func(trip *rider.TripInfo, along, metres float64) rider.LatLon {
 		return rider.OffsetMetres(trip.Shape.PointAt(along), 0, metres)
 	}
+	north := func(pos rider.LatLon, metres float64) rider.LatLon {
+		return rider.OffsetMetres(pos, metres, 0)
+	}
+	start, end := t1.Shape.PointAt(0), t1.Shape.PointAt(t1.Shape.Length)
 
 	type want struct {
 		stopID    string
@@ -123,6 +130,20 @@ func TestTripLocator_Locate(t *testing.T) {
 			want{"", 0, false, at(st2.AlongShape + stoppedAtDistance + 1)}},
 		{"well past the last stop", report("T1S", t1s.Shape.PointAt(800), nil), at(0),
 			want{"", 0, false, at(800)}},
+		// T1's shape ends at its last stop and begins at its first, and the
+		// projection clamps a fix beyond either end onto the end itself.
+		{"beyond the end of the shape, inside the radius of the terminal", report("T1", north(end, stoppedAtDistance-1), nil), at(900),
+			want{"ST3", 3, true, at(t1.Shape.Length)}},
+		{"beyond the end of the shape, outside the radius of the terminal", report("T1", north(end, stoppedAtDistance+1), nil), at(900),
+			want{"", 0, false, at(t1.Shape.Length)}},
+		{"parked well beyond the end of the shape", report("T1", north(end, 50), nil), at(900),
+			want{"", 0, false, at(t1.Shape.Length)}},
+		{"beside the terminal, not beyond it", report("T1", rider.OffsetMetres(end, 0, 50), nil), at(900),
+			want{"ST3", 3, true, at(t1.Shape.Length)}},
+		{"before the start of the shape, inside the radius of the first stop", report("T1", north(start, -stoppedAtDistance+1), nil), at(0),
+			want{"ST1", 1, true, at(0)}},
+		{"before the start of the shape, outside the radius of the first stop", report("T1", north(start, -stoppedAtDistance-1), nil), at(0),
+			want{"ST1", 1, false, at(0)}},
 		{"inside the off-route distance", report("T1", east(t1, 250, 59), nil), at(0),
 			want{"ST2", 2, false, at(250)}},
 		{"off route keeps the hint", report("T1", east(t1, 250, 61), nil), at(120),
