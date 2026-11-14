@@ -387,6 +387,7 @@ func TestAlertFeed_RecordsOnlySavedReports(t *testing.T) {
 func TestAlerts_ListReadsEveryActiveTrip(t *testing.T) {
 	trips := &fakeTripLister{trips: []TripSummary{alertTrip("bus-7", alertT0)}}
 	w := newAlertWatcher(trips, testAlertSettings)
+	w.watchingSince = alertT0
 
 	got, err := w.list(context.Background(), alertT0.Add(time.Hour))
 
