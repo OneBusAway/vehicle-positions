@@ -80,7 +80,7 @@ type appStore interface {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
@@ -107,12 +107,13 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/trips/{id}", authMiddleware(adminMiddleware(handleGetTrip(store))))
 	mux.Handle("GET /api/v1/admin/trips/{id}/locations", authMiddleware(adminMiddleware(handleTripLocations(store))))
 	mux.Handle("POST /api/v1/admin/trips/{id}/end", authMiddleware(adminMiddleware(handleAdminEndTrip(store, tracker))))
+	mux.Handle("GET /api/v1/admin/alerts", authMiddleware(adminMiddleware(handleListAlerts(alerts))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /ready", handleReadiness(store))
 
-	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(store, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter)))
 	// Built here rather than passed in like the others: it lives as long as the mux, and nothing
 	// else needs to reach it.
 	historyLimiter := NewKeyedRateLimiter(historyUploadInterval, historyUploadBurst, false)
@@ -167,9 +168,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter, adminLoginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
-	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, jwtSecret, adminLoginLimiter, cfg)
@@ -285,6 +286,11 @@ func main() {
 	tracker := NewTracker(maxAge)
 	defer tracker.Stop()
 
+	alerts := newAlertWatcher(store, alertSettings{
+		quietAfter:   envPositiveDurationOrDefault("ALERT_QUIET_AFTER", defaultAlertQuietAfter),
+		stoppedAfter: envPositiveDurationOrDefault("ALERT_STOPPED_AFTER", defaultAlertStoppedAfter),
+	})
+
 	rateLimiter := NewVehicleRateLimiter()
 	defer rateLimiter.Stop()
 
@@ -385,7 +391,7 @@ func main() {
 	startTime := time.Now()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)

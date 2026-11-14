@@ -104,6 +104,20 @@ the `users` table holds zero admins — it is a no-op on every later boot, and
 changing the values afterwards does not change an account that already exists.
 Once an admin exists, both variables can be removed.
 
+## Dispatcher alerts
+
+The thresholds behind the admin UI's **Alerts** page and
+`GET /api/v1/admin/alerts`. Both apply only to vehicles on an active trip.
+
+| Variable | Default | Status | Purpose |
+|---|---|---|---|
+| `ALERT_QUIET_AFTER` | `3m` | Optional | How long a vehicle may go without a report before it shows as gone quiet. The default sits below `STALENESS_THRESHOLD`, so the alert comes before the vehicle drops out of the feed and off the live map. Must be positive; zero, negative or unparseable warns and defaults. |
+| `ALERT_STOPPED_AFTER` | `10m` | Optional | How long a vehicle that is still reporting may stay within 50 m of where it is before it shows as not moving. Must be positive; zero, negative or unparseable warns and defaults. |
+
+The server keeps what the alerts need in memory, from the reports it accepts.
+After a restart it counts a quiet vehicle from the restart, and a vehicle that
+is not moving from its first report since.
+
 ## Security and proxying
 
 | Variable | Default | Status | Purpose |

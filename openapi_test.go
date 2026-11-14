@@ -97,6 +97,8 @@ var schemaStructs = map[string]string{
 	"TripTrailPoint":       "tripTrailPoint",
 	"LocationHistory":      "locationHistoryResponse",
 	"LocationHistoryEntry": "locationEntry",
+	"AlertList":            "alertListResponse",
+	"Alert":                "alertEntry",
 
 	// Rider mode (#94).
 	"RiderRegisterResponse": "riderRegisterResponse",

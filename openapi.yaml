@@ -1457,6 +1457,41 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/admin/alerts:
+    get:
+      tags: [admin]
+      summary: Vehicles on an active trip that have gone quiet or are not moving
+      description: |
+        The same list the admin UI's Alerts page shows, worked out on request
+        from the active trips and the reports the server has accepted since it
+        started. Requires the `admin` role.
+
+        - `quiet`: the vehicle has sent no report for longer than
+          `ALERT_QUIET_AFTER` (3m by default). Before its first report on the
+          trip it is counted from the trip's start, and after a server restart
+          from the restart.
+        - `not_moving`: the vehicle is still reporting but has stayed within
+          50 m of where it is now for at least `ALERT_STOPPED_AFTER` (10m by
+          default). A vehicle waiting at its first stop counts too.
+
+        A trip has at most one alert, and a quiet vehicle is not also reported
+        as not moving. An ended trip has none. The list is ordered
+        longest-running first. Nothing is sent anywhere: a client polls this
+        endpoint.
+      responses:
+        '200':
+          description: The current alerts, longest-running first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/admin/users:
     get:
       tags: [admin]
@@ -3214,6 +3249,41 @@ components:
         status:
           type: string
           enum: [active, completed]
+
+    AlertList:
+      type: object
+      required: [count, alerts]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of alerts in `alerts`.
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+
+    Alert:
+      type: object
+      required: [kind, since, duration_seconds, trip]
+      properties:
+        kind:
+          type: string
+          enum: [quiet, not_moving]
+        since:
+          type: string
+          format: date-time
+          description: |
+            For `quiet`, the vehicle's last report (or the trip's start, or
+            the server's start, when it has not reported since). For
+            `not_moving`, when it came within 50 m of where it is now.
+        duration_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Whole seconds from `since` to when the list was worked out.
+        trip:
+          $ref: '#/components/schemas/TripSummary'
 
     TripTrail:
       type: object

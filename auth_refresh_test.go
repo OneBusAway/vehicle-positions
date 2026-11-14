@@ -536,7 +536,7 @@ func TestRefresh_DoesNotSpendLoginBudget(t *testing.T) {
 	defer loginLimiter.Stop()
 	refreshLimiter := NewRefreshRateLimiter()
 	defer refreshLimiter.Stop()
-	mux := newMux(store, nil, nil, testSecret, testTTLs, time.Time{}, loginLimiter, refreshLimiter, false, false, nil, nil, nil)
+	mux := newMux(store, nil, nil, testSecret, testTTLs, time.Time{}, loginLimiter, refreshLimiter, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings))
 
 	var w *httptest.ResponseRecorder
 	for range refreshIPLimit + 1 {

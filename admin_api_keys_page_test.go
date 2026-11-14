@@ -425,7 +425,7 @@ func newAPIKeysHandler(t *testing.T) (http.Handler, *apiKeyCountingStore) {
 	t.Cleanup(tracker.Stop)
 	ll := NewLoginRateLimiter()
 	t.Cleanup(ll.Stop)
-	h, err := newHandler(store, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, nil, nil, nil)
+	h, err := newHandler(store, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings))
 	require.NoError(t, err)
 	return h, store
 }
