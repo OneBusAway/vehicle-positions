@@ -416,6 +416,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 	}{
 		{"GET", "/admin/dashboard"},
 		{"GET", "/admin/map"},
+		{"GET", "/admin/alerts"},
 		{"GET", "/admin/vehicles"},
 		{"GET", "/admin/vehicles/new"},
 		{"POST", "/admin/vehicles"},

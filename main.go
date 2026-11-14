@@ -173,7 +173,7 @@ func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimite
 	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts)
 
 	if cfg.enabled {
-		ui, err := newAdminUI(store, tracker, jwtSecret, adminLoginLimiter, cfg)
+		ui, err := newAdminUI(store, tracker, alerts, jwtSecret, adminLoginLimiter, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("init admin UI: %w", err)
 		}
