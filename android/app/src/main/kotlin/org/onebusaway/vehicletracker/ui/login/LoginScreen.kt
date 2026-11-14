@@ -98,6 +98,8 @@ fun LoginScreen(
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // Read off the state, so a sign-in that ends after a rotation goes on from the screen showing then.
+    LaunchedEffect(state.signedIn) { if (state.signedIn) onLoginSuccess() }
     LoginScreenContent(
         state = state,
         server = viewModel.server,
@@ -105,7 +107,7 @@ fun LoginScreen(
         password = viewModel.password,
         onChangeServer = viewModel::onChangeServer,
         onEdited = viewModel::onEdited,
-        onSignIn = { viewModel.onSignIn(onLoginSuccess) },
+        onSignIn = viewModel::onSignIn,
     )
 }
 

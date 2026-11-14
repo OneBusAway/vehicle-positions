@@ -79,6 +79,8 @@ data class LoginUiState(
     val changingServer: Boolean = false,
     val loading: Boolean = false,
     val error: LoginError? = null,
+    /** The sign-in worked, and the screen goes on. */
+    val signedIn: Boolean = false,
 ) {
     /**
      * Once the phone knows its server it shows as one quiet line, until the driver asks to change it. The agency's
@@ -184,9 +186,12 @@ class LoginViewModel @Inject constructor(
     /** An error is about what was typed, so it goes once the driver types again. */
     fun onEdited() = _uiState.update { it.copy(error = null) }
 
-    fun onSignIn(onSuccess: () -> Unit) {
-        // The button is disabled while signing in, but a second tap already on its way must not sign in, and
-        // navigate, twice.
+    /**
+     * Ends in [LoginUiState.signedIn] rather than calling the screen back: the screen that asked is gone after a
+     * rotation, and the one showing then is the one to go on.
+     */
+    fun onSignIn() {
+        // The button is disabled while signing in, but a second tap already on its way must not sign in twice.
         if (_uiState.value.loading) return
         val typedServer = server.text.toString()
         val missing = when {
@@ -210,10 +215,7 @@ class LoginViewModel @Inject constructor(
             // wrong password. The password goes as typed.
             val typedEmail = email.text.toString().trim()
             authRepository.login(serverUrl, typedEmail, password.text.toString()).fold(
-                onSuccess = {
-                    _uiState.update { it.copy(loading = false) }
-                    onSuccess()
-                },
+                onSuccess = { _uiState.update { it.copy(loading = false, signedIn = true) } },
                 onFailure = { error ->
                     failed(
                         when {

@@ -172,26 +172,25 @@ class ViewModelsTest {
             val vm = loginViewModel()
             dispatcher.scheduler.advanceUntilIdle()
             vm.fill(fields.first, fields.second, fields.third)
-            var succeeded = false
-            vm.onSignIn { succeeded = true }
+            vm.onSignIn()
             dispatcher.scheduler.advanceUntilIdle()
 
-            assertFalse(succeeded)
+            assertFalse(vm.uiState.value.signedIn)
             assertEquals("for $fields", LoginError.MissingField(missing), vm.uiState.value.error)
             assertFalse(vm.uiState.value.loading)
         }
     }
 
-    @Test fun `sign in succeeds and calls back`() = runTest(dispatcher) {
+    @Test fun `sign in succeeds and says so`() = runTest(dispatcher) {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody("""{"access_token":"jwt","refresh_token":"r1","expires_in":900}"""))
         val vm = loginViewModel()
         dispatcher.scheduler.advanceUntilIdle()
         vm.fill(server.url("/").toString(), "d@example.com", "pw")
-        var succeeded = false
-        vm.onSignIn { succeeded = true }
+        vm.onSignIn()
         assertTrue("signing in while the request is out", vm.uiState.value.loading)
-        awaitCondition(description = "sign-in callback invoked") { succeeded }
+        assertFalse(vm.uiState.value.signedIn)
+        awaitCondition(description = "signed in") { vm.uiState.value.signedIn }
         assertFalse(vm.uiState.value.loading)
         assertNull(vm.uiState.value.error)
         server.shutdown()
@@ -205,9 +204,8 @@ class ViewModelsTest {
         val vm = loginViewModel(sessions)
         dispatcher.scheduler.advanceUntilIdle()
         vm.fill(server.url("/").toString(), " d@example.com ", " p w ")
-        var succeeded = false
-        vm.onSignIn { succeeded = true }
-        awaitCondition(description = "sign-in callback invoked") { succeeded }
+        vm.onSignIn()
+        awaitCondition(description = "signed in") { vm.uiState.value.signedIn }
 
         val sent = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
         assertEquals("d@example.com", sent["email"]?.jsonPrimitive?.content)
@@ -223,13 +221,11 @@ class ViewModelsTest {
         val vm = loginViewModel()
         dispatcher.scheduler.advanceUntilIdle()
         vm.fill(server.url("/").toString(), "d@example.com", "pw")
-        var successes = 0
-        vm.onSignIn { successes++ }
-        vm.onSignIn { successes++ }
-        awaitCondition(description = "sign-in callback invoked") { successes > 0 }
+        vm.onSignIn()
+        vm.onSignIn()
+        awaitCondition(description = "signed in") { vm.uiState.value.signedIn }
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, successes)
         assertEquals(1, server.requestCount)
         server.shutdown()
     }
@@ -241,9 +237,10 @@ class ViewModelsTest {
             val vm = loginViewModel()
             dispatcher.scheduler.advanceUntilIdle()
             vm.fill(server.url("/").toString(), "d@example.com", "pw")
-            vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+            vm.onSignIn()
             awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
             assertFalse(vm.uiState.value.loading)
+            assertFalse("a failed sign-in must not leave the screen", vm.uiState.value.signedIn)
             return vm.uiState.value
         } finally {
             server.shutdown()
@@ -271,7 +268,7 @@ class ViewModelsTest {
         require(!vm.uiState.value.showsServerField)
         vm.password.setTextAndPlaceCursorAtEnd("pw")
 
-        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        vm.onSignIn()
         awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
 
         assertEquals(LoginError.Unreachable(url), vm.uiState.value.error)
@@ -312,7 +309,7 @@ class ViewModelsTest {
         require(!vm.uiState.value.showsServerField)
         vm.password.setTextAndPlaceCursorAtEnd("pw")
 
-        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        vm.onSignIn()
         awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
 
         assertEquals(LoginError.TooManyAttempts, vm.uiState.value.error)
@@ -359,7 +356,7 @@ class ViewModelsTest {
         dispatcher.scheduler.advanceUntilIdle()
         vm.password.setTextAndPlaceCursorAtEnd("pw")
 
-        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        vm.onSignIn()
         awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
 
         assertEquals(LoginError.NotATrackerServer(url), vm.uiState.value.error)
@@ -384,7 +381,7 @@ class ViewModelsTest {
             dispatcher.scheduler.advanceUntilIdle()
             vm.fill(server.url("/").toString(), "d@example.com", "pw")
 
-            vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+            vm.onSignIn()
             awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
 
             assertEquals(LoginError.HttpsRequired, vm.uiState.value.error)
@@ -434,7 +431,7 @@ class ViewModelsTest {
         dispatcher.scheduler.advanceUntilIdle()
         vm.fill("localhost:${server.port}", "d@example.com", "pw")
 
-        vm.onSignIn { fail("nothing here speaks https") }
+        vm.onSignIn()
         // The server waits for a request line that never comes, so this takes the client's whole read timeout.
         awaitCondition(timeoutMs = 15_000, description = "sign-in failure surfaced") { vm.uiState.value.error != null }
 
@@ -450,7 +447,7 @@ class ViewModelsTest {
         require(!vm.uiState.value.showsServerField)
         vm.fill("foo bar", "d@example.com", "pw")
 
-        vm.onSignIn { fail("there is no server to sign in to") }
+        vm.onSignIn()
         dispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(LoginError.InvalidAddress, vm.uiState.value.error)
@@ -463,7 +460,7 @@ class ViewModelsTest {
         dispatcher.scheduler.advanceUntilIdle()
         vm.fill("https//tracker.example.org", "d@example.com", "pw")
 
-        vm.onSignIn { fail("there is no server to sign in to") }
+        vm.onSignIn()
         dispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(LoginError.InvalidAddress, vm.uiState.value.error)
@@ -477,10 +474,9 @@ class ViewModelsTest {
         val vm = loginViewModel(sessionStore)
         dispatcher.scheduler.advanceUntilIdle()
         vm.fill(" ${server.url("/")} ", "d@example.com", "pw")
-        var succeeded = false
 
-        vm.onSignIn { succeeded = true }
-        awaitCondition(description = "sign-in callback invoked") { succeeded }
+        vm.onSignIn()
+        awaitCondition(description = "signed in") { vm.uiState.value.signedIn }
 
         assertEquals(server.url("/").toString(), sessionStore.state.value.serverUrl)
         server.shutdown()
@@ -489,7 +485,7 @@ class ViewModelsTest {
     @Test fun `typing clears the error`() = runTest(dispatcher) {
         val vm = loginViewModel()
         dispatcher.scheduler.advanceUntilIdle()
-        vm.onSignIn { }
+        vm.onSignIn()
         assertEquals(LoginError.MissingField(LoginField.SERVER), vm.uiState.value.error)
 
         vm.onEdited()
@@ -593,10 +589,9 @@ class ViewModelsTest {
         vm.onChangeServer()
         assertFalse("there is no Change, and nothing opens the field", vm.uiState.value.showsServerField)
         vm.password.setTextAndPlaceCursorAtEnd("pw")
-        var succeeded = false
 
-        vm.onSignIn { succeeded = true }
-        awaitCondition(description = "sign-in callback invoked") { succeeded }
+        vm.onSignIn()
+        awaitCondition(description = "signed in") { vm.uiState.value.signedIn }
 
         assertEquals(1, server.requestCount)
         assertEquals(managed, sessionStore.state.value.serverUrl)
@@ -611,7 +606,7 @@ class ViewModelsTest {
         dispatcher.scheduler.advanceUntilIdle()
         vm.fill(managed, "d@example.com", "pw")
 
-        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        vm.onSignIn()
         awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
 
         assertEquals(LoginError.Unreachable(managed), vm.uiState.value.error)
@@ -731,7 +726,7 @@ class ViewModelsTest {
         val vm = loginViewModel(sessionStore, serverSetup = setup)
         dispatcher.scheduler.advanceUntilIdle()
         require(!vm.uiState.value.showsServerField)
-        vm.onSignIn { fail("there is no password") }
+        vm.onSignIn()
         require(vm.uiState.value.error == LoginError.MissingField(LoginField.PASSWORD))
 
         setup.agree()
@@ -763,10 +758,9 @@ class ViewModelsTest {
         dispatcher.scheduler.advanceUntilIdle()
         setup.agree()
         vm.fill(server.url("/").toString(), "d@example.com", "pw")
-        var succeeded = false
 
-        vm.onSignIn { succeeded = true }
-        awaitCondition(description = "sign-in callback invoked") { succeeded }
+        vm.onSignIn()
+        awaitCondition(description = "signed in") { vm.uiState.value.signedIn }
 
         assertEquals(server.url("/").toString(), sessionStore.state.value.serverUrl)
         server.shutdown()
@@ -883,7 +877,7 @@ class ViewModelsTest {
         dispatcher.scheduler.advanceUntilIdle()
         vm.password.setTextAndPlaceCursorAtEnd("pw")
 
-        vm.onSignIn { fail("a failed sign-in must not leave the screen") }
+        vm.onSignIn()
         awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
 
         assertEquals(LoginError.Unreachable(url), vm.uiState.value.error)
