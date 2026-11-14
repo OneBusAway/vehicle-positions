@@ -133,6 +133,12 @@ func validateFeedCompliance(t *testing.T, feed *gtfsrt.FeedMessage) []string {
 			if sd := trip.GetStartDate(); sd != "" && !serviceDatePattern.MatchString(sd) {
 				violations = append(violations, fmt.Sprintf("entity %s: start_date %q is not YYYYMMDD", id, sd))
 			}
+			// W009, for the descriptors that name a trip. A route-only one
+			// names no trip instance to be SCHEDULED against, so it still
+			// gets W009 from the real validator, alongside W006.
+			if trip.GetTripId() != "" && trip.ScheduleRelationship == nil {
+				violations = append(violations, fmt.Sprintf("W009: schedule_relationship not populated for entity %q", id))
+			}
 		}
 
 		// Project rules: current_stop_sequence indexes the trip's stop_times,
@@ -520,6 +526,13 @@ func TestFeedValidation_RejectsBrokenFeed(t *testing.T) {
 			},
 			want: "entity bus-1: current_status without current_stop_sequence",
 		},
+		{
+			name: "W009 trip without schedule_relationship",
+			breakFeed: func(f *gtfsrt.FeedMessage) {
+				f.Entity[0].Vehicle.Trip = &gtfsrt.TripDescriptor{TripId: proto.String("T1")}
+			},
+			want: `W009: schedule_relationship not populated for entity "bus-1"`,
+		},
 	}
 
 	for _, tc := range cases {
@@ -690,4 +703,25 @@ func TestFeedValidation_TripDescriptorNeedsTripOrRoute(t *testing.T) {
 	v := validateFeedCompliance(t, bad)
 	require.NotEmpty(t, v)
 	assert.Contains(t, v[0], "neither trip_id nor route_id")
+}
+
+func TestFeedValidation_W009_ScheduleRelationship(t *testing.T) {
+	now := time.Now().Unix()
+	feed := buildFeed([]*VehicleState{
+		{VehicleID: "on-trip", TripID: "T1", RouteID: "R1", StartDate: "20260906", Latitude: 1, Longitude: 1, Timestamp: now},
+		{VehicleID: "trip-only", TripID: "T1", Latitude: 1, Longitude: 1, Timestamp: now},
+		{VehicleID: "route-only", RouteID: "R1", StartDate: "20260906", Latitude: 1, Longitude: 1, Timestamp: now},
+	}, []rider.TripEstimate{sampleEstimate()})
+	assert.Empty(t, validateFeedCompliance(t, feed))
+
+	trips := make(map[string]*gtfsrt.TripDescriptor)
+	for _, e := range feed.Entity {
+		trips[e.GetId()] = e.GetVehicle().GetTrip()
+	}
+	require.Len(t, trips, 4)
+	scheduled := gtfsrt.TripDescriptor_SCHEDULED.Enum()
+	assert.Equal(t, scheduled, trips["on-trip"].ScheduleRelationship)
+	assert.Equal(t, scheduled, trips["trip-only"].ScheduleRelationship)
+	assert.Equal(t, scheduled, trips[riderEntityID(sampleEstimate().Key)].ScheduleRelationship)
+	assert.Nil(t, trips["route-only"].ScheduleRelationship, "a route-only report names no trip to be SCHEDULED against")
 }

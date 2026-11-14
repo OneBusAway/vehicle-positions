@@ -62,6 +62,8 @@ func TestWriteFeedSnapshots(t *testing.T) {
 	// test in docs/development.md, so T1 matches at whatever hour this runs.
 	thresholds := rider.DefaultThresholds()
 	thresholds.ScheduleEarly, thresholds.ScheduleLate = 24*time.Hour, 24*time.Hour
+	// As main.go wires it, so the driver on a trip carries its stop fields.
+	tracker.SetTripLocator(newTripLocator(func() *rider.Index { return ix }, thresholds.MaxShapeDistance))
 	agg := rider.NewAggregator(thresholds, ix.Timezone())
 	trusted := trustedSources{feed: rider.NewTrustedFeed(nil, nil, defaultTrustedMaxAge), tracker: tracker}
 	riderSvc := newRiderService(newFakeRiderStore(), agg, func() *rider.Index { return ix }, trusted, testSecret, defaultRiderJWTTTL, false)
@@ -163,6 +165,10 @@ func TestWriteFeedSnapshots(t *testing.T) {
 		var ids []string
 		for _, e := range feed.GetEntity() {
 			ids = append(ids, e.GetId())
+			if e.GetId() == "bus-101" {
+				require.NotEmpty(t, e.GetVehicle().GetStopId(),
+					"the driver on a trip must be placed on it, or the validator never sees a driver's stop fields")
+			}
 		}
 		require.ElementsMatch(t, []string{"bus-101", "bus-102", "bus-103", "rider:T1:" + startDate}, ids,
 			"a snapshot missing an entity would pass the validator while checking less")
