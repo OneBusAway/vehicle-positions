@@ -204,8 +204,8 @@ struct SignInView: View {
     }
 
     private func signIn() {
-        let url = animated { form.begin(server: server, email: email, password: password) }
-        guard let url else {
+        let attempt = animated { form.begin(server: server, email: email, password: password) }
+        guard let attempt else {
             if let field = form.focus { focus = field }
             return
         }
@@ -214,9 +214,9 @@ struct SignInView: View {
         signing = Task {
             do {
                 if isAgain {
-                    try await session.reauthenticate(password: password)
+                    try await session.reauthenticate(password: attempt.password)
                 } else {
-                    try await session.signIn(serverURL: url, email: email, password: password)
+                    try await session.signIn(serverURL: attempt.server, email: attempt.email, password: attempt.password)
                 }
                 form.succeeded()
                 onSignedIn()

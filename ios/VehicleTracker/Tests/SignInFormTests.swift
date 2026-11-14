@@ -36,7 +36,7 @@ import Testing
     /// Android's `serverAddressOf` allows for.
     @Test func anAddressTypedWithNoSchemeIsSignedInToOverHttps() {
         var form = SignInForm()
-        #expect(form.begin(server: " tracker.example.org ", email: email, password: "pw") == URL(string: "https://tracker.example.org")!)
+        #expect(form.begin(server: " tracker.example.org ", email: email, password: "pw")?.server == URL(string: "https://tracker.example.org")!)
         #expect(form.isSigningIn)
         #expect(form.failure == nil)
         #expect(SignInForm.check(server: "tracker.example.org:8443", email: email, password: "pw")
@@ -71,9 +71,19 @@ import Testing
             == .success(URL(string: "https://tracker.example.org")!))
     }
 
+    /// The server compares the email exactly as sent, so the spaces would be
+    /// refused as a wrong password. The session saves the email it is sent,
+    /// so the trimmed one fills the field next time.
+    @Test func spacesAroundTheEmailAreNotSent() {
+        var form = SignInForm()
+        let attempt = form.begin(server: server, email: " \(email) \n", password: " p w ")
+        #expect(attempt?.email == email)
+        #expect(attempt?.password == " p w ", "a password goes as typed")
+    }
+
     @Test func aGoodFormIsSentOnceWhateverTheTaps() {
         var form = SignInForm()
-        #expect(form.begin(server: server, email: email, password: "pw") == URL(string: server)!)
+        #expect(form.begin(server: server, email: email, password: "pw")?.server == URL(string: server)!)
         #expect(form.isSigningIn)
         #expect(form.begin(server: server, email: email, password: "pw") == nil)
         form.succeeded()
