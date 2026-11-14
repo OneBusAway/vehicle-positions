@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -22,7 +20,7 @@ type TokenRevoker interface {
 // the user a staff token was issued to may still use it.
 type TokenChecker interface {
 	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
-	IsUserActive(ctx context.Context, userID int64) (bool, error)
+	IsUserActiveInRole(ctx context.Context, userID int64, role string) (bool, error)
 }
 
 // RevokeToken adds a jti to the revocation list. It is idempotent, so logging
@@ -63,15 +61,13 @@ func (s *Store) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
 var _ TokenRevoker = (*Store)(nil)
 var _ TokenChecker = (*Store)(nil)
 
-// IsUserActive reports whether the user exists and is active. A deleted user
-// is not active: the access tokens they were issued outlive the row.
-func (s *Store) IsUserActive(ctx context.Context, userID int64) (bool, error) {
-	active, err := s.queries.GetUserActive(ctx, userID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
+// IsUserActiveInRole reports whether the user exists, is active, and still
+// holds role. A deleted user is not active: the access tokens they were
+// issued outlive the row.
+func (s *Store) IsUserActiveInRole(ctx context.Context, userID int64, role string) (bool, error) {
+	ok, err := s.queries.IsUserActiveInRole(ctx, db.IsUserActiveInRoleParams{ID: userID, Role: role})
 	if err != nil {
-		return false, fmt.Errorf("check user active: %w", err)
+		return false, fmt.Errorf("check user active in role: %w", err)
 	}
-	return active, nil
+	return ok, nil
 }

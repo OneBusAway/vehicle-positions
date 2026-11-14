@@ -855,17 +855,6 @@ func (q *Queries) GetTripSummary(ctx context.Context, id int64) (GetTripSummaryR
 	return i, err
 }
 
-const getUserActive = `-- name: GetUserActive :one
-SELECT active FROM users WHERE id = $1
-`
-
-func (q *Queries) GetUserActive(ctx context.Context, id int64) (bool, error) {
-	row := q.db.QueryRow(ctx, getUserActive, id)
-	var active bool
-	err := row.Scan(&active)
-	return active, err
-}
-
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, name, email, role, active, created_at, updated_at
 FROM users
@@ -1043,6 +1032,27 @@ SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1)
 
 func (q *Queries) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
 	row := q.db.QueryRow(ctx, isTokenRevoked, jti)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isUserActiveInRole = `-- name: IsUserActiveInRole :one
+SELECT EXISTS (
+    SELECT 1 FROM users
+    WHERE id = $1 AND active AND role = $2
+)
+`
+
+type IsUserActiveInRoleParams struct {
+	ID   int64
+	Role string
+}
+
+// A token's role claim is fixed when it is issued, so a user whose role has
+// changed since no longer holds the role the token claims.
+func (q *Queries) IsUserActiveInRole(ctx context.Context, arg IsUserActiveInRoleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isUserActiveInRole, arg.ID, arg.Role)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

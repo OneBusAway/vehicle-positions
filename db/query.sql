@@ -441,5 +441,10 @@ VALUES (1, $1, $2, $3, NOW())
 ON CONFLICT (id) DO UPDATE
 SET source = EXCLUDED.source, body = EXCLUDED.body, sha256 = EXCLUDED.sha256, fetched_at = NOW();
 
--- name: GetUserActive :one
-SELECT active FROM users WHERE id = $1;
+-- name: IsUserActiveInRole :one
+-- A token's role claim is fixed when it is issued, so a user whose role has
+-- changed since no longer holds the role the token claims.
+SELECT EXISTS (
+    SELECT 1 FROM users
+    WHERE id = sqlc.arg(id) AND active AND role = sqlc.arg(role)
+);

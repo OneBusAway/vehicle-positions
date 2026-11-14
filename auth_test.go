@@ -596,7 +596,7 @@ type fakeRevocations struct {
 	lastExpiresAt time.Time
 	revokeCalls   int
 	inactive      map[int64]bool
-	userErr       error // fails only IsUserActive
+	userErr       error // fails only IsUserActiveInRole
 	revokeErr     error // fails only RevokeToken
 }
 
@@ -612,8 +612,9 @@ func (f *fakeRevocations) IsTokenRevoked(_ context.Context, jti string) (bool, e
 	return ok, nil
 }
 
-// IsUserActive treats every user as active unless listed in inactive.
-func (f *fakeRevocations) IsUserActive(_ context.Context, userID int64) (bool, error) {
+// IsUserActiveInRole treats every user as active unless listed in inactive,
+// and as still holding whatever role their token claims.
+func (f *fakeRevocations) IsUserActiveInRole(_ context.Context, userID int64, _ string) (bool, error) {
 	if f.userErr != nil {
 		return false, f.userErr
 	}
