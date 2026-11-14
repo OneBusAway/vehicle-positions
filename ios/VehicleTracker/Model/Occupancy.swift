@@ -20,32 +20,47 @@ nonisolated enum Occupancy: String, Sendable, Codable, CaseIterable {
     }
 }
 
-/// The driver's occupancy choice, which belongs to one trip: it is keyed by
-/// the trip's GTFS id and service date, so a new trip starts with none, and
-/// kept in `UserDefaults`, so a relaunch keeps it. Only the latest trip's
+/// The driver's occupancy choice, which belongs to one trip and one driver:
+/// it is kept with the trip's GTFS id and service date, so a new trip starts
+/// with none, and with the driver and server signed in, so the next driver on
+/// a shared phone, or the same driver on another server, starts that trip with
+/// none too. Kept in `UserDefaults`, so a relaunch keeps it. Only the latest
 /// choice is kept.
 @MainActor @Observable
 final class OccupancyChoice {
-    /// The one the trip sheet and the reporter share.
-    static let shared = OccupancyChoice()
+    /// The one the trip sheet and the reporter share, going by the app's
+    /// sign-in.
+    static let shared = OccupancyChoice(settings: AppContainer.shared.settings)
     nonisolated static let key = "occupancy-choice"
 
+    /// One saved by a build before the driver and server were kept has
+    /// neither, so it does not decode and no one takes it up.
     private nonisolated struct Stored: Codable, Equatable {
+        var driverEmail: String
+        var serverURL: String
         var tripID: String
         var serviceDate: String
         var occupancy: Occupancy
     }
 
     private let defaults: UserDefaults
+    /// Who is signed in, and to which server.
+    let settings: AppSettings
     private var stored: Stored?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, settings: AppSettings) {
         self.defaults = defaults
+        self.settings = settings
         stored = defaults.data(forKey: Self.key).flatMap { try? JSONCoding.decoder.decode(Stored.self, from: $0) }
     }
 
+    /// The choice for this trip, if the driver and server signed in made it,
+    /// told apart as `TripSession` tells a stored trip's: email case, a
+    /// trailing slash or a written-out port don't make another.
     func occupancy(tripID: String, serviceDate: String) -> Occupancy? {
-        guard let stored, stored.tripID == tripID, stored.serviceDate == serviceDate else { return nil }
+        guard let stored, stored.tripID == tripID, stored.serviceDate == serviceDate,
+              stored.driverEmail.caseInsensitiveCompare(settings.email) == .orderedSame,
+              isSameServer(stored.serverURL, settings.serverURLString) else { return nil }
         return stored.occupancy
     }
 
@@ -57,7 +72,10 @@ final class OccupancyChoice {
     }
 
     func set(_ occupancy: Occupancy?, tripID: String, serviceDate: String) {
-        stored = occupancy.map { Stored(tripID: tripID, serviceDate: serviceDate, occupancy: $0) }
+        stored = occupancy.map {
+            Stored(driverEmail: settings.email, serverURL: settings.serverURLString,
+                   tripID: tripID, serviceDate: serviceDate, occupancy: $0)
+        }
         if let stored, let data = try? JSONCoding.encoder.encode(stored) {
             defaults.set(data, forKey: Self.key)
         } else {
