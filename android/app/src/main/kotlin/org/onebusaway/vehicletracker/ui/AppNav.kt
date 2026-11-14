@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -178,11 +179,18 @@ class AppNavViewModel @Inject constructor(
             _startDestination.value = when {
                 activeTrip != null && serviceIsRunning() -> ROUTE_TRACKING
                 activeTrip != null -> ROUTE_RESUME
-                session.isSignedIn(clock()) -> ROUTE_VEHICLES
-                else -> ROUTE_LOGIN
+                else -> withNoTrip(session)
             }
         }
     }
+
+    /**
+     * Where Resume goes once it has ended the trip, as the app would open with no trip. Sign in when nobody is signed in
+     * to choose the next one, as on a phone restored from backup, which keeps the trip but not the session.
+     */
+    suspend fun routeAfterResumeEnds(): String = withNoTrip(sessionStore.session.first())
+
+    private fun withNoTrip(session: Session): String = if (session.isSignedIn(clock())) ROUTE_VEHICLES else ROUTE_LOGIN
 
     /**
      * A session signed in before the queue recorded owners has none on file, so this driver's next sign-in would drop
@@ -364,6 +372,7 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
             }
         }
         composable(ROUTE_RESUME) {
+            val scope = rememberCoroutineScope()
             ClearOfSystemBars {
                 ResumeShiftScreen(
                     onResumed = dropUnlessResumed {
@@ -374,8 +383,10 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     onSignInFirst = dropUnlessResumed { navController.navigate(ROUTE_LOGIN_REAUTH) },
                     // Not a tap: the server confirms the end, perhaps after the driver has locked the phone.
                     onEnded = {
-                        navController.navigate(ROUTE_VEHICLES) {
-                            popUpTo(0) { inclusive = true }
+                        scope.launch {
+                            navController.navigate(navViewModel.routeAfterResumeEnds()) {
+                                popUpTo(0) { inclusive = true }
+                            }
                         }
                     },
                 )
