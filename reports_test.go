@@ -154,9 +154,14 @@ func TestServiceReporter_DefaultsToYesterdayInTheAgencyTimezone(t *testing.T) {
 func TestServiceReporter_Errors(t *testing.T) {
 	r, store, _ := newFixtureReporter(t, reportFixtureNow)
 
-	for _, bad := range []string{"2026-9-2", "20260902", "2026-02-30", "yesterday"} {
+	for _, bad := range []string{"2026-9-2", "20260902", "2026-02-30", "yesterday", "0000-12-31", "9999-01-01"} {
 		_, err := r.report(context.Background(), bad)
 		assert.ErrorIs(t, err, errBadReportDate, bad)
+	}
+	// The first and last days whose neighbours a GTFS date can still hold.
+	for _, edge := range []string{"0001-01-01", "9998-12-31"} {
+		_, err := r.report(context.Background(), edge)
+		assert.NoError(t, err, edge)
 	}
 
 	store.err = errors.New("database down")
@@ -239,6 +244,52 @@ func TestServiceReporter_RefreshedScheduleWorksDaysOutAgain(t *testing.T) {
 	_, err = r.report(context.Background(), "2026-09-02")
 	require.NoError(t, err)
 	assert.Equal(t, 2, store.reads)
+}
+
+func TestServiceReporter_RefreshedScheduleDropsTheOldReports(t *testing.T) {
+	r, _, first := newFixtureReporter(t, reportFixtureNow)
+	for _, date := range []string{"2026-09-01", "2026-09-02"} {
+		_, err := r.report(context.Background(), date)
+		require.NoError(t, err)
+	}
+	require.Len(t, r.cache, 2)
+	require.Same(t, first, r.schedule)
+
+	second := reportFixtureIndex(t)
+	r.index = func() *rider.Index { return second }
+	// Today's report is never kept, so nothing takes the old reports' place:
+	// asking is enough to let them, and the schedule they hold, go.
+	_, err := r.report(context.Background(), "2026-09-04")
+	require.NoError(t, err)
+	assert.Empty(t, r.cache)
+	assert.Empty(t, r.order)
+	assert.Same(t, second, r.schedule)
+
+	_, err = r.report(context.Background(), "2026-09-02")
+	require.NoError(t, err)
+	assert.Len(t, r.cache, 1)
+	assert.Equal(t, []string{"20260902"}, r.order)
+}
+
+func TestServiceReporter_DoesNotKeepAReportForAReplacedSchedule(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	second := reportFixtureIndex(t)
+	// While the first request is reading its trips, the schedule is
+	// refreshed and another day is asked for against the new one.
+	store.onRead = func() {
+		r.index = func() *rider.Index { return second }
+		_, err := r.report(context.Background(), "2026-09-01")
+		require.NoError(t, err)
+	}
+	stale, err := r.report(context.Background(), "2026-09-02")
+	require.NoError(t, err)
+	require.Equal(t, 2, store.reads)
+
+	fresh, err := r.report(context.Background(), "2026-09-02")
+	require.NoError(t, err)
+	assert.NotSame(t, stale, fresh, "a report worked out against the replaced schedule was kept")
+	assert.Equal(t, 3, store.reads)
+	assert.Same(t, second, r.schedule)
 }
 
 func TestServiceReporter_CacheIsBounded(t *testing.T) {

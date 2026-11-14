@@ -252,10 +252,16 @@ type fakeReportStore struct {
 	trails map[int64][]LocationPoint
 	err    error
 	reads  int
+	// onRead runs once, in the middle of the next read of the trips.
+	onRead func()
 }
 
 func (f *fakeReportStore) ListTripsStartedBetween(_ context.Context, from, to time.Time) ([]TripSummary, error) {
 	f.reads++
+	if during := f.onRead; during != nil {
+		f.onRead = nil
+		during()
+	}
 	if f.err != nil {
 		return nil, f.err
 	}

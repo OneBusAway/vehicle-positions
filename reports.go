@@ -138,16 +138,15 @@ type serviceReporter struct {
 	settings reportSettings
 	now      func() time.Time
 
-	mu    sync.Mutex
-	cache map[reportCacheKey]*serviceReport
-	order []reportCacheKey // oldest first
-}
-
-// reportCacheKey names a report by the schedule it was worked out against as
-// well as its day, so a refreshed schedule works every day out again.
-type reportCacheKey struct {
-	index *rider.Index
-	date  string
+	mu sync.Mutex
+	// schedule is the index the kept reports were worked out against. A
+	// refresh puts a new index in place even when the feed has not changed,
+	// and the cache then starts again: reports kept against the old index
+	// are never asked for again, and each would keep that whole schedule in
+	// memory.
+	schedule *rider.Index
+	cache    map[string]*serviceReport // by service date
+	order    []string                  // oldest first
 }
 
 func newServiceReporter(store serviceReportStore, index func() *rider.Index, settings reportSettings) *serviceReporter {
@@ -156,7 +155,7 @@ func newServiceReporter(store serviceReportStore, index func() *rider.Index, set
 		index:    index,
 		settings: settings,
 		now:      time.Now,
-		cache:    make(map[reportCacheKey]*serviceReport),
+		cache:    make(map[string]*serviceReport),
 	}
 }
 
@@ -171,8 +170,8 @@ func (r *serviceReporter) report(ctx context.Context, date string) (*serviceRepo
 	if err != nil {
 		return nil, err
 	}
-	key := reportCacheKey{index: ix, date: day.Format(gtfsDateLayout)}
-	if cached, ok := r.cached(key); ok {
+	serviceDate := day.Format(gtfsDateLayout)
+	if cached, ok := r.cached(ix, serviceDate); ok {
 		return cached, nil
 	}
 
@@ -180,8 +179,8 @@ func (r *serviceReporter) report(ctx context.Context, date string) (*serviceRepo
 	if err != nil {
 		return nil, err
 	}
-	if r.settled(ix, key.date, rep) {
-		r.keep(key, rep)
+	if r.settled(ix, serviceDate, rep) {
+		r.keep(ix, serviceDate, rep)
 	}
 	return rep, nil
 }
@@ -198,6 +197,11 @@ func (r *serviceReporter) reportDay(ix *rider.Index, date string) (time.Time, er
 	if err != nil {
 		return time.Time{}, errBadReportDate
 	}
+	// The days either side are read too, and all of them must stay inside
+	// the four-digit years a GTFS date can hold.
+	if day.Year() < 1 || day.Year() > 9998 {
+		return time.Time{}, errBadReportDate
+	}
 	return day, nil
 }
 
@@ -210,28 +214,38 @@ func (r *serviceReporter) settled(ix *rider.Index, date string, rep *serviceRepo
 	return date < ix.ServiceDate(now) && !now.Before(rep.serviceEnds.Add(reportSettleAfter))
 }
 
-func (r *serviceReporter) cached(key reportCacheKey) (*serviceReport, bool) {
+// cached returns the report kept for date. Asking with a schedule other than
+// the one the kept reports were worked out against empties the cache first.
+func (r *serviceReporter) cached(ix *rider.Index, date string) (*serviceReport, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	rep, ok := r.cache[key]
+	if r.schedule != ix {
+		r.schedule = ix
+		clear(r.cache)
+		r.order = nil
+	}
+	rep, ok := r.cache[date]
 	return rep, ok
 }
 
 // keep caches rep, dropping the oldest report kept once there are
-// reportCacheSize. A report kept against a schedule since replaced is never
-// asked for again, so it goes the same way.
-func (r *serviceReporter) keep(key reportCacheKey, rep *serviceReport) {
+// reportCacheSize. A report worked out against ix while a request with
+// another schedule took the cache over is not kept.
+func (r *serviceReporter) keep(ix *rider.Index, date string, rep *serviceReport) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.cache[key]; ok {
+	if r.schedule != ix {
+		return
+	}
+	if _, ok := r.cache[date]; ok {
 		return
 	}
 	if len(r.order) == reportCacheSize {
 		delete(r.cache, r.order[0])
 		r.order = r.order[1:]
 	}
-	r.cache[key] = rep
-	r.order = append(r.order, key)
+	r.cache[date] = rep
+	r.order = append(r.order, date)
 }
 
 // compute works out the report for day. A driver's trip counts towards the

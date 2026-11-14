@@ -161,6 +161,7 @@ func TestHandleServiceReport_Errors(t *testing.T) {
 	}{
 		{"a date not in YYYY-MM-DD", r, "?date=2026-9-2", http.StatusBadRequest, "date must be YYYY-MM-DD"},
 		{"a date that does not exist", r, "?date=2026-02-30", http.StatusBadRequest, "date must be YYYY-MM-DD"},
+		{"a year too far out to read the days around", r, "?date=9999-12-31", http.StatusBadRequest, "date must be YYYY-MM-DD"},
 		{"an unknown format", r, "?date=2026-09-02&format=xml", http.StatusBadRequest, "format must be json or csv"},
 		{"no schedule loaded", newServiceReporter(store, func() *rider.Index { return nil }, testReportSettings), "?date=2026-09-02", http.StatusServiceUnavailable, "schedule data unavailable"},
 	}
