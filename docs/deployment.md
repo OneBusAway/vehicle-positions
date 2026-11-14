@@ -29,7 +29,7 @@ few seconds of feed continuity.
 
 | Requirement | What you need |
 |---|---|
-| Host | A Linux server with a public IP. 1 vCPU and 1 GB RAM comfortably serves a fleet of tens of vehicles; the process holds one small record per active vehicle in memory. |
+| Host | A Linux server with a public IP. 1 vCPU and 1 GB RAM comfortably serves a fleet of tens of vehicles; the process holds one small record per active vehicle in memory. [`load-test.md`](load-test.md) has measured numbers for 50, 100 and 200 vehicles reporting every 10 seconds, with the server and PostgreSQL given one CPU and 1 GB each. |
 | Disk | Sized for `location_points`, the only table that grows quickly. Fifty vehicles reporting every 10 seconds over a 16-hour service day is roughly 105 million rows a year (see the README's [Data Retention & Privacy](../README.md#31-server-go) notes). Turn on retention (section 6) and this stops mattering. |
 | PostgreSQL | 15 or newer. The project's own stack runs `postgres:17-alpine` (`docker-compose.yml`), so 17 is the best-tested choice for a new install. It may run on the same host or a managed service. |
 | GTFS schedule | Your agency's GTFS static zip, at a URL the server can download or as a file on the host. The server will not start without one: drivers pick their route and run from it. Use the same feed OneBusAway uses (section 11). |
