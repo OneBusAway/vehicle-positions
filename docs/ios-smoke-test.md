@@ -160,6 +160,12 @@ xcodebuild build -project VehicleTracker.xcodeproj -scheme VehicleTracker \
 xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/VehicleTracker.app
 ```
 
+The app embeds a widget extension, `VehicleTrackerWidgets`, which draws the
+trip's Live Activity. Its bundle id is the app's plus `.widgets`
+(`org.onebusaway.vehicletracker.widgets`). The simulator needs nothing more;
+an agency signing the app for devices needs a second App ID for it, under the
+same team.
+
 Grant location **before** launching, so the When-In-Use prompt never appears:
 
 ```bash
@@ -735,6 +741,84 @@ loaded, so **Change vehicle** loads them again. Back does not.
    **Expected outcome:** with its one vehicle back, the app goes straight on
    to **Choose a route**, as a fresh sign-in does.
 
+### Check 7: The Live Activity on the Lock Screen and in the Dynamic Island
+
+Run it with a trip under way from Check 1 (or the debug auto-start) and GPS
+playback running.
+
+1. Lock the simulator (`⌘L`, or the side button), then wake it with the Home
+   button (`⇧⌘H`).
+
+   **Expected outcome:** a card at the bottom of the Lock Screen: the route
+   badge `1`, **North**, and on the right the status card's answer in its
+   colour (**On time** in green, or **6 min late** in blue); under it **Next
+   Stop ST2 · 8:05 AM** in the agency's time, then **Reporting** with a cloud
+   and a tick. The first time, iOS itself asks on the Lock Screen whether to
+   allow Live Activities from OBA Vehicle Tracker, and later asks again with
+   **Always Allow**; the app asks nothing. The Xcode 27 simulator draws the
+   card on black in both appearances, and the iPhone SE simulator doesn't put
+   it on the Lock Screen at all, so use an iPhone with a Dynamic Island.
+
+2. Unlock and go to the Home Screen, then touch and hold the Dynamic Island.
+
+   **Expected outcome:** the compact Island shows **1** on the left and the
+   status symbol on the right, with the minutes (**6 min**) when late or
+   early. Held, it expands: a vehicle symbol and **1**, the answer in large
+   type, then the headsign and a dot with the next stop.
+
+3. Stop the server as in Check 3 and wait about 15 seconds, then start it
+   again.
+
+   **Expected outcome:** the answer gives way to an amber cloud and **No
+   connection**, and the last line reads **Riders can't see you**; in the
+   Island the symbol turns amber. Once the server is back, the answer and
+   **Reporting** return. No line on the card or in the Island says "Tap".
+
+4. End the trip from the app, as in Check 5.
+
+   **Expected outcome:** the card and the Island go at once.
+
+### Check 7b: One card across a relaunch, a start from the car, and the driver's choice
+
+1. During a trip, terminate the app (`xcrun simctl terminate "$UDID"
+   org.onebusaway.vehicletracker`), launch it again and lock the simulator.
+
+   **Expected outcome:** one card, not two, now reading amber **Location
+   stopped** over **Open the app to keep reporting.** Unlock and tap **Resume
+   trip**: the card carries on from **Waiting for GPS**.
+
+2. Swipe the card away on the Lock Screen while the trip runs, and let a few
+   fixes arrive.
+
+   **Expected outcome:** it doesn't come back for that trip. End the trip and
+   start another: the new trip has its card.
+
+3. In Settings, turn off **Live Activities** for OBA Vehicle Tracker, then
+   start a trip.
+
+   **Expected outcome:** nothing shows and nothing is asked. Turn them back
+   on during the trip and return to the app: the card appears.
+
+4. With the CarPlay window open (see "CarPlay" below) and the phone app in the
+   background, start a trip from the car.
+
+   **Expected outcome:** iOS doesn't start a Live Activity for an app in the
+   background, so there is no card yet. Open the app on the phone: the card
+   appears.
+
+### Check 7c: The card says so when the app stops updating it
+
+1. During a trip, with GPS playback running, terminate the app
+   (`xcrun simctl terminate "$UDID" org.onebusaway.vehicletracker`) and lock
+   the simulator. Wait about two minutes, then wake it.
+
+   **Expected outcome:** the card dims, and in place of **Reporting** an amber
+   line at full strength reads **Reports paused · Open the app to keep
+   reporting.** The compact Island shows an amber warning triangle in place
+   of the route. While the app runs, in front or in the background for
+   location, the card never goes stale: the app sends the same words again a
+   minute after its last update while nothing changes.
+
 ## CarPlay
 
 **Not yet run on this machine.** The steps and expected results below are
@@ -819,6 +903,15 @@ sentence, such as **You're not assigned to vehicle bus-1.**, with **OK**.
 Screenshot the picker: `/tmp/vt-carplay-routes.png`. If clicking cannot be
 scripted, say so; the picker's contents are covered by `CarPlayTemplatesTests`
 instead.
+
+### The Live Activity on the Dashboard (to verify)
+
+With a trip running, open the CarPlay Dashboard, not the app's own screen.
+Since iOS 26 every Live Activity also shows there, and an app can't keep it
+off. Expect the trip on black in three short lines: **1** and the answer, the
+headsign, then **Reporting** or the problem's second line, with no buttons and
+no "Tap". Once the app stops updating it (Check 7c), the third line becomes an
+amber **Reports paused**. Tapping it opens the app's CarPlay screen.
 
 ### Real car and background caveats
 

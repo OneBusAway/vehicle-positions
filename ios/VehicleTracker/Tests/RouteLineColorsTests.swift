@@ -33,7 +33,7 @@ import Testing
             // Lifted until it reads, and no further: it keeps as much of its
             // own colour as it can.
             let lifted = RouteLineColors.liftedForNight(try #require(RGB(hex: hex)))
-            let ratio = RouteLineColors.contrast(lifted, RouteLineColors.nightBackground)
+            let ratio = lifted.contrast(with: RouteLineColors.nightBackground)
             #expect(ratio >= 3.0 && ratio < 3.3, "\(hex) at \(ratio):1")
         }
         // Maroon stays red: more red than green or blue.
