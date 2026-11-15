@@ -55,9 +55,13 @@ VALUES ($1, $2, $3, $4)
 RETURNING id, name, email, role, active, created_at, updated_at;
 
 -- name: UpdateUser :one
--- updated_at is maintained by the set_users_updated_at trigger.
+-- updated_at is maintained by the set_users_updated_at trigger. A role change
+-- ends every token issued before it (sessions_valid_after), so giving the old
+-- role back later cannot revive them. The role read in the CASE is the row's
+-- value before this update.
 UPDATE users
-SET name = $1, email = $2, role = $3
+SET name = $1, email = $2, role = $3,
+    sessions_valid_after = CASE WHEN role <> $3 THEN NOW() ELSE sessions_valid_after END
 WHERE id = $4
 RETURNING id, name, email, role, active, created_at, updated_at;
 
@@ -65,7 +69,12 @@ RETURNING id, name, email, role, active, created_at, updated_at;
 DELETE FROM users WHERE id = $1;
 
 -- name: SetUserActive :execrows
-UPDATE users SET active = $2 WHERE id = $1;
+-- Deactivation ends every token issued before it (sessions_valid_after), so
+-- reactivating the user cannot revive them.
+UPDATE users
+SET active = $2,
+    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE NOW() END
+WHERE id = $1;
 
 -- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2 WHERE id = $1;
@@ -468,8 +477,11 @@ SET source = EXCLUDED.source, body = EXCLUDED.body, sha256 = EXCLUDED.sha256, fe
 
 -- name: IsUserActiveInRole :one
 -- A token's role claim is fixed when it is issued, so a user whose role has
--- changed since no longer holds the role the token claims.
+-- changed since no longer holds the role the token claims. A token issued
+-- before sessions_valid_after was ended by a deactivation or a role change and
+-- stays ended, whatever the user's active flag and role are now.
 SELECT EXISTS (
     SELECT 1 FROM users
     WHERE id = sqlc.arg(id) AND active AND role = sqlc.arg(role)
+      AND (sessions_valid_after IS NULL OR sessions_valid_after < sqlc.arg(issued_at))
 );

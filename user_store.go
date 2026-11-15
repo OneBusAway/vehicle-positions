@@ -221,7 +221,9 @@ func (s *Store) CreateUser(ctx context.Context, name, email, password, role stri
 	}, nil
 }
 
-// UpdateUser updates a user's name, email, and role.
+// UpdateUser updates a user's name, email, and role. A role change ends every
+// token issued to the user before it, for good: changing the role back later
+// does not revive them.
 func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
 	row, err := s.queries.UpdateUser(ctx, db.UpdateUserParams{
 		Name:  name,

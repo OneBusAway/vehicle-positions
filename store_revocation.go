@@ -20,7 +20,7 @@ type TokenRevoker interface {
 // the user a staff token was issued to may still use it.
 type TokenChecker interface {
 	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
-	IsUserActiveInRole(ctx context.Context, userID int64, role string) (bool, error)
+	IsUserActiveInRole(ctx context.Context, userID int64, role string, issuedAt time.Time) (bool, error)
 }
 
 // RevokeToken adds a jti to the revocation list. It is idempotent, so logging
@@ -61,11 +61,15 @@ func (s *Store) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
 var _ TokenRevoker = (*Store)(nil)
 var _ TokenChecker = (*Store)(nil)
 
-// IsUserActiveInRole reports whether the user exists, is active, and still
-// holds role. A deleted user is not active: the access tokens they were
-// issued outlive the row.
-func (s *Store) IsUserActiveInRole(ctx context.Context, userID int64, role string) (bool, error) {
-	ok, err := s.queries.IsUserActiveInRole(ctx, db.IsUserActiveInRoleParams{ID: userID, Role: role})
+// IsUserActiveInRole reports whether the user exists, is active, still holds
+// role, and has had no deactivation or role change since issuedAt. A deleted
+// user is not active: the access tokens they were issued outlive the row.
+func (s *Store) IsUserActiveInRole(ctx context.Context, userID int64, role string, issuedAt time.Time) (bool, error) {
+	ok, err := s.queries.IsUserActiveInRole(ctx, db.IsUserActiveInRoleParams{
+		ID:       userID,
+		Role:     role,
+		IssuedAt: pgtype.Timestamptz{Time: issuedAt, Valid: true},
+	})
 	if err != nil {
 		return false, fmt.Errorf("check user active in role: %w", err)
 	}

@@ -1068,18 +1068,22 @@ const isUserActiveInRole = `-- name: IsUserActiveInRole :one
 SELECT EXISTS (
     SELECT 1 FROM users
     WHERE id = $1 AND active AND role = $2
+      AND (sessions_valid_after IS NULL OR sessions_valid_after < $3)
 )
 `
 
 type IsUserActiveInRoleParams struct {
-	ID   int64
-	Role string
+	ID       int64
+	Role     string
+	IssuedAt pgtype.Timestamptz
 }
 
 // A token's role claim is fixed when it is issued, so a user whose role has
-// changed since no longer holds the role the token claims.
+// changed since no longer holds the role the token claims. A token issued
+// before sessions_valid_after was ended by a deactivation or a role change and
+// stays ended, whatever the user's active flag and role are now.
 func (q *Queries) IsUserActiveInRole(ctx context.Context, arg IsUserActiveInRoleParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isUserActiveInRole, arg.ID, arg.Role)
+	row := q.db.QueryRow(ctx, isUserActiveInRole, arg.ID, arg.Role, arg.IssuedAt)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -1586,7 +1590,10 @@ func (q *Queries) SetRiderTier(ctx context.Context, arg SetRiderTierParams) erro
 }
 
 const setUserActive = `-- name: SetUserActive :execrows
-UPDATE users SET active = $2 WHERE id = $1
+UPDATE users
+SET active = $2,
+    sessions_valid_after = CASE WHEN $2 THEN sessions_valid_after ELSE NOW() END
+WHERE id = $1
 `
 
 type SetUserActiveParams struct {
@@ -1594,6 +1601,8 @@ type SetUserActiveParams struct {
 	Active bool
 }
 
+// Deactivation ends every token issued before it (sessions_valid_after), so
+// reactivating the user cannot revive them.
 func (q *Queries) SetUserActive(ctx context.Context, arg SetUserActiveParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setUserActive, arg.ID, arg.Active)
 	if err != nil {
@@ -1730,7 +1739,8 @@ func (q *Queries) UpdateRideProgress(ctx context.Context, arg UpdateRideProgress
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET name = $1, email = $2, role = $3
+SET name = $1, email = $2, role = $3,
+    sessions_valid_after = CASE WHEN role <> $3 THEN NOW() ELSE sessions_valid_after END
 WHERE id = $4
 RETURNING id, name, email, role, active, created_at, updated_at
 `
@@ -1752,7 +1762,10 @@ type UpdateUserRow struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
-// updated_at is maintained by the set_users_updated_at trigger.
+// updated_at is maintained by the set_users_updated_at trigger. A role change
+// ends every token issued before it (sessions_valid_after), so giving the old
+// role back later cannot revive them. The role read in the CASE is the row's
+// value before this update.
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Name,

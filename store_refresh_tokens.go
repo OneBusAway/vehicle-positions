@@ -252,9 +252,11 @@ func (s *Store) SetUserPasswordAndRevokeSessions(ctx context.Context, id int64, 
 }
 
 // SetUserActiveAndRevokeSessions flips a user's active flag in one
-// transaction under the user lock, deleting every refresh token the user
-// holds when active is false. Deactivated users cannot log in. Returns
-// ErrUserNotFound if no user matches id.
+// transaction under the user lock. When active is false it also deletes every
+// refresh token the user holds and ends every token issued so far, for good:
+// SetUserActive moves sessions_valid_after, so reactivating the user later does
+// not revive them. Deactivated users cannot log in. Returns ErrUserNotFound if
+// no user matches id.
 func (s *Store) SetUserActiveAndRevokeSessions(ctx context.Context, id int64, active bool) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

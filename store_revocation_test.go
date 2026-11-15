@@ -168,22 +168,22 @@ func TestStore_IsUserActiveInRole(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.DeleteUser(context.Background(), user.ID) })
 
-	active, err := store.IsUserActiveInRole(ctx, user.ID, roleDriver)
+	active, err := store.IsUserActiveInRole(ctx, user.ID, roleDriver, time.Now())
 	require.NoError(t, err)
 	assert.True(t, active)
 
-	active, err = store.IsUserActiveInRole(ctx, user.ID, roleAdmin)
+	active, err = store.IsUserActiveInRole(ctx, user.ID, roleAdmin, time.Now())
 	require.NoError(t, err)
 	assert.False(t, active, "a role the user does not hold")
 
 	_, err = store.pool.Exec(ctx, "UPDATE users SET active = false WHERE id = $1", user.ID)
 	require.NoError(t, err)
-	active, err = store.IsUserActiveInRole(ctx, user.ID, roleDriver)
+	active, err = store.IsUserActiveInRole(ctx, user.ID, roleDriver, time.Now())
 	require.NoError(t, err)
 	assert.False(t, active, "deactivated")
 
 	require.NoError(t, store.DeleteUser(ctx, user.ID))
-	active, err = store.IsUserActiveInRole(ctx, user.ID, roleDriver)
+	active, err = store.IsUserActiveInRole(ctx, user.ID, roleDriver, time.Now())
 	require.NoError(t, err)
 	assert.False(t, active, "deleted")
 }
@@ -230,4 +230,143 @@ func TestDemotedAdmin_LosesAdminAccessAtOnce(t *testing.T) {
 		assert.Equal(t, "/admin/login", w.Header().Get("Location"))
 		assert.False(t, reached)
 	})
+}
+
+// adminPageReached reports whether a request carrying token as the admin UI's
+// session cookie gets past requireAdminPage.
+func adminPageReached(t *testing.T, store *Store, token string) bool {
+	t.Helper()
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true })
+	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	requireAdminPage(testSecret, store)(next).ServeHTTP(httptest.NewRecorder(), req)
+	return reached
+}
+
+// staffBearerStatus returns the status requireAuth answers a bearer token with.
+func staffBearerStatus(t *testing.T, store *Store, token string) int {
+	t.Helper()
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/vehicles", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	requireAuth(testSecret, store)(next).ServeHTTP(w, req)
+	return w.Code
+}
+
+// TestReactivation_DoesNotReviveEndedSessions: the README says deactivating a
+// user ends the access tokens and admin UI session cookies already issued to
+// them, and the operator manual calls it the response to a stolen phone.
+// Reactivating the account must not hand those sessions back.
+func TestReactivation_DoesNotReviveEndedSessions(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+	user, err := store.CreateUser(ctx, "Stolen Laptop", email, "password123", roleAdmin)
+	require.NoError(t, err)
+
+	// A browser session and an API token issued before the deactivation: the
+	// copies a thief holds.
+	cookie, err := generateJWT(&User{ID: user.ID, Email: user.Email, Role: roleAdmin}, testSecret, sessionLifetime)
+	require.NoError(t, err)
+	bearer, err := generateJWT(&User{ID: user.ID, Email: user.Email, Role: roleAdmin}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+	require.True(t, adminPageReached(t, store, cookie))
+	require.Equal(t, http.StatusOK, staffBearerStatus(t, store, bearer))
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, user.ID, false))
+	require.False(t, adminPageReached(t, store, cookie), "deactivation must end the cookie")
+	require.Equal(t, http.StatusUnauthorized, staffBearerStatus(t, store, bearer), "deactivation must end the token")
+
+	// The owner has a new laptop; an admin reactivates the account.
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, user.ID, true))
+
+	assert.False(t, adminPageReached(t, store, cookie),
+		"a session cookie issued before the deactivation opens admin pages again after reactivation")
+	assert.Equal(t, http.StatusUnauthorized, staffBearerStatus(t, store, bearer),
+		"an access token issued before the deactivation works again after reactivation")
+}
+
+// TestRepromotion_DoesNotReviveDemotedAdminCookie: the README says changing a
+// user's role ends their sessions the same way as deactivation. Demoting an
+// admin and promoting them back must not revive the old admin cookie.
+func TestRepromotion_DoesNotReviveDemotedAdminCookie(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+	user, err := store.CreateUser(ctx, "Demoted Then Promoted", email, "password123", roleAdmin)
+	require.NoError(t, err)
+	cookie, err := generateJWT(&User{ID: user.ID, Email: user.Email, Role: roleAdmin}, testSecret, sessionLifetime)
+	require.NoError(t, err)
+
+	_, err = store.UpdateUser(ctx, user.ID, user.Name, user.Email, roleDriver)
+	require.NoError(t, err)
+	require.False(t, adminPageReached(t, store, cookie), "demotion must end the cookie")
+
+	_, err = store.UpdateUser(ctx, user.ID, user.Name, user.Email, roleAdmin)
+	require.NoError(t, err)
+
+	assert.False(t, adminPageReached(t, store, cookie),
+		"an admin cookie issued before the demotion opens admin pages again after re-promotion")
+}
+
+// sessionsValidAfter reads the user's sessions_valid_after, nil while nothing
+// has ended their tokens.
+func sessionsValidAfter(t *testing.T, store *Store, userID int64) *time.Time {
+	t.Helper()
+	var at *time.Time
+	require.NoError(t, store.pool.QueryRow(context.Background(),
+		"SELECT sessions_valid_after FROM users WHERE id = $1", userID).Scan(&at))
+	return at
+}
+
+// TestStore_SessionsValidAfter pins what moves sessions_valid_after, and how
+// IsUserActiveInRole compares a token's issue time with it.
+func TestStore_SessionsValidAfter(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	email := uniqueEmail(t)
+	t.Cleanup(func() { cleanupTestUsers(t, store, email) })
+	user, err := store.CreateUser(ctx, "Sessions Valid After", email, "password123", roleDriver)
+	require.NoError(t, err)
+	require.Nil(t, sessionsValidAfter(t, store, user.ID), "nothing has ended a new user's tokens")
+
+	_, err = store.UpdateUser(ctx, user.ID, "Renamed Driver", email, roleDriver)
+	require.NoError(t, err)
+	assert.Nil(t, sessionsValidAfter(t, store, user.ID), "an edit that keeps the role must not end the user's tokens")
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, user.ID, false))
+	deactivatedAt := sessionsValidAfter(t, store, user.ID)
+	require.NotNil(t, deactivatedAt, "deactivation ends the user's tokens")
+
+	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, user.ID, true))
+	reactivated := sessionsValidAfter(t, store, user.ID)
+	require.NotNil(t, reactivated)
+	assert.True(t, reactivated.Equal(*deactivatedAt), "reactivation must leave it where deactivation put it")
+
+	for _, tc := range []struct {
+		name     string
+		issuedAt time.Time
+		want     bool
+	}{
+		{"issued a second before the deactivation", deactivatedAt.Add(-time.Second), false},
+		{"issued at the instant of the deactivation", *deactivatedAt, false},
+		{"issued a second after the deactivation", deactivatedAt.Add(time.Second), true},
+	} {
+		ok, err := store.IsUserActiveInRole(ctx, user.ID, roleDriver, tc.issuedAt)
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, ok, tc.name)
+	}
+
+	_, err = store.UpdateUser(ctx, user.ID, "Renamed Driver", email, roleAdmin)
+	require.NoError(t, err)
+	promotedAt := sessionsValidAfter(t, store, user.ID)
+	require.NotNil(t, promotedAt)
+	assert.True(t, promotedAt.After(*deactivatedAt), "a role change ends the tokens issued before it")
 }

@@ -313,6 +313,11 @@ func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error)
 // otherwise keep its old powers until it expires: a demoted admin's token
 // would still pass requireAdmin. A client turned away for a role change
 // refreshes and gets a token for the role the user holds now.
+// A deactivation or role change ends the tokens issued before it for good, so
+// reactivating the user or giving the old role back does not revive them.
+// That is decided by the token's iat, which is whole seconds: a token issued
+// in the same second as the change is ended too. Every token generateJWT
+// issues has an iat, so a staff token without one is refused.
 // It is the second half of validation, kept out of parseSessionToken so that
 // function stays pure; both token paths (the API's Authorization header and
 // the admin UI's vp_session cookie) must call it, and
@@ -332,7 +337,12 @@ func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecke
 	if err != nil {
 		return true, nil
 	}
-	active, err := checker.IsUserActiveInRole(ctx, userID, role)
+	issuedAt, _ := claims.GetIssuedAt()
+	if issuedAt == nil {
+		slog.Warn("rejected staff token without iat", "sub", sub)
+		return true, nil
+	}
+	active, err := checker.IsUserActiveInRole(ctx, userID, role, issuedAt.Time)
 	if err != nil {
 		return false, err
 	}
