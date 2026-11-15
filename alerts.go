@@ -227,7 +227,9 @@ func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bo
 	if since.Before(trip.StartTime) {
 		since = trip.StartTime
 	}
-	if now.Sub(since) >= w.settings.stoppedAfter {
+	// Only reported time counts towards a stop: the vehicle may have moved
+	// off in the silence since its latest report.
+	if onTrip[len(onTrip)-1].at.Sub(since) >= w.settings.stoppedAfter {
 		return newAlert(alertNotMoving, since, trip, now), true
 	}
 	return alertEntry{}, false
