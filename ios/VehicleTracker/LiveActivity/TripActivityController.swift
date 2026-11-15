@@ -77,19 +77,19 @@ import OSLog
     /// other is ended (Apple: end any Live Activity that's no longer
     /// relevant). One the driver swiped away or the system ended stays gone.
     private func adoptOrEnd() {
-        let stored = session.activeTrip
+        let stored = session.activeTrip.map { key($0) }
         for activity in host.existing() {
-            let isStored = activity.serverTripID == stored?.serverTripID
+            let isStored = TripKey(server: activity.server, tripID: activity.serverTripID) == stored
             if activity.isLive {
                 if let stored, isStored, current == nil {
-                    current = (activity.id, key(stored))
+                    current = (activity.id, stored)
                     watchEndings(activity.id)
                     startHeartbeat()
                 } else {
                     end(activity.id)
                 }
             } else if let stored, isStored {
-                declined = key(stored)
+                declined = stored
             }
         }
     }
@@ -135,7 +135,8 @@ import OSLog
             return
         }
         do {
-            let id = try host.request(TripActivityAttributes(trip), state, staleDate: now().addingTimeInterval(Self.staleAfter))
+            let id = try host.request(TripActivityAttributes(trip, server: key(trip).server), state,
+                                      staleDate: now().addingTimeInterval(Self.staleAfter))
             current = (id, key(trip))
             sent = state
             sentAt = now()

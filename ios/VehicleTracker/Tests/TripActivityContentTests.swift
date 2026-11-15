@@ -211,8 +211,9 @@ import Testing
             TripFixtures.fix(lat: 47.6000, lon: -122.3300, at: TripFixtures.at(8, 0).addingTimeInterval(-1260)), previous: nil)
         let longest = try [TripSession.ReportingStatus.connected, .preciseLocationOff, .needsForeground]
             .map { try content(latest, reporting: $0, trip: trip) }
+        let server = "https://\(forty).\(forty).example.org"
         for state in longest {
-            let size = try JSONEncoder().encode(TripActivityAttributes(trip)).count + JSONEncoder().encode(state).count
+            let size = try JSONEncoder().encode(TripActivityAttributes(trip, server: server)).count + JSONEncoder().encode(state).count
             #expect(size <= 4096, "\(size) bytes")
         }
     }

@@ -33,8 +33,11 @@ nonisolated struct TripActivityAttributes: ActivityAttributes {
         var spoken: String
     }
 
-    /// The trip's id on the server: what tells one trip's activity from another's.
+    /// The trip's id on the server, and the server it is open on: trip ids
+    /// are numbered per server, so it takes both to tell one trip's activity
+    /// from another's.
     var serverTripID: Int64
+    var server: String
     /// The route as its badge names it.
     var routeName: String
     /// The feed's hex colours, as `RouteBadge` takes them.

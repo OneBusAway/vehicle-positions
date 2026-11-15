@@ -6,6 +6,7 @@ import OSLog
 nonisolated struct TripActivitySnapshot: Equatable {
     var id: String
     var serverTripID: Int64
+    var server: String
     /// Neither ended nor dismissed.
     var isLive: Bool
 }
@@ -56,7 +57,8 @@ nonisolated enum TripActivityError: Error {
 
     func existing() -> [TripActivitySnapshot] {
         Activity<TripActivityAttributes>.activities.map {
-            TripActivitySnapshot(id: $0.id, serverTripID: $0.attributes.serverTripID, isLive: Self.isLive($0.activityState))
+            TripActivitySnapshot(id: $0.id, serverTripID: $0.attributes.serverTripID, server: $0.attributes.server,
+                                 isLive: Self.isLive($0.activityState))
         }
     }
 
