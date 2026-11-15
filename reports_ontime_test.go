@@ -106,7 +106,7 @@ func TestPlaceFixes_LeavesOutFixesOffTheRoute(t *testing.T) {
 	assert.InDelta(t, 300, fixes[2].along, 0.5)
 }
 
-func TestEvaluateRun_FixtureDay(t *testing.T) {
+func TestEvaluateRuns_FixtureDay(t *testing.T) {
 	ix := reportFixtureIndex(t)
 	trips, trails := reportFixtureTrips(t, ix)
 
@@ -132,10 +132,10 @@ func TestEvaluateRun_FixtureDay(t *testing.T) {
 	}
 }
 
-// TestEvaluateRun_OutAndBackKeepsTheReturnLeg pins what the hint is for: on
+// TestEvaluateRuns_OutAndBackKeepsTheReturnLeg pins what the hint is for: on
 // OB's way back every fix is nearer the outbound leg, and placed with no hint
 // they would land there, leaving OB4 and OB5 never reached.
-func TestEvaluateRun_OutAndBackKeepsTheReturnLeg(t *testing.T) {
+func TestEvaluateRuns_OutAndBackKeepsTheReturnLeg(t *testing.T) {
 	ix := reportFixtureIndex(t)
 	ob := mustTrip(t, ix, "OB")
 	trips, trails := reportFixtureTrips(t, ix)
@@ -160,7 +160,7 @@ func TestEvaluateRun_OutAndBackKeepsTheReturnLeg(t *testing.T) {
 	assert.Greater(t, fixes[len(fixes)-1].along, ob.StopTimes[4].AlongShape-stoppedAtDistance)
 }
 
-func TestEvaluateRun_Timepoints(t *testing.T) {
+func TestEvaluateRuns_Timepoints(t *testing.T) {
 	ix := reportFixtureIndex(t)
 	trips, trails := reportFixtureTrips(t, ix)
 	rl := mustTrip(t, ix, "RL")
@@ -180,9 +180,9 @@ func TestEvaluateRun_Timepoints(t *testing.T) {
 	assert.Equal(t, stopCounts{late: 1, onTime: 1}, got.counts)
 }
 
-// TestEvaluateRun_EndsShortOfTheLastStop: a bus that pulls in 15 m short of
+// TestEvaluateRuns_EndsShortOfTheLastStop: a bus that pulls in 15 m short of
 // its terminal has reached it, though it never gets to the end of the shape.
-func TestEvaluateRun_EndsShortOfTheLastStop(t *testing.T) {
+func TestEvaluateRuns_EndsShortOfTheLastStop(t *testing.T) {
 	ix := reportFixtureIndex(t)
 	t1 := mustTrip(t, ix, "T1")
 	legs := []reportLeg{
@@ -253,16 +253,16 @@ func TestEvaluateRuns_ASecondVehicleFinishesTheTrip(t *testing.T) {
 	assert.Equal(t, stopCounts{onTime: 2, late: 1}, got.counts)
 }
 
-func TestEvaluateRun_NoPoints(t *testing.T) {
+func TestEvaluateRuns_NoPoints(t *testing.T) {
 	ix := reportFixtureIndex(t)
 	got := evaluateRuns(mustTrip(t, ix, "T1"), reportDayStart, nil, testReportSettings)
 	assert.Equal(t, runEvaluation{counts: stopCounts{unknown: 3}}, got)
 }
 
-// TestEvaluateRun_ShapeDrawnThroughStops: tripLocator does not place a
+// TestEvaluateRuns_ShapeDrawnThroughStops: tripLocator does not place a
 // vehicle on a shape drawn through the stops, and neither does the report, so
 // a run of T4 driven exactly along that shape is unknown everywhere.
-func TestEvaluateRun_ShapeDrawnThroughStops(t *testing.T) {
+func TestEvaluateRuns_ShapeDrawnThroughStops(t *testing.T) {
 	ix := reportFixtureIndex(t)
 	t4 := mustTrip(t, ix, "T4")
 	require.True(t, t4.ShapeFromStops)
