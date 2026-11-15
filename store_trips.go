@@ -120,6 +120,16 @@ func (s *Store) StartTrip(ctx context.Context, userID int64, vehicleID, routeID,
 
 	qtx := s.queries.WithTx(tx)
 
+	// The driver's row comes before the assignment, in the order DeleteUser
+	// takes them. No row means the driver was deleted, so they are no longer
+	// assigned to anything.
+	if _, err := qtx.LockUserForKeyShare(ctx, userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotAssigned
+		}
+		return nil, fmt.Errorf("lock user: %w", err)
+	}
+
 	// Verify driver is assigned to this vehicle, and keep the assignment until
 	// the trip is committed.
 	_, err = qtx.CheckUserVehicleAssignmentForShare(ctx, db.CheckUserVehicleAssignmentForShareParams{

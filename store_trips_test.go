@@ -1071,3 +1071,75 @@ func TestStore_StartTrip_TwoStartsAndAnUnassignDoNotDeadlock(t *testing.T) {
 	assert.ErrorIs(t, <-unassigned, ErrAssignmentInUse)
 	assert.True(t, assignmentExists(t, store, userID, "bus-trip-1"))
 }
+
+// TestStore_StartTrip_DeleteUserDuringStart deletes a driver while their first
+// trip start is parked between its assignment check and its insert. The start
+// holds the driver's row from its first statement, so the delete waits for it,
+// then finds the trip and is refused. Had the start locked the assignment
+// first, the delete would lock the driver's row and wait on the assignment
+// for its cascade, while the start's insert waited on the driver's row for
+// the trip's foreign key.
+func TestStore_StartTrip_DeleteUserDuringStart(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	holder, release := holdVehicle(t, store, "bus-trip-1")
+
+	started := make(chan error, 1)
+	go func() {
+		_, err := store.StartTrip(ctx, userID, "bus-trip-1", "R1", "T1")
+		started <- err
+	}()
+	require.Eventually(t, func() bool { return blockedBehind(store, holder, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the start never got past its assignment check")
+
+	deleted := make(chan error, 1)
+	go func() { deleted <- store.DeleteUser(ctx, userID) }()
+	require.Eventually(t, func() bool { return len(deleted) == 1 || blockedBehind(store, holder, 2) == 1 },
+		5*time.Second, 10*time.Millisecond, "the delete neither finished nor queued behind the start")
+
+	release()
+
+	// A deadlock comes back from one of the two as SQLSTATE 40P01.
+	require.NoError(t, <-started)
+	assert.ErrorIs(t, <-deleted, ErrUserHasTrips)
+	assert.True(t, activeTripExists(t, store, userID, "bus-trip-1"))
+}
+
+// TestStore_StartTrip_WaitsForADeleteHoldingTheDriver is the other order: a
+// delete holds the driver's row, as DeleteUser's DELETE does before its cascade
+// reaches the assignment, when the start begins. The start must wait at the
+// driver's row holding nothing the cascade needs, then find the driver gone. A
+// start that took the assignment first would hold it against the cascade while
+// it waited on the driver's row.
+func TestStore_StartTrip_WaitsForADeleteHoldingTheDriver(t *testing.T) {
+	store := newTestStore(t)
+	userID := setupTripTestData(t, store)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	deleteUser, err := dedicatedConn(t).Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = deleteUser.Rollback(context.Background()) })
+	_, err = deleteUser.Exec(ctx, "SELECT 1 FROM users WHERE id = $1 FOR UPDATE", userID)
+	require.NoError(t, err)
+	var deletePID int
+	require.NoError(t, deleteUser.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&deletePID))
+
+	started := make(chan error, 1)
+	go func() {
+		_, err := store.StartTrip(ctx, userID, "bus-trip-1", "R1", "T1")
+		started <- err
+	}()
+	require.Eventually(t, func() bool { return blockedBehind(store, deletePID, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the start never waited for the driver's row")
+
+	// A deadlock comes back from this delete or from the start as SQLSTATE 40P01.
+	_, err = deleteUser.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	require.NoError(t, err)
+	require.NoError(t, deleteUser.Commit(ctx))
+
+	assert.ErrorIs(t, <-started, ErrNotAssigned)
+	assert.False(t, activeTripExists(t, store, userID, "bus-trip-1"))
+}
