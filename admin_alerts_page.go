@@ -33,12 +33,11 @@ type alertRow struct {
 	TripURL string
 }
 
-func newAlertRow(a alertEntry) alertRow {
+// newAlertRow is a's row, with the off-route distance from settings.
+func newAlertRow(a alertEntry, settings alertSettings) alertRow {
 	duration := humanizeDuration(time.Duration(a.DurationSeconds) * time.Second)
 	row := alertRow{
 		Quiet:        a.Kind == alertQuiet,
-		Kind:         "Not moving",
-		Detail:       fmt.Sprintf("Under %.0f m in %s", stoppedRadius, duration),
 		VehicleID:    a.Trip.VehicleID,
 		VehicleLabel: a.Trip.VehicleLabel,
 		DriverName:   a.Trip.DriverName,
@@ -47,9 +46,16 @@ func newAlertRow(a alertEntry) alertRow {
 		MapURL:       "/admin/map?trip_id=" + strconv.FormatInt(a.Trip.ID, 10),
 		TripURL:      tripsPageURL("active", a.Trip.VehicleID, "", 1),
 	}
-	if row.Quiet {
+	switch a.Kind {
+	case alertQuiet:
 		row.Kind = "Gone quiet"
 		row.Detail = "No report for " + duration
+	case alertOffRoute:
+		row.Kind = "Off route"
+		row.Detail = fmt.Sprintf("Over %.0f m from its route for %s", settings.offRouteDistance, duration)
+	default:
+		row.Kind = "Not moving"
+		row.Detail = fmt.Sprintf("Under %.0f m in %s", stoppedRadius, duration)
 	}
 	return row
 }
@@ -68,17 +74,19 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 
 	rows := make([]alertRow, 0, len(alerts))
 	for _, a := range alerts {
-		rows = append(rows, newAlertRow(a))
+		rows = append(rows, newAlertRow(a, ui.alerts.settings))
 	}
 
 	ui.renderAdmin(w, r, http.StatusOK, "alerts.html", map[string]interface{}{
-		"Title":         "Alerts",
-		"Page":          "alerts",
-		"Alerts":        rows,
-		"AlertCount":    len(rows),
-		"QuietAfter":    humanizeDuration(ui.alerts.settings.quietAfter),
-		"StoppedAfter":  humanizeDuration(ui.alerts.settings.stoppedAfter),
-		"StoppedRadius": fmt.Sprintf("%.0f m", stoppedRadius),
+		"Title":            "Alerts",
+		"Page":             "alerts",
+		"Alerts":           rows,
+		"AlertCount":       len(rows),
+		"QuietAfter":       humanizeDuration(ui.alerts.settings.quietAfter),
+		"StoppedAfter":     humanizeDuration(ui.alerts.settings.stoppedAfter),
+		"StoppedRadius":    fmt.Sprintf("%.0f m", stoppedRadius),
+		"OffRouteDistance": fmt.Sprintf("%.0f m", ui.alerts.settings.offRouteDistance),
+		"OffRouteAfter":    humanizeDuration(ui.alerts.settings.offRouteAfter),
 	})
 }
 

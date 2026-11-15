@@ -442,8 +442,8 @@ driver-reported vehicles only.
 
 ### Alerts
 
-**Alerts** lists the vehicles on a running trip that need a look. There are two
-kinds:
+**Alerts** lists the vehicles on a running trip that need a look. There are
+three kinds:
 
 - **Gone quiet**: the vehicle has sent no report for over 3 minutes. The phone
   may have lost signal or been switched off, or the app may have stopped. At 5
@@ -451,20 +451,36 @@ kinds:
 - **Not moving**: the vehicle is still reporting but has moved under 50 m in 10
   minutes. It may have broken down or be stuck in traffic. A driver waiting at
   the first stop before departure shows here too.
+- **Off route**: the vehicle has been more than 60 m from its trip's route for
+  over 5 minutes. The driver may have taken a wrong turn or a detour, or be
+  heading back to the depot with the trip still running. A vehicle standing
+  still off its route shows here rather than as **Not moving**. Only trips
+  whose route has a shape in your GTFS feed are checked, so a trip started
+  with only a route, or on a feed without shapes, never shows as off route.
 
 Each row names the vehicle, driver, route and GTFS trip, and says how long:
-**No report for 7 min** or **Under 50 m in 12 min**. The longest-running alert
-is at the top. **View on map** opens the trip's trail, whose **End** marker is
-where the vehicle last reported, even after it has dropped off the Live Map.
-**View trip** opens **Trips** on that trip, where **End trip** is.
+**No report for 7 min**, **Under 50 m in 12 min** or **Over 60 m from its route
+for 6 min**. The longest-running alert is at the top. **View on map** opens the
+trip's trail, whose **End** marker is where the vehicle last reported, even
+after it has dropped off the Live Map. **View trip** opens **Trips** on that
+trip, where **End trip** is.
 
-An alert clears by itself when the vehicle reports again or moves on, and when
-its trip ends. The page reloads every 30 seconds. The **Alerts** item in the
-sidebar shows how many there are on every page, counted when that page loaded.
+For an off-route vehicle, **View on map** shows the way it has gone since the
+trip started. Ask the driver whether a road is closed. If they have finished
+the trip, end it from **View trip**. If vehicles on one route keep showing as
+off route at the same place, the route's shape in your GTFS feed is probably
+wrong there: tell whoever maintains the feed.
+
+An alert clears by itself when the vehicle reports again, moves on or comes
+back to its route, and when its trip ends. A position the phone is unsure of
+(a poor GPS fix) neither raises nor clears **Off route**. The page reloads
+every 30 seconds. The **Alerts** item in the sidebar shows how many there are
+on every page, counted when that page loaded.
 Nothing is emailed or pushed, so keep the page open during service. Your server
-administrator can change the 3 and 10 minutes (`ALERT_QUIET_AFTER` and
-`ALERT_STOPPED_AFTER`, see [`configuration.md`](configuration.md)). After the
-server restarts, a vehicle is counted as quiet from the restart.
+administrator can change the 3, 5 and 10 minutes and the 60 m
+(`ALERT_QUIET_AFTER`, `ALERT_OFF_ROUTE_AFTER`, `ALERT_STOPPED_AFTER` and
+`ALERT_OFF_ROUTE_DISTANCE`, see [`configuration.md`](configuration.md)). After
+the server restarts, a vehicle is counted as quiet from the restart.
 
 ### Trips and trails
 
