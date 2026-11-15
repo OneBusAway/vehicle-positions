@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui.vehicles
 
+import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,7 +16,10 @@ import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
 import org.onebusaway.vehicletracker.data.VehicleRepository
 import org.onebusaway.vehicletracker.data.api.VehicleDto
+import java.io.IOException
 import javax.inject.Inject
+
+private const val TAG = "VehicleViewModel"
 
 /** Where a bus sits on the bus step. While the driver searches, every match is under [MATCHES]. */
 enum class BusSection { FAVORITES, RECENT, ALL, MATCHES }
@@ -99,7 +103,14 @@ class VehicleViewModel @Inject constructor(
     }
 
     fun onToggleFavorite(vehicleId: String) {
-        viewModelScope.launch { vehiclePrefsStore.toggleFavorite(vehicleId) }
+        viewModelScope.launch {
+            try {
+                vehiclePrefsStore.toggleFavorite(vehicleId)
+            } catch (e: IOException) {
+                // A full disk, say. The star shows what is stored, so the driver sees that the tap did not take.
+                Log.w(TAG, "Could not store the favorite", e)
+            }
+        }
     }
 
     private fun load() {
