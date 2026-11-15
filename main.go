@@ -80,7 +80,7 @@ type appStore interface {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
@@ -90,11 +90,14 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, jwtSecret, ttls, loginLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, ttls, refreshLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store, store)))
+	// Outermost, so a request the auth middleware refuses is counted too.
+	countReports := health.count(healthReports)
+	countFeed := health.count(healthFeed)
 	feed := handleGetFeed(tracker, riderEstimates)
 	if feedAuthEnabled {
-		mux.Handle("GET /gtfs-rt/vehicle-positions", requireAPIKey(store, trustProxy)(feed))
+		mux.Handle("GET /gtfs-rt/vehicle-positions", countFeed(requireAPIKey(store, trustProxy)(feed)))
 	} else {
-		mux.Handle("GET /gtfs-rt/vehicle-positions", feed)
+		mux.Handle("GET /gtfs-rt/vehicle-positions", countFeed(feed))
 	}
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))
@@ -109,16 +112,17 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("POST /api/v1/admin/trips/{id}/end", authMiddleware(adminMiddleware(handleAdminEndTrip(store, tracker))))
 	mux.Handle("GET /api/v1/admin/alerts", authMiddleware(adminMiddleware(handleListAlerts(alerts))))
 	mux.Handle("GET /api/v1/admin/reports/service", authMiddleware(adminMiddleware(handleServiceReport(reports))))
+	mux.Handle("GET /api/v1/admin/health", authMiddleware(adminMiddleware(handleFeedHealth(health))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /ready", handleReadiness(store))
 
-	mux.Handle("POST /api/v1/locations", authMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter)))
+	mux.Handle("POST /api/v1/locations", countReports(authMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter))))
 	// Built here rather than passed in like the others: it lives as long as the mux, and nothing
 	// else needs to reach it.
 	historyLimiter := NewKeyedRateLimiter(historyUploadInterval, historyUploadBurst, false)
-	mux.Handle("POST /api/v1/locations/history", authMiddleware(handlePostLocationHistory(store, historyLimiter)))
+	mux.Handle("POST /api/v1/locations/history", countReports(authMiddleware(handlePostLocationHistory(store, historyLimiter))))
 	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store, catalog)))
 	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store, tracker)))
 	mux.Handle("GET /api/v1/vehicles", authMiddleware(handleListMyVehicles(store)))
@@ -169,12 +173,12 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter, adminLoginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
-	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
 
 	if cfg.enabled {
-		ui, err := newAdminUI(store, tracker, alerts, reports, jwtSecret, adminLoginLimiter, cfg)
+		ui, err := newAdminUI(store, tracker, alerts, reports, health, jwtSecret, adminLoginLimiter, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("init admin UI: %w", err)
 		}
@@ -395,9 +399,11 @@ func main() {
 	}
 
 	startTime := time.Now()
+	// Counted from here, so the counts and the uptime start together.
+	health := newFeedHealth(time.Now)
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)

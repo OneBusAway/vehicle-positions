@@ -1,0 +1,81 @@
+{{define "content"}}
+<div class="space-y-5 p-4 lg:p-5">
+
+  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="border-b border-slate-200/60 px-5 py-4">
+      <h3 class="display-font text-lg font-bold text-slate-900">Feed health</h3>
+      <p class="mt-0.5 text-xs text-slate-400">Position reports from driver phones and fetches of the GTFS-RT feed, counted in memory since the server started at {{.Since}}. A restart starts the counts again. This page reloads every minute.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table id="health-summary" class="min-w-full text-sm">
+        <thead class="bg-slate-50/80">
+          <tr class="text-left">
+            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Outcome</th>
+            <th class="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Last hour</th>
+            <th class="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Total</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr><td class="px-5 py-3 font-semibold text-slate-900">Reports accepted</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Reports.Accepted}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Reports.Accepted}}</td></tr>
+          <tr><td class="px-5 py-3 text-slate-500">Rejected as invalid (400, 409, 415)</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Reports.Invalid}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Reports.Invalid}}</td></tr>
+          <tr><td class="px-5 py-3 text-slate-500">Rejected, signed out or not allowed (401, 403)</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Reports.Unauthorized}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Reports.Unauthorized}}</td></tr>
+          <tr><td class="px-5 py-3 text-slate-500">Rejected, rate limited (429)</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Reports.RateLimited}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Reports.RateLimited}}</td></tr>
+          <tr><td class="px-5 py-3 text-slate-500">Rejected, server error (5xx)</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Reports.ServerError}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Reports.ServerError}}</td></tr>
+          <tr><td class="px-5 py-3 font-semibold text-slate-900">Feed fetches served</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Feed.Served}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Feed.Served}}</td></tr>
+          <tr><td class="px-5 py-3 text-slate-500">Refused, missing or bad API key (401)</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Feed.Refused}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Feed.Refused}}</td></tr>
+          <tr><td class="px-5 py-3 text-slate-500">Bad request (400)</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Feed.Invalid}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Feed.Invalid}}</td></tr>
+          <tr><td class="px-5 py-3 text-slate-500">Server error (5xx)</td><td class="px-5 py-3 text-right tabular-nums">{{.LastHour.Feed.ServerError}}</td><td class="px-5 py-3 text-right tabular-nums">{{.Total.Feed.ServerError}}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="border-t border-slate-200/60 px-5 py-3 text-xs text-slate-400">{{if .Strip.ErrorRate}}{{.Strip.ErrorRate}} of reports rejected in the last hour.{{else}}No reports in the last hour.{{end}} Also available as JSON from <span class="font-mono">GET /api/v1/admin/health</span>.</p>
+  </div>
+
+  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="border-b border-slate-200/60 px-5 py-4">
+      <h3 class="display-font text-base font-bold text-slate-900">Per minute</h3>
+      <p class="mt-0.5 text-xs text-slate-400">The last hour, newest first. Times are UTC; the top row is the minute in progress.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table id="health-minutes" class="min-w-full text-sm">
+        <thead class="bg-slate-50/80">
+          <tr class="text-left">
+            <th class="px-4 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500"></th>
+            <th colspan="5" class="border-l border-slate-200/60 px-4 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Reports</th>
+            <th colspan="4" class="border-l border-slate-200/60 px-4 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Feed fetches</th>
+          </tr>
+          <tr class="text-right text-[11px] font-semibold text-slate-500">
+            <th class="px-4 pb-3 pt-1 text-left">Minute</th>
+            <th class="border-l border-slate-200/60 px-4 pb-3 pt-1">Accepted</th>
+            <th class="px-4 pb-3 pt-1">Invalid</th>
+            <th class="px-4 pb-3 pt-1">Auth</th>
+            <th class="px-4 pb-3 pt-1">Rate limited</th>
+            <th class="px-4 pb-3 pt-1">Server error</th>
+            <th class="border-l border-slate-200/60 px-4 pb-3 pt-1">Served</th>
+            <th class="px-4 pb-3 pt-1">Refused</th>
+            <th class="px-4 pb-3 pt-1">Bad request</th>
+            <th class="px-4 pb-3 pt-1">Server error</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-right tabular-nums text-slate-500">
+          {{range .Minutes}}
+          <tr>
+            <td class="px-4 py-2 text-left font-mono text-xs text-slate-700">{{.Minute}}</td>
+            <td class="border-l border-slate-200/60 px-4 py-2">{{.Reports.Accepted}}</td>
+            <td class="px-4 py-2{{if .Reports.Invalid}} font-semibold text-rose-700{{end}}">{{.Reports.Invalid}}</td>
+            <td class="px-4 py-2{{if .Reports.Unauthorized}} font-semibold text-rose-700{{end}}">{{.Reports.Unauthorized}}</td>
+            <td class="px-4 py-2{{if .Reports.RateLimited}} font-semibold text-rose-700{{end}}">{{.Reports.RateLimited}}</td>
+            <td class="px-4 py-2{{if .Reports.ServerError}} font-semibold text-rose-700{{end}}">{{.Reports.ServerError}}</td>
+            <td class="border-l border-slate-200/60 px-4 py-2">{{.Feed.Served}}</td>
+            <td class="px-4 py-2{{if .Feed.Refused}} font-semibold text-rose-700{{end}}">{{.Feed.Refused}}</td>
+            <td class="px-4 py-2{{if .Feed.Invalid}} font-semibold text-rose-700{{end}}">{{.Feed.Invalid}}</td>
+            <td class="px-4 py-2{{if .Feed.ServerError}} font-semibold text-rose-700{{end}}">{{.Feed.ServerError}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{{end}}

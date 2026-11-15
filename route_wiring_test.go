@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -233,6 +234,7 @@ var adminRoutes = []struct {
 	{"POST", "/api/v1/admin/trips/1/end"},
 	{"GET", "/api/v1/admin/alerts"},
 	{"GET", "/api/v1/admin/reports/service"},
+	{"GET", "/api/v1/admin/health"},
 	{"GET", "/api/v1/admin/users"},
 	{"GET", "/api/v1/admin/users/1"},
 	{"POST", "/api/v1/admin/users"},
@@ -258,7 +260,7 @@ func TestAdminRoutes_DriverTokenRejected(t *testing.T) {
 
 	// nil tracker and rateLimiter are safe: adminMiddleware rejects driver
 	// tokens before any handler body runs, so neither is dereferenced.
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 	for _, tc := range adminRoutes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
@@ -308,7 +310,7 @@ func TestAdminRoutes_AdminTokenAllowed(t *testing.T) {
 	// With no schedule the reports handler answers 503, which is enough to
 	// show the route reached it.
 	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return nil }, testReportSettings)
-	mux := newMux(&existingRecordsStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), reports)
+	mux := newMux(&existingRecordsStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), reports, newFeedHealth(time.Now))
 
 	for _, tc := range adminRoutes {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
@@ -340,7 +342,7 @@ func TestLiveVehiclesRoute_DoesNotHitGetVehicle(t *testing.T) {
 	tracker := NewTracker(5 * time.Minute)
 	defer tracker.Stop()
 
-	mux := newMux(&noopStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+	mux := newMux(&noopStore{}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/vehicles/live", nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -385,7 +387,7 @@ func TestAdminEndTripRoute_Registered(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			mux := newMux(tc.store, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+			mux := newMux(tc.store, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/trips/1/end", nil)
 			req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -440,6 +442,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 		{"GET", "/admin/trips"},
 		{"POST", "/admin/trips/1/end"},
 		{"GET", "/admin/reports"},
+		{"GET", "/admin/health"},
 		{"GET", "/admin/api-keys"},
 		{"POST", "/admin/api-keys"},
 		{"POST", "/admin/api-keys/1/deactivate"},
@@ -472,7 +475,7 @@ func TestLogoutRoute_Wiring(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 	tests := []struct {
 		name       string
@@ -505,7 +508,7 @@ func TestDriverVehiclesRoute_Wiring(t *testing.T) {
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 	tests := []struct {
 		name       string
@@ -571,7 +574,7 @@ func TestFeedRoute_Wiring(t *testing.T) {
 			tracker := NewTracker(5 * time.Minute)
 			defer tracker.Stop()
 
-			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, tc.feedAuthEnabled, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, tc.feedAuthEnabled, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 			req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
 			if tc.apiKey != "" {
@@ -589,7 +592,7 @@ func TestFeedRoute_Wiring(t *testing.T) {
 }
 
 func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
-	without := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+	without := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 	rec := httptest.NewRecorder()
 	without.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/gtfs/routes", nil))
 	assert.Equal(t, http.StatusNotFound, rec.Code)
@@ -600,7 +603,7 @@ func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
 	// T1 is weekday-only in the fixture calendar: pin the clock so this test
 	// never depends on the day of the week it happens to run on.
 	catalog.now = func() time.Time { return catalogNow }
-	with := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, catalog, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+	with := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, catalog, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 	driverTok, _ := generateJWT(&User{ID: 1, Email: "d@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	riderTok, _ := generateRiderJWT("rider-1", testSecret, time.Hour)
@@ -632,7 +635,7 @@ func TestGTFSRoutes_RegisteredOnlyWithACatalog(t *testing.T) {
 // the status: requireAuth and the handler both answer 401, and only the
 // handler's message proves the request reached it.
 func TestRefreshRoute_Wiring(t *testing.T) {
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
 		strings.NewReader(`{"refresh_token":"nosuchtoken"}`))
@@ -655,7 +658,7 @@ func TestServiceReportRoute_Wiring(t *testing.T) {
 	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return reportFixtureIndex(t) }, testReportSettings)
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), reports)
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), reports, newFeedHealth(time.Now))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/reports/service?date=tomorrow", nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -666,4 +669,63 @@ func TestServiceReportRoute_Wiring(t *testing.T) {
 	var resp map[string]string
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Equal(t, "date must be YYYY-MM-DD", resp["error"])
+}
+
+// TestFeedHealthRoutes_Wiring drives the real mux to pin which routes are
+// counted. The requests are all ones the auth middleware refuses, so only a
+// counter wrapped outside it can have seen them, and the counts are read back
+// through GET /api/v1/admin/health.
+func TestFeedHealthRoutes_Wiring(t *testing.T) {
+	const rawKey = "wired-feed-key"
+	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
+	require.NoError(t, err)
+
+	serve := func(mux http.Handler, method, path, apiKey string) int {
+		req := httptest.NewRequest(method, path, strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		if apiKey != "" {
+			req.Header.Set(apiKeyHeader, apiKey)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w.Code
+	}
+	healthOf := func(mux http.Handler) feedHealthResponse {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/health", nil)
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var body feedHealthResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		return body
+	}
+
+	for _, feedAuthEnabled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("feed auth %t", feedAuthEnabled), func(t *testing.T) {
+			tracker := NewTracker(5 * time.Minute)
+			defer tracker.Stop()
+			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, feedAuthEnabled, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
+
+			require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodPost, "/api/v1/locations", ""))
+			require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodPost, "/api/v1/locations/history", ""))
+			require.Equal(t, http.StatusOK, serve(mux, http.MethodGet, "/gtfs-rt/vehicle-positions", rawKey))
+			require.Equal(t, http.StatusOK, serve(mux, http.MethodGet, "/gtfs-rt/vehicle-positions?format=json", rawKey))
+			// Not a report or a feed fetch, so not counted.
+			require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodPost, "/api/v1/trips/start", ""))
+
+			want := healthPeriod{
+				Reports: reportOutcomes{Unauthorized: 2},
+				Feed:    feedOutcomes{Served: 2},
+			}
+			if feedAuthEnabled {
+				require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodGet, "/gtfs-rt/vehicle-positions", ""))
+				want.Feed.Refused = 1
+			}
+
+			got := healthOf(mux)
+			assert.Equal(t, want, got.LastHour)
+			assert.Equal(t, want, got.Total)
+		})
+	}
 }

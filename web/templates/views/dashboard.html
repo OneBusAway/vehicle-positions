@@ -27,6 +27,9 @@
   <div class="glass-panel flex flex-wrap items-center gap-x-6 gap-y-1 rounded-[16px] border border-white/70 px-5 py-3 text-xs font-medium text-slate-500">
     <span>Feed last updated: <span class="font-semibold text-slate-700">{{.LastUpdate}}</span></span>
     <span>Staleness threshold: <span class="font-semibold text-slate-700">{{.StalenessThreshold}}</span></span>
+    <span id="health-reports">Reports, last hour: <span class="font-semibold text-slate-700">{{.Health.ReportsAccepted}}</span> accepted, <span class="font-semibold {{if .Health.ReportsRejected}}text-rose-700{{else}}text-slate-700{{end}}">{{.Health.ReportsRejected}}</span> rejected{{if .Health.ReportsRejected}} ({{.Health.ErrorRate}}, mostly {{.Health.TopReason}}){{end}}</span>
+    <span id="health-feed">Feed fetches, last hour: <span class="font-semibold text-slate-700">{{.Health.FeedFetches}}</span>, <span class="font-semibold {{if .Health.FeedRefused}}text-rose-700{{else}}text-slate-700{{end}}">{{.Health.FeedRefused}}</span> refused key{{if .Health.FeedFailed}}, <span class="font-semibold text-rose-700">{{.Health.FeedFailed}}</span> failed{{end}}</span>
+    <a href="/admin/health" class="font-semibold text-sky-600 hover:text-sky-800">Feed health &rarr;</a>
   </div>
 
   <div class="table-card overflow-hidden rounded-[20px] border border-white/80">

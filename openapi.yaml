@@ -1571,6 +1571,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/admin/health:
+    get:
+      tags: [admin]
+      summary: Report and feed outcomes, per minute for the last hour and since start
+      description: |
+        The same counts the admin UI's Feed health page shows. Every response to
+        a driver's position report (`POST /api/v1/locations` and
+        `POST /api/v1/locations/history`) and to a feed fetch
+        (`GET /gtfs-rt/vehicle-positions`, in either format) is counted by its
+        status, including requests refused before they reach the handler. The
+        counts are kept in memory: a restart starts them again from `since`.
+        Requires the `admin` role.
+
+        A report is `accepted` (2xx), `invalid` (400, 409 for a report that
+        does not match the driver's running trip, 415 and any other 4xx),
+        `unauthorized` (401 or 403), `rate_limited` (429) or a `server_error`
+        (5xx). A feed fetch is `served` (2xx), `refused` (401: a missing,
+        unknown or inactive API key), `invalid` (any other 4xx, such as an
+        unknown `source`) or a `server_error` (5xx).
+      responses:
+        '200':
+          description: The counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedHealth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/admin/users:
     get:
       tags: [admin]
@@ -3531,6 +3564,102 @@ components:
           type: string
         driver_name:
           type: string
+
+    FeedHealth:
+      type: object
+      required: [since, last_hour, total, minutes]
+      properties:
+        since:
+          type: string
+          format: date-time
+          description: When counting started, which is when the server started.
+        last_hour:
+          $ref: '#/components/schemas/FeedHealthPeriod'
+        total:
+          $ref: '#/components/schemas/FeedHealthPeriod'
+        minutes:
+          type: array
+          description: |
+            The last 60 minutes, oldest first, ending with the minute in
+            progress. Every minute is listed, with zeros where nothing came
+            in. `last_hour` is their sum.
+          items:
+            $ref: '#/components/schemas/FeedHealthMinute'
+
+    FeedHealthPeriod:
+      type: object
+      required: [reports, feed]
+      properties:
+        reports:
+          $ref: '#/components/schemas/ReportOutcomes'
+        feed:
+          $ref: '#/components/schemas/FeedOutcomes'
+
+    FeedHealthMinute:
+      type: object
+      required: [minute, reports, feed]
+      properties:
+        minute:
+          type: string
+          format: date-time
+          description: The start of the minute, in UTC.
+        reports:
+          $ref: '#/components/schemas/ReportOutcomes'
+        feed:
+          $ref: '#/components/schemas/FeedOutcomes'
+
+    ReportOutcomes:
+      type: object
+      required: [accepted, invalid, unauthorized, rate_limited, server_error]
+      properties:
+        accepted:
+          type: integer
+          format: int64
+          minimum: 0
+        invalid:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 400, 409, 415 and any other 4xx not listed here.
+        unauthorized:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 401 or 403.
+        rate_limited:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 429.
+        server_error:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 5xx.
+
+    FeedOutcomes:
+      type: object
+      required: [served, refused, invalid, server_error]
+      properties:
+        served:
+          type: integer
+          format: int64
+          minimum: 0
+        refused:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 401 or 403. With `FEED_AUTH_ENABLED`, a missing, unknown or inactive API key.
+        invalid:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Any other 4xx, such as an unknown `source`.
+        server_error:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 5xx.
 
     TripTrail:
       type: object
