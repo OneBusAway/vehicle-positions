@@ -589,7 +589,8 @@ SELECT
     )::boolean AS assigned,
     (t.id IS NOT NULL)::boolean AS has_active_trip,
     COALESCE(t.route_id, '')::text AS trip_route_id,
-    COALESCE(t.gtfs_trip_id, '')::text AS trip_gtfs_trip_id
+    COALESCE(t.gtfs_trip_id, '')::text AS trip_gtfs_trip_id,
+    t.start_time AS trip_start_time
 FROM vehicles v
 LEFT JOIN trips t
     ON t.vehicle_id = v.id AND t.user_id = $1 AND t.status = 'active'
@@ -608,12 +609,14 @@ type GetLocationAuthorizationRow struct {
 	HasActiveTrip  bool
 	TripRouteID    string
 	TripGtfsTripID string
+	TripStartTime  pgtype.Timestamptz
 }
 
 // One round trip answers every question the location ingest asks before it
-// accepts a report, and the label the feed publishes for the vehicle. No row
-// means the vehicle does not exist. A driver has at most one active trip
-// (idx_trips_one_active_per_user), so the join adds at most one row.
+// accepts a report, and what the feed publishes from it: the vehicle's label
+// and when its trip started. No row means the vehicle does not exist. A
+// driver has at most one active trip (idx_trips_one_active_per_user), so the
+// join adds at most one row.
 func (q *Queries) GetLocationAuthorization(ctx context.Context, arg GetLocationAuthorizationParams) (GetLocationAuthorizationRow, error) {
 	row := q.db.QueryRow(ctx, getLocationAuthorization, arg.UserID, arg.VehicleID)
 	var i GetLocationAuthorizationRow
@@ -624,6 +627,7 @@ func (q *Queries) GetLocationAuthorization(ctx context.Context, arg GetLocationA
 		&i.HasActiveTrip,
 		&i.TripRouteID,
 		&i.TripGtfsTripID,
+		&i.TripStartTime,
 	)
 	return i, err
 }

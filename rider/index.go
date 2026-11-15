@@ -72,9 +72,14 @@ type TripInfo struct {
 	ShapeFromStops bool
 	// FrequencyBased is set when frequencies.txt runs the trip by headway
 	// (exact_times=0): its stop times are a pattern each run follows, not a
-	// timetable. GTFS-RT calls such a trip UNSCHEDULED.
+	// timetable. GTFS-RT calls such a trip UNSCHEDULED. A trip can have
+	// exact_times=1 rows too, at other times of day; Run says which kind one
+	// run is.
 	FrequencyBased bool
 	StopTimes      []StopTimeInfo // sorted by Sequence
+	// frequencies is the trip's frequencies.txt rows, none for a trip run by
+	// timetable.
+	frequencies []gtfs.Frequency
 }
 
 // RouteInfo is one GTFS route as the driver catalog lists it. Only routes
@@ -179,7 +184,8 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 			FrequencyBased: slices.ContainsFunc(trip.Frequencies, func(f gtfs.Frequency) bool {
 				return f.ExactTimes == gtfs.FrequencyBased
 			}),
-			StopTimes: stopTimesAlong(trip.StopTimes, shape, feedShapeEnd(trip.Shape), !fromStops),
+			StopTimes:   stopTimesAlong(trip.StopTimes, shape, feedShapeEnd(trip.Shape), !fromStops),
+			frequencies: trip.Frequencies,
 		}
 		if fromStops {
 			stopShapes++
@@ -394,6 +400,74 @@ func ServiceDayStart(serviceDate string, loc *time.Location) (time.Time, error) 
 	}
 	noon := time.Date(day.Year(), day.Month(), day.Day(), 12, 0, 0, 0, loc)
 	return noon.Add(-12 * time.Hour), nil
+}
+
+// Run describes the run of a trip in frequencies.txt that started at
+// startedAt on serviceDate, as a GTFS-RT TripDescriptor names it: its
+// start_time, and whether it is run by headway (UNSCHEDULED). The run
+// belongs to the frequencies.txt row whose window, from start_time up to but
+// not including end_time, holds its start, or to the nearest row when none
+// does. In an exact_times=0 row the run keeps no timetable and its start_time
+// is when it started. In an exact_times=1 row it is that row's departure
+// nearest the start: GTFS-RT requires a whole number of headways after the
+// row's start_time. startTime is "" for a trip run by timetable, which GTFS-RT
+// leaves without one, for a run whose start is not known (the zero time) or
+// whose service date is not a date, which say nothing of which row it is in,
+// and for a run that started before its service day, which no GTFS time can
+// express.
+func (t *TripInfo) Run(serviceDate string, tz *time.Location, startedAt time.Time) (startTime string, headway bool) {
+	if len(t.frequencies) == 0 {
+		return "", false
+	}
+	dayStart, err := ServiceDayStart(serviceDate, tz)
+	if err != nil || startedAt.IsZero() {
+		return "", t.FrequencyBased
+	}
+	since := startedAt.Sub(dayStart)
+	row := frequencyRow(t.frequencies, since)
+	if row.ExactTimes == gtfs.ScheduleBased {
+		return gtfsClock(scheduledDeparture(row, since)), false
+	}
+	if since < 0 {
+		return "", true
+	}
+	return gtfsClock(since), true
+}
+
+// frequencyRow is the row whose window holds since, or else the row whose
+// window is nearest it. rows is never empty.
+func frequencyRow(rows []gtfs.Frequency, since time.Duration) gtfs.Frequency {
+	if i := slices.IndexFunc(rows, func(f gtfs.Frequency) bool {
+		return f.StartTime <= since && since < f.EndTime
+	}); i >= 0 {
+		return rows[i]
+	}
+	gap := func(f gtfs.Frequency) time.Duration {
+		if since < f.StartTime {
+			return f.StartTime - since
+		}
+		return since - f.EndTime
+	}
+	return slices.MinFunc(rows, func(a, b gtfs.Frequency) int { return cmp.Compare(gap(a), gap(b)) })
+}
+
+// scheduledDeparture is the exact_times=1 row's departure nearest since: its
+// start_time plus a whole number of headways, the last one before its
+// end_time at the latest.
+func scheduledDeparture(row gtfs.Frequency, since time.Duration) time.Duration {
+	if row.Headway <= 0 {
+		return row.StartTime
+	}
+	last := (row.EndTime - row.StartTime - 1) / row.Headway
+	n := (since - row.StartTime + row.Headway/2) / row.Headway
+	return row.StartTime + max(0, min(n, last))*row.Headway
+}
+
+// gtfsClock formats a time since the start of the service day the way GTFS
+// writes one, hours going past 24 for a time after midnight.
+func gtfsClock(d time.Duration) string {
+	secs := int64(d / time.Second)
+	return fmt.Sprintf("%02d:%02d:%02d", secs/3600, secs/60%60, secs%60)
 }
 
 // ScheduledOffsetAt returns the scheduled offset from the start of the service

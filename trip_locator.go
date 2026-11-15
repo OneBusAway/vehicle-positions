@@ -91,15 +91,19 @@ func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 	return place
 }
 
-// frequencyBased reports whether the loaded schedule runs tripID by headway
-// (rider.TripInfo.FrequencyBased). A trip the schedule lacks is not.
-func (l *tripLocator) frequencyBased(tripID string) bool {
+// run describes the run loc's vehicle is on, by the loaded schedule
+// (rider.TripInfo.Run): its start_time and whether it is run by headway. A
+// trip the schedule lacks has no start_time and is not.
+func (l *tripLocator) run(loc *LocationReport) (startTime string, headway bool) {
 	ix := l.index()
 	if ix == nil {
-		return false
+		return "", false
 	}
-	trip, ok := ix.Trip(tripID)
-	return ok && trip.FrequencyBased
+	trip, ok := ix.Trip(loc.TripID)
+	if !ok {
+		return "", false
+	}
+	return trip.Run(loc.StartDate, ix.Timezone(), loc.TripStartedAt)
 }
 
 // stopSearchPosition is where along shape to look for the stop of a fix at pos

@@ -90,9 +90,9 @@ var ErrTripMismatch = errors.New("trip_id or route_id does not match the driver'
 // not contradict. A report may leave either field empty. An unknown vehicle is
 // ErrNotAssigned, since no driver can be assigned to it, and so is a DriverID
 // that is not a user id: the JWT sub of every real driver is one. When the
-// report is authorized it sets loc.VehicleLabel from the vehicle row it has
-// just read, which is how a label reaches the feed without a query per feed
-// request.
+// report is authorized it sets loc.VehicleLabel and loc.TripStartedAt from the
+// vehicle and trip rows it has just read, which is how they reach the feed
+// without a query per feed request.
 func (s *Store) AuthorizeLocation(ctx context.Context, loc *LocationReport) error {
 	userID, err := strconv.ParseInt(loc.DriverID, 10, 64)
 	if err != nil {
@@ -120,6 +120,7 @@ func (s *Store) AuthorizeLocation(ctx context.Context, loc *LocationReport) erro
 		return ErrTripMismatch
 	}
 	loc.VehicleLabel = auth.VehicleLabel
+	loc.TripStartedAt = auth.TripStartTime.Time
 	return nil
 }
 

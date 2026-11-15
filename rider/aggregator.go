@@ -62,7 +62,10 @@ type TripEstimate struct {
 	StopID       string // "" past the last stop
 	StopSequence int    // 0 when StopID == ""
 	Riders       int
-	// FrequencyBased is the trip's TripInfo.FrequencyBased.
+	// StartTime and FrequencyBased describe the run the riders are on
+	// (TripInfo.Run): its start_time, "" for a trip run by timetable, and
+	// whether it is run by headway.
+	StartTime      string
 	FrequencyBased bool
 }
 
@@ -75,15 +78,19 @@ type Aggregator struct {
 	mu       sync.Mutex
 	sessions map[string]*Session // by ride id
 	byRider  map[string]string   // rider id → the ride id of that rider's newest session
+	// runStarts is when each trip's run started, as runStart first estimated
+	// it. An entry goes when the last ride on its trip is removed.
+	runStarts map[TripKey]time.Time
 }
 
 // NewAggregator returns an empty registry judging points with th, in tz.
 func NewAggregator(th Thresholds, tz *time.Location) *Aggregator {
 	return &Aggregator{
-		th:       th,
-		tz:       tz,
-		sessions: make(map[string]*Session),
-		byRider:  make(map[string]string),
+		th:        th,
+		tz:        tz,
+		sessions:  make(map[string]*Session),
+		byRider:   make(map[string]string),
+		runStarts: make(map[TripKey]time.Time),
 	}
 }
 
@@ -339,7 +346,8 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 		if covered != nil && covered(key) {
 			continue
 		}
-		if est, ok := g.estimate(key, now); ok {
+		if est, along, ok := g.estimate(key, now); ok {
+			est.StartTime, est.FrequencyBased = g.trip.Run(key.StartDate, a.tz, a.runStart(key, g.trip, along, est.Timestamp))
 			out = append(out, est)
 		}
 	}
@@ -374,8 +382,25 @@ func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey
 	if covered != nil && covered(key) {
 		return false, riders
 	}
-	_, reported := g.estimate(key, now)
+	_, _, reported := g.estimate(key, now)
 	return reported, riders
+}
+
+// runStart is when the run of key's trip left its first stop: the time the
+// schedule takes to reach along, back from ts, when the riders first put the
+// vehicle there. Riders board along the way, so none of them saw it start.
+// The first estimate is kept until the trip's last ride is removed, because
+// GTFS-RT fixes a headway run's start_time once it is published, and the
+// riders' later positions would each put the start somewhere else.
+func (a *Aggregator) runStart(key TripKey, trip *TripInfo, along float64, ts time.Time) time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if start, ok := a.runStarts[key]; ok {
+		return start
+	}
+	start := ts.Add(ScheduledOffsetAt(trip, 0) - ScheduledOffsetAt(trip, along))
+	a.runStarts[key] = start
+	return start
 }
 
 // activeForRiderLocked returns the rider's newest live session, or nil.
@@ -402,6 +427,12 @@ func (a *Aggregator) removeLocked(rideID string) *Session {
 	if a.byRider[s.RiderID()] == rideID {
 		delete(a.byRider, s.RiderID())
 	}
+	for _, other := range a.sessions {
+		if other.Key() == s.Key() {
+			return s
+		}
+	}
+	delete(a.runStarts, s.Key())
 	return s
 }
 
@@ -509,11 +540,12 @@ func (a *Aggregator) memberOfLocked(s *Session, now time.Time) (estimateMember, 
 	}, true
 }
 
-// estimate combines the group's members into one vehicle position, reporting
-// false when the riders are not credible enough to publish.
-func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
+// estimate combines the group's members into one vehicle position, and how
+// far along the trip's shape it is, reporting false when the riders are not
+// credible enough to publish.
+func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, float64, bool) {
 	if !g.canEstimate() {
-		return TripEstimate{}, false
+		return TripEstimate{}, 0, false
 	}
 
 	members := g.members
@@ -530,26 +562,25 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
 		// publishable on — a trusted rider the crowd outvoted — and the
 		// survivors must then be credible on their own, or nothing is.
 		if len(kept) == 0 || !(&tripGroup{trip: g.trip, members: kept}).publishable() {
-			return TripEstimate{}, false
+			return TripEstimate{}, 0, false
 		}
 		members = kept
 		median = medianAlong(members)
 	}
 
 	est := TripEstimate{
-		Key:            key,
-		RouteID:        g.trip.RouteID,
-		Pos:            g.trip.Shape.PointAt(median),
-		Bearing:        g.trip.Shape.BearingAt(median),
-		Speed:          medianSpeed(members),
-		Timestamp:      newestTimestamp(members, now),
-		Riders:         distinctRiders(members),
-		FrequencyBased: g.trip.FrequencyBased,
+		Key:       key,
+		RouteID:   g.trip.RouteID,
+		Pos:       g.trip.Shape.PointAt(median),
+		Bearing:   g.trip.Shape.BearingAt(median),
+		Speed:     medianSpeed(members),
+		Timestamp: newestTimestamp(members, now),
+		Riders:    distinctRiders(members),
 	}
 	if stop, ok := NextStop(g.trip, median); ok {
 		est.StopID, est.StopSequence = stop.StopID, stop.Sequence
 	}
-	return est, true
+	return est, median, true
 }
 
 // canEstimate reports whether the group can and may be turned into a position:

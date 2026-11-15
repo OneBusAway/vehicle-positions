@@ -48,6 +48,10 @@ type LocationReport struct {
 	// AuthorizeLocation (or GetRecentLocations for the startup seed); never
 	// decoded from JSON. Empty when the admin has not given the vehicle one.
 	VehicleLabel string `json:"-"`
+	// TripStartedAt is when the driver's active trip started, set server-side
+	// by AuthorizeLocation; never decoded from JSON. Zero for the startup
+	// seed.
+	TripStartedAt time.Time `json:"-"`
 }
 
 const maxVehicleIDLength = 50
@@ -375,6 +379,9 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 			if v.TripID != "" {
 				trip.TripId = proto.String(v.TripID)
 				trip.ScheduleRelationship = scheduleRelationship(v.FrequencyBased)
+				if v.StartTime != "" {
+					trip.StartTime = proto.String(v.StartTime)
+				}
 			}
 			if v.RouteID != "" {
 				trip.RouteId = proto.String(v.RouteID)
@@ -467,6 +474,9 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 		TripId:               proto.String(est.Key.TripID),
 		StartDate:            proto.String(est.Key.StartDate),
 		ScheduleRelationship: scheduleRelationship(est.FrequencyBased),
+	}
+	if est.StartTime != "" {
+		trip.StartTime = proto.String(est.StartTime)
 	}
 	if est.RouteID != "" {
 		trip.RouteId = proto.String(est.RouteID)
