@@ -15,10 +15,12 @@ import (
 
 // The default thresholds. A vehicle leaves the feed STALENESS_THRESHOLD (5m
 // by default) after its last report, so a quiet vehicle is flagged before it
-// drops off the map.
+// drops off the map. Going round a blocked street takes a minute or two, so a
+// vehicle off its route for five is not doing that.
 const (
-	defaultAlertQuietAfter   = 3 * time.Minute
-	defaultAlertStoppedAfter = 10 * time.Minute
+	defaultAlertQuietAfter    = 3 * time.Minute
+	defaultAlertStoppedAfter  = 10 * time.Minute
+	defaultAlertOffRouteAfter = 5 * time.Minute
 )
 
 // stoppedRadius is how far, in metres, a vehicle has to get from where it last
@@ -42,10 +44,10 @@ const (
 const (
 	alertQuiet     = "quiet"
 	alertNotMoving = "not_moving"
+	alertOffRoute  = "off_route"
 )
 
-// alertSettings are the thresholds, read from ALERT_QUIET_AFTER and
-// ALERT_STOPPED_AFTER.
+// alertSettings are the thresholds, read by alertSettingsFromEnv.
 type alertSettings struct {
 	// quietAfter is how long a vehicle on an active trip may go without a
 	// report before it has gone quiet.
@@ -53,14 +55,35 @@ type alertSettings struct {
 	// stoppedAfter is how long a vehicle on an active trip that is still
 	// reporting may stay within stoppedRadius before it is not moving.
 	stoppedAfter time.Duration
+	// offRouteDistance is how far, in metres, a report has to put a vehicle
+	// from its trip's shape, beyond the fix's own accuracy, to count as off
+	// route.
+	offRouteDistance float64
+	// offRouteAfter is how long a vehicle on an active trip may keep
+	// reporting from off its route before it is off route.
+	offRouteAfter time.Duration
 }
 
-// alertEntry is one alert: a vehicle on an active trip that has gone quiet or
-// is not moving, since when, and the trip.
+// alertSettingsFromEnv reads the thresholds from ALERT_QUIET_AFTER,
+// ALERT_STOPPED_AFTER, ALERT_OFF_ROUTE_DISTANCE and ALERT_OFF_ROUTE_AFTER. The
+// off-route distance defaults to maxShapeDistance, RIDER_MAX_SHAPE_DISTANCE,
+// which is where the driver apps already tell the driver they are off route.
+func alertSettingsFromEnv(maxShapeDistance float64) alertSettings {
+	return alertSettings{
+		quietAfter:       envPositiveDurationOrDefault("ALERT_QUIET_AFTER", defaultAlertQuietAfter),
+		stoppedAfter:     envPositiveDurationOrDefault("ALERT_STOPPED_AFTER", defaultAlertStoppedAfter),
+		offRouteDistance: envPositiveFloatOrDefault("ALERT_OFF_ROUTE_DISTANCE", maxShapeDistance),
+		offRouteAfter:    envPositiveDurationOrDefault("ALERT_OFF_ROUTE_AFTER", defaultAlertOffRouteAfter),
+	}
+}
+
+// alertEntry is one alert: a vehicle on an active trip that has gone quiet, is
+// off route or is not moving, since when, and the trip.
 type alertEntry struct {
 	Kind string `json:"kind"`
-	// Since is the vehicle's last report for a quiet alert, and when it came
-	// within stoppedRadius of where it is now for a not-moving one.
+	// Since is the vehicle's last report for a quiet alert, its first report
+	// off route for an off-route one, and when it came within stoppedRadius of
+	// where it is now for a not-moving one.
 	Since           time.Time   `json:"since"`
 	DurationSeconds int64       `json:"duration_seconds"`
 	Trip            TripSummary `json:"trip"`
@@ -78,11 +101,32 @@ type positionSample struct {
 	pos rider.LatLon
 }
 
+// offRouteSpell is a vehicle's run of reports off its trip's shape, with none
+// near it in between.
+type offRouteSpell struct {
+	// tripID is the GTFS trip the reports named. A report off another trip's
+	// shape starts a new spell.
+	tripID string
+	since  time.Time // the first report off the shape
+	last   time.Time // the latest
+}
+
+// shapeSide is where a report puts its vehicle against the off-route distance.
+type shapeSide int
+
+const (
+	// sideUnknown is a report that cannot tell: its trip has no shape to judge
+	// against, or the fix is too coarse to say which side it is on.
+	sideUnknown shapeSide = iota
+	sideNear
+	sideOff
+)
+
 // alertWatcher keeps what the alerts need that the tracker does not: when each
-// vehicle last reported, and where it has been lately. The tracker keeps only
-// a vehicle's latest position, and forgets the vehicle STALENESS_THRESHOLD
-// after its last report, so it can tell neither whether a vehicle has moved
-// nor how long one has been quiet.
+// vehicle last reported, where it has been lately, and how long it has been off
+// its route. The tracker keeps only a vehicle's latest position, and forgets
+// the vehicle STALENESS_THRESHOLD after its last report, so it can tell neither
+// whether a vehicle has moved nor how long one has been quiet.
 type alertWatcher struct {
 	trips    TripLister
 	settings alertSettings
@@ -94,6 +138,11 @@ type alertWatcher struct {
 	// history holds each vehicle's samples, oldest first. A vehicle with no
 	// active trip loses its history the next time alerts are worked out.
 	history map[string][]positionSample
+	// offRoute holds each vehicle's current spell off its trip's shape, which
+	// it loses with its history.
+	offRoute map[string]offRouteSpell
+	// schedule is where the trips' shapes come from, nil until watchRoutes.
+	schedule func() *rider.Index
 }
 
 // newAlertWatcher makes a watcher that reads the active trips from trips.
@@ -103,7 +152,24 @@ func newAlertWatcher(trips TripLister, settings alertSettings) *alertWatcher {
 		settings:      settings,
 		watchingSince: time.Now(),
 		history:       make(map[string][]positionSample),
+		offRoute:      make(map[string]offRouteSpell),
 	}
+}
+
+// watchRoutes makes the watcher judge each report against its trip's shape in
+// the schedule index returns, which the off-route alert needs. Until then no
+// vehicle is off route.
+func (w *alertWatcher) watchRoutes(index func() *rider.Index) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.schedule = index
+}
+
+// report adds a report the server accepted at at to what the alerts know of
+// its vehicle.
+func (w *alertWatcher) report(loc *LocationReport, at time.Time) {
+	w.record(loc.VehicleID, rider.LatLon{Lat: loc.Latitude, Lon: loc.Longitude}, at)
+	w.recordRoute(loc, at)
 }
 
 // record adds a report the server accepted at at to its vehicle's history. The
@@ -163,8 +229,78 @@ func stillSince(samples []positionSample) time.Time {
 	return samples[i].at
 }
 
+// recordRoute starts, extends or ends the vehicle's spell off route with a
+// report accepted at at. A report that cannot tell leaves the spell as it is.
+func (w *alertWatcher) recordRoute(loc *LocationReport, at time.Time) {
+	w.mu.Lock()
+	schedule := w.schedule
+	w.mu.Unlock()
+	// Judged outside the lock: the projection is a pass over every segment of
+	// the shape.
+	side := judgeReport(schedule, loc, w.settings.offRouteDistance)
+	if side == sideUnknown {
+		return
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	spell, ok := w.offRoute[loc.VehicleID]
+	switch {
+	case side == sideNear:
+		delete(w.offRoute, loc.VehicleID)
+	case ok && spell.tripID == loc.TripID:
+		spell.last = at
+		w.offRoute[loc.VehicleID] = spell
+	default:
+		w.offRoute[loc.VehicleID] = offRouteSpell{tripID: loc.TripID, since: at, last: at}
+	}
+}
+
+// judgeReport is where loc puts its vehicle against limit, measured from the
+// shape of the trip it names, found as tripLocator finds it. It cannot tell
+// when no schedule is loaded, the report names no trip or one the schedule
+// lacks, or the trip's shape was drawn through its stops, which cuts every
+// corner between them.
+func judgeReport(schedule func() *rider.Index, loc *LocationReport, limit float64) shapeSide {
+	if schedule == nil {
+		return sideUnknown
+	}
+	ix := schedule()
+	if ix == nil {
+		return sideUnknown
+	}
+	trip, ok := ix.Trip(loc.TripID)
+	if !ok || trip.ShapeFromStops {
+		return sideUnknown
+	}
+	// With no hint the nearest pass of a loop or an out-and-back counts: how
+	// far a vehicle is from its route does not depend on which pass it is on.
+	proj := trip.Shape.Project(rider.LatLon{Lat: loc.Latitude, Lon: loc.Longitude}, nil)
+	accuracy := 0.0
+	if loc.Accuracy != nil {
+		accuracy = *loc.Accuracy
+	}
+	return judgeDistance(proj.DistanceToShape, accuracy, limit)
+}
+
+// judgeDistance is where a fix distance metres from the shape puts its vehicle
+// against limit. A fix counts only when its accuracy circle lies wholly on one
+// side: beyond limit plus its accuracy it is off, as the rider engine and the
+// driver apps judge it, and within limit less its accuracy it is near. One in
+// between says nothing, so a poor fix neither raises the alert nor clears it.
+func judgeDistance(distance, accuracy, limit float64) shapeSide {
+	accuracy = math.Max(accuracy, 0)
+	switch {
+	case distance > limit+accuracy:
+		return sideOff
+	case distance+accuracy <= limit:
+		return sideNear
+	}
+	return sideUnknown
+}
+
 // alerts works out the alerts at now for active, which must be every active
-// trip, longest-running first. It also drops the history of every vehicle
+// trip, longest-running first. It also drops what it keeps of every vehicle
 // with no active trip, so a trip that has ended leaves nothing behind.
 func (w *alertWatcher) alerts(active []TripSummary, now time.Time) []alertEntry {
 	w.mu.Lock()
@@ -183,6 +319,11 @@ func (w *alertWatcher) alerts(active []TripSummary, now time.Time) []alertEntry 
 			delete(w.history, vehicleID)
 		}
 	}
+	for vehicleID := range w.offRoute {
+		if _, ok := onTrip[vehicleID]; !ok {
+			delete(w.offRoute, vehicleID)
+		}
+	}
 
 	sort.Slice(alerts, func(i, j int) bool {
 		if !alerts[i].Since.Equal(alerts[j].Since) {
@@ -194,8 +335,10 @@ func (w *alertWatcher) alerts(active []TripSummary, now time.Time) []alertEntry 
 }
 
 // alertFor is the alert for one active trip at now, if it has one. A vehicle
-// that is quiet is not also checked for moving: with no report to go on, the
-// last position says nothing about now.
+// that is quiet is not also checked for its route or for moving: with no
+// report to go on, the last position says nothing about now. Off route comes
+// before not moving, so a vehicle standing still away from its route keeps
+// the one alert rather than changing kind when it has stood long enough.
 func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bool) {
 	samples := w.history[trip.VehicleID]
 	// Samples from before the trip started belong to the vehicle's last trip.
@@ -213,6 +356,20 @@ func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bo
 	}
 	if now.Sub(heard) > w.settings.quietAfter {
 		return newAlert(alertQuiet, heard, trip, now), true
+	}
+
+	// A spell begun before the trip counts from the trip's start. One on the
+	// vehicle's last trip counts for nothing: a report on this trip either
+	// starts a new spell or cannot tell, so it ended before this trip began.
+	if spell, ok := w.offRoute[trip.VehicleID]; ok {
+		since := spell.since
+		if since.Before(trip.StartTime) {
+			since = trip.StartTime
+		}
+		// As for a stop, only reported time counts.
+		if spell.last.Sub(since) > w.settings.offRouteAfter {
+			return newAlert(alertOffRoute, since, trip, now), true
+		}
 	}
 
 	if len(onTrip) == 0 {
@@ -270,7 +427,7 @@ func (f alertFeed) SaveLocation(ctx context.Context, loc *LocationReport) error 
 	if err := f.LocationStore.SaveLocation(ctx, loc); err != nil {
 		return err
 	}
-	f.alerts.record(loc.VehicleID, rider.LatLon{Lat: loc.Latitude, Lon: loc.Longitude}, time.Now())
+	f.alerts.report(loc, time.Now())
 	return nil
 }
 

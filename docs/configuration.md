@@ -107,16 +107,18 @@ Once an admin exists, both variables can be removed.
 ## Dispatcher alerts
 
 The thresholds behind the admin UI's **Alerts** page and
-`GET /api/v1/admin/alerts`. Both apply only to vehicles on an active trip.
+`GET /api/v1/admin/alerts`. All apply only to vehicles on an active trip.
 
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
 | `ALERT_QUIET_AFTER` | `3m` | Optional | How long a vehicle may go without a report before it shows as gone quiet. The default sits below `STALENESS_THRESHOLD`, so the alert comes before the vehicle drops out of the feed and off the live map. Must be positive; zero, negative or unparseable warns and defaults. |
 | `ALERT_STOPPED_AFTER` | `10m` | Optional | How long a vehicle that is still reporting may stay within 50 m of where it is before it shows as not moving. Must be positive; zero, negative or unparseable warns and defaults. |
+| `ALERT_OFF_ROUTE_DISTANCE` | `RIDER_MAX_SHAPE_DISTANCE` (`60`) | Optional | Metres from the trip's shape, beyond the fix's reported accuracy, at which a report counts as off route. The default is the distance at which the driver apps already show the driver as off route. A fix whose accuracy reaches across this distance counts neither way, so one poor fix neither raises the alert nor clears it. Trips with no shape in the GTFS feed, or a shape drawn through their stops, are never judged. Must be positive; zero, negative, `NaN`, `Inf` or unparseable warns and defaults. |
+| `ALERT_OFF_ROUTE_AFTER` | `5m` | Optional | How long a vehicle's reports may stay off route, counted to its latest report, before it shows as off route. Going round a blocked street takes a minute or two. Must be positive; zero, negative or unparseable warns and defaults. |
 
 The server keeps what the alerts need in memory, from the reports it accepts.
 After a restart it counts a quiet vehicle from the restart, and a vehicle that
-is not moving from its first report since.
+is off route or not moving from its first report since.
 
 ## Service reports
 
