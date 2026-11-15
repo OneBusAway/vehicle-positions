@@ -263,6 +263,80 @@ func TestListTripLocationsWindow(t *testing.T) {
 	assert.InDelta(t, 2.0, pts[0].Longitude, 0.0001)
 }
 
+// TestStore_ListTrails reads the trails of four trips at once: two back to
+// back on one vehicle with a two-minute layover, a third on another vehicle
+// at the same time as the first, and a fourth that never reported. Each trail
+// is the one ListTripLocations gives its trip. Points are stored straight into
+// the table so each one's received time is exact.
+func TestStore_ListTrails(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	driver := setupTripUser(t, store, "Trail Driver", "trail-driver@test.com", "bus-trail", "Bus Trail")
+	otherDriver := setupTripUser(t, store, "Other Driver", "trail-other@test.com", "bus-trail-other", "Bus Trail Other")
+	point := func(vehicleID string, driverID int64, lat float64, ts, receivedAt time.Time) {
+		t.Helper()
+		_, err := store.pool.Exec(ctx,
+			`INSERT INTO location_points (vehicle_id, driver_id, trip_id, latitude, longitude, timestamp, received_at)
+			 VALUES ($1, $2, '', $3, $3, $4, $5)`,
+			vehicleID, strconv.FormatInt(driverID, 10), lat, ts.Unix(), receivedAt)
+		require.NoError(t, err)
+	}
+
+	// Trips start and end half a second into a second, as start_time and
+	// end_time carry fractions that timestamp does not.
+	base := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	at := func(d time.Duration) time.Time { return base.Add(d) }
+	half := 500 * time.Millisecond
+	firstEnd, nextEnd := at(10*time.Minute+half), at(20*time.Minute+half)
+	first := insertReportTrip(t, store, driver, "bus-trail", "R1", "T1", at(half), &firstEnd)
+	next := insertReportTrip(t, store, driver, "bus-trail", "R1", "T2", at(12*time.Minute+half), &nextEnd)
+	other := insertReportTrip(t, store, otherDriver, "bus-trail-other", "R1", "T3", at(half), &firstEnd)
+	silent := insertReportTrip(t, store, otherDriver, "bus-trail-other", "R1", "T4", at(12*time.Minute+half), &nextEnd)
+
+	// The first trip: a fix in its first second, one mid-trip, a backlog fix
+	// uploaded during the next trip, a fix young enough to count as live
+	// that arrived once the next trip had begun, and a fix in its last second
+	// received before the trip ended.
+	point("bus-trail", driver, 1.1, at(0), at(time.Second))
+	point("bus-trail", driver, 1.2, at(5*time.Minute), at(5*time.Minute+time.Second))
+	point("bus-trail", driver, 1.3, at(7*time.Minute), at(14*time.Minute))
+	point("bus-trail", driver, 1.4, at(9*time.Minute), at(12*time.Minute+30*time.Second))
+	point("bus-trail", driver, 1.5, at(10*time.Minute), at(10*time.Minute+200*time.Millisecond))
+	// The next trip: a fix in its first second, one mid-trip, and one in its
+	// last second received after it ended, which may be from after the end
+	// and is in no trail.
+	point("bus-trail", driver, 2.1, at(12*time.Minute), at(12*time.Minute+time.Second))
+	point("bus-trail", driver, 2.2, at(15*time.Minute), at(15*time.Minute+time.Second))
+	point("bus-trail", driver, 2.3, at(20*time.Minute), at(20*time.Minute+time.Second))
+	// The other vehicle, during the first trip.
+	point("bus-trail-other", otherDriver, 3.1, at(5*time.Minute), at(5*time.Minute+time.Second))
+
+	trails, err := store.ListTrails(ctx, []int64{first, next, other, silent})
+	require.NoError(t, err)
+	require.Len(t, trails, 4)
+	latitudes := func(points []LocationPoint) []float64 {
+		out := make([]float64, len(points))
+		for i, p := range points {
+			out[i] = p.Latitude
+		}
+		return out
+	}
+	assert.Equal(t, []float64{1.1, 1.2, 1.3, 1.4, 1.5}, latitudes(trails[first]), "in the order driven")
+	assert.Equal(t, []float64{2.1, 2.2}, latitudes(trails[next]), "nothing from the trip before, nor from after the end")
+	assert.Equal(t, []float64{3.1}, latitudes(trails[other]))
+	assert.NotNil(t, trails[silent], "a trip with no points has an empty trail, not a missing one")
+	assert.Empty(t, trails[silent])
+
+	for id, trail := range trails {
+		alone, err := store.ListTripLocations(ctx, id)
+		require.NoError(t, err)
+		assert.Equal(t, alone, trail, "trip %d", id)
+	}
+}
+
 func TestStore_StartTrip_Success(t *testing.T) {
 	store := newTestStore(t)
 	userID := setupTripTestData(t, store)

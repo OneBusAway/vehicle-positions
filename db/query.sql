@@ -239,7 +239,10 @@ JOIN users u ON u.id = t.user_id
 JOIN vehicles v ON v.id = t.vehicle_id
 WHERE t.id = $1;
 
--- name: ListTripLocations :many
+-- name: ListTrails :many
+-- The trails of the trips with these ids, in id order, each in the order
+-- driven and capped at 10000 points of its own. The trail of one trip is read
+-- with this query too, so the window below is written once.
 -- Trail derivation per spec §4.5: location_points.trip_id is a client string,
 -- not trips.id, so trail points are matched by vehicle + driver + time window.
 -- A live point is in the window when it was recorded after the trip started
@@ -255,24 +258,30 @@ WHERE t.id = $1;
 -- the trail where it was driven and in no other. Both branches floor the start
 -- because timestamp is whole seconds and a fix from the trip's first second
 -- must still count.
-SELECT lp.latitude, lp.longitude, lp.bearing, lp.speed, lp.accuracy,
-       lp.timestamp, lp.trip_id, lp.received_at
-FROM location_points lp
-JOIN trips t ON t.id = $1
-WHERE lp.vehicle_id = t.vehicle_id
-  AND lp.driver_id = t.user_id::text
-  AND (
-    (lp.received_at >= t.start_time
-        AND (lp.received_at <= COALESCE(t.end_time, NOW())
-            OR lp.timestamp < FLOOR(EXTRACT(EPOCH FROM t.end_time)))
-        AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes'
-        AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time)))
-    OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
-        AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time))
-        AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
-  )
-ORDER BY lp.timestamp ASC, lp.received_at ASC
-LIMIT 10000;
+SELECT t.id, p.latitude, p.longitude, p.bearing, p.speed, p.accuracy,
+       p.timestamp, p.trip_id, p.received_at
+FROM trips t
+CROSS JOIN LATERAL (
+    SELECT lp.latitude, lp.longitude, lp.bearing, lp.speed, lp.accuracy,
+           lp.timestamp, lp.trip_id, lp.received_at
+    FROM location_points lp
+    WHERE lp.vehicle_id = t.vehicle_id
+      AND lp.driver_id = t.user_id::text
+      AND (
+        (lp.received_at >= t.start_time
+            AND (lp.received_at <= COALESCE(t.end_time, NOW())
+                OR lp.timestamp < FLOOR(EXTRACT(EPOCH FROM t.end_time)))
+            AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes'
+            AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time)))
+        OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
+            AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time))
+            AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
+      )
+    ORDER BY lp.timestamp ASC, lp.received_at ASC
+    LIMIT 10000
+) p
+WHERE t.id = ANY(sqlc.arg('trip_ids')::bigint[])
+ORDER BY t.id, p.timestamp, p.received_at;
 
 -- name: ListActiveTripsByVehicle :many
 -- idx_trips_one_active_per_vehicle allows one active trip per vehicle; the

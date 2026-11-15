@@ -1266,28 +1266,35 @@ func (q *Queries) ListRides(ctx context.Context, arg ListRidesParams) ([]Ride, e
 	return items, nil
 }
 
-const listTripLocations = `-- name: ListTripLocations :many
-SELECT lp.latitude, lp.longitude, lp.bearing, lp.speed, lp.accuracy,
-       lp.timestamp, lp.trip_id, lp.received_at
-FROM location_points lp
-JOIN trips t ON t.id = $1
-WHERE lp.vehicle_id = t.vehicle_id
-  AND lp.driver_id = t.user_id::text
-  AND (
-    (lp.received_at >= t.start_time
-        AND (lp.received_at <= COALESCE(t.end_time, NOW())
-            OR lp.timestamp < FLOOR(EXTRACT(EPOCH FROM t.end_time)))
-        AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes'
-        AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time)))
-    OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
-        AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time))
-        AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
-  )
-ORDER BY lp.timestamp ASC, lp.received_at ASC
-LIMIT 10000
+const listTrails = `-- name: ListTrails :many
+SELECT t.id, p.latitude, p.longitude, p.bearing, p.speed, p.accuracy,
+       p.timestamp, p.trip_id, p.received_at
+FROM trips t
+CROSS JOIN LATERAL (
+    SELECT lp.latitude, lp.longitude, lp.bearing, lp.speed, lp.accuracy,
+           lp.timestamp, lp.trip_id, lp.received_at
+    FROM location_points lp
+    WHERE lp.vehicle_id = t.vehicle_id
+      AND lp.driver_id = t.user_id::text
+      AND (
+        (lp.received_at >= t.start_time
+            AND (lp.received_at <= COALESCE(t.end_time, NOW())
+                OR lp.timestamp < FLOOR(EXTRACT(EPOCH FROM t.end_time)))
+            AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes'
+            AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time)))
+        OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
+            AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time))
+            AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
+      )
+    ORDER BY lp.timestamp ASC, lp.received_at ASC
+    LIMIT 10000
+) p
+WHERE t.id = ANY($1::bigint[])
+ORDER BY t.id, p.timestamp, p.received_at
 `
 
-type ListTripLocationsRow struct {
+type ListTrailsRow struct {
+	ID         int64
 	Latitude   float64
 	Longitude  float64
 	Bearing    pgtype.Float8
@@ -1298,6 +1305,9 @@ type ListTripLocationsRow struct {
 	ReceivedAt pgtype.Timestamptz
 }
 
+// The trails of the trips with these ids, in id order, each in the order
+// driven and capped at 10000 points of its own. The trail of one trip is read
+// with this query too, so the window below is written once.
 // Trail derivation per spec §4.5: location_points.trip_id is a client string,
 // not trips.id, so trail points are matched by vehicle + driver + time window.
 // A live point is in the window when it was recorded after the trip started
@@ -1313,16 +1323,17 @@ type ListTripLocationsRow struct {
 // the trail where it was driven and in no other. Both branches floor the start
 // because timestamp is whole seconds and a fix from the trip's first second
 // must still count.
-func (q *Queries) ListTripLocations(ctx context.Context, id int64) ([]ListTripLocationsRow, error) {
-	rows, err := q.db.Query(ctx, listTripLocations, id)
+func (q *Queries) ListTrails(ctx context.Context, tripIds []int64) ([]ListTrailsRow, error) {
+	rows, err := q.db.Query(ctx, listTrails, tripIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListTripLocationsRow
+	var items []ListTrailsRow
 	for rows.Next() {
-		var i ListTripLocationsRow
+		var i ListTrailsRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.Latitude,
 			&i.Longitude,
 			&i.Bearing,

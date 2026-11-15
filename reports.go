@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -65,10 +64,10 @@ func envNonNegativeDurationOrDefault(key string, fallback time.Duration) time.Du
 }
 
 // serviceReportStore is what a service report reads: the trips started around
-// the day and each one's trail.
+// the day and the trails of those that ran its scheduled trips.
 type serviceReportStore interface {
 	TripsStartedBetweenLister
-	TripLocationLister
+	TrailLister
 }
 
 // serviceReport is one service day's report: for each route with service
@@ -139,14 +138,33 @@ type serviceReporter struct {
 	now      func() time.Time
 
 	mu sync.Mutex
-	// schedule is the index the kept reports were worked out against. A
-	// refresh puts a new index in place even when the feed has not changed,
-	// and the cache then starts again: reports kept against the old index
-	// are never asked for again, and each would keep that whole schedule in
-	// memory.
-	schedule *rider.Index
+	// schedule is the load of the schedule the kept reports were worked out
+	// against. The cache is keyed by service date alone, so a request with
+	// another load empties it: a kept day was judged against the old
+	// schedule's trips and times, which the refresh may have changed, and
+	// would otherwise be served as the new schedule's report. It names the
+	// load rather than holding the index, so a replaced schedule is not kept
+	// in memory until the next request comes.
+	schedule scheduleLoad
 	cache    map[string]*serviceReport // by service date
 	order    []string                  // oldest first
+}
+
+// scheduleLoad names one load of the schedule: the feed it was loaded from
+// and when. A refresh stamps its index with the time it loaded the feed, so
+// every refresh is a new schedule even when the feed has not changed.
+type scheduleLoad struct {
+	source   string
+	loadedAt time.Time
+}
+
+func loadOf(ix *rider.Index) scheduleLoad {
+	stats := ix.Stats()
+	return scheduleLoad{source: stats.Source, loadedAt: stats.LoadedAt}
+}
+
+func (l scheduleLoad) same(other scheduleLoad) bool {
+	return l.source == other.source && l.loadedAt.Equal(other.loadedAt)
 }
 
 func newServiceReporter(store serviceReportStore, index func() *rider.Index, settings reportSettings) *serviceReporter {
@@ -171,7 +189,8 @@ func (r *serviceReporter) report(ctx context.Context, date string) (*serviceRepo
 		return nil, err
 	}
 	serviceDate := day.Format(gtfsDateLayout)
-	if cached, ok := r.cached(ix, serviceDate); ok {
+	load := loadOf(ix)
+	if cached, ok := r.cached(load, serviceDate); ok {
 		return cached, nil
 	}
 
@@ -180,7 +199,7 @@ func (r *serviceReporter) report(ctx context.Context, date string) (*serviceRepo
 		return nil, err
 	}
 	if r.settled(ix, serviceDate, rep) {
-		r.keep(ix, serviceDate, rep)
+		r.keep(load, serviceDate, rep)
 	}
 	return rep, nil
 }
@@ -214,13 +233,14 @@ func (r *serviceReporter) settled(ix *rider.Index, date string, rep *serviceRepo
 	return date < ix.ServiceDate(now) && !now.Before(rep.serviceEnds.Add(reportSettleAfter))
 }
 
-// cached returns the report kept for date. Asking with a schedule other than
-// the one the kept reports were worked out against empties the cache first.
-func (r *serviceReporter) cached(ix *rider.Index, date string) (*serviceReport, bool) {
+// cached returns the report kept for date. Asking with a load of the schedule
+// other than the one the kept reports were worked out against empties the
+// cache first.
+func (r *serviceReporter) cached(load scheduleLoad, date string) (*serviceReport, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.schedule != ix {
-		r.schedule = ix
+	if !r.schedule.same(load) {
+		r.schedule = load
 		clear(r.cache)
 		r.order = nil
 	}
@@ -229,12 +249,12 @@ func (r *serviceReporter) cached(ix *rider.Index, date string) (*serviceReport, 
 }
 
 // keep caches rep, dropping the oldest report kept once there are
-// reportCacheSize. A report worked out against ix while a request with
-// another schedule took the cache over is not kept.
-func (r *serviceReporter) keep(ix *rider.Index, date string, rep *serviceReport) {
+// reportCacheSize. A report worked out against load while a request with
+// another load took the cache over is not kept.
+func (r *serviceReporter) keep(load scheduleLoad, date string, rep *serviceReport) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.schedule != ix {
+	if !r.schedule.same(load) {
 		return
 	}
 	if _, ok := r.cache[date]; ok {
@@ -268,6 +288,7 @@ func (r *serviceReporter) compute(ctx context.Context, ix *rider.Index, day time
 	}
 
 	runs := make(map[string][]TripSummary)
+	runIDs := make([]int64, 0, len(started))
 	for _, t := range started {
 		trip, ok := ix.Trip(t.GtfsTripID)
 		if !ok {
@@ -275,17 +296,18 @@ func (r *serviceReporter) compute(ctx context.Context, ix *rider.Index, day time
 		}
 		if runDate, ok := runServiceDate(ix, trip, t.StartTime); ok && runDate == date {
 			runs[trip.ID] = append(runs[trip.ID], t)
+			runIDs = append(runIDs, t.ID)
 		}
 	}
 
+	runTrails, err := r.store.ListTrails(ctx, runIDs)
+	if err != nil {
+		return nil, err
+	}
 	trails := make(map[string][][]LocationPoint, len(runs))
 	for tripID, tripRuns := range runs {
 		for _, t := range tripRuns {
-			trail, err := r.store.ListTripLocations(ctx, t.ID)
-			if err != nil {
-				return nil, fmt.Errorf("trail of trip %d: %w", t.ID, err)
-			}
-			trails[tripID] = append(trails[tripID], trail)
+			trails[tripID] = append(trails[tripID], runTrails[t.ID])
 		}
 	}
 	return buildServiceReport(ix, day, runs, trails, r.settings)
