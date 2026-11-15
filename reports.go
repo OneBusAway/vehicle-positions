@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -65,10 +64,10 @@ func envNonNegativeDurationOrDefault(key string, fallback time.Duration) time.Du
 }
 
 // serviceReportStore is what a service report reads: the trips started around
-// the day and each one's trail.
+// the day and the trails of those that ran its scheduled trips.
 type serviceReportStore interface {
 	TripsStartedBetweenLister
-	TripLocationLister
+	TrailLister
 }
 
 // serviceReport is one service day's report: for each route with service
@@ -270,6 +269,7 @@ func (r *serviceReporter) compute(ctx context.Context, ix *rider.Index, day time
 	}
 
 	runs := make(map[string][]TripSummary)
+	runIDs := make([]int64, 0, len(started))
 	for _, t := range started {
 		trip, ok := ix.Trip(t.GtfsTripID)
 		if !ok {
@@ -277,17 +277,18 @@ func (r *serviceReporter) compute(ctx context.Context, ix *rider.Index, day time
 		}
 		if runDate, ok := runServiceDate(ix, trip, t.StartTime); ok && runDate == date {
 			runs[trip.ID] = append(runs[trip.ID], t)
+			runIDs = append(runIDs, t.ID)
 		}
 	}
 
+	runTrails, err := r.store.ListTrails(ctx, runIDs)
+	if err != nil {
+		return nil, err
+	}
 	trails := make(map[string][][]LocationPoint, len(runs))
 	for tripID, tripRuns := range runs {
 		for _, t := range tripRuns {
-			trail, err := r.store.ListTripLocations(ctx, t.ID)
-			if err != nil {
-				return nil, fmt.Errorf("trail of trip %d: %w", t.ID, err)
-			}
-			trails[tripID] = append(trails[tripID], trail)
+			trails[tripID] = append(trails[tripID], runTrails[t.ID])
 		}
 	}
 	return buildServiceReport(ix, day, runs, trails, r.settings)

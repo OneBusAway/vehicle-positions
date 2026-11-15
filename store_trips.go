@@ -97,6 +97,11 @@ type TripLocationLister interface {
 	ListTripLocations(ctx context.Context, tripID int64) ([]LocationPoint, error)
 }
 
+// TrailLister returns the trails of many trips in one read.
+type TrailLister interface {
+	ListTrails(ctx context.Context, tripIDs []int64) (map[int64][]LocationPoint, error)
+}
+
 // ActiveTripsByVehicleLister returns the current active trip for each
 // vehicle that has one, keyed by vehicle ID.
 type ActiveTripsByVehicleLister interface {
@@ -340,12 +345,27 @@ func (s *Store) GetTripSummary(ctx context.Context, id int64) (*TripSummary, err
 // (not trips.id), so the trail is derived by matching vehicle + driver +
 // the trip's start/end time window rather than a direct trip_id join.
 func (s *Store) ListTripLocations(ctx context.Context, tripID int64) ([]LocationPoint, error) {
-	rows, err := s.queries.ListTripLocations(ctx, tripID)
+	trails, err := s.ListTrails(ctx, []int64{tripID})
+	if err != nil {
+		return nil, err
+	}
+	return trails[tripID], nil
+}
+
+// ListTrails returns the trail of each trip in tripIDs, keyed by trip id,
+// with the same window ListTripLocations reads one trip's trail with. Every
+// id asked for has a trail, empty when the trip has no points or does not
+// exist.
+func (s *Store) ListTrails(ctx context.Context, tripIDs []int64) (map[int64][]LocationPoint, error) {
+	rows, err := s.queries.ListTrails(ctx, tripIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list trip locations: %w", err)
 	}
 
-	points := make([]LocationPoint, 0, len(rows))
+	trails := make(map[int64][]LocationPoint, len(tripIDs))
+	for _, id := range tripIDs {
+		trails[id] = make([]LocationPoint, 0)
+	}
 	for _, row := range rows {
 		p := LocationPoint{
 			Latitude:   row.Latitude,
@@ -357,9 +377,9 @@ func (s *Store) ListTripLocations(ctx context.Context, tripID int64) ([]Location
 		p.Bearing = nullableFloat(row.Bearing)
 		p.Speed = nullableFloat(row.Speed)
 		p.Accuracy = nullableFloat(row.Accuracy)
-		points = append(points, p)
+		trails[row.ID] = append(trails[row.ID], p)
 	}
-	return points, nil
+	return trails, nil
 }
 
 // ListActiveTripsByVehicle returns the current active trip for each vehicle

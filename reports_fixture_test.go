@@ -246,7 +246,7 @@ func reportFixtureTrips(t *testing.T, ix *rider.Index) ([]TripSummary, map[int64
 }
 
 // fakeReportStore serves the trips and trails a report reads from memory,
-// counting how often the trips are read.
+// counting how often each is read.
 type fakeReportStore struct {
 	trips  []TripSummary
 	trails map[int64][]LocationPoint
@@ -254,6 +254,11 @@ type fakeReportStore struct {
 	reads  int
 	// onRead runs once, in the middle of the next read of the trips.
 	onRead func()
+
+	trailErr   error
+	trailReads int
+	// trailIDs are the trips whose trails were asked for, in every read.
+	trailIDs []int64
 }
 
 func (f *fakeReportStore) ListTripsStartedBetween(_ context.Context, from, to time.Time) ([]TripSummary, error) {
@@ -274,8 +279,17 @@ func (f *fakeReportStore) ListTripsStartedBetween(_ context.Context, from, to ti
 	return out, nil
 }
 
-func (f *fakeReportStore) ListTripLocations(_ context.Context, tripID int64) ([]LocationPoint, error) {
-	return f.trails[tripID], nil
+func (f *fakeReportStore) ListTrails(_ context.Context, tripIDs []int64) (map[int64][]LocationPoint, error) {
+	f.trailReads++
+	f.trailIDs = append(f.trailIDs, tripIDs...)
+	if f.trailErr != nil {
+		return nil, f.trailErr
+	}
+	trails := make(map[int64][]LocationPoint, len(tripIDs))
+	for _, id := range tripIDs {
+		trails[id] = f.trails[id]
+	}
+	return trails, nil
 }
 
 var testReportSettings = reportSettings{

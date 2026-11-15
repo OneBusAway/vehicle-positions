@@ -206,6 +206,11 @@ func TestServiceReporter_Errors(t *testing.T) {
 	_, err := r.report(context.Background(), "2026-09-02")
 	assert.ErrorIs(t, err, store.err)
 
+	store.err = nil
+	store.trailErr = errors.New("trails timed out")
+	_, err = r.report(context.Background(), "2026-09-02")
+	assert.ErrorIs(t, err, store.trailErr)
+
 	noSchedule := newServiceReporter(store, func() *rider.Index { return nil }, testReportSettings)
 	_, err = noSchedule.report(context.Background(), "2026-09-02")
 	assert.ErrorIs(t, err, errNoSchedule)
@@ -220,6 +225,18 @@ func TestServiceReporter_KeepsPastDays(t *testing.T) {
 	require.NoError(t, err)
 	assert.Same(t, first, second)
 	assert.Equal(t, 1, store.reads)
+}
+
+// TestServiceReporter_ReadsTheTrailsInOneRead: the trails of the day's seven
+// runs come from one read, and the three trips that are not the day's are not
+// read at all.
+func TestServiceReporter_ReadsTheTrailsInOneRead(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+
+	_, err := r.report(context.Background(), "2026-09-02")
+	require.NoError(t, err)
+	assert.Equal(t, 1, store.trailReads)
+	assert.ElementsMatch(t, []int64{1, 2, 3, 4, 5, 6, 7}, store.trailIDs)
 }
 
 func TestServiceReporter_WorksOutTodayEveryTime(t *testing.T) {
