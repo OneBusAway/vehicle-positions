@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -168,6 +169,38 @@ func TestRunPosition(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestRunNeverDrivesBackwards: a stop placed by projection can sit behind the
+// one before it. The vehicle waits on that leg rather than reporting a
+// negative speed, which POST /api/v1/locations refuses.
+func TestRunNeverDrivesBackwards(t *testing.T) {
+	d := straightTrip(noon)
+	// A third stop 20 m behind the 600 m one, reached a minute after leaving
+	// it, before the last leg to 1000 m.
+	d.Stops = slices.Insert(d.Stops, 2, struct {
+		AlongShapeM float64   `json:"along_shape_m"`
+		ArrivalAt   time.Time `json:"arrival_at"`
+		DepartureAt time.Time `json:"departure_at"`
+	}{580, noon.Add(140 * time.Second), noon.Add(140 * time.Second)})
+	d.Stops[3].ArrivalAt = noon.Add(180 * time.Second)
+	d.Stops[3].DepartureAt = noon.Add(180 * time.Second)
+	r, err := newRun(scheduledTrip{ID: "T"}, "20261113", 0, d)
+	require.NoError(t, err)
+
+	previous := 0.0
+	for s := 0; s <= 180; s += 5 {
+		along, speed := r.position(noon.Add(time.Duration(s) * time.Second))
+		assert.GreaterOrEqual(t, speed, 0.0, "speed %d s after departure", s)
+		assert.GreaterOrEqual(t, along, previous, "along %d s after departure", s)
+		previous = along
+	}
+	along, speed := r.position(noon.Add(110 * time.Second))
+	assert.InDelta(t, 600, along, 1e-6, "waiting at the 600 m stop through the leg to the stop behind it")
+	assert.InDelta(t, 0, speed, 1e-6)
+	along, speed = r.position(noon.Add(160 * time.Second))
+	assert.InDelta(t, 800, along, 1e-6, "the last leg runs from 600 m")
+	assert.InDelta(t, 10, speed, 1e-6)
 }
 
 func TestNewRunRejectsATripWithNothingToDriveAlong(t *testing.T) {
