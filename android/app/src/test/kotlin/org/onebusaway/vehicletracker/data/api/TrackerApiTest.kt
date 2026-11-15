@@ -11,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
+import retrofit2.HttpException
 
 class TrackerApiTest {
     private lateinit var server: MockWebServer
@@ -116,6 +117,40 @@ class TrackerApiTest {
         assertEquals(7L, trip.id)
         val sent = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
         assertEquals(setOf("vehicle_id", "route_id", "gtfs_trip_id"), sent.keys)
+    }
+
+    // A 307 or 308 keeps the method and the body, so a redirect followed would hand the password to whichever host
+    // it names. The request to the other host would be answered, and the sign-in would work.
+    @Test fun `a sign-in is not sent on where a redirect points`() = runTest {
+        val elsewhere = MockWebServer().apply { start() }
+        try {
+            elsewhere.enqueue(MockResponse().setBody(
+                """{"token":"jwt-abc","access_token":"jwt-abc","refresh_token":"a1b2c3","expires_in":900}"""))
+            server.enqueue(MockResponse().setResponseCode(307).setHeader("Location", elsewhere.url("/api/v1/auth/login")))
+
+            val error = runCatching { api.login(LoginRequest("d@example.com", "pw")) }.exceptionOrNull()
+
+            assertEquals("the redirect comes back as the answer", 307, (error as? HttpException)?.code())
+            assertEquals("nothing reached the other host", 0, elsewhere.requestCount)
+        } finally {
+            elsewhere.shutdown()
+        }
+    }
+
+    @Test fun `a refresh is not sent on where a redirect points`() {
+        val elsewhere = MockWebServer().apply { start() }
+        try {
+            elsewhere.enqueue(MockResponse().setBody(
+                """{"token":"jwt-new","access_token":"jwt-new","refresh_token":"r2","expires_in":900}"""))
+            server.enqueue(MockResponse().setResponseCode(308).setHeader("Location", elsewhere.url("/api/v1/auth/refresh")))
+
+            val reply = ApiFactory { null }.createRefreshApi(server.url("/").toString()).refresh(RefreshRequest("r1")).execute()
+
+            assertEquals(308, reply.code())
+            assertEquals("nothing reached the other host", 0, elsewhere.requestCount)
+        } finally {
+            elsewhere.shutdown()
+        }
     }
 
     @Test fun `base URL without trailing slash is normalized and still reaches the right path`() = runTest {
