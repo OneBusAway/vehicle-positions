@@ -407,6 +407,10 @@ class ViewModelsTest {
             "http//tracker.example.org" to null,
             "HTTPS//tracker.example.org" to null,
             "https:/tracker.example.org" to null,
+            // An email typed in the wrong field, which reads as the user "driver" at agency.org.
+            "driver@agency.org" to null,
+            "driver:pw@agency.org" to null,
+            ":pw@agency.org" to null,
             "ftp://x" to null,
             "://" to null,
             "https://" to null,
@@ -454,6 +458,22 @@ class ViewModelsTest {
         assertEquals(LoginError.InvalidAddress, vm.uiState.value.error)
         assertFalse(vm.uiState.value.loading)
         assertTrue("the error goes under the server field, so it shows", vm.uiState.value.showsServerField)
+    }
+
+    @Test fun `an email typed as the server is refused, not sent the password`() = runTest(dispatcher) {
+        // The email's domain is this test's server, so a sign-in sent there would be counted.
+        val server = MockWebServer().apply { start() }
+        val vm = loginViewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill("d@localhost:${server.port}", "d@example.com", "pw")
+
+        vm.onSignIn()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(LoginError.InvalidAddress, vm.uiState.value.error)
+        assertFalse(vm.uiState.value.loading)
+        assertEquals(0, server.requestCount)
+        server.shutdown()
     }
 
     @Test fun `a scheme typed wrong is an address that can't be one, not a server called https`() = runTest(dispatcher) {
