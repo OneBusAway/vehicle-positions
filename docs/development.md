@@ -20,6 +20,10 @@ The current implementation focuses on:
 
 ## Quick Start (Docker)
 
+To see the whole system working first, with nothing to configure, run
+`make demo`: it starts the server on a sample schedule with simulated vehicles
+driving it. See [demo.md](demo.md).
+
 From the repository root:
 
 1. Start the stack. Compose refuses to start without `JWT_SECRET` (32+ bytes)
@@ -247,6 +251,9 @@ Custom example:
 ```bash
 go run ./cmd/simulator -url http://localhost:8080 -vehicles 5 -interval 6s -duration 2m
 ```
+
+For how the server held up with 50, 100 and 200 simulated vehicles, and how to
+repeat that run, see [load-test.md](load-test.md).
 
 ## Watching Retention Prune Locally
 
