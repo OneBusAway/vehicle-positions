@@ -896,10 +896,19 @@ The feed is a standard GTFS Realtime `FeedMessage` containing
 https://tracker.example.org/gtfs-rt/vehicle-positions
 ```
 
-Point your OneBusAway instance's vehicle-positions realtime source at that URL.
-OneBusAway consumes GTFS-RT Vehicle Positions natively — no changes to OBA are
-required, and any other GTFS-RT-compliant consumer works the same way (see the
+Use [Maglev](https://github.com/OneBusAway/maglev), the OneBusAway server
+written in Go. It reads the feed as-is and shows the vehicles: put that URL in
+the `vehicle-positions-url` of one of its `gtfs-rt-feeds`, as
+[demo.md](demo.md#maglev) shows, with no changes to Maglev. Any other GTFS-RT
+consumer that reads Vehicle Positions on their own works the same way (see the
 README's [How This Connects to OneBusAway](../README.md#8-how-this-connects-to-onebusaway)).
+
+The Java OneBusAway server (the application suite that onebusaway-docker runs,
+as of 2.7.2) shows no vehicles from this feed. It builds vehicle records only
+from a trip updates feed and uses a vehicle position only to place the vehicle
+of a trip update, and this server publishes vehicle positions alone. Pointed at
+the feed, it loads the schedule and lists the running trips, but
+`vehicles-for-agency` stays empty. Run Maglev for this feed instead.
 
 If you set `FEED_AUTH_ENABLED=true`, every consumer must send its key in an
 `X-API-Key` header, OneBusAway included. Configure that header on the consumer
