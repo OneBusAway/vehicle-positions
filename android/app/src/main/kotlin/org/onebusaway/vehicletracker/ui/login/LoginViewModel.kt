@@ -101,13 +101,15 @@ internal fun serverLabel(server: String): String {
 /**
  * The address to sign in to, from what was typed: trimmed, and over https when no scheme was typed, since that is
  * how a driver is usually told the address. Null when it is not an http or https address at all, as for a scheme typed
- * wrong: "https//host" would otherwise go to a server called "https".
+ * wrong: "https//host" would otherwise go to a server called "https". Null too for an email typed in this field:
+ * "driver@agency.org" reads as the user "driver" at agency.org, and the sign-in would send the password there.
  */
 internal fun serverAddressOf(typed: String): String? {
     val trimmed = typed.trim()
     if ("://" in trimmed) return trimmed.toHttpUrlOrNull()?.toString()
     val url = "https://$trimmed".toHttpUrlOrNull() ?: return null
-    return if (url.host == "http" || url.host == "https") null else url.toString()
+    if (url.host == "http" || url.host == "https") return null
+    return if (url.username.isEmpty() && url.password.isEmpty()) url.toString() else null
 }
 
 /** [ARG_SIGN_IN_AGAIN] is set on the route Tracking opens once the session has ended; the first sign-in has none. */
