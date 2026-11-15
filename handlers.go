@@ -370,11 +370,11 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 		if v.TripID != "" || v.RouteID != "" {
 			trip := &gtfsrt.TripDescriptor{}
 			// A trip_id was checked against the schedule when its trip was
-			// started, so it names a scheduled trip. A route-only report
+			// started, so it names a trip in the schedule. A route-only report
 			// names no trip instance, so it claims no relationship to one.
 			if v.TripID != "" {
 				trip.TripId = proto.String(v.TripID)
-				trip.ScheduleRelationship = gtfsrt.TripDescriptor_SCHEDULED.Enum()
+				trip.ScheduleRelationship = scheduleRelationship(v.FrequencyBased)
 			}
 			if v.RouteID != "" {
 				trip.RouteId = proto.String(v.RouteID)
@@ -437,6 +437,16 @@ func vehicleDescriptor(v *VehicleState) *gtfsrt.VehicleDescriptor {
 	return d
 }
 
+// scheduleRelationship is how a trip in the schedule relates to it. A trip
+// run by headway has no timetable to keep: the GTFS-RT spec makes it
+// UNSCHEDULED, and the MobilityData validator rejects SCHEDULED on one (E013).
+func scheduleRelationship(frequencyBased bool) *gtfsrt.TripDescriptor_ScheduleRelationship {
+	if frequencyBased {
+		return gtfsrt.TripDescriptor_UNSCHEDULED.Enum()
+	}
+	return gtfsrt.TripDescriptor_SCHEDULED.Enum()
+}
+
 // riderEntity renders one rider-consensus trip estimate as a FeedEntity. The
 // "rider:" prefixes keep these ids from colliding with driver-reported
 // vehicles, and the label marks the position as rider-reported for consumers.
@@ -456,7 +466,7 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 	trip := &gtfsrt.TripDescriptor{
 		TripId:               proto.String(est.Key.TripID),
 		StartDate:            proto.String(est.Key.StartDate),
-		ScheduleRelationship: gtfsrt.TripDescriptor_SCHEDULED.Enum(),
+		ScheduleRelationship: scheduleRelationship(est.FrequencyBased),
 	}
 	if est.RouteID != "" {
 		trip.RouteId = proto.String(est.RouteID)

@@ -239,6 +239,18 @@ func TestAggregator_OutlierExcludedFromEstimate(t *testing.T) {
 	assert.InDelta(t, 105, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 3)
 }
 
+func TestAggregator_EstimateCarriesFrequencyBased(t *testing.T) {
+	f := newAggFixture(t)
+	f.t1.FrequencyBased = true
+	f.addSession("r1", "rider-a", TierTrusted)
+	res := f.walk(t, "r1", 0, 100, 10, nil)
+	require.True(t, res.Published)
+
+	est := f.agg.Estimates(f.onSchedulePoint(100, 2*time.Second).Timestamp, noCover)
+	require.Len(t, est, 1)
+	assert.True(t, est[0].FrequencyBased)
+}
+
 func TestAggregator_EstimateUsesLatestMatchedPoint(t *testing.T) {
 	f := newAggFixture(t)
 	f.addSession("r1", "rider-a", TierTrusted)

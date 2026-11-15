@@ -31,6 +31,9 @@ type VehicleState struct {
 	StopID       string
 	StopSequence int
 	StoppedAt    bool
+	// FrequencyBased is set when the loaded schedule runs TripID by headway
+	// (frequencies.txt exact_times=0), so the feed calls the trip UNSCHEDULED.
+	FrequencyBased bool
 	// alongShape is how far along its trip's shape the vehicle was last
 	// placed, in metres: the projection hint for its next report on that trip.
 	// It is nil until the vehicle has been placed on its current trip.
@@ -201,7 +204,11 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 		StopID:       place.stopID,
 		StopSequence: place.stopSequence,
 		StoppedAt:    place.stoppedAt,
-		alongShape:   place.alongShape,
+		// Looked up here rather than carried in place: a vehicle seeded at
+		// startup is not placed, but the feed still has to name its trip
+		// right.
+		FrequencyBased: t.locator != nil && t.locator.frequencyBased(loc.TripID),
+		alongShape:     place.alongShape,
 		// Not carried over from the vehicle's previous report: a driver app
 		// is to send it with every report while the driver has one set, so a
 		// report without it means the driver has cleared it.

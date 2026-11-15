@@ -70,6 +70,10 @@ type TripInfo struct {
 	// was drawn through its stops. Those straight lines cut every curve
 	// between stops, so a vehicle on the route can be far from them.
 	ShapeFromStops bool
+	// FrequencyBased is set when frequencies.txt runs the trip by headway
+	// (exact_times=0): its stop times are a pattern each run follows, not a
+	// timetable. GTFS-RT calls such a trip UNSCHEDULED.
+	FrequencyBased bool
 	StopTimes      []StopTimeInfo // sorted by Sequence
 }
 
@@ -172,7 +176,10 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 			DirectionID:    directionID(trip.DirectionId),
 			Shape:          shape,
 			ShapeFromStops: fromStops,
-			StopTimes:      stopTimesAlong(trip.StopTimes, shape, feedShapeEnd(trip.Shape), !fromStops),
+			FrequencyBased: slices.ContainsFunc(trip.Frequencies, func(f gtfs.Frequency) bool {
+				return f.ExactTimes == gtfs.FrequencyBased
+			}),
+			StopTimes: stopTimesAlong(trip.StopTimes, shape, feedShapeEnd(trip.Shape), !fromStops),
 		}
 		if fromStops {
 			stopShapes++

@@ -29,10 +29,14 @@ func testCatalog(t *testing.T) *gtfsCatalog {
 	return c
 }
 
+// fixtureMember is a GTFS file added to the fixture feed.
+type fixtureMember struct{ name, body string }
+
 // fixtureZipEdited returns the fixture feed with each member's body replaced
-// by what edit returns for it. The committed fixture is left untouched, so
-// cases that only one test needs do not have to live in it.
-func fixtureZipEdited(t *testing.T, edit func(name string, body []byte) []byte) []byte {
+// by what edit returns for it, and with added appended. The committed fixture
+// is left untouched, so cases that only one test needs do not have to live in
+// it.
+func fixtureZipEdited(t *testing.T, edit func(name string, body []byte) []byte, added ...fixtureMember) []byte {
 	t.Helper()
 	zr, err := zip.OpenReader("rider/testdata/fixture.zip")
 	require.NoError(t, err)
@@ -50,14 +54,20 @@ func fixtureZipEdited(t *testing.T, edit func(name string, body []byte) []byte) 
 		_, err = w.Write(edit(f.Name, body))
 		require.NoError(t, err)
 	}
+	for _, m := range added {
+		w, err := zw.Create(m.name)
+		require.NoError(t, err)
+		_, err = w.Write([]byte(m.body))
+		require.NoError(t, err)
+	}
 	require.NoError(t, zw.Close())
 	return buf.Bytes()
 }
 
 // fixtureIndexEdited builds an index over fixtureZipEdited's feed.
-func fixtureIndexEdited(t *testing.T, edit func(name string, body []byte) []byte) *rider.Index {
+func fixtureIndexEdited(t *testing.T, edit func(name string, body []byte) []byte, added ...fixtureMember) *rider.Index {
 	t.Helper()
-	ix, err := rider.IndexFromBytes(fixtureZipEdited(t, edit), "edited", catalogNow)
+	ix, err := rider.IndexFromBytes(fixtureZipEdited(t, edit, added...), "edited", catalogNow)
 	require.NoError(t, err)
 	return ix
 }
