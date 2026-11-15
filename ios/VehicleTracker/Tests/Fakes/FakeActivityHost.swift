@@ -26,6 +26,8 @@ import Foundation
     struct Listed {
         var id: String
         var serverTripID: Int64
+        /// The server the tests sign in to, unless a test says otherwise.
+        var server = "https://positions.example.org"
         var state: ActivityState
     }
 
@@ -48,7 +50,9 @@ import Foundation
     private var watchers: [String: AsyncStream<Void>.Continuation] = [:]
 
     func existing() -> [TripActivitySnapshot] {
-        listed.map { TripActivitySnapshot(id: $0.id, serverTripID: $0.serverTripID, isLive: ActivityKitHost.isLive($0.state)) }
+        listed.map {
+            TripActivitySnapshot(id: $0.id, serverTripID: $0.serverTripID, server: $0.server, isLive: ActivityKitHost.isLive($0.state))
+        }
     }
 
     func request(_ attributes: TripActivityAttributes, _ state: TripActivityAttributes.ContentState, staleDate: Date) throws -> String {
@@ -56,7 +60,7 @@ import Foundation
         guard areActivitiesEnabled else { throw Refusal.activitiesOff }
         guard inForeground else { throw TripActivityError.notInForeground }
         let id = "activity-\(requests.count)"
-        listed.append(Listed(id: id, serverTripID: attributes.serverTripID, state: .active))
+        listed.append(Listed(id: id, serverTripID: attributes.serverTripID, server: attributes.server, state: .active))
         return id
     }
 

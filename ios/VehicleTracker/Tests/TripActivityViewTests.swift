@@ -13,7 +13,8 @@ import UIKit
     /// default text size and at the largest the Lock Screen uses.
     @Test(arguments: [DynamicTypeSize.large, .xxLarge, .xxxLarge, .accessibility5])
     func theLongestCardFitsTheLockScreen(size: DynamicTypeSize) {
-        let attributes = TripActivityAttributes(serverTripID: 7, routeName: "E Line", routeColor: "FDB71A", routeTextColor: "000000",
+        let attributes = TripActivityAttributes(serverTripID: 7, server: "https://positions.example.org",
+                                                routeName: "E Line", routeColor: "FDB71A", routeTextColor: "000000",
                                                 headsign: "Downtown Seattle Via Rainier Ave S and Beacon Hill Station",
                                                 staleLine: "Reports paused · Open the app to keep reporting.", staleTitle: "Reports paused")
         let state = TripActivityAttributes.ContentState(
@@ -37,7 +38,8 @@ import UIKit
     /// Dashboard slot must hold all of them, stale or not.
     @Test(arguments: [false, true])
     func theSmallLayoutFitsTheNarrowestDashboardSlot(isStale: Bool) {
-        let attributes = TripActivityAttributes(serverTripID: 7, routeName: "E Line", routeColor: "FDB71A", routeTextColor: "000000",
+        let attributes = TripActivityAttributes(serverTripID: 7, server: "https://positions.example.org",
+                                                routeName: "E Line", routeColor: "FDB71A", routeTextColor: "000000",
                                                 headsign: "Downtown Seattle Via Rainier Ave S",
                                                 staleLine: "Reports paused · Open the app to keep reporting.", staleTitle: "Reports paused")
         let state = TripActivityAttributes.ContentState(

@@ -70,6 +70,7 @@ import VehiclePositionsKit
         let (s, c) = try await started()
         let request = try #require(host.requests.first)
         #expect(request.attributes.serverTripID == 42)
+        #expect(request.attributes.server == "https://positions.example.org")
         #expect(request.attributes.routeName == "1")
         #expect(request.attributes.routeColor == "0077C0")
         #expect(request.attributes.routeTextColor == "FFFFFF")
@@ -322,6 +323,33 @@ import VehiclePositionsKit
         try await s.start(vehicle: bus, tripID: "T1")
         #expect(await eventually { host.requests.count == 2 })
         #expect(host.requests.last?.attributes.serverTripID == 42)
+        withExtendedLifetime(c) {}
+    }
+
+    /// The same across a relaunch: trip 7 on another server was swiped away
+    /// and ActivityKit still lists it, but the stored trip 7 is on this one,
+    /// so resuming it starts its activity.
+    @Test func theSameTripIDSwipedAwayOnAnotherServerStartsAfterARelaunch() async throws {
+        host.listed = [.init(id: "elsewhere", serverTripID: 7, server: "https://other.example.org", state: .dismissed)]
+        let s = try relaunched()
+        let c = controller(s)
+        s.resume()
+        #expect(await eventually { host.requests.count == 1 })
+        #expect(host.requests.first?.attributes.serverTripID == 7)
+        #expect(host.requests.first?.attributes.server == "https://positions.example.org")
+        withExtendedLifetime(c) {}
+    }
+
+    /// A live activity for trip 7 on another server is not the stored trip
+    /// 7's: it is ended, not taken over with the other trip's route on it.
+    @Test func endsTheSameTripIDsActivityFromAnotherServerOnRelaunch() async throws {
+        host.listed = [.init(id: "elsewhere", serverTripID: 7, server: "https://other.example.org", state: .active)]
+        let s = try relaunched()
+        let c = controller(s)
+        #expect(await eventually { host.ends == ["elsewhere"] })
+        s.resume()
+        #expect(await eventually { host.requests.count == 1 })
+        #expect(host.updates.allSatisfy { $0.id != "elsewhere" })
         withExtendedLifetime(c) {}
     }
 
