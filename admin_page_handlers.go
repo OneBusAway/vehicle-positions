@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -711,7 +712,7 @@ func (ui *adminUI) setVehicleActive(w http.ResponseWriter, r *http.Request, acti
 	http.Redirect(w, r, "/admin/vehicles", http.StatusSeeOther)
 }
 
-// minPasswordLength is the minimum length required for a user password, and
+// minPasswordLength is the minimum number of characters in a password, and
 // maxPasswordBytes is bcrypt's input limit: bcrypt.GenerateFromPassword
 // rejects anything longer. Both are enforced everywhere passwords are set —
 // the users API, the admin UI forms, and the bootstrap admin path — via
@@ -726,7 +727,7 @@ const (
 
 // validatePassword enforces the shared password-length policy.
 func validatePassword(password string) error {
-	if len(password) < minPasswordLength {
+	if utf8.RuneCountInString(password) < minPasswordLength {
 		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
 	}
 	if len(password) > maxPasswordBytes {

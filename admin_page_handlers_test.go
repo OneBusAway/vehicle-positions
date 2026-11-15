@@ -2212,6 +2212,9 @@ func TestValidatePassword(t *testing.T) {
 	}{
 		{"one short of the minimum", strings.Repeat("a", 7), "password must be at least 8 characters"},
 		{"exactly the minimum", strings.Repeat("a", 8), ""},
+		// The minimum is characters, not bytes: 7 two-byte characters are 14 bytes.
+		{"multi-byte characters one short of the minimum", strings.Repeat("é", 7), "password must be at least 8 characters"},
+		{"multi-byte characters at the minimum", strings.Repeat("é", 8), ""},
 		{"exactly bcrypt's limit", strings.Repeat("a", 72), ""},
 		{"one byte over bcrypt's limit", strings.Repeat("a", 73), "password must be at most 72 bytes"},
 		// The limit is bytes, not characters: 37 two-byte characters are 74 bytes.
