@@ -55,6 +55,7 @@ var htmlUIRoutes = map[string]struct{}{
 	"GET /admin/alerts":                                  {},
 	"GET /admin/trips":                                   {},
 	"GET /admin/reports":                                 {},
+	"GET /admin/health":                                  {},
 	"POST /admin/trips/{id}/end":                         {},
 	"GET /admin/api-keys":                                {},
 	"POST /admin/api-keys":                               {},
@@ -105,6 +106,11 @@ var schemaStructs = map[string]string{
 	"RouteServiceReport":   "routeReport",
 	"ScheduledTripReport":  "tripReport",
 	"ServiceReportRun":     "tripRun",
+	"FeedHealth":           "feedHealthResponse",
+	"FeedHealthPeriod":     "healthPeriod",
+	"FeedHealthMinute":     "healthMinute",
+	"ReportOutcomes":       "reportOutcomes",
+	"FeedOutcomes":         "feedOutcomes",
 
 	// Rider mode (#94).
 	"RiderRegisterResponse": "riderRegisterResponse",
