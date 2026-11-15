@@ -43,7 +43,9 @@ type EndTripRequest struct {
 	TripID int64 `json:"trip_id"`
 }
 
-func handleStartTrip(store TripStarter, catalog *gtfsCatalog) http.HandlerFunc {
+// handleStartTrip also marks the trip's vehicle as starting a trip, so the
+// feed places its first report at the start of the trip.
+func handleStartTrip(store TripStarter, catalog *gtfsCatalog, tracker *Tracker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		contentType := r.Header.Get("Content-Type")
 		mediaType, _, err := mime.ParseMediaType(contentType)
@@ -129,6 +131,7 @@ func handleStartTrip(store TripStarter, catalog *gtfsCatalog) http.HandlerFunc {
 			return
 		}
 
+		tracker.MarkTripStarted(trip.VehicleID)
 		writeJSON(w, http.StatusCreated, trip)
 	}
 }
