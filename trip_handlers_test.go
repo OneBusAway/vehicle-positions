@@ -80,7 +80,7 @@ func TestHandleStartTrip_Success(t *testing.T) {
 		Status:    "active",
 	}}
 
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 	w := tripRequest(t, handler, "42", StartTripRequest{
 		VehicleID: "bus-1",
 		RouteID:   "route-5",
@@ -98,7 +98,7 @@ func TestHandleStartTrip_Success(t *testing.T) {
 func TestHandleStartTrip_NotAssigned(t *testing.T) {
 	store := &mockTripStarter{err: ErrNotAssigned}
 
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1"})
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
@@ -108,7 +108,7 @@ func TestHandleStartTrip_NotAssigned(t *testing.T) {
 func TestHandleStartTrip_AlreadyActive(t *testing.T) {
 	store := &mockTripStarter{err: ErrActiveTripExists}
 
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1"})
 
 	assert.Equal(t, http.StatusConflict, w.Code)
@@ -117,7 +117,7 @@ func TestHandleStartTrip_AlreadyActive(t *testing.T) {
 
 func TestHandleStartTrip_Validation(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	tests := []struct {
 		name        string
@@ -146,7 +146,7 @@ func TestHandleStartTrip_Validation(t *testing.T) {
 
 func TestHandleStartTrip_MissingClaims(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
@@ -227,7 +227,7 @@ func TestHandleEndTrip_MissingClaims(t *testing.T) {
 
 func TestHandleStartTrip_TrailingJSON(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	w := tripRawRequest(t, handler, "42", []byte(`{"vehicle_id":"bus-1"}{"extra":true}`))
 
@@ -247,7 +247,7 @@ func TestHandleEndTrip_TrailingJSON(t *testing.T) {
 
 func TestHandleStartTrip_UnknownFields(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	w := tripRawRequest(t, handler, "42", []byte(`{"vehicle_id":"bus-1","unknown_field":"value"}`))
 
@@ -257,7 +257,7 @@ func TestHandleStartTrip_UnknownFields(t *testing.T) {
 
 func TestHandleStartTrip_InvalidSubClaim(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	w := tripRawRequest(t, handler, "not-a-number", []byte(`{"vehicle_id":"bus-1"}`))
 
@@ -277,7 +277,7 @@ func TestHandleEndTrip_InvalidSubClaim(t *testing.T) {
 
 func TestHandleStartTrip_EmptySub(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	w := tripRawRequest(t, handler, "", []byte(`{"vehicle_id":"bus-1"}`))
 
@@ -287,7 +287,7 @@ func TestHandleStartTrip_EmptySub(t *testing.T) {
 
 func TestHandleStartTrip_WrongContentType(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	body, _ := json.Marshal(StartTripRequest{VehicleID: "bus-1"})
 	req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
@@ -335,7 +335,7 @@ func TestHandleEndTrip_UnknownFields(t *testing.T) {
 
 func TestHandleStartTrip_RequestBodyTooLarge(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	largeBody := `{"vehicle_id":"` + strings.Repeat("a", 2048) + `"}`
 	w := tripRawRequest(t, handler, "42", []byte(largeBody))
@@ -361,7 +361,7 @@ func TestHandleStartTrip_VehicleIDFormat(t *testing.T) {
 		VehicleID: strings.Repeat("a", 50),
 		Status:    "active",
 	}}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 
 	tests := []struct {
 		name        string
@@ -388,7 +388,7 @@ func TestHandleStartTrip_VehicleIDFormat(t *testing.T) {
 
 func TestHandleStartTrip_RouteIDTooLong(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1", RouteID: strings.Repeat("r", 101)})
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -397,7 +397,7 @@ func TestHandleStartTrip_RouteIDTooLong(t *testing.T) {
 
 func TestHandleStartTrip_GtfsTripIDTooLong(t *testing.T) {
 	store := &mockTripStarter{}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1", GtfsTripID: strings.Repeat("g", 101)})
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -406,7 +406,7 @@ func TestHandleStartTrip_GtfsTripIDTooLong(t *testing.T) {
 
 func TestHandleStartTrip_InternalServerError(t *testing.T) {
 	store := &mockTripStarter{err: assert.AnError}
-	handler := handleStartTrip(store, nil)
+	handler := handleStartTrip(store, nil, newTestTracker(t))
 	w := tripRequest(t, handler, "42", StartTripRequest{VehicleID: "bus-1"})
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -442,7 +442,7 @@ func TestHandleStartTrip_ChecksIDsAgainstSchedule(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &mockTripStarter{trip: &TripResponse{ID: 1, UserID: 42, VehicleID: "bus-1", Status: "active"}}
-			w := tripRequest(t, handleStartTrip(store, catalog), "42",
+			w := tripRequest(t, handleStartTrip(store, catalog, newTestTracker(t)), "42",
 				StartTripRequest{VehicleID: "bus-1", RouteID: tc.routeID, GtfsTripID: tc.tripID})
 			assert.Equal(t, tc.status, w.Code)
 			if tc.message != "" {
@@ -490,11 +490,11 @@ func TestScheduleSwapMidTrip_ReportsStillAccepted(t *testing.T) {
 	catalog := newGTFSCatalog(current.Load, rider.DefaultThresholds())
 	catalog.now = func() time.Time { return catalogNow }
 
-	w := tripRequest(t, handleStartTrip(store, catalog), sub, StartTripRequest{VehicleID: "bus-swap", RouteID: "R1", GtfsTripID: "T1"})
+	w := tripRequest(t, handleStartTrip(store, catalog, newTestTracker(t)), sub, StartTripRequest{VehicleID: "bus-swap", RouteID: "R1", GtfsTripID: "T1"})
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
 	current.Store(fixtureWithTripRenamed(t, "T1", "T1-v2"))
-	w = tripRequest(t, handleStartTrip(store, catalog), sub, StartTripRequest{VehicleID: "bus-swap", RouteID: "R1", GtfsTripID: "T1"})
+	w = tripRequest(t, handleStartTrip(store, catalog, newTestTracker(t)), sub, StartTripRequest{VehicleID: "bus-swap", RouteID: "R1", GtfsTripID: "T1"})
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, `gtfs_trip_id "T1" is not in the GTFS schedule`, decodeError(t, w), "the new schedule no longer has T1")
 
@@ -512,7 +512,7 @@ func TestHandleStartTrip_VehicleBusyOrInactive(t *testing.T) {
 		ErrVehicleBusy:     "vehicle already has an active trip",
 		ErrVehicleInactive: "vehicle is inactive",
 	} {
-		w := tripRequest(t, handleStartTrip(&mockTripStarter{err: err}, nil), "42", StartTripRequest{VehicleID: "bus-1"})
+		w := tripRequest(t, handleStartTrip(&mockTripStarter{err: err}, nil, newTestTracker(t)), "42", StartTripRequest{VehicleID: "bus-1"})
 		assert.Equal(t, http.StatusConflict, w.Code)
 		assert.Equal(t, message, decodeError(t, w))
 	}

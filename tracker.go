@@ -48,6 +48,10 @@ type Tracker struct {
 	// removedAt is when Remove last dropped each vehicle, so UpdateAuthorized
 	// can tell a report that raced a removal from one that came after it.
 	removedAt map[string]time.Time
+	// tripStarted holds each vehicle that has started a trip since its last
+	// report: that report is the trip's first, and is placed from the start
+	// of the shape.
+	tripStarted map[string]struct{}
 	// locator places each accepted report on its GTFS trip; nil places none,
 	// which leaves every vehicle's stop fields unset.
 	locator  *tripLocator
@@ -63,11 +67,12 @@ func NewTracker(maxAge time.Duration) *Tracker {
 	}
 
 	t := &Tracker{
-		vehicles:  make(map[string]*VehicleState),
-		seen:      make(map[string]struct{}),
-		removedAt: make(map[string]time.Time),
-		maxAge:    maxAge,
-		done:      make(chan struct{}),
+		vehicles:    make(map[string]*VehicleState),
+		seen:        make(map[string]struct{}),
+		removedAt:   make(map[string]time.Time),
+		tripStarted: make(map[string]struct{}),
+		maxAge:      maxAge,
+		done:        make(chan struct{}),
 	}
 
 	go func() {
@@ -141,14 +146,29 @@ func (t *Tracker) place(loc *LocationReport) tripPlace {
 	return locator.locate(loc, hint)
 }
 
+// MarkTripStarted records that vehicleID has just started a trip, so its next
+// report, the trip's first, is placed from the start of the trip's shape.
+// Ending a trip removes the vehicle, so that report would otherwise find no
+// place to start from however short the layover, and on a loop or an
+// out-and-back the nearest pass at the terminal is the one that ends there.
+func (t *Tracker) MarkTripStarted(vehicleID string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.tripStarted[vehicleID] = struct{}{}
+}
+
 // hint is where to project loc from, with t.mu held: the vehicle's last place
 // on this same trip instance, or 0, the start of the shape, when the vehicle
-// has just moved on to a new trip or to the same trip on another service date.
-// It is nil, no hint, when the vehicle has no recent place: a vehicle seeded
-// at startup or back from going stale may be anywhere along its trip, and
-// assuming the start would put one on the return leg of an out-and-back on
-// the outbound pass beside it.
+// has just started a trip, or has moved on to a new trip or to the same trip
+// on another service date. It is nil, no hint, when the vehicle has no recent
+// place: a vehicle seeded at startup or back from going stale may be anywhere
+// along its trip, and assuming the start would put one on the return leg of
+// an out-and-back on the outbound pass beside it.
 func (t *Tracker) hint(loc *LocationReport) *float64 {
+	if _, ok := t.tripStarted[loc.VehicleID]; ok {
+		start := 0.0
+		return &start
+	}
 	prev, ok := t.vehicles[loc.VehicleID]
 	if !ok || !prev.UpdatedAt.After(time.Now().Add(-t.maxAge)) {
 		return nil
@@ -164,6 +184,7 @@ func (t *Tracker) hint(loc *LocationReport) *float64 {
 // place on its trip.
 func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 	t.seen[loc.VehicleID] = struct{}{}
+	delete(t.tripStarted, loc.VehicleID)
 
 	var bearing *float64
 	if loc.Bearing != nil {
@@ -217,7 +238,8 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 }
 
 // Remove drops a vehicle's latest position, so it leaves the feed now rather
-// than when it goes stale. Used when an admin deactivates the vehicle.
+// than when it goes stale. Used when the vehicle's trip ends and when an admin
+// deactivates the vehicle.
 func (t *Tracker) Remove(vehicleID string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
