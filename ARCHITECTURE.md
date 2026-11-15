@@ -370,7 +370,7 @@ Authentication is per endpoint, not global:
   "bearing":     90.0,
   "speed":       12.5,
   "accuracy":    5.0,
-  "timestamp":   1752566400
+  "timestamp":   1784094120
 }
 ```
 
@@ -386,39 +386,55 @@ Authentication is per endpoint, not global:
 | `speed` | ❌ | Speed in metres per second. |
 | `accuracy` | ❌ | GPS accuracy in metres. Stored in PostgreSQL, but not emitted in the GTFS-RT feed. |
 | `timestamp` | ✅ | Positive Unix epoch timestamp in seconds. |
+| `occupancy_status` | ❌ | How full the vehicle is, as the driver sees it: one of the GTFS-RT `OccupancyStatus` names `EMPTY`, `MANY_SEATS_AVAILABLE`, `FEW_SEATS_AVAILABLE`, `STANDING_ROOM_ONLY`, `CRUSHED_STANDING_ROOM_ONLY`, `FULL` or `NOT_ACCEPTING_PASSENGERS`. Left out when the driver has not said. |
 
 **Validation rules:**
 
 - `vehicle_id` must be a non-empty string. Error: `vehicle_id is required`.
+- `vehicle_id` is capped at 50 characters. Error: `vehicle_id must be at most 50 characters`.
+- `vehicle_id` may contain only ASCII letters, digits, `.`, `_` and `-`. Error: `vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores`.
 - `latitude` and `longitude` cannot both be zero. Error: `latitude and longitude cannot both be zero (likely GPS error)`.
 - `latitude` must be in the range `-90` to `90`. Error: `latitude must be between -90 and 90`.
 - `longitude` must be in the range `-180` to `180`. Error: `longitude must be between -180 and 180`.
 - `timestamp` must be positive. Error: `timestamp must be positive`.
+- `timestamp` must be within 5 minutes of server time, ahead or behind. Error: `timestamp must be within 5 minutes of server time`.
+- `bearing`, when sent, must be from `0` to `360` inclusive. Error: `bearing must be between 0 and 360 (inclusive)`.
+- `speed`, when sent, must not be negative. Error: `speed must be non-negative`.
 - `trip_id` is capped at 100 characters. Error: `trip_id must be at most 100 characters`.
 - `route_id` is capped at 100 characters. Error: `route_id must be at most 100 characters`.
 - `start_date` must match `YYYYMMDD`. Error: `start_date must be YYYYMMDD`.
 - `start_date` must be a real calendar date. Error: `start_date must be a valid YYYYMMDD date`.
 - `start_date` requires `trip_id` or `route_id` to be non-empty. Error: `start_date requires trip_id or route_id`.
+- `occupancy_status`, when sent, must be one of the seven names above, spelled exactly so. Error: `occupancy_status must be one of EMPTY, MANY_SEATS_AVAILABLE, FEW_SEATS_AVAILABLE, STANDING_ROOM_ONLY, CRUSHED_STANDING_ROOM_ONLY, FULL, NOT_ACCEPTING_PASSENGERS`.
 
 **Decoding behavior:**
 
 - Invalid or malformed JSON returns `400` with `{"error":"invalid JSON: ..."}`.
 - Unknown JSON properties are rejected because the decoder uses `DisallowUnknownFields()`.
 - A second JSON object or other non-whitespace trailing data is rejected with `invalid JSON: request body must contain a single JSON object and no trailing data`.
-- Because `bearing`, `speed`, and `accuracy` are plain `float64` fields, omitted values decode as `0` and are persisted as non-NULL zeroes.
+- `bearing`, `speed`, `accuracy` and `occupancy_status` are pointer fields, so one left out (or sent as `null`) stays absent: it is stored as `NULL` and the feed leaves it out, while `bearing: 0`, due north, is kept and published as `0`.
 
 ### 6.3 GTFS-Realtime Feed Generation
 
-The feed is generated on every request entirely from the in-memory Tracker — the database is **not** read during feed generation. This keeps feed latency low and independent of database load.
+The feed is generated on every request entirely from memory: the Tracker's driver vehicles and, with rider mode on, the rider aggregator's trip estimates (§8.5). The database is **not** read during feed generation. This keeps feed latency low and independent of database load.
 
 `buildFeed()` uses `github.com/OneBusAway/go-gtfs/proto` types together with `google.golang.org/protobuf/proto` and `protojson` to construct a `FeedMessage` with:
 
 (Those are the same generated GTFS-RT bindings as MobilityData's `gtfs-realtime-bindings`; only one of the two may be linked into the binary, because both register the same protobuf file names and the second registration panics at init. The rider engine already depends on `go-gtfs` for static GTFS, so that copy is the one the server uses.)
 
-- **Header:** GTFS-Realtime version `2.0`, incrementality `FULL_DATASET`, current Unix timestamp.
-- One `FeedEntity` per active vehicle (`id = vehicle_id`).
-- Each entity carries a `VehiclePosition` with `Position` (latitude, longitude, bearing, speed), a `VehicleDescriptor` (`id` only), and an epoch `Timestamp` copied from the incoming report.
-- A `TripDescriptor` with `trip_id`, `route_id` and `start_date` as reported, only when `trip_id` or `route_id` is non-empty.
+- **Header:** GTFS-Realtime version `2.0`, incrementality `FULL_DATASET`, and a timestamp that is the newest of the current time and every entity's timestamp, so no entity is newer than the feed (E012).
+- One `FeedEntity` per active driver vehicle (`id = vehicle_id`), then one per rider-reported trip (§8.5).
+
+A driver vehicle's `VehiclePosition` carries:
+
+- `trip`, a `TripDescriptor`, only when the report sent `trip_id` or `route_id`. `trip_id`, `route_id` and `start_date` are the report's, each set only when non-empty. `schedule_relationship` is `SCHEDULED` when `trip_id` is set: the trip id is checked against the GTFS schedule when the trip starts, and a report's `trip_id` must be its active trip's. A route-only report names no trip instance, so it carries no `schedule_relationship`. `start_time` is never set: GTFS-RT needs it only for frequency-based trips, and every trip the feed publishes is a scheduled one.
+- `vehicle`, a `VehicleDescriptor`: `id` is the `vehicle_id`, and `label` is the vehicle's label from the `vehicles` table, left out when that is empty or only whitespace. The label is read with each accepted report, so an admin's rename reaches the feed with the vehicle's next report.
+- `position`: `latitude` and `longitude`, and `bearing` and `speed` when the report sent them. `accuracy` is never published.
+- `stop_id`, `current_stop_sequence` and `current_status`: the stop of its trip the vehicle is at or heading to. `tripLocator` (`trip_locator.go`) works it out once, when the report is accepted, by projecting the fix onto the trip's shape, so a feed request does no projection. `current_status` is `STOPPED_AT` when the vehicle is within 30 m of the stop along the shape, before or after it, and `IN_TRANSIT_TO` otherwise. All three are left out when the report has no `trip_id`, the trip is not in the loaded schedule, the trip's shape was drawn through its stops, the fix is further from the shape than `RIDER_MAX_SHAPE_DISTANCE` plus its accuracy, or the vehicle is more than 30 m past its last stop. A vehicle seeded at startup has none until it next reports.
+- `timestamp`: the report's `timestamp`, capped at 60 seconds after the feed's own time (E050), because a report may be up to 5 minutes ahead of server time.
+- `occupancy_status`: the latest report's `occupancy_status`, left out when that report sent none.
+
+A rider-reported entity differs: its `id` and `vehicle.id` are both `rider:<trip_id>:<start_date>` and `vehicle.label` is always `Rider-reported`; `trip` is always there, with `trip_id`, `start_date`, `schedule_relationship: SCHEDULED` and the trip's `route_id` from the schedule; `bearing` is always set, from the shape, and `speed` when the riders' phones reported one; the stop fields name the next stop along the shape, with `current_status` always `IN_TRANSIT_TO`, never `STOPPED_AT`; and it has no `occupancy_status`.
 
 Consumers can request JSON encoding by appending `?format=json` to the URL. The default response is binary protobuf (`application/x-protobuf`). Any other `format` value falls back to protobuf because only the exact string `json` is checked.
 
