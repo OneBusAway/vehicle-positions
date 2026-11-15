@@ -87,12 +87,16 @@ keys**. **Sign out** is at the top right of every page.
 | **Drivers** | Accounts with the driver role that are not deactivated. |
 | **Active Trips** | Trips that have been started and not yet ended. |
 
-Below them is a thin strip with two more:
+Below them is a thin strip:
 
 | Field | What it means |
 |---|---|
 | **Feed last updated** | How long ago *any* vehicle the server is still tracking last reported — "just now", "3 min ago". It is **never** whenever the server is tracking no vehicles at all, which in practice means nothing has reported for roughly the last 5 to 10 minutes: the server forgets a vehicle once it passes the staleness threshold. **never** is also what you see after a restart if nothing has reported in the last few minutes. Treat it as "recently" or "not recently", not as a long-term record. |
 | **Staleness threshold** | How long a vehicle may go without reporting before it drops out of the feed and out of **Active Now**. Default 5 min; changing it is a server setting (`STALENESS_THRESHOLD`), not a UI control. |
+| **Reports, last hour** | Position reports from driver phones the server accepted and rejected in the last hour. When any were rejected it adds the share rejected and the most common reason. |
+| **Feed fetches, last hour** | How many times consumers fetched the feed, how many were refused for their API key, and how many failed for another reason. |
+
+**Feed health →** opens the full counts; see [Feed health](#feed-health).
 
 The **Recent Activity** table lists the ten most recently reporting vehicles
 with their **Vehicle** label, **Route** (the route of their current trip, or a
@@ -578,6 +582,51 @@ To cut a consumer off, click **Deactivate** on its row and confirm **Deactivate
 this key? It cannot be turned back on.** The feed refuses that key from its next
 request. There is no reactivate: if the consumer should have access again, make
 it a new key.
+
+### Feed health
+
+**Feed health** (the **Feed health →** link on the Dashboard) shows what became
+of every position report the driver phones sent and every fetch of the feed,
+minute by minute for the last hour, plus totals. The counts are kept in memory:
+a server restart starts them again, and the page says when counting began. It
+reloads every minute. Your IT contact can read the same numbers from
+`GET /api/v1/admin/health`.
+
+| Row | What it means |
+|---|---|
+| **Reports accepted** | The server took the position. |
+| **Rejected as invalid** | The phone sent a report the server would not take: malformed (400), for a trip the driver is not running (409), or in the wrong format (415). |
+| **Rejected, signed out or not allowed** | The phone was not signed in, or the driver is not assigned to the vehicle, or the vehicle is deactivated (401, 403). |
+| **Rejected, rate limited** | The phone reported more often than once every 5 seconds on average (429). |
+| **Rejected, server error** | The server failed to handle the report, usually because the database did (5xx). |
+| **Feed fetches served** | A consumer got the feed. |
+| **Refused, missing or bad API key** | Only with feed authentication on: the consumer sent no key, an unknown key or a deactivated one. |
+| **Bad request** | The consumer asked for an address the feed does not understand. |
+| **Server error** | The server failed to build the feed. |
+
+The **Per minute** table shows the same counts for each minute, newest first,
+with any rejection in red. Use it to find when a problem started.
+
+**When the rejected share climbs**, look at the most common reason:
+
+- **invalid**: often one phone. A 409 means the driver is reporting for a trip
+  that is no longer running, for example one ended from **Trips**. Ask them to
+  start their trip again. If it began right after an app update, tell your IT
+  contact.
+- **signed out or not allowed**: check **Users** and **Vehicles** for an account
+  or vehicle you deactivated, or an assignment you removed. A short burst right
+  after you do that is expected; it stops once the driver signs in again.
+- **rate limited**: a phone sending too often, usually one running an old or
+  modified app.
+- **server error**: tell your IT contact the minute it started. The server's
+  logs and its `/ready` check will say whether the database is reachable.
+
+**When refused fetches climb**, a consumer is using a missing or deactivated
+key. Steady refusals every minute are a consumer polling with a key you revoked:
+give them a new one or ask them to stop.
+
+A phone that cannot reach the server sends nothing, so it shows up as fewer
+reports, not as rejections. **Alerts** tells you which vehicle has gone quiet.
 
 ---
 
