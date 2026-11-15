@@ -165,17 +165,27 @@ Leave the demo running and point the server at both.
 ### Maglev
 
 [Maglev](https://github.com/OneBusAway/maglev) is the OneBusAway server written
-in Go. In its checkout, save this as `config.json`, with the path to your clone
-of this repository:
+in Go. Building it needs Go and a C compiler, as its README says. Clone it:
+
+```bash
+git clone https://github.com/OneBusAway/maglev.git
+cd maglev
+```
+
+Save this there as `config.json`, with the path to your clone of this
+repository:
 
 ```json
 {
   "port": 4000,
-  "env": "development",
+  "host": "127.0.0.1",
   "api-keys": ["test"],
-  "gtfs-static-feed": {
-    "url": "/path/to/vehicle-positions/demo/gtfs.zip"
-  },
+  "gtfs-static-feeds": [
+    {
+      "id": "demo",
+      "url": "/path/to/vehicle-positions/demo/gtfs.zip"
+    }
+  ],
   "gtfs-rt-feeds": [
     {
       "id": "vehicle-positions-demo",
@@ -188,35 +198,36 @@ of this repository:
 }
 ```
 
-Start it with `make run`, which builds Maglev and runs it with `config.json`,
-then ask it for the agency's vehicles:
+`host` keeps Maglev on your machine, like the demo; without it Maglev listens
+on every interface. Start it with `make run`, which builds Maglev and runs it
+with `config.json`. Once it logs `starting server`, ask it for the agency's
+vehicles:
 
 ```bash
-curl -s 'http://localhost:4000/api/where/vehicles-for-agency/DEMO.json?key=test' | jq '.data.list'
+curl -s 'http://localhost:4000/api/where/vehicles-for-agency/DEMO.json?key=test' \
+  | jq '.data.list[] | {vehicleId, tripId, location}'
 ```
 
-### The OneBusAway application suite
+All nine vehicles are listed, each on its trip from the schedule. Maglev puts
+the agency id in front of trip ids:
 
-The Java server is easiest to run from
-[onebusaway-docker](https://github.com/OneBusAway/onebusaway-docker). Its
-README describes the variables it reads. Build the bundle from the URL of
-`demo/gtfs.zip`, then give the `oba_app` service the same URL and the feed:
-
-```yaml
-    environment:
-      - GTFS_URL=https://raw.githubusercontent.com/OneBusAway/vehicle-positions/main/demo/gtfs.zip
-      - TZ=Africa/Nairobi
-      - VEHICLE_POSITIONS_URL=http://host.docker.internal:18080/gtfs-rt/vehicle-positions
-      - AGENCY_ID=DEMO
-      - REFRESH_INTERVAL=10
+```json
+{
+  "vehicleId": "sim-3c70e5c0-001",
+  "tripId": "DEMO_R1-0-0545",
+  "location": { "lat": -1.30046, "lon": 36.76901 }
+}
 ```
 
-`TZ` has to be the timezone in the feed's `agency.txt`. Inside a container
-`localhost` is the container itself, which is why the feed's address is not the
-one above. `host.docker.internal` is your machine as Docker
-Desktop (macOS and Windows) names it. On Linux, attach the OneBusAway container
-to the demo's network, `vehicle-positions-demo_default`, and use
-`http://server:8080/gtfs-rt/vehicle-positions` instead.
+### The Java OneBusAway server
+
+The OneBusAway application suite, which
+[onebusaway-docker](https://github.com/OneBusAway/onebusaway-docker) runs,
+shows no vehicles from this feed, as of OneBusAway 2.7.2. It uses a vehicle
+position only to place the vehicle of a trip update for the same trip, and this
+server publishes vehicle positions alone. Pointed at the demo, it loads the
+schedule and lists the running trips, but `vehicles-for-agency/DEMO.json` stays
+empty. Use Maglev to see the demo in OneBusAway.
 
 For a deployed server rather than this demo, see
 [Connecting the feed to OneBusAway](deployment.md#11-connecting-the-feed-to-onebusaway).
