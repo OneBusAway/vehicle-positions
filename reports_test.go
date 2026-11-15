@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -293,7 +295,7 @@ func TestServiceReporter_RefreshedScheduleWorksDaysOutAgain(t *testing.T) {
 	_, err := r.report(context.Background(), "2026-09-02")
 	require.NoError(t, err)
 
-	second := reportFixtureIndex(t)
+	second := refreshedReportFixtureIndex(t)
 	require.NotSame(t, first, second)
 	r.index = func() *rider.Index { return second }
 	_, err = r.report(context.Background(), "2026-09-02")
@@ -308,17 +310,17 @@ func TestServiceReporter_RefreshedScheduleDropsTheOldReports(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Len(t, r.cache, 2)
-	require.Same(t, first, r.schedule)
+	require.Equal(t, loadOf(first), r.schedule)
 
-	second := reportFixtureIndex(t)
+	second := refreshedReportFixtureIndex(t)
 	r.index = func() *rider.Index { return second }
 	// Today's report is never kept, so nothing takes the old reports' place:
-	// asking is enough to let them, and the schedule they hold, go.
+	// asking is enough to let them go.
 	_, err := r.report(context.Background(), "2026-09-04")
 	require.NoError(t, err)
 	assert.Empty(t, r.cache)
 	assert.Empty(t, r.order)
-	assert.Same(t, second, r.schedule)
+	assert.Equal(t, loadOf(second), r.schedule)
 
 	_, err = r.report(context.Background(), "2026-09-02")
 	require.NoError(t, err)
@@ -328,7 +330,7 @@ func TestServiceReporter_RefreshedScheduleDropsTheOldReports(t *testing.T) {
 
 func TestServiceReporter_DoesNotKeepAReportForAReplacedSchedule(t *testing.T) {
 	r, store, _ := newFixtureReporter(t, reportFixtureNow)
-	second := reportFixtureIndex(t)
+	second := refreshedReportFixtureIndex(t)
 	// While the first request is reading its trips, the schedule is
 	// refreshed and another day is asked for against the new one.
 	store.onRead = func() {
@@ -344,7 +346,57 @@ func TestServiceReporter_DoesNotKeepAReportForAReplacedSchedule(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotSame(t, stale, fresh, "a report worked out against the replaced schedule was kept")
 	assert.Equal(t, 3, store.reads)
-	assert.Same(t, second, r.schedule)
+	assert.Equal(t, loadOf(second), r.schedule)
+}
+
+// TestServiceReporter_LetsAReplacedScheduleGo: the schedule is refreshed and
+// nobody opens Reports afterwards. The day kept against the old index stays
+// until the next request, but neither that index nor any trip of it may stay
+// in memory with it.
+func TestServiceReporter_LetsAReplacedScheduleGo(t *testing.T) {
+	current := reportFixtureIndex(t)
+	trips, trails := reportFixtureTrips(t, current)
+	r := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return current }, testReportSettings)
+	r.now = func() time.Time { return reportFixtureNow }
+	_, err := r.report(context.Background(), "2026-09-02")
+	require.NoError(t, err)
+	require.Len(t, r.cache, 1)
+	replaced, replacedTrip := weak.Make(current), weak.Make(mustTrip(t, current, "T1"))
+
+	current = refreshedReportFixtureIndex(t)
+	runtime.GC()
+	assert.Nil(t, replaced.Value(), "the replaced index is still reachable")
+	assert.Nil(t, replacedTrip.Value(), "a trip of the replaced index is still reachable")
+	assert.Len(t, r.cache, 1, "nothing has asked for a report since the refresh")
+}
+
+// TestServiceReporter_TheLoadNamesTheSchedule: the kept reports belong to one
+// load of the schedule, named by the feed it was loaded from and when. The
+// same load in another index value keeps them, and another feed loaded at the
+// same moment does not.
+func TestServiceReporter_TheLoadNamesTheSchedule(t *testing.T) {
+	cases := []struct {
+		name      string
+		source    string
+		wantReads int
+	}{
+		{"the same load", "edited", 1},
+		{"another feed loaded at the same moment", "other.zip", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, store, first := newFixtureReporter(t, reportFixtureNow)
+			_, err := r.report(context.Background(), "2026-09-02")
+			require.NoError(t, err)
+
+			next := loadReportFixture(t, tc.source, first.Stats().LoadedAt)
+			require.NotSame(t, first, next)
+			r.index = func() *rider.Index { return next }
+			_, err = r.report(context.Background(), "2026-09-02")
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantReads, store.reads)
+		})
+	}
 }
 
 func TestServiceReporter_CacheIsBounded(t *testing.T) {

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
@@ -28,6 +30,20 @@ var (
 // arrival and departure times apart, so it tells the two apart.
 func reportFixtureIndex(t *testing.T) *rider.Index {
 	t.Helper()
+	return loadReportFixture(t, "edited", catalogNow)
+}
+
+// refreshedReportFixtureIndex is the report fixture as the next day's GTFS
+// refresh loads it: the same feed in a new index, loaded a day later.
+func refreshedReportFixtureIndex(t *testing.T) *rider.Index {
+	t.Helper()
+	return loadReportFixture(t, "edited", catalogNow.AddDate(0, 0, 1))
+}
+
+// loadReportFixture indexes the report fixture's feed as loaded from source
+// at loadedAt.
+func loadReportFixture(t *testing.T, source string, loadedAt time.Time) *rider.Index {
+	t.Helper()
 	appendLines := func(body []byte, lines ...string) []byte {
 		return []byte(string(body) + strings.Join(lines, "\n") + "\n")
 	}
@@ -39,7 +55,7 @@ func reportFixtureIndex(t *testing.T) *rider.Index {
 			trip + "," + st3 + "," + st3 + ",ST3,3,1001.000000",
 		}
 	}
-	return fixtureIndexEdited(t, func(name string, body []byte) []byte {
+	zip := fixtureZipEdited(t, func(name string, body []byte) []byte {
 		switch name {
 		case "routes.txt":
 			return appendLines(body, "R3,A,3,Out and back,3,3,,")
@@ -84,6 +100,9 @@ func reportFixtureIndex(t *testing.T) *rider.Index {
 		}
 		return body
 	})
+	ix, err := rider.IndexFromBytes(zip, source, loadedAt)
+	require.NoError(t, err)
+	return ix
 }
 
 // hms is a time of day on the service day's clock, which runs past 24:00.
