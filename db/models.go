@@ -128,14 +128,15 @@ type Trip struct {
 }
 
 type User struct {
-	ID           int64
-	Name         string
-	Email        string
-	PasswordHash string
-	Role         string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	Active       bool
+	ID                 int64
+	Name               string
+	Email              string
+	PasswordHash       string
+	Role               string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	Active             bool
+	SessionsValidAfter pgtype.Timestamptz
 }
 
 type UserVehicle struct {

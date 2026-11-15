@@ -614,7 +614,7 @@ func (f *fakeRevocations) IsTokenRevoked(_ context.Context, jti string) (bool, e
 
 // IsUserActiveInRole treats every user as active unless listed in inactive,
 // and as still holding whatever role their token claims.
-func (f *fakeRevocations) IsUserActiveInRole(_ context.Context, userID int64, _ string) (bool, error) {
+func (f *fakeRevocations) IsUserActiveInRole(_ context.Context, userID int64, _ string, _ time.Time) (bool, error) {
 	if f.userErr != nil {
 		return false, f.userErr
 	}
@@ -1118,4 +1118,56 @@ func TestRequireAuth_UserCheckErrorFailsClosed(t *testing.T) {
 	w := httptest.NewRecorder()
 	requireAuth(testSecret, revocations)(dummyHandler()).ServeHTTP(w, req)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// TestRequireAuth_RejectsStaffTokenWithoutIat: whether a deactivation or role
+// change has ended a token is decided by its iat, so a staff token without one
+// is refused on both token paths.
+// Not safe for t.Parallel(); uses global logger.
+func TestRequireAuth_RejectsStaffTokenWithoutIat(t *testing.T) {
+	sign := func(claims jwt.MapClaims) string {
+		tokenStr, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(testSecret)
+		require.NoError(t, err)
+		return tokenStr
+	}
+	claims := jwt.MapClaims{
+		"sub":   "1",
+		"email": "admin@test.com",
+		"role":  roleAdmin,
+		"jti":   "0123456789abcdef0123456789abcdef",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"iss":   "vehicle-positions-api",
+	}
+	withoutIat := sign(claims)
+	claims["iat"] = time.Now().Unix()
+	withIat := sign(claims)
+
+	t.Run("header", func(t *testing.T) {
+		logs := captureLogs(t)
+		serve := func(token string) *httptest.ResponseRecorder {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/vehicles", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			requireAuth(testSecret, newFakeRevocations())(dummyHandler()).ServeHTTP(w, req)
+			return w
+		}
+
+		require.Equal(t, http.StatusOK, serve(withIat).Code, "the same token with an iat is accepted")
+
+		w := serve(withoutIat)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Equal(t, "invalid token", errorBody(t, w))
+		assert.Contains(t, logs.String(), "rejected staff token without iat")
+	})
+
+	t.Run("admin cookie", func(t *testing.T) {
+		cookieAccepted := func(token string) bool {
+			req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+			req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+			_, ok := adminClaimsFromCookie(req, testSecret, newFakeRevocations())
+			return ok
+		}
+		require.True(t, cookieAccepted(withIat), "the same cookie with an iat is accepted")
+		assert.False(t, cookieAccepted(withoutIat), "the admin UI must refuse the same token")
+	})
 }
