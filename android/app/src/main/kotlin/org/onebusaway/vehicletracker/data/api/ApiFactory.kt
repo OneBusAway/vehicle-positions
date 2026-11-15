@@ -45,10 +45,12 @@ class ApiFactory(
 
     // The refresh call goes through this client as it is, with no access token and no
     // authenticator, so a refresh can never set off another. The API client shares its
-    // connections.
+    // connections. Neither follows a redirect, as on iOS: a 307 or 308 keeps the body, so the
+    // password, the refresh token or a position would go to whatever host it names.
     private val baseClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
+        .followRedirects(false)
         .build()
 
     private val client = baseClient.newBuilder()
