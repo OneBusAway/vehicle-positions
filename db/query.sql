@@ -78,6 +78,13 @@ UPDATE users SET password_hash = $2 WHERE id = $1;
 -- Login does not take it.
 SELECT id FROM users WHERE id = $1 FOR UPDATE;
 
+-- name: LockUserForKeyShare :one
+-- StartTrip takes the driver's row before the assignment, the order DeleteUser
+-- takes them in (the user, then its cascade into user_vehicles), so a start and
+-- a delete queue behind each other instead of deadlocking. KEY SHARE is the
+-- lock the trip's foreign key takes on insert anyway.
+SELECT id FROM users WHERE id = $1 FOR KEY SHARE;
+
 -- name: CountUsersByRole :one
 SELECT COUNT(*) FROM users WHERE role = $1;
 

@@ -1521,6 +1521,21 @@ func (q *Queries) LockUser(ctx context.Context, id int64) (int64, error) {
 	return id_2, err
 }
 
+const lockUserForKeyShare = `-- name: LockUserForKeyShare :one
+SELECT id FROM users WHERE id = $1 FOR KEY SHARE
+`
+
+// StartTrip takes the driver's row before the assignment, the order DeleteUser
+// takes them in (the user, then its cascade into user_vehicles), so a start and
+// a delete queue behind each other instead of deadlocking. KEY SHARE is the
+// lock the trip's foreign key takes on insert anyway.
+func (q *Queries) LockUserForKeyShare(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockUserForKeyShare, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :execrows
 UPDATE refresh_tokens
 SET used_at = NOW()
