@@ -551,9 +551,11 @@ GTFS-Realtime consumer:
 https://your-server/gtfs-rt/vehicle-positions
 ```
 
-That is the whole integration. OneBusAway reads GTFS-RT Vehicle Positions
-natively; see [`deployment.md` §11](deployment.md#11-connecting-the-feed-to-onebusaway)
-for the details your IT contact needs.
+Maglev, the Go OneBusAway server, reads it as-is and shows your vehicles. The
+Java OneBusAway server shows none of them, because it needs a trip
+updates feed that this server does not publish. See
+[`deployment.md` §11](deployment.md#11-connecting-the-feed-to-onebusaway) for
+the details your IT contact needs.
 
 To check the feed with your own eyes, open the same address with `?format=json`
 on the end:

@@ -957,9 +957,9 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
 
 ## 8. How This Connects to OneBusAway
 
-The output of this project — a GTFS-RT Vehicle Positions feed — is a standard that OBA already consumes natively. Once a transit agency deploys the Vehicle Tracker server and equips its drivers with the Android app, the generated feed can be pointed at any OBA server instance as a realtime data source. No changes to OBA are required.
+The output of this project is a GTFS-RT Vehicle Positions feed. [Maglev](https://github.com/OneBusAway/maglev), the OneBusAway server written in Go, reads it as-is and shows the vehicles: once a transit agency deploys the Vehicle Tracker server and equips its drivers with the app, the feed can be pointed at a Maglev instance as a realtime data source, with no changes to Maglev. The Java OneBusAway server (the application suite that onebusaway-docker runs, as of 2.7.2) shows no vehicles from it. It builds vehicle records only from a trip updates feed and uses a vehicle position only to place the vehicle of a trip update, and this server publishes vehicle positions alone. Agencies that want OneBusAway on this feed should run Maglev; [docs/demo.md](docs/demo.md#add-the-feed-to-a-onebusaway-server) shows both servers against the demo.
 
-This makes the Vehicle Tracker a force multiplier for OBA adoption: it removes the single biggest prerequisite (an AVL system) that has historically prevented transit agencies in developing countries from using OneBusAway. A city that has a GTFS static feed and a fleet of Android phones can go from zero realtime data to a fully functional OBA deployment in a day.
+This makes the Vehicle Tracker a force multiplier for OBA adoption: it removes the single biggest prerequisite (an AVL system) that has historically prevented transit agencies in developing countries from using OneBusAway. A city that has a GTFS static feed and a fleet of Android phones can go from zero realtime data to a working Maglev deployment in a day.
 
 The Vehicle Tracker server is intentionally built as a standalone service (not integrated into Maglev) so that it can be deployed independently by agencies that may not run their own OBA server, and so that the GTFS-RT feed can be consumed by any compliant application, not just OneBusAway.
 
