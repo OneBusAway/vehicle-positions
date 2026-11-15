@@ -62,6 +62,8 @@ type TripEstimate struct {
 	StopID       string // "" past the last stop
 	StopSequence int    // 0 when StopID == ""
 	Riders       int
+	// FrequencyBased is the trip's TripInfo.FrequencyBased.
+	FrequencyBased bool
 }
 
 // Aggregator is the registry of live rides. It owns every Session it holds and
@@ -535,13 +537,14 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, bool) {
 	}
 
 	est := TripEstimate{
-		Key:       key,
-		RouteID:   g.trip.RouteID,
-		Pos:       g.trip.Shape.PointAt(median),
-		Bearing:   g.trip.Shape.BearingAt(median),
-		Speed:     medianSpeed(members),
-		Timestamp: newestTimestamp(members, now),
-		Riders:    distinctRiders(members),
+		Key:            key,
+		RouteID:        g.trip.RouteID,
+		Pos:            g.trip.Shape.PointAt(median),
+		Bearing:        g.trip.Shape.BearingAt(median),
+		Speed:          medianSpeed(members),
+		Timestamp:      newestTimestamp(members, now),
+		Riders:         distinctRiders(members),
+		FrequencyBased: g.trip.FrequencyBased,
 	}
 	if stop, ok := NextStop(g.trip, median); ok {
 		est.StopID, est.StopSequence = stop.StopID, stop.Sequence

@@ -404,6 +404,33 @@ func TestBuildIndex_ShortNameAndBlockID(t *testing.T) {
 	}
 }
 
+func TestBuildIndex_FrequencyBased(t *testing.T) {
+	files := append(fixtureFiles(fixtureTimezone, 1), fixtureFile{"frequencies.txt",
+		"trip_id,start_time,end_time,headway_secs,exact_times\n" +
+			"T1,06:00:00,22:00:00,600,0\n" +
+			"T2,06:00:00,22:00:00,600,1\n" +
+			"T3,06:00:00,09:00:00,900,\n"})
+	static, err := gtfs.ParseStatic(zipFixtureFiles(t, files), gtfs.ParseStaticOptions{})
+	require.NoError(t, err)
+	ix, err := BuildIndex(static, "fixture", fixtureLoadedAt)
+	require.NoError(t, err)
+
+	tests := []struct {
+		id   string
+		want bool
+	}{
+		{"T1", true},  // exact_times=0
+		{"T2", false}, // exact_times=1 spells out a timetable
+		{"T3", true},  // a blank exact_times means 0
+		{"T4", false}, // not in frequencies.txt
+	}
+	for _, tc := range tests {
+		trip, ok := ix.Trip(tc.id)
+		require.True(t, ok, tc.id)
+		assert.Equal(t, tc.want, trip.FrequencyBased, tc.id)
+	}
+}
+
 func TestBuildIndex_ShortNameAndBlockIDEmptyWithoutTheColumns(t *testing.T) {
 	ix := fixtureIndex(t) // trips.txt has neither trip_short_name nor block_id
 	require.Len(t, ix.TripIDs(), 4)

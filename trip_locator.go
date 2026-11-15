@@ -91,6 +91,17 @@ func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 	return place
 }
 
+// frequencyBased reports whether the loaded schedule runs tripID by headway
+// (rider.TripInfo.FrequencyBased). A trip the schedule lacks is not.
+func (l *tripLocator) frequencyBased(tripID string) bool {
+	ix := l.index()
+	if ix == nil {
+		return false
+	}
+	trip, ok := ix.Trip(tripID)
+	return ok && trip.FrequencyBased
+}
+
 // stopSearchPosition is where along shape to look for the stop of a fix at pos
 // that projected to along. The projection clamps a fix beyond either end of
 // the shape onto that end, which would make a vehicle parked 50 m past its
