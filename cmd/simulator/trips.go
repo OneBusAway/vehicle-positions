@@ -86,9 +86,15 @@ func newRun(trip scheduledTrip, serviceDate string, shift time.Duration, detail 
 	for i, p := range detail.Shape.Points {
 		points[i] = rider.LatLon{Lat: p[0], Lon: p[1]}
 	}
+	// A feed without shape_dist_traveled has each stop placed where it
+	// projects onto the shape, which can be behind the stop before it. The
+	// vehicle waits there rather than reversing: a backward leg would report
+	// a negative speed, which the server refuses.
 	timetable := make([]timepoint, 0, 2*len(detail.Stops))
+	along := detail.Stops[0].AlongShapeM
 	for _, s := range detail.Stops {
-		timetable = append(timetable, timepoint{s.ArrivalAt, s.AlongShapeM}, timepoint{s.DepartureAt, s.AlongShapeM})
+		along = max(along, s.AlongShapeM)
+		timetable = append(timetable, timepoint{s.ArrivalAt, along}, timepoint{s.DepartureAt, along})
 	}
 	return &run{trip: trip, serviceDate: serviceDate, shape: rider.NewShapeGeom(points), timetable: timetable, shift: shift}, nil
 }
