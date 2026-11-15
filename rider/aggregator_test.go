@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	gtfs "github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -242,6 +243,7 @@ func TestAggregator_OutlierExcludedFromEstimate(t *testing.T) {
 func TestAggregator_EstimateCarriesFrequencyBased(t *testing.T) {
 	f := newAggFixture(t)
 	f.t1.FrequencyBased = true
+	f.t1.frequencies = []gtfs.Frequency{{StartTime: 6 * time.Hour, EndTime: 22 * time.Hour, Headway: 10 * time.Minute}}
 	f.addSession("r1", "rider-a", TierTrusted)
 	res := f.walk(t, "r1", 0, 100, 10, nil)
 	require.True(t, res.Published)
