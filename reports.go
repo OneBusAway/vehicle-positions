@@ -139,11 +139,13 @@ type serviceReporter struct {
 	now      func() time.Time
 
 	mu sync.Mutex
-	// schedule is the index the kept reports were worked out against. A
-	// refresh puts a new index in place even when the feed has not changed,
-	// and the cache then starts again: reports kept against the old index
-	// are never asked for again, and each would keep that whole schedule in
-	// memory.
+	// schedule is the index the kept reports were worked out against. The
+	// cache is keyed by service date alone, so a request with another index
+	// empties it: a kept day was judged against the old schedule's trips and
+	// times, which the refresh may have changed, and would otherwise be
+	// served as the new schedule's report. A refresh puts a new index in
+	// place even when the feed has not changed, so the kept days are worked
+	// out again after every refresh.
 	schedule *rider.Index
 	cache    map[string]*serviceReport // by service date
 	order    []string                  // oldest first
