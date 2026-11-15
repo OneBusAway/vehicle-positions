@@ -174,6 +174,36 @@ import VehiclePositionsKit
         #expect(r.problem == .none)
     }
 
+    /// "Phone clock wrong · Set automatic time": a clock that runs fast is put
+    /// right by setting it back, and the last report then carries a later
+    /// time than now. Taken for one sent less than five seconds ago, it would
+    /// hold every report until the clock had passed that time again.
+    @Test func aClockSetBackDoesNotHoldTheNextReport() async {
+        let r = reporter()
+        api.postError = APIError.status(400, message: "timestamp must be within 5 minutes of server time")
+        for _ in 0..<3 {
+            r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1")
+            await r.waitForInFlightSend()
+            clock.advance(5)
+        }
+        #expect(r.problem == .clockSkew)
+
+        clock.advance(-600)
+        api.postError = nil
+        #expect(r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"), "the first fix after the clock was set back is sent")
+        await r.waitForInFlightSend()
+        #expect(r.problem == .none)
+        #expect(r.fixesSent == 1)
+
+        // The five seconds are counted from that report on.
+        clock.advance(2)
+        #expect(!r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"))
+        clock.advance(3)
+        #expect(r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"))
+        await r.waitForInFlightSend()
+        #expect(r.fixesSent == 2)
+    }
+
     @Test func aFailedSendStillCountsForTheThrottle() async {
         let r = reporter()
         api.postError = APIError.transport("offline")

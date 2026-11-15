@@ -64,7 +64,11 @@ final class LocationReporter {
     func report(_ fix: LocationFix, vehicleID: String, gtfsTripID: String,
                 routeID: String = "", startDate: String = "") -> Bool {
         let at = now()
-        if let last = lastSentAt, at.timeIntervalSince(last) < Self.minimumInterval {
+        // Only a clock that has gone forward since the last report says how
+        // long ago that was. Set back, as "Phone clock wrong" asks of one
+        // that runs fast, it would hold every report until it passed the
+        // last one's time again.
+        if let last = lastSentAt, (0..<Self.minimumInterval).contains(at.timeIntervalSince(last)) {
             return false
         }
         // A send still in flight means the network, not the throttle, is the
