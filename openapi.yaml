@@ -1460,7 +1460,7 @@ paths:
   /api/v1/admin/alerts:
     get:
       tags: [admin]
-      summary: Vehicles on an active trip that have gone quiet or are not moving
+      summary: Vehicles on an active trip that have gone quiet, are off route or are not moving
       description: |
         The same list the admin UI's Alerts page shows, worked out on request
         from the active trips and the reports the server has accepted since it
@@ -1470,12 +1470,21 @@ paths:
           `ALERT_QUIET_AFTER` (3m by default). Before its first report on the
           trip it is counted from the trip's start, and after a server restart
           from the restart.
+        - `off_route`: the vehicle's reports have stayed more than
+          `ALERT_OFF_ROUTE_DISTANCE` (`RIDER_MAX_SHAPE_DISTANCE`, 60 m, by
+          default) from its trip's shape for longer than
+          `ALERT_OFF_ROUTE_AFTER` (5m by default), counted to its latest
+          report. A fix counts only when its whole accuracy circle is on one
+          side of that distance; one near the shape ends the spell. A trip
+          with no shape in the schedule, or with only a route, is never off
+          route.
         - `not_moving`: the vehicle is still reporting but has stayed within
           50 m of where it is now for at least `ALERT_STOPPED_AFTER` (10m by
           default). A vehicle waiting at its first stop counts too.
 
-        A trip has at most one alert, and a quiet vehicle is not also reported
-        as not moving. An ended trip has none. The list is ordered
+        A trip has at most one alert: a quiet vehicle is not also reported as
+        off route or not moving, and an off-route one is not also reported as
+        not moving. An ended trip has none. The list is ordered
         longest-running first. Nothing is sent anywhere: a client polls this
         endpoint.
       responses:
@@ -3391,14 +3400,16 @@ components:
       properties:
         kind:
           type: string
-          enum: [quiet, not_moving]
+          enum: [quiet, off_route, not_moving]
         since:
           type: string
           format: date-time
           description: |
             For `quiet`, the vehicle's last report (or the trip's start, or
             the server's start, when it has not reported since). For
-            `not_moving`, when it came within 50 m of where it is now.
+            `off_route`, its first report off route (or the trip's start, if
+            that came before). For `not_moving`, when it came within 50 m of
+            where it is now.
         duration_seconds:
           type: integer
           format: int64

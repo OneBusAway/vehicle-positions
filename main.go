@@ -291,11 +291,6 @@ func main() {
 	tracker := NewTracker(maxAge)
 	defer tracker.Stop()
 
-	alerts := newAlertWatcher(store, alertSettings{
-		quietAfter:   envPositiveDurationOrDefault("ALERT_QUIET_AFTER", defaultAlertQuietAfter),
-		stoppedAfter: envPositiveDurationOrDefault("ALERT_STOPPED_AFTER", defaultAlertStoppedAfter),
-	})
-
 	rateLimiter := NewVehicleRateLimiter()
 	defer rateLimiter.Stop()
 
@@ -379,6 +374,9 @@ func main() {
 		onTimeLate:       envNonNegativeDurationOrDefault("REPORT_ON_TIME_LATE", defaultReportOnTimeLate),
 		maxShapeDistance: riderCfg.Thresholds.MaxShapeDistance,
 	})
+	// The alerts judge off route against the same schedule.
+	alerts := newAlertWatcher(store, alertSettingsFromEnv(riderCfg.Thresholds.MaxShapeDistance))
+	alerts.watchRoutes(schedule.Index)
 
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)
