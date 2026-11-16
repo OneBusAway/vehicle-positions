@@ -454,9 +454,12 @@ three kinds:
 - **Off route**: the vehicle has been more than 60 m from its trip's route for
   over 5 minutes. The driver may have taken a wrong turn or a detour, or be
   heading back to the depot with the trip still running. A vehicle standing
-  still off its route shows here rather than as **Not moving**. Only trips
-  whose route has a shape in your GTFS feed are checked, so a trip started
-  with only a route, or on a feed without shapes, never shows as off route.
+  still off its route shows here rather than as **Not moving**. It counts only
+  once the vehicle has been on its route during the trip, so a driver who
+  starts the trip at a depot or a layover spot shows as **Not moving** if they
+  wait there. Only trips whose route has a shape in your GTFS feed are
+  checked, so a trip started with only a route, or on a feed without shapes,
+  never shows as off route.
 
 Each row names the vehicle, driver, route and GTFS trip, and says how long:
 **No report for 7 min**, **Under 50 m in 12 min** or **Over 60 m from its route

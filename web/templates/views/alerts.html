@@ -6,7 +6,7 @@
       <p class="mt-0.5 text-xs text-slate-400">Vehicles on a running trip that have sent no report for over {{.QuietAfter}}, or have moved under {{.StoppedRadius}} in {{.StoppedAfter}}, or have been more than {{.OffRouteDistance}} from their route for over {{.OffRouteAfter}}. This page reloads every 30 seconds.</p>
     </div>
     {{if not .Alerts}}
-    <p class="px-5 py-6 text-center text-sm text-slate-400">No alerts. Every vehicle on a running trip is reporting and moving.</p>
+    <p class="px-5 py-6 text-center text-sm text-slate-400">No alerts. No vehicle on a running trip has gone quiet, left its route or stopped moving.</p>
     {{else}}
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm">

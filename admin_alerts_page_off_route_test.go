@@ -17,9 +17,10 @@ func TestAlertsPage_OffRoute(t *testing.T) {
 	w.watchingSince = now.Add(-time.Hour)
 	ix := plainFixtureIndex(t)
 	w.watchRoutes(func() *rider.Index { return ix })
-	w.report(routeFix("T1", alongT1(100, 200), nil), now.Add(-6*time.Minute))
-	w.report(routeFix("T1", alongT1(400, 200), nil), now)
 	trip := alertTrip("bus-7", now.Add(-time.Hour))
+	w.report(onRun(routeFix("T1", alongT1(10, 3), nil), trip.StartTime), now.Add(-7*time.Minute))
+	w.report(onRun(routeFix("T1", alongT1(100, 200), nil), trip.StartTime), now.Add(-6*time.Minute))
+	w.report(onRun(routeFix("T1", alongT1(400, 200), nil), trip.StartTime), now)
 	trip.VehicleLabel = "Van 7"
 	trips.trips = []TripSummary{trip}
 	mux := newAlertsMux(t, w)
