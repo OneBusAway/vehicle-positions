@@ -94,7 +94,7 @@ struct TripSheet: View {
     private func end() {
         Task {
             do {
-                try await session.end()
+                try await DriverTips.shared.end(session)
             } catch {
                 log.error("the server did not confirm the end of the trip: \(String(describing: error), privacy: .public)")
                 endNotConfirmed = true
@@ -234,12 +234,14 @@ struct TripBar: View, Equatable {
                     .monospacedDigit()
                     .contentTransition(.numericText(value: Double(session.fixesSent)))
                     .animation(.smooth(duration: 0.25), value: session.fixesSent)
+                    .modifier(SentCountTipAnchor())
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .coordinateSpace(.named(SentCountTipAnchor.titles))
     }
 
     /// Glass, never red: red already means early on this screen.

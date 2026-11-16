@@ -577,7 +577,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await session.end()
+                try await DriverTips.shared.end(session)
             } catch {
                 log.error("the server did not confirm the end of the trip: \(String(describing: error), privacy: .public)")
                 let alert = CarPlayTemplates.notEndedAlert(onTryAgain: { [weak self] in

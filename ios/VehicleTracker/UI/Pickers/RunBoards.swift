@@ -40,6 +40,12 @@ nonisolated struct Board: Equatable {
     /// the run under way or next sit under it; the last run once all are
     /// over; nil for an empty board.
     let openAt: String?
+
+    /// The run the board's tip points at: the one tagged Now or Next, or
+    /// once the day is over the run the board opens at, the first on screen.
+    var tipRun: String? {
+        runs.first { $0.highlight != nil }?.id ?? openAt
+    }
 }
 
 /// A route's boards at one moment, and the index of the one the screen opens

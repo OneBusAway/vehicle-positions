@@ -8,6 +8,12 @@ import UIKit
 /// keeps each driver's by name, so its shape stays as it is.
 nonisolated enum DriverFlag: String {
     case welcome
+    /// The tip on "Choose a run" that says to tap a run, then Start trip.
+    case runBoardTip
+    /// The tip on Tracking that says what the sent count is.
+    case sentCountTip
+    /// The sheet after the driver's first trip that sent reports.
+    case firstTripDone
 }
 
 /// What the driver typed last time, so the login screen and the route list

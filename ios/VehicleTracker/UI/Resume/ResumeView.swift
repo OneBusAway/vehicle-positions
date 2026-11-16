@@ -105,7 +105,7 @@ struct ResumeView: View {
         // whether or not the screen does.
         Task {
             do {
-                try await session.end()
+                try await DriverTips.shared.end(session)
             } catch {
                 log.error("the server did not confirm the end of the trip: \(String(describing: error), privacy: .public)")
                 animated { endNotConfirmed = true }

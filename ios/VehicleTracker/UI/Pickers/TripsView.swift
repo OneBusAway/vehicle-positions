@@ -101,7 +101,7 @@ struct TripsView: View {
                             if dynamicTypeSize.isAccessibilitySize {
                                 header(boards, selected: selected, page: page)
                             }
-                            rows(boards.boards[index], page: page)
+                            rows(boards.boards[index], page: page, isShown: index == selected, landed: landed.contains(index))
                         }
                     }
                     // After the update that made the rows, so they exist to
@@ -137,14 +137,17 @@ struct TripsView: View {
         }
     }
 
-    @ViewBuilder private func rows(_ board: Board, page: RouteTripsPage) -> some View {
+    /// `isShown` is whether this is the board the switch shows; the tip goes
+    /// on its tip run once it has `landed`.
+    @ViewBuilder private func rows(_ board: Board, page: RouteTripsPage, isShown: Bool, landed: Bool) -> some View {
         ForEach(Array(board.runs.enumerated()), id: \.element.id) { index, run in
             if index == board.nowAt {
                 NowLine()
             }
             RunRow(run: run, timezone: page.timezone, starting: starting && confirmed?.id == run.id,
-                   dimmed: starting && confirmed?.id != run.id) { confirming = run }
+                   dimmed: starting && confirmed?.id != run.id) { select(run) }
                 .equatable()
+                .modifier(RunBoardTipAnchor(isAnchor: isShown && run.id == board.tipRun, landed: landed))
                 .id(run.id)
                 // On the row, so the dialog anchors to it on iPhone, where a
                 // tap outside cancels and iOS shows no Cancel button.
@@ -159,6 +162,13 @@ struct TripsView: View {
         if board.nowAt == board.runs.count {
             NowLine()
         }
+    }
+
+    /// A tap on a run asks before it starts. It also does what the board's
+    /// tip says, so the tip goes for good.
+    private func select(_ run: BoardRun) {
+        RunBoardTip.runTapped(settings: session.settings)
+        confirming = run
     }
 
     private func isConfirming(_ run: BoardRun) -> Binding<Bool> {

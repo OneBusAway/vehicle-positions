@@ -26,5 +26,6 @@ struct PickerFlow: View {
                     }
                 }
         }
+        .modifier(PickersTipHost())
     }
 }

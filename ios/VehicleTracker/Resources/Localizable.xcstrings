@@ -57,6 +57,29 @@
         }
       }
     },
+    "%lld reports sent": {
+      "comment": "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld report sent"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld reports sent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld sent": {
       "comment": "Trip bar: how many reports have reached the server, e.g. '142 sent'.",
       "localizations": {
