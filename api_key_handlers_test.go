@@ -48,6 +48,18 @@ func (f *fakeAPIKeyManager) ListAPIKeys(_ context.Context) ([]APIKey, error) {
 	return append(keys, f.keys...), nil
 }
 
+// ListAPIKeysPage pages over keys in the order they are held, which the tests
+// treat as newest first, the order the real query returns.
+func (f *fakeAPIKeyManager) ListAPIKeysPage(_ context.Context, limit, offset int) ([]APIKey, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	start := min(offset, len(f.keys))
+	end := min(start+limit, len(f.keys))
+	keys := make([]APIKey, 0, end-start)
+	return append(keys, f.keys[start:end]...), nil
+}
+
 func (f *fakeAPIKeyManager) DeactivateAPIKey(_ context.Context, id int64) error {
 	if f.deactivateErr != nil {
 		return f.deactivateErr

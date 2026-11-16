@@ -124,6 +124,36 @@ func TestStore_ListAPIKeys(t *testing.T) {
 	assert.ElementsMatch(t, []int64{first.ID, second.ID}, ids)
 }
 
+// TestStore_ListAPIKeysPage pages through keys that share a created_at, as keys
+// inserted in one statement do. The id tiebreaker puts them in one order,
+// newest id first, so each key is on exactly one page.
+func TestStore_ListAPIKeysPage(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearAPIKeys(t, store)
+	t.Cleanup(func() { clearAPIKeys(t, store) })
+
+	_, err := store.pool.Exec(ctx, `
+		INSERT INTO api_keys (name, key_hash)
+		VALUES ('first', $1), ('second', $2), ('third', $3)`,
+		hashAPIKey("first-key"), hashAPIKey("second-key"), hashAPIKey("third-key"))
+	require.NoError(t, err)
+
+	names := func(limit, offset int) []string {
+		keys, err := store.ListAPIKeysPage(ctx, limit, offset)
+		require.NoError(t, err)
+		require.NotNil(t, keys, "an empty page must marshal as [], not null")
+		out := make([]string, 0, len(keys))
+		for _, k := range keys {
+			out = append(out, k.Name)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"third", "second"}, names(2, 0))
+	assert.Equal(t, []string{"first"}, names(2, 2))
+	assert.Empty(t, names(2, 4))
+}
+
 // TestStore_CreateAPIKey_DuplicateHash covers the UNIQUE constraint on
 // key_hash: the second insert must fail and leave nothing behind.
 func TestStore_CreateAPIKey_DuplicateHash(t *testing.T) {

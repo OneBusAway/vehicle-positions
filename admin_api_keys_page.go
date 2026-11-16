@@ -32,12 +32,16 @@ func apiKeysPageURL(page int) string {
 	return "/admin/api-keys?page=" + strconv.Itoa(page)
 }
 
-// renderAPIKeys renders one page of keys with the create form above it.
-// ListAPIKeys returns every key, so the paging is done here, over a list
-// that is already in memory.
+// listAPIKeysPage reads the keys for one page of the list, plus the first key
+// of the next page if there is one, which is how renderAPIKeys knows to link
+// to it.
+func (ui *adminUI) listAPIKeysPage(r *http.Request, page int) ([]APIKey, error) {
+	return ui.apiKeys.ListAPIKeysPage(r.Context(), adminPageSize+1, adminPageOffset(page))
+}
+
+// renderAPIKeys renders one page of keys with the create form above it. keys
+// is what listAPIKeysPage read for that page, and may hold one key past it.
 func (ui *adminUI) renderAPIKeys(w http.ResponseWriter, r *http.Request, status int, keys []APIKey, page int, form apiKeyForm) {
-	offset := min(adminPageOffset(page), len(keys))
-	keys = keys[offset:]
 	hasMore := len(keys) > adminPageSize
 	if hasMore {
 		keys = keys[:adminPageSize]
@@ -76,13 +80,14 @@ func (ui *adminUI) renderAPIKeys(w http.ResponseWriter, r *http.Request, status 
 // apiKeysPage renders the feed API keys, newest first, with the form that
 // makes a new one.
 func (ui *adminUI) apiKeysPage(w http.ResponseWriter, r *http.Request) {
-	keys, err := ui.apiKeys.ListAPIKeys(r.Context())
+	page := adminPageNumber(r.URL.Query())
+	keys, err := ui.listAPIKeysPage(r, page)
 	if err != nil {
 		slog.Error("api keys: list api keys", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	ui.renderAPIKeys(w, r, http.StatusOK, keys, adminPageNumber(r.URL.Query()), apiKeyForm{})
+	ui.renderAPIKeys(w, r, http.StatusOK, keys, page, apiKeyForm{})
 }
 
 // apiKeyCreate makes a key from the form's name and answers with the list
@@ -94,10 +99,10 @@ func (ui *adminUI) apiKeysPage(w http.ResponseWriter, r *http.Request) {
 // issueAPIKey, the same two the JSON API uses, so the form and the API cannot
 // disagree about either.
 //
-// The list is read before the key is made. Reading it afterwards would leave
-// a failed read with a stored key and no page to show it on.
+// The first page is read before the key is made. Reading it afterwards would
+// leave a failed read with a stored key and no page to show it on.
 func (ui *adminUI) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
-	keys, err := ui.apiKeys.ListAPIKeys(r.Context())
+	keys, err := ui.listAPIKeysPage(r, 1)
 	if err != nil {
 		slog.Error("api key create: list api keys", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

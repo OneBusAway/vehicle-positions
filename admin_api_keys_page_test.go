@@ -522,3 +522,31 @@ func TestAPIKeyRoutes_SignedOutGoToLogin(t *testing.T) {
 		}
 	}
 }
+
+// TestAPIKeysPage_ReachesEveryKey pages through 1001 real keys, one more than
+// a list capped at 1000 rows would hold. The oldest key must still be on a
+// page, and the page before it must link there, or it can be neither seen nor
+// deactivated from the admin UI.
+func TestAPIKeysPage_ReachesEveryKey(t *testing.T) {
+	store := newTestStore(t)
+	clearAPIKeys(t, store)
+	t.Cleanup(func() { clearAPIKeys(t, store) })
+
+	// 1001 keys, one a minute apart, "Consumer 0001" the oldest.
+	_, err := store.pool.Exec(context.Background(), `
+		INSERT INTO api_keys (name, key_hash, created_at, updated_at)
+		SELECT 'Consumer ' || lpad(g::text, 4, '0'), md5(g::text) || md5('x' || g::text),
+		       NOW() - (1002 - g) * INTERVAL '1 minute', NOW() - (1002 - g) * INTERVAL '1 minute'
+		FROM generate_series(1, 1001) AS g`)
+	require.NoError(t, err)
+
+	mux := newAPIKeysMux(t, store)
+
+	// 50 a page: keys 1001 to 952 on page 1, 51 to 2 on page 20, 1 on page 21.
+	page20 := getAdminPage(t, mux, "/admin/api-keys?page=20")
+	assert.Contains(t, page20, "Consumer 0002")
+	assert.Contains(t, page20, `href="/admin/api-keys?page=21"`, "page 20 must link to the page holding the oldest key")
+
+	page21 := getAdminPage(t, mux, "/admin/api-keys?page=21")
+	assert.Contains(t, page21, "Consumer 0001", "the oldest key must be on some page so it can be deactivated")
+}

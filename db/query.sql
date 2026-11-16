@@ -423,6 +423,15 @@ FROM api_keys
 ORDER BY created_at DESC
 LIMIT 1000;
 
+-- name: ListAPIKeysPage :many
+-- One page of the admin Feed API keys page, newest first. The id tiebreaker
+-- makes the order total, so a key created in the same instant as another
+-- cannot be on two pages or none.
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+ORDER BY created_at DESC, id DESC
+LIMIT $1 OFFSET $2;
+
 -- name: DeactivateAPIKey :execrows
 UPDATE api_keys
 SET active = false, updated_at = NOW()
