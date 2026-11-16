@@ -373,6 +373,31 @@ func (ix *Index) ServiceDateFor(trip *TripInfo, now time.Time) string {
 	return best
 }
 
+// RunServiceDate is the service date a run of trip that started at startedAt
+// counts its start_time from: of the day before and the calendar day, one the
+// trip runs on whose frequencies.txt window holds the start, the day before
+// on a tie, or else ServiceDateFor's choice. ServiceDateFor goes by the trip's
+// stop times, which on a trip in frequencies.txt are only the pattern of one
+// run: a window from 06:00 to 26:00 runs past midnight while the pattern
+// ends at 07:00, so a run started at 00:30 belongs to the day before.
+func (ix *Index) RunServiceDate(trip *TripInfo, startedAt time.Time) string {
+	calendarDay := startedAt.In(ix.tz)
+	for _, day := range []time.Time{calendarDay.AddDate(0, 0, -1), calendarDay} {
+		date := day.Format(serviceDateLayout)
+		dayStart, err := ServiceDayStart(date, ix.tz)
+		if err != nil || !ix.ActiveOn(trip, date) {
+			continue
+		}
+		since := startedAt.Sub(dayStart)
+		if slices.ContainsFunc(trip.frequencies, func(f gtfs.Frequency) bool {
+			return f.StartTime <= since && since < f.EndTime
+		}) {
+			return date
+		}
+	}
+	return ix.ServiceDateFor(trip, startedAt)
+}
+
 // runSpan is the trip's run on the service day starting at dayStart, from its
 // first departure to its last arrival. An indexed trip always has stop times.
 func runSpan(trip *TripInfo, dayStart time.Time) (first, last time.Time) {

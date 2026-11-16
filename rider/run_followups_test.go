@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	gtfs "github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,16 +108,94 @@ func TestAggregator_RiderRunStartKeptAsTheRunMovesOn(t *testing.T) {
 }
 
 // Estimates lets go of the lock between finding a trip's riders and keeping
-// their run's start, so the trip's last ride can be removed in between. No
-// start is kept for a trip with no ride, and the next riders on it get their
-// own.
-func TestAggregator_RunStartKeepsNothingForATripWithNoRide(t *testing.T) {
+// their run's start, so the rides it found can be removed in between. No
+// start is kept unless one of them is still registered, whether the trip has
+// no ride left or a new one has replaced them, and the next riders on it get
+// their own.
+func TestAggregator_RunStartKeepsNothingWhenItsRidesHaveGone(t *testing.T) {
+	gone := func(f *aggFixture) *tripGroup {
+		return &tripGroup{trip: f.t1, members: []estimateMember{{rideID: "removed"}}}
+	}
+	key := TripKey{"T1", "20260902"}
+
+	t.Run("no ride left", func(t *testing.T) {
+		f := newAggFixture(t)
+		headwayT1(f)
+		f.agg.runStart(key, gone(f), 350, f.base.Add(4*time.Minute))
+		assert.Empty(t, f.agg.runStarts)
+
+		f.addSession("r1", "rider-a", TierTrusted)
+		now := f.walkOffset(t, "r1", 300, 400, 10, 3*time.Minute)
+		assert.InDelta(t, 8*3600+3*60, estimateStart(t, f, now), 1)
+	})
+	t.Run("a new ride in their place", func(t *testing.T) {
+		f := newAggFixture(t)
+		headwayT1(f)
+		f.addSession("r1", "rider-a", TierTrusted)
+		f.agg.runStart(key, gone(f), 350, f.base.Add(4*time.Minute))
+		assert.Empty(t, f.agg.runStarts)
+
+		now := f.walkOffset(t, "r1", 300, 400, 10, 3*time.Minute)
+		assert.InDelta(t, 8*3600+3*60, estimateStart(t, f, now), 1)
+	})
+}
+
+// Two estimates of a trip can reach runStart in either order. One older than
+// the estimate kept is not taken for another run, however far back it is.
+func TestAggregator_RunStartIgnoresAnOlderEstimate(t *testing.T) {
 	f := newAggFixture(t)
 	headwayT1(f)
-	f.agg.runStart(TripKey{"T1", "20260902"}, f.t1, 350, f.base.Add(4*time.Minute))
-	assert.Empty(t, f.agg.runStarts)
-
 	f.addSession("r1", "rider-a", TierTrusted)
-	now := f.walkOffset(t, "r1", 300, 400, 10, 3*time.Minute)
-	assert.InDelta(t, 8*3600+3*60, estimateStart(t, f, now), 1)
+	g := &tripGroup{trip: f.t1, members: []estimateMember{{rideID: "r1"}}}
+	key := TripKey{"T1", "20260902"}
+
+	newer := f.agg.runStart(key, g, 900, f.base.Add(9*time.Minute))
+	older := f.agg.runStart(key, g, 300, f.base.Add(3*time.Minute))
+	assert.Equal(t, newer, older)
+	assert.Equal(t, riderRun{start: newer, along: 900, at: f.base.Add(9 * time.Minute)}, f.agg.runStarts[key])
+}
+
+// A vehicle the riders put at its first stop is taken to be leaving it then,
+// whatever the stop's dwell: T1 arrives there at 07:58 and leaves at 08:00.
+func TestAggregator_RunStartAtTheFirstStopIsNow(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	f.t1.StopTimes[0].Arrival -= 2 * time.Minute
+	f.addSession("r1", "rider-a", TierTrusted)
+	g := &tripGroup{trip: f.t1, members: []estimateMember{{rideID: "r1"}}}
+
+	at := f.base.Add(30 * time.Second)
+	assert.Equal(t, at, f.agg.runStart(TripKey{"T1", "20260902"}, g, 0, at))
+}
+
+// A run counts its start_time from the service date whose frequencies.txt
+// window holds its start, which can be the day before when the window runs
+// past midnight, whatever the trip's one-run pattern of stop times says.
+func TestIndex_RunServiceDate(t *testing.T) {
+	ix := fixtureIndex(t)
+	t1, ok := ix.Trip("T1") // weekdays, its pattern 08:00 to 08:10
+	require.True(t, ok)
+	at := func(day, h, m int) time.Time { return time.Date(2026, 9, day, h, m, 0, 0, ix.Timezone()) }
+
+	tests := []struct {
+		name    string
+		windows []gtfs.Frequency
+		started time.Time
+		want    string
+	}{
+		{"in the day's window", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(26, 0, 0)}}, at(2, 8, 3), "20260902"},
+		{"after midnight in the day before's window", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(26, 0, 0)}}, at(3, 0, 30), "20260902"},
+		{"in both days' windows", []gtfs.Frequency{{StartTime: clock(0, 0, 0), EndTime: clock(30, 0, 0)}}, at(3, 5, 0), "20260902"},
+		{"in the window of a day the trip does not run", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(26, 0, 0)}}, at(7, 0, 30), "20260907"},
+		{"in no window", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(22, 0, 0)}}, at(3, 0, 30), ix.ServiceDateFor(t1, at(3, 0, 30))},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t1.frequencies = tc.windows
+			assert.Equal(t, tc.want, ix.RunServiceDate(t1, tc.started))
+		})
+	}
+	// On Saturday T1 does not run, and Friday's window is long over.
+	t1.frequencies = []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(26, 0, 0)}}
+	assert.Equal(t, ix.ServiceDateFor(t1, at(5, 8, 3)), ix.RunServiceDate(t1, at(5, 8, 3)))
 }
