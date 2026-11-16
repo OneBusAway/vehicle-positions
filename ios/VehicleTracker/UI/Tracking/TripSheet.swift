@@ -94,12 +94,7 @@ struct TripSheet: View {
     private func end() {
         Task {
             do {
-                try await session.end()
-                // The server confirmed it. The count stays until the next
-                // trip starts.
-                if session.phase == .idle {
-                    DriverTips.shared.tripEnded(sent: session.fixesSent, settings: session.settings)
-                }
+                try await DriverTips.shared.end(session)
             } catch {
                 log.error("the server did not confirm the end of the trip: \(String(describing: error), privacy: .public)")
                 endNotConfirmed = true

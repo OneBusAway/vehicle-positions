@@ -1,12 +1,28 @@
 import Foundation
 import Testing
+import TipKit
 @testable import VehicleTracker
+
+/// TipKit set up once for the test process, with a store of its own: a
+/// tip's parameters hold a value only once TipKit is configured, and the
+/// app's own store is left alone.
+enum TestTipKit {
+    static let configured: Void = {
+        let store = FileManager.default.temporaryDirectory.appending(path: "TipKit-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: store, withIntermediateDirectories: true)
+        try? Tips.configure([.datastoreLocation(.url(store))])
+    }()
+}
 
 /// The two tips and First trip done (walkthrough spec §8): each once per
 /// driver, one at a time. Real `UserDefaults` suites, so the flags are kept
 /// the way the app keeps them.
 @Suite struct DriverTipsTests {
     let defaults = UserDefaults(suiteName: "DriverTipsTests-\(UUID().uuidString)")!
+
+    init() {
+        _ = TestTipKit.configured
+    }
 
     func settings(as email: String = "maria@metro.example") -> AppSettings {
         let settings = AppSettings(defaults: defaults)
@@ -128,6 +144,32 @@ import Testing
         #expect(tips.mayShow(.runBoard, settings: settings), "the run board's tip is not about the trip")
     }
 
+    /// The tip can still be up when the server confirms the end. The end
+    /// takes it down for good: `wanted` is TipKit's, for the whole app, and
+    /// left true it would bring the tip back on the next trip, on the road.
+    @Test func theEndOfTheFirstTripTakesTrackingsTipDownForGood() throws {
+        let tips = DriverTips()
+        let settings = settings()
+        SentCountTip.wanted = true
+        try #require(SentCountTip.wanted, "TipKit holds the parameter")
+        tips.shown(.sentCount)
+        tips.tripEnded(sent: 12, settings: settings)
+        #expect(!SentCountTip.wanted)
+        #expect(settings.hasSeen(.sentCountTip))
+        #expect(tips.showing == nil)
+    }
+
+    /// Closing a tip already marked seen still takes it down.
+    @Test func aSeenTipStillComesDownWhenClosed() throws {
+        let tips = DriverTips()
+        let settings = settings()
+        settings.markSeen(.sentCountTip)
+        SentCountTip.wanted = true
+        try #require(SentCountTip.wanted, "TipKit holds the parameter")
+        SentCountTip.close(.actionPerformed, settings: settings, tips: tips)
+        #expect(!SentCountTip.wanted)
+    }
+
     /// Tracking's sheet is built again when the pickers go, so its tip
     /// waits for them to be gone.
     @Test func thePickersSayWhenTheyAreOnScreen() {
@@ -189,17 +231,22 @@ import Testing
     }
 }
 
-/// The count First trip done shows is the session's, read after the end:
-/// the session keeps it until the next trip starts.
-@Suite struct FirstTripDoneCountTests {
+/// Tracking, Resume and the car end a trip through `DriverTips.end`: the
+/// count First trip done shows is the session's, read once the server has
+/// confirmed the end, and the session keeps it until the next trip starts.
+@Suite struct TripEndTests {
     let api = FakeTrackerAPI()
     let locations = FakeLocationSource()
-    let store = InMemoryActiveTripStore()
     let clock = ManualClock(start: TripFixtures.at(8, 0))
-    let defaults = UserDefaults(suiteName: "FirstTripDoneCountTests-\(UUID().uuidString)")!
+    let defaults = UserDefaults(suiteName: "TripEndTests-\(UUID().uuidString)")!
 
-    @Test func theEndedTripsCountReachesTheSheet() async throws {
-        let session = TripSession(settings: AppSettings(defaults: defaults), tokens: InMemoryTokenStore(), store: store,
+    init() {
+        _ = TestTipKit.configured
+    }
+
+    /// A trip under way that has sent two reports.
+    func tripWithTwoReports() async throws -> TripSession {
+        let session = TripSession(settings: AppSettings(defaults: defaults), tokens: InMemoryTokenStore(), store: InMemoryActiveTripStore(),
                                   locations: locations, access: FakeLocationAccess(), makeAPI: { _, _ in api }, now: { clock.now })
         try await session.signIn(serverURL: URL(string: "https://tracker.example.org")!, email: "maria@metro.example", password: "pw")
         try await session.start(vehicle: Vehicle(id: "4317", label: "4317"), tripID: "T1")
@@ -208,11 +255,25 @@ import Testing
         clock.advance(6)
         locations.emitFix(lat: 47.6050, lon: -122.3300, at: TripFixtures.at(8, 5, 6))
         #expect(await eventually { session.fixesSent == 2 })
+        return session
+    }
 
-        try await session.end()
-        #expect(session.phase == .idle)
+    @Test func theEndedTripsCountReachesTheSheet() async throws {
+        let session = try await tripWithTwoReports()
         let tips = DriverTips()
-        tips.tripEnded(sent: session.fixesSent, settings: session.settings)
+        try await tips.end(session)
+        #expect(session.phase == .idle)
         #expect(tips.finishedTrip?.sent == 2)
+        #expect(session.settings.hasSeen(.sentCountTip), "the first trip is over")
+    }
+
+    /// The trip is still the driver's: nothing changes for the tips.
+    @Test func anEndTheServerDidNotConfirmLeavesTheTips() async throws {
+        let session = try await tripWithTwoReports()
+        api.endError = APIError.transport("offline")
+        let tips = DriverTips()
+        await #expect(throws: APIError.self) { try await tips.end(session) }
+        #expect(tips.finishedTrip == nil)
+        #expect(!session.settings.hasSeen(.sentCountTip))
     }
 }

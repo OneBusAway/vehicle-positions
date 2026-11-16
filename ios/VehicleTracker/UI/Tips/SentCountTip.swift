@@ -26,13 +26,14 @@ nonisolated struct SentCountTip: Tip {
 }
 
 extension SentCountTip {
-    /// The tip is done with for the driver signed in, in TipKit's record and
-    /// in the flags.
-    @MainActor static func close(_ reason: Tips.InvalidationReason, settings: AppSettings) {
-        guard !settings.hasSeen(.sentCountTip) else { return }
+    /// The tip is done with for the driver signed in. It comes down and
+    /// leaves TipKit's record every time, so a tip already marked seen can
+    /// never stay wanted; the flag is written the first time.
+    @MainActor static func close(_ reason: Tips.InvalidationReason, settings: AppSettings, tips: DriverTips = .shared) {
         wanted = false
         SentCountTip(driver: DriverTips.key(of: settings)).invalidate(reason: reason)
-        DriverTips.shared.seen(.sentCount, settings: settings)
+        guard !settings.hasSeen(.sentCountTip) else { return }
+        tips.seen(.sentCount, settings: settings)
     }
 }
 

@@ -83,11 +83,23 @@ final class DriverTips {
         settings.markSeen(kind.flag)
     }
 
+    /// Ends the trip and, once the server has confirmed it, tells the tips.
+    /// Tracking, Resume and the car all end a trip through here, so a first
+    /// trip ended from any of them is the end of Tracking's tip and can be
+    /// followed by First trip done.
+    func end(_ session: TripSession) async throws {
+        try await session.end()
+        // The count stays until the next trip starts.
+        guard session.phase == .idle else { return }
+        tripEnded(sent: session.fixesSent, settings: session.settings)
+    }
+
     /// The server confirmed the end of a trip. Tracking's tip is for the
-    /// first trip only, so it is done with whatever the count, and gone with
-    /// Tracking; First trip done follows the first trip that sent a report.
+    /// first trip only, so it closes for good whatever the count, even if it
+    /// is still up; First trip done follows the first trip that sent a
+    /// report.
     func tripEnded(sent: Int, settings: AppSettings) {
-        seen(.sentCount, settings: settings)
+        SentCountTip.close(.actionPerformed, settings: settings, tips: self)
         hidden(.sentCount)
         guard sent > 0, mayShow(.firstTripDone, settings: settings) else { return }
         finishedTrip = FinishedTrip(sent: sent)
