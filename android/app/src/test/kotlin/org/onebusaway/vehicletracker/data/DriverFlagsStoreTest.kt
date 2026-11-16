@@ -5,6 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -51,9 +53,12 @@ class DriverFlagsStoreTest {
 
     private fun newFile() = File(tempFolder.newFolder(), "driver_flags.preferences_pb")
 
-    /** DataStore allows one live instance per file, so a store that reopens a file first closes the one before. */
-    private fun storeOn(file: File): DataStoreDriverFlagsStore {
-        scopes.forEach { it.cancel() }
+    /**
+     * DataStore allows one live instance per file, so a store that reopens a file first closes the one before and waits
+     * for its scope to finish: only then is the file free, as in VehiclePrefsStoreTest.
+     */
+    private suspend fun storeOn(file: File): DataStoreDriverFlagsStore {
+        scopes.forEach { it.coroutineContext.job.cancelAndJoin() }
         scopes.clear()
         return DataStoreDriverFlagsStore(
             PreferenceDataStoreFactory.create(
@@ -161,7 +166,7 @@ class DriverFlagsStoreTest {
         }
     }
 
-    @Test fun `a record that can't be read says so`() {
+    @Test fun `a record that can't be read says so`() = runTest {
         val file = newFile().apply { writeText("not a preferences file") }
         val store = storeOn(file)
 
