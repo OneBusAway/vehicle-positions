@@ -1,7 +1,14 @@
+import CryptoKit
 import Foundation
 import Observation
 import OSLog
 import UIKit
+
+/// Something the app shows a driver once. A new one is a new case: the store
+/// keeps each driver's by name, so its shape stays as it is.
+nonisolated enum DriverFlag: String {
+    case welcome
+}
 
 /// What the driver typed last time, so the login screen and the route list
 /// start where they left off, and the server address the agency sets, if any.
@@ -39,6 +46,12 @@ final class AppSettings {
     private(set) var recentVehicleIDs: [String] {
         didSet { defaults.set(recentVehicleIDs, forKey: Keys.recentVehicles) }
     }
+    /// What each driver has been shown once, by `driverKey`: per driver, not
+    /// per phone, so the next driver on a shared phone is shown it too. A
+    /// sign-out leaves it. Stored sorted, so the file does not churn.
+    private var seenByDriver: [String: Set<String>] {
+        didSet { defaults.set(seenByDriver.mapValues { $0.sorted() }, forKey: Keys.seenByDriver) }
+    }
     /// The agency's server from managed configuration, when it is one the app
     /// may use. Read again when the defaults change and when the app comes to
     /// the front.
@@ -65,6 +78,7 @@ final class AppSettings {
         // still offered after the update. The old key is read, never deleted.
         recentVehicleIDs = defaults.stringArray(forKey: Keys.recentVehicles)
             ?? [defaults.string(forKey: Keys.legacyLastVehicle)].compactMap { $0 }
+        seenByDriver = (defaults.dictionary(forKey: Keys.seenByDriver) as? [String: [String]] ?? [:]).mapValues(Set.init)
         readManagedConfiguration()
         if !defaultServerURL.isEmpty && self.defaultServerURL == nil {
             log.warning("ignoring the built-in DEFAULT_SERVER_URL: not an address the app may use")
@@ -102,6 +116,29 @@ final class AppSettings {
         } else {
             favoriteVehicleIDs.insert(id)
         }
+    }
+
+    /// The driver signed in, as the once-only flags know them: the SHA-256 of
+    /// "host|email" in lower case, as hex, the email without the spaces
+    /// round it, as Android's `DriverKey` makes it. A hash, so the email of
+    /// a driver who signed out does not stay on the phone.
+    static func driverKey(host: String, email: String) -> String {
+        let driver = "\(host)|\(email.trimmingCharacters(in: .whitespacesAndNewlines))".lowercased()
+        return SHA256.hash(data: Data(driver.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private var driverKey: String {
+        Self.driverKey(host: serverURL?.host() ?? "", email: email)
+    }
+
+    /// The driver signed in has been shown this.
+    func hasSeen(_ flag: DriverFlag) -> Bool {
+        seenByDriver[driverKey]?.contains(flag.rawValue) ?? false
+    }
+
+    /// The driver signed in has now been shown this, for good.
+    func markSeen(_ flag: DriverFlag) {
+        seenByDriver[driverKey, default: []].insert(flag.rawValue)
     }
 
     /// `ids` with `id` at the front, any earlier copy of it dropped, and at
@@ -145,6 +182,7 @@ final class AppSettings {
         static let recentRoutes = "recentRouteIDs"
         static let favoriteVehicles = "favoriteVehicleIDs"
         static let recentVehicles = "recentVehicleIDs"
+        static let seenByDriver = "seenByDriver"
         /// Written by builds before favourites and recents; read as a fallback only.
         static let legacyLastVehicle = "lastVehicleID"
     }
