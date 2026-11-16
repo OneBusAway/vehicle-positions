@@ -53,6 +53,15 @@ func newAlertRow(a alertEntry, settings alertSettings) alertRow {
 	case alertOffRoute:
 		row.Kind = "Off route"
 		row.Detail = fmt.Sprintf("Over %.0f m from its route for %s", settings.offRouteDistance, duration)
+	case alertNotStarted:
+		// The vehicle and driver are the last trip's, the route and trip the
+		// one not started. The vehicle has no trip running for View trip to
+		// open, so it opens all of the vehicle's trips.
+		row.Kind = "Not started"
+		row.Detail = fmt.Sprintf("Next on block %s, due %s ago", a.NextTrip.BlockID, duration)
+		row.RouteID = a.NextTrip.RouteID
+		row.GtfsTripID = a.NextTrip.GtfsTripID
+		row.TripURL = tripsPageURL("", a.Trip.VehicleID, "", 1)
 	default:
 		row.Kind = "Not moving"
 		row.Detail = fmt.Sprintf("Under %.0f m in %s", stoppedRadius, duration)
@@ -87,6 +96,7 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		"StoppedRadius":    fmt.Sprintf("%.0f m", stoppedRadius),
 		"OffRouteDistance": fmt.Sprintf("%.0f m", ui.alerts.settings.offRouteDistance),
 		"OffRouteAfter":    humanizeDuration(ui.alerts.settings.offRouteAfter),
+		"NotStartedAfter":  humanizeDuration(ui.alerts.settings.notStartedAfter),
 	})
 }
 
