@@ -15,8 +15,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
+import org.onebusaway.vehicletracker.data.DataStoreDriverFlagsStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
+import org.onebusaway.vehicletracker.data.DriverFlagsStore
 import org.onebusaway.vehicletracker.data.EncryptedSessionStore
 import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
@@ -30,6 +32,7 @@ import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
+import org.onebusaway.vehicletracker.data.driverFlagsDataStore
 import org.onebusaway.vehicletracker.data.sessionDataStore
 import org.onebusaway.vehicletracker.data.tripStateDataStore
 import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
@@ -206,6 +209,11 @@ object AppModule {
     @Singleton
     fun provideVehiclePrefsStore(@ApplicationContext context: Context): VehiclePrefsStore =
         DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore)
+
+    @Provides
+    @Singleton
+    fun provideDriverFlagsStore(@ApplicationContext context: Context): DriverFlagsStore =
+        DataStoreDriverFlagsStore(context.driverFlagsDataStore)
 
     /** The build checks it is https; one the app still can't use, such as one with user info, is ignored. */
     @Provides

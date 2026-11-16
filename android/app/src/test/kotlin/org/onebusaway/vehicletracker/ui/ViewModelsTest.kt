@@ -977,6 +977,7 @@ class ViewModelsTest {
         queue,
         clock = { launchNow },
         serviceAnnounceGrace = serviceAnnounceGrace,
+        driverFlags = FakeDriverFlagsStore(),
     )
 
     @Test fun noTrip_andFreshToken_goesToVehicles() = runTest(dispatcher) {

@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.ui
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.EnterTransition
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,6 +37,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.onebusaway.vehicletracker.data.DriverFlag
+import org.onebusaway.vehicletracker.data.DriverFlagsStore
+import org.onebusaway.vehicletracker.data.DriverKey
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.SessionStore
@@ -58,14 +63,20 @@ import org.onebusaway.vehicletracker.ui.theme.sharedAxisIn
 import org.onebusaway.vehicletracker.ui.theme.sharedAxisOut
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreen
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleScreen
+import org.onebusaway.vehicletracker.ui.welcome.WelcomeScreen
+import java.io.IOException
 import java.time.Duration
 import javax.inject.Inject
+
+private const val TAG = "AppNav"
 
 private const val ROUTE_LOGIN = "login"
 // Distinct route (rather than an optional nav argument on ROUTE_LOGIN) so `popUpTo`/start-destination
 // string matching stays unambiguous; reuses the same LoginScreen composable with a different
 // post-login destination — returns to the still-active Tracking screen instead of Vehicles.
 private const val ROUTE_LOGIN_REAUTH = "login_reauth"
+// The three screens a driver sees once, between their first sign-in on this phone and the bus step.
+internal const val ROUTE_WELCOME = "welcome"
 internal const val ROUTE_VEHICLES = "vehicles"
 // The same bus step, opened because the driver asked to change bus. A distinct route, as for ROUTE_LOGIN_REAUTH, so
 // skipBusStep's `popUpTo` still matches only the step the app opened by itself.
@@ -110,9 +121,16 @@ private val SETUP_STEPS = setOf(ROUTE_VEHICLES, ROUTE_VEHICLES_CHOSEN, ROUTE_ROU
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenSetupSteps(): Boolean =
     initialState.destination.route in SETUP_STEPS && targetState.destination.route in SETUP_STEPS
 
-/** Signing in is the step before choosing the bus, so it goes forward along the same axis. */
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.fromSignInToBuses(): Boolean =
-    initialState.destination.route == ROUTE_LOGIN && targetState.destination.route == ROUTE_VEHICLES
+/**
+ * Signing in is the step before choosing the bus, and the welcome sits between the two for a driver new to this
+ * phone, so each goes forward to the next along the same axis.
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.onTowardsBuses(): Boolean {
+    val from = initialState.destination.route
+    val to = targetState.destination.route
+    return (from == ROUTE_LOGIN && (to == ROUTE_WELCOME || to == ROUTE_VEHICLES)) ||
+        (from == ROUTE_WELCOME && to == ROUTE_VEHICLES)
+}
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
@@ -166,6 +184,7 @@ class AppNavViewModel @Inject constructor(
     private val offlineQueue: OfflineFixQueue,
     @param:EpochSecondsClock private val clock: () -> Long,
     @param:ServiceAnnounceGrace private val serviceAnnounceGrace: Duration,
+    private val driverFlags: DriverFlagsStore,
 ) : ViewModel() {
     private val _startDestination = MutableStateFlow<String?>(null)
     val startDestination: StateFlow<String?> = _startDestination.asStateFlow()
@@ -184,12 +203,34 @@ class AppNavViewModel @Inject constructor(
     }
 
     /**
-     * Where Resume goes once it has ended the trip, as the app would open with no trip. Sign in when nobody is signed in
-     * to choose the next one, as on a phone restored from backup, which keeps the trip but not the session.
+     * Where Resume goes once it has ended the trip: the bus step, as ending it from Tracking does. Sign in when nobody
+     * is signed in to choose the next one, as on a phone restored from backup, which keeps the trip but not the
+     * session. Never the welcome: a driver who has just ended a trip is past it.
      */
-    suspend fun routeAfterResumeEnds(): String = withNoTrip(sessionStore.session.first())
+    suspend fun routeAfterResumeEnds(): String = busStepOrSignIn(sessionStore.session.first())
 
-    private fun withNoTrip(session: Session): String = if (session.isSignedIn(clock())) ROUTE_VEHICLES else ROUTE_LOGIN
+    /** Where Sign in goes on to: the welcome for a driver who has not seen it on this phone, the bus step for one who has. */
+    suspend fun routeAfterSignIn(): String = withNoTrip(sessionStore.session.first())
+
+    private suspend fun withNoTrip(session: Session): String =
+        if (session.isSignedIn(clock()) && welcomeIsDue(session)) ROUTE_WELCOME else busStepOrSignIn(session)
+
+    private fun busStepOrSignIn(session: Session): String = if (session.isSignedIn(clock())) ROUTE_VEHICLES else ROUTE_LOGIN
+
+    /**
+     * Whether the signed-in driver has yet to see the welcome on this phone. Read before the first screen is chosen, so
+     * the welcome never flashes up for a driver who has seen it. Not due for a session that names no driver, as one an
+     * older build stored, nor when the record can't be read: the welcome must never be what keeps a driver from a trip.
+     */
+    private suspend fun welcomeIsDue(session: Session): Boolean {
+        val driver = DriverKey.of(session) ?: return false
+        return try {
+            !driverFlags.isSet(driver, DriverFlag.WelcomeSeen)
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not read whether the welcome was seen; going on without it", e)
+            false
+        }
+    }
 
     /**
      * A session signed in before the queue recorded owners has none on file, so this driver's next sign-in would drop
@@ -255,14 +296,14 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
         modifier = modifier,
         enterTransition = {
             when {
-                betweenSetupSteps() || fromSignInToBuses() -> sharedAxisIn(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || onTowardsBuses() -> sharedAxisIn(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughIn()
                 else -> DefaultNavTransitions.enterTransition(this)
             }
         },
         exitTransition = {
             when {
-                betweenSetupSteps() || fromSignInToBuses() -> sharedAxisOut(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || onTowardsBuses() -> sharedAxisOut(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughOut()
                 else -> DefaultNavTransitions.exitTransition(this)
             }
@@ -277,11 +318,29 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
         },
     ) {
         composable(ROUTE_LOGIN) {
+            val scope = rememberCoroutineScope()
             ClearOfSystemBars {
                 LoginScreen(
                     onLoginSuccess = {
+                        // Whether this driver has seen the welcome is read off the phone. Should a rotation cut the
+                        // read short, the screen that replaces this one finds the sign-in done and asks again.
+                        scope.launch {
+                            navController.navigate(navViewModel.routeAfterSignIn()) {
+                                popUpTo(ROUTE_LOGIN) { inclusive = true }
+                            }
+                        }
+                    },
+                )
+            }
+        }
+        composable(ROUTE_WELCOME) {
+            ClearOfSystemBars {
+                WelcomeScreen(
+                    // Not a tap: it fires once the phone has recorded that the driver has seen the welcome, and a
+                    // guard would drop it.
+                    onDone = {
                         navController.navigate(ROUTE_VEHICLES) {
-                            popUpTo(ROUTE_LOGIN) { inclusive = true }
+                            popUpTo(ROUTE_WELCOME) { inclusive = true }
                         }
                     },
                 )
