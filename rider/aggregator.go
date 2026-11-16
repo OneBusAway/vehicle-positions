@@ -78,9 +78,17 @@ type Aggregator struct {
 	mu       sync.Mutex
 	sessions map[string]*Session // by ride id
 	byRider  map[string]string   // rider id → the ride id of that rider's newest session
-	// runStarts is when each trip's run started, as runStart first estimated
-	// it. An entry goes when the last ride on its trip is removed.
-	runStarts map[TripKey]time.Time
+	// runStarts is the run each trip's riders are on, as runStart keeps it.
+	// An entry goes when the last ride on its trip is removed.
+	runStarts map[TripKey]riderRun
+}
+
+// riderRun is when the run a trip's riders are on left its first stop, and
+// where along the shape and when its latest estimate put it.
+type riderRun struct {
+	start time.Time
+	along float64
+	at    time.Time
 }
 
 // NewAggregator returns an empty registry judging points with th, in tz.
@@ -90,7 +98,7 @@ func NewAggregator(th Thresholds, tz *time.Location) *Aggregator {
 		tz:        tz,
 		sessions:  make(map[string]*Session),
 		byRider:   make(map[string]string),
-		runStarts: make(map[TripKey]time.Time),
+		runStarts: make(map[TripKey]riderRun),
 	}
 }
 
@@ -386,21 +394,48 @@ func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey
 	return reported, riders
 }
 
-// runStart is when the run of key's trip left its first stop: the time the
-// schedule takes to reach along, back from ts, when the riders first put the
-// vehicle there. Riders board along the way, so none of them saw it start.
-// The first estimate is kept until the trip's last ride is removed, because
+// runStart is when the run of key's trip that the riders put at along at ts
+// left its first stop: the schedule's time from its first departure to along,
+// back from ts. Riders board along the way, so none of them saw it start.
+//
 // GTFS-RT fixes a headway run's start_time once it is published, and the
-// riders' later positions would each put the start somewhere else.
+// riders' later positions would each put the start somewhere else, so the
+// first estimate of a run is kept. But every run of a trip on a service day
+// shares key, and on a busy headway route the riders of the next run start
+// before the last ride on this one ends. So the start is kept only while each
+// estimate is where the last one's vehicle could be: no more than
+// CorroborationBase back along the shape, the trusted feed's allowance for
+// two positions of one vehicle, and no further ahead than that plus MaxSpeed
+// for the time between them. Anywhere else the riders are on another run, and
+// it gets its own start.
+//
+// Nothing is kept for a trip with no ride registered: groups let go of a.mu
+// before this takes it, so its last ride may have been removed in between,
+// and a start kept then would never be cleared.
 func (a *Aggregator) runStart(key TripKey, trip *TripInfo, along float64, ts time.Time) time.Time {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if start, ok := a.runStarts[key]; ok {
-		return start
+	run, ok := a.runStarts[key]
+	moved := along - run.along
+	ahead := a.th.CorroborationBase + a.th.MaxSpeed*max(0, ts.Sub(run.at).Seconds())
+	if !ok || moved < -a.th.CorroborationBase || moved > ahead {
+		run.start = ts.Add(trip.StopTimes[0].Departure - ScheduledOffsetAt(trip, along))
 	}
-	start := ts.Add(ScheduledOffsetAt(trip, 0) - ScheduledOffsetAt(trip, along))
-	a.runStarts[key] = start
-	return start
+	run.along, run.at = along, ts
+	if a.rideOnLocked(key) {
+		a.runStarts[key] = run
+	}
+	return run.start
+}
+
+// rideOnLocked reports whether a ride on key is registered.
+func (a *Aggregator) rideOnLocked(key TripKey) bool {
+	for _, s := range a.sessions {
+		if s.Key() == key {
+			return true
+		}
+	}
+	return false
 }
 
 // activeForRiderLocked returns the rider's newest live session, or nil.
@@ -427,12 +462,9 @@ func (a *Aggregator) removeLocked(rideID string) *Session {
 	if a.byRider[s.RiderID()] == rideID {
 		delete(a.byRider, s.RiderID())
 	}
-	for _, other := range a.sessions {
-		if other.Key() == s.Key() {
-			return s
-		}
+	if !a.rideOnLocked(s.Key()) {
+		delete(a.runStarts, s.Key())
 	}
-	delete(a.runStarts, s.Key())
 	return s
 }
 

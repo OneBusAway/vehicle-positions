@@ -37,6 +37,10 @@ type VehicleState struct {
 	// and whether it is run by headway, which the feed calls UNSCHEDULED.
 	StartTime      string
 	FrequencyBased bool
+	// StartTimeDate is the service date StartTime counts from: StartDate, or
+	// when the report gave none, the date the schedule runs the trip on
+	// nearest its start. "" when StartTime is.
+	StartTimeDate string
 	// alongShape is how far along its trip's shape the vehicle was last
 	// placed, in metres: the projection hint for its next report on that trip.
 	// It is nil until the vehicle has been placed on its current trip.
@@ -212,10 +216,10 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 		occupancy = *loc.OccupancyStatus
 	}
 
-	var startTime string
+	var startTime, startTimeDate string
 	var frequencyBased bool
 	if t.locator != nil {
-		startTime, frequencyBased = t.locator.run(loc)
+		startTime, startTimeDate, frequencyBased = t.locator.run(loc)
 	}
 
 	t.vehicles[loc.VehicleID] = &VehicleState{
@@ -239,6 +243,7 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 		// right.
 		StartTime:      startTime,
 		FrequencyBased: frequencyBased,
+		StartTimeDate:  startTimeDate,
 		alongShape:     place.alongShape,
 		// Not carried over from the vehicle's previous report: a driver app
 		// is to send it with every report while the driver has one set, so a

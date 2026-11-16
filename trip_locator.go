@@ -92,18 +92,30 @@ func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 }
 
 // run describes the run loc's vehicle is on, by the loaded schedule
-// (rider.TripInfo.Run): its start_time and whether it is run by headway. A
-// trip the schedule lacks has no start_time and is not.
-func (l *tripLocator) run(loc *LocationReport) (startTime string, headway bool) {
+// (rider.TripInfo.Run): its start_time, the service date that counts from,
+// and whether it is run by headway. A report without a start_date has its
+// run counted from the date the schedule runs the trip on nearest the trip's
+// start (rider.Index.ServiceDateFor), since GTFS-RT needs both on a
+// frequency run. A trip the schedule lacks has no start_time and is not run
+// by headway.
+func (l *tripLocator) run(loc *LocationReport) (startTime, startDate string, headway bool) {
 	ix := l.index()
 	if ix == nil {
-		return "", false
+		return "", "", false
 	}
 	trip, ok := ix.Trip(loc.TripID)
 	if !ok {
-		return "", false
+		return "", "", false
 	}
-	return trip.Run(loc.StartDate, ix.Timezone(), loc.TripStartedAt)
+	startDate = loc.StartDate
+	if startDate == "" && !loc.TripStartedAt.IsZero() {
+		startDate = ix.ServiceDateFor(trip, loc.TripStartedAt)
+	}
+	startTime, headway = trip.Run(startDate, ix.Timezone(), loc.TripStartedAt)
+	if startTime == "" {
+		startDate = ""
+	}
+	return startTime, startDate, headway
 }
 
 // stopSearchPosition is where along shape to look for the stop of a fix at pos
