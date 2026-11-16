@@ -24,6 +24,7 @@ type APIKeyStore interface {
 type APIKeyManager interface {
 	CreateAPIKey(ctx context.Context, name, keyHash string) (*APIKey, error)
 	ListAPIKeys(ctx context.Context) ([]APIKey, error)
+	ListAPIKeysPage(ctx context.Context, limit, offset int) ([]APIKey, error)
 	DeactivateAPIKey(ctx context.Context, id int64) error
 }
 
@@ -70,6 +71,25 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
 	rows, err := s.queries.ListAPIKeys(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
+	}
+
+	keys := make([]APIKey, 0, len(rows))
+	for _, row := range rows {
+		keys = append(keys, toAPIKey(row))
+	}
+	return keys, nil
+}
+
+// ListAPIKeysPage returns up to limit keys, newest first, skipping the first
+// offset. Unlike ListAPIKeys it has no 1000-row cap, so every key is on some
+// page.
+func (s *Store) ListAPIKeysPage(ctx context.Context, limit, offset int) ([]APIKey, error) {
+	rows, err := s.queries.ListAPIKeysPage(ctx, db.ListAPIKeysPageParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list api keys page: %w", err)
 	}
 
 	keys := make([]APIKey, 0, len(rows))

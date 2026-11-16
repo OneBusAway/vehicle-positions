@@ -1129,6 +1129,49 @@ func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
 	return items, nil
 }
 
+const listAPIKeysPage = `-- name: ListAPIKeysPage :many
+SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
+FROM api_keys
+ORDER BY created_at DESC, id DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAPIKeysPageParams struct {
+	Limit  int32
+	Offset int32
+}
+
+// One page of the admin Feed API keys page, newest first. The id tiebreaker
+// makes the order total, so a key created in the same instant as another
+// cannot be on two pages or none.
+func (q *Queries) ListAPIKeysPage(ctx context.Context, arg ListAPIKeysPageParams) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysPage, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.KeyHash,
+			&i.Active,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveTripsByVehicle = `-- name: ListActiveTripsByVehicle :many
 SELECT DISTINCT ON (t.vehicle_id)
        t.vehicle_id, t.id, t.route_id, t.gtfs_trip_id, t.user_id, u.name AS driver_name
