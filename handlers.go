@@ -460,8 +460,9 @@ func scheduleRelationship(frequencyBased bool) *gtfsrt.TripDescriptor_ScheduleRe
 // riderEntity renders one rider-consensus trip estimate as a FeedEntity. The
 // "rider:" prefixes keep these ids from colliding with driver-reported
 // vehicles, and the label marks the position as rider-reported for consumers.
-// vehicle.id repeats the entity id (trip + start date) rather than the trip id
-// alone: the same trip running on two service dates is two vehicles, and E052
+// vehicle.id repeats the entity id (trip, start date and, for a run of a trip
+// in frequencies.txt, start time) rather than the trip id alone: the same trip
+// running on two service dates, or twice on one, is two vehicles, and E052
 // requires vehicle.id to be unique across the feed.
 func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 	position := &gtfsrt.Position{
@@ -485,7 +486,7 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 		trip.RouteId = proto.String(est.RouteID)
 	}
 
-	id := riderEntityID(est.Key)
+	id := riderEntityID(est)
 	vp := &gtfsrt.VehiclePosition{
 		Vehicle: &gtfsrt.VehicleDescriptor{
 			Id:    proto.String(id),
@@ -508,9 +509,15 @@ func riderEntity(est rider.TripEstimate) *gtfsrt.FeedEntity {
 }
 
 // riderEntityID is the feed id of a rider-reported trip instance, used both as
-// the FeedEntity id and as vehicle.id.
-func riderEntityID(key rider.TripKey) string {
-	return "rider:" + key.TripID + ":" + key.StartDate
+// the FeedEntity id and as vehicle.id. A trip in frequencies.txt runs many
+// times on one service day, and its runs' start times tell them apart, as
+// GTFS-RT's trip_id, start_date and start_time do.
+func riderEntityID(est rider.TripEstimate) string {
+	id := "rider:" + est.Key.TripID + ":" + est.Key.StartDate
+	if est.StartTime != "" {
+		id += ":" + est.StartTime
+	}
+	return id
 }
 
 type adminStatusResponse struct {

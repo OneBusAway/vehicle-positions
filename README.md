@@ -155,8 +155,8 @@ fields are rejected.
 
 Two admin endpoints report on the subsystem: `GET /api/v1/admin/rider/status`
 (schedule snapshot, trusted-feed health, rider tiers, live ride counts — where
-`rides.publishable` counts *trips* being published, one per estimate, not
-rides, so several riders on one bus count once) and
+`rides.publishable` counts the runs of trips being published, one per
+estimate, not rides, so several riders on one bus count once) and
 `GET /api/v1/admin/rider/rides?status=active|ended` (recent rides, newest
 first). Both require an admin token, like every other `/api/v1/admin/*` route.
 
@@ -165,7 +165,8 @@ a `source` parameter — `driver`, `rider`, or `all` (the default) — so a
 consumer can take the driver-reported entities alone. Rider entities are
 distinguishable by construction: their id — and their `vehicle.id`, so that two
 service dates of one trip are two vehicles — is `rider:<trip_id>:<start_date>`,
-and their vehicle label is `Rider-reported`. A rider-reported position is always
+with `:<start_time>` added for a run of a trip in `frequencies.txt`, which runs
+many times a day, and their vehicle label is `Rider-reported`. A rider-reported position is always
 snapped to the route shape, never a raw GPS fix, and a trip the trusted feed
 already reports is never published from rider data — for the server's own
 driver reports, that requires the driver to have entered the GTFS trip id, not

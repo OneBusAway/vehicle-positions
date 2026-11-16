@@ -434,7 +434,7 @@ A driver vehicle's `VehiclePosition` carries:
 - `timestamp`: the report's `timestamp`, capped at 60 seconds after the feed's own time (E050), because a report may be up to 5 minutes ahead of server time.
 - `occupancy_status`: the latest report's `occupancy_status`, left out when that report sent none.
 
-A rider-reported entity differs: its `id` and `vehicle.id` are both `rider:<trip_id>:<start_date>` and `vehicle.label` is always `Rider-reported`; `trip` is always there, with `trip_id`, `start_date`, `schedule_relationship` and `start_time` by the same rules and the trip's `route_id` from the schedule, the run's start being when the schedule has it leave its first stop (its departure there) to be where its riders put it, or the estimate's own time when they put it at the first stop. That start is kept while each estimate is where the last one's vehicle could be, no more than 150 m back along the shape and no further ahead than 150 m plus `RIDER_MAX_SPEED` for the time between them, and until the trip's last ride is removed; an estimate anywhere else is another run of the trip, whose riders share its `trip_id` and `start_date`, and gets its own start; `bearing` is always set, from the shape, and `speed` when the riders' phones reported one; the stop fields name the next stop along the shape, with `current_status` always `IN_TRANSIT_TO`, never `STOPPED_AT`; and it has no `occupancy_status`.
+A rider-reported entity differs: its `id` and `vehicle.id` are both `rider:<trip_id>:<start_date>`, with `:<start_time>` added for a run of a trip in `frequencies.txt`, and `vehicle.label` is always `Rider-reported`; `trip` is always there, with `trip_id`, `start_date`, `schedule_relationship` and `start_time` by the same rules and the trip's `route_id` from the schedule, the run's start being when the schedule has it leave its first stop (its departure there) to be where its riders put it, or the estimate's own time when they put it at the first stop. Every run of a trip in `frequencies.txt` on a service day shares its `trip_id` and `start_date`, so the riders of such a trip are split into runs along the shape, a new run wherever the next rider is more than 200 m on, twice the trim's 100 m, with each rider carried on at their point's speed to the newest rider's point so an older point does not read as distance, and each run is its own entity; a trip run by timetable has one run a day and its riders stay one group. A run's start is kept while each estimate of it is where the last one's vehicle could be, no more than 150 m back along the shape and no further ahead than 150 m plus `RIDER_MAX_SPEED` for the time between them; of the kept runs an estimate could be, it takes the one whose start is nearest its own, an estimate that takes none is a new run with its own start, and a run no estimate has placed for 15 minutes, or whose trip's last ride is removed, is let go. Two runs that come out at the same `start_time` are published once, the one with more riders; `bearing` is always set, from the shape, and `speed` when the riders' phones reported one; the stop fields name the next stop along the shape, with `current_status` always `IN_TRANSIT_TO`, never `STOPPED_AT`; and it has no `occupancy_status`.
 
 Consumers can request JSON encoding by appending `?format=json` to the URL. The default response is binary protobuf (`application/x-protobuf`). Any other `format` value falls back to protobuf because only the exact string `json` is checked.
 
@@ -602,8 +602,8 @@ the vehicle is on its route rather than where any phone was.
 
 `GET /api/v1/admin/rider/status` reports both ends of that pipeline:
 `rides.active` counts live sessions, one per ride, while `rides.publishable`
-counts the estimates the feed would carry right now — one per *trip*, so three
-riders on one bus are one publishable trip, not three.
+counts the estimates the feed would carry right now — one per *run* of a trip,
+so three riders on one bus are one publishable run, not three.
 
 ### 8.4 Trust states
 
@@ -631,8 +631,9 @@ independently agrees within 100 m.
 
 `handleGetFeed` asks the tracker for driver entities and the aggregator for
 rider entities, and `buildFeed` emits both into one `FeedMessage`. Rider
-entities take the id `rider:<trip_id>:<start_date>` — repeated as `vehicle.id`,
-so the same trip on two service dates is two vehicles (E052) — and the vehicle
+entities take the id `rider:<trip_id>:<start_date>`, with `:<start_time>` added
+for a run of a trip in `frequencies.txt` — repeated as `vehicle.id`, so the same
+trip on two service dates, or twice on one, is two vehicles (E052) — and the vehicle
 label `Rider-reported`; driver vehicle ids cannot contain a colon, so entity and
 vehicle ids stay unique across both halves by construction. The position
 published for a ride comes from its latest *matched* point, snapped to the

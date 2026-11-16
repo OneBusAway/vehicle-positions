@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runStartAt is the start runStarts gives one run of key's trip that g's
+// riders put at along at at.
+func runStartAt(f *aggFixture, key TripKey, g *tripGroup, along float64, at time.Time) time.Time {
+	return f.agg.runStarts(key, f.t1, []runPlace{{group: g, along: along, at: at}}, at)[0]
+}
+
 // estimateStart is the start_time, in seconds into the service day, of the
 // one trip estimate the aggregator has at now.
 func estimateStart(t *testing.T, f *aggFixture, now time.Time) int {
@@ -121,8 +127,8 @@ func TestAggregator_RunStartKeepsNothingWhenItsRidesHaveGone(t *testing.T) {
 	t.Run("no ride left", func(t *testing.T) {
 		f := newAggFixture(t)
 		headwayT1(f)
-		f.agg.runStart(key, gone(f), 350, f.base.Add(4*time.Minute))
-		assert.Empty(t, f.agg.runStarts)
+		runStartAt(f, key, gone(f), 350, f.base.Add(4*time.Minute))
+		assert.Empty(t, f.agg.runs)
 
 		f.addSession("r1", "rider-a", TierTrusted)
 		now := f.walkOffset(t, "r1", 300, 400, 10, 3*time.Minute)
@@ -132,15 +138,15 @@ func TestAggregator_RunStartKeepsNothingWhenItsRidesHaveGone(t *testing.T) {
 		f := newAggFixture(t)
 		headwayT1(f)
 		f.addSession("r1", "rider-a", TierTrusted)
-		f.agg.runStart(key, gone(f), 350, f.base.Add(4*time.Minute))
-		assert.Empty(t, f.agg.runStarts)
+		runStartAt(f, key, gone(f), 350, f.base.Add(4*time.Minute))
+		assert.Empty(t, f.agg.runs)
 
 		now := f.walkOffset(t, "r1", 300, 400, 10, 3*time.Minute)
 		assert.InDelta(t, 8*3600+3*60, estimateStart(t, f, now), 1)
 	})
 }
 
-// Two estimates of a trip can reach runStart in either order. One older than
+// Two estimates of a trip can reach runStarts in either order. One older than
 // the estimate kept is not taken for another run, however far back it is.
 func TestAggregator_RunStartIgnoresAnOlderEstimate(t *testing.T) {
 	f := newAggFixture(t)
@@ -149,10 +155,10 @@ func TestAggregator_RunStartIgnoresAnOlderEstimate(t *testing.T) {
 	g := &tripGroup{trip: f.t1, members: []estimateMember{{rideID: "r1"}}}
 	key := TripKey{"T1", "20260902"}
 
-	newer := f.agg.runStart(key, g, 900, f.base.Add(9*time.Minute))
-	older := f.agg.runStart(key, g, 300, f.base.Add(3*time.Minute))
+	newer := runStartAt(f, key, g, 900, f.base.Add(9*time.Minute))
+	older := runStartAt(f, key, g, 300, f.base.Add(3*time.Minute))
 	assert.Equal(t, newer, older)
-	assert.Equal(t, riderRun{start: newer, along: 900, at: f.base.Add(9 * time.Minute)}, f.agg.runStarts[key])
+	assert.Equal(t, []riderRun{{start: newer, along: 900, at: f.base.Add(9 * time.Minute)}}, f.agg.runs[key])
 }
 
 // A vehicle the riders put at its first stop is taken to be leaving it then,
@@ -165,7 +171,7 @@ func TestAggregator_RunStartAtTheFirstStopIsNow(t *testing.T) {
 	g := &tripGroup{trip: f.t1, members: []estimateMember{{rideID: "r1"}}}
 
 	at := f.base.Add(30 * time.Second)
-	assert.Equal(t, at, f.agg.runStart(TripKey{"T1", "20260902"}, g, 0, at))
+	assert.Equal(t, at, runStartAt(f, TripKey{"T1", "20260902"}, g, 0, at))
 }
 
 // A run counts its start_time from the service date whose frequencies.txt
