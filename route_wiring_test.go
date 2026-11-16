@@ -439,6 +439,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 		{"POST", "/admin/users/1/activate"},
 		{"POST", "/admin/users/1/vehicles"},
 		{"POST", "/admin/users/1/vehicles/bus-1/remove"},
+		{"GET", "/admin/driver-setup"},
 		{"GET", "/admin/trips"},
 		{"POST", "/admin/trips/1/end"},
 		{"GET", "/admin/reports"},
