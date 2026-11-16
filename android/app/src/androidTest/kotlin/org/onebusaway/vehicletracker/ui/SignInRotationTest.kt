@@ -21,6 +21,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.onebusaway.vehicletracker.MainActivity
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.DataStoreDriverFlagsStore
+import org.onebusaway.vehicletracker.data.DriverFlag
+import org.onebusaway.vehicletracker.data.DriverKey
+import org.onebusaway.vehicletracker.data.driverFlagsDataStore
 import org.onebusaway.vehicletracker.data.sessionDataStore
 import org.onebusaway.vehicletracker.data.tripStateDataStore
 import java.io.Closeable
@@ -33,6 +37,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 private const val TIMEOUT_SEC = 15L
+private const val DRIVER = "driver@example.com"
 
 /**
  * Signing in, in the app itself with its own stores, when the server answers only after a rotation has recreated the
@@ -45,7 +50,11 @@ class SignInRotationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val server = HeldServer()
 
-    @Before fun setUp() = runBlocking { forgetAll() }
+    /** The driver has signed in on this phone before, so the welcome is behind them and Sign in goes on to the vehicles. */
+    @Before fun setUp() = runBlocking {
+        forgetAll()
+        DataStoreDriverFlagsStore(context.driverFlagsDataStore).set(DriverKey.of(server.url, DRIVER), DriverFlag.WelcomeSeen)
+    }
 
     @After fun tearDown() = runBlocking {
         server.close()
@@ -55,6 +64,7 @@ class SignInRotationTest {
     private suspend fun forgetAll() {
         context.sessionDataStore.edit { it.clear() }
         context.tripStateDataStore.edit { it.clear() }
+        context.driverFlagsDataStore.edit { it.clear() }
     }
 
     private fun shows(id: Int) = compose.onAllNodes(hasText(context.getString(id))).fetchSemanticsNodes().isNotEmpty()
@@ -67,7 +77,7 @@ class SignInRotationTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             compose.waitUntil(TIMEOUT_SEC * 1000) { shows(R.string.login_button) }
             field(R.string.login_server_url_label).performTextReplacement(server.url)
-            field(R.string.login_email_label).performTextReplacement("driver@example.com")
+            field(R.string.login_email_label).performTextReplacement(DRIVER)
             field(R.string.login_password_label).performTextReplacement("driverpass123")
             compose.onNode(hasText(context.getString(R.string.login_button)) and hasClickAction()).performScrollTo().performClick()
             assertTrue("the sign-in reached the server", server.signInArrived.await(TIMEOUT_SEC, TimeUnit.SECONDS))
