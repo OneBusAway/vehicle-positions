@@ -130,6 +130,71 @@ import UIKit
         }
     }
 
+    func signIn(_ settings: AppSettings, to server: String = "https://tracker.example.org", as email: String) {
+        settings.serverURLString = server
+        settings.email = email
+    }
+
+    /// The once-only flags name a driver by a hash, so the phone keeps no
+    /// email once the driver has signed out.
+    @Test func aDriverIsKnownByTheHashOfServerHostAndEmail() {
+        let key = AppSettings.driverKey(host: "tracker.example.org", email: "maria@metro.example")
+        #expect(key == "475edb74202a73b4664cf7aee5f3124923431382b443aff4616442b60bc477f0", "SHA-256 of host|email")
+        #expect(AppSettings.driverKey(host: "Tracker.Example.org", email: "Maria@Metro.example") == key, "in lower case")
+        #expect(AppSettings.driverKey(host: "tracker.example.org", email: " maria@metro.example\n") == key, "without the spaces round it")
+        #expect(AppSettings.driverKey(host: "tracker.example.org", email: "omar@metro.example") != key)
+        #expect(AppSettings.driverKey(host: "other.example.org", email: "maria@metro.example") != key)
+    }
+
+    @Test func aFlagIsSeenByTheDriverWhoSawItAndNobodyElse() async {
+        await withDefaults { defaults in
+            let settings = AppSettings(defaults: defaults)
+            signIn(settings, as: "maria@metro.example")
+            #expect(!settings.hasSeen(.welcome))
+            settings.markSeen(.welcome)
+            #expect(settings.hasSeen(.welcome))
+            signIn(settings, as: "omar@metro.example")
+            #expect(!settings.hasSeen(.welcome), "the next driver on a shared phone")
+            signIn(settings, to: "https://other.example.org", as: "maria@metro.example")
+            #expect(!settings.hasSeen(.welcome), "the same email on another server is another driver")
+            signIn(settings, as: "Maria@Metro.example")
+            #expect(settings.hasSeen(.welcome), "however the email is typed")
+        }
+    }
+
+    /// Sign out clears the email. The flags stay, under a key that does not
+    /// hold it.
+    @Test func aFlagOutlivesSignOutAndARelaunchWithoutKeepingTheEmail() async throws {
+        try await withDefaults { defaults in
+            let settings = AppSettings(defaults: defaults)
+            signIn(settings, as: "maria@metro.example")
+            settings.markSeen(.welcome)
+            settings.email = ""
+            #expect(!settings.hasSeen(.welcome), "nobody is signed in")
+            #expect(defaults.string(forKey: "email") == "")
+            let stored = try #require(defaults.dictionary(forKey: "seenByDriver"))
+            #expect(!String(describing: stored).contains("maria"), "only the hash is kept")
+            let relaunched = AppSettings(defaults: defaults)
+            signIn(relaunched, as: "maria@metro.example")
+            #expect(relaunched.hasSeen(.welcome))
+        }
+    }
+
+    /// The store keeps each driver's flags by name, so a flag this build
+    /// does not know, from a later one, is left as it is.
+    @Test func aNewFlagNeedsNoChangeToWhatIsStored() async {
+        await withDefaults { defaults in
+            let key = AppSettings.driverKey(host: "tracker.example.org", email: "maria@metro.example")
+            defaults.set([key: ["runBoardTip", "firstTripDone"]], forKey: "seenByDriver")
+            let settings = AppSettings(defaults: defaults)
+            signIn(settings, as: "maria@metro.example")
+            #expect(!settings.hasSeen(.welcome))
+            settings.markSeen(.welcome)
+            settings.markSeen(.welcome)
+            #expect(defaults.dictionary(forKey: "seenByDriver") as? [String: [String]] == [key: ["firstTripDone", "runBoardTip", "welcome"]])
+        }
+    }
+
     /// Device management changes the settings from outside the app, which
     /// doesn't post `didChangeNotification` to it. A second `UserDefaults` on
     /// the same suite stands in for that.

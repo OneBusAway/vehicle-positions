@@ -10,14 +10,18 @@ struct RootView: View {
     /// already the right screen, and a relaunch onto Resume never shows
     /// Sign in first.
     private var shown: RootScreen {
-        screen ?? RootScreen.next(phase: session.phase, showing: .signIn)
+        screen ?? RootScreen.next(phase: session.phase, showing: .signIn, welcomeSeen: welcomeSeen)
     }
+
+    private var welcomeSeen: Bool { session.settings.hasSeen(.welcome) }
 
     var body: some View {
         ZStack {
             switch shown {
             case .signIn:
                 SignInView().transition(.opacity)
+            case .welcome:
+                WelcomeView { session.settings.markSeen(.welcome) }.transition(.opacity)
             case .pickers:
                 PickerFlow().transition(.opacity)
             case .resume:
@@ -28,7 +32,11 @@ struct RootView: View {
         }
         .animation(.smooth(duration: 0.35), value: shown)
         .onChange(of: session.phase, initial: true) { _, phase in
-            screen = RootScreen.next(phase: phase, showing: shown)
+            screen = RootScreen.next(phase: phase, showing: shown, welcomeSeen: welcomeSeen)
+        }
+        // Skip, or Continue on the welcome's last screen.
+        .onChange(of: welcomeSeen) { _, seen in
+            screen = RootScreen.next(phase: session.phase, showing: shown, welcomeSeen: seen)
         }
         // The trip started, or ended, on the server (DESIGN-iOS §2.7).
         .sensoryFeedback(.success, trigger: session.phase) { old, new in
