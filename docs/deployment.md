@@ -1246,21 +1246,32 @@ from the build-tools shows the address it carries:
 
 ### 13.3 A setup link or QR code
 
-Send drivers a link, or print it as a QR code:
+The admin site's **Driver setup** page makes the link and its QR code for you.
+It fills in your server's address from the address you opened the page at,
+which behind the nginx site in section 7 comes out as `https://` once
+`TRUST_PROXY_HEADERS=true` is set (section 7.3). Change it there if drivers'
+phones reach the server at another address. **Print the sheet** prints one
+page, on A4 or Letter, that takes a new driver through installing the app,
+scanning the code and signing in. On the **Users** page, **Setup sheet** on an
+active driver's row prints the same sheet with that driver's name and email on
+it. Neither sheet has a password on it, and the link holds only the server,
+because that is all the apps take from a link.
+
+A setup link looks like this:
 
 ```
 obavehicletracker://setup?server=https%3A%2F%2Ftracker.example.org
 ```
 
-The `server` value is your address, percent-encoded. To make the link for
-yours:
+The `server` value is your address, percent-encoded. Without the admin site,
+this makes the link for yours, and any QR code generator turns it into a code:
 
 ```bash
 python3 -c 'import sys, urllib.parse; print("obavehicletracker://setup?server=" + urllib.parse.quote(sys.argv[1], safe=""))' https://tracker.example.org
 ```
 
-Any QR code generator turns the link into a code. The iPhone Camera app opens
-it, and iOS may first ask whether to open OBA Vehicle Tracker. On Android, a
+The iPhone Camera app opens the link, and iOS may first ask whether to open
+OBA Vehicle Tracker. On Android, a
 QR scanner such as Google Lens opens it, and if another app also takes these
 links, Android asks which one to use. When a driver opens the link, the app
 asks **"Use tracker.example.org?"** with "Only continue if your agency sent you
