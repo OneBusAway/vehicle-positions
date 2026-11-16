@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui.account
 
+import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
@@ -14,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,22 +33,39 @@ import org.onebusaway.vehicletracker.ui.components.QuietButton
 /** The build as the menu names it, "0.1.0 (1)", with "?" for a build that has no version name. */
 internal fun versionText(name: String?, code: Long): String = "${name ?: "?"} ($code)"
 
+/** This build's [versionText], as the menu and Help show it. It asks the package manager. */
+internal fun appVersion(context: Context): String {
+    // The overload taking flags needs API 33.
+    @Suppress("DEPRECATION")
+    val info = context.packageManager.getPackageInfo(context.packageName, 0)
+    return versionText(info.versionName, PackageInfoCompat.getLongVersionCode(info))
+}
+
+/**
+ * Opens Help. Provided on the steps of choosing a trip, so the menu there has Help without each step passing it on;
+ * null elsewhere, and the menu then has no Help.
+ */
+internal val LocalOpenHelp = compositionLocalOf<(() -> Unit)?> { null }
+
 /**
  * The account menu at the end of each picker step's header, the same as iOS's: who is signed in, to which server,
- * which build, and Sign out. There is none on Tracking or Resume, so a driver ends the trip first. [enabled] is false
- * while a start is in flight, which a sign-out would leave started for nobody.
+ * which build, Help, and Sign out. There is none on Tracking or Resume, so a driver ends the trip first, and Help never
+ * opens while the vehicle moves. [enabled] is false while a start is in flight, which a sign-out would leave started for
+ * nobody.
  */
 @Composable
 fun AccountMenu(onSignedOut: () -> Unit, enabled: Boolean = true, viewModel: AccountViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val version = remember(context) {
-        // The overload taking flags needs API 33.
-        @Suppress("DEPRECATION")
-        val info = context.packageManager.getPackageInfo(context.packageName, 0)
-        versionText(info.versionName, PackageInfoCompat.getLongVersionCode(info))
-    }
-    AccountMenuContent(state, version, enabled, onSignOut = viewModel::onSignOut, onSignedOut = onSignedOut)
+    val version = remember(context) { appVersion(context) }
+    AccountMenuContent(
+        state,
+        version,
+        enabled,
+        onSignOut = viewModel::onSignOut,
+        onSignedOut = onSignedOut,
+        onHelp = LocalOpenHelp.current,
+    )
 }
 
 /**
@@ -61,6 +80,7 @@ fun AccountMenuContent(
     enabled: Boolean,
     onSignOut: () -> Unit,
     onSignedOut: () -> Unit,
+    onHelp: (() -> Unit)? = null,
 ) {
     // Not a tap: it fires once the phone has forgotten the driver.
     LaunchedEffect(state.signedOut) { if (state.signedOut) onSignedOut() }
@@ -77,6 +97,16 @@ fun AccountMenuContent(
             state.server?.let { AboutItem(it, R.drawable.ic_dns) }
             AboutItem(stringResource(R.string.account_version, version), R.drawable.ic_info)
             HorizontalDivider()
+            if (onHelp != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.help_title)) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_help), contentDescription = null) },
+                    onClick = {
+                        expanded = false
+                        onHelp()
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.account_sign_out)) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_logout), contentDescription = null) },
