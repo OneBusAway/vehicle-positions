@@ -722,6 +722,6 @@ func TestFeedValidation_W009_ScheduleRelationship(t *testing.T) {
 	scheduled := gtfsrt.TripDescriptor_SCHEDULED.Enum()
 	assert.Equal(t, scheduled, trips["on-trip"].ScheduleRelationship)
 	assert.Equal(t, scheduled, trips["trip-only"].ScheduleRelationship)
-	assert.Equal(t, scheduled, trips[riderEntityID(sampleEstimate().Key)].ScheduleRelationship)
+	assert.Equal(t, scheduled, trips[riderEntityID(sampleEstimate())].ScheduleRelationship)
 	assert.Nil(t, trips["route-only"].ScheduleRelationship, "a route-only report names no trip to be SCHEDULED against")
 }

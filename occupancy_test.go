@@ -214,7 +214,7 @@ func TestBuildFeed_OccupancyStatus(t *testing.T) {
 		assert.Equal(t, name, vp.GetOccupancyStatus().String())
 	}
 	assert.Nil(t, byID["unsaid"].OccupancyStatus, "a vehicle whose latest report did not say publishes none")
-	riderVP := byID[riderEntityID(est.Key)]
+	riderVP := byID[riderEntityID(est)]
 	require.NotNil(t, riderVP)
 	assert.Nil(t, riderVP.OccupancyStatus, "a rider-reported vehicle never carries one, even on a trip whose driver said")
 }

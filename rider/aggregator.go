@@ -78,13 +78,13 @@ type Aggregator struct {
 	mu       sync.Mutex
 	sessions map[string]*Session // by ride id
 	byRider  map[string]string   // rider id → the ride id of that rider's newest session
-	// runStarts is the run each trip's riders are on, as runStart keeps it.
-	// An entry goes when the last ride on its trip is removed.
-	runStarts map[TripKey]riderRun
+	// runs is the runs of each trip its riders are on, as runStarts keeps
+	// them. A trip's entry goes when the last ride on it is removed.
+	runs map[TripKey][]riderRun
 }
 
-// riderRun is when the run a trip's riders are on left its first stop, and
-// where along the shape and when its latest estimate put it.
+// riderRun is when a run of a trip its riders are on left its first stop,
+// and where along the shape and when its latest estimate put it.
 type riderRun struct {
 	start time.Time
 	along float64
@@ -94,11 +94,11 @@ type riderRun struct {
 // NewAggregator returns an empty registry judging points with th, in tz.
 func NewAggregator(th Thresholds, tz *time.Location) *Aggregator {
 	return &Aggregator{
-		th:        th,
-		tz:        tz,
-		sessions:  make(map[string]*Session),
-		byRider:   make(map[string]string),
-		runStarts: make(map[TripKey]riderRun),
+		th:       th,
+		tz:       tz,
+		sessions: make(map[string]*Session),
+		byRider:  make(map[string]string),
+		runs:     make(map[TripKey][]riderRun),
 	}
 }
 
@@ -344,9 +344,9 @@ func (a *Aggregator) Reap(now time.Time) []string {
 	return reaped
 }
 
-// Estimates returns one vehicle position per trip the riders can vouch for,
-// sorted by trip id then start date. Trips the trusted feed already covers are
-// left out: the agency's own position wins.
+// Estimates returns one vehicle position per run of a trip the riders can
+// vouch for, sorted by trip id, start date and start time. Trips the trusted
+// feed already covers are left out: the agency's own position wins.
 func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []TripEstimate {
 	groups := a.groups(now)
 	out := make([]TripEstimate, 0, len(groups))
@@ -354,17 +354,46 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 		if covered != nil && covered(key) {
 			continue
 		}
-		if est, along, ok := g.estimate(key, now); ok {
-			est.StartTime, est.FrequencyBased = g.trip.Run(key.StartDate, a.tz, a.runStart(key, g, along, est.Timestamp))
-			out = append(out, est)
-		}
+		out = append(out, a.tripEstimates(key, g, now)...)
 	}
 	slices.SortFunc(out, func(x, y TripEstimate) int {
 		return cmp.Or(
 			cmp.Compare(x.Key.TripID, y.Key.TripID),
 			cmp.Compare(x.Key.StartDate, y.Key.StartDate),
+			cmp.Compare(x.StartTime, y.StartTime),
 		)
 	})
+	return out
+}
+
+// tripEstimates is an estimate for each run of key's trip that g's riders
+// can vouch for. Two runs that come out at the same start_time are one trip
+// instance to GTFS-RT, which a feed may name once, so only the one more
+// riders are on is kept. A trip run by timetable has one run, so its estimate
+// is never one of two.
+func (a *Aggregator) tripEstimates(key TripKey, g *tripGroup, now time.Time) []TripEstimate {
+	var ests []TripEstimate
+	var places []runPlace
+	for _, run := range g.runs() {
+		est, along, ok := run.estimate(key, now)
+		if !ok {
+			continue
+		}
+		ests = append(ests, est)
+		places = append(places, runPlace{group: run, along: along, at: est.Timestamp})
+	}
+	out := make([]TripEstimate, 0, len(ests))
+	for i, start := range a.runStarts(key, g.trip, places, now) {
+		est := ests[i]
+		est.StartTime, est.FrequencyBased = g.trip.Run(key.StartDate, a.tz, start)
+		j := slices.IndexFunc(out, func(o TripEstimate) bool { return o.StartTime == est.StartTime })
+		switch {
+		case j < 0:
+			out = append(out, est)
+		case est.Riders > out[j].Riders:
+			out[j] = est
+		}
+	}
 	return out
 }
 
@@ -390,51 +419,105 @@ func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey
 	if covered != nil && covered(key) {
 		return false, riders
 	}
-	_, _, reported := g.estimate(key, now)
-	return reported, riders
+	for _, run := range g.runs() {
+		if _, _, ok := run.estimate(key, now); ok {
+			return true, riders
+		}
+	}
+	return false, riders
 }
 
-// runStart is when the run of key's trip that g's riders put at along at ts
-// left its first stop: the schedule's time from its first departure to along,
-// back from ts. Riders board along the way, so none of them saw it start; a
-// vehicle they put at its first stop is taken to be leaving it then, however
-// long the stop's dwell.
+// runPlace is where an estimate put one run of a trip, and when, with the
+// riders who put it there.
+type runPlace struct {
+	group *tripGroup
+	along float64
+	at    time.Time
+}
+
+// runStarts is when each of places' runs of key's trip left its first stop.
+// A run's start is the schedule's time from its first departure to where its
+// riders put it, back from when they did. Riders board along the way, so none
+// of them saw it start; a vehicle they put at its first stop is taken to be
+// leaving it then, however long the stop's dwell.
 //
 // GTFS-RT fixes a headway run's start_time once it is published, and the
-// riders' later positions would each put the start somewhere else, so the
-// first estimate of a run is kept. But every run of a trip on a service day
-// shares key, and on a busy headway route the riders of the next run start
-// before the last ride on this one ends. So the start is kept only while each
-// estimate is where the last one's vehicle could be: no more than
+// riders' later positions would each put the start somewhere else, so a run's
+// first start is kept and each place is matched to a kept run. A kept run
+// can only be where its last estimate's vehicle could be since: no more than
 // CorroborationBase back along the shape, the trusted feed's allowance for
 // two positions of one vehicle, and no further ahead than that plus MaxSpeed
-// for the time between them. Anywhere else the riders are on another run, and
-// it gets its own start.
+// for the time between them. An older estimate, which reaches here after a
+// newer one when two Estimates overlap, is held to the same reach back in
+// time. Of the kept runs a place could be, it takes the one whose start is
+// nearest its own, and each kept run goes to one place at most; a place that
+// takes none is another run, with its own start. A kept run that no estimate
+// has placed for idleTimeout, the time a ride may go without a point, has no
+// riders left and is let go, so a later run does not take its start.
 //
-// groups lets go of a.mu before this takes it, so two estimates of the trip
-// can arrive in either order, and g's rides can be removed in between. An
-// estimate older than the one kept is not held against it, and nothing is
-// kept unless one of g's rides is still registered: a start kept for a trip
-// whose rides have gone, or have been replaced, would never be cleared, or
-// would be passed on to riders it does not describe.
-func (a *Aggregator) runStart(key TripKey, g *tripGroup, along float64, ts time.Time) time.Time {
+// groups lets go of a.mu before this takes it, so a place's rides may have
+// been removed meanwhile. A new run is kept only if one of them is still
+// registered: one kept for rides that have gone, or been replaced, would be
+// passed on to riders it does not describe.
+func (a *Aggregator) runStarts(key TripKey, trip *TripInfo, places []runPlace, now time.Time) []time.Time {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	run, ok := a.runStarts[key]
-	if ok && ts.Before(run.at) {
-		return run.start
+	kept := slices.DeleteFunc(a.runs[key], func(r riderRun) bool { return now.Sub(r.at) > idleTimeout })
+
+	starts := make([]time.Time, len(places))
+	for i, p := range places {
+		starts[i] = p.at.Add(-max(0, ScheduledOffsetAt(trip, p.along)-trip.StopTimes[0].Departure))
 	}
-	moved := along - run.along
-	ahead := a.th.CorroborationBase + a.th.MaxSpeed*max(0, ts.Sub(run.at).Seconds())
-	if !ok || moved < -a.th.CorroborationBase || moved > ahead {
-		first := g.trip.StopTimes[0].Departure
-		run.start = ts.Add(-max(0, ScheduledOffsetAt(g.trip, along)-first))
+	type match struct {
+		place, run int
+		gap        time.Duration
 	}
-	run.along, run.at = along, ts
-	if slices.ContainsFunc(g.members, func(m estimateMember) bool { return a.sessions[m.rideID] != nil }) {
-		a.runStarts[key] = run
+	var matches []match
+	for i, p := range places {
+		for j, r := range kept {
+			if a.couldBe(r, p) {
+				matches = append(matches, match{i, j, starts[i].Sub(r.start).Abs()})
+			}
+		}
 	}
-	return run.start
+	slices.SortStableFunc(matches, func(x, y match) int { return cmp.Compare(x.gap, y.gap) })
+	placed := make([]bool, len(places))
+	taken := make([]bool, len(kept))
+	for _, m := range matches {
+		if placed[m.place] || taken[m.run] {
+			continue
+		}
+		placed[m.place], taken[m.run] = true, true
+		r, p := &kept[m.run], places[m.place]
+		starts[m.place] = r.start
+		if !p.at.Before(r.at) {
+			r.along, r.at = p.along, p.at
+		}
+	}
+	for i, p := range places {
+		if !placed[i] && slices.ContainsFunc(p.group.members, func(m estimateMember) bool { return a.sessions[m.rideID] != nil }) {
+			kept = append(kept, riderRun{start: starts[i], along: p.along, at: p.at})
+		}
+	}
+	if len(kept) == 0 {
+		delete(a.runs, key)
+	} else {
+		a.runs[key] = kept
+	}
+	return starts
+}
+
+// couldBe reports whether r's vehicle could be where p puts a run: forward in
+// time, no more than CorroborationBase back from r's last place and no
+// further ahead than that plus MaxSpeed for the time since; back in time, the
+// other way round.
+func (a *Aggregator) couldBe(r riderRun, p runPlace) bool {
+	moved := p.along - r.along
+	elapsed := p.at.Sub(r.at).Seconds()
+	if elapsed < 0 {
+		moved, elapsed = -moved, -elapsed
+	}
+	return moved >= -a.th.CorroborationBase && moved <= a.th.CorroborationBase+a.th.MaxSpeed*elapsed
 }
 
 // rideOnLocked reports whether a ride on key is registered.
@@ -472,7 +555,7 @@ func (a *Aggregator) removeLocked(rideID string) *Session {
 		delete(a.byRider, s.RiderID())
 	}
 	if !a.rideOnLocked(s.Key()) {
-		delete(a.runStarts, s.Key())
+		delete(a.runs, s.Key())
 	}
 	return s
 }
@@ -529,6 +612,28 @@ type estimateMember struct {
 type tripGroup struct {
 	trip    *TripInfo
 	members []estimateMember
+}
+
+// runs splits the group into the runs of its trip that its riders are on. A
+// trip in frequencies.txt runs again and again on a service day, every run
+// under the one TripKey, so riders of two runs at once are one group. They
+// are told apart along the shape: a run ends wherever the next rider is more
+// than outlierDistance on, the distance at which an estimate takes a rider
+// for one on another vehicle. A trip run by timetable has one run a day, and
+// its riders stay one group, as far apart as they are.
+func (g *tripGroup) runs() []*tripGroup {
+	if len(g.trip.frequencies) == 0 {
+		return []*tripGroup{g}
+	}
+	members := slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(x.along, y.along) })
+	var runs []*tripGroup
+	for i, m := range members {
+		if i == 0 || m.along-members[i-1].along > outlierDistance {
+			runs = append(runs, &tripGroup{trip: g.trip})
+		}
+		runs[len(runs)-1].members = append(runs[len(runs)-1].members, m)
+	}
+	return runs
 }
 
 // groups snapshots the contributing rides by trip.
