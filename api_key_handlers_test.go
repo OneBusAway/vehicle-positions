@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,14 +39,6 @@ func (f *fakeAPIKeyManager) CreateAPIKey(_ context.Context, name, keyHash string
 	}
 	f.keys = append(f.keys, key)
 	return &key, nil
-}
-
-func (f *fakeAPIKeyManager) ListAPIKeys(_ context.Context) ([]APIKey, error) {
-	if f.listErr != nil {
-		return nil, f.listErr
-	}
-	keys := make([]APIKey, 0, len(f.keys))
-	return append(keys, f.keys...), nil
 }
 
 // ListAPIKeysPage pages over keys in the order they are held, which the tests
@@ -207,7 +200,11 @@ func TestHandleCreateAPIKey_OversizedBodyRejected(t *testing.T) {
 }
 
 func listAPIKeys(store APIKeyManager) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/api-keys", nil)
+	return listAPIKeysAt(store, "/api/v1/admin/api-keys")
+}
+
+func listAPIKeysAt(store APIKeyManager, target string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, target, nil)
 	w := httptest.NewRecorder()
 	handleListAPIKeys(store)(w, req)
 	return w
@@ -230,8 +227,7 @@ func TestHandleListAPIKeys_NeverLeaksHash(t *testing.T) {
 	assert.NotContains(t, body, "key_hash")
 	assert.NotContains(t, body, hash)
 
-	var keys []APIKey
-	require.NoError(t, json.Unmarshal([]byte(body), &keys))
+	keys := decodeAPIKeyList(t, w).APIKeys
 	require.Len(t, keys, 2)
 	assert.Equal(t, "transit-app", keys[0].Name)
 	assert.Equal(t, lastUsed, keys[0].LastUsedAt.UTC())
@@ -243,7 +239,7 @@ func TestHandleListAPIKeys_EmptyReturnsArray(t *testing.T) {
 	w := listAPIKeys(&fakeAPIKeyManager{})
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "[]", strings.TrimSpace(w.Body.String()), "an empty list must not serialize as null")
+	assert.JSONEq(t, `{"count":0,"has_more":false,"api_keys":[]}`, w.Body.String(), "an empty list must not serialize as null")
 }
 
 func TestHandleListAPIKeys_StoreError(t *testing.T) {
@@ -297,4 +293,91 @@ func TestHandleDeactivateAPIKey_InvalidID(t *testing.T) {
 			assert.Empty(t, store.deactivated, "a rejected id must never reach the store")
 		})
 	}
+}
+
+// decodeAPIKeyList decodes a 200 from the list endpoint.
+func decodeAPIKeyList(t *testing.T, w *httptest.ResponseRecorder) apiKeyListResponse {
+	t.Helper()
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var page apiKeyListResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	return page
+}
+
+// TestHandleListAPIKeys_Paginates walks three keys two at a time: limit and
+// offset choose the slice, and has_more says whether a key is left after it.
+func TestHandleListAPIKeys_Paginates(t *testing.T) {
+	store := &fakeAPIKeyManager{keys: []APIKey{
+		{ID: 3, Name: "newest", Active: true},
+		{ID: 2, Name: "middle", Active: true},
+		{ID: 1, Name: "oldest", Active: true},
+	}}
+	names := func(page apiKeyListResponse) []string {
+		out := make([]string, 0, len(page.APIKeys))
+		for _, k := range page.APIKeys {
+			out = append(out, k.Name)
+		}
+		return out
+	}
+
+	first := decodeAPIKeyList(t, listAPIKeysAt(store, "/api/v1/admin/api-keys?limit=2"))
+	assert.Equal(t, []string{"newest", "middle"}, names(first))
+	assert.Equal(t, 2, first.Count)
+	assert.True(t, first.HasMore, "a key is left after the first two")
+
+	last := decodeAPIKeyList(t, listAPIKeysAt(store, "/api/v1/admin/api-keys?limit=2&offset=2"))
+	assert.Equal(t, []string{"oldest"}, names(last))
+	assert.Equal(t, 1, last.Count)
+	assert.False(t, last.HasMore)
+
+	exact := decodeAPIKeyList(t, listAPIKeysAt(store, "/api/v1/admin/api-keys?limit=3"))
+	assert.Equal(t, 3, exact.Count)
+	assert.False(t, exact.HasMore, "a page that fits exactly has nothing more")
+}
+
+func TestHandleListAPIKeys_DefaultLimit(t *testing.T) {
+	store := &fakeAPIKeyManager{keys: seedAPIKeys(defaultListLimit + 1)}
+
+	page := decodeAPIKeyList(t, listAPIKeys(store))
+
+	assert.Equal(t, defaultListLimit, page.Count)
+	assert.True(t, page.HasMore)
+}
+
+func TestHandleListAPIKeys_BadPageParams(t *testing.T) {
+	for _, target := range []string{
+		"/api/v1/admin/api-keys?limit=0",
+		fmt.Sprintf("/api/v1/admin/api-keys?limit=%d", maxListLimit+1),
+		"/api/v1/admin/api-keys?offset=-1",
+		"/api/v1/admin/api-keys?limit=ten",
+	} {
+		w := listAPIKeysAt(&fakeAPIKeyManager{}, target)
+		assert.Equal(t, http.StatusBadRequest, w.Code, target)
+	}
+}
+
+// TestHandleListAPIKeys_ReachesEveryKey asks the real store for the oldest of
+// 1001 keys, past the 1000 rows the endpoint used to stop at.
+func TestHandleListAPIKeys_ReachesEveryKey(t *testing.T) {
+	store := newTestStore(t)
+	clearAPIKeys(t, store)
+	t.Cleanup(func() { clearAPIKeys(t, store) })
+
+	// 1001 keys, one a minute apart, "Consumer 0001" the oldest.
+	_, err := store.pool.Exec(context.Background(), `
+		INSERT INTO api_keys (name, key_hash, created_at, updated_at)
+		SELECT 'Consumer ' || lpad(g::text, 4, '0'), md5(g::text) || md5('x' || g::text),
+		       NOW() - (1002 - g) * INTERVAL '1 minute', NOW() - (1002 - g) * INTERVAL '1 minute'
+		FROM generate_series(1, 1001) AS g`)
+	require.NoError(t, err)
+
+	beforeLast := decodeAPIKeyList(t, listAPIKeysAt(store, "/api/v1/admin/api-keys?limit=200&offset=800"))
+	require.Equal(t, 200, beforeLast.Count)
+	assert.Equal(t, "Consumer 0002", beforeLast.APIKeys[199].Name)
+	assert.True(t, beforeLast.HasMore, "the oldest key is still to come")
+
+	last := decodeAPIKeyList(t, listAPIKeysAt(store, "/api/v1/admin/api-keys?limit=200&offset=1000"))
+	require.Equal(t, 1, last.Count)
+	assert.Equal(t, "Consumer 0001", last.APIKeys[0].Name)
+	assert.False(t, last.HasMore)
 }

@@ -101,29 +101,6 @@ func TestStore_DeactivateAPIKey_NotFound(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrAPIKeyNotFound), "revoking an unknown id must not report success, got %v", err)
 }
 
-func TestStore_ListAPIKeys(t *testing.T) {
-	store := newTestStore(t)
-	ctx := context.Background()
-	clearAPIKeys(t, store)
-
-	empty, err := store.ListAPIKeys(ctx)
-	require.NoError(t, err)
-	assert.NotNil(t, empty, "an empty list must marshal as [], not null")
-	assert.Empty(t, empty)
-
-	first, err := store.CreateAPIKey(ctx, "first", hashAPIKey("first-key"))
-	require.NoError(t, err)
-	second, err := store.CreateAPIKey(ctx, "second", hashAPIKey("second-key"))
-	require.NoError(t, err)
-
-	keys, err := store.ListAPIKeys(ctx)
-	require.NoError(t, err)
-	require.Len(t, keys, 2)
-
-	ids := []int64{keys[0].ID, keys[1].ID}
-	assert.ElementsMatch(t, []int64{first.ID, second.ID}, ids)
-}
-
 // TestStore_ListAPIKeysPage pages through keys that share a created_at, as keys
 // inserted in one statement do. The id tiebreaker puts them in one order,
 // newest id first, so each key is on exactly one page.
@@ -169,7 +146,7 @@ func TestStore_CreateAPIKey_DuplicateHash(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, duplicate)
 
-	keys, err := store.ListAPIKeys(ctx)
+	keys, err := store.ListAPIKeysPage(ctx, 10, 0)
 	require.NoError(t, err)
 	require.Len(t, keys, 1, "the rejected insert must not leave a row behind")
 	assert.Equal(t, "original", keys[0].Name)

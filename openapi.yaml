@@ -773,16 +773,25 @@ paths:
     get:
       tags: [admin]
       summary: List feed API keys
-      description: Requires the `admin` role. The raw keys are never returned — only their hashes are stored.
+      description: |
+        Returns one page of keys newest-first, deactivated ones included.
+        Requires the `admin` role. The raw keys are never returned: only their
+        hashes are stored.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
+      parameters:
+        - $ref: '#/components/parameters/ListLimitQuery'
+        - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
         '200':
-          description: API keys.
+          description: One page of API keys.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/APIKey'
+                $ref: '#/components/schemas/APIKeyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2680,6 +2689,22 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    APIKeyList:
+      type: object
+      required: [count, has_more, api_keys]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of keys in `api_keys`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when there are more keys than this page returned.
+        api_keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKey'
 
     APIKeyCreated:
       allOf:

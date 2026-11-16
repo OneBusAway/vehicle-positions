@@ -1093,42 +1093,6 @@ func (q *Queries) IsUserActiveInRole(ctx context.Context, arg IsUserActiveInRole
 	return exists, err
 }
 
-const listAPIKeys = `-- name: ListAPIKeys :many
-SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
-FROM api_keys
-ORDER BY created_at DESC
-LIMIT 1000
-`
-
-// safety bound; not pagination
-func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
-	rows, err := q.db.Query(ctx, listAPIKeys)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ApiKey
-	for rows.Next() {
-		var i ApiKey
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.KeyHash,
-			&i.Active,
-			&i.LastUsedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listAPIKeysPage = `-- name: ListAPIKeysPage :many
 SELECT id, name, key_hash, active, last_used_at, created_at, updated_at
 FROM api_keys
@@ -1141,9 +1105,9 @@ type ListAPIKeysPageParams struct {
 	Offset int32
 }
 
-// One page of the admin Feed API keys page, newest first. The id tiebreaker
-// makes the order total, so a key created in the same instant as another
-// cannot be on two pages or none.
+// One page of keys, newest first, for the admin page and the admin API. The id
+// tiebreaker makes the order total, so a key created in the same instant as
+// another cannot be on two pages or none.
 func (q *Queries) ListAPIKeysPage(ctx context.Context, arg ListAPIKeysPageParams) ([]ApiKey, error) {
 	rows, err := q.db.Query(ctx, listAPIKeysPage, arg.Limit, arg.Offset)
 	if err != nil {
