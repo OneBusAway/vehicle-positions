@@ -53,15 +53,39 @@ func issueAPIKey(ctx context.Context, store APIKeyManager, name string) (*APIKey
 	return key, rawKey, nil
 }
 
+// apiKeyListResponse is one page of GET /api/v1/admin/api-keys.
+type apiKeyListResponse struct {
+	Count   int      `json:"count"`
+	HasMore bool     `json:"has_more"`
+	APIKeys []APIKey `json:"api_keys"`
+}
+
+// handleListAPIKeys returns one page of keys, newest first, bounded by the
+// limit/offset query params. It fetches limit+1 rows from the store to detect
+// has_more without a separate count query, as handleListUsers does.
 func handleListAPIKeys(store APIKeyManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		keys, err := store.ListAPIKeys(r.Context())
+		limit, offset, ok := parseListPageParams(w, r)
+		if !ok {
+			return
+		}
+
+		keys, err := store.ListAPIKeysPage(r.Context(), limit+1, offset)
 		if err != nil {
 			slog.Error("failed to list api keys", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
-		writeJSON(w, http.StatusOK, keys)
+
+		hasMore := len(keys) > limit
+		if hasMore {
+			keys = keys[:limit]
+		}
+		writeJSON(w, http.StatusOK, apiKeyListResponse{
+			Count:   len(keys),
+			HasMore: hasMore,
+			APIKeys: keys,
+		})
 	}
 }
 

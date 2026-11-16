@@ -489,7 +489,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "X-API-Key: $KEY" \
 
 # Revoke it, then the same key is rejected
 ID=$(curl -s -H "Authorization: Bearer $ADMIN_JWT" \
-  http://localhost:8080/api/v1/admin/api-keys | jq -r '.[0].id')
+  http://localhost:8080/api/v1/admin/api-keys | jq -r '.api_keys[0].id')
 curl -s -X DELETE -H "Authorization: Bearer $ADMIN_JWT" \
   "http://localhost:8080/api/v1/admin/api-keys/$ID"
 

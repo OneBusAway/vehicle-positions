@@ -151,9 +151,6 @@ func (n *noopStore) UpdateAPIKeyLastUsed(_ context.Context, _ int64) error {
 func (n *noopStore) CreateAPIKey(_ context.Context, _, _ string) (*APIKey, error) {
 	return &APIKey{}, nil
 }
-func (n *noopStore) ListAPIKeys(_ context.Context) ([]APIKey, error) {
-	return make([]APIKey, 0), nil
-}
 func (n *noopStore) ListAPIKeysPage(_ context.Context, _, _ int) ([]APIKey, error) {
 	return make([]APIKey, 0), nil
 }

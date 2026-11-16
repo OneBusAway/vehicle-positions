@@ -131,6 +131,7 @@ var schemaStructs = map[string]string{
 
 	// Feed API keys and the GTFS catalog.
 	"APIKey":             "APIKey",
+	"APIKeyList":         "apiKeyListResponse",
 	"CatalogRoutes":      "catalogRoutesResponse",
 	"CatalogRoute":       "catalogRoute",
 	"CatalogRouteTrips":  "catalogRouteTripsResponse",
