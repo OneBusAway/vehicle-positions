@@ -117,6 +117,36 @@
     <string name="first_trip_done_text">Riders could see your vehicle.</string>
     <string name="first_trip_done_ok">OK</string>
 
+    <!-- Help: a page opened from the account menu, its item named the same. Each row below is the app's own words, then one plain line. -->
+    <string name="help_title">Help</string>
+    <!-- Opens the three welcome screens again. -->
+    <string name="help_welcome_again">See the welcome again</string>
+    <string name="help_welcome_again_detail">3 short screens</string>
+    <!-- Over what the status card can say on Tracking. -->
+    <string name="help_section_status">On the status card</string>
+    <string name="help_status_on_time">You are on the timetable.</string>
+    <string name="help_status_late">Behind the timetable.</string>
+    <string name="help_status_early">Ahead of the timetable. Riders may miss you.</string>
+    <string name="help_status_off_schedule">Far from the timetable. Check you chose the right run.</string>
+    <string name="help_status_off_route">Away from the route on the map.</string>
+    <string name="help_status_waiting_for_gps">The phone is finding its position.</string>
+    <string name="help_status_no_schedule">This run has no times. Riders still see you.</string>
+    <!-- Over the lines that show under the status card, the card shown in its place, and the Reports paused notification. -->
+    <string name="help_section_problems">Under the card, and in notifications</string>
+    <string name="help_problem_no_network">Keep driving. Reports are saved and sent later.</string>
+    <string name="help_problem_no_gps">Riders see your last position until it comes back.</string>
+    <string name="help_problem_clock_skew">Turn on automatic time in the phone\'s settings.</string>
+    <string name="help_problem_reports_refused">The server is not taking this vehicle\'s reports. Ask your dispatcher.</string>
+    <string name="help_problem_signed_out">Reports have stopped. Sign in to go on. Your trip is still open.</string>
+    <string name="help_problem_reports_paused">A notification. Open the app to keep reporting.</string>
+    <!-- The app's version, e.g. "0.1.0 (1)", and the server's address, each beside its label. -->
+    <string name="help_section_about">About</string>
+    <string name="help_version">Version</string>
+    <string name="help_server">Server</string>
+    <!-- Opens the phone's share sheet with a short text about the app, the phone and its permissions, for whoever looks after the app. -->
+    <string name="help_share">Share diagnostics</string>
+    <string name="help_share_detail">Sends the app version, the phone model and what the app is allowed to do. No positions, no sign-in details, no email.</string>
+
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>
     <string name="setup_trip_so_far">Trip so far</string>

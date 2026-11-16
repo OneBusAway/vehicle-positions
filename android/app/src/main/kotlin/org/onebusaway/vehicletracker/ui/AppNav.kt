@@ -9,6 +9,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +52,8 @@ import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.di.ServiceAnnounceGrace
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
+import org.onebusaway.vehicletracker.ui.account.LocalOpenHelp
+import org.onebusaway.vehicletracker.ui.help.HelpScreen
 import org.onebusaway.vehicletracker.ui.login.LoginScreen
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreen
 import org.onebusaway.vehicletracker.ui.routes.RouteItem
@@ -88,6 +91,9 @@ private const val ROUTE_ROUTES = "trip/{vehicleId}"
 private const val ROUTE_RUNS = "trip/{vehicleId}/routes/{routeId}?name={routeName}&color={routeColor}&text={routeTextColor}"
 private const val ROUTE_TRACKING = "tracking"
 private const val ROUTE_RESUME = "resume"
+// Help, from the account menu on the steps of choosing a trip, and the welcome opened again from it.
+internal const val ROUTE_HELP = "help"
+internal const val ROUTE_WELCOME_AGAIN = "welcome_again"
 // Not private: RunsViewModel reads them out of its SavedStateHandle, and the names have to
 // be the ones the nav graph wrote.
 internal const val ARG_VEHICLE_ID = "vehicleId"
@@ -136,6 +142,12 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.onTowardsBuses(): 
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromTracking(): Boolean =
     initialState.destination.route == ROUTE_TRACKING || targetState.destination.route == ROUTE_TRACKING
+
+private val HELP_ROUTES = setOf(ROUTE_HELP, ROUTE_WELCOME_AGAIN)
+
+/** Help is a step on from the step it opened over, and the welcome a step on from Help. */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.toOrFromHelp(): Boolean =
+    initialState.destination.route in HELP_ROUTES || targetState.destination.route in HELP_ROUTES
 
 /** Whether the bus step is behind this screen. It is not once the one-bus skip has taken its place. */
 private fun NavController.hasBusStep(): Boolean = listOf(ROUTE_VEHICLES, ROUTE_VEHICLES_CHOSEN).any { route ->
@@ -267,15 +279,22 @@ private fun ClearOfSystemBars(content: @Composable () -> Unit) {
     Box(Modifier.safeDrawingPadding()) { content() }
 }
 
-/** Going back a setup step, or out of Tracking; null for the screens that keep the default transitions. */
+/** A step of choosing a trip, whose account menu opens Help. A tap while the step is leaving does nothing. */
+@Composable
+private fun PickerStep(navController: NavController, content: @Composable () -> Unit) {
+    val openHelp = dropUnlessResumed { navController.navigate(ROUTE_HELP) }
+    CompositionLocalProvider(LocalOpenHelp provides openHelp) { ClearOfSystemBars(content) }
+}
+
+/** Going back a setup step, out of Help, or out of Tracking; null for the screens that keep the default transitions. */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter(slidePx: Int): EnterTransition? = when {
-    betweenSetupSteps() -> sharedAxisIn(SlideDirection.End, slidePx)
+    betweenSetupSteps() || toOrFromHelp() -> sharedAxisIn(SlideDirection.End, slidePx)
     toOrFromTracking() -> fadeThroughIn()
     else -> null
 }
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit(slidePx: Int): ExitTransition? = when {
-    betweenSetupSteps() -> sharedAxisOut(SlideDirection.End, slidePx)
+    betweenSetupSteps() || toOrFromHelp() -> sharedAxisOut(SlideDirection.End, slidePx)
     toOrFromTracking() -> fadeThroughOut()
     else -> null
 }
@@ -289,23 +308,23 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
 
     val navController = rememberNavController()
     val slidePx = with(LocalDensity.current) { SharedAxisSlide.roundToPx() }
-    // Signing in and the steps of choosing a trip slide along one axis; starting the trip and leaving it fade through
-    // instead, because they change the task. The rest keep the defaults. The back gesture previews the same pop it
-    // ends in.
+    // Signing in, the steps of choosing a trip and Help slide along one axis; starting the trip and leaving it fade
+    // through instead, because they change the task. The rest keep the defaults. The back gesture previews the same pop
+    // it ends in.
     NavHost(
         navController = navController,
         startDestination = destination,
         modifier = modifier,
         enterTransition = {
             when {
-                betweenSetupSteps() || onTowardsBuses() -> sharedAxisIn(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || onTowardsBuses() || toOrFromHelp() -> sharedAxisIn(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughIn()
                 else -> DefaultNavTransitions.enterTransition(this)
             }
         },
         exitTransition = {
             when {
-                betweenSetupSteps() || onTowardsBuses() -> sharedAxisOut(SlideDirection.Start, slidePx)
+                betweenSetupSteps() || onTowardsBuses() || toOrFromHelp() -> sharedAxisOut(SlideDirection.Start, slidePx)
                 toOrFromTracking() -> fadeThroughOut()
                 else -> DefaultNavTransitions.exitTransition(this)
             }
@@ -385,7 +404,7 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     )
                 }
             }
-            ClearOfSystemBars {
+            PickerStep(navController) {
                 RoutesScreen(
                     busId = vehicleId,
                     onBack = backToBuses,
@@ -409,7 +428,7 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
             ),
         ) { backStackEntry ->
             val hasBusStep = remember(backStackEntry) { navController.hasBusStep() }
-            ClearOfSystemBars {
+            PickerStep(navController) {
                 // The arguments reach RunsViewModel through its SavedStateHandle.
                 RunsScreen(
                     // Not a tap: the server confirms the start, perhaps after the driver has locked the phone, and
@@ -451,6 +470,24 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                 )
             }
         }
+        composable(ROUTE_HELP) {
+            ClearOfSystemBars {
+                HelpScreen(
+                    onBack = dropUnlessResumed { navController.popBackStack() },
+                    onWelcomeAgain = dropUnlessResumed { navController.navigate(ROUTE_WELCOME_AGAIN) },
+                )
+            }
+        }
+        composable(ROUTE_WELCOME_AGAIN) {
+            ClearOfSystemBars {
+                WelcomeScreen(
+                    // Not a tap: it fires once the driver has left the welcome, which records nothing from here.
+                    // Named, so a second firing can't pop Help as well.
+                    onDone = { navController.popBackStack(ROUTE_WELCOME_AGAIN, inclusive = true) },
+                    marksSeen = false,
+                )
+            }
+        }
         composable(ROUTE_TRACKING) {
             TrackingScreen(
                 onTripEnded = {
@@ -484,7 +521,7 @@ private fun NavGraphBuilder.vehicleStep(route: String, navController: NavControl
         val openRoutes = remember(backStackEntry) {
             backStackEntry.ifResumed<String> { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") }
         }
-        ClearOfSystemBars {
+        PickerStep(navController) {
             VehicleScreen(
                 onVehicleSelected = openRoutes,
                 // Not a tap: it fires once the assignments load, which can be while this screen is still sliding in,
