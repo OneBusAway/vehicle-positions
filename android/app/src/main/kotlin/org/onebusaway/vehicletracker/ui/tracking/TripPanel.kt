@@ -77,6 +77,7 @@ import org.onebusaway.vehicletracker.ui.routes.RouteBadge
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.theme.StatusTone
 import org.onebusaway.vehicletracker.ui.theme.tripTitle
+import org.onebusaway.vehicletracker.ui.tips.ScreenTip
 import kotlin.math.roundToInt
 
 private val SidePadding = 20.dp
@@ -95,6 +96,7 @@ private val CompactBarWidth = 380.dp
  * what the panel shows while it is down, and [rowsAlpha] how much of the rest shows, read as it is placed and
  * drawn. The panel runs under the navigation bar, [navigationBarPx] tall, where the rows would otherwise sit
  * while it is down: they are held that far below the screen instead, and rise and fade in with the pull.
+ * A [tip] points at the bar's sent count, from above the bar.
  */
 @Composable
 internal fun TripPanel(
@@ -107,6 +109,7 @@ internal fun TripPanel(
     rowsAlpha: () -> Float,
     navigationBarPx: Int,
     modifier: Modifier = Modifier,
+    tip: ScreenTip? = null,
 ) {
     val geometry = state.tracking.geometry
     val reporting = reporting(state.tracking.problem)
@@ -121,6 +124,7 @@ internal fun TripPanel(
             ending = state.ending,
             onEndTripClick = onEndTripClick,
             onClick = onBarClick,
+            tip = tip,
             modifier = Modifier.onSizeChanged { onBarHeightChanged(it.height) },
         )
         Column(
@@ -178,9 +182,10 @@ private fun TripBar(
     ending: Boolean,
     onEndTripClick: () -> Unit,
     onClick: () -> Unit,
+    tip: ScreenTip?,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxWidth().then(tip?.clearOf ?: Modifier)) {
         // Once set it stays set: without the icon the count fits, and the icon must not come back.
         var countCutShort by remember { mutableStateOf(false) }
         val compact = maxWidth < CompactBarWidth || countCutShort
@@ -229,6 +234,7 @@ private fun TripBar(
                         maxLines = 1,
                         // Squeezed, the count wraps after the number, and its one line shows only that.
                         onTextLayout = { if (it.didOverflowHeight) countCutShort = true },
+                        modifier = tip?.anchor ?: Modifier,
                     )
                 }
             }

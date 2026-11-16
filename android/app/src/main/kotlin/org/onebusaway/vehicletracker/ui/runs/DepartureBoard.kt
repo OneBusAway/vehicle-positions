@@ -24,6 +24,12 @@ data class BoardRun(
 @Immutable
 data class Board(val direction: RunDirection?, val runs: List<BoardRun>, val nowAt: Int?, val openAt: Int)
 
+/**
+ * The run the run board's tip points at: the one marked Now; failing that the one marked Next, which on a day none has
+ * started is the first; failing both, as once every run has gone, the first. Null on a board with no runs.
+ */
+fun tipRunOf(board: Board): String? = (board.runs.firstOrNull { it.highlight != null } ?: board.runs.firstOrNull())?.id
+
 /** A route's boards, and the index of the one the screen opens on. */
 data class DepartureBoards(val boards: List<Board>, val start: Int)
 
