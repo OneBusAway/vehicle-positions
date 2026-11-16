@@ -78,9 +78,17 @@ type Aggregator struct {
 	mu       sync.Mutex
 	sessions map[string]*Session // by ride id
 	byRider  map[string]string   // rider id → the ride id of that rider's newest session
-	// runStarts is when each trip's run started, as runStart first estimated
-	// it. An entry goes when the last ride on its trip is removed.
-	runStarts map[TripKey]time.Time
+	// runStarts is the run each trip's riders are on, as runStart keeps it.
+	// An entry goes when the last ride on its trip is removed.
+	runStarts map[TripKey]riderRun
+}
+
+// riderRun is when the run a trip's riders are on left its first stop, and
+// where along the shape and when its latest estimate put it.
+type riderRun struct {
+	start time.Time
+	along float64
+	at    time.Time
 }
 
 // NewAggregator returns an empty registry judging points with th, in tz.
@@ -90,7 +98,7 @@ func NewAggregator(th Thresholds, tz *time.Location) *Aggregator {
 		tz:        tz,
 		sessions:  make(map[string]*Session),
 		byRider:   make(map[string]string),
-		runStarts: make(map[TripKey]time.Time),
+		runStarts: make(map[TripKey]riderRun),
 	}
 }
 
@@ -347,7 +355,7 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 			continue
 		}
 		if est, along, ok := g.estimate(key, now); ok {
-			est.StartTime, est.FrequencyBased = g.trip.Run(key.StartDate, a.tz, a.runStart(key, g.trip, along, est.Timestamp))
+			est.StartTime, est.FrequencyBased = g.trip.Run(key.StartDate, a.tz, a.runStart(key, g, along, est.Timestamp))
 			out = append(out, est)
 		}
 	}
@@ -386,21 +394,57 @@ func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey
 	return reported, riders
 }
 
-// runStart is when the run of key's trip left its first stop: the time the
-// schedule takes to reach along, back from ts, when the riders first put the
-// vehicle there. Riders board along the way, so none of them saw it start.
-// The first estimate is kept until the trip's last ride is removed, because
+// runStart is when the run of key's trip that g's riders put at along at ts
+// left its first stop: the schedule's time from its first departure to along,
+// back from ts. Riders board along the way, so none of them saw it start; a
+// vehicle they put at its first stop is taken to be leaving it then, however
+// long the stop's dwell.
+//
 // GTFS-RT fixes a headway run's start_time once it is published, and the
-// riders' later positions would each put the start somewhere else.
-func (a *Aggregator) runStart(key TripKey, trip *TripInfo, along float64, ts time.Time) time.Time {
+// riders' later positions would each put the start somewhere else, so the
+// first estimate of a run is kept. But every run of a trip on a service day
+// shares key, and on a busy headway route the riders of the next run start
+// before the last ride on this one ends. So the start is kept only while each
+// estimate is where the last one's vehicle could be: no more than
+// CorroborationBase back along the shape, the trusted feed's allowance for
+// two positions of one vehicle, and no further ahead than that plus MaxSpeed
+// for the time between them. Anywhere else the riders are on another run, and
+// it gets its own start.
+//
+// groups lets go of a.mu before this takes it, so two estimates of the trip
+// can arrive in either order, and g's rides can be removed in between. An
+// estimate older than the one kept is not held against it, and nothing is
+// kept unless one of g's rides is still registered: a start kept for a trip
+// whose rides have gone, or have been replaced, would never be cleared, or
+// would be passed on to riders it does not describe.
+func (a *Aggregator) runStart(key TripKey, g *tripGroup, along float64, ts time.Time) time.Time {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if start, ok := a.runStarts[key]; ok {
-		return start
+	run, ok := a.runStarts[key]
+	if ok && ts.Before(run.at) {
+		return run.start
 	}
-	start := ts.Add(ScheduledOffsetAt(trip, 0) - ScheduledOffsetAt(trip, along))
-	a.runStarts[key] = start
-	return start
+	moved := along - run.along
+	ahead := a.th.CorroborationBase + a.th.MaxSpeed*max(0, ts.Sub(run.at).Seconds())
+	if !ok || moved < -a.th.CorroborationBase || moved > ahead {
+		first := g.trip.StopTimes[0].Departure
+		run.start = ts.Add(-max(0, ScheduledOffsetAt(g.trip, along)-first))
+	}
+	run.along, run.at = along, ts
+	if slices.ContainsFunc(g.members, func(m estimateMember) bool { return a.sessions[m.rideID] != nil }) {
+		a.runStarts[key] = run
+	}
+	return run.start
+}
+
+// rideOnLocked reports whether a ride on key is registered.
+func (a *Aggregator) rideOnLocked(key TripKey) bool {
+	for _, s := range a.sessions {
+		if s.Key() == key {
+			return true
+		}
+	}
+	return false
 }
 
 // activeForRiderLocked returns the rider's newest live session, or nil.
@@ -427,12 +471,9 @@ func (a *Aggregator) removeLocked(rideID string) *Session {
 	if a.byRider[s.RiderID()] == rideID {
 		delete(a.byRider, s.RiderID())
 	}
-	for _, other := range a.sessions {
-		if other.Key() == s.Key() {
-			return s
-		}
+	if !a.rideOnLocked(s.Key()) {
+		delete(a.runStarts, s.Key())
 	}
-	delete(a.runStarts, s.Key())
 	return s
 }
 
@@ -470,6 +511,7 @@ func expiry(s *Session, now time.Time) (EndReason, bool) {
 // the rider's latest *matched* point: an off-route or implausible point is not
 // a position anyone should be told the vehicle is at.
 type estimateMember struct {
+	rideID      string
 	riderID     string
 	along       float64
 	speed       float64
@@ -532,6 +574,7 @@ func (a *Aggregator) memberOfLocked(s *Session, now time.Time) (estimateMember, 
 		return estimateMember{}, false
 	}
 	return estimateMember{
+		rideID:      s.ID(),
 		riderID:     s.RiderID(),
 		along:       matched.AlongShape,
 		speed:       matched.Speed,

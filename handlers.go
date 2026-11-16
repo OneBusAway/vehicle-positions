@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -386,8 +387,10 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 			if v.RouteID != "" {
 				trip.RouteId = proto.String(v.RouteID)
 			}
-			if v.StartDate != "" {
-				trip.StartDate = proto.String(v.StartDate)
+			// A run's start_time needs its start_date, so a report that gave
+			// none is published with the one the start_time counts from.
+			if startDate := cmp.Or(v.StartDate, v.StartTimeDate); startDate != "" {
+				trip.StartDate = proto.String(startDate)
 			}
 			entity.Vehicle.Trip = trip
 		}
