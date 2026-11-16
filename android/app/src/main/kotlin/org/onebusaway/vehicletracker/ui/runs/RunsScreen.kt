@@ -76,6 +76,10 @@ import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.departureTime
 import org.onebusaway.vehicletracker.ui.theme.fadeThroughIn
 import org.onebusaway.vehicletracker.ui.theme.fadeThroughOut
+import org.onebusaway.vehicletracker.ui.tips.RunBoardTipViewModel
+import org.onebusaway.vehicletracker.ui.tips.ScreenTip
+import org.onebusaway.vehicletracker.ui.tips.TipHost
+import org.onebusaway.vehicletracker.ui.tips.rememberScreenTip
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -99,6 +103,7 @@ fun RunsScreen(
     onSessionEnded: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: RunsViewModel = hiltViewModel(),
+    tipViewModel: RunBoardTipViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LifecycleStartEffect(viewModel) {
@@ -121,6 +126,8 @@ fun RunsScreen(
         onReady = { pendingRunId?.let(viewModel::onStartRun) },
     )
     BackHandler(enabled = permissionFlow.visible) { permissionFlow.cancel() }
+    // Its state is kept here, and only the tip reads it, so the board under it is never recomposed for it.
+    val runTip = rememberScreenTip()
 
     Box {
         // The board stays under the checklist, so its direction and place are as the driver left them, but TalkBack
@@ -134,6 +141,8 @@ fun RunsScreen(
                 onBusClick = onBusClick,
                 onRouteClick = onRouteClick,
                 onRunClick = { runId ->
+                    // The driver knows how a trip starts now, whether or not the tip had come yet.
+                    tipViewModel.onSeen()
                     pendingRunId = runId
                     permissionFlow.start()
                 },
@@ -143,6 +152,7 @@ fun RunsScreen(
                 onChooseAnotherRoute = onChooseAnotherRoute,
                 onSessionEnded = onSessionEnded,
                 account = { AccountMenu(onSignedOut, enabled = canSignOut(state)) },
+                tip = runTip,
             )
         }
         AnimatedVisibility(visible = permissionFlow.visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
@@ -155,13 +165,23 @@ fun RunsScreen(
                 onRowAction = permissionFlow::onRowAction,
             )
         }
+        TipHost(
+            tip = runTip,
+            title = stringResource(R.string.tip_run_board_title),
+            text = stringResource(R.string.tip_run_board_text),
+            show = tipViewModel.show,
+            onShown = tipViewModel::onShown,
+            onLeft = tipViewModel::onLeft,
+            onSeen = tipViewModel::onSeen,
+        )
     }
 }
 
 /**
  * The run step as a departure board: big start times, a switch between the route's two directions, a line at "now",
  * and the run under way or next tagged. The header, the title, the switch and the date stay put; only the board
- * scrolls, and it opens at the run just gone so the driver sees where the day is without scrolling.
+ * scrolls, and it opens at the run just gone so the driver sees where the day is without scrolling. A [tip] points at
+ * the start time of the run [tipRunOf] picks on the board the driver is looking at.
  */
 @Composable
 fun RunsScreenContent(
@@ -178,6 +198,7 @@ fun RunsScreenContent(
     onChooseAnotherRoute: () -> Unit,
     onSessionEnded: () -> Unit,
     account: @Composable () -> Unit,
+    tip: ScreenTip? = null,
 ) {
     val sessionEnded = state is RunsUiState.SessionEnded
     LaunchedEffect(sessionEnded) { if (sessionEnded) onSessionEnded() }
@@ -223,7 +244,7 @@ fun RunsScreenContent(
                     )
                 }
             } else {
-                Departures(state, vehicleId, onRunClick, onReload, onTryAgain, onChangeBus)
+                Departures(state, vehicleId, onRunClick, onReload, onTryAgain, onChangeBus, tip)
             }
         }
     }
@@ -237,6 +258,7 @@ private fun Departures(
     onReload: () -> Unit,
     onTryAgain: () -> Unit,
     onChangeBus: () -> Unit,
+    tip: ScreenTip?,
 ) {
     var savedBoard by rememberSaveable { mutableIntStateOf(state.startBoard) }
     // After the app is killed and restored, the runs are loaded again and can split into fewer boards than when the
@@ -268,7 +290,8 @@ private fun Departures(
     BoardHeader(state.page.serviceDate, state.boards[selected].direction)
     ScrolledUnderDivider({ listStates[selected].canScrollBackward })
     Crossfade(targetState = selected, animationSpec = AppMotion.fastEffectsSpec(), label = "direction") { index ->
-        BoardList(state.boards[index], listStates[index], state.startingRunId, onRunClick)
+        // Only the board the driver is looking at has the tip's run: one fading out has none.
+        BoardList(state.boards[index], listStates[index], state.startingRunId, onRunClick, tip.takeIf { index == selected })
     }
 }
 
@@ -341,20 +364,39 @@ private fun serviceDay(serviceDate: String): String {
 }
 
 @Composable
-private fun BoardList(board: Board, listState: LazyListState, startingRunId: String?, onRunClick: (String) -> Unit) {
+private fun BoardList(
+    board: Board,
+    listState: LazyListState,
+    startingRunId: String?,
+    onRunClick: (String) -> Unit,
+    tip: ScreenTip?,
+) {
+    val tipRun = remember(board) { tipRunOf(board) }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         val split = board.nowAt ?: 0
-        runs(board.runs.subList(0, split), startingRunId, onRunClick)
+        runs(board.runs.subList(0, split), startingRunId, onRunClick, tipRun, tip)
         if (board.nowAt != null) {
             item(key = "now", contentType = "line") { NowLine() }
         }
-        runs(board.runs.subList(split, board.runs.size), startingRunId, onRunClick)
+        runs(board.runs.subList(split, board.runs.size), startingRunId, onRunClick, tipRun, tip)
     }
 }
 
-private fun LazyListScope.runs(runs: List<BoardRun>, startingRunId: String?, onRunClick: (String) -> Unit) {
+private fun LazyListScope.runs(
+    runs: List<BoardRun>,
+    startingRunId: String?,
+    onRunClick: (String) -> Unit,
+    tipRun: String?,
+    tip: ScreenTip?,
+) {
     items(runs, key = { it.id }, contentType = { "run" }) { run ->
-        RunRow(run, starting = run.id == startingRunId, dimmed = startingRunId != null && run.id != startingRunId, onRunClick)
+        RunRow(
+            run,
+            starting = run.id == startingRunId,
+            dimmed = startingRunId != null && run.id != startingRunId,
+            onRunClick,
+            tip = tip.takeIf { run.id == tipRun },
+        )
     }
 }
 
@@ -364,12 +406,13 @@ private fun LazyListScope.runs(runs: List<BoardRun>, startingRunId: String?, onR
  * ignore taps.
  */
 @Composable
-private fun RunRow(run: BoardRun, starting: Boolean, dimmed: Boolean, onRunClick: (String) -> Unit) {
+private fun RunRow(run: BoardRun, starting: Boolean, dimmed: Boolean, onRunClick: (String) -> Unit, tip: ScreenTip?) {
     val startingLabel = stringResource(R.string.runs_starting)
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(tip?.clearOf ?: Modifier)
             .then(if (starting) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh) else Modifier)
             .heightIn(min = 72.dp)
             .clickable(enabled = !starting && !dimmed, role = Role.Button) { onRunClick(run.id) }
@@ -392,6 +435,7 @@ private fun RunRow(run: BoardRun, starting: Boolean, dimmed: Boolean, onRunClick
                 text = run.time,
                 style = MaterialTheme.typography.departureTime,
                 color = if (run.past || dimmed) quiet else MaterialTheme.colorScheme.onSurface,
+                modifier = tip?.anchor ?: Modifier,
             )
             Text(text = run.headsign, style = MaterialTheme.typography.bodyMedium, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val label = runLabelText(

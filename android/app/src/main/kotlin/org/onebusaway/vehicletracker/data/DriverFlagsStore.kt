@@ -21,6 +21,15 @@ value class DriverFlag(val storedAs: String) {
     companion object {
         /** The driver has been through the welcome, or skipped it. */
         val WelcomeSeen = DriverFlag("welcome_seen")
+
+        /** The run board's tip has been closed, or the driver tapped a run before it showed. */
+        val RunBoardTipSeen = DriverFlag("run_board_tip_seen")
+
+        /** The tip on Tracking's sent count has been closed, or the driver's first trip moved off or ended without it. */
+        val SentCountTipSeen = DriverFlag("sent_count_tip_seen")
+
+        /** The sheet after the driver's first End trip has shown. */
+        val FirstTripDoneSeen = DriverFlag("first_trip_done_seen")
     }
 }
 

@@ -62,6 +62,10 @@ import org.onebusaway.vehicletracker.ui.map.RouteMap
 import org.onebusaway.vehicletracker.ui.map.glEsVersion
 import org.onebusaway.vehicletracker.ui.map.supportsMap
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
+import org.onebusaway.vehicletracker.ui.tips.ScreenTip
+import org.onebusaway.vehicletracker.ui.tips.SentCountTipViewModel
+import org.onebusaway.vehicletracker.ui.tips.TipHost
+import org.onebusaway.vehicletracker.ui.tips.rememberScreenTip
 
 /** The gap between the screen's edges and the status card floating over the map. */
 private val CardMargin = 12.dp
@@ -69,11 +73,16 @@ private val CardMargin = 12.dp
 /** How far the panel is pulled up before the rows under the trip bar have fully come in: about one row. */
 private val RowsFadeDistance = 48.dp
 
+/**
+ * [sentCountTip] is the tip on the sent count, for a driver's first trip. Null where the screen is shown without the
+ * app's own dependencies, as in a test of the rest of it.
+ */
 @Composable
 fun TrackingScreen(
     onTripEnded: () -> Unit,
     onReauthRequired: () -> Unit,
     viewModel: TrackingViewModel = hiltViewModel(),
+    sentCountTip: SentCountTipViewModel? = null,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LifecycleStartEffect(viewModel) {
@@ -83,6 +92,7 @@ fun TrackingScreen(
     // Read off the state, so an end the server confirms after a rotation goes on from the screen showing then.
     LaunchedEffect(state.ended) {
         if (state.ended) {
+            sentCountTip?.onTripEnded()
             onTripEnded()
             viewModel.onNavigated()
         }
@@ -90,24 +100,40 @@ fun TrackingScreen(
     KeepScreenOnWhileCharging()
     val context = LocalContext.current
     val mapSupported = remember { supportsMap(context.glEsVersion()) }
-    TrackingScreenContent(
-        state = state,
-        onEndTripClick = viewModel::onEndTrip,
-        onEndTripLocallyClick = viewModel::onEndTripLocally,
-        onDismissError = viewModel::dismissEndTripError,
-        onReauthClick = onReauthRequired,
-        onOccupancyClick = viewModel::onOccupancyClick,
-        map = { modifier, contentPadding, controlsPadding ->
-            // With no geometry there is no route to draw, and the status card already says so.
-            val geometry = state.tracking.geometry
-            if (mapSupported && geometry != null) {
-                val ring = AppTheme.statusColors[vehicleTone(state.tracking.adherence, state.tracking.problem)].text
-                RouteMap(geometry, state.tracking.adherence, state.mapFile, ring.toArgb(), contentPadding, controlsPadding, modifier)
-            } else {
-                Spacer(modifier)
-            }
-        },
-    )
+    // Its state is kept here, and only the tip reads it, so neither the map nor the panel is recomposed for it.
+    val sentTip = rememberScreenTip()
+    Box {
+        TrackingScreenContent(
+            state = state,
+            onEndTripClick = viewModel::onEndTrip,
+            onEndTripLocallyClick = viewModel::onEndTripLocally,
+            onDismissError = viewModel::dismissEndTripError,
+            onReauthClick = onReauthRequired,
+            onOccupancyClick = viewModel::onOccupancyClick,
+            tip = sentTip,
+            map = { modifier, contentPadding, controlsPadding ->
+                // With no geometry there is no route to draw, and the status card already says so.
+                val geometry = state.tracking.geometry
+                if (mapSupported && geometry != null) {
+                    val ring = AppTheme.statusColors[vehicleTone(state.tracking.adherence, state.tracking.problem)].text
+                    RouteMap(geometry, state.tracking.adherence, state.mapFile, ring.toArgb(), contentPadding, controlsPadding, modifier)
+                } else {
+                    Spacer(modifier)
+                }
+            },
+        )
+        if (sentCountTip != null) {
+            TipHost(
+                tip = sentTip,
+                title = stringResource(R.string.tip_sent_count_title),
+                text = stringResource(R.string.tip_sent_count_text),
+                show = sentCountTip.show,
+                onShown = sentCountTip::onShown,
+                onLeft = sentCountTip::onLeft,
+                onSeen = sentCountTip::onSeen,
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,6 +146,8 @@ fun TrackingScreenContent(
     onReauthClick: () -> Unit,
     // A default for the tests of the rest of the screen, which tap nothing in the occupancy row.
     onOccupancyClick: (OccupancyStatus) -> Unit = {},
+    // The tip that points at the trip bar's sent count.
+    tip: ScreenTip? = null,
     // The map is handed in so that this screen can be shown, in tests and previews, with no
     // OpenGL behind it. It fills the screen: its content padding says how much of it the status
     // card and the trip panel cover, and its controls padding where its own buttons go, above
@@ -188,6 +216,7 @@ fun TrackingScreenContent(
                     rowsAlpha = { panelRowsAlpha(collapsedTop, runCatching { sheetState.requireOffset() }.getOrNull(), rowsFade) },
                     navigationBarPx = navigationBarPx,
                     modifier = Modifier.heightIn(max = panelMaxHeight).onSizeChanged { panelHeight = it.height },
+                    tip = tip,
                 )
             },
         ) {

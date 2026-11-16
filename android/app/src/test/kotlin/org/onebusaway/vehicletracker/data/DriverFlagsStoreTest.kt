@@ -150,6 +150,17 @@ class DriverFlagsStoreTest {
         assertFalse(reopened.isSet(omar, DriverFlag.WelcomeSeen))
     }
 
+    @Test fun `each thing a driver is shown is its own record`() = runTest {
+        val all = listOf(DriverFlag.WelcomeSeen, DriverFlag.RunBoardTipSeen, DriverFlag.SentCountTipSeen, DriverFlag.FirstTripDoneSeen)
+        assertEquals("no two share a name", all.size, all.map { it.storedAs }.toSet().size)
+        val store = storeOn(newFile())
+
+        for (flag in all) {
+            store.set(maria, flag)
+            for (other in all) assertEquals("$other after $flag", all.indexOf(other) <= all.indexOf(flag), store.isSet(maria, other))
+        }
+    }
+
     @Test fun `a record that can't be read says so`() {
         val file = newFile().apply { writeText("not a preferences file") }
         val store = storeOn(file)

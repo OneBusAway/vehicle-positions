@@ -28,6 +28,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.DefaultNavTransitions
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -61,6 +62,7 @@ import org.onebusaway.vehicletracker.ui.theme.fadeThroughIn
 import org.onebusaway.vehicletracker.ui.theme.fadeThroughOut
 import org.onebusaway.vehicletracker.ui.theme.sharedAxisIn
 import org.onebusaway.vehicletracker.ui.theme.sharedAxisOut
+import org.onebusaway.vehicletracker.ui.tips.FirstTripDoneHost
 import org.onebusaway.vehicletracker.ui.tracking.TrackingScreen
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleScreen
 import org.onebusaway.vehicletracker.ui.welcome.WelcomeScreen
@@ -457,9 +459,21 @@ fun AppNav(modifier: Modifier = Modifier, navViewModel: AppNavViewModel = hiltVi
                     }
                 },
                 onReauthRequired = { navController.navigate(ROUTE_LOGIN_REAUTH) },
+                sentCountTip = hiltViewModel(),
             )
         }
     }
+    AfterTheFirstTrip(navController)
+}
+
+/**
+ * "First trip done", over the step that follows the driver's first End trip. Out here rather than on a step, because
+ * the vehicle step can hand straight on to the route step, and the sheet stays up over it.
+ */
+@Composable
+private fun AfterTheFirstTrip(navController: NavController) {
+    val entry by navController.currentBackStackEntryAsState()
+    FirstTripDoneHost(onASetupStep = entry?.destination?.route in SETUP_STEPS)
 }
 
 /** The bus step, under either of its routes: they differ only in whether one bus skips it. */

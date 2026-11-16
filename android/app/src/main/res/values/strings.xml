@@ -100,6 +100,23 @@
     <!-- Over a picture of the Reports paused notification. -->
     <string name="welcome_habits_if_stops">If reporting stops</string>
 
+    <!-- A tip shown once to each driver, on the run board, pointing at the run under way. A tap on a run starts the trip at once. -->
+    <string name="tip_run_board_title">Tap your run to start</string>
+    <string name="tip_run_board_text">The trip starts at once. Riders see your vehicle from then on.</string>
+    <!-- A tip shown once, on the driver's first trip and before the vehicle moves, pointing at the "N sent" count. -->
+    <string name="tip_sent_count_title">Reports sent</string>
+    <string name="tip_sent_count_text">This number grows while riders can see you. No signal? Keep driving. Reports are saved and sent later.</string>
+    <!-- The one button on a tip, which closes it. -->
+    <string name="tip_got_it">Got it</string>
+    <!-- A sheet after the driver's first trip ends: a title, the trip's report count as a large number with its words beside it, a line and a button. -->
+    <string name="first_trip_done_title">First trip done</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="one">report sent</item>
+        <item quantity="other">reports sent</item>
+    </plurals>
+    <string name="first_trip_done_text">Riders could see your vehicle.</string>
+    <string name="first_trip_done_ok">OK</string>
+
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>
     <string name="setup_trip_so_far">Trip so far</string>
