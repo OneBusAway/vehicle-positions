@@ -64,6 +64,42 @@
     <string name="restriction_server_url_title">Server address</string>
     <string name="restriction_server_url_description">The agency\'s tracker server, an https:// address. Drivers sign in to it and can\'t change it.</string>
 
+    <!-- The welcome: three short screens a driver sees once, after the first sign-in on this phone and before choosing a vehicle. -->
+    <!-- Leaves the welcome from any of its screens. -->
+    <string name="welcome_skip">Skip</string>
+    <!-- The button on the first two screens, and on the last. -->
+    <string name="welcome_next">Next</string>
+    <string name="welcome_continue">Continue</string>
+    <!-- What TalkBack reads for the line at the top, where a vehicle moves one stop for each screen, e.g. "Step 1 of 3". -->
+    <string name="welcome_step">Step %1$d of %2$d</string>
+    <!-- Screen 1: what the app does for riders. -->
+    <string name="welcome_riders_title">Riders can see you coming</string>
+    <string name="welcome_riders_body">Start a trip and riders see your vehicle on their map. End it when you finish.</string>
+    <!-- What TalkBack reads for screen 1's picture, a vehicle coming up its route to a stop where riders watch it on a phone. -->
+    <string name="welcome_riders_picture">Three riders at a stop can see your vehicle coming.</string>
+    <!-- Screen 2: the three choices before a trip, each on a card with the picker's own title over a hint. -->
+    <string name="welcome_pieces_title">Vehicle, route, run</string>
+    <!-- A tap on a run starts the trip at once, with no confirmation. -->
+    <string name="welcome_pieces_body">Choose them, then tap your run to start. End the trip when you finish.</string>
+    <string name="welcome_pieces_vehicle_hint">The number on the vehicle</string>
+    <string name="welcome_pieces_route_hint">The number on the sign</string>
+    <string name="welcome_pieces_run_hint">A tap starts the trip</string>
+    <!-- On a green card like the status card, once the three are chosen. -->
+    <string name="welcome_pieces_live">Riders see you</string>
+    <!-- Beside a picture of the End trip button. -->
+    <string name="welcome_pieces_finish">When you finish</string>
+    <!-- Screen 3: what keeps reports going, each as a title over its reason. Nothing here is a switch. -->
+    <string name="welcome_habits_title">Keep it reporting</string>
+    <string name="welcome_habits_body">Do these 3 things on every trip.</string>
+    <string name="welcome_habits_location">Allow location all the time</string>
+    <string name="welcome_habits_location_why">So reporting can restart by itself</string>
+    <string name="welcome_habits_charge">Keep the phone on charge</string>
+    <string name="welcome_habits_charge_why">The screen stays on while it charges</string>
+    <string name="welcome_habits_open">Leave the app open</string>
+    <string name="welcome_habits_open_why">Don\'t swipe it away during a trip</string>
+    <!-- Over a picture of the Reports paused notification. -->
+    <string name="welcome_habits_if_stops">If reporting stops</string>
+
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>
     <string name="setup_trip_so_far">Trip so far</string>
