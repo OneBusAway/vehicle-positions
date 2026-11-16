@@ -1475,9 +1475,11 @@ paths:
           default) from its trip's shape for longer than
           `ALERT_OFF_ROUTE_AFTER` (5m by default), counted to its latest
           report. A fix counts only when its whole accuracy circle is on one
-          side of that distance; one near the shape ends the spell. A trip
-          with no shape in the schedule, or with only a route, is never off
-          route.
+          side of that distance; one near the shape ends the spell. Reports
+          count only once the vehicle has been near the shape on this trip,
+          so one on its way to the route from a depot or a layover spot is
+          not off route. A trip with no shape in the schedule, or with only a
+          route, is never off route.
         - `not_moving`: the vehicle is still reporting but has stayed within
           50 m of where it is now for at least `ALERT_STOPPED_AFTER` (10m by
           default). A vehicle waiting at its first stop counts too.
@@ -3407,9 +3409,8 @@ components:
           description: |
             For `quiet`, the vehicle's last report (or the trip's start, or
             the server's start, when it has not reported since). For
-            `off_route`, its first report off route (or the trip's start, if
-            that came before). For `not_moving`, when it came within 50 m of
-            where it is now.
+            `off_route`, its first report off route. For `not_moving`, when it
+            came within 50 m of where it is now.
         duration_seconds:
           type: integer
           format: int64

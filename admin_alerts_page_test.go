@@ -55,7 +55,7 @@ func TestAlertsPage_Empty(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "30", w.Header().Get("Refresh"), "the page reloads itself without JavaScript")
 	body := w.Body.String()
-	assert.Contains(t, body, "No alerts. Every vehicle on a running trip is reporting and moving.")
+	assert.Contains(t, body, "No alerts. No vehicle on a running trip has gone quiet, left its route or stopped moving.")
 	assert.Contains(t, body, "sent no report for over 3 min, or have moved under 50 m in 10 min")
 	assert.NotRegexp(t, alertBadge, body, "no alerts, no badge")
 }

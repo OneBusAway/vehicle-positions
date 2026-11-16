@@ -101,14 +101,20 @@ type positionSample struct {
 	pos rider.LatLon
 }
 
-// offRouteSpell is a vehicle's run of reports off its trip's shape, with none
-// near it in between.
-type offRouteSpell struct {
-	// tripID is the GTFS trip the reports named. A report off another trip's
-	// shape starts a new spell.
-	tripID string
-	since  time.Time // the first report off the shape
-	last   time.Time // the latest
+// routeState is what a vehicle's reports have said about where it is against
+// its trip's shape.
+type routeState struct {
+	// tripStart is when the trip whose route the vehicle has joined started:
+	// a report near the shape sets it, and zero means none has yet. Until then
+	// the vehicle is still on its way to the route, from a depot or a layover
+	// spot beside it, and a report away from the shape is not off route. The
+	// start tells one run of a GTFS trip from the next, so a vehicle on a
+	// headway route, which starts the same trip_id over and over, joins each
+	// run's route anew.
+	tripStart time.Time
+	// offSince and offLast are the first and the latest report off the shape
+	// since the last one near it, both zero when there is none.
+	offSince, offLast time.Time
 }
 
 // shapeSide is where a report puts its vehicle against the off-route distance.
@@ -138,9 +144,9 @@ type alertWatcher struct {
 	// history holds each vehicle's samples, oldest first. A vehicle with no
 	// active trip loses its history the next time alerts are worked out.
 	history map[string][]positionSample
-	// offRoute holds each vehicle's current spell off its trip's shape, which
-	// it loses with its history.
-	offRoute map[string]offRouteSpell
+	// routes holds each vehicle's routeState for its latest trip. A vehicle
+	// with no active trip loses it with its history.
+	routes map[string]routeState
 	// schedule is where the trips' shapes come from, nil until watchRoutes.
 	schedule func() *rider.Index
 }
@@ -152,7 +158,7 @@ func newAlertWatcher(trips TripLister, settings alertSettings) *alertWatcher {
 		settings:      settings,
 		watchingSince: time.Now(),
 		history:       make(map[string][]positionSample),
-		offRoute:      make(map[string]offRouteSpell),
+		routes:        make(map[string]routeState),
 	}
 }
 
@@ -229,8 +235,10 @@ func stillSince(samples []positionSample) time.Time {
 	return samples[i].at
 }
 
-// recordRoute starts, extends or ends the vehicle's spell off route with a
-// report accepted at at. A report that cannot tell leaves the spell as it is.
+// recordRoute updates the vehicle's routeState with a report accepted at at. A
+// report that cannot tell changes nothing. A report near the shape starts the
+// state over for its own trip, so a vehicle that ends one trip off its route
+// and starts the next carries none of it over.
 func (w *alertWatcher) recordRoute(loc *LocationReport, at time.Time) {
 	w.mu.Lock()
 	schedule := w.schedule
@@ -244,16 +252,16 @@ func (w *alertWatcher) recordRoute(loc *LocationReport, at time.Time) {
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	spell, ok := w.offRoute[loc.VehicleID]
+	state := w.routes[loc.VehicleID]
 	switch {
 	case side == sideNear:
-		delete(w.offRoute, loc.VehicleID)
-	case ok && spell.tripID == loc.TripID:
-		spell.last = at
-		w.offRoute[loc.VehicleID] = spell
+		state = routeState{tripStart: loc.TripStartedAt}
+	case state.offSince.IsZero():
+		state.offSince, state.offLast = at, at
 	default:
-		w.offRoute[loc.VehicleID] = offRouteSpell{tripID: loc.TripID, since: at, last: at}
+		state.offLast = at
 	}
+	w.routes[loc.VehicleID] = state
 }
 
 // judgeReport is where loc puts its vehicle against limit, measured from the
@@ -319,9 +327,9 @@ func (w *alertWatcher) alerts(active []TripSummary, now time.Time) []alertEntry 
 			delete(w.history, vehicleID)
 		}
 	}
-	for vehicleID := range w.offRoute {
+	for vehicleID := range w.routes {
 		if _, ok := onTrip[vehicleID]; !ok {
-			delete(w.offRoute, vehicleID)
+			delete(w.routes, vehicleID)
 		}
 	}
 
@@ -358,18 +366,12 @@ func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bo
 		return newAlert(alertQuiet, heard, trip, now), true
 	}
 
-	// A spell begun before the trip counts from the trip's start. One on the
-	// vehicle's last trip counts for nothing: a report on this trip either
-	// starts a new spell or cannot tell, so it ended before this trip began.
-	if spell, ok := w.offRoute[trip.VehicleID]; ok {
-		since := spell.since
-		if since.Before(trip.StartTime) {
-			since = trip.StartTime
-		}
-		// As for a stop, only reported time counts.
-		if spell.last.Sub(since) > w.settings.offRouteAfter {
-			return newAlert(alertOffRoute, since, trip, now), true
-		}
+	// Only a vehicle that has joined this trip's route can be off it: a state
+	// joined on its last trip, or not joined at all, says nothing about this
+	// one. As for a stop, only reported time counts.
+	state := w.routes[trip.VehicleID]
+	if state.tripStart.Equal(trip.StartTime) && state.offLast.Sub(state.offSince) > w.settings.offRouteAfter {
+		return newAlert(alertOffRoute, state.offSince, trip, now), true
 	}
 
 	if len(onTrip) == 0 {
