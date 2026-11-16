@@ -464,10 +464,12 @@ driver-reported vehicles only.
   trip has not started 5 minutes after it was due to leave. The driver may
   have forgotten to start it in the app, or not be back from a break. The
   alert lasts until that trip is due to arrive, and clears when the vehicle
-  starts a trip or another vehicle starts that one. Only a block a vehicle
-  has run a trip on today is watched, so blocks nobody with the app is
-  driving never show here, and neither does a feed whose trips have no
-  `block_id`.
+  starts a trip or another vehicle starts that one. A trip started with only
+  a route doesn't take the vehicle off the block, though: the alert stays away
+  while that trip runs and comes back when it ends, if the block's next trip
+  is still due. Only a block a vehicle has run a trip on today is watched, so
+  blocks nobody with the app is driving never show here, and neither does a
+  feed whose trips have no `block_id`.
 
 Each row names the vehicle, driver, route and GTFS trip, and says how long:
 **No report for 7 min**, **Under 50 m in 12 min**, **Over 60 m from its route

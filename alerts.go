@@ -520,7 +520,12 @@ func (w *alertWatcher) notStarted(active, recent []TripSummary, now time.Time) [
 			continue
 		}
 		key := blockDay{info.BlockID, ix.ServiceDateFor(info, trip.StartTime)}
-		if run, ok := latestOfBlock[key]; !ok || departs(info) > departs(run.info) {
+		// Of two runs of one trip, after an end by mistake, a relief mid-trip
+		// or a breakdown, the one started later has the block. Compared on
+		// the start rather than relying on recent's order.
+		run, ok := latestOfBlock[key]
+		if !ok || departs(info) > departs(run.info) ||
+			(departs(info) == departs(run.info) && trip.StartTime.After(run.trip.StartTime)) {
 			latestOfBlock[key] = blockRun{trip, info}
 		}
 	}

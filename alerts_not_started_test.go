@@ -166,6 +166,55 @@ func TestAlerts_NotStartedMovesOnWithTheBlock(t *testing.T) {
 	assert.Equal(t, due.UTC(), got[0].Since)
 }
 
+// TestAlerts_NotStartedAfterARerun: a trip run twice by one vehicle, after an
+// end by mistake or a relief mid-trip, gives the block to the later run,
+// whatever order the trips are listed in.
+func TestAlerts_NotStartedAfterARerun(t *testing.T) {
+	w := newBlockWatcher(blockFixtureIndex(t))
+	first := blockRun(7, "van-7", "T1", onBlockDay(8, 1, 0), onBlockDay(8, 3, 0))
+	again := blockRun(8, "van-7", "T1", onBlockDay(8, 4, 0), onBlockDay(8, 13, 0))
+
+	tests := []struct {
+		name   string
+		recent []TripSummary
+	}{
+		{"listed by start", []TripSummary{first, again}},
+		{"listed the other way", []TripSummary{again, first}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := w.notStarted(nil, tc.recent, onBlockDay(8, 36, 0))
+			require.Len(t, got, 1, "T7 is still due")
+			assert.Equal(t, again, got[0].Trip)
+			assert.Equal(t, "T7", got[0].NextTrip.GtfsTripID)
+		})
+	}
+}
+
+// TestAlerts_NotStartedRerunByAnotherVehicle: a second vehicle that reruns a
+// trip, after a breakdown say, takes its block over, whether the first vehicle
+// stands idle or has gone on to something else.
+func TestAlerts_NotStartedRerunByAnotherVehicle(t *testing.T) {
+	w := newBlockWatcher(blockFixtureIndex(t))
+	brokeDown := blockRun(7, "van-7", "T1", onBlockDay(8, 1, 0), onBlockDay(8, 5, 0))
+	rescue := blockRun(8, "van-8", "T1", onBlockDay(8, 10, 0), onBlockDay(8, 20, 0))
+
+	tests := []struct {
+		name   string
+		active []TripSummary
+	}{
+		{"first vehicle idle", nil},
+		{"first vehicle busy elsewhere", []TripSummary{blockRun(9, "van-7", "", onBlockDay(8, 30, 0), time.Time{})}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := w.notStarted(tc.active, []TripSummary{brokeDown, rescue}, onBlockDay(8, 36, 0))
+			require.Len(t, got, 1)
+			assert.Equal(t, rescue, got[0].Trip)
+		})
+	}
+}
+
 // TestAlerts_NotStartedFollowsTheVehicle: a vehicle whose latest trip is on
 // another block, or on none, is no longer working the block.
 func TestAlerts_NotStartedFollowsTheVehicle(t *testing.T) {
