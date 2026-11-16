@@ -155,8 +155,8 @@ fields are rejected.
 
 Two admin endpoints report on the subsystem: `GET /api/v1/admin/rider/status`
 (schedule snapshot, trusted-feed health, rider tiers, live ride counts — where
-`rides.publishable` counts *trips* being published, one per estimate, not
-rides, so several riders on one bus count once) and
+`rides.publishable` counts the runs of trips being published, one per
+estimate, not rides, so several riders on one bus count once) and
 `GET /api/v1/admin/rider/rides?status=active|ended` (recent rides, newest
 first). Both require an admin token, like every other `/api/v1/admin/*` route.
 

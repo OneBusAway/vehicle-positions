@@ -27,6 +27,11 @@ const (
 	// outlierDistance is how far a rider may sit from the group's median
 	// before that rider is dropped from the estimate.
 	outlierDistance = 100.0
+	// runSplitDistance is how far apart two riders of a trip in frequencies.txt must be
+	// along the shape to be on different runs of it: twice outlierDistance,
+	// the furthest apart two riders can be and both survive one estimate's
+	// trim.
+	runSplitDistance = 2 * outlierDistance
 )
 
 // AppliedPoint is one point of a batch together with the verdict it earned. The
@@ -369,8 +374,8 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 // tripEstimates is an estimate for each run of key's trip that g's riders
 // can vouch for. Two runs that come out at the same start_time are one trip
 // instance to GTFS-RT, which a feed may name once, so only the one more
-// riders are on is kept. A trip run by timetable has one run, so its estimate
-// is never one of two.
+// riders are on is kept, or on a tie the one with the newer point. A trip
+// run by timetable has one run, so its estimate is never one of two.
 func (a *Aggregator) tripEstimates(key TripKey, g *tripGroup, now time.Time) []TripEstimate {
 	var ests []TripEstimate
 	var places []runPlace
@@ -390,16 +395,17 @@ func (a *Aggregator) tripEstimates(key TripKey, g *tripGroup, now time.Time) []T
 		switch {
 		case j < 0:
 			out = append(out, est)
-		case est.Riders > out[j].Riders:
+		case est.Riders > out[j].Riders,
+			est.Riders == out[j].Riders && est.Timestamp.After(out[j].Timestamp):
 			out[j] = est
 		}
 	}
 	return out
 }
 
-// PublishableCount is how many trips currently have a rider-derived position:
-// the trips Estimates would publish, counted rather than re-derived, so the
-// count can never disagree with the feed.
+// PublishableCount is how many runs of trips currently have a rider-derived
+// position: the estimates Estimates would publish, one per run, counted
+// rather than re-derived, so the count can never disagree with the feed.
 func (a *Aggregator) PublishableCount(now time.Time, covered func(TripKey) bool) int {
 	return len(a.Estimates(now, covered))
 }
@@ -617,18 +623,25 @@ type tripGroup struct {
 // runs splits the group into the runs of its trip that its riders are on. A
 // trip in frequencies.txt runs again and again on a service day, every run
 // under the one TripKey, so riders of two runs at once are one group. They
-// are told apart along the shape: a run ends wherever the next rider is more
-// than outlierDistance on, the distance at which an estimate takes a rider
-// for one on another vehicle. A trip run by timetable has one run a day, and
-// its riders stay one group, as far apart as they are.
+// are told apart along the shape, a run ending wherever the next rider is
+// more than runSplitDistance on. Riders are compared where they would be at the newest
+// rider's point, each carried on at the speed their own point gave: a point a
+// few seconds older than the rest is far behind a moving vehicle, though its
+// rider is on it. A point with no speed is taken as it stands. A trip run by
+// timetable has one run a day, and its riders stay one group, as far apart as
+// they are.
 func (g *tripGroup) runs() []*tripGroup {
 	if len(g.trip.frequencies) == 0 {
 		return []*tripGroup{g}
 	}
-	members := slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(x.along, y.along) })
+	newest := slices.MaxFunc(g.members, func(x, y estimateMember) int { return x.timestamp.Compare(y.timestamp) }).timestamp
+	place := func(m estimateMember) float64 {
+		return m.along + max(m.speed, 0)*newest.Sub(m.timestamp).Seconds()
+	}
+	members := slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(place(x), place(y)) })
 	var runs []*tripGroup
 	for i, m := range members {
-		if i == 0 || m.along-members[i-1].along > outlierDistance {
+		if i == 0 || place(m)-place(members[i-1]) > runSplitDistance {
 			runs = append(runs, &tripGroup{trip: g.trip})
 		}
 		runs[len(runs)-1].members = append(runs[len(runs)-1].members, m)

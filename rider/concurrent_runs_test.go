@@ -143,10 +143,10 @@ func TestAggregator_IdleRunIsLetGo(t *testing.T) {
 	assertStartsNear(t, []int{8*3600 + 15*60}, estimateStarts(t, f, now))
 }
 
-// Each kept run goes to one estimate at most. Riders waiting at the first
-// stop for the run behind could be the run just ahead of them, kept 100 m on,
-// but its own riders are nearer its start, so the waiting riders' run gets
-// its own start rather than sharing it.
+// Each kept run goes to one estimate at most. Riders 50 m into the run
+// behind could be the run ahead, kept 100 m on before it moved another 160 m,
+// but that run's own riders are nearer its start, so the run behind gets its
+// own start rather than sharing it.
 func TestAggregator_KeptRunGoesToOneRun(t *testing.T) {
 	f := newAggFixture(t)
 	headwayT1(f)
@@ -155,7 +155,83 @@ func TestAggregator_KeptRunGoesToOneRun(t *testing.T) {
 	assertStartsNear(t, []int{8 * 3600}, estimateStarts(t, f, now))
 
 	f.addSession("b1", "rider-b1", TierTrusted)
-	f.walkOffset(t, "a1", 110, 160, 10, 0)
-	now = f.walkOffset(t, "b1", 0, 30, 10, 72*time.Second)
-	assertStartsNear(t, []int{8 * 3600, 8*3600 + 72}, estimateStarts(t, f, now))
+	f.walkOffset(t, "a1", 110, 260, 10, 0)
+	now = f.walkOffset(t, "b1", 0, 50, 10, 125*time.Second)
+	assertStartsNear(t, []int{8 * 3600, 8*3600 + 124}, estimateStarts(t, f, now))
+}
+
+// Riders on one bus can be well apart along the shape: the trim keeps two
+// riders up to twice outlierDistance apart in one estimate. Two trusted
+// riders on one run 150 m apart, with a few seconds between their latest
+// points, are one vehicle.
+func TestAggregator_RidersOfOneRunAreOneVehicle(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	f.addSession("a1", "rider-a1", TierTrusted)
+	f.addSession("a2", "rider-a2", TierTrusted)
+	f.walkOffset(t, "a1", 400, 550, 10, 0)
+	now := f.walkOffset(t, "a2", 300, 400, 10, 85*time.Second)
+
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.Equal(t, 2, est[0].Riders)
+}
+
+// Riders are told apart where they would be at the newest rider's point,
+// each carried on at their own point's speed.
+func TestTripGroup_Runs(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	at := f.base.Add(5 * time.Minute)
+	rider := func(id string, along, speed float64, age time.Duration) estimateMember {
+		return estimateMember{rideID: id, riderID: id, along: along, speed: speed, timestamp: at.Add(-age)}
+	}
+
+	tests := []struct {
+		name    string
+		members []estimateMember
+		want    [][]string
+	}{
+		{"500 m apart now are two runs",
+			[]estimateMember{rider("a", 600, 1.7, 0), rider("b", 100, 1.7, 0)},
+			[][]string{{"b"}, {"a"}}},
+		{"240 m back on a point 10 s older at 15 m/s is 90 m back now",
+			[]estimateMember{rider("a", 500, 15, 0), rider("b", 260, 15, 10*time.Second)},
+			[][]string{{"b", "a"}}},
+		{"240 m apart now are two runs",
+			[]estimateMember{rider("a", 500, 15, 0), rider("b", 260, 15, 0)},
+			[][]string{{"b"}, {"a"}}},
+		{"a point with no speed is taken as it stands",
+			[]estimateMember{rider("a", 500, 15, 0), rider("b", 310, -1, 20*time.Second)},
+			[][]string{{"b", "a"}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got [][]string
+			for _, run := range (&tripGroup{trip: f.t1, members: tc.members}).runs() {
+				var ids []string
+				for _, m := range run.members {
+					ids = append(ids, m.riderID)
+				}
+				got = append(got, ids)
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// Two runs at one start_time with as many riders each: the one with the newer
+// point is published. The run ahead's rider reported last.
+func TestAggregator_RunsAtOneStartTimeTieGoesToTheNewerPoint(t *testing.T) {
+	f := newAggFixture(t)
+	f.t1.frequencies = []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(22, 0, 0), Headway: 30 * time.Minute, ExactTimes: gtfs.ScheduleBased}}
+	f.addSession("a1", "rider-a1", TierTrusted)
+	f.addSession("b1", "rider-b1", TierTrusted)
+	f.walkOffset(t, "b1", 0, 90, 10, 10*time.Minute)
+	now := f.walkOffset(t, "a1", 500, 600, 10, 5*time.Minute)
+
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.Equal(t, "08:00:00", est[0].StartTime)
+	assert.Equal(t, f.onSchedulePoint(600, 5*time.Minute).Timestamp, est[0].Timestamp)
 }
