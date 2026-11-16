@@ -115,12 +115,14 @@ The thresholds behind the admin UI's **Alerts** page and
 | `ALERT_STOPPED_AFTER` | `10m` | Optional | How long a vehicle that is still reporting may stay within 50 m of where it is before it shows as not moving. Must be positive; zero, negative or unparseable warns and defaults. |
 | `ALERT_OFF_ROUTE_DISTANCE` | `RIDER_MAX_SHAPE_DISTANCE` (`60`) | Optional | Metres from the trip's shape, beyond the fix's reported accuracy, at which a report counts as off route. The default is the distance at which the driver apps already show the driver as off route. A fix whose accuracy reaches across this distance counts neither way, so one poor fix neither raises the alert nor clears it. Trips with no shape in the GTFS feed, or a shape drawn through their stops, are never judged. Must be positive; zero, negative, `NaN`, `Inf` or unparseable warns and defaults. |
 | `ALERT_OFF_ROUTE_AFTER` | `5m` | Optional | How long a vehicle's reports may stay off route, counted to its latest report, before it shows as off route. Going round a blocked street takes a minute or two. Reports count only once the vehicle has been near its route on that trip, so a trip started at a depot or a layover spot away from the route is not off route on the way there. Must be positive; zero, negative or unparseable warns and defaults. |
+| `ALERT_NOT_STARTED_AFTER` | `5m` | Optional | How long after it was due to leave a block's next trip may go unstarted before the vehicle that ran the block's latest trip shows as not started. The default matches `REPORT_ON_TIME_LATE`: a trip that leaves later than that is late. Only a block a vehicle has run a trip on today counts, and only in a feed whose `trips.txt` gives a `block_id`; headway trips never do. Must be positive; zero, negative or unparseable warns and defaults. |
 
 The server keeps what the alerts need in memory, from the reports it accepts.
 After a restart it counts a quiet vehicle from the restart, and a vehicle that
 is not moving from its first report since. A vehicle that was off route when the
 server restarted shows as off route again only after it has come back near its
-route and left it.
+route and left it. The not-started alert reads the trips started in the last
+day from the database instead, so a restart does not reset it.
 
 ## Service reports
 

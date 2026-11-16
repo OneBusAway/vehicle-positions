@@ -1460,11 +1460,12 @@ paths:
   /api/v1/admin/alerts:
     get:
       tags: [admin]
-      summary: Vehicles on an active trip that have gone quiet, are off route or are not moving
+      summary: Vehicles that have gone quiet, are off route, are not moving or have not started a block's next trip
       description: |
         The same list the admin UI's Alerts page shows, worked out on request
-        from the active trips and the reports the server has accepted since it
-        started. Requires the `admin` role.
+        from the active trips, the trips started in the last day, and the
+        reports the server has accepted since it started. Requires the `admin`
+        role.
 
         - `quiet`: the vehicle has sent no report for longer than
           `ALERT_QUIET_AFTER` (3m by default). Before its first report on the
@@ -1483,6 +1484,14 @@ paths:
         - `not_moving`: the vehicle is still reporting but has stayed within
           50 m of where it is now for at least `ALERT_STOPPED_AFTER` (10m by
           default). A vehicle waiting at its first stop counts too.
+        - `not_started`: the vehicle that ran the latest trip of a GTFS block
+          today has no trip running, and the block's next trip that day has
+          not started `ALERT_NOT_STARTED_AFTER` (5m by default) after it was
+          due to leave. It lasts until that trip is due to arrive. `trip` is
+          the trip the vehicle ran last and `next_trip` the one not started.
+          Only a block a vehicle has run a trip on counts, so a block no
+          vehicle with the app is working never raises one, nor does a trip
+          with no `block_id` or a headway trip.
 
         A trip has at most one alert: a quiet vehicle is not also reported as
         off route or not moving, and an off-route one is not also reported as
@@ -3402,7 +3411,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [quiet, off_route, not_moving]
+          enum: [quiet, off_route, not_moving, not_started]
         since:
           type: string
           format: date-time
@@ -3410,7 +3419,8 @@ components:
             For `quiet`, the vehicle's last report (or the trip's start, or
             the server's start, when it has not reported since). For
             `off_route`, its first report off route. For `not_moving`, when it
-            came within 50 m of where it is now.
+            came within 50 m of where it is now. For `not_started`, when the
+            next trip was due to leave.
         duration_seconds:
           type: integer
           format: int64
@@ -3418,6 +3428,22 @@ components:
           description: Whole seconds from `since` to when the list was worked out.
         trip:
           $ref: '#/components/schemas/TripSummary'
+        next_trip:
+          $ref: '#/components/schemas/AlertNextTrip'
+
+    AlertNextTrip:
+      type: object
+      description: |
+        The scheduled trip a `not_started` alert is about: the next one on the
+        block after the trip in `trip`. Only `not_started` alerts have one.
+      required: [gtfs_trip_id, route_id, block_id]
+      properties:
+        gtfs_trip_id:
+          type: string
+        route_id:
+          type: string
+        block_id:
+          type: string
 
     ServiceReport:
       type: object

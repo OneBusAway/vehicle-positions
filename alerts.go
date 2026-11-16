@@ -16,12 +16,20 @@ import (
 // The default thresholds. A vehicle leaves the feed STALENESS_THRESHOLD (5m
 // by default) after its last report, so a quiet vehicle is flagged before it
 // drops off the map. Going round a blocked street takes a minute or two, so a
-// vehicle off its route for five is not doing that.
+// vehicle off its route for five is not doing that. A trip that leaves five
+// minutes after it was due is late by the Reports page's default on-time
+// window (REPORT_ON_TIME_LATE).
 const (
-	defaultAlertQuietAfter    = 3 * time.Minute
-	defaultAlertStoppedAfter  = 10 * time.Minute
-	defaultAlertOffRouteAfter = 5 * time.Minute
+	defaultAlertQuietAfter      = 3 * time.Minute
+	defaultAlertStoppedAfter    = 10 * time.Minute
+	defaultAlertOffRouteAfter   = 5 * time.Minute
+	defaultAlertNotStartedAfter = 5 * time.Minute
 )
+
+// notStartedLookback is how far back list reads the trips started, to find
+// the trip each block was run on last. A day covers any block's day, split
+// shifts and trips past midnight included.
+const notStartedLookback = 24 * time.Hour
 
 // stoppedRadius is how far, in metres, a vehicle has to get from where it last
 // reported to count as having moved. A phone standing still reports positions
@@ -42,9 +50,10 @@ const (
 
 // The kinds of alert, as the API names them.
 const (
-	alertQuiet     = "quiet"
-	alertNotMoving = "not_moving"
-	alertOffRoute  = "off_route"
+	alertQuiet      = "quiet"
+	alertNotMoving  = "not_moving"
+	alertOffRoute   = "off_route"
+	alertNotStarted = "not_started"
 )
 
 // alertSettings are the thresholds, read by alertSettingsFromEnv.
@@ -62,10 +71,15 @@ type alertSettings struct {
 	// offRouteAfter is how long a vehicle on an active trip may keep
 	// reporting from off its route before it is off route.
 	offRouteAfter time.Duration
+	// notStartedAfter is how long after it was due to leave the next trip of
+	// a block may go unstarted before the vehicle working the block is late
+	// to start it.
+	notStartedAfter time.Duration
 }
 
 // alertSettingsFromEnv reads the thresholds from ALERT_QUIET_AFTER,
-// ALERT_STOPPED_AFTER, ALERT_OFF_ROUTE_DISTANCE and ALERT_OFF_ROUTE_AFTER. The
+// ALERT_STOPPED_AFTER, ALERT_OFF_ROUTE_DISTANCE, ALERT_OFF_ROUTE_AFTER and
+// ALERT_NOT_STARTED_AFTER. The
 // off-route distance defaults to maxShapeDistance, RIDER_MAX_SHAPE_DISTANCE,
 // which is where the driver apps already tell the driver they are off route.
 func alertSettingsFromEnv(maxShapeDistance float64) alertSettings {
@@ -74,19 +88,34 @@ func alertSettingsFromEnv(maxShapeDistance float64) alertSettings {
 		stoppedAfter:     envPositiveDurationOrDefault("ALERT_STOPPED_AFTER", defaultAlertStoppedAfter),
 		offRouteDistance: envPositiveFloatOrDefault("ALERT_OFF_ROUTE_DISTANCE", maxShapeDistance),
 		offRouteAfter:    envPositiveDurationOrDefault("ALERT_OFF_ROUTE_AFTER", defaultAlertOffRouteAfter),
+		notStartedAfter:  envPositiveDurationOrDefault("ALERT_NOT_STARTED_AFTER", defaultAlertNotStartedAfter),
 	}
 }
 
 // alertEntry is one alert: a vehicle on an active trip that has gone quiet, is
-// off route or is not moving, since when, and the trip.
+// off route or is not moving, or a vehicle working a block that has not
+// started the block's next trip, since when, and the trip.
 type alertEntry struct {
 	Kind string `json:"kind"`
 	// Since is the vehicle's last report for a quiet alert, its first report
-	// off route for an off-route one, and when it came within stoppedRadius of
-	// where it is now for a not-moving one.
-	Since           time.Time   `json:"since"`
-	DurationSeconds int64       `json:"duration_seconds"`
-	Trip            TripSummary `json:"trip"`
+	// off route for an off-route one, when it came within stoppedRadius of
+	// where it is now for a not-moving one, and when the next trip was due to
+	// leave for a not-started one.
+	Since           time.Time `json:"since"`
+	DurationSeconds int64     `json:"duration_seconds"`
+	// Trip is the trip running, or for a not-started alert the trip the
+	// vehicle ran last.
+	Trip TripSummary `json:"trip"`
+	// NextTrip is the trip a not-started alert is about, nil for the others.
+	NextTrip *alertNextTrip `json:"next_trip,omitempty"`
+}
+
+// alertNextTrip is the scheduled trip a vehicle working a block has not
+// started.
+type alertNextTrip struct {
+	GtfsTripID string `json:"gtfs_trip_id"`
+	RouteID    string `json:"route_id"`
+	BlockID    string `json:"block_id"`
 }
 
 type alertListResponse struct {
@@ -147,8 +176,11 @@ type alertWatcher struct {
 	// routes holds each vehicle's routeState for its latest trip. A vehicle
 	// with no active trip loses it with its history.
 	routes map[string]routeState
-	// schedule is where the trips' shapes come from, nil until watchRoutes.
+	// schedule is where the trips' shapes and blocks come from, nil until
+	// watchRoutes.
 	schedule func() *rider.Index
+	// started lists the trips started lately, nil until watchBlocks.
+	started TripsStartedBetweenLister
 }
 
 // newAlertWatcher makes a watcher that reads the active trips from trips.
@@ -169,6 +201,15 @@ func (w *alertWatcher) watchRoutes(index func() *rider.Index) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.schedule = index
+}
+
+// watchBlocks makes the watcher look for blocks whose next trip has not
+// started, reading the trips started lately from started. Until then it does
+// not.
+func (w *alertWatcher) watchBlocks(started TripsStartedBetweenLister) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.started = started
 }
 
 // report adds a report the server accepted at at to what the alerts know of
@@ -333,13 +374,18 @@ func (w *alertWatcher) alerts(active []TripSummary, now time.Time) []alertEntry 
 		}
 	}
 
+	sortAlerts(alerts)
+	return alerts
+}
+
+// sortAlerts puts alerts longest-running first.
+func sortAlerts(alerts []alertEntry) {
 	sort.Slice(alerts, func(i, j int) bool {
 		if !alerts[i].Since.Equal(alerts[j].Since) {
 			return alerts[i].Since.Before(alerts[j].Since)
 		}
 		return alerts[i].Trip.VehicleID < alerts[j].Trip.VehicleID
 	})
-	return alerts
 }
 
 // alertFor is the alert for one active trip at now, if it has one. A vehicle
@@ -411,7 +457,135 @@ func (w *alertWatcher) list(ctx context.Context, now time.Time) ([]alertEntry, e
 	if err != nil {
 		return nil, fmt.Errorf("list active trips: %w", err)
 	}
-	return w.alerts(active, now), nil
+	alerts := w.alerts(active, now)
+
+	w.mu.Lock()
+	started := w.started
+	w.mu.Unlock()
+	if started == nil {
+		return alerts, nil
+	}
+	recent, err := started.ListTripsStartedBetween(ctx, now.Add(-notStartedLookback), now)
+	if err != nil {
+		return nil, fmt.Errorf("list trips started: %w", err)
+	}
+	alerts = append(alerts, w.notStarted(active, recent, now)...)
+	sortAlerts(alerts)
+	return alerts, nil
+}
+
+// notStarted works out the not-started alerts at now. recent must be every
+// trip started over the last notStartedLookback and active every trip
+// running. A block is worked by the vehicle that ran its trip latest in the
+// schedule, while that is the vehicle's own latest trip and it has nothing
+// running. The block's next trip that day is late to start once
+// notStartedAfter has passed since it was due to leave, and stays so until it
+// is due to arrive: by then it can no longer run, and with nothing to
+// acknowledge an alert by, a block dropped on purpose would otherwise keep
+// one all day.
+//
+// Only a vehicle that has run a trip on a block today can raise one, so in a
+// pilot where few vehicles carry the app, the blocks nobody is working stay
+// quiet.
+func (w *alertWatcher) notStarted(active, recent []TripSummary, now time.Time) []alertEntry {
+	w.mu.Lock()
+	schedule := w.schedule
+	w.mu.Unlock()
+	if schedule == nil {
+		return nil
+	}
+	ix := schedule()
+	if ix == nil {
+		return nil
+	}
+
+	busy := make(map[string]struct{}, len(active))
+	for _, trip := range active {
+		busy[trip.VehicleID] = struct{}{}
+	}
+	type blockDay struct{ block, serviceDate string }
+	type blockRun struct {
+		trip TripSummary
+		info *rider.TripInfo
+	}
+	latestOfVehicle := make(map[string]TripSummary)
+	latestOfBlock := make(map[blockDay]blockRun)
+	for _, trip := range recent {
+		if latest, ok := latestOfVehicle[trip.VehicleID]; !ok || trip.StartTime.After(latest.StartTime) {
+			latestOfVehicle[trip.VehicleID] = trip
+		}
+		info, ok := ix.Trip(trip.GtfsTripID)
+		// A headway trip's runs share one trip_id and leave at no set time.
+		if !ok || info.BlockID == "" || info.FrequencyBased {
+			continue
+		}
+		key := blockDay{info.BlockID, ix.ServiceDateFor(info, trip.StartTime)}
+		if run, ok := latestOfBlock[key]; !ok || departs(info) > departs(run.info) {
+			latestOfBlock[key] = blockRun{trip, info}
+		}
+	}
+
+	alerts := make([]alertEntry, 0)
+	var blocks map[string][]*rider.TripInfo
+	for key, run := range latestOfBlock {
+		vehicleID := run.trip.VehicleID
+		if _, ok := busy[vehicleID]; ok || latestOfVehicle[vehicleID].ID != run.trip.ID {
+			continue
+		}
+		if blocks == nil {
+			blocks = tripsByBlock(ix)
+		}
+		next := nextOnBlock(ix, blocks[key.block], key.serviceDate, departs(run.info))
+		if next == nil {
+			continue
+		}
+		dayStart, err := rider.ServiceDayStart(key.serviceDate, ix.Timezone())
+		if err != nil {
+			continue
+		}
+		due := dayStart.Add(departs(next))
+		if now.Sub(due) > w.settings.notStartedAfter && now.Before(dayStart.Add(arrives(next))) {
+			alert := newAlert(alertNotStarted, due, run.trip, now)
+			alert.NextTrip = &alertNextTrip{GtfsTripID: next.ID, RouteID: next.RouteID, BlockID: next.BlockID}
+			alerts = append(alerts, alert)
+		}
+	}
+	return alerts
+}
+
+// tripsByBlock is the schedule's trips by block_id.
+func tripsByBlock(ix *rider.Index) map[string][]*rider.TripInfo {
+	blocks := make(map[string][]*rider.TripInfo)
+	for _, id := range ix.TripIDs() {
+		if trip, ok := ix.Trip(id); ok {
+			blocks[trip.BlockID] = append(blocks[trip.BlockID], trip)
+		}
+	}
+	return blocks
+}
+
+// nextOnBlock is the trip of block that runs on serviceDate and leaves first
+// after after, nil when there is none or it is a headway trip, which leaves at
+// no set time.
+func nextOnBlock(ix *rider.Index, block []*rider.TripInfo, serviceDate string, after time.Duration) *rider.TripInfo {
+	var next *rider.TripInfo
+	for _, trip := range block {
+		if departs(trip) > after && ix.ActiveOn(trip, serviceDate) && (next == nil || departs(trip) < departs(next)) {
+			next = trip
+		}
+	}
+	if next != nil && next.FrequencyBased {
+		return nil
+	}
+	return next
+}
+
+// departs and arrives are when a trip leaves its first stop and reaches its
+// last, from the start of its service day.
+func departs(trip *rider.TripInfo) time.Duration { return trip.StopTimes[0].Departure }
+
+func arrives(trip *rider.TripInfo) time.Duration {
+	return trip.StopTimes[len(trip.StopTimes)-1].Arrival
 }
 
 // alertFeed is the LocationStore that POST /api/v1/locations saves through, so

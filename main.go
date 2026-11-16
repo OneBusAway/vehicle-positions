@@ -377,6 +377,7 @@ func main() {
 	// The alerts judge off route against the same schedule.
 	alerts := newAlertWatcher(store, alertSettingsFromEnv(riderCfg.Thresholds.MaxShapeDistance))
 	alerts.watchRoutes(schedule.Index)
+	alerts.watchBlocks(store)
 
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)
