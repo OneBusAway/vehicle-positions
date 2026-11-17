@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,10 +12,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// uniqueEmail generates a unique test email address to avoid cross-test collisions.
+// uniqueEmail generates a unique test email address to avoid cross-test
+// collisions, lower-case as the store keeps it.
 func uniqueEmail(t *testing.T) string {
 	t.Helper()
-	return fmt.Sprintf("u-%d-%s@test.com", time.Now().UnixNano(), sanitizeTestName(t.Name()))
+	return strings.ToLower(fmt.Sprintf("u-%d-%s@test.com", time.Now().UnixNano(), sanitizeTestName(t.Name())))
 }
 
 // sanitizeTestName replaces characters that are invalid in email local-parts.
@@ -75,7 +77,7 @@ func cleanupTestUsers(t *testing.T, store *Store, emails ...string) {
 	t.Helper()
 	ctx := context.Background()
 	for _, email := range emails {
-		_, err := store.pool.Exec(ctx, "DELETE FROM users WHERE email = $1", email)
+		_, err := store.pool.Exec(ctx, "DELETE FROM users WHERE lower(email) = lower($1)", email)
 		require.NoError(t, err)
 	}
 }

@@ -294,17 +294,13 @@ func TestStore_ImportDrivers_RowErrors(t *testing.T) {
 	store := newImportTestStore(t)
 	ctx := context.Background()
 	addImportVehicle(t, store, "imp-off", "Off", false)
-	addImportUser(t, store, "Dee", "Imp-Dee@example.org", roleDriver)
-	addImportUser(t, store, "Dee 2", "imp-dee@EXAMPLE.org", roleDriver)
 
 	plan, err := store.PlanDriverImport(ctx, []driverImportRow{
 		{Line: 2, Email: "imp-eve@example.org", Name: "Eve", VehicleIDs: []string{"imp-off", "imp-missing"}},
-		{Line: 3, Email: "imp-dee@example.org", Name: "Dee"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []importOutcome{
 		{Status: importError, Reason: "vehicle imp-off is inactive; vehicle imp-missing not found"},
-		{Status: importError, Reason: "more than one account has this email, in different cases"},
 	}, plan)
 }
 
@@ -347,7 +343,7 @@ func TestStore_ImportDrivers_AllOrNothing(t *testing.T) {
 
 	t.Run("the last email was taken meanwhile", func(t *testing.T) {
 		failWrites(t, store, "BEFORE INSERT", "users", "NEW.email = 'imp-cy@example.org'",
-			`RAISE unique_violation USING CONSTRAINT = 'users_email_key';`)
+			`RAISE unique_violation USING CONSTRAINT = 'users_email_lower_key';`)
 		got, err := store.ImportDrivers(ctx, rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy"}), generateDriverPassword)
 		require.NoError(t, err)
 		assert.Equal(t, importOutcome{Status: importError, Reason: "email already exists"}, got[2])

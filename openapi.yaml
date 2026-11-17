@@ -2262,6 +2262,7 @@ components:
         email:
           type: string
           format: email
+          description: Matched to the account in any case.
         password:
           type: string
           format: password
@@ -2500,6 +2501,7 @@ components:
         email:
           type: string
           format: email
+          description: Stored lower-case. An email another account has in any case is a duplicate (409).
         password:
           $ref: '#/components/schemas/Password'
         role:
@@ -2517,6 +2519,7 @@ components:
         email:
           type: string
           format: email
+          description: Stored lower-case. An email another account has in any case is a duplicate (409).
         role:
           type: string
           enum: [driver, admin]
@@ -2575,6 +2578,7 @@ components:
         email:
           type: string
           format: email
+          description: Lower-case. Sign-in matches it in any case.
         role:
           type: string
           enum: [driver, admin]

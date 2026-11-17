@@ -186,22 +186,17 @@ func planDrivers(ctx context.Context, q *db.Queries, rows []driverImportRow) ([]
 	outcomes := make([]importOutcome, len(rows))
 	plans := make([]driverPlan, len(rows))
 	for i, row := range rows {
-		accounts, err := q.ListUsersByEmailFold(ctx, row.Email)
-		if err != nil {
-			return nil, nil, fmt.Errorf("find account for line %d: %w", row.Line, err)
-		}
 		o := importOutcome{Status: importNew}
 		p := driverPlan{assign: row.VehicleIDs}
+		u, err := q.GetUserByEmail(ctx, row.Email)
 		switch {
-		case len(accounts) > 1:
-			outcomes[i] = importOutcome{Status: importError, Reason: "more than one account has this email, in different cases"}
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return nil, nil, fmt.Errorf("find account for line %d: %w", row.Line, err)
+		case u.Role != roleDriver:
+			outcomes[i] = importOutcome{Status: importError, Reason: "this email belongs to an admin account"}
 			continue
-		case len(accounts) == 1:
-			u := accounts[0]
-			if u.Role != roleDriver {
-				outcomes[i] = importOutcome{Status: importError, Reason: "this email belongs to an admin account"}
-				continue
-			}
+		default:
 			assigned, err := q.ListVehiclesByUser(ctx, u.ID)
 			if err != nil {
 				return nil, nil, fmt.Errorf("list assignments of user %d: %w", u.ID, err)

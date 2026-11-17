@@ -251,7 +251,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, role)
-VALUES ($1, $2, $3, $4)
+VALUES ($1, lower($2), $3, $4)
 RETURNING id, name, email, role, active, created_at, updated_at
 `
 
@@ -272,6 +272,7 @@ type CreateUserRow struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+// Every account is made here, so every stored email is lower-case.
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Name,
@@ -886,6 +887,41 @@ func (q *Queries) GetTripSummary(ctx context.Context, id int64) (GetTripSummaryR
 	return i, err
 }
 
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, name, email, password_hash, role, active, created_at, updated_at
+FROM users
+WHERE lower(email) = lower($1)
+`
+
+type GetUserByEmailRow struct {
+	ID           int64
+	Name         string
+	Email        string
+	PasswordHash string
+	Role         string
+	Active       bool
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+// Matches the email in any case, for sign-in and for the CSV import:
+// users_email_lower_key holds lower(email) unique and serves the lookup.
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i GetUserByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, name, email, role, active, created_at, updated_at
 FROM users
@@ -1416,50 +1452,6 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	return items, nil
 }
 
-const listUsersByEmailFold = `-- name: ListUsersByEmailFold :many
-SELECT id, name, email, role, active
-FROM users
-WHERE lower(email) = lower($1)
-ORDER BY id
-`
-
-type ListUsersByEmailFoldRow struct {
-	ID     int64
-	Name   string
-	Email  string
-	Role   string
-	Active bool
-}
-
-// Emails are stored as they were typed, and the CSV import lower-cases them,
-// so it finds an account whatever the case. Two stored addresses can differ
-// only in case, hence :many.
-func (q *Queries) ListUsersByEmailFold(ctx context.Context, email string) ([]ListUsersByEmailFoldRow, error) {
-	rows, err := q.db.Query(ctx, listUsersByEmailFold, email)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUsersByEmailFoldRow
-	for rows.Next() {
-		var i ListUsersByEmailFoldRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Email,
-			&i.Role,
-			&i.Active,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listUsersByVehicle = `-- name: ListUsersByVehicle :many
 SELECT user_id, vehicle_id, created_at
 FROM user_vehicles
@@ -1794,7 +1786,7 @@ func (q *Queries) UpdateRideProgress(ctx context.Context, arg UpdateRideProgress
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET name = $1, email = $2, role = $3,
+SET name = $1, email = lower($2), role = $3,
     sessions_valid_after = CASE WHEN role <> $3 THEN NOW() ELSE sessions_valid_after END
 WHERE id = $4
 RETURNING id, name, email, role, active, created_at, updated_at
@@ -1820,7 +1812,8 @@ type UpdateUserRow struct {
 // updated_at is maintained by the set_users_updated_at trigger. A role change
 // ends every token issued before it (sessions_valid_after), so giving the old
 // role back later cannot revive them. The role read in the CASE is the row's
-// value before this update.
+// value before this update. The email is stored lower-case, as CreateUser
+// stores it.
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Name,
