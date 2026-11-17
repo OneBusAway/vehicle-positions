@@ -47,7 +47,7 @@
           {{end}}
           {{range .Trips}}
           <tr class="transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-4 font-mono text-xs font-medium text-slate-400">{{.ID}}</td>
+            <td class="px-5 py-4 font-mono text-xs font-medium"><a href="/admin/trips/{{.ID}}" class="text-sky-600 hover:text-sky-800">{{.ID}}</a></td>
             <td class="px-5 py-4 font-semibold text-slate-900">{{.VehicleLabel}}</td>
             <td class="px-5 py-4 text-slate-500">{{.DriverName}}</td>
             <td class="px-5 py-4 text-slate-500">{{.RouteID}}</td>

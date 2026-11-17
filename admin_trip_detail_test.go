@@ -554,3 +554,13 @@ func TestTripDetailPage_Gaps(t *testing.T) {
 	assert.Contains(t, body, "6 min")
 	assert.Regexp(t, `data-gap="\d+"`, body, "a button to show it on the map")
 }
+
+func TestTripsPage_LinksTheTripPage(t *testing.T) {
+	ui := newTestAdminUI(t)
+	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
+	ui.trips = &fakeTripLister{trips: []TripSummary{{ID: 42, VehicleID: "bus-1", VehicleLabel: "Bus One", StartTime: start, Status: "active"}}}
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	assert.Contains(t, getAdminPage(t, mux, "/admin/trips"), `<a href="/admin/trips/42" class="text-sky-600 hover:text-sky-800">42</a>`)
+}

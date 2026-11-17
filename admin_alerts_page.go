@@ -24,8 +24,8 @@ type alertRow struct {
 	DriverName   string
 	RouteID      string
 	GtfsTripID   string
-	// MapURL opens the trip's trail, whose end marker is where the vehicle
-	// last reported. The live map would not do: it drops a vehicle
+	// MapURL opens the trip's page, whose map starts on the vehicle's last
+	// report. The live map would not do: it drops a vehicle
 	// STALENESS_THRESHOLD after its last report.
 	MapURL string
 	// TripURL opens the Trips page on this vehicle's active trip, which is
@@ -43,7 +43,7 @@ func newAlertRow(a alertEntry, settings alertSettings) alertRow {
 		DriverName:   a.Trip.DriverName,
 		RouteID:      a.Trip.RouteID,
 		GtfsTripID:   a.Trip.GtfsTripID,
-		MapURL:       "/admin/map?trip_id=" + strconv.FormatInt(a.Trip.ID, 10),
+		MapURL:       "/admin/trips/" + strconv.FormatInt(a.Trip.ID, 10),
 		TripURL:      tripsPageURL("active", a.Trip.VehicleID, "", 1),
 	}
 	switch a.Kind {
