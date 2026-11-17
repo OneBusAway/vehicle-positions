@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -27,6 +28,8 @@ func newImportTestStore(t *testing.T) *Store {
 		_, err = store.pool.Exec(ctx, `DELETE FROM users WHERE lower(email) LIKE 'imp-%@example.org'`)
 		require.NoError(t, err)
 		_, err = store.pool.Exec(ctx, `DELETE FROM vehicles WHERE id LIKE 'imp-%'`)
+		require.NoError(t, err)
+		_, err = store.pool.Exec(ctx, `DELETE FROM import_confirmations`)
 		require.NoError(t, err)
 	}
 	cleanup()
@@ -135,7 +138,7 @@ func TestStore_ImportVehicles_RoundTrip(t *testing.T) {
 	n, _, _ := countImportRows(t, store)
 	assert.Equal(t, 2, n, "a plan writes nothing")
 
-	got, err := store.ImportVehicles(ctx, rows)
+	got, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
 	require.NoError(t, err)
 	assert.Equal(t, plan, got)
 
@@ -149,7 +152,7 @@ func TestStore_ImportVehicles_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, v.Active, "an import never reactivates a vehicle")
 
-	again, err := store.ImportVehicles(ctx, rows)
+	again, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
 	require.NoError(t, err)
 	assert.Equal(t, []importStatus{importUnchanged, importUnchanged, importUnchanged}, statuses(again))
 }
@@ -166,7 +169,7 @@ func TestStore_ImportVehicles_AllOrNothing(t *testing.T) {
 
 	t.Run("the last write fails", func(t *testing.T) {
 		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-last'", `RAISE EXCEPTION 'test failure';`)
-		_, err := store.ImportVehicles(ctx, rows)
+		_, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
 		require.Error(t, err)
 		vehicles, _, _ := countImportRows(t, store)
 		assert.Equal(t, 1, vehicles, "no vehicle created")
@@ -179,7 +182,7 @@ func TestStore_ImportVehicles_AllOrNothing(t *testing.T) {
 		// The insert skips the row, as ON CONFLICT DO NOTHING does when
 		// another admin created the id after the plan read it.
 		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-last'", `RETURN NULL;`)
-		got, err := store.ImportVehicles(ctx, rows)
+		got, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
 		require.NoError(t, err)
 		assert.Equal(t, importOutcome{Status: importError, Reason: "vehicle id already exists"}, got[2])
 		vehicles, _, _ := countImportRows(t, store)
@@ -191,7 +194,7 @@ func TestStore_ImportVehicles_AllOrNothing(t *testing.T) {
 
 	t.Run("the last vehicle was removed meanwhile", func(t *testing.T) {
 		failWrites(t, store, "BEFORE UPDATE", "vehicles", "NEW.id = 'imp-old'", `RETURN NULL;`)
-		got, err := store.ImportVehicles(ctx, []vehicleImportRow{rows[0], rows[1]})
+		got, err := store.ImportVehicles(ctx, newTestPreview(t), []vehicleImportRow{rows[0], rows[1]})
 		require.NoError(t, err)
 		assert.Equal(t, importOutcome{Status: importError, Reason: "vehicle not found"}, got[1])
 		vehicles, _, _ := countImportRows(t, store)
@@ -212,7 +215,7 @@ func TestStore_ImportDrivers_RoundTrip(t *testing.T) {
 	_, users, _ := countImportRows(t, store)
 	assert.Equal(t, 0, users, "a plan writes nothing")
 
-	got, err := store.ImportDrivers(ctx, rows, func() string { return "abcd-efgh-jkmn" })
+	got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, func() string { return "abcd-efgh-jkmn" })
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, importNew, got[0].Status)
@@ -227,7 +230,7 @@ func TestStore_ImportDrivers_RoundTrip(t *testing.T) {
 	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte("abcd-efgh-jkmn")))
 	assert.ElementsMatch(t, []string{"imp-v1", "imp-v2"}, assignedVehicles(t, store, got[0].UserID))
 
-	again, err := store.ImportDrivers(ctx, rows, noPassword)
+	again, err := store.ImportDrivers(ctx, newTestPreview(t), rows, noPassword)
 	require.NoError(t, err)
 	assert.Equal(t, []importOutcome{{Status: importUnchanged, UserID: got[0].UserID}}, again)
 }
@@ -256,7 +259,7 @@ func TestStore_ImportDrivers_ChangesOnlyNameAndAssignments(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, want, plan)
 
-	got, err := store.ImportDrivers(ctx, rows, noPassword)
+	got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, noPassword)
 	require.NoError(t, err)
 	want[0].UserID, want[1].UserID = bo, cy
 	assert.Equal(t, want, got)
@@ -283,7 +286,7 @@ func TestStore_ImportDrivers_NeverTouchesAnAdmin(t *testing.T) {
 	plan, err := store.PlanDriverImport(ctx, rows)
 	require.NoError(t, err)
 	assert.Equal(t, want, plan)
-	got, err := store.ImportDrivers(ctx, rows, noPassword)
+	got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, noPassword)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 	assert.Equal(t, before, readImportedUser(t, store, admin))
@@ -328,7 +331,7 @@ func TestStore_ImportDrivers_AllOrNothing(t *testing.T) {
 	}
 
 	t.Run("a bad last row", func(t *testing.T) {
-		got, err := store.ImportDrivers(ctx, rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: []string{"imp-off"}}), noPassword)
+		got, err := store.ImportDrivers(ctx, newTestPreview(t), rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: []string{"imp-off"}}), noPassword)
 		require.NoError(t, err)
 		assert.Equal(t, []importStatus{importNew, importUpdate, importError}, statuses(got))
 		nothingWritten(t)
@@ -336,7 +339,7 @@ func TestStore_ImportDrivers_AllOrNothing(t *testing.T) {
 
 	t.Run("the last write fails", func(t *testing.T) {
 		failWrites(t, store, "BEFORE INSERT", "user_vehicles", "NEW.vehicle_id = 'imp-v2'", `RAISE EXCEPTION 'test failure';`)
-		_, err := store.ImportDrivers(ctx, rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: []string{"imp-v2"}}), generateDriverPassword)
+		_, err := store.ImportDrivers(ctx, newTestPreview(t), rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: []string{"imp-v2"}}), generateDriverPassword)
 		require.Error(t, err)
 		nothingWritten(t)
 	})
@@ -344,7 +347,7 @@ func TestStore_ImportDrivers_AllOrNothing(t *testing.T) {
 	t.Run("the last email was taken meanwhile", func(t *testing.T) {
 		failWrites(t, store, "BEFORE INSERT", "users", "NEW.email = 'imp-cy@example.org'",
 			`RAISE unique_violation USING CONSTRAINT = 'users_email_lower_key';`)
-		got, err := store.ImportDrivers(ctx, rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy"}), generateDriverPassword)
+		got, err := store.ImportDrivers(ctx, newTestPreview(t), rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy"}), generateDriverPassword)
 		require.NoError(t, err)
 		assert.Equal(t, importOutcome{Status: importError, Reason: "email already exists"}, got[2])
 		nothingWritten(t)
@@ -353,7 +356,7 @@ func TestStore_ImportDrivers_AllOrNothing(t *testing.T) {
 	t.Run("the last vehicle was assigned meanwhile", func(t *testing.T) {
 		failWrites(t, store, "BEFORE INSERT", "user_vehicles", "NEW.vehicle_id = 'imp-v2'",
 			`RAISE unique_violation USING CONSTRAINT = 'user_vehicles_pkey';`)
-		got, err := store.ImportDrivers(ctx, rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: []string{"imp-v2"}}), generateDriverPassword)
+		got, err := store.ImportDrivers(ctx, newTestPreview(t), rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: []string{"imp-v2"}}), generateDriverPassword)
 		require.NoError(t, err)
 		assert.Equal(t, importOutcome{Status: importError, Reason: "vehicle imp-v2 was assigned meanwhile; preview the file again"}, got[2])
 		nothingWritten(t)
@@ -361,7 +364,7 @@ func TestStore_ImportDrivers_AllOrNothing(t *testing.T) {
 
 	t.Run("an account was removed between the two plans", func(t *testing.T) {
 		gone := addImportUser(t, store, "Gone", "imp-gone@example.org", roleDriver)
-		got, err := store.ImportDrivers(ctx, rows(driverImportRow{Line: 4, Email: "imp-gone@example.org", Name: "Gone"}), func() string {
+		got, err := store.ImportDrivers(ctx, newTestPreview(t), rows(driverImportRow{Line: 4, Email: "imp-gone@example.org", Name: "Gone"}), func() string {
 			_, err := store.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, gone)
 			require.NoError(t, err)
 			return "abcd-efgh-jkmn"
@@ -373,7 +376,7 @@ func TestStore_ImportDrivers_AllOrNothing(t *testing.T) {
 
 	// Last, since it leaves Bo an admin.
 	t.Run("an account became an admin between the two plans", func(t *testing.T) {
-		got, err := store.ImportDrivers(ctx, rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy"}), func() string {
+		got, err := store.ImportDrivers(ctx, newTestPreview(t), rows(driverImportRow{Line: 4, Email: "imp-cy@example.org", Name: "Cy"}), func() string {
 			_, err := store.pool.Exec(ctx, `UPDATE users SET role = 'admin' WHERE id = $1`, bo)
 			require.NoError(t, err)
 			return "abcd-efgh-jkmn"
@@ -392,7 +395,7 @@ func TestStore_ImportDrivers_CanceledWhileHashing(t *testing.T) {
 	store := newImportTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, err := store.ImportDrivers(ctx, []driverImportRow{{Line: 2, Email: "imp-ana@example.org", Name: "Ana"}}, func() string {
+	_, err := store.ImportDrivers(ctx, newTestPreview(t), []driverImportRow{{Line: 2, Email: "imp-ana@example.org", Name: "Ana"}}, func() string {
 		cancel()
 		return "abcd-efgh-jkmn"
 	})
@@ -448,4 +451,101 @@ func TestAdminImport_DatabaseRoundTrip(t *testing.T) {
 	_, users, assignments := countImportRows(t, store)
 	assert.Equal(t, 1, users)
 	assert.Equal(t, 2, assignments)
+}
+
+// newTestPreview is a confirmed preview no import has used yet.
+func newTestPreview(t *testing.T) importPreview {
+	t.Helper()
+	sig := make([]byte, 32)
+	rand.Read(sig)
+	return importPreview{Signature: sig, Expires: time.Now().Add(importPreviewLifetime)}
+}
+
+// A preview imports once: confirming it again within its hour doesn't bring
+// back a driver or a vehicle deleted since the first import.
+func TestStore_Import_PreviewImportedOnce(t *testing.T) {
+	store := newImportTestStore(t)
+	ctx := context.Background()
+	addImportVehicle(t, store, "imp-v1", "V1", true)
+
+	preview := newTestPreview(t)
+	drivers := []driverImportRow{{Line: 2, Email: "imp-ana@example.org", Name: "Ana", VehicleIDs: []string{"imp-v1"}}}
+	got, err := store.ImportDrivers(ctx, preview, drivers, generateDriverPassword)
+	require.NoError(t, err)
+	require.Equal(t, importNew, got[0].Status)
+	_, err = store.pool.Exec(ctx, `DELETE FROM user_vehicles WHERE user_id = $1`, got[0].UserID)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, got[0].UserID)
+	require.NoError(t, err)
+
+	_, err = store.ImportDrivers(ctx, preview, drivers, generateDriverPassword)
+	assert.ErrorIs(t, err, ErrPreviewImported)
+	_, users, assignments := countImportRows(t, store)
+	assert.Equal(t, 0, users, "the deleted driver isn't made again")
+	assert.Equal(t, 0, assignments)
+
+	preview = newTestPreview(t)
+	vehicles := []vehicleImportRow{{Line: 2, ID: "imp-new", Label: "New"}}
+	_, err = store.ImportVehicles(ctx, preview, vehicles)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx, `DELETE FROM vehicles WHERE id = 'imp-new'`)
+	require.NoError(t, err)
+	_, err = store.ImportVehicles(ctx, preview, vehicles)
+	assert.ErrorIs(t, err, ErrPreviewImported)
+	n, _, _ := countImportRows(t, store)
+	assert.Equal(t, 1, n, "only imp-v1; the deleted vehicle isn't made again")
+}
+
+// The preview is recorded in the import's own transaction, so an import that
+// fails, on a database error or on a row, leaves it to be confirmed again.
+func TestStore_Import_FailedImportLeavesPreviewUsable(t *testing.T) {
+	store := newImportTestStore(t)
+	ctx := context.Background()
+	preview := newTestPreview(t)
+	rows := []vehicleImportRow{{Line: 2, ID: "imp-a", Label: "A"}, {Line: 3, ID: "imp-last", Label: "Last"}}
+
+	t.Run("a write fails", func(t *testing.T) {
+		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-last'", `RAISE EXCEPTION 'test failure';`)
+		_, err := store.ImportVehicles(ctx, preview, rows)
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrPreviewImported)
+	})
+	t.Run("a row fails", func(t *testing.T) {
+		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-last'", `RETURN NULL;`)
+		got, err := store.ImportVehicles(ctx, preview, rows)
+		require.NoError(t, err)
+		assert.Equal(t, importError, got[1].Status)
+	})
+
+	got, err := store.ImportVehicles(ctx, preview, rows)
+	require.NoError(t, err)
+	assert.Equal(t, []importStatus{importNew, importNew}, statuses(got))
+}
+
+// Records are kept an hour past their preview's expiry, then dropped by the
+// next import.
+func TestStore_Import_OldConfirmationsDropped(t *testing.T) {
+	store := newImportTestStore(t)
+	ctx := context.Background()
+	stale, kept := newTestPreview(t), newTestPreview(t)
+	for _, c := range []struct {
+		sig     []byte
+		expires time.Time
+	}{
+		{stale.Signature, time.Now().Add(-importPreviewLifetime - time.Minute)},
+		{kept.Signature, time.Now().Add(-importPreviewLifetime + time.Minute)},
+	} {
+		_, err := store.pool.Exec(ctx, `INSERT INTO import_confirmations (signature, expires_at) VALUES ($1, $2)`, c.sig, c.expires)
+		require.NoError(t, err)
+	}
+
+	_, err := store.ImportVehicles(ctx, newTestPreview(t), []vehicleImportRow{{Line: 2, ID: "imp-a", Label: "A"}})
+	require.NoError(t, err)
+	recorded := func(sig []byte) bool {
+		var n int
+		require.NoError(t, store.pool.QueryRow(ctx, `SELECT count(*) FROM import_confirmations WHERE signature = $1`, sig).Scan(&n))
+		return n == 1
+	}
+	assert.False(t, recorded(stale.Signature))
+	assert.True(t, recorded(kept.Signature))
 }

@@ -498,3 +498,13 @@ SELECT EXISTS (
     WHERE id = sqlc.arg(id) AND active AND role = sqlc.arg(role)
       AND (sessions_valid_after IS NULL OR sessions_valid_after < sqlc.arg(issued_at))
 );
+
+-- name: RecordImportConfirmation :execrows
+-- No row is inserted for a signature already recorded: that preview was
+-- imported.
+INSERT INTO import_confirmations (signature, expires_at)
+VALUES (sqlc.arg(signature), sqlc.arg(expires_at))
+ON CONFLICT (signature) DO NOTHING;
+
+-- name: DeleteImportConfirmationsBefore :exec
+DELETE FROM import_confirmations WHERE expires_at < sqlc.arg(cutoff);

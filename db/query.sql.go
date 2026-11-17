@@ -344,6 +344,15 @@ func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, cutoff pgtype.
 	return result.RowsAffected(), nil
 }
 
+const deleteImportConfirmationsBefore = `-- name: DeleteImportConfirmationsBefore :exec
+DELETE FROM import_confirmations WHERE expires_at < $1
+`
+
+func (q *Queries) DeleteImportConfirmationsBefore(ctx context.Context, cutoff pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, deleteImportConfirmationsBefore, cutoff)
+	return err
+}
+
 const deleteLocationPointsBefore = `-- name: DeleteLocationPointsBefore :execrows
 DELETE FROM location_points
 WHERE ctid IN (
@@ -1598,6 +1607,27 @@ WHERE id = $1 AND used_at IS NULL
 // one updates it. Zero rows affected means this caller lost that race.
 func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, id int64) (int64, error) {
 	result, err := q.db.Exec(ctx, markRefreshTokenUsed, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordImportConfirmation = `-- name: RecordImportConfirmation :execrows
+INSERT INTO import_confirmations (signature, expires_at)
+VALUES ($1, $2)
+ON CONFLICT (signature) DO NOTHING
+`
+
+type RecordImportConfirmationParams struct {
+	Signature []byte
+	ExpiresAt pgtype.Timestamptz
+}
+
+// No row is inserted for a signature already recorded: that preview was
+// imported.
+func (q *Queries) RecordImportConfirmation(ctx context.Context, arg RecordImportConfirmationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordImportConfirmation, arg.Signature, arg.ExpiresAt)
 	if err != nil {
 		return 0, err
 	}
