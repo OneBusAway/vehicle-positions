@@ -183,6 +183,11 @@ func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimite
 		if err != nil {
 			return nil, fmt.Errorf("init admin UI: %w", err)
 		}
+		// newAdminUI starts from riderOff; a nil *riderService must not take
+		// its place, or the Rider mode page gets a nil pointer in an interface.
+		if riderSvc != nil {
+			ui.rider = riderSvc
+		}
 		staticFiles, err := fs.Sub(files, "web/static")
 		if err != nil {
 			return nil, fmt.Errorf("prepare static files: %w", err)

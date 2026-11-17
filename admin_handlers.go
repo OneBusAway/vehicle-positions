@@ -34,6 +34,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 		"import.html",
 		"map.html",
 		"reports.html",
+		"rider.html",
 		"trips.html",
 		"trip_detail.html",
 		"users.html",
