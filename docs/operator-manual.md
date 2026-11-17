@@ -474,9 +474,9 @@ driver-reported vehicles only.
 Each row names the vehicle, driver, route and GTFS trip, and says how long:
 **No report for 7 min**, **Under 50 m in 12 min**, **Over 60 m from its route
 for 6 min** or **Next on block 12, due 7 min ago**. The longest-running alert is at the top. **View on map** opens the
-trip's trail, whose **End** marker is where the vehicle last reported, even
-after it has dropped off the Live Map. **View trip** opens **Trips** on that
-trip, where **End trip** is.
+trip's page (see [A trip's page](#a-trips-page)), whose map starts where the
+vehicle last reported, even after it has dropped off the Live Map. **View
+trip** opens **Trips** on that trip, where **End trip** is.
 
 For an off-route vehicle, **View on map** shows the way it has gone since the
 trip started. Ask the driver whether a road is closed. If they have finished
@@ -510,7 +510,7 @@ search box ("Search driver, route, trip id") — then click **Apply**.
 Click **View trail** on any trip to open the map on that trip alone: the route
 actually driven as a line, with a **Start** and an **End** marker, and the
 sidebar replaced by **Trip Detail** showing driver, route, status and times.
-This is the tool for answering "where did this bus actually go?".
+Click the number in the **Trip** column for the trip's own page, below.
 
 An active trip also has **End trip**. It ends the trip for good, the same as
 the driver ending it. Use it when a driver sees **You already have a trip
@@ -521,6 +521,39 @@ the driver taps the run again. If a phone does still show the trip, ending it
 there is safe: on Android **End trip** finishes as usual, and on an iPhone
 **End locally anyway** is right when the app says **Could not end the trip**,
 because the server has already ended it.
+
+### A trip's page
+
+One trip has a page of its own, opened from the number in the **Trip** column
+of **Trips**, **View on map** on **Alerts**, or **View trail** in **Reports**.
+Its times are on your agency's clock, which the page names (UTC if the
+schedule is not loaded).
+
+- The top shows the vehicle, driver, route in its colour, GTFS trip and
+  block, start, end, status, duration and how many reports the phone sent. An
+  active trip has **End trip** here too; it works as on **Trips** and takes
+  you back there.
+- The map draws the trail in the route's colour over the trip's route in
+  grey, with its stops. A dashed line is a gap: more than 5 minutes (the
+  staleness threshold) with no report. The marker starts on the last report.
+  **Play** replays the trip at **1x**, **10x** or **60x**, and the slider, or
+  the arrow keys on it, step through the reports one at a time.
+- **Stops** lists each stop with when it was due, when the vehicle left it
+  (reached it, for the last stop) and how early or late that was, by the same
+  rule and colours as **Reports**, so the two pages agree. A stop your
+  schedule does not mark as a timepoint shows its time but is not counted. On
+  a running trip, a stop the vehicle has not got to yet says **not yet**. A
+  trip run by headway shows only when it passed each stop, and a trip started
+  with only a route has no stop list.
+- **Gaps in reports** lists each gap's times, and **Show** goes to it on the
+  map.
+- **Download CSV** saves the trip's reports. One file holds at most 1,000, so
+  a longer trip comes in parts, each named by its times.
+- An open page of an active trip adds new reports every 10 seconds.
+
+A trip run twice, say by a second vehicle after a breakdown, shows each run on
+its own page, while **Reports** takes each stop from whichever run passed it
+first.
 
 ### Reports
 
@@ -549,7 +582,8 @@ Each route with service that day has a row:
 **Trips →** opens the route's trips for the day, by departure. Each shows
 when it was scheduled, the vehicle and driver that ran it (**Not run** if
 none), how early or late it left the first stop and reached the last, and its
-own on-time share. **View trail** opens the trip's trail on the map.
+own on-time share. **View trail** opens the trip's page, with its time at
+every stop.
 
 **Download CSV** saves the route rows for the day as a spreadsheet. Today's
 report is worked out again each time you open it, so it fills in as the day
