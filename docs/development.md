@@ -245,9 +245,10 @@ Two consequences worth knowing:
 - Startup makes one login per vehicle plus the simulator's own admin login, one
   at a time. The server allows ten logins per IP per minute, but a successful
   login hands its attempt back, so only failed ones use up that budget and a
-  run of any size signs in without meeting the limiter. If a login is refused
-  anyway, say because other clients behind the same address are failing
-  theirs, the simulator waits and tries again rather than failing.
+  run of any size signs in without meeting the limiter. If a driver login is
+  refused anyway, say because other clients behind the same address are
+  failing theirs, the simulator waits and tries again. The admin login at
+  startup does not retry: a refusal there stops the simulator.
 - `-interval` now has to be 5 s or slower, but it no longer has to grow with
   `-vehicles`. The simulator warns at startup if the interval is too fast.
 
