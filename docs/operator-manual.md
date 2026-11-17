@@ -523,11 +523,49 @@ back to its route, and when its trip ends. A position the phone is unsure of
 (a poor GPS fix) neither raises nor clears **Off route**. The page reloads
 every 30 seconds. The **Alerts** item in the sidebar shows how many there are
 on every page, counted when that page loaded.
-Nothing is emailed or pushed, so keep the page open during service. Your server
+Unless your server posts them to a chat channel (see
+[Alerts on your phone](#alerts-on-your-phone)), keep the page open during
+service. Your server
 administrator can change these times and the 60 m (`ALERT_QUIET_AFTER`,
 `ALERT_STOPPED_AFTER`, `ALERT_OFF_ROUTE_AFTER`, `ALERT_NOT_STARTED_AFTER` and
 `ALERT_OFF_ROUTE_DISTANCE`, see [`configuration.md`](configuration.md)). After
 the server restarts, a vehicle is counted as quiet from the restart.
+
+#### Alerts on your phone
+
+Your server can post each alert to a chat channel, so the dispatcher on duty
+hears of it on their phone without keeping **Alerts** open. An alert is posted
+once when it starts and once when it clears, as one sentence:
+
+> Bus 7 on route 1 has gone quiet: no report since 09:02. https://tracker.example.org/admin/trips/42
+>
+> Cleared: Bus 7 on route 1, gone quiet since 09:02.
+
+The link opens the trip's page. A post names the vehicle, the route and the
+trip, never the driver, and never says where the vehicle is. Alerts are checked
+every 30 seconds, as often as the page reloads.
+
+To set it up in Slack:
+
+1. Make a channel for the alerts, such as `#fleet-alerts`, and add the
+   dispatchers.
+2. At [api.slack.com/apps](https://api.slack.com/apps), click **Create New
+   App**, give the app a name such as "Fleet alerts" and pick your workspace.
+3. On the app's settings page, open **Incoming Webhooks** and turn on
+   **Activate Incoming Webhooks**.
+4. Click **Add New Webhook to Workspace**, pick the channel and click
+   **Authorize**.
+5. Copy the new URL under **Webhook URLs for Your Workspace**. It starts with
+   `https://hooks.slack.com/services/`. Treat it like a password: anyone who
+   has it can post to the channel.
+6. Send it to your IT contact and ask them to set `ALERT_WEBHOOK_URL` to it and
+   `PUBLIC_URL` to the address you open this site at, and restart the server
+   (see [`configuration.md`](configuration.md#alert-webhook)).
+
+In the Slack app on each dispatcher's phone, set the channel's notifications to
+all new messages, so every alert rings. Google Chat works the same way with a
+space's webhook. In Microsoft Teams, your IT contact sets up a Workflows flow
+that posts the alert's text to a channel.
 
 ### Trips and trails
 
