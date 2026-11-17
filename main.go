@@ -183,6 +183,11 @@ func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimite
 		if err != nil {
 			return nil, fmt.Errorf("init admin UI: %w", err)
 		}
+		// newAdminUI starts from riderOff; a nil *riderService must not take
+		// its place, or the Rider mode page gets a nil pointer in an interface.
+		if riderSvc != nil {
+			ui.rider = riderSvc
+		}
 		staticFiles, err := fs.Sub(files, "web/static")
 		if err != nil {
 			return nil, fmt.Errorf("prepare static files: %w", err)
@@ -255,6 +260,14 @@ func main() {
 		os.Exit(1)
 	}
 	logMapPMTilesURL(mapPMTilesURL)
+
+	// Checked before the database is touched too. The webhook is off when
+	// ALERT_WEBHOOK_URL is unset.
+	webhookCfg, err := alertWebhookConfigFromEnv()
+	if err != nil {
+		slog.Error("refusing to start: invalid alert webhook setting", "error", err)
+		os.Exit(1)
+	}
 
 	ttls := tokenTTLs{
 		access:  envDurationOrDefault("ACCESS_TOKEN_TTL", defaultAccessTokenTTL),
@@ -379,6 +392,13 @@ func main() {
 	alerts := newAlertWatcher(store, alertSettingsFromEnv(riderCfg.Thresholds.MaxShapeDistance))
 	alerts.watchRoutes(schedule.Index)
 	alerts.watchBlocks(store)
+	if webhookCfg != nil {
+		webhook := newAlertWebhook(*webhookCfg, alerts, alerts.settings, schedule.Index, defaultAlertWebhookTiming())
+		defer webhook.Stop()
+		// The host only: a chat service's webhook URL carries its credential.
+		slog.Info("alert webhook enabled", "host", webhookCfg.host, "signed", webhookCfg.secret != nil,
+			"links", webhookCfg.publicURL != "", "text_only", webhookCfg.textOnly)
+	}
 
 	cutoff := time.Now().Add(-maxAge)
 	recentLocations, err := store.GetRecentLocations(ctx, cutoff)

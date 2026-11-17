@@ -449,6 +449,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 		{"POST", "/admin/trips/1/end"},
 		{"GET", "/admin/reports"},
 		{"GET", "/admin/health"},
+		{"GET", "/admin/rider"},
 		{"GET", "/admin/api-keys"},
 		{"POST", "/admin/api-keys"},
 		{"POST", "/admin/api-keys/1/deactivate"},

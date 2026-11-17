@@ -523,11 +523,49 @@ back to its route, and when its trip ends. A position the phone is unsure of
 (a poor GPS fix) neither raises nor clears **Off route**. The page reloads
 every 30 seconds. The **Alerts** item in the sidebar shows how many there are
 on every page, counted when that page loaded.
-Nothing is emailed or pushed, so keep the page open during service. Your server
+Unless your server posts them to a chat channel (see
+[Alerts on your phone](#alerts-on-your-phone)), keep the page open during
+service. Your server
 administrator can change these times and the 60 m (`ALERT_QUIET_AFTER`,
 `ALERT_STOPPED_AFTER`, `ALERT_OFF_ROUTE_AFTER`, `ALERT_NOT_STARTED_AFTER` and
 `ALERT_OFF_ROUTE_DISTANCE`, see [`configuration.md`](configuration.md)). After
 the server restarts, a vehicle is counted as quiet from the restart.
+
+#### Alerts on your phone
+
+Your server can post each alert to a chat channel, so the dispatcher on duty
+hears of it on their phone without keeping **Alerts** open. An alert is posted
+once when it starts and once when it clears, as one sentence:
+
+> Bus 7 on route 1 has gone quiet: no report since 09:02. https://tracker.example.org/admin/trips/42
+>
+> Cleared: Bus 7 on route 1, gone quiet since 09:02.
+
+The link opens the trip's page. A post names the vehicle, the route and the
+trip, never the driver, and never says where the vehicle is. Alerts are checked
+every 30 seconds, as often as the page reloads.
+
+To set it up in Slack:
+
+1. Make a channel for the alerts, such as `#fleet-alerts`, and add the
+   dispatchers.
+2. At [api.slack.com/apps](https://api.slack.com/apps), click **Create New
+   App**, give the app a name such as "Fleet alerts" and pick your workspace.
+3. On the app's settings page, open **Incoming Webhooks** and turn on
+   **Activate Incoming Webhooks**.
+4. Click **Add New Webhook to Workspace**, pick the channel and click
+   **Authorize**.
+5. Copy the new URL under **Webhook URLs for Your Workspace**. It starts with
+   `https://hooks.slack.com/services/`. Treat it like a password: anyone who
+   has it can post to the channel.
+6. Send it to your IT contact and ask them to set `ALERT_WEBHOOK_URL` to it and
+   `PUBLIC_URL` to the address you open this site at, and restart the server
+   (see [`configuration.md`](configuration.md#alert-webhook)).
+
+In the Slack app on each dispatcher's phone, set the channel's notifications to
+all new messages, so every alert rings. Google Chat works the same way with a
+space's webhook. In Microsoft Teams, your IT contact sets up a Workflows flow
+that posts the alert's text to a channel.
 
 ### Trips and trails
 
@@ -772,24 +810,39 @@ schedule and route shape, and only publishes one when it is convincing. It is
 **off** unless your IT contact deliberately turned it on, and when it is off it
 changes nothing at all about the driver-reported feed.
 
-It has no screens in the admin UI. Two addresses report on it, and both answer
-with raw data meant for a technical reader rather than a page:
+### The Rider mode page
 
-- `https://your-server/api/v1/admin/rider/status` — whether it is enabled, plus
-  schedule and live-ride counts. When rider mode is off it simply answers
-  `{"enabled":false}`, which is the quickest way to tell.
-- `https://your-server/api/v1/admin/rider/rides` — recent rider rides, newest
-  first.
+**Rider mode** in the sidebar shows what it is doing. When rider mode is off,
+the page says so and names the setting that turns it on. When it is on:
 
-Both require an admin account, so while you are signed in to the admin UI you
-can open them in the same browser. If the answer means nothing to you, that is
-expected — hand it to your IT contact. The settings behind it are in
-[`deployment.md` §3](deployment.md#3-configuration-reference) and the README's
-rider-mode section.
+- **Riders**, **Rides**, **In the feed** and **Trusted feeds**: how many rider
+  phones have registered (and how many are trusted or blocked), how many rides
+  are in progress, how many vehicles riders are placing in the feed right now,
+  and how many trusted feeds are set.
+- **Schedule riders are checked against**: the GTFS schedule the server loaded,
+  and when.
+- **Trusted feeds**: each GTFS-realtime feed of vehicle positions your IT
+  contact told the server to believe, and whether its last poll worked. A
+  rider whose position a trusted feed agrees with is **Confirmed**. Your own
+  drivers' positions always count as trusted.
+- **Rides**: in progress or ended, newest first, 50 to a page. Each shows the
+  trip and route the rider picked, whether the ride is **Pending** (not enough
+  matching positions yet), **Verified** or **Rejected**, and how many of its
+  positions matched. For a ride in progress, **Riders on trip** counts the
+  riders whose recent positions count for that trip, **In the feed** marks a
+  trip the riders are placing, and **Driver trip** opens the page of the one
+  driver trip running the same scheduled trip. An ended ride shows why it ended.
 
-What you *can* see for yourself is the effect on the feed. Rider-derived
-vehicles are labelled **Rider-reported** and their ids look like
-`rider:<trip id>:<date>`, so they are never confused with your own buses. They
+A vehicle goes in the feed from riders only when one trusted rider, or two
+riders who agree, are on it. Your IT contact can read the same data as JSON
+from `/api/v1/admin/rider/status` and `/api/v1/admin/rider/rides`. The settings
+behind it are in [`deployment.md` §3](deployment.md#3-configuration-reference)
+and the README's rider-mode section.
+
+### Rider positions in the feed
+
+Rider-derived vehicles are labelled **Rider-reported** and their ids look like
+`rider:<trip id>:<date>`, so they are never confused with your own vehicles. They
 never appear on the **Live Map**, which shows driver-reported vehicles only.
 A trip your own drivers are already reporting is never published from rider
 data — but only when the driver picked the specific scheduled trip, not just a

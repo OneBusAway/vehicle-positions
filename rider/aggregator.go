@@ -624,19 +624,25 @@ type tripGroup struct {
 // trip in frequencies.txt runs again and again on a service day, every run
 // under the one TripKey, so riders of two runs at once are one group.
 //
-// They are first told apart as their points stand, a run ending wherever the
-// next rider is more than runSplitDistance on, so a run never ends between
-// two points the trim would keep in one estimate. But a point a few seconds
-// older than the rest is far behind a moving vehicle, though its rider is on
-// it, so neighbouring runs are then joined when their vehicles are within
-// runSplitDistance of each other now. A run's vehicle is where its newest
-// point would be at the newest rider's point, carried on at that point's
-// speed, no faster than MaxSpeed and no later than now, however far ahead a
-// rider's clock has put their point; a point with no speed is taken as it
-// stands. Only that newest point is carried, so a point taken at speed before
-// its vehicle stopped says nothing about where the vehicle is while a newer
-// point stands beside it. A run whose newest point is a stale one is carried
-// as far as that point says, and can join the run it reaches.
+// Each rider is carried on from their point at its speed, no faster than
+// MaxSpeed, to the newest rider's point or now, whichever is earlier. A point
+// with no speed, or from a clock that runs ahead, is not carried. A rider
+// carried no more than outlierDistance is about where their vehicle is, and
+// those riders make the runs as their points stand: a run ends wherever the
+// next of them is more than runSplitDistance on, so a run never ends between
+// two of their points that the trim would keep in one estimate.
+//
+// A rider carried further has a point too old to say where their vehicle is
+// now, so it never joins two runs together. Standing within runSplitDistance
+// of a rider who makes a run, it is on the run of the nearest such rider:
+// riders standing together are on one vehicle, whatever speed an old point
+// gave. Otherwise it is grouped with the other such riders standing near it,
+// and the group is placed where its newest point is carried. It joins the run
+// whose vehicle is nearest that place, within runSplitDistance, with its
+// riders counted where they are carried, so the estimate does not trim them
+// and the run's own riders out against each other; a run's vehicle is where
+// its newest point is carried. A group that reaches no run is a run of its
+// own, as its points stand.
 //
 // A trip run by timetable has one run a day, and its riders stay one group,
 // as far apart as they are.
@@ -649,25 +655,69 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 	if now.Before(until) {
 		until = now
 	}
+	carry := func(m estimateMember) float64 {
+		return min(max(m.speed, 0), th.MaxSpeed) * max(0, until.Sub(m.timestamp).Seconds())
+	}
 	vehicle := func(members []estimateMember) float64 {
 		m := slices.MaxFunc(members, byTime)
-		return m.along + min(max(m.speed, 0), th.MaxSpeed)*max(0, until.Sub(m.timestamp).Seconds())
+		return m.along + carry(m)
 	}
 
-	members := slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(x.along, y.along) })
-	var standing [][]estimateMember
-	for i, m := range members {
-		if i == 0 || m.along-members[i-1].along > runSplitDistance {
-			standing = append(standing, nil)
-		}
-		standing[len(standing)-1] = append(standing[len(standing)-1], m)
+	type standing struct {
+		along float64
+		run   int
 	}
 	var runs []*tripGroup
-	for _, ms := range standing {
-		if len(runs) == 0 || math.Abs(vehicle(ms)-vehicle(runs[len(runs)-1].members)) > runSplitDistance {
+	var fresh []standing
+	var stale []estimateMember
+	for _, m := range slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(x.along, y.along) }) {
+		if carry(m) > outlierDistance {
+			stale = append(stale, m)
+			continue
+		}
+		if len(fresh) == 0 || m.along-fresh[len(fresh)-1].along > runSplitDistance {
 			runs = append(runs, &tripGroup{trip: g.trip})
 		}
-		runs[len(runs)-1].members = append(runs[len(runs)-1].members, ms...)
+		runs[len(runs)-1].members = append(runs[len(runs)-1].members, m)
+		fresh = append(fresh, standing{along: m.along, run: len(runs) - 1})
+	}
+	vehicles := make([]float64, len(runs))
+	for i, run := range runs {
+		vehicles[i] = vehicle(run.members)
+	}
+
+	var lone [][]estimateMember
+	for _, m := range stale {
+		if len(fresh) > 0 {
+			near := slices.MinFunc(fresh, func(x, y standing) int {
+				return cmp.Compare(math.Abs(x.along-m.along), math.Abs(y.along-m.along))
+			})
+			if math.Abs(near.along-m.along) <= runSplitDistance {
+				runs[near.run].members = append(runs[near.run].members, m)
+				continue
+			}
+		}
+		if len(lone) == 0 || m.along-lone[len(lone)-1][len(lone[len(lone)-1])-1].along > runSplitDistance {
+			lone = append(lone, nil)
+		}
+		lone[len(lone)-1] = append(lone[len(lone)-1], m)
+	}
+	for _, group := range lone {
+		at := vehicle(group)
+		best := -1
+		for i, v := range vehicles {
+			if math.Abs(v-at) <= runSplitDistance && (best < 0 || math.Abs(v-at) < math.Abs(vehicles[best]-at)) {
+				best = i
+			}
+		}
+		if best < 0 {
+			runs = append(runs, &tripGroup{trip: g.trip, members: group})
+			continue
+		}
+		for _, m := range group {
+			m.along += carry(m)
+			runs[best].members = append(runs[best].members, m)
+		}
 	}
 	return runs
 }

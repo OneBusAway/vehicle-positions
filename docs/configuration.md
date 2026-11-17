@@ -124,6 +124,56 @@ server restarted shows as off route again only after it has come back near its
 route and left it. The not-started alert reads the trips started in the last
 day from the database instead, so a restart does not reset it.
 
+### Alert webhook
+
+Posts each alert when it is raised and again when it clears, to a chat service
+or an endpoint of your own, so a dispatcher can follow the alerts on a phone
+instead of keeping the **Alerts** page open.
+
+| Variable | Default | Status | Purpose |
+|---|---|---|---|
+| `ALERT_WEBHOOK_URL` | unset | Optional | Where to post: a Slack or Google Chat incoming webhook URL, a Microsoft Teams Workflows webhook URL, or your own endpoint. Unset, empty or only whitespace leaves the webhook off. Anything but an `http` or `https` URL with a host **refuses to start**. A chat service's webhook URL works as its password, so the server logs only its host. |
+| `ALERT_WEBHOOK_SECRET` | unset | Optional | Signs each post, for an endpoint of your own to check (see below). Unset sends posts unsigned. Never logged. |
+| `PUBLIC_URL` | unset | Optional | The address dispatchers open the admin site at, such as `https://tracker.example.org`. With it set, each alert post links to the trip's page, `/admin/trips/{id}` under this address. Anything but an `http` or `https` URL with a host and no username, password, query or fragment **refuses to start**, whether or not the webhook is on. |
+
+The server works the alerts out every 30 seconds, as often as the **Alerts**
+page reloads, and posts one JSON body for each alert raised and each cleared
+since the last time. An alert that stays is not posted again, and one that
+comes and goes between two checks is not posted at all. Each body is the one
+alert:
+
+```json
+{"event":"raised","kind":"quiet","vehicle_id":"bus-7","vehicle_label":"Bus 7","route_id":"R1","route_short_name":"1","gtfs_trip_id":"T1","trip_id":42,"since":"2026-11-14T09:02:00Z","link":"https://tracker.example.org/admin/trips/42","text":"Bus 7 on route 1 has gone quiet: no report since 09:02. https://tracker.example.org/admin/trips/42"}
+```
+
+`event` is `raised` or `cleared`, and `kind` is one of the alert kinds of
+`GET /api/v1/admin/alerts`. For a `not_started` alert, the route and GTFS trip
+are the trip not started, and `trip_id` and `link` are the vehicle's last trip.
+`route_short_name` is empty when the GTFS feed gives the route none, and `link`
+is left out without `PUBLIC_URL`. `text` is one sentence, with the time in the
+GTFS feed's timezone, for a chat service to show as it is, as Slack does.
+Google Chat refuses any other field, so to a
+`chat.googleapis.com` URL only `text` is sent. Microsoft Teams takes webhooks
+through a Workflows flow, which has to be set to post the body's `text`. No
+post names the driver or carries a position.
+
+With `ALERT_WEBHOOK_SECRET` set, each post carries `X-Alert-Timestamp`, the
+Unix time in seconds, and `X-Alert-Signature`, `sha256=` followed by the hex
+HMAC-SHA256, keyed with the secret, of the timestamp, a `.` and the raw body.
+Check it with a constant-time comparison, and refuse a timestamp more than a
+few minutes old so a captured post cannot be replayed.
+
+Each attempt times out after 5 seconds. One that cannot connect, times out, or
+is answered `5xx` or `429` is tried again after 1, 2 and 4 seconds; any other
+answer is final, and a redirect is not followed. Posts go out one at a time, in
+order, without holding up the alerts or any request: up to 100 wait in a queue,
+and when it is full the oldest is dropped with a `WARN`. A post that still fails
+logs one `ERROR` per alert, naming the alert, the host and the status code or
+why there was no answer; never the rest of the URL or what the receiver sent
+back. A bad setting is refused by name, without its value. Posts still queued
+when the server stops are lost, and after a restart every alert still on is
+posted again as `raised`.
+
 ## Service reports
 
 The on-time window behind the admin UI's **Reports** page and

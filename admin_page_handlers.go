@@ -87,6 +87,8 @@ type adminUI struct {
 	assignments    assignmentManager
 	importer       CSVImporter
 	apiKeys        APIKeyManager
+	rider          riderPageSource
+	rides          RideLister
 	tokenChecker   TokenChecker
 	tokenRevoker   TokenRevoker
 	jwtSecret      []byte
@@ -125,6 +127,8 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 		assignments:    store,
 		importer:       store,
 		apiKeys:        store,
+		rider:          riderOff{},
+		rides:          store,
 		tokenChecker:   store,
 		tokenRevoker:   store,
 		jwtSecret:      jwtSecret,
@@ -172,6 +176,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("GET /admin/trips/{id}", protect(http.HandlerFunc(ui.tripDetailPage)))
 	mux.Handle("GET /admin/reports", protect(http.HandlerFunc(ui.reportsPage)))
 	mux.Handle("GET /admin/health", protect(http.HandlerFunc(ui.healthPage)))
+	mux.Handle("GET /admin/rider", protect(http.HandlerFunc(ui.riderPage)))
 	mux.Handle("POST /admin/trips/{id}/end", protect(http.HandlerFunc(ui.tripEnd)))
 	mux.Handle("GET /admin/api-keys", protect(http.HandlerFunc(ui.apiKeysPage)))
 	mux.Handle("POST /admin/api-keys", protect(http.HandlerFunc(ui.apiKeyCreate)))
