@@ -1,10 +1,12 @@
 package org.onebusaway.vehicletracker.ui.tracking
 
+import androidx.annotation.PluralsRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.TrackingProblem
+import org.onebusaway.vehicletracker.data.WaitingOutlook
 import org.onebusaway.vehicletracker.engine.Adherence
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.ui.runs.clockTime
@@ -91,3 +93,10 @@ internal fun distanceText(metres: Double): String =
     } else {
         stringResource(R.string.tracking_adherence_distance_km, metres / METRES_PER_KILOMETRE)
     }
+
+/** The waiting line's words, on the status card and in the notification: how many, and what happens to them. */
+@PluralsRes
+internal fun waitingWords(outlook: WaitingOutlook): Int = when (outlook) {
+    WaitingOutlook.WILL_SEND -> R.plurals.tracking_waiting
+    WaitingOutlook.NEVER -> R.plurals.tracking_waiting_never
+}

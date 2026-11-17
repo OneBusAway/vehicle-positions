@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui.tracking
 
+import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.engine.Adherence
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
@@ -98,3 +99,11 @@ private fun judged(adherence: Adherence, zone: ZoneId): StatusCardModel {
         )
     }
 }
+
+/**
+ * Whether TalkBack reads the waiting line out as it goes from [before] to [now]: as it comes, as it turns between will
+ * send and won't send, and as the count drops while the backlog uploads. Not as each report adds one while there is no
+ * connection: that would be every report.
+ */
+internal fun speaksWaiting(before: ReportsWaiting?, now: ReportsWaiting): Boolean =
+    before == null || before.outlook != now.outlook || now.count < before.count

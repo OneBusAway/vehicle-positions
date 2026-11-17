@@ -14,8 +14,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import org.onebusaway.vehicletracker.MainActivity
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.ui.tracking.formatClock
+import org.onebusaway.vehicletracker.ui.tracking.waitingWords
 
 const val NOTIFICATION_ID = 1001
 
@@ -82,7 +84,8 @@ class TrackingNotification(private val context: Context) {
 
     /**
      * The ongoing notification while reports are being sent: the route and its status as the screen's card says
-     * them, over the next stop or what is wrong. [routeColor] tints it, as ARGB, when the schedule gives one.
+     * them, over the next stop, what is wrong or the reports waiting. [routeColor] tints it, as ARGB, when the schedule
+     * gives one.
      */
     internal fun buildActiveNotification(text: NotificationText, routeColor: Int?): Notification =
         baseBuilder(CHANNEL_ID, NotificationCompat.PRIORITY_LOW)
@@ -156,7 +159,16 @@ class TrackingNotification(private val context: Context) {
         return text.route?.let { context.getString(R.string.tracking_notification_title, it, status) } ?: status
     }
 
-    private fun line(text: NotificationText): String = when (text.problem) {
+    private fun line(text: NotificationText): String {
+        text.waiting?.let { return waitingLine(it) }
+        return problemLine(text)
+    }
+
+    /** The status card's waiting line, in the same words. */
+    private fun waitingLine(waiting: ReportsWaiting): String =
+        context.resources.getQuantityString(waitingWords(waiting.outlook), waiting.count, waiting.count)
+
+    private fun problemLine(text: NotificationText): String = when (text.problem) {
         TrackingProblem.NONE -> {
             val reporting = context.getString(R.string.tracking_reports_reporting)
             val stop = text.nextStop

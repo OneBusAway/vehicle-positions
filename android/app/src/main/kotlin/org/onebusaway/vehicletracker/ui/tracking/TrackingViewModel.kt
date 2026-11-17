@@ -13,9 +13,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.OccupancyStatus
+import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.WaitingReports
 import org.onebusaway.vehicletracker.data.map.MapFileSource
 import org.onebusaway.vehicletracker.data.map.MapFileState
 import java.io.IOException
@@ -31,6 +33,8 @@ data class TrackingUiState(
     val mapFile: MapFileState = MapFileState.None,
     /** The trip has ended, and the screen goes on to choose the next one. */
     val ended: Boolean = false,
+    /** Reports saved while there was no connection, still on the phone; null when there are none. */
+    val waiting: ReportsWaiting? = null,
 )
 
 @HiltViewModel
@@ -39,12 +43,19 @@ class TrackingViewModel @Inject constructor(
     private val tripStateStore: TripStateStore,
     private val tripEnder: TripEnder,
     mapFiles: MapFileSource,
+    waitingReports: WaitingReports,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TrackingUiState())
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
     init {
-        combine(trackingRepository.state, tripStateStore.activeTrip, tripEnder.state, mapFiles.state) { tracking, trip, end, mapFile ->
+        combine(
+            trackingRepository.state,
+            tripStateStore.activeTrip,
+            tripEnder.state,
+            mapFiles.state,
+            waitingReports.waiting,
+        ) { tracking, trip, end, mapFile, waiting ->
             TrackingUiState(
                 tracking = tracking,
                 activeTrip = trip,
@@ -52,6 +63,7 @@ class TrackingViewModel @Inject constructor(
                 endTripError = end.failed,
                 mapFile = mapFile,
                 ended = end.ended,
+                waiting = waiting,
             )
         }
             .onEach { _uiState.value = it }

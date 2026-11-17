@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -53,6 +54,7 @@ import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.tracking.minutesText
+import org.onebusaway.vehicletracker.ui.tracking.waitingWords
 import java.util.concurrent.atomic.AtomicBoolean
 
 // A group's rows are joined: round on the group's outside, tight where two rows meet.
@@ -175,6 +177,7 @@ private fun StatusRow(help: CardStatusHelp, place: GroupPlace) {
     val title = when (val words = help.words) {
         is CardWords.Minutes -> minutesText(words.minutes)
         is CardWords.Text -> stringResource(words.id)
+        is CardWords.Waiting -> pluralStringResource(waitingWords(words.outlook), words.count, words.count)
     }
     val tone = AppTheme.statusColors[help.tone]
     GroupRow(title, stringResource(help.meaning), place) { Disc(help.icon, tone.fill, tone.onFill) }

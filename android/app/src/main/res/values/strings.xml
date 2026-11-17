@@ -131,6 +131,9 @@
     <string name="help_status_off_route">Away from the route on the map.</string>
     <string name="help_status_waiting_for_gps">The phone is finding its position.</string>
     <string name="help_status_no_schedule">This run has no times. Riders still see you.</string>
+    <!-- The card's line under the next stop while reports wait on the phone, which the notification says too. -->
+    <string name="help_waiting">Saved with no connection. They are sent once it is back.</string>
+    <string name="help_waiting_never">Saved under another sign-in, so this one can\'t send them.</string>
     <!-- Over the lines that show under the status card, the card shown in its place, and the Reports paused notification. -->
     <string name="help_section_problems">Under the card, and in notifications</string>
     <string name="help_problem_no_network">Keep driving. Reports are saved and sent later.</string>
@@ -340,6 +343,16 @@
     <string name="tracking_problem_clock_skew_detail">Set automatic time</string>
     <string name="tracking_problem_reports_refused">Reports refused</string>
     <string name="tracking_problem_reports_refused_detail">Ask your dispatcher</string>
+    <!-- The status card's last line, and the notification's, while reports saved with no connection wait on the phone. It takes the place of the next stop's time and distance, in one line on a narrow phone. The count is grouped, e.g. "1,244", as the phone keeps up to 8,640. -->
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d report to send when online</item>
+        <item quantity="other">%1$,d reports to send when online</item>
+    </plurals>
+    <!-- The same, for reports saved under another sign-in, which nothing will send under this one. Help says why. -->
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d report won\'t send</item>
+        <item quantity="other">%1$,d reports won\'t send</item>
+    </plurals>
     <!-- In the status card's place once the driver's sign-in has expired. -->
     <string name="tracking_signed_out_title">Signed out</string>
     <string name="tracking_signed_out_message">Reports have stopped. Your trip is still open.</string>

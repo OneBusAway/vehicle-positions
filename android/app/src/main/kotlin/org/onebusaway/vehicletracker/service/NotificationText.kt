@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.service
 
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.engine.TripStop
@@ -21,8 +22,9 @@ internal sealed interface NotificationStatus {
 /**
  * What the tracking notification says, decided here and worded from strings.xml by [TrackingNotification]:
  * "Route 7 · On time" over "Next 3rd Ave & Seneca St · 7:18 AM · Reporting", or over the problem in place of the
- * reporting line. [route] is null before the stored trip has been read. Two of these are equal exactly when the
- * notification would read the same, so the service posts only when it changes.
+ * reporting line. [route] is null before the stored trip has been read. [waiting] is the reports waiting on the phone,
+ * said in place of that line, and is null when there are none or a problem needs saying instead. Two of these are equal
+ * exactly when the notification would read the same, so the service posts only when it changes.
  */
 internal data class NotificationText(
     val route: String?,
@@ -30,9 +32,16 @@ internal data class NotificationText(
     val nextStop: TripStop?,
     val zone: ZoneId?,
     val problem: TrackingProblem,
+    val waiting: ReportsWaiting?,
 )
 
-internal fun notificationText(tracking: TrackingState, trip: ActiveTrip?): NotificationText {
+/**
+ * The notification has one line. The reports waiting take it from the next stop, and from No connection as the more
+ * useful of the two while offline. Any other problem keeps it: it says why reports aren't getting through.
+ */
+private val WAITING_LINE_PROBLEMS = setOf(TrackingProblem.NONE, TrackingProblem.NO_NETWORK)
+
+internal fun notificationText(tracking: TrackingState, trip: ActiveTrip?, waiting: ReportsWaiting?): NotificationText {
     val model = statusCardModel(tracking, trip?.vehicleId)
     val status = when (model) {
         is StatusCardModel.Adherence -> NotificationStatus.Minutes(model.answerMinutes)
@@ -54,5 +63,6 @@ internal fun notificationText(tracking: TrackingState, trip: ActiveTrip?): Notif
         nextStop = nextStop,
         zone = zone,
         problem = tracking.problem,
+        waiting = waiting.takeIf { tracking.problem in WAITING_LINE_PROBLEMS },
     )
 }

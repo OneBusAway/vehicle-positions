@@ -2332,7 +2332,7 @@ class ViewModelsTest {
             val geometryStore = FakeTripGeometryStore().apply { stored = TripFixtures.t1 }
             val tripRepository = TripRepository(provider, tripState, FakeVehiclePrefsStore(), sessions, clock = { 0L })
             val tripEnder = TripEnder(tripRepository, tripState, geometryStore, FakeServiceController(), sessions)
-            val vm = TrackingViewModel(tracking, tripState, tripEnder, mapFiles)
+            val vm = TrackingViewModel(tracking, tripState, tripEnder, mapFiles, WaitingReports(FakeOfflineFixQueue(), sessions))
             awaitCondition(description = "active trip loaded") { vm.uiState.value.activeTrip != null }
             block(vm, tracking, geometryStore)
         } finally {

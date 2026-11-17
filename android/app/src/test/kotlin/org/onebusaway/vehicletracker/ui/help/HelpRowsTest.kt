@@ -7,6 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingState
+import org.onebusaway.vehicletracker.data.WaitingOutlook
 import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.engine.TripFixtures
@@ -16,7 +17,10 @@ import org.onebusaway.vehicletracker.ui.theme.StatusTone
 import org.onebusaway.vehicletracker.ui.tracking.StatusCardModel
 import org.onebusaway.vehicletracker.ui.tracking.statusCardModel
 
-/** Every status the card can give and every problem a trip can have has its own row on Help, in the spec's order. */
+/**
+ * Every status the card can give, every outlook of its waiting line and every problem a trip can have has its own row on
+ * Help, in the spec's order.
+ */
 class HelpRowsTest {
     private val t1 = TripFixtures.t1
     private val evaluator = requireNotNull(AdherenceEvaluator.of(t1))
@@ -51,10 +55,19 @@ class HelpRowsTest {
         assertEquals(permitted.map { it.simpleName }.toSet(), everyCardAnswer.map { it::class.java.simpleName }.toSet())
     }
 
-    @Test fun `every answer the card gives has a row of its own, and every row is an answer`() {
+    @Test fun `every answer the card gives has a row of its own, and every other row is the waiting line's`() {
         val rows = everyCardAnswer.map(::cardStatusHelp)
 
-        assertEquals(CardStatusHelp.entries.toList(), rows)
+        assertEquals(CardStatusHelp.entries - WaitingOutlook.entries.map(::waitingHelp).toSet(), rows)
+    }
+
+    @Test fun `every outlook of the waiting line has a row of its own, worded as the card words it`() {
+        val rows = WaitingOutlook.entries.map(::waitingHelp)
+
+        assertEquals("one row each", WaitingOutlook.entries.size, rows.toSet().size)
+        for (outlook in WaitingOutlook.entries) {
+            assertEquals(outlook, (waitingHelp(outlook).words as CardWords.Waiting).outlook)
+        }
     }
 
     @Test fun `every adherence status has a row of its own`() {
@@ -92,7 +105,7 @@ class HelpRowsTest {
                 "welcome",
                 "section-STATUS",
                 "status-ON_TIME", "status-LATE", "status-EARLY", "status-OFF_SCHEDULE", "status-OFF_ROUTE",
-                "status-WAITING_FOR_GPS", "status-NO_SCHEDULE",
+                "status-WAITING_FOR_GPS", "status-NO_SCHEDULE", "status-REPORTS_WAITING", "status-REPORTS_WONT_SEND",
                 "section-PROBLEMS",
                 "problem-NO_CONNECTION", "problem-NO_GPS", "problem-CLOCK_WRONG", "problem-REPORTS_REFUSED",
                 "problem-SIGNED_OUT", "problem-REPORTS_PAUSED",

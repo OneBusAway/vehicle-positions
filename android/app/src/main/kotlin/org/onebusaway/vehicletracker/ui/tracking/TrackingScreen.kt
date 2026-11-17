@@ -233,6 +233,7 @@ fun TrackingScreenContent(
                         .windowInsetsPadding(statusInsets)
                         .padding(CardMargin),
                     onCardHeightChanged = { cardHeight = it },
+                    waiting = state.waiting,
                 )
             }
         }

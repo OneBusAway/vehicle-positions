@@ -31,7 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +42,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -52,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.engine.TripStop
@@ -77,6 +81,8 @@ private val Elevation = 1.dp
  *
  * [onCardHeightChanged] hands back the status card's own height, without the problem line, for the map to keep
  * the vehicle clear of: a line that comes and goes with the signal should not move the map each time.
+ *
+ * While reports are [waiting] on the phone, the card says how many in place of its last line.
  */
 @Composable
 internal fun StatusArea(
@@ -85,6 +91,7 @@ internal fun StatusArea(
     onSignIn: () -> Unit,
     modifier: Modifier = Modifier,
     onCardHeightChanged: (Int) -> Unit = {},
+    waiting: ReportsWaiting? = null,
 ) {
     // Unclipped, so the cards' shadows show over the map.
     AnimatedContent(
@@ -101,7 +108,7 @@ internal fun StatusArea(
         } else {
             val line = problemLine(problem)
             Column {
-                StatusCard(model, joined = line != null, Modifier.onSizeChanged { onCardHeightChanged(it.height) })
+                StatusCard(model, waiting, joined = line != null, Modifier.onSizeChanged { onCardHeightChanged(it.height) })
                 AnimatedContent(
                     targetState = line,
                     transitionSpec = {
@@ -118,7 +125,7 @@ internal fun StatusArea(
 }
 
 @Composable
-private fun StatusCard(model: StatusCardModel, joined: Boolean, modifier: Modifier = Modifier) {
+private fun StatusCard(model: StatusCardModel, waiting: ReportsWaiting?, joined: Boolean, modifier: Modifier = Modifier) {
     val colors = AppTheme.statusColors[model.tone]
     // Drawn rather than set as a background, so a change of tone animates in the draw phase alone.
     val fill by animateColorAsState(colors.fill, AppMotion.defaultEffectsSpec(), label = "status fill")
@@ -163,7 +170,7 @@ private fun StatusCard(model: StatusCardModel, joined: Boolean, modifier: Modifi
                             liveRegion = LiveRegionMode.Polite
                         },
                 )
-                StatusLines(model)
+                StatusLines(model, waiting)
             }
         }
     }
@@ -196,9 +203,12 @@ private fun statusAnswer(model: StatusCardModel): String = when (model) {
 private fun statusAnnouncement(model: StatusCardModel): String =
     if (model is StatusCardModel.OffRoute) stringResource(R.string.tracking_adherence_off_route_short) else statusAnswer(model)
 
-/** The card's two lines under the answer: the stop it was judged against, then that stop's time and distance. */
+/**
+ * The card's two lines under the answer: the stop it was judged against, then that stop's time and distance, or the
+ * reports [waiting] in its place.
+ */
 @Composable
-private fun StatusLines(model: StatusCardModel) {
+private fun StatusLines(model: StatusCardModel, waiting: ReportsWaiting?) {
     val line1: String
     val line1Emphasis: String?
     val line2: String
@@ -256,7 +266,32 @@ private fun StatusLines(model: StatusCardModel) {
             )
         }
     }
-    Text(line2, style = MaterialTheme.typography.statusLine, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (waiting != null) {
+        WaitingLine(waiting)
+    } else {
+        Text(line2, style = MaterialTheme.typography.statusLine, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** What the waiting line said at its last composition, for TalkBack to tell what changed. */
+private class LastWaiting(var shown: ReportsWaiting? = null)
+
+/**
+ * How many reports wait on the phone, and what happens to them. TalkBack reads it out only as [speaksWaiting]
+ * decides, and the line keeps no fix's distance, so a fix alone never makes it speak.
+ */
+@Composable
+private fun WaitingLine(waiting: ReportsWaiting) {
+    val last = remember { LastWaiting() }
+    val speaks = speaksWaiting(last.shown, waiting)
+    SideEffect { last.shown = waiting }
+    Text(
+        text = pluralStringResource(waitingWords(waiting.outlook), waiting.count, waiting.count),
+        style = MaterialTheme.typography.statusLine,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.semantics { if (speaks) liveRegion = LiveRegionMode.Polite },
+    )
 }
 
 /** The stop's scheduled time on the agency's clock, then how far along the route it is. */

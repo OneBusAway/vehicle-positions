@@ -61,6 +61,7 @@ import org.onebusaway.vehicletracker.data.KeystoreCryptor
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.TripRepository
+import org.onebusaway.vehicletracker.data.WaitingReports
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.driverFlagsDataStore
@@ -238,7 +239,8 @@ class FirstTripFlowTest {
                             onTripEnded = { navController.navigate("next") { popUpTo(0) { inclusive = true } } },
                             onReauthRequired = {},
                             viewModel = viewModel {
-                                TrackingViewModel(tracking, trips, TripEnder(tripRepository, trips, geometry, NoReportsService, sessions), NoStreetMap)
+                                val ender = TripEnder(tripRepository, trips, geometry, NoReportsService, sessions)
+                                TrackingViewModel(tracking, trips, ender, NoStreetMap, WaitingReports(FileOfflineFixQueue(queueFile), sessions))
                             },
                             sentCountTip = viewModel { SentCountTipViewModel(tips, tracking) },
                         )

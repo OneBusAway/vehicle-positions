@@ -36,6 +36,7 @@ import org.onebusaway.vehicletracker.data.FileTripGeometryStore
 import org.onebusaway.vehicletracker.data.KeystoreCryptor
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TripRepository
+import org.onebusaway.vehicletracker.data.WaitingReports
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.map.MapFileSource
@@ -105,7 +106,8 @@ class OccupancyReportTest {
         )
         val tripRepository = TripRepository(api, trips, DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore), sessions, clock = { 0L })
         val geometry = FileTripGeometryStore(File(context.cacheDir, "occupancy-test-geometry"))
-        val viewModel = TrackingViewModel(TrackingRepository(), trips, TripEnder(tripRepository, trips, geometry, NoService, sessions), NoMapFile)
+        val ender = TripEnder(tripRepository, trips, geometry, NoService, sessions)
+        val viewModel = TrackingViewModel(TrackingRepository(), trips, ender, NoMapFile, WaitingReports(queue, sessions))
         compose.setContent { TrackingScreen(onTripEnded = {}, onReauthRequired = {}, viewModel = viewModel) }
         compose.waitUntil(TIMEOUT_SEC * 1000) { viewModel.uiState.value.activeTrip != null }
 
