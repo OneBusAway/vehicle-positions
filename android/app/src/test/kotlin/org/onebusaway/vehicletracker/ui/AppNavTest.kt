@@ -17,16 +17,29 @@ class AppNavTest {
     private val signedIn = AccountUiState(email = "d@example.com", server = "tracker.example.org")
 
     @Test fun `the vehicle step the app opened skips, and the one the driver asked for doesn't`() {
-        assertTrue("opened by itself, after sign-in or a trip", skipsOnlyVehicle(ROUTE_VEHICLES, signedIn))
-        assertFalse("opened by Change vehicle, so it shows the one vehicle", skipsOnlyVehicle(ROUTE_VEHICLES_CHOSEN, signedIn))
-        assertFalse(skipsOnlyVehicle(null, signedIn))
+        assertTrue(
+            "opened by itself, after sign-in or a trip",
+            skipsOnlyVehicle(ROUTE_VEHICLES, signedIn, onTop = true),
+        )
+        assertFalse(
+            "opened by Change vehicle, so it shows the one vehicle",
+            skipsOnlyVehicle(ROUTE_VEHICLES_CHOSEN, signedIn, onTop = true),
+        )
+        assertFalse(skipsOnlyVehicle(null, signedIn, onTop = true))
+    }
+
+    @Test fun `the vehicle step doesn't skip while Help is over it`() {
+        assertFalse("the skip would close Help", skipsOnlyVehicle(ROUTE_VEHICLES, signedIn, onTop = false))
     }
 
     @Test fun `the vehicle step doesn't skip once Sign out is confirmed`() {
-        assertFalse("still waiting on the server", skipsOnlyVehicle(ROUTE_VEHICLES, signedIn.copy(signingOut = true)))
+        assertFalse(
+            "still waiting on the server",
+            skipsOnlyVehicle(ROUTE_VEHICLES, signedIn.copy(signingOut = true), onTop = true),
+        )
         assertFalse(
             "already forgotten, before Sign in opens",
-            skipsOnlyVehicle(ROUTE_VEHICLES, signedIn.copy(signingOut = true, signedOut = true)),
+            skipsOnlyVehicle(ROUTE_VEHICLES, signedIn.copy(signingOut = true, signedOut = true), onTop = true),
         )
     }
 
