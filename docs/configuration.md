@@ -168,9 +168,11 @@ is answered `5xx` or `429` is tried again after 1, 2 and 4 seconds; any other
 answer is final, and a redirect is not followed. Posts go out one at a time, in
 order, without holding up the alerts or any request: up to 100 wait in a queue,
 and when it is full the oldest is dropped with a `WARN`. A post that still fails
-logs one `ERROR` naming the alert, once per alert. Posts still queued when the
-server stops are lost, and after a restart every alert still on is posted again
-as `raised`.
+logs one `ERROR` per alert, naming the alert, the host and the status code or
+why there was no answer; never the rest of the URL or what the receiver sent
+back. A bad setting is refused by name, without its value. Posts still queued
+when the server stops are lost, and after a restart every alert still on is
+posted again as `raised`.
 
 ## Service reports
 

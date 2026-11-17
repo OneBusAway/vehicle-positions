@@ -6,12 +6,14 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -108,13 +110,9 @@ func alertWebhookConfigFromEnv() (*alertWebhookConfig, error) {
 	if raw == "" {
 		return nil, nil
 	}
-	u, err := url.Parse(raw)
+	u, err := parseHTTPURL("ALERT_WEBHOOK_URL", raw)
 	if err != nil {
-		// Not wrapped: url.Parse's error repeats the URL, credential and all.
-		return nil, errors.New("ALERT_WEBHOOK_URL is not a valid URL")
-	}
-	if (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" {
-		return nil, fmt.Errorf("ALERT_WEBHOOK_URL must be an http or https URL with a host, got scheme %q", u.Scheme)
+		return nil, err
 	}
 	cfg := &alertWebhookConfig{
 		url:       raw,
@@ -135,21 +133,38 @@ func parsePublicURL(raw string) (string, error) {
 	if v == "" {
 		return "", nil
 	}
-	u, err := url.Parse(v)
+	u, err := parseHTTPURL("PUBLIC_URL", v)
 	if err != nil {
-		// Not wrapped, like ALERT_WEBHOOK_URL: the value may carry a password.
-		return "", errors.New("PUBLIC_URL is not a valid URL")
+		return "", err
 	}
 	if u.User != nil {
 		return "", errors.New("PUBLIC_URL must not carry a username or password: it is sent in every alert")
 	}
-	if (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" {
-		return "", fmt.Errorf("PUBLIC_URL must be an http or https URL with a host, got %q", v)
+	if u.RawQuery != "" {
+		return "", errors.New("PUBLIC_URL must not have a query")
 	}
-	if u.RawQuery != "" || u.Fragment != "" {
-		return "", fmt.Errorf("PUBLIC_URL must not have a query or a fragment, got %q", v)
+	if u.Fragment != "" {
+		return "", errors.New("PUBLIC_URL must not have a fragment")
 	}
 	return u.Scheme + "://" + u.Host + strings.TrimRight(u.EscapedPath(), "/"), nil
+}
+
+// parseHTTPURL parses raw, the value of the setting name, as an http or https
+// URL with a host. Its errors name the setting and what is wrong with it, never
+// the value: they go to the startup log, and the value can be a credential.
+func parseHTTPURL(name, raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		// Not wrapped: url.Parse's error repeats the value.
+		return nil, fmt.Errorf("%s is not a valid URL", name)
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return nil, fmt.Errorf("%s must start with http:// or https://", name)
+	}
+	if u.Hostname() == "" {
+		return nil, fmt.Errorf("%s has no host", name)
+	}
+	return u, nil
 }
 
 // alertSource is where the webhook reads the alerts: the alertWatcher.
@@ -525,16 +540,11 @@ func (h *alertWebhook) post(body []byte) (retry bool, err error) {
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		// A *url.Error repeats the URL, whose path can be the credential.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			err = urlErr.Err
-		}
-		return true, err
+		return true, h.noAnswer(err)
 	}
 	defer resp.Body.Close()
-	detail, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
-	// Drained so the connection can be used again.
+	// Drained so the connection can be used again, and never read: a receiver
+	// can quote the path back, credential and all.
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 
 	switch {
@@ -543,8 +553,29 @@ func (h *alertWebhook) post(body []byte) (retry bool, err error) {
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		return false, fmt.Errorf("answered %d, a redirect, which is not followed: set ALERT_WEBHOOK_URL to where it leads", resp.StatusCode)
 	}
-	err = fmt.Errorf("answered %d: %s", resp.StatusCode, strings.TrimSpace(string(detail)))
+	err = fmt.Errorf("answered %d", resp.StatusCode)
 	return resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests, err
+}
+
+// noAnswer says, for the log, why a post got no answer, in words that carry
+// nothing of the URL past its host. Go's error repeats the URL, and when the
+// reply is not HTTP it quotes the reply, which from a receiver that echoes the
+// request is the path. So only a timeout, a failure to reach the host, which
+// names its address, and an untrusted certificate are told apart.
+func (h *alertWebhook) noAnswer(err error) error {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return fmt.Errorf("no answer within %s", h.timing.timeout)
+	}
+	var dialErr *net.OpError
+	if errors.As(err, &dialErr) && dialErr.Op == "dial" {
+		return dialErr
+	}
+	var certErr *tls.CertificateVerificationError
+	if errors.As(err, &certErr) {
+		return certErr
+	}
+	return errors.New("no valid HTTP answer")
 }
 
 // signAlertWebhook is the hex HMAC-SHA256, keyed with secret, of the

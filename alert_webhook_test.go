@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -11,8 +12,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -563,7 +566,7 @@ func TestAlertWebhook_Timeout(t *testing.T) {
 
 	require.Eventually(t, func() bool { return logs.count("post failed") == 1 }, 5*time.Second, time.Millisecond)
 	assert.Equal(t, 1+len(timing.backoff), receiver.count(), "a timeout is retried")
-	assert.Contains(t, logs.String(), "Client.Timeout exceeded")
+	assert.Contains(t, logs.String(), `error="no answer within 50ms"`)
 	assert.Less(t, time.Since(start), 2*time.Second, "each attempt gave up at the timeout")
 }
 
@@ -678,20 +681,66 @@ func TestAlertWebhook_DroppedClearEndsTheAlert(t *testing.T) {
 	require.Eventually(t, func() bool { return failuresFor(logs, "bus-7") == 2 }, 5*time.Second, time.Millisecond)
 }
 
+// newEchoServer answers every connection with the first line of its request
+// and hangs up: a reply that is not HTTP, and that quotes the URL's path.
+func newEchoServer(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				line, _ := bufio.NewReader(conn).ReadString('\n')
+				_, _ = io.WriteString(conn, line+"\r\n")
+			}()
+		}
+	}()
+	return "http://" + ln.Addr().String()
+}
+
+// TestAlertWebhook_LogsNeitherTheURLNorTheSecret fails a post each way it can
+// fail, with receivers that quote the path back where they can, and checks
+// the log says why with nothing of the path or the secret.
 func TestAlertWebhook_LogsNeitherTheURLNorTheSecret(t *testing.T) {
 	const token = "XyZ0webhookToken"
 	const secret = "s3cret-signing-key"
+	// A receiver that does not know the webhook, saying so with its path.
+	notFound := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no webhook at "+r.URL.Path, http.StatusNotFound)
+	}))
+	t.Cleanup(notFound.Close)
 	failing := newWebhookReceiver(t, http.StatusInternalServerError)
 	closed := httptest.NewServer(http.NotFoundHandler())
 	closed.Close()
+	untrusted := httptest.NewTLSServer(http.NotFoundHandler())
+	t.Cleanup(untrusted.Close)
 
-	for name, base := range map[string]string{"5xx": failing.URL, "unreachable": closed.URL} {
-		t.Run(name, func(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		logged string
+	}{
+		{"404 quoting the path", notFound.URL, `error="answered 404"`},
+		{"5xx", failing.URL, `error="answered 500"`},
+		{"reply not HTTP, quoting the request", newEchoServer(t), `error="no valid HTTP answer"`},
+		{"unreachable", closed.URL, "connection refused"},
+		{"untrusted certificate", untrusted.URL, "failed to verify certificate"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			logs := captureWebhookLogs(t)
+			base, err := url.Parse(tc.base)
+			require.NoError(t, err)
 			source := &scriptedAlerts{}
 			cfg := alertWebhookConfig{
-				url:    base + "/services/T000/B000/" + token,
-				host:   strings.TrimPrefix(base, "http://"),
+				url:    tc.base + "/services/T000/B000/" + token,
+				host:   base.Host,
 				secret: []byte(secret),
 			}
 			h := startWebhook(t, cfg, source, nil, idleWebhookTiming())
@@ -701,6 +750,7 @@ func TestAlertWebhook_LogsNeitherTheURLNorTheSecret(t *testing.T) {
 
 			require.Eventually(t, func() bool { return logs.count("post failed") == 1 }, 5*time.Second, time.Millisecond)
 			assert.Contains(t, logs.String(), "host="+cfg.host)
+			assert.Contains(t, logs.String(), tc.logged)
 			assert.NotContains(t, logs.String(), token)
 			assert.NotContains(t, logs.String(), "/services/")
 			assert.NotContains(t, logs.String(), secret)
@@ -783,16 +833,17 @@ func TestAlertWebhookConfigFromEnv(t *testing.T) {
 		{name: "public URL with a path", url: slack, publicURL: " https://example.org/fleet/ ",
 			want: &alertWebhookConfig{url: slack, host: "hooks.slack.com", publicURL: "https://example.org/fleet"}},
 
-		{name: "not http", url: "ftp://hooks.example.org/XyZ0webhookToken", err: `ALERT_WEBHOOK_URL must be an http or https URL with a host, got scheme "ftp"`},
-		{name: "no scheme", url: "hooks.slack.com/services/T000/B000/XyZ0webhookToken", err: `got scheme ""`},
-		{name: "no host", url: "https:///services/T000/B000/XyZ0webhookToken", err: "ALERT_WEBHOOK_URL must be an http or https URL with a host"},
+		{name: "not http", url: "ftp://hooks.example.org/XyZ0webhookToken", err: "ALERT_WEBHOOK_URL must start with http:// or https://"},
+		{name: "no scheme", url: "hooks.slack.com/services/T000/B000/XyZ0webhookToken", err: "ALERT_WEBHOOK_URL must start with http:// or https://"},
+		{name: "no host", url: "https:///services/T000/B000/XyZ0webhookToken", err: "ALERT_WEBHOOK_URL has no host"},
 		{name: "unparseable", url: "https://[::1/XyZ0webhookToken", err: "ALERT_WEBHOOK_URL is not a valid URL"},
-		{name: "public URL not http", url: slack, publicURL: "tracker.example.org", err: `PUBLIC_URL must be an http or https URL with a host, got "tracker.example.org"`},
-		{name: "public URL with a password", url: slack, publicURL: "https://admin:XyZ0webhookToken@tracker.example.org", err: "PUBLIC_URL must not carry a username or password"},
-		{name: "public URL with a query", url: slack, publicURL: "https://tracker.example.org/?x=1", err: "PUBLIC_URL must not have a query or a fragment"},
-		{name: "public URL with a fragment", url: slack, publicURL: "https://tracker.example.org/#top", err: "PUBLIC_URL must not have a query or a fragment"},
-		{name: "public URL unparseable", url: slack, publicURL: "https://[::1", err: "PUBLIC_URL is not a valid URL"},
-		{name: "bad public URL with the webhook off", publicURL: "ftp://tracker.example.org", err: "PUBLIC_URL must be an http or https URL"},
+		{name: "public URL not http", url: slack, publicURL: "tracker.example.org/XyZ0webhookToken", err: "PUBLIC_URL must start with http:// or https://"},
+		{name: "public URL with no host", url: slack, publicURL: "https:///XyZ0webhookToken", err: "PUBLIC_URL has no host"},
+		{name: "public URL with a password", url: slack, publicURL: "https://admin:XyZ0webhookToken@tracker.example.org", err: "PUBLIC_URL must not carry a username or password: it is sent in every alert"},
+		{name: "public URL with a query", url: slack, publicURL: "https://tracker.example.org/?token=XyZ0webhookToken", err: "PUBLIC_URL must not have a query"},
+		{name: "public URL with a fragment", url: slack, publicURL: "https://tracker.example.org/#XyZ0webhookToken", err: "PUBLIC_URL must not have a fragment"},
+		{name: "public URL unparseable", url: slack, publicURL: "https://[::1/XyZ0webhookToken", err: "PUBLIC_URL is not a valid URL"},
+		{name: "bad public URL with the webhook off", publicURL: "ftp://tracker.example.org/XyZ0webhookToken", err: "PUBLIC_URL must start with http:// or https://"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -802,9 +853,10 @@ func TestAlertWebhookConfigFromEnv(t *testing.T) {
 
 			got, err := alertWebhookConfigFromEnv()
 			if tc.err != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.err)
-				assert.NotContains(t, err.Error(), "XyZ0webhookToken", "the error goes to the startup log")
+				// The error goes to the startup log: it names what is wrong,
+				// never the value.
+				assert.EqualError(t, err, tc.err)
+				assert.NotContains(t, err.Error(), "XyZ0webhookToken")
 				assert.Nil(t, got)
 				return
 			}
