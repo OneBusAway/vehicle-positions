@@ -54,6 +54,7 @@ var htmlUIRoutes = map[string]struct{}{
 	"GET /admin/map":                                     {},
 	"GET /admin/alerts":                                  {},
 	"GET /admin/trips":                                   {},
+	"GET /admin/trips/{id}":                              {},
 	"GET /admin/reports":                                 {},
 	"GET /admin/health":                                  {},
 	"POST /admin/trips/{id}/end":                         {},

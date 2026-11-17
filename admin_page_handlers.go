@@ -76,6 +76,7 @@ type adminUI struct {
 	activeTrips    ActiveTripLister
 	trips          TripLister
 	tripEnder      TripByIDEnder
+	tripTrails     TripTrailStore
 	vehicles       VehicleManager
 	vehiclePager   VehiclePager
 	userPager      UserPager
@@ -112,6 +113,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 		activeTrips:    store,
 		trips:          store,
 		tripEnder:      store,
+		tripTrails:     store,
 		vehicles:       store,
 		vehiclePager:   store,
 		userPager:      store,
@@ -160,6 +162,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("POST /admin/users/{id}/vehicles/{vehicleID}/remove", protect(http.HandlerFunc(ui.userUnassignVehicle)))
 	mux.Handle("GET /admin/driver-setup", protect(http.HandlerFunc(ui.driverSetupPage)))
 	mux.Handle("GET /admin/trips", protect(http.HandlerFunc(ui.tripsPage)))
+	mux.Handle("GET /admin/trips/{id}", protect(http.HandlerFunc(ui.tripDetailPage)))
 	mux.Handle("GET /admin/reports", protect(http.HandlerFunc(ui.reportsPage)))
 	mux.Handle("GET /admin/health", protect(http.HandlerFunc(ui.healthPage)))
 	mux.Handle("POST /admin/trips/{id}/end", protect(http.HandlerFunc(ui.tripEnd)))
