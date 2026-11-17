@@ -622,42 +622,52 @@ type tripGroup struct {
 
 // runs splits the group into the runs of its trip that its riders are on. A
 // trip in frequencies.txt runs again and again on a service day, every run
-// under the one TripKey, so riders of two runs at once are one group. They
-// are told apart along the shape, a run ending wherever the next rider is
-// more than runSplitDistance on.
+// under the one TripKey, so riders of two runs at once are one group.
 //
-// A point a few seconds older than the rest is far behind a moving vehicle,
-// though its rider is on it, so riders are also compared where they would be
-// at the newest rider's point, each carried on at the speed their own point
-// gave, and two riders are on different runs only if they are more than
-// runSplitDistance apart both as their points stand and as carried on. The
-// carrying only brings riders together, so a run never ends between two
-// points the trim would keep in one estimate, and a point taken at speed
-// before the vehicle stopped cannot set its rider ahead of the rest. It is
-// bounded by what th allows of a vehicle: a speed past MaxSpeed is taken as
-// MaxSpeed, and no rider is carried past now, however far ahead a rider's
-// clock has put their point. A point with no speed is taken as it stands. A
-// trip run by timetable has one run a day, and its riders stay one group, as
-// far apart as they are.
+// They are first told apart as their points stand, a run ending wherever the
+// next rider is more than runSplitDistance on, so a run never ends between
+// two points the trim would keep in one estimate. But a point a few seconds
+// older than the rest is far behind a moving vehicle, though its rider is on
+// it, so neighbouring runs are then joined when their vehicles are within
+// runSplitDistance of each other now. A run's vehicle is where its newest
+// point would be at the newest rider's point, carried on at that point's
+// speed, no faster than MaxSpeed and no later than now, however far ahead a
+// rider's clock has put their point; a point with no speed is taken as it
+// stands. Only that newest point is carried, so a point taken at speed before
+// its vehicle stopped says nothing about where the vehicle is while a newer
+// point stands beside it. A run whose newest point is a stale one is carried
+// as far as that point says, and can join the run it reaches.
+//
+// A trip run by timetable has one run a day, and its riders stay one group,
+// as far apart as they are.
 func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 	if len(g.trip.frequencies) == 0 {
 		return []*tripGroup{g}
 	}
-	newest := slices.MaxFunc(g.members, func(x, y estimateMember) int { return x.timestamp.Compare(y.timestamp) }).timestamp
-	until := newest
+	byTime := func(x, y estimateMember) int { return x.timestamp.Compare(y.timestamp) }
+	until := slices.MaxFunc(g.members, byTime).timestamp
 	if now.Before(until) {
 		until = now
 	}
-	place := func(m estimateMember) float64 {
+	vehicle := func(members []estimateMember) float64 {
+		m := slices.MaxFunc(members, byTime)
 		return m.along + min(max(m.speed, 0), th.MaxSpeed)*max(0, until.Sub(m.timestamp).Seconds())
 	}
-	members := slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(place(x), place(y)) })
-	var runs []*tripGroup
+
+	members := slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(x.along, y.along) })
+	var standing [][]estimateMember
 	for i, m := range members {
-		if i == 0 || place(m)-place(members[i-1]) > runSplitDistance && math.Abs(m.along-members[i-1].along) > runSplitDistance {
+		if i == 0 || m.along-members[i-1].along > runSplitDistance {
+			standing = append(standing, nil)
+		}
+		standing[len(standing)-1] = append(standing[len(standing)-1], m)
+	}
+	var runs []*tripGroup
+	for _, ms := range standing {
+		if len(runs) == 0 || math.Abs(vehicle(ms)-vehicle(runs[len(runs)-1].members)) > runSplitDistance {
 			runs = append(runs, &tripGroup{trip: g.trip})
 		}
-		runs[len(runs)-1].members = append(runs[len(runs)-1].members, m)
+		runs[len(runs)-1].members = append(runs[len(runs)-1].members, ms...)
 	}
 	return runs
 }

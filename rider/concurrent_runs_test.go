@@ -177,10 +177,9 @@ func TestAggregator_RidersOfOneRunAreOneVehicle(t *testing.T) {
 	assert.Equal(t, 2, est[0].Riders)
 }
 
-// Riders are on different runs only if they are far apart both as their
-// points stand and where they would be at the newest rider's point, carried
-// on at their own point's speed, no faster than MaxSpeed and no later than
-// now.
+// Riders are on different runs only if they are far apart as their points
+// stand and their runs' vehicles are far apart now, each run's newest point
+// carried on at its speed, no faster than MaxSpeed and no later than now.
 func TestTripGroup_Runs(t *testing.T) {
 	f := newAggFixture(t)
 	headwayT1(f)
@@ -217,7 +216,16 @@ func TestTripGroup_Runs(t *testing.T) {
 			[][]string{{"b"}, {"a"}}},
 		{"a point taken at speed before the vehicle stopped does not set its rider apart",
 			[]estimateMember{rider("a", 500, 0, 0), rider("b", 480, 15, 60*time.Second)},
-			[][]string{{"a", "b"}}},
+			[][]string{{"b", "a"}}},
+		{"a point taken at speed before the vehicle stopped is not carried into the run ahead",
+			[]estimateMember{rider("B", 100, 0, 0), rider("A", 0, 15, 60*time.Second), rider("C", 700, 0, 0)},
+			[][]string{{"A", "B"}, {"C"}}},
+		{"a lone point carried on joins the run it reaches",
+			[]estimateMember{rider("X", 0, 0, 0), rider("Y", 300, 15, 35*time.Second), rider("Z", 800, 0, 0)},
+			[][]string{{"X"}, {"Y", "Z"}}},
+		{"a lone point carried on past the run ahead is another run",
+			[]estimateMember{rider("A", 0, 15, 80*time.Second), rider("C", 700, 0, 0)},
+			[][]string{{"A"}, {"C"}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
