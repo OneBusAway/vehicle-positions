@@ -8,6 +8,9 @@ on:
     branches: [main]
     paths: ['android/**', '.github/workflows/android.yml']
 
+permissions:
+  contents: read
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -105,3 +108,14 @@ jobs:
           disable-animations: true
           working-directory: android
           script: ./gradlew :app:connectedDebugAndroidTest
+      # Gradle's log says only "There were failing tests". The report names the test, and the results hold each
+      # test's logcat. Named by attempt, so each re-run of a failed job keeps its own.
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-report-${{ github.run_attempt }}
+          path: |
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
+          retention-days: 7
