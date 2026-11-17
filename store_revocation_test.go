@@ -227,7 +227,7 @@ func TestDemotedAdmin_LosesAdminAccessAtOnce(t *testing.T) {
 		requireAdminPage(testSecret, store)(next).ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusSeeOther, w.Code)
-		assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+		assert.Equal(t, loginLocation(http.MethodGet, "/admin/users"), w.Header().Get("Location"))
 		assert.False(t, reached)
 	})
 }

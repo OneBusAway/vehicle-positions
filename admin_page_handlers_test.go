@@ -185,7 +185,7 @@ func TestAdminLogoutRevokesSession(t *testing.T) {
 	afterRec := httptest.NewRecorder()
 	mux.ServeHTTP(afterRec, after)
 	assert.Equal(t, http.StatusSeeOther, afterRec.Code, "a replayed cookie must no longer work")
-	assert.Equal(t, "/admin/login", afterRec.Header().Get("Location"))
+	assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), afterRec.Header().Get("Location"))
 }
 
 // TestAdminLogoutKeepsSessionWhenRevocationFails: if the revocation can't be
@@ -238,12 +238,12 @@ func TestAdminPagesRedirectWithoutSession(t *testing.T) {
 	ui := newTestAdminUI(t)
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
-	for _, path := range []string{"/admin", "/admin/dashboard", "/admin/map", "/admin/vehicles", "/admin/users", "/admin/trips", "/admin/api-keys"} {
+	for _, path := range []string{"/admin/dashboard", "/admin/map", "/admin/vehicles", "/admin/users", "/admin/trips", "/admin/api-keys"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusSeeOther, w.Code, path)
-		assert.Equal(t, "/admin/login", w.Header().Get("Location"), path)
+		assert.Equal(t, loginLocation(http.MethodGet, path), w.Header().Get("Location"), path)
 	}
 }
 

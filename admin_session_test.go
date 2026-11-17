@@ -57,7 +57,7 @@ func TestRequireAdminPage(t *testing.T) {
 			h.ServeHTTP(w, req)
 			assert.Equal(t, tc.want, w.Code)
 			if tc.want == http.StatusSeeOther {
-				assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+				assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), w.Header().Get("Location"))
 			}
 		})
 	}
@@ -114,7 +114,7 @@ func TestAdminCookiePath_RejectsRevokedToken(t *testing.T) {
 	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusSeeOther, w.Code, "a revoked session cookie must not reach an admin page")
-	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), w.Header().Get("Location"))
 	assert.False(t, reached, "the page handler must not run")
 }
 
@@ -134,7 +134,7 @@ func TestAdminCookiePath_CheckerErrorFailsClosed(t *testing.T) {
 	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusSeeOther, w.Code)
-	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), w.Header().Get("Location"))
 }
 
 func TestRevokeSessionCookie(t *testing.T) {
@@ -216,6 +216,6 @@ func TestAdminCookiePath_RejectsDeactivatedAdmin(t *testing.T) {
 	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusSeeOther, w.Code)
-	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), w.Header().Get("Location"))
 	assert.False(t, reached)
 }

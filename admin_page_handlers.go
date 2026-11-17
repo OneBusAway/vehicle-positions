@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -177,11 +178,12 @@ func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ui *adminUI) loginPage(w http.ResponseWriter, r *http.Request) {
+	next := loginNext(r.URL.Query().Get("next"))
 	if _, ok := adminClaimsFromCookie(r, ui.jwtSecret, ui.tokenChecker); ok {
-		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+		http.Redirect(w, r, cmp.Or(next, "/admin/dashboard"), http.StatusSeeOther)
 		return
 	}
-	ui.renderLogin(w, http.StatusOK, "", "")
+	ui.renderLogin(w, http.StatusOK, "", "", next)
 }
 
 // loginSubmit authenticates the form POST. Failure responses are
@@ -192,60 +194,61 @@ func (ui *adminUI) loginPage(w http.ResponseWriter, r *http.Request) {
 // Active only after the password compare succeeds.
 func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		ui.renderLogin(w, http.StatusBadRequest, "Invalid form submission.", "")
+		ui.renderLogin(w, http.StatusBadRequest, "Invalid form submission.", "", "")
 		return
 	}
+	next := loginNext(r.PostFormValue("next"))
 	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
 	if email == "" || password == "" {
-		ui.renderLogin(w, http.StatusUnprocessableEntity, "Email and password are required.", email)
+		ui.renderLogin(w, http.StatusUnprocessableEntity, "Email and password are required.", email, next)
 		return
 	}
 	if !ui.loginLimiter.Allow(clientIP(r, ui.cfg.trustProxy), email) {
-		ui.renderLogin(w, http.StatusTooManyRequests, "Too many attempts, try again shortly.", email)
+		ui.renderLogin(w, http.StatusTooManyRequests, "Too many attempts, try again shortly.", email, next)
 		return
 	}
 	user, err := ui.users.GetUserByEmail(r.Context(), email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
-			ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email)
+			ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email, next)
 			return
 		}
 		slog.Error("admin login: database error", "error", err)
-		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email)
+		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email, next)
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email)
+		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email, next)
 		return
 	}
 	if !user.Active {
-		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email)
+		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email, next)
 		return
 	}
 	// Successful authentication: legitimate logins aren't counted toward the
 	// brute-force budget (mirrors handleLogin in auth.go).
 	ui.loginLimiter.RecordSuccess(clientIP(r, ui.cfg.trustProxy), email)
 	if user.Role != roleAdmin {
-		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email)
+		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email, next)
 		return
 	}
 	token, err := generateJWT(user, ui.jwtSecret, sessionLifetime)
 	if err != nil {
 		slog.Error("admin login: token generation failed", "error", err)
-		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email)
+		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email, next)
 		return
 	}
 	setSessionCookie(w, r, token, ui.cfg.trustProxy)
-	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+	http.Redirect(w, r, cmp.Or(next, "/admin/dashboard"), http.StatusSeeOther)
 }
 
 // renderLogin renders the login form with the given status (renderInto
 // writes the status line after a successful render).
-func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email string) {
+func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email, next string) {
 	renderInto(w, status, ui.tmpl.public, "login.html", "login.html", map[string]interface{}{
-		"Title": "Sign In", "Error": errMsg, "Email": email,
+		"Title": "Sign In", "Error": errMsg, "Email": email, "Next": next,
 	})
 }
 

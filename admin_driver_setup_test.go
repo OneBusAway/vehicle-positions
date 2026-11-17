@@ -156,7 +156,7 @@ func TestDriverSetupPage_RequiresAdminSession(t *testing.T) {
 			w := httptest.NewRecorder()
 			mux.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusSeeOther, w.Code)
-			assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+			assert.Equal(t, loginLocation(http.MethodGet, "/admin/driver-setup"), w.Header().Get("Location"))
 		})
 	}
 
