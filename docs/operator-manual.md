@@ -349,13 +349,15 @@ takes about ten minutes. Before you start, make sure the driver has an account
      time, whatever time zone the phone is set to. Of the runs not over yet, the
      one starting nearest the current time is marked: **Now** once it has
      started, **Next** before that. Tap the run the driver is about to drive.
+     The app asks first, for example **Start the 6:43 AM run?** over the route,
+     where the run goes and the vehicle; check them and tap **Start trip**.
      **No runs on route 7 today** means the schedule has no service on that
      route today.
 
    The route and trip the app reports both come from the schedule, so as long
    as OneBusAway uses the same GTFS feed (your IT contact sets this up), it can
    place the bus on the exact scheduled trip.
-6. If the phone has not yet allowed everything the app needs, tapping a run
+6. If the phone has not yet allowed everything the app needs, **Start trip**
    opens **Before you start**: six rows, each saying why the app needs it. Work
    through it with the driver; this is the step drivers get wrong on their
    own. Tap **Continue** and Android asks about each in turn, and each row then

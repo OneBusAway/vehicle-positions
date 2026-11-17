@@ -223,8 +223,10 @@ it on its own, before or after the rest.
 4. **Choose a run** lists that route's runs for the agency's service date, one
    row per run: the start time over the headsign. The clock times are the
    agency's, not the phone's: with the fixture's `America/Los_Angeles` schedule,
-   `8:00 AM` over `North` reads the same on a phone set to any timezone. Tap it.
-5. On a fresh install the run opens **Before you start**, a checklist of what
+   `8:00 AM` over `North` reads the same on a phone set to any timezone. Tap it:
+   **Start the 8:00 AM run?** asks first, over the route, `North` and the
+   vehicle. Tap **Start trip**.
+5. On a fresh install **Start trip** opens **Before you start**, a checklist of what
    the app needs. Tap **Continue** and answer Android's prompts as they come:
    location (precise, while using the app), the location settings page for
    "Allow all the time", notifications (allow), the battery exemption (allow or
