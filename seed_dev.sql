@@ -7,7 +7,7 @@ VALUES (
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'driver'
 )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT ((lower(email))) DO NOTHING;
 
 -- Seed a test admin for local development
 -- Email: admin@test.com  |  Password: password
@@ -18,7 +18,7 @@ VALUES (
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'admin'
 )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT ((lower(email))) DO NOTHING;
 
 -- Seed a feed API key for local development only. The raw key below is public
 -- in this file, so it must never be used anywhere but a local machine; real
