@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path"
 	"strconv"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -140,13 +143,41 @@ func requireAdminPage(secret []byte, checker TokenChecker) func(http.Handler) ht
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := adminClaimsFromCookie(r, secret, checker)
 			if !ok {
-				http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+				http.Redirect(w, r, loginURL(r), http.StatusSeeOther)
 				return
 			}
 			ctx := contextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// loginURL sends a GET on to the login page with the page it asked for, so
+// signing in can return there. Any other method gets the plain login page:
+// sign-in returns with a GET, which cannot resend a form.
+func loginURL(r *http.Request) string {
+	if r.Method != http.MethodGet {
+		return "/admin/login"
+	}
+	return "/admin/login?" + url.Values{"next": {r.URL.RequestURI()}}.Encode()
+}
+
+// loginNext returns the admin page a sign-in may return to, or "" when raw
+// is not one. next arrives in a link anyone can write, so only a local page
+// under /admin/ is accepted: a scheme or host would send the admin off the
+// site, and a path that cleans to somewhere else, or to the login or logout
+// page, is not a page to return to. The result is rebuilt from the cleaned
+// path, so it always starts with /admin/ whatever the raw text held.
+func loginNext(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "" || u.Host != "" {
+		return ""
+	}
+	p := path.Clean(u.Path)
+	if !strings.HasPrefix(p, "/admin/") || p == "/admin/login" || p == "/admin/logout" {
+		return ""
+	}
+	return (&url.URL{Path: p, RawQuery: u.RawQuery}).RequestURI()
 }
 
 func setFlash(w http.ResponseWriter, code string) {

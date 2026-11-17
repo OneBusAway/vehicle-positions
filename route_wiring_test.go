@@ -455,7 +455,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusSeeOther, w.Code, "unauthenticated request to %s %s must redirect", tc.method, tc.path)
-			assert.Equal(t, "/admin/login", w.Header().Get("Location"), "%s %s", tc.method, tc.path)
+			assert.Equal(t, loginLocation(tc.method, tc.path), w.Header().Get("Location"), "%s %s", tc.method, tc.path)
 		})
 
 		t.Run("driver session "+tc.method+" "+tc.path, func(t *testing.T) {
@@ -464,7 +464,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, req)
 			assert.Equal(t, http.StatusSeeOther, w.Code, "driver session on %s %s must redirect, not reach the handler", tc.method, tc.path)
-			assert.Equal(t, "/admin/login", w.Header().Get("Location"), "%s %s", tc.method, tc.path)
+			assert.Equal(t, loginLocation(tc.method, tc.path), w.Header().Get("Location"), "%s %s", tc.method, tc.path)
 		})
 	}
 }

@@ -225,7 +225,7 @@ func TestReportsPage_SignedOut(t *testing.T) {
 
 	page := serve(h, "/admin/reports?date=2026-09-02", nil)
 	assert.Equal(t, http.StatusSeeOther, page.Code)
-	assert.Equal(t, "/admin/login", page.Header().Get("Location"))
+	assert.Equal(t, loginLocation(http.MethodGet, "/admin/reports?date=2026-09-02"), page.Header().Get("Location"))
 
 	api := serve(h, "/api/v1/admin/reports/service?date=2026-09-02&format=csv", nil)
 	assert.Equal(t, http.StatusUnauthorized, api.Code)

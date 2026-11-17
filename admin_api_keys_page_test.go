@@ -515,7 +515,7 @@ func TestAPIKeyRoutes_SignedOutGoToLogin(t *testing.T) {
 				h.ServeHTTP(w, req)
 
 				assert.Equal(t, http.StatusSeeOther, w.Code)
-				assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+				assert.Equal(t, loginLocation(route.method, route.path), w.Header().Get("Location"))
 				assert.Zero(t, store.created+store.deactivated, "a request without an admin session must not reach the store")
 				assert.NotContains(t, w.Body.String(), "Feed API keys")
 			})

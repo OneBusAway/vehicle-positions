@@ -277,7 +277,7 @@ func TestHealthPage_SignedOutIsRefused(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin/health", nil))
 	assert.Equal(t, http.StatusSeeOther, w.Code)
-	assert.Equal(t, "/admin/login", w.Header().Get("Location"))
+	assert.Equal(t, loginLocation(http.MethodGet, "/admin/health"), w.Header().Get("Location"))
 
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/admin/health", nil))
