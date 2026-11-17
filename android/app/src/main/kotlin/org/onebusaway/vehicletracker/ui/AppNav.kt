@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -172,10 +175,11 @@ internal fun NavController.toBusStep() {
 /**
  * Only the step the app opened by itself skips. One the driver asked for shows the one vehicle, rather than bouncing
  * back. Nor does it skip once the driver has confirmed Sign out: the assignments can land behind the Sign out dialog,
- * and the skip would take a driver who is signing out on to the route step.
+ * and the skip would take a driver who is signing out on to the route step. Nor while the step is not [onTop]: the
+ * assignments can land as Help opens over it, and the skip would close Help.
  */
-internal fun skipsOnlyVehicle(route: String?, account: AccountUiState): Boolean =
-    route == ROUTE_VEHICLES && !account.signingOut
+internal fun skipsOnlyVehicle(route: String?, account: AccountUiState, onTop: Boolean): Boolean =
+    route == ROUTE_VEHICLES && onTop && !account.signingOut
 
 /**
  * How the app leaves the bus step when the driver has only one bus: the route step takes its place. Left on the back
@@ -521,16 +525,23 @@ private fun NavGraphBuilder.vehicleStep(route: String, navController: NavControl
         val openRoutes = remember(backStackEntry) {
             backStackEntry.ifResumed<String> { vehicleId -> navController.navigate("trip/${arg(vehicleId)}") }
         }
+        // The one vehicle, once its assignment has landed. The skip waits while Help is over this step rather than
+        // being dropped: the screen names the vehicle once, and the back gesture brings the step back without asking
+        // it again.
+        var onlyVehicle by remember { mutableStateOf<String?>(null) }
+        val onTop = navController.currentBackStackEntryAsState().value?.id == backStackEntry.id
+        LaunchedEffect(onlyVehicle, onTop) {
+            val vehicleId = onlyVehicle ?: return@LaunchedEffect
+            if (skipsOnlyVehicle(route, account.uiState.value, onTop)) {
+                navController.navigate("trip/${arg(vehicleId)}", skipBusStep)
+            }
+        }
         PickerStep(navController) {
             VehicleScreen(
                 onVehicleSelected = openRoutes,
                 // Not a tap: it fires once the assignments load, which can be while this screen is still sliding in,
                 // and a guard would drop it.
-                onOnlyVehicle = { vehicleId ->
-                    if (skipsOnlyVehicle(route, account.uiState.value)) {
-                        navController.navigate("trip/${arg(vehicleId)}", skipBusStep)
-                    }
-                },
+                onOnlyVehicle = { vehicleId -> onlyVehicle = vehicleId },
                 // Not a tap: it fires when the reply lands, and a guard would drop it.
                 onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 // Not a tap either: it fires once the phone has forgotten the driver.
