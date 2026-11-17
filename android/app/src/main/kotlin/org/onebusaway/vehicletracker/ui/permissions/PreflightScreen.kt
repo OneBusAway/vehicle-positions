@@ -3,8 +3,12 @@ package org.onebusaway.vehicletracker.ui.permissions
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,7 +33,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -37,9 +46,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -112,12 +124,30 @@ internal fun PreflightContent(
     }
 }
 
-/** One thing the app needs. When its answer comes in, its marker and state change in place, with a quick fade. */
+/**
+ * One thing the app needs. When its answer comes in, its marker and state change in place, with a quick fade. When the
+ * screen sees it become allowed, the row ticks instead: the icon turns into a check and the row settles.
+ */
 @Composable
 private fun PreflightRow(row: ChecklistRow, onAction: () -> Unit) {
     val text = textOf(row.row)
+    val allowed = row.state == RowState.ALLOWED
+    // Once a row has shown allowed, it never ticks: asking Android again for precise location takes the location row
+    // back to Next, and the same grant would tick twice.
+    var shownAllowed by remember { mutableStateOf(allowed) }
+    val ticks = remember(allowed) { allowed && !shownAllowed }
+    val dip = remember { Animatable(0f) }
+    LaunchedEffect(ticks) {
+        if (!ticks) return@LaunchedEffect
+        shownAllowed = true
+        dip.animateTo(0f, AppMotion.defaultSpatialSpec(), initialVelocity = SETTLE_PUSH)
+    }
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp).padding(horizontal = 24.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 76.dp)
+            .graphicsLayer { translationY = dip.value.dp.toPx() }
+            .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -126,8 +156,8 @@ private fun PreflightRow(row: ChecklistRow, onAction: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AnimatedContent(row.state.marker, transitionSpec = { crossFade() }, label = "marker") { marker ->
-                Marker(marker, text.icon)
+            AnimatedContent(row.state.marker, transitionSpec = { if (ticks) tick() else crossFade() }, label = "marker") {
+                Marker(it, text.icon)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(stringResource(text.title), style = MaterialTheme.typography.titleMedium)
@@ -138,10 +168,38 @@ private fun PreflightRow(row: ChecklistRow, onAction: () -> Unit) {
                 )
             }
         }
-        AnimatedContent(row.state, transitionSpec = { crossFade() }, label = "state") { state ->
+        val label = labelOf(row.state)
+        val said = label?.let { stringResource(R.string.preflight_row_state, stringResource(text.title), stringResource(it)) }
+        AnimatedContent(
+            targetState = row.state,
+            // The words fade from one state to the next, but one node says the state, with the row's name, so TalkBack
+            // reads a change once. They take their new width at once: a width that grew frame by frame would wrap the
+            // row's reason again on every frame.
+            modifier = if (actionOf(row.state) == null) {
+                Modifier.clearAndSetSemantics {
+                    said?.let { contentDescription = it }
+                    liveRegion = LiveRegionMode.Polite
+                }
+            } else {
+                Modifier.semantics {}
+            },
+            transitionSpec = { crossFade() using null },
+            label = "state",
+        ) { state ->
             RowEnd(state, onAction)
         }
     }
+}
+
+/** How fast the row is pushed down as it ticks: with [AppMotion.defaultSpatialSpec], about 2 dp at most, and back. */
+private const val SETTLE_PUSH = 134f
+
+/** The check grows in on the spring for something small landing, while the icon shrinks away. */
+private fun tick(): ContentTransform {
+    val checkIn = fadeIn(AppMotion.defaultEffectsSpec()) + scaleIn(AppMotion.expressiveFastSpatialSpec(), initialScale = 0.5f)
+    val iconOut = fadeOut(AppMotion.fastEffectsSpec()) + scaleOut(AppMotion.defaultSpatialSpec(), targetScale = 0.6f)
+    // No size change to animate, and a clip would cut the check as it settles a little past its size and back.
+    return ContentTransform(checkIn, iconOut, sizeTransform = null)
 }
 
 private fun crossFade() = fadeIn(AppMotion.defaultEffectsSpec()) togetherWith fadeOut(AppMotion.defaultEffectsSpec())
@@ -155,29 +213,36 @@ private fun whyOf(state: RowState): Int? = when (state) {
     else -> null
 }
 
-/** The state in words at the end of the row, which TalkBack reads out as it changes; or the action that unblocks it. */
+/** The action that unblocks a row, or null when the driver has nothing to do there. */
+@StringRes
+private fun actionOf(state: RowState): Int? = when (state) {
+    RowState.NEEDED, RowState.APPROXIMATE, RowState.OFF -> R.string.preflight_try_again
+    RowState.NEEDED_IN_SETTINGS -> R.string.preflight_open_settings
+    else -> null
+}
+
+/** A row's state in words, or null for a row not reached yet or one with an action. */
+@StringRes
+private fun labelOf(state: RowState): Int? = when (state) {
+    RowState.ALLOWED -> R.string.preflight_allowed
+    RowState.SKIPPED -> R.string.preflight_skipped
+    RowState.NEXT -> R.string.preflight_next
+    else -> null
+}
+
+/** The state in words at the end of the row, or the action that unblocks it. */
 @Composable
 private fun RowEnd(state: RowState, onAction: () -> Unit) {
-    val action = when (state) {
-        RowState.NEEDED, RowState.APPROXIMATE, RowState.OFF -> R.string.preflight_try_again
-        RowState.NEEDED_IN_SETTINGS -> R.string.preflight_open_settings
-        else -> null
-    }
+    val action = actionOf(state)
     if (action != null) {
         TextButton(onClick = onAction) { Text(stringResource(action)) }
         return
     }
-    val label = when (state) {
-        RowState.ALLOWED -> R.string.preflight_allowed
-        RowState.SKIPPED -> R.string.preflight_skipped
-        RowState.NEXT -> R.string.preflight_next
-        else -> return
-    }
+    val label = labelOf(state) ?: return
     Text(
         text = stringResource(label),
         style = MaterialTheme.typography.labelLarge,
         color = if (state == RowState.NEXT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
     )
 }
 
