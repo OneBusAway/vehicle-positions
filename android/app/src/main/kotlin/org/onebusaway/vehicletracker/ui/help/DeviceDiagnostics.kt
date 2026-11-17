@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.PowerManager
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import org.onebusaway.vehicletracker.ui.account.appVersion
@@ -23,6 +24,7 @@ internal fun deviceFacts(context: Context): DeviceFacts = DeviceFacts(
     sdk = Build.VERSION.SDK_INT,
     phone = "${Build.MANUFACTURER} ${Build.MODEL}",
     grants = grantsOf(context),
+    notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled(),
     locationServicesOn = context.getSystemService(LocationManager::class.java)?.let(LocationManagerCompat::isLocationEnabled) == true,
 )
 

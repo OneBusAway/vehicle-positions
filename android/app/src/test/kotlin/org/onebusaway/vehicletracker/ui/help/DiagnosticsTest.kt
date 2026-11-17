@@ -16,6 +16,7 @@ class DiagnosticsTest {
         sdk = 36,
         phone = "Google Pixel 5",
         grants = Grants(sdk = 36, fine = true, coarse = true, background = false, notifications = true, batteryExempt = false),
+        notificationsOn = true,
         locationServicesOn = true,
     )
 
@@ -54,11 +55,43 @@ class DiagnosticsTest {
 
     @Test fun `a permission Android has not given reads as not allowed, and location services off as off`() {
         val text = diagnosticsText(
-            device.copy(grants = Grants(36, fine = false, coarse = true, background = false, notifications = false, batteryExempt = true), locationServicesOn = false),
+            device.copy(
+                grants = Grants(
+                    sdk = 36,
+                    fine = false,
+                    coarse = true,
+                    background = false,
+                    notifications = false,
+                    batteryExempt = true,
+                ),
+                notificationsOn = false,
+                locationServicesOn = false,
+            ),
             signedIn("https://tracker.example.org"),
         )
 
         assertTrue(text, text.contains("Location: allowed\nPrecise location: not allowed\nAll the time: not allowed\nNotifications: not allowed\nBattery: allowed\nLocation services: off"))
+    }
+
+    @Test fun `below Android 13, notifications turned off in Settings read as not allowed`() {
+        // There is no permission to refuse on Android 12, so the checklist's grants count notifications as allowed.
+        val android12 = device.copy(
+            androidRelease = "12",
+            sdk = 31,
+            grants = Grants(
+                sdk = 31,
+                fine = true,
+                coarse = true,
+                background = true,
+                notifications = false,
+                batteryExempt = true,
+            ),
+            notificationsOn = false,
+        )
+
+        val text = diagnosticsText(android12, signedIn("https://tracker.example.org"))
+
+        assertTrue(text, text.contains("\nNotifications: not allowed\n"))
     }
 
     @Test fun `of the session only the host gets out, not the email, a token, a password, a path or a query`() {

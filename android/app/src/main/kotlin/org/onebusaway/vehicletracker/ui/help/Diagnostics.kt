@@ -16,6 +16,8 @@ internal data class DeviceFacts(
     val sdk: Int,
     val phone: String,
     val grants: Grants,
+    /** Whether the app's notifications are on, which a driver can turn off on any Android version. */
+    val notificationsOn: Boolean,
     val locationServicesOn: Boolean,
 )
 
@@ -30,6 +32,8 @@ internal fun diagnosticsText(device: DeviceFacts, session: Session): String = bu
     // The checklist's rows, under its names.
     val rows = PermissionRow.entries.map { row ->
         val state = when (row) {
+            // The checklist counts notifications as allowed below Android 13, where there is nothing to ask for.
+            PermissionRow.NOTIFICATIONS -> if (device.notificationsOn) "allowed" else "not allowed"
             PermissionRow.LOCATION_SERVICES -> if (device.locationServicesOn) "on" else "off"
             else -> if (device.grants.allows(row)) "allowed" else "not allowed"
         }
