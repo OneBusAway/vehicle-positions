@@ -179,6 +179,8 @@ class LocationTrackingService : Service() {
             // again after a relaunch, as on iOS.
             val geometry = runBlocking { tripGeometryStore.loadFor(trip) }
             adherenceTracker = AdherenceTracker(geometry)
+            // Before the trip shows as active, so a trip resumed after the app was killed never shows "0 sent".
+            runBlocking { tripReporter.carryOnCount(trip) }
             initialized = true
             trackingRepository.update {
                 it.copy(active = true, tripStartedAtEpochSec = trip.startedAtEpochSec, geometry = geometry)

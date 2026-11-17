@@ -116,6 +116,14 @@ class FakeTripStateStore : TripStateStore {
         tripState.value?.takeIf { it.tripDbId == tripDbId }?.let { tripState.value = it.copy(occupancy = occupancy) }
     }
 
+    /** The trip id and its count. Read and written for the stored trip only, as [DataStoreTripStateStore] does. */
+    var sentState: Pair<Long, Int>? = null
+    override suspend fun sentCount(tripDbId: Long): Int =
+        sentState?.takeIf { (id, _) -> id == tripDbId && tripState.value?.tripDbId == tripDbId }?.second ?: 0
+    override suspend fun saveSentCount(tripDbId: Long, count: Int) {
+        if (tripState.value?.tripDbId == tripDbId) sentState = tripDbId to count
+    }
+
     /** Keeps the end under the trip's own driver, as [DataStoreTripStateStore] does. */
     override suspend fun endActiveTripLocally(signedInDriverId: String?) {
         tripState.value?.let { trip ->
