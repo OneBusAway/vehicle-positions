@@ -56,26 +56,10 @@ func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID st
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer rollbackTx(tx)
-	qtx := s.queries.WithTx(tx)
 
-	// A driver assigned to a deactivated vehicle could do nothing with it.
-	active, err := qtx.GetVehicleActiveForShare(ctx, vehicleID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrVehicleNotFoundFK
-	}
+	row, err := assignVehicle(ctx, s.queries.WithTx(tx), userID, vehicleID)
 	if err != nil {
-		return nil, fmt.Errorf("check vehicle active: %w", err)
-	}
-	if !active {
-		return nil, ErrVehicleInactive
-	}
-
-	row, err := qtx.AssignUserVehicle(ctx, db.AssignUserVehicleParams{
-		UserID:    userID,
-		VehicleID: vehicleID,
-	})
-	if err != nil {
-		return nil, classifyAssignmentError(err)
+		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit tx: %w", err)
@@ -86,6 +70,41 @@ func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID st
 		VehicleID: row.VehicleID,
 		CreatedAt: row.CreatedAt.Time,
 	}, nil
+}
+
+// assignVehicle assigns vehicleID to userID through q, which the caller runs in
+// a transaction so checkAssignableVehicle's lock holds until it commits.
+// CreateAssignment and the CSV import both assign through it.
+func assignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID string) (db.UserVehicle, error) {
+	if err := checkAssignableVehicle(ctx, q, vehicleID); err != nil {
+		return db.UserVehicle{}, err
+	}
+	row, err := q.AssignUserVehicle(ctx, db.AssignUserVehicleParams{
+		UserID:    userID,
+		VehicleID: vehicleID,
+	})
+	if err != nil {
+		return db.UserVehicle{}, classifyAssignmentError(err)
+	}
+	return row, nil
+}
+
+// checkAssignableVehicle refuses a vehicle that doesn't exist or is
+// deactivated: a driver assigned to a deactivated vehicle could do nothing
+// with it. The CSV import's preview asks it too, so the preview refuses
+// exactly what the assignment would.
+func checkAssignableVehicle(ctx context.Context, q *db.Queries, vehicleID string) error {
+	active, err := q.GetVehicleActiveForShare(ctx, vehicleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrVehicleNotFoundFK
+	}
+	if err != nil {
+		return fmt.Errorf("check vehicle active: %w", err)
+	}
+	if !active {
+		return ErrVehicleInactive
+	}
+	return nil
 }
 
 // classifyAssignmentError maps pgx constraint errors to domain errors.

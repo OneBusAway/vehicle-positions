@@ -78,6 +78,10 @@ var htmlUIRoutes = map[string]struct{}{
 	"POST /admin/users/{id}/vehicles":                    {},
 	"POST /admin/users/{id}/vehicles/{vehicleID}/remove": {},
 	"GET /admin/driver-setup":                            {},
+	"GET /admin/import/{kind}":                           {},
+	"GET /admin/import/{kind}/template.csv":              {},
+	"POST /admin/import/{kind}":                          {},
+	"POST /admin/import/{kind}/confirm":                  {},
 }
 
 // schemaStructs pairs a response schema with the Go struct whose JSON encoding

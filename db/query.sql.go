@@ -1416,6 +1416,50 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	return items, nil
 }
 
+const listUsersByEmailFold = `-- name: ListUsersByEmailFold :many
+SELECT id, name, email, role, active
+FROM users
+WHERE lower(email) = lower($1)
+ORDER BY id
+`
+
+type ListUsersByEmailFoldRow struct {
+	ID     int64
+	Name   string
+	Email  string
+	Role   string
+	Active bool
+}
+
+// Emails are stored as they were typed, and the CSV import lower-cases them,
+// so it finds an account whatever the case. Two stored addresses can differ
+// only in case, hence :many.
+func (q *Queries) ListUsersByEmailFold(ctx context.Context, email string) ([]ListUsersByEmailFoldRow, error) {
+	rows, err := q.db.Query(ctx, listUsersByEmailFold, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersByEmailFoldRow
+	for rows.Next() {
+		var i ListUsersByEmailFoldRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.Role,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsersByVehicle = `-- name: ListUsersByVehicle :many
 SELECT user_id, vehicle_id, created_at
 FROM user_vehicles

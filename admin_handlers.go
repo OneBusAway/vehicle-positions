@@ -31,6 +31,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 		"dashboard.html",
 		"driver_setup.html",
 		"health.html",
+		"import.html",
 		"map.html",
 		"reports.html",
 		"trips.html",
