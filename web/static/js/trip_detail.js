@@ -31,7 +31,9 @@
   }
   cfg.stops.forEach(s => {
     L.circleMarker([s.lat, s.lon], { radius: 5, color: "#475569", weight: 2, fillColor: "#ffffff", fillOpacity: 1 })
-      .bindTooltip(s.name)
+      // A stop name is the feed's text, never markup: a string tooltip
+      // would be parsed as HTML.
+      .bindTooltip(Object.assign(document.createElement("span"), { textContent: s.name }))
       .addTo(map);
   });
 
@@ -221,21 +223,33 @@
 
   // refreshSections replaces the parts of the page the server works out from
   // the trail (the header, the stops and the gaps) with a fresh copy of the
-  // page, so the stop times and gaps are worked out in one place.
+  // page, so the stop times and gaps are worked out in one place. It returns
+  // whether it did, so a failed attempt is made again on the next refresh.
   async function refreshSections() {
     const res = await fetch(location.href, { headers: { Accept: "text/html" } });
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+    // An expired session is sent to the sign-in page, which has no header.
+    if (!doc.getElementById("trip-header")) return false;
     ["trip-header", "trip-stops", "trip-gaps"].forEach(id => {
       const fresh = doc.getElementById(id);
       const old = document.getElementById(id);
       if (fresh && old) old.replaceWith(fresh);
     });
+    return true;
   }
 
   let timer = null;
+  // refreshing stops the timer and the tab coming back into view from
+  // starting a second refresh before the first ends, so an older answer can
+  // never land after a newer one.
+  let refreshing = false;
+  // sectionsStale is set while the page's sections are behind the trail.
+  let sectionsStale = false;
 
   async function refresh() {
+    if (refreshing) return;
+    refreshing = true;
     try {
       const data = await fetchTrail();
       const fresh = data.points || [];
@@ -244,14 +258,18 @@
       const changed = fresh.length !== points.length || (newest && last && newest.reported_at !== last.reported_at);
       const ended = data.trip && data.trip.status !== "active";
       if (changed) setPoints(fresh);
-      if (changed || ended) await refreshSections();
-      if (ended) {
+      if (changed || ended) sectionsStale = true;
+      if (sectionsStale) sectionsStale = !(await refreshSections());
+      // The page keeps polling until it shows the trip as ended.
+      if (ended && !sectionsStale) {
         cfg.active = false;
         clearInterval(timer);
         document.getElementById("trip-live-note")?.remove();
       }
     } catch (e) {
       console.error("trip refresh failed", e);
+    } finally {
+      refreshing = false;
     }
   }
 
