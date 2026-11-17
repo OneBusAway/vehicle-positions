@@ -100,9 +100,9 @@
     <!-- Over a picture of the Reports paused notification. -->
     <string name="welcome_habits_if_stops">If reporting stops</string>
 
-    <!-- A tip shown once to each driver, on the run board, pointing at the run under way. A tap on a run starts the trip at once. -->
-    <string name="tip_run_board_title">Tap your run to start</string>
-    <string name="tip_run_board_text">The trip starts at once. Riders see your vehicle from then on.</string>
+    <!-- A tip shown once to each driver, on the run board, pointing at the run under way. A tap on a run asks first, and the text names that dialog's button, runs_start_confirm. -->
+    <string name="tip_run_board_title">Tap your run</string>
+    <string name="tip_run_board_text">Then tap Start trip. Riders see your vehicle from then on.</string>
     <!-- A tip shown once, on the driver's first trip and before the vehicle moves, pointing at the "N sent" count. -->
     <string name="tip_sent_count_title">Reports sent</string>
     <string name="tip_sent_count_text">This number grows while riders can see you. No signal? Keep driving. Reports are saved and sent later.</string>
@@ -239,6 +239,20 @@
     <string name="runs_row_run_block">%1$s · %2$s</string>
     <!-- What TalkBack says on the run being started. -->
     <string name="runs_starting">Starting\u2026</string>
+    <!-- The dialog a run tap opens before the trip starts: the run's start time as the board shows it, e.g. "Start the 6:43 AM run?". -->
+    <string name="runs_start_title">Start the %1$s run?</string>
+    <!-- Under the title: the route's short name, the run's headsign, then the vehicle, e.g. "Route 7 to Downtown Seattle on vehicle 4317." -->
+    <string name="runs_start_message">Route %1$s to %2$s on vehicle %3$s.</string>
+    <!-- Under the title, for a run whose feed gave no headsign: the route's short name, then the vehicle. -->
+    <string name="runs_start_message_no_headsign">Route %1$s on vehicle %2$s.</string>
+    <!-- Under the title, for a route whose feed gave no short name: the run's headsign, then the vehicle. -->
+    <string name="runs_start_message_unnamed">To %1$s on vehicle %2$s.</string>
+    <!-- Under the title, when the feed gave neither a short name nor a headsign: the vehicle. -->
+    <string name="runs_start_message_vehicle">On vehicle %1$s.</string>
+    <!-- The dialog's button that starts the trip. The run board's tip names it. -->
+    <string name="runs_start_confirm">Start trip</string>
+    <!-- The dialog's button that closes it, starting nothing. -->
+    <string name="runs_start_cancel">Cancel</string>
     <string name="runs_error_message">Couldn\'t load the runs</string>
     <string name="runs_error_detail">Check your connection and try again.</string>
     <string name="runs_retry_button">Try again</string>

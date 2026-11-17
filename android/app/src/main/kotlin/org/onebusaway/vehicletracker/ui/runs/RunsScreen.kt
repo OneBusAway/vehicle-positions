@@ -119,8 +119,11 @@ fun RunsScreen(
         }
     }
 
-    // The permission sequence has no argument to carry the tapped run through, so the run waits
-    // here until it comes back ready. Try again on a refused start reuses it.
+    // The run tapped, while the dialog asks whether to start it. Kept as an id, so a dialog back after a rotation shows
+    // the run as the board has it then.
+    var confirmingRunId by rememberSaveable { mutableStateOf<String?>(null) }
+    // The permission sequence has no argument to carry the confirmed run through, so the run waits
+    // here until it comes back ready. Try again on a refused start reuses it without asking again.
     var pendingRunId by rememberSaveable { mutableStateOf<String?>(null) }
     val permissionFlow = rememberPermissionFlow(
         onReady = { pendingRunId?.let(viewModel::onStartRun) },
@@ -141,10 +144,12 @@ fun RunsScreen(
                 onBusClick = onBusClick,
                 onRouteClick = onRouteClick,
                 onRunClick = { runId ->
-                    // The driver knows how a trip starts now, whether or not the tip had come yet.
+                    // The driver knows how a trip starts now, whether or not the tip had come yet. It closes as the
+                    // dialog opens, so it is never over it.
                     tipViewModel.onSeen()
-                    pendingRunId = runId
-                    permissionFlow.start()
+                    // A second tap before the dialog covers the board keeps it on the first run. Read off the state
+                    // now, so a run a reload has dropped does not hold the board.
+                    if (viewModel.uiState.value.runNamed(confirmingRunId) == null) confirmingRunId = runId
                 },
                 onReload = viewModel::retry,
                 onTryAgain = { pendingRunId?.let(viewModel::onStartRun) },
@@ -153,6 +158,19 @@ fun RunsScreen(
                 onSessionEnded = onSessionEnded,
                 account = { AccountMenu(onSignedOut, enabled = canSignOut(state)) },
                 tip = runTip,
+            )
+        }
+        state.runNamed(confirmingRunId)?.let { run ->
+            StartRunDialog(
+                run = run,
+                routeName = viewModel.route.shortName,
+                vehicleId = viewModel.vehicleId,
+                onStart = {
+                    confirmingRunId = null
+                    pendingRunId = run.id
+                    permissionFlow.start()
+                },
+                onCancel = { confirmingRunId = null },
             )
         }
         AnimatedVisibility(visible = permissionFlow.visible, enter = fadeThroughIn(), exit = fadeThroughOut()) {
