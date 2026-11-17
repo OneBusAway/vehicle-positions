@@ -47,8 +47,9 @@ type stats struct {
 const perDriverReportInterval = 5 * time.Second
 
 // provisionStagger spaces the driver logins out and provisionBackoff is how
-// long a refused one waits: the server allows ten logins per IP per minute, so
-// a refusal has to sit out most of that window.
+// long a refused one waits. Only failed logins count against the server's ten
+// per IP per minute, so a refusal comes from other clients behind the same
+// address and may have to wait out the rest of that minute.
 const (
 	provisionStagger  = 250 * time.Millisecond
 	provisionBackoff  = 12 * time.Second
@@ -445,8 +446,9 @@ func postJSON(ctx context.Context, client *http.Client, url, token string, body,
 	return nil
 }
 
-// loginWithRetry backs off past a 429 from the per-IP login limiter, which one
-// login per vehicle will reach on a run with more than ten of them.
+// loginWithRetry backs off past a 429 from the per-IP login limiter. A
+// successful login hands its attempt back, so the simulator's own logins don't
+// use that budget up, however many vehicles the run has.
 func loginWithRetry(ctx context.Context, client *http.Client, baseURL, email, password string) (tokenResponse, error) {
 	var lastErr error
 	for attempt := 1; attempt <= provisionAttempts; attempt++ {
