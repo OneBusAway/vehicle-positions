@@ -23,6 +23,7 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
@@ -33,6 +34,7 @@ import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
+import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.LocationReportDto
@@ -785,6 +787,113 @@ class TripReporterTest {
         val sent = server.reportBodies()
         assertEquals(1, sent.size)
         assertFalse(sent[0].containsKey("occupancy_status"))
+        server.shutdown()
+    }
+
+    // --- The sent count, kept with the trip so the app can be killed without losing it ---
+
+    private fun MockWebServer.accepting(reports: Int) = repeat(reports) {
+        enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+    }
+
+    /** A store holding [trip], with [sent] kept as its count. */
+    private fun storing(trip: ActiveTrip, sent: Int? = null) = FakeTripStateStore().apply {
+        tripState.value = trip
+        sentState = sent?.let { trip.tripDbId to it }
+    }
+
+    @Test fun `every report the server takes is kept with its trip`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.accepting(2)
+        server.enqueue(MockResponse().setResponseCode(500).setBody("{}"))
+        val trips = storing(trip)
+        val (reporter, _) = reporterWith(server, trips = trips)
+
+        reporter.report(trip, fix(1000))
+        assertEquals(trip.tripDbId to 1, trips.sentState)
+        reporter.report(trip, fix(1010))
+        assertEquals(trip.tripDbId to 2, trips.sentState)
+        reporter.report(trip, fix(1020))
+        assertEquals("one the server did not take is not counted", trip.tripDbId to 2, trips.sentState)
+        assertEquals(3, server.requestCount)
+        server.shutdown()
+    }
+
+    @Test fun `a trip restarted after the app was killed carries on from the count it kept`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.accepting(1)
+        val trips = storing(trip, sent = 141)
+        // A new process: a tracking state and a reporter of its own, and the store as it was.
+        val (reporter, tracking) = reporterWith(server, trips = trips)
+
+        reporter.carryOnCount(trip)
+        assertEquals("shown before the first report goes", 141, tracking.state.value.fixesSent)
+
+        reporter.report(trip, fix())
+        assertEquals(142, tracking.state.value.fixesSent)
+        assertEquals(trip.tripDbId to 142, trips.sentState)
+        server.shutdown()
+    }
+
+    @Test fun `a report that lands as the service empties the tracking state counts on from the trip's count`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.accepting(1)
+        val trips = storing(trip, sent = 141)
+        val (reporter, tracking) = reporterWith(server, trips = trips)
+        reporter.carryOnCount(trip)
+
+        tracking.update { TrackingState() }
+        reporter.report(trip, fix())
+
+        assertEquals("not 1 over the trip's 141", trip.tripDbId to 142, trips.sentState)
+        server.shutdown()
+    }
+
+    @Test fun `a count that cannot be kept leaves the trip reporting`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.accepting(2)
+        val queue = FakeOfflineFixQueue()
+        val full = object : TripStateStore by storing(trip) {
+            override suspend fun saveSentCount(tripDbId: Long, count: Int) = throw IOException("No space left on device")
+        }
+        val (reporter, tracking) = reporterWith(server, queue = queue, trips = full)
+
+        reporter.report(trip, fix(1000))
+        reporter.report(trip, fix(1010))
+
+        assertEquals("both reports went", 2, server.requestCount)
+        assertEquals(2, tracking.state.value.fixesSent)
+        assertEquals("the server took them, so they are not a network failure", TrackingProblem.NONE, tracking.state.value.problem)
+        assertEquals(emptyList<LocationReportDto>(), queue.queued)
+        server.shutdown()
+    }
+
+    @Test fun `a count that cannot be read starts the trip from 0`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.accepting(1)
+        val unreadable = object : TripStateStore by storing(trip) {
+            override suspend fun sentCount(tripDbId: Long): Int = throw IOException("I/O error")
+        }
+        val (reporter, tracking) = reporterWith(server, trips = unreadable)
+
+        reporter.carryOnCount(trip)
+        reporter.report(trip, fix())
+
+        assertEquals(1, tracking.state.value.fixesSent)
+        server.shutdown()
+    }
+
+    @Test fun `a store failure that is not an IOException is not swallowed`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.accepting(1)
+        val broken = object : TripStateStore by storing(trip) {
+            override suspend fun saveSentCount(tripDbId: Long, count: Int) = throw IllegalStateException("a bug")
+        }
+        val (reporter, _) = reporterWith(server, trips = broken)
+
+        val thrown = runCatching { reporter.report(trip, fix()) }.exceptionOrNull()
+
+        assertTrue(thrown is IllegalStateException)
         server.shutdown()
     }
 }

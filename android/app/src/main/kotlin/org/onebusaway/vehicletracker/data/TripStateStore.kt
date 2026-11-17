@@ -6,10 +6,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -73,6 +75,19 @@ interface TripStateStore {
     suspend fun setOccupancy(tripDbId: Long, occupancy: OccupancyStatus?)
 
     /**
+     * How many of trip [tripDbId]'s reports the server took, as last kept: 0 when none were, and when that trip is no
+     * longer the stored one.
+     */
+    suspend fun sentCount(tripDbId: Long): Int
+
+    /**
+     * Keeps [count] as how many of trip [tripDbId]'s reports the server took, so the trip carries on from it after the
+     * app is killed. It goes with the trip, and nothing is written once that trip is no longer the stored one: a report
+     * that lands as the trip ends must not give its count to the next one.
+     */
+    suspend fun saveSentCount(tripDbId: Long, count: Int)
+
+    /**
      * Clears the active trip but keeps its server id in [unconfirmedEnds], under the driver who
      * started it, in one write so a crash between the two cannot lose it: the server keeps the
      * trip open until it hears the end, and refuses that driver's every start until then.
@@ -116,6 +131,7 @@ class DataStoreTripStateStore(
 
         /** An [OccupancyStatus] name. */
         val TRIP_OCCUPANCY = stringPreferencesKey("trip_occupancy")
+        val TRIP_SENT_COUNT = intPreferencesKey("trip_sent_count")
 
         /** A JSON list of [UnconfirmedEnd], oldest first. */
         val UNCONFIRMED_ENDS = stringPreferencesKey("unconfirmed_ends")
@@ -186,6 +202,7 @@ class DataStoreTripStateStore(
                 prefs.remove(Keys.TRIP_SERVER_URL)
             }
             prefs.writeOccupancy(trip.occupancy)
+            prefs.remove(Keys.TRIP_SENT_COUNT)
         }
     }
 
@@ -204,6 +221,17 @@ class DataStoreTripStateStore(
             this[Keys.TRIP_OCCUPANCY] = occupancy.name
         } else {
             remove(Keys.TRIP_OCCUPANCY)
+        }
+    }
+
+    override suspend fun sentCount(tripDbId: Long): Int {
+        val prefs = dataStore.data.first()
+        return prefs[Keys.TRIP_SENT_COUNT]?.takeIf { prefs[Keys.TRIP_DB_ID] == tripDbId } ?: 0
+    }
+
+    override suspend fun saveSentCount(tripDbId: Long, count: Int) {
+        dataStore.edit { prefs ->
+            if (prefs[Keys.TRIP_DB_ID] == tripDbId) prefs[Keys.TRIP_SENT_COUNT] = count
         }
     }
 
@@ -264,6 +292,7 @@ class DataStoreTripStateStore(
         remove(Keys.TRIP_DRIVER_ID)
         remove(Keys.TRIP_SERVER_URL)
         remove(Keys.TRIP_OCCUPANCY)
+        remove(Keys.TRIP_SENT_COUNT)
         remove(Keys.LEGACY_LOCATION_TRIP_ID)
     }
 

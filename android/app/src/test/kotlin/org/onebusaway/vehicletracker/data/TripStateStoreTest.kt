@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
@@ -360,5 +361,61 @@ class TripStateStoreTest {
         val restored = DataStoreTripStateStore(PreferenceDataStoreFactory.create(scope = after, produceFile = { file }), nairobi)
 
         assertEquals(trip7.copy(occupancy = OccupancyStatus.STANDING_ROOM_ONLY), restored.activeTrip.first())
+    }
+
+    // --- How many reports the server took, which belongs to the trip too ---
+
+    private val sentKey = intPreferencesKey("trip_sent_count")
+
+    @Test fun `the sent count is still there after the process is killed`() = runTest {
+        val file = File(tempFolder.newFolder(), "trip_state.preferences_pb")
+        val before = CoroutineScope(Job() + Dispatchers.IO)
+        val store = DataStoreTripStateStore(PreferenceDataStoreFactory.create(scope = before, produceFile = { file }), nairobi)
+        store.saveActiveTrip(trip7)
+        assertEquals("nothing is kept when a trip starts", 0, store.sentCount(7L))
+        store.saveSentCount(7L, 141)
+        store.saveSentCount(7L, 142)
+        before.coroutineContext[Job]!!.cancelAndJoin()
+
+        val after = CoroutineScope(Job() + Dispatchers.IO).also { scopes += it }
+        val restored = DataStoreTripStateStore(PreferenceDataStoreFactory.create(scope = after, produceFile = { file }), nairobi)
+
+        assertEquals(142, restored.sentCount(7L))
+        assertEquals("the trip itself reads back as it was", trip7, restored.activeTrip.first())
+    }
+
+    @Test fun `the sent count goes with the trip, however it ends`() = runTest {
+        val dataStore = newDataStore()
+        val store = DataStoreTripStateStore(dataStore, nairobi)
+
+        store.saveActiveTrip(trip7)
+        store.saveSentCount(7L, 141)
+        store.clearActiveTrip()
+        assertFalse("ended on the server", dataStore.data.first().contains(sentKey))
+
+        store.saveActiveTrip(trip7)
+        store.saveSentCount(7L, 141)
+        store.endActiveTripLocally(signedInDriverId = "1")
+        assertFalse("ended on this phone", dataStore.data.first().contains(sentKey))
+    }
+
+    @Test fun `a count kept for another trip is never used`() = runTest {
+        val store = DataStoreTripStateStore(newDataStore(), nairobi)
+        store.saveActiveTrip(trip7)
+        store.saveSentCount(7L, 141)
+
+        val trip8 = ActiveTrip(8L, "trip-0900", "bus-1", "5", "20260804", 200L)
+        store.saveActiveTrip(trip8)
+        assertEquals("the next trip starts from 0", 0, store.sentCount(8L))
+
+        store.saveSentCount(7L, 142)
+        assertEquals("a report of the trip before that lands late writes nothing", 0, store.sentCount(8L))
+
+        store.saveSentCount(8L, 3)
+        assertEquals("nor is the next trip's read for the one before", 0, store.sentCount(7L))
+        assertEquals(3, store.sentCount(8L))
+
+        store.saveActiveTrip(ActiveTrip(8L, "trip-1000", "bus-2", "5", "20260804", 300L, driverId = "2", serverUrl = "https://b.example.org/"))
+        assertEquals("the same id from another driver on another server is another trip", 0, store.sentCount(8L))
     }
 }

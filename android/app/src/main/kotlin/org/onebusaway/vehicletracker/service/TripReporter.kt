@@ -14,6 +14,7 @@ import org.onebusaway.vehicletracker.di.ElapsedMillisClock
 import retrofit2.HttpException
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
@@ -61,9 +62,32 @@ class TripReporter @Inject constructor(
     private var consecutiveTimestampRejects = 0
     private var currentSendProblem = TrackingProblem.NONE
 
+    /**
+     * How many of the trip's reports the server took. Kept here rather than read off the tracking state, which the
+     * service empties as it stops: a report that lands after that must not count on from 0 and save it over the trip's.
+     */
+    private val fixesSent = AtomicInteger(0)
+
     fun gpsAvailable(available: Boolean) {
         gpsAvailable = available
         refreshProblem(sendProblem = currentSendProblem)
+    }
+
+    /**
+     * Takes up [trip]'s sent count where the phone kept it, and shows it: a trip resumed after the app was killed, or
+     * restarted after a reboot, carries on from its count rather than from 0, as on iOS. Called as the service starts
+     * for the trip, before its first report.
+     */
+    suspend fun carryOnCount(trip: ActiveTrip) {
+        val kept = try {
+            tripStateStore.sentCount(trip.tripDbId)
+        } catch (e: IOException) {
+            // Nothing above this catches it, so it would crash the app as the trip starts: the count starts from 0.
+            Log.w(TAG, "Could not read the sent count of trip ${trip.tripDbId}", e)
+            0
+        }
+        fixesSent.set(kept)
+        tracking.update { it.copy(fixesSent = kept) }
     }
 
     /**
@@ -123,10 +147,12 @@ class TripReporter @Inject constructor(
             timestamp = fix.timeEpochSec,
             occupancyStatus = occupancy(trip),
         )
+        val sent: Int
         try {
             apiProvider.get().postLocation(dto)
             consecutiveTimestampRejects = 0
-            tracking.update { it.copy(fixesSent = it.fixesSent + 1) }
+            sent = fixesSent.incrementAndGet()
+            tracking.update { it.copy(fixesSent = sent) }
             refreshProblem(sendProblem = TrackingProblem.NONE)
         } catch (e: HttpException) {
             val is400WithTimestamp = e.code() == 400 &&
@@ -166,7 +192,24 @@ class TripReporter @Inject constructor(
             refreshProblem(sendProblem = TrackingProblem.NO_NETWORK)
             return false
         }
+        keepSentCount(trip, sent)
         return true
+    }
+
+    /**
+     * Writes the count down at every report the server takes, as iOS does, so the app can be killed at any moment
+     * without losing any of it. Reports go out at most every [MIN_REPORT_GAP_MS], and each write is one small file
+     * beside a request that has just gone over the network. It is made before the next report can start, so two
+     * writes never land out of order.
+     */
+    private suspend fun keepSentCount(trip: ActiveTrip, sent: Int) {
+        try {
+            tripStateStore.saveSentCount(trip.tripDbId, sent)
+        } catch (e: IOException) {
+            // A full disk, say. Nothing above this catches it, so it would crash the app mid-trip: the count is the
+            // lesser loss.
+            Log.w(TAG, "Could not keep the sent count of trip ${trip.tripDbId}", e)
+        }
     }
 
     /**
