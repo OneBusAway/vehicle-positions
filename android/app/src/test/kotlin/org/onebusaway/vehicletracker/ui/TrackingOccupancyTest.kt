@@ -14,6 +14,7 @@ import org.junit.Before
 import org.junit.Test
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.data.FakeMapFileSource
+import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FakeServiceController
 import org.onebusaway.vehicletracker.data.FakeSessionStore
 import org.onebusaway.vehicletracker.data.FakeTripGeometryStore
@@ -23,6 +24,7 @@ import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TripRepository
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.WaitingReports
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.ui.tracking.TrackingViewModel
 import org.onebusaway.vehicletracker.ui.tracking.TripEnder
@@ -41,7 +43,8 @@ class TrackingOccupancyTest {
         val sessions = FakeSessionStore()
         val api = TrackerApiProvider { error("ending the trip is not part of these tests") }
         val ender = TripEnder(TripRepository(api, store, FakeVehiclePrefsStore(), sessions, clock = { 0L }), store, FakeTripGeometryStore(), FakeServiceController(), sessions)
-        return TrackingViewModel(TrackingRepository(), store, ender, FakeMapFileSource()).also { advanceUntilIdle() }
+        val waiting = WaitingReports(FakeOfflineFixQueue(), sessions)
+        return TrackingViewModel(TrackingRepository(), store, ender, FakeMapFileSource(), waiting).also { advanceUntilIdle() }
     }
 
     private fun TestScope.tap(vm: TrackingViewModel, occupancy: OccupancyStatus): OccupancyStatus? {

@@ -31,6 +31,7 @@ class TrackingNotificationTest {
         nextStop = null,
         zone = null,
         problem = TrackingProblem.NONE,
+        waiting = null,
     )
     private val both = setOf("tracking", "tracking_attention")
 

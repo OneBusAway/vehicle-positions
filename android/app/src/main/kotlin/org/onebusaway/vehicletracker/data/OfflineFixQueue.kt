@@ -2,6 +2,10 @@ package org.onebusaway.vehicletracker.data
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -49,7 +53,16 @@ interface OfflineFixQueue {
 
     /** The account the queue was last handed to, or null when it has no owner. */
     suspend fun owner(): String?
+
+    /**
+     * How many fixes the queue holds and whose they are, as they are now and again after every change. The fixes are
+     * read when this is first collected, if nothing has read them yet.
+     */
+    val contents: Flow<QueueContents>
 }
+
+/** What [OfflineFixQueue] holds: how many fixes, and the account it was last handed to. */
+data class QueueContents(val count: Int, val owner: String?)
 
 /** The account [OfflineFixQueue.claimFor] compares: the same server and email however they were typed. */
 fun offlineQueueAccount(serverUrl: String, email: String) = "${serverUrl.trimEnd('/')} ${email.trim().lowercase()}"
@@ -69,6 +82,24 @@ class FileOfflineFixQueue(
     private val ownerFile = File("${file.path}.owner")
     private val mutex = Mutex()
     private var queue: ArrayDeque<LocationReportDto>? = null
+
+    /** The owner as last read or written, read with [queue]. */
+    private var knownOwner: String? = null
+
+    /** Null until the fixes have been read. */
+    private val held = MutableStateFlow<QueueContents?>(null)
+
+    override val contents: Flow<QueueContents> = held
+        .onStart {
+            if (held.value != null) return@onStart
+            try {
+                locked { }
+            } catch (e: IOException) {
+                // Then nothing shows as waiting. The uploads read the same file, and fail the same way.
+                Log.w(TAG, "Could not read the queued fixes", e)
+            }
+        }
+        .filterNotNull()
 
     override suspend fun add(report: LocationReportDto) = locked { q ->
         q.addLast(report)
@@ -100,6 +131,7 @@ class FileOfflineFixQueue(
             rewrite(q)
         }
         ownerFile.writeText(account)
+        knownOwner = account
     }
 
     // Leaves the fixes unread: only the owner file matters, and this runs before the first screen shows.
@@ -108,6 +140,11 @@ class FileOfflineFixQueue(
             if (ownerFile.exists()) return@withLock
             try {
                 ownerFile.writeText(account)
+                // Once the fixes have been read; before then, reading them reads the owner too.
+                queue?.let { q ->
+                    knownOwner = account
+                    held.value = QueueContents(q.size, account)
+                }
             } catch (e: IOException) {
                 // The next sign-in then drops the fixes, as it would have without this claim.
                 Log.w(TAG, "Could not record who owns the queued fixes", e)
@@ -119,10 +156,20 @@ class FileOfflineFixQueue(
         mutex.withLock { ownerFile.takeIf { it.exists() }?.readText() }
     }
 
-    private suspend fun <T> locked(block: (ArrayDeque<LocationReportDto>) -> T): T =
-        withContext(Dispatchers.IO) { mutex.withLock { block(queue ?: load().also { queue = it }) } }
+    private suspend fun <T> locked(block: (ArrayDeque<LocationReportDto>) -> T): T = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val q = queue ?: load().also { queue = it }
+            // Even when the block fails partway: what it changed in memory is what the uploads read next.
+            try {
+                block(q)
+            } finally {
+                held.value = QueueContents(q.size, knownOwner)
+            }
+        }
+    }
 
     private fun load(): ArrayDeque<LocationReportDto> {
+        knownOwner = ownerFile.takeIf { it.exists() }?.readText()
         if (!file.exists()) return ArrayDeque()
         // A line cut short by a crash mid-append is skipped, not allowed to cost the rest.
         val text = file.readText()

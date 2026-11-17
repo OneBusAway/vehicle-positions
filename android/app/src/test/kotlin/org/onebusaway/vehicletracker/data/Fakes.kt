@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.data
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.onebusaway.vehicletracker.data.map.MapFileSource
 import org.onebusaway.vehicletracker.data.map.MapFileState
 import org.onebusaway.vehicletracker.engine.TripGeometry
@@ -178,21 +179,36 @@ class FakeServiceController : ServiceController {
     override fun askToResume() { askCount++ }
 }
 
-/** An [OfflineFixQueue] in memory, oldest first. */
+/**
+ * An [OfflineFixQueue] in memory, oldest first. [contents] follows the calls through the interface, not changes made
+ * to [queued] or [owner] directly.
+ */
 class FakeOfflineFixQueue : OfflineFixQueue {
     val queued = ArrayDeque<org.onebusaway.vehicletracker.data.api.LocationReportDto>()
-    override suspend fun add(report: org.onebusaway.vehicletracker.data.api.LocationReportDto) { queued.addLast(report) }
+    override suspend fun add(report: org.onebusaway.vehicletracker.data.api.LocationReportDto) {
+        queued.addLast(report)
+        publish()
+    }
     override suspend fun oldest(max: Int) = queued.take(max)
     override suspend fun remove(fixes: List<org.onebusaway.vehicletracker.data.api.LocationReportDto>) {
         fixes.forEach { if (queued.firstOrNull() == it) queued.removeFirst() }
+        publish()
     }
     var owner: String? = null
     override suspend fun claimFor(account: String) {
         if (owner != account) queued.clear()
         owner = account
+        publish()
     }
     override suspend fun claimIfUnowned(account: String) {
         if (owner == null) owner = account
+        publish()
     }
     override suspend fun owner() = owner
+
+    private val held = MutableStateFlow(QueueContents(0, null))
+    override val contents = held.asStateFlow()
+    private fun publish() {
+        held.value = QueueContents(queued.size, owner)
+    }
 }

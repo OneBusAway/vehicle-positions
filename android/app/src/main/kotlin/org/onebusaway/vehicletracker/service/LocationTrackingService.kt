@@ -21,19 +21,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripStateStore
+import org.onebusaway.vehicletracker.data.WaitingReports
 import org.onebusaway.vehicletracker.data.loadFor
 import org.onebusaway.vehicletracker.engine.AdherenceTracker
 import org.onebusaway.vehicletracker.ui.routes.routeColorArgb
@@ -86,6 +88,7 @@ class LocationTrackingService : Service() {
     @Inject lateinit var tripStateStore: TripStateStore
     @Inject lateinit var tripGeometryStore: TripGeometryStore
     @Inject lateinit var trackingRepository: TrackingRepository
+    @Inject lateinit var waitingReports: WaitingReports
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var fusedClient: FusedLocationProviderClient
@@ -96,6 +99,9 @@ class LocationTrackingService : Service() {
     private var adherenceTracker: AdherenceTracker? = null
     private var initialized = false
     private var locationUpdatesActive = false
+
+    /** The reports waiting on the phone, as the notification last said them. */
+    @Volatile private var waiting: ReportsWaiting? = null
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -222,9 +228,10 @@ class LocationTrackingService : Service() {
     }
 
     private fun observeTrackingState() {
-        // Posted when what it says changes, at most once a fix: not for each report sent.
-        trackingRepository.state
-            .map { notificationText(it, activeTrip) }
+        // Posted when what it says changes, at most once a fix or a new waiting count: not for each report sent.
+        combine(trackingRepository.state, waitingReports.waiting.onEach { waiting = it }) { state, waitingNow ->
+            notificationText(state, activeTrip, waitingNow)
+        }
             .distinctUntilChanged()
             .onEach { postNotification() }
             .launchIn(scope)
@@ -242,7 +249,7 @@ class LocationTrackingService : Service() {
     private fun activeNotification(): Notification {
         val state = trackingRepository.state.value
         val routeColor = state.geometry?.routeColor?.let(::routeColorArgb)?.toInt()
-        return notification.buildActiveNotification(notificationText(state, activeTrip), routeColor)
+        return notification.buildActiveNotification(notificationText(state, activeTrip, waiting), routeColor)
     }
 
     private fun stopTrackingWork() {

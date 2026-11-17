@@ -30,8 +30,8 @@ class NotificationTextTest {
         for ((secondsLate, minutes) in listOf(0L to 0, 240L to 0, 300L to 0, 301L to 5, 400L to 7, -120L to -2, 6000L to 100)) {
             assertEquals(
                 "$secondsLate s late",
-                NotificationText("7", NotificationStatus.Minutes(minutes), t1.stops[1], t1.timezone, TrackingProblem.NONE),
-                notificationText(atStop1(secondsLate), trip),
+                NotificationText("7", NotificationStatus.Minutes(minutes), t1.stops[1], t1.timezone, TrackingProblem.NONE, waiting = null),
+                notificationText(atStop1(secondsLate), trip, waiting = null),
             )
         }
     }
@@ -40,39 +40,40 @@ class NotificationTextTest {
         val near = evaluator.evaluate(fix(47.6045, -122.3200, at(8, 5)), previous = null)
         val far = evaluator.evaluate(fix(47.6045, -122.3100, at(8, 5)), previous = null)
 
-        val text = notificationText(TrackingState(active = true, geometry = t1, adherence = near), trip)
+        val text = notificationText(TrackingState(active = true, geometry = t1, adherence = near), trip, waiting = null)
 
         assertEquals(NotificationStatus.OffRoute, text.status)
         assertEquals(near.nextStop, text.nextStop)
-        assertEquals(text, notificationText(TrackingState(active = true, geometry = t1, adherence = far), trip))
+        assertEquals(text, notificationText(TrackingState(active = true, geometry = t1, adherence = far), trip, waiting = null))
     }
 
     @Test fun `before the first fix, and with no schedule, there is no next stop to name`() {
-        val waiting = notificationText(TrackingState(active = true, geometry = t1), trip)
+        val waiting = notificationText(TrackingState(active = true, geometry = t1), trip, waiting = null)
         assertEquals(NotificationStatus.WaitingForGps, waiting.status)
         assertNull(waiting.nextStop)
 
-        val noSchedule = notificationText(TrackingState(active = true, geometry = null), trip)
+        val noSchedule = notificationText(TrackingState(active = true, geometry = null), trip, waiting = null)
         assertEquals(NotificationStatus.NoSchedule, noSchedule.status)
         assertNull(noSchedule.nextStop)
     }
 
     @Test fun `a problem takes the reporting line's place`() {
         for (problem in TrackingProblem.entries) {
-            assertEquals(problem, notificationText(atStop1(0, problem), trip).problem)
+            assertEquals(problem, notificationText(atStop1(0, problem), trip, waiting = null).problem)
         }
     }
 
     @Test fun `the route is its short name, or its id without one, and none before the trip is read`() {
-        assertEquals("7", notificationText(atStop1(0), trip).route)
-        assertEquals("100263", notificationText(TrackingState(active = true, geometry = TripFixtures.t1), trip).route)
-        assertEquals("100263", notificationText(TrackingState(active = true, geometry = null), trip).route)
-        assertNull(notificationText(TrackingState(), null).route)
+        assertEquals("7", notificationText(atStop1(0), trip, waiting = null).route)
+        assertEquals("100263", notificationText(TrackingState(active = true, geometry = TripFixtures.t1), trip, waiting = null).route)
+        assertEquals("100263", notificationText(TrackingState(active = true, geometry = null), trip, waiting = null).route)
+        assertNull(notificationText(TrackingState(), null, waiting = null).route)
     }
 
     @Test fun `a report sent, or the trip clock, does not change what it says`() {
         val before = atStop1(0)
-        assertEquals(notificationText(before, trip), notificationText(before.copy(fixesSent = 41), trip))
-        assertNotEquals(notificationText(before, trip), notificationText(before.copy(problem = TrackingProblem.NO_GPS), trip))
+        val said = notificationText(before, trip, waiting = null)
+        assertEquals(said, notificationText(before.copy(fixesSent = 41), trip, waiting = null))
+        assertNotEquals(said, notificationText(before.copy(problem = TrackingProblem.NO_GPS), trip, waiting = null))
     }
 }

@@ -4,17 +4,25 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.TrackingProblem
+import org.onebusaway.vehicletracker.data.WaitingOutlook
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.ui.theme.StatusTone
 import org.onebusaway.vehicletracker.ui.tracking.StatusCardModel
 
-/** The status card's own words for a status: minutes, read as the card reads them ("6 min late"), or its string. */
+/**
+ * The status card's own words for a status: minutes, read as the card reads them ("6 min late"), its string, or the
+ * waiting line for [Waiting.count] reports ("3 reports to send when online").
+ */
 internal sealed interface CardWords {
     data class Minutes(val minutes: Int) : CardWords
     data class Text(@StringRes val id: Int) : CardWords
+    data class Waiting(val outlook: WaitingOutlook, val count: Int) : CardWords
 }
 
-/** One answer the status card gives, as Help explains it: the card's words, icon and colour, then one plain line. */
+/**
+ * One answer the status card gives, or its waiting line, as Help explains it: the card's words, icon and colour, then
+ * one plain line.
+ */
 internal enum class CardStatusHelp(val words: CardWords, @StringRes val meaning: Int, val tone: StatusTone, @DrawableRes val icon: Int) {
     ON_TIME(CardWords.Minutes(0), R.string.help_status_on_time, StatusTone.ON_TIME, R.drawable.ic_check_circle),
     LATE(CardWords.Minutes(6), R.string.help_status_late, StatusTone.LATE, R.drawable.ic_hourglass_bottom),
@@ -44,6 +52,20 @@ internal enum class CardStatusHelp(val words: CardWords, @StringRes val meaning:
         R.string.help_status_no_schedule,
         StatusTone.NEUTRAL,
         R.drawable.ic_event_busy,
+    ),
+
+    // The waiting line, which the notification says too. On the card it takes the answer's colour; Help shows it grey.
+    REPORTS_WAITING(
+        CardWords.Waiting(WaitingOutlook.WILL_SEND, 3),
+        R.string.help_waiting,
+        StatusTone.NEUTRAL,
+        R.drawable.ic_schedule_outline,
+    ),
+    REPORTS_WONT_SEND(
+        CardWords.Waiting(WaitingOutlook.NEVER, 3),
+        R.string.help_waiting_never,
+        StatusTone.NEUTRAL,
+        R.drawable.ic_sync_problem,
     ),
 }
 
@@ -84,6 +106,12 @@ internal fun problemHelp(problem: TrackingProblem): ProblemHelp? = when (problem
     TrackingProblem.CLOCK_SKEW -> ProblemHelp.CLOCK_WRONG
     TrackingProblem.REPORTS_REFUSED -> ProblemHelp.REPORTS_REFUSED
     TrackingProblem.AUTH_EXPIRED -> ProblemHelp.SIGNED_OUT
+}
+
+/** The Help row for the card's waiting line, and the notification's. A new outlook does not compile until it has one. */
+internal fun waitingHelp(outlook: WaitingOutlook): CardStatusHelp = when (outlook) {
+    WaitingOutlook.WILL_SEND -> CardStatusHelp.REPORTS_WAITING
+    WaitingOutlook.NEVER -> CardStatusHelp.REPORTS_WONT_SEND
 }
 
 /** Where a row sits in its group, which decides its corners: round on the group's outside, tight between rows. */
