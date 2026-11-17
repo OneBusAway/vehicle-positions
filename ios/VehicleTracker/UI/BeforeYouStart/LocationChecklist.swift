@@ -48,9 +48,14 @@ nonisolated struct LocationChecklist: Equatable {
     /// The sheet asked for precise location since it opened, so iOS's answer
     /// stands: Continue doesn't ask again, the row's Try again does.
     private(set) var preciseAsked = false
+    /// The rows allowed when the sheet opened: they show the check from the
+    /// start and never tick.
+    private var allowedAtOpen: Set<Row> = []
+    private var ticked: Set<Row> = []
 
     init(_ access: LocationAccessState) {
         self.access = access
+        allowedAtOpen = Set(Row.allCases.filter { state(of: $0) == .allowed })
     }
 
     /// Whether a run needs the sheet before it starts.
@@ -62,12 +67,27 @@ nonisolated struct LocationChecklist: Equatable {
     /// back from Settings, or when Try again reads Location Services again.
     mutating func read(_ access: LocationAccessState) {
         self.access = access
+        tickNewlyAllowed()
     }
 
     /// What iOS says after the precise-location prompt.
     mutating func answeredPrecise(_ access: LocationAccessState) {
         self.access = access
         preciseAsked = true
+        tickNewlyAllowed()
+    }
+
+    /// Whether the sheet has seen iOS allow the row, which plays its tick.
+    /// Once per row, as on Android: a row refused in Settings and allowed
+    /// again shows the check but does not tick a second time.
+    func hasTicked(_ row: Row) -> Bool {
+        ticked.contains(row)
+    }
+
+    private mutating func tickNewlyAllowed() {
+        for row in Row.allCases where state(of: row) == .allowed && !allowedAtOpen.contains(row) {
+            ticked.insert(row)
+        }
     }
 
     func state(of row: Row) -> RowState {

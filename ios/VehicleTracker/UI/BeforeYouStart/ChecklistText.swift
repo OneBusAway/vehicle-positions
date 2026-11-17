@@ -63,6 +63,25 @@ nonisolated enum ChecklistText {
         String(localized: "Cancel", comment: "Closes the checklist without starting the run, once nothing on it asks iOS by itself.")
     }
 
+    /// What VoiceOver says when iOS allows a row while the sheet shows it,
+    /// as TalkBack says it on Android.
+    static func allowedNow(_ row: LocationChecklist.Row) -> String {
+        let name = title(of: row)
+        return String(localized: "\(name), allowed.", comment: "VoiceOver: said once when iOS allows a checklist row while the checklist shows, e.g. 'Location, allowed.'")
+    }
+
+    /// One announcement for a change on the sheet: each row that changed,
+    /// in order, so no part cuts off the one before it. A row allowed now
+    /// says only that. Nil when no row changed.
+    static func announcement(from old: LocationChecklist, to new: LocationChecklist) -> String? {
+        let parts = LocationChecklist.Row.allCases.compactMap { row -> String? in
+            let state = new.state(of: row)
+            guard state != old.state(of: row) else { return nil }
+            return state == .allowed ? allowedNow(row) : spoken(row, state)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
     /// One row as VoiceOver reads it, e.g. "Location. So the app knows where
     /// the vehicle is. Next."
     static func spoken(_ row: LocationChecklist.Row, _ state: LocationChecklist.RowState) -> String {
