@@ -638,11 +638,19 @@ type tripGroup struct {
 // riders standing together are on one vehicle, whatever speed an old point
 // gave. Otherwise it is grouped with the other such riders standing near it,
 // and the group is placed where its newest point is carried. It joins the run
-// whose vehicle is nearest that place, within runSplitDistance, with its
-// riders counted where they are carried, so the estimate does not trim them
-// and the run's own riders out against each other; a run's vehicle is where
-// its newest point is carried. A group that reaches no run is a run of its
-// own, as its points stand.
+// whose vehicle is nearest that place, within runSplitDistance; a run's
+// vehicle is where its newest point is carried. A group that reaches no run
+// is a run of its own, as its points stand.
+//
+// A run that takes in such riders has them weighed against its own in the
+// estimate, so all of them are handed to it as they would be at one moment,
+// the newest rider's point. The riders who make the run are carried there
+// from their own points, no more than outlierDistance each. A rider on it by
+// standing near them is placed at the run's vehicle, and a group that joins
+// it at the group's own place: each where the newest point it stands with is
+// carried, never from its own older point, which would carry a point taken at
+// speed before its vehicle stopped far past where the vehicle is. A run of
+// only the riders who make it is weighed as they reported.
 //
 // A trip run by timetable has one run a day, and its riders stay one group,
 // as far apart as they are.
@@ -682,8 +690,10 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 		fresh = append(fresh, standing{along: m.along, run: len(runs) - 1})
 	}
 	vehicles := make([]float64, len(runs))
+	own := make([]int, len(runs))
 	for i, run := range runs {
 		vehicles[i] = vehicle(run.members)
+		own[i] = len(run.members)
 	}
 
 	var lone [][]estimateMember
@@ -693,6 +703,7 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 				return cmp.Compare(math.Abs(x.along-m.along), math.Abs(y.along-m.along))
 			})
 			if math.Abs(near.along-m.along) <= runSplitDistance {
+				m.along = vehicles[near.run]
 				runs[near.run].members = append(runs[near.run].members, m)
 				continue
 			}
@@ -715,8 +726,16 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 			continue
 		}
 		for _, m := range group {
-			m.along += carry(m)
+			m.along = at
 			runs[best].members = append(runs[best].members, m)
+		}
+	}
+	for i, run := range runs[:len(own)] {
+		if len(run.members) == own[i] {
+			continue
+		}
+		for j := range run.members[:own[i]] {
+			run.members[j].along += carry(run.members[j])
 		}
 	}
 	return runs

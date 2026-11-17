@@ -194,70 +194,87 @@ func TestTripGroup_Runs(t *testing.T) {
 		name    string
 		members []estimateMember
 		want    [][]string
+		// placed is where along the shape each rider is handed to the
+		// estimate, for the cases that check it.
+		placed map[string]float64
 	}{
 		{"500 m apart now are two runs",
 			[]estimateMember{rider("a", 600, 1.7, 0), rider("b", 100, 1.7, 0)},
-			[][]string{{"a"}, {"b"}}},
+			[][]string{{"a"}, {"b"}}, nil},
 		{"240 m back on a point 10 s older at 15 m/s is 90 m back now",
 			[]estimateMember{rider("a", 500, 15, 0), rider("b", 260, 15, 10*time.Second)},
-			[][]string{{"a", "b"}}},
+			[][]string{{"a", "b"}}, nil},
 		{"240 m apart now are two runs",
 			[]estimateMember{rider("a", 500, 15, 0), rider("b", 260, 15, 0)},
-			[][]string{{"a"}, {"b"}}},
+			[][]string{{"a"}, {"b"}}, nil},
 		{"a run whose newest point has no speed is where that point stands",
 			[]estimateMember{rider("F", 500, -1, 80*time.Second), rider("N", 1000, 0, 0), rider("S", 270, 15, 28*time.Second)},
-			[][]string{{"F", "S"}, {"N"}}},
+			[][]string{{"F", "S"}, {"N"}}, nil},
 		{"a speed past MaxSpeed is taken as MaxSpeed",
 			[]estimateMember{rider("a", 600, 1.7, 0), rider("b", 100, 100, 5*time.Second)},
-			[][]string{{"a"}, {"b"}}},
+			[][]string{{"a"}, {"b"}}, nil},
 		{"no rider is carried past now by a clock that runs ahead",
 			[]estimateMember{rider("a", 600, 1.7, -30*time.Second), rider("b", 300, 10, 0)},
-			[][]string{{"a"}, {"b"}}},
+			[][]string{{"a"}, {"b"}}, nil},
 		{"a run whose newest point is from a clock that runs ahead is not carried back",
 			[]estimateMember{rider("F", 600, 15, -30*time.Second), rider("S", 150, 15, 40*time.Second)},
-			[][]string{{"F", "S"}}},
+			[][]string{{"F", "S"}}, nil},
 		{"a point taken at speed before the vehicle stopped does not set its rider apart",
 			[]estimateMember{rider("a", 500, 0, 0), rider("b", 480, 15, 60*time.Second)},
-			[][]string{{"a", "b"}}},
+			[][]string{{"a", "b"}}, nil},
 		{"a point taken at speed before the vehicle stopped is not carried into the run ahead",
 			[]estimateMember{rider("B", 100, 0, 0), rider("A", 0, 15, 60*time.Second), rider("C", 700, 0, 0)},
-			[][]string{{"A", "B"}, {"C"}}},
+			[][]string{{"A", "B"}, {"C"}},
+			map[string]float64{"B": 100, "A": 100, "C": 700}},
 		{"a lone point carried on joins the run it reaches",
 			[]estimateMember{rider("X", 0, 0, 0), rider("Y", 300, 15, 35*time.Second), rider("Z", 800, 0, 0)},
-			[][]string{{"X"}, {"Y", "Z"}}},
+			[][]string{{"X"}, {"Y", "Z"}}, nil},
 		{"a lone point carried on past the run ahead is another run",
 			[]estimateMember{rider("A", 0, 15, 80*time.Second), rider("C", 700, 0, 0)},
-			[][]string{{"A"}, {"C"}}},
+			[][]string{{"A"}, {"C"}}, nil},
 		{"a stale point between two runs does not link them",
 			[]estimateMember{rider("R1", 0, 0, 0), rider("S", 180, 15, 60*time.Second), rider("R2", 350, 0, 0)},
-			[][]string{{"R1"}, {"R2", "S"}}},
+			[][]string{{"R1"}, {"R2", "S"}}, nil},
 		{"a lone point carried past a run joins the run it reaches beyond",
 			[]estimateMember{rider("P", 0, 15, 60*time.Second), rider("Q", 400, 0, 0), rider("W", 900, 0, 0)},
-			[][]string{{"P", "W"}, {"Q"}}},
+			[][]string{{"P", "W"}, {"Q"}}, nil},
 		{"a lone point carried on joins the nearest run within reach",
 			[]estimateMember{rider("F1", 400, 0, 0), rider("F2", 650, 0, 0), rider("S", 150, 15, 30*time.Second)},
-			[][]string{{"F1"}, {"F2", "S"}}},
+			[][]string{{"F1"}, {"F2", "S"}}, nil},
 		{"a run's vehicle is where its newest point is carried",
 			[]estimateMember{rider("M1", 500, 0, 0), rider("M2", 450, 1, 90*time.Second), rider("S", 240, 15, 32*time.Second)},
-			[][]string{{"M1", "M2"}, {"S"}}},
+			[][]string{{"M1", "M2"}, {"S"}}, nil},
 		{"stale points standing together are one run with no run near them",
 			[]estimateMember{rider("N", 2000, 0, 0), rider("T1", 0, 15, 60*time.Second), rider("T2", 50, 15, 70*time.Second)},
-			[][]string{{"N"}, {"T1", "T2"}}},
+			[][]string{{"N"}, {"T1", "T2"}}, nil},
+		{"a run's own riders are carried to the moment a group joining it is placed at",
+			[]estimateMember{rider("F", 500, 1, 80*time.Second), rider("S", 0, 15, 50*time.Second), rider("N", 1000, 0, 0)},
+			[][]string{{"F", "S"}, {"N"}},
+			map[string]float64{"F": 580, "S": 750, "N": 1000}},
+		{"a stale group joining a run is placed where its newest point is carried",
+			[]estimateMember{rider("F", 500, 0, 0), rider("S1", 0, 10, 50*time.Second), rider("S2", 50, 12, 70*time.Second), rider("S3", 60, 12, 70*time.Second)},
+			[][]string{{"F", "S1", "S2", "S3"}},
+			map[string]float64{"F": 500, "S1": 500, "S2": 500, "S3": 500}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Which riders share a run, whatever order runs() lists them in.
 			var got [][]string
+			placed := make(map[string]float64)
 			for _, run := range (&tripGroup{trip: f.t1, members: tc.members}).runs(DefaultThresholds(), at) {
 				var ids []string
 				for _, m := range run.members {
 					ids = append(ids, m.riderID)
+					placed[m.riderID] = m.along
 				}
 				slices.Sort(ids)
 				got = append(got, ids)
 			}
 			slices.SortFunc(got, func(x, y []string) int { return cmp.Compare(x[0], y[0]) })
 			assert.Equal(t, tc.want, got)
+			for id, want := range tc.placed {
+				assert.InDelta(t, want, placed[id], 1, "where %s is handed to the estimate", id)
+			}
 		})
 	}
 }
@@ -319,4 +336,44 @@ func TestAggregator_StaleRiderCarriedOntoARunIsPublishedWithIt(t *testing.T) {
 	require.Len(t, est, 1)
 	assert.Equal(t, 2, est[0].Riders)
 	assert.InDelta(t, 800, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 30)
+}
+
+// rideTo registers a trusted ride on T1 whose last point is at along at at,
+// each of its points reporting speed; it reaches along over the 30 s before,
+// from up to 50 m back.
+func (f *aggFixture) rideTo(t *testing.T, id string, along, speed float64, at time.Time) {
+	t.Helper()
+	f.addSession(id, "rider-"+id, TierTrusted)
+	var pts []Point
+	for i := 5; i >= 0; i-- {
+		pts = append(pts, Point{Pos: f.t1.Shape.PointAt(max(0, along-float64(i)*10)), Accuracy: 5, Speed: speed,
+			Timestamp: at.Add(-time.Duration(i) * 6 * time.Second)})
+	}
+	_, err := f.agg.ApplyBatch(id, pts, nil, at.Add(2*time.Second))
+	require.NoError(t, err)
+}
+
+// A stale rider that joins a moving run is weighed against that run's rider
+// at the same moment. F is 80 s old at 500 m and 1 m/s, so its run's vehicle
+// is carried to 580 m; S is 50 s old at 0 m and 15 m/s, carried to 750 m and
+// near enough to join. With F left at the 500 m it reported, both were 125 m
+// from their median and trimmed, and F's vehicle was not published. The Y/Z
+// test does not see this: Z is stopped, so its point is already where it is.
+func TestAggregator_StaleRiderJoiningAMovingRunKeepsItsRider(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	now := f.base.Add(10 * time.Minute)
+	f.rideTo(t, "F", 500, 1, now.Add(-80*time.Second))
+	f.rideTo(t, "S", 0, 15, now.Add(-50*time.Second))
+	f.rideTo(t, "N", 1000, 1.7, now)
+
+	est := f.agg.Estimates(now.Add(2*time.Second), noCover)
+	var at []float64
+	for _, e := range est {
+		at = append(at, f.t1.Shape.Project(e.Pos, nil).AlongShape)
+	}
+	slices.Sort(at)
+	require.Len(t, at, 2, "F's run and N's are both published: %v", at)
+	assert.InDelta(t, 665, at[0], 30)
+	assert.InDelta(t, 1000, at[1], 30)
 }
