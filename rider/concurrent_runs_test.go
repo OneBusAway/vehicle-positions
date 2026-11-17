@@ -177,8 +177,10 @@ func TestAggregator_RidersOfOneRunAreOneVehicle(t *testing.T) {
 	assert.Equal(t, 2, est[0].Riders)
 }
 
-// Riders are told apart where they would be at the newest rider's point,
-// each carried on at their own point's speed.
+// Riders are on different runs only if they are far apart both as their
+// points stand and where they would be at the newest rider's point, carried
+// on at their own point's speed, no faster than MaxSpeed and no later than
+// now.
 func TestTripGroup_Runs(t *testing.T) {
 	f := newAggFixture(t)
 	headwayT1(f)
@@ -202,13 +204,25 @@ func TestTripGroup_Runs(t *testing.T) {
 			[]estimateMember{rider("a", 500, 15, 0), rider("b", 260, 15, 0)},
 			[][]string{{"b"}, {"a"}}},
 		{"a point with no speed is taken as it stands",
-			[]estimateMember{rider("a", 500, 15, 0), rider("b", 310, -1, 20*time.Second)},
-			[][]string{{"b", "a"}}},
+			[]estimateMember{rider("a", 100, 1.7, 0), rider("b", 340, -1, 60*time.Second)},
+			[][]string{{"a"}, {"b"}}},
+		{"a speed past MaxSpeed is taken as MaxSpeed",
+			[]estimateMember{rider("a", 600, 1.7, 0), rider("b", 100, 100, 5*time.Second)},
+			[][]string{{"b"}, {"a"}}},
+		{"no rider is carried past now by a clock that runs ahead",
+			[]estimateMember{rider("a", 600, 1.7, -30*time.Second), rider("b", 300, 10, 0)},
+			[][]string{{"b"}, {"a"}}},
+		{"a point from a clock that runs ahead is not carried back",
+			[]estimateMember{rider("a", 600, 15, -30*time.Second), rider("b", 350, 1.7, 0)},
+			[][]string{{"b"}, {"a"}}},
+		{"a point taken at speed before the vehicle stopped does not set its rider apart",
+			[]estimateMember{rider("a", 500, 0, 0), rider("b", 480, 15, 60*time.Second)},
+			[][]string{{"a", "b"}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var got [][]string
-			for _, run := range (&tripGroup{trip: f.t1, members: tc.members}).runs() {
+			for _, run := range (&tripGroup{trip: f.t1, members: tc.members}).runs(DefaultThresholds(), at) {
 				var ids []string
 				for _, m := range run.members {
 					ids = append(ids, m.riderID)
@@ -234,4 +248,22 @@ func TestAggregator_RunsAtOneStartTimeTieGoesToTheNewerPoint(t *testing.T) {
 	require.Len(t, est, 1)
 	assert.Equal(t, "08:00:00", est[0].StartTime)
 	assert.Equal(t, f.onSchedulePoint(600, 5*time.Minute).Timestamp, est[0].Timestamp)
+}
+
+// A rider whose point is a minute older than the rest, 240 m back, is where
+// the rest are once carried on at the point's speed: one run, whose estimate
+// trims that rider as it always would, not a second vehicle.
+func TestAggregator_OlderPointIsCarriedOnToItsRun(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	f.addSession("a1", "rider-a1", TierTrusted)
+	f.addSession("a2", "rider-a2", TierTrusted)
+	f.addSession("a3", "rider-a3", TierTrusted)
+	f.walkOffset(t, "a3", 200, 300, 10, 90*time.Second)
+	f.walkOffset(t, "a2", 440, 540, 10, 0)
+	now := f.walkOffset(t, "a1", 450, 550, 10, 0)
+
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.Equal(t, 2, est[0].Riders)
 }

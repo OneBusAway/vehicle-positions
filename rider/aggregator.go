@@ -27,10 +27,10 @@ const (
 	// outlierDistance is how far a rider may sit from the group's median
 	// before that rider is dropped from the estimate.
 	outlierDistance = 100.0
-	// runSplitDistance is how far apart two riders of a trip in frequencies.txt must be
-	// along the shape to be on different runs of it: twice outlierDistance,
-	// the furthest apart two riders can be and both survive one estimate's
-	// trim.
+	// runSplitDistance is how far apart two riders of a trip in
+	// frequencies.txt must be along the shape to be on different runs of it:
+	// twice outlierDistance, the furthest apart two riders' points can be and
+	// both survive one estimate's trim.
 	runSplitDistance = 2 * outlierDistance
 )
 
@@ -379,7 +379,7 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 func (a *Aggregator) tripEstimates(key TripKey, g *tripGroup, now time.Time) []TripEstimate {
 	var ests []TripEstimate
 	var places []runPlace
-	for _, run := range g.runs() {
+	for _, run := range g.runs(a.th, now) {
 		est, along, ok := run.estimate(key, now)
 		if !ok {
 			continue
@@ -425,7 +425,7 @@ func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey
 	if covered != nil && covered(key) {
 		return false, riders
 	}
-	for _, run := range g.runs() {
+	for _, run := range g.runs(a.th, now) {
 		if _, _, ok := run.estimate(key, now); ok {
 			return true, riders
 		}
@@ -624,24 +624,37 @@ type tripGroup struct {
 // trip in frequencies.txt runs again and again on a service day, every run
 // under the one TripKey, so riders of two runs at once are one group. They
 // are told apart along the shape, a run ending wherever the next rider is
-// more than runSplitDistance on. Riders are compared where they would be at the newest
-// rider's point, each carried on at the speed their own point gave: a point a
-// few seconds older than the rest is far behind a moving vehicle, though its
-// rider is on it. A point with no speed is taken as it stands. A trip run by
-// timetable has one run a day, and its riders stay one group, as far apart as
-// they are.
-func (g *tripGroup) runs() []*tripGroup {
+// more than runSplitDistance on.
+//
+// A point a few seconds older than the rest is far behind a moving vehicle,
+// though its rider is on it, so riders are also compared where they would be
+// at the newest rider's point, each carried on at the speed their own point
+// gave, and two riders are on different runs only if they are more than
+// runSplitDistance apart both as their points stand and as carried on. The
+// carrying only brings riders together, so a run never ends between two
+// points the trim would keep in one estimate, and a point taken at speed
+// before the vehicle stopped cannot set its rider ahead of the rest. It is
+// bounded by what th allows of a vehicle: a speed past MaxSpeed is taken as
+// MaxSpeed, and no rider is carried past now, however far ahead a rider's
+// clock has put their point. A point with no speed is taken as it stands. A
+// trip run by timetable has one run a day, and its riders stay one group, as
+// far apart as they are.
+func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 	if len(g.trip.frequencies) == 0 {
 		return []*tripGroup{g}
 	}
 	newest := slices.MaxFunc(g.members, func(x, y estimateMember) int { return x.timestamp.Compare(y.timestamp) }).timestamp
+	until := newest
+	if now.Before(until) {
+		until = now
+	}
 	place := func(m estimateMember) float64 {
-		return m.along + max(m.speed, 0)*newest.Sub(m.timestamp).Seconds()
+		return m.along + min(max(m.speed, 0), th.MaxSpeed)*max(0, until.Sub(m.timestamp).Seconds())
 	}
 	members := slices.SortedFunc(slices.Values(g.members), func(x, y estimateMember) int { return cmp.Compare(place(x), place(y)) })
 	var runs []*tripGroup
 	for i, m := range members {
-		if i == 0 || place(m)-place(members[i-1]) > runSplitDistance {
+		if i == 0 || place(m)-place(members[i-1]) > runSplitDistance && math.Abs(m.along-members[i-1].along) > runSplitDistance {
 			runs = append(runs, &tripGroup{trip: g.trip})
 		}
 		runs[len(runs)-1].members = append(runs[len(runs)-1].members, m)
