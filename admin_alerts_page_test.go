@@ -72,7 +72,7 @@ func TestAlertsPage_ListsEachAlert(t *testing.T) {
 	assert.Contains(t, body, "Quiet bus")
 	assert.Contains(t, body, "bus-quiet")
 	assert.Contains(t, body, "Achieng")
-	assert.Contains(t, body, `href="/admin/map?trip_id=7"`)
+	assert.Contains(t, body, `href="/admin/trips/7"`)
 	assert.Contains(t, body, `href="/admin/trips?page=1&amp;status=active&amp;vehicle_id=bus-quiet"`)
 
 	assert.Contains(t, body, "Not moving")
@@ -81,7 +81,7 @@ func TestAlertsPage_ListsEachAlert(t *testing.T) {
 	assert.Contains(t, body, "Baraka")
 	assert.Contains(t, body, "R2")
 	assert.Contains(t, body, "T2")
-	assert.Contains(t, body, `href="/admin/map?trip_id=8"`)
+	assert.Contains(t, body, `href="/admin/trips/8"`)
 	assert.Contains(t, body, `href="/admin/trips?page=1&amp;status=active&amp;vehicle_id=bus-still"`)
 
 	assert.Less(t, strings.Index(body, "Still bus"), strings.Index(body, "Quiet bus"), "the longest-running alert comes first")

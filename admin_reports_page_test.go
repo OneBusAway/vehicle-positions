@@ -83,7 +83,7 @@ func TestReportsPage_RouteTrips(t *testing.T) {
 
 	t1 := byID["T1"]
 	assert.Equal(t, "08:00 to 08:10", t1.Scheduled)
-	assert.Equal(t, []reportRunRow{{Vehicle: "Bus T1", Driver: "Driver T1", TrailURL: "/admin/map?trip_id=1"}}, t1.Runs)
+	assert.Equal(t, []reportRunRow{{Vehicle: "Bus T1", Driver: "Driver T1", TrailURL: "/admin/trips/1"}}, t1.Runs)
 	assert.Equal(t, reportDeviation{Text: "0:06 late", Tone: "on-time"}, t1.Departure)
 	assert.Equal(t, reportDeviation{Text: "0:16 early", Tone: "on-time"}, t1.Arrival)
 	assert.Equal(t, "100.0%", t1.OnTime)
@@ -101,7 +101,7 @@ func TestReportsPage_RouteTrips(t *testing.T) {
 	assert.Equal(t, "", rn.OnTime)
 
 	html := renderReportsContent(t, data)
-	assert.Contains(t, html, `href="/admin/map?trip_id=1"`)
+	assert.Contains(t, html, `href="/admin/trips/1"`)
 	assert.Contains(t, html, "View trail")
 	assert.Contains(t, html, "Not run")
 	assert.Contains(t, html, "2:54 early")
@@ -247,7 +247,7 @@ func TestReportsPage_SignedIn(t *testing.T) {
 
 	rec = serve(h, "/admin/reports?date=2026-09-02&route_id=R1", admin)
 	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), `href="/admin/map?trip_id=1"`)
+	assert.Contains(t, rec.Body.String(), `href="/admin/trips/1"`)
 
 	rec = serve(h, "/admin/reports?date=13-11-2026", admin)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)

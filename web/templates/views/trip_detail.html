@@ -1,0 +1,204 @@
+{{define "content"}}
+{{with .Trip}}
+<div class="space-y-5 p-4 lg:p-5">
+
+  <div id="trip-header" class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
+      <div class="min-w-0">
+        <a href="/admin/trips" class="text-xs font-semibold text-sky-600 hover:text-sky-800">&larr; All trips</a>
+        <div class="mt-1 flex flex-wrap items-center gap-2">
+          <h3 class="display-font text-lg font-bold text-slate-900">{{.VehicleLabel}}</h3>
+          {{if eq .Status "active"}}
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Active</span>
+          {{else if eq .Status "completed"}}
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>Completed</span>
+          {{else}}
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>{{.Status}}</span>
+          {{end}}
+        </div>
+        <p class="mt-0.5 text-xs text-slate-400">Times in {{.Timezone}}.</p>
+      </div>
+      {{if .Active}}
+      <form method="post" action="/admin/trips/{{.ID}}/end" class="shrink-0" onsubmit="return confirm('End this trip? Do this only when the driver phone cannot end it.')">
+        <button type="submit" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">End trip</button>
+      </form>
+      {{end}}
+    </div>
+    <dl class="grid grid-cols-2 gap-x-6 gap-y-4 px-5 py-4 text-sm sm:grid-cols-3 lg:grid-cols-4">
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</dt>
+        <dd class="mt-1 font-semibold text-slate-900">{{.VehicleLabel}}</dd>
+        <dd class="font-mono text-xs text-slate-400">{{.VehicleID}}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Driver</dt>
+        <dd class="mt-1 text-slate-700">{{.DriverName}}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</dt>
+        <dd class="mt-1">
+          {{if .Route.ID}}
+          {{if .Route.Color}}
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" style="background-color: {{.Route.Color}}; color: {{.Route.TextColor}}">{{.Route.Name}}</span>
+          {{else}}
+          <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{{.Route.Name}}</span>
+          {{end}}
+          {{if .Route.LongName}}<span class="text-slate-500">{{.Route.LongName}}</span>{{end}}
+          {{else}}
+          <span class="text-slate-400">&mdash;</span>
+          {{end}}
+        </dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">GTFS trip</dt>
+        {{if .GtfsTripID}}
+        <dd class="mt-1 font-mono text-xs text-slate-700">{{.GtfsTripID}}</dd>
+        {{if .Headsign}}<dd class="text-xs text-slate-400">{{.Headsign}}</dd>{{end}}
+        {{if .BlockID}}<dd class="text-xs text-slate-400">Block <span class="font-mono">{{.BlockID}}</span></dd>{{end}}
+        {{else}}
+        <dd class="mt-1 text-slate-400">None, route only</dd>
+        {{end}}
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Start</dt>
+        <dd class="mt-1 text-slate-700">{{.Start}}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">End</dt>
+        <dd class="mt-1 text-slate-700">{{.End}}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Duration</dt>
+        <dd class="mt-1 text-slate-700">{{.Duration}}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Reports</dt>
+        <dd class="mt-1 text-slate-700">{{.Reports}}</dd>
+        {{if .FirstReport}}<dd class="text-xs text-slate-400">{{.FirstReport}} to {{.LastReport}}</dd>{{end}}
+      </div>
+    </dl>
+    {{if .CSV}}
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200/60 px-5 py-3 text-xs">
+      {{if eq (len .CSV) 1}}
+      {{range .CSV}}<a href="{{.URL}}" class="font-semibold text-sky-600 hover:text-sky-800">Download CSV</a>{{end}}
+      {{else}}
+      <span class="text-slate-500">Download CSV in {{len .CSV}} parts:</span>
+      {{range .CSV}}<a href="{{.URL}}" class="font-semibold text-sky-600 hover:text-sky-800">{{.Label}}</a>{{end}}
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+
+  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="relative" style="height:60vh; min-height:320px">
+      <div id="trip-map" class="absolute inset-0"></div>
+      <div id="trip-empty" class="hidden pointer-events-none absolute inset-x-0 top-4 z-[500] flex justify-center">
+        <div class="glass-panel pointer-events-auto rounded-xl border border-white/70 px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-md">No reports yet.</div>
+      </div>
+    </div>
+    <div class="border-t border-slate-200/60 px-5 py-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="trip-play" type="button" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50" disabled>Play</button>
+        <div role="group" aria-label="Playback speed" class="inline-flex items-center gap-1">
+          <button type="button" data-speed="1" aria-pressed="false" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 aria-pressed:border-sky-500 aria-pressed:bg-sky-50 aria-pressed:text-sky-700">1x</button>
+          <button type="button" data-speed="10" aria-pressed="false" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 aria-pressed:border-sky-500 aria-pressed:bg-sky-50 aria-pressed:text-sky-700">10x</button>
+          <button type="button" data-speed="60" aria-pressed="true" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 aria-pressed:border-sky-500 aria-pressed:bg-sky-50 aria-pressed:text-sky-700">60x</button>
+        </div>
+        <p id="trip-time" class="text-xs font-semibold tabular-nums text-slate-700"></p>
+      </div>
+      <input id="trip-slider" type="range" min="0" max="0" step="1" value="0" disabled aria-label="Report shown on the map" class="mt-3 w-full accent-sky-600">
+      <p class="mt-2 text-xs text-slate-400">The slider steps through every report; the arrow keys move it one report at a time. A dashed line is a gap of over {{.GapAfter}} with no report.{{if .Active}}<span id="trip-live-note"> New reports are added every 10 seconds.</span>{{end}}</p>
+    </div>
+  </div>
+  <script type="application/json" id="trip-data">{{.Map}}</script>
+
+  {{if or .Stops .Note}}
+  <div id="trip-stops" class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="border-b border-slate-200/60 px-5 py-4">
+      <h3 class="display-font text-base font-bold text-slate-900">Stops</h3>
+      {{if and .Timetable .Active}}
+      <p class="mt-1 text-xs text-slate-500">Scheduled {{.Summary.Scheduled}}. {{if .Summary.OnTime}}On time so far at <span class="font-semibold text-slate-900">{{.Summary.OnTime}}</span> of the stops passed.{{else}}Nothing to judge yet.{{end}}</p>
+      {{else if .Timetable}}
+      <p class="mt-1 text-xs text-slate-500">Scheduled {{.Summary.Scheduled}}. First stop {{template "trip-deviation" .Summary.Departure}}, last stop {{template "trip-deviation" .Summary.Arrival}}, on time at {{if .Summary.OnTime}}<span class="font-semibold text-slate-900">{{.Summary.OnTime}}</span>{{else}}an unknown share{{end}} of stops{{if .Summary.Unknown}}, {{.Summary.Unknown}} unknown{{end}}.</p>
+      {{end}}
+      {{if .Note}}<p class="mt-1 text-xs text-slate-500">{{.Note}}</p>{{end}}
+    </div>
+    {{if .Stops}}
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50/80">
+          <tr class="text-left">
+            <th class="hidden px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:table-cell">#</th>
+            <th class="px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:px-5">Stop</th>
+            {{if .Timetable}}<th class="hidden px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:table-cell">Scheduled</th>{{end}}
+            <th class="px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:px-5">Passed</th>
+            {{if .Timetable}}<th class="px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:px-5">Difference</th>{{end}}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {{$timetable := .Timetable}}
+          {{range .Stops}}
+          <tr class="transition-colors hover:bg-slate-50/60">
+            <td class="hidden px-5 py-3 font-mono text-xs text-slate-400 sm:table-cell">{{.Sequence}}</td>
+            <td class="px-3 py-3 sm:px-5">
+              <p class="text-slate-900">{{.Name}}</p>
+              {{if $timetable}}<p class="text-xs tabular-nums text-slate-400 sm:hidden">Due {{.Scheduled}}</p>{{end}}
+            </td>
+            {{if $timetable}}<td class="hidden whitespace-nowrap px-5 py-3 tabular-nums text-slate-500 sm:table-cell">{{.Scheduled}}</td>{{end}}
+            <td class="whitespace-nowrap px-3 py-3 tabular-nums text-slate-700 sm:px-5">{{if .Passed}}{{.Passed}}{{else if .Ahead}}<span class="text-slate-400">not yet</span>{{else}}<span class="text-slate-400">unknown</span>{{end}}</td>
+            {{if $timetable}}
+            <td class="whitespace-nowrap px-3 py-3 sm:px-5">{{if .Ahead}}{{else if .Timed}}{{template "trip-deviation" .Deviation}}{{else}}<span class="text-slate-400">{{.Deviation.Text}}, not a timepoint</span>{{end}}</td>
+            {{end}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if .Timetable}}
+    <p class="border-t border-slate-200/60 px-5 py-4 text-xs text-slate-400">The same rule as the Reports page: a stop is on time when the vehicle left it from {{.OnTimeEarly}} early to {{.OnTimeLate}} late, or reached the last stop in that window. A stop with no report within {{.FixWindow}} either side of the vehicle passing it is unknown.</p>
+    {{end}}
+    {{end}}
+  </div>
+  {{end}}
+
+  <div id="trip-gaps" class="table-card overflow-hidden rounded-[20px] border border-white/80">
+    <div class="border-b border-slate-200/60 px-5 py-4">
+      <h3 class="display-font text-base font-bold text-slate-900">Gaps in reports</h3>
+      <p class="mt-0.5 text-xs text-slate-400">Stretches of over {{.GapAfter}} with no report, dashed on the map.</p>
+    </div>
+    {{if .Gaps}}
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50/80">
+          <tr class="text-left">
+            <th class="px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:px-5">From</th>
+            <th class="px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:px-5">To</th>
+            <th class="px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:px-5">Length</th>
+            <th class="px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 sm:px-5"><span class="sr-only">Map</span></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {{range .Gaps}}
+          <tr class="transition-colors hover:bg-slate-50/60">
+            <td class="whitespace-nowrap px-3 py-3 tabular-nums text-slate-700 sm:px-5">{{.From}}</td>
+            <td class="whitespace-nowrap px-3 py-3 tabular-nums text-slate-700 sm:px-5">{{.To}}</td>
+            <td class="whitespace-nowrap px-3 py-3 text-slate-500 sm:px-5">{{.Length}}</td>
+            <td class="px-3 py-3 sm:px-5"><button type="button" data-gap="{{.Index}}" class="whitespace-nowrap text-xs font-semibold text-sky-600 hover:text-sky-800">Show<span class="sr-only"> on map</span></button></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else if .Reports}}
+    <p class="px-5 py-6 text-center text-sm text-slate-400">No gap of over {{.GapAfter}} between reports.</p>
+    {{else}}
+    <p class="px-5 py-6 text-center text-sm text-slate-400">No reports yet.</p>
+    {{end}}
+  </div>
+
+</div>
+{{end}}
+<script src="/static/js/trip_detail.js" defer></script>
+{{end}}
+
+{{define "trip-deviation"}}{{if eq .Tone "on-time"}}<span class="font-semibold text-emerald-700">{{.Text}}</span>{{else if eq .Tone "early"}}<span class="font-semibold text-amber-700">{{.Text}}</span>{{else if eq .Tone "late"}}<span class="font-semibold text-rose-700">{{.Text}}</span>{{else}}<span class="text-slate-400">{{.Text}}</span>{{end}}{{end}}

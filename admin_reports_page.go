@@ -40,7 +40,7 @@ type reportTripRow struct {
 }
 
 // reportRunRow is a driver trip that ran a scheduled trip, with a link to
-// its trail.
+// its page.
 type reportRunRow struct {
 	Vehicle  string
 	Driver   string
@@ -184,7 +184,7 @@ func newReportTripRow(rep *serviceReport, trip tripReport, day time.Time) report
 		row.Runs = append(row.Runs, reportRunRow{
 			Vehicle:  run.VehicleLabel,
 			Driver:   run.DriverName,
-			TrailURL: "/admin/map?trip_id=" + strconv.FormatInt(run.ID, 10),
+			TrailURL: "/admin/trips/" + strconv.FormatInt(run.ID, 10),
 		})
 	}
 	if len(trip.Runs) > 0 {

@@ -31,7 +31,7 @@ func TestAlertsPage_OffRoute(t *testing.T) {
 	assert.Contains(t, body, "Off route")
 	assert.Contains(t, body, "Over 60 m from its route for 6 min")
 	assert.Contains(t, body, "Van 7")
-	assert.Contains(t, body, `href="/admin/map?trip_id=7"`)
+	assert.Contains(t, body, `href="/admin/trips/7"`)
 	assert.Contains(t, body, `href="/admin/trips?page=1&amp;status=active&amp;vehicle_id=bus-7"`)
 	badge := alertBadge.FindStringSubmatch(body)
 	require.NotNil(t, badge)
