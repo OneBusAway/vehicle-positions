@@ -33,7 +33,7 @@ struct BeforeYouStartSheet: View {
                         .padding(.horizontal, 24)
                         .padding(.bottom, 20)
                     ForEach(LocationChecklist.Row.allCases, id: \.self) { row in
-                        ChecklistRow(row: row, state: checklist.state(of: row), onAction: act)
+                        ChecklistRow(row: row, state: checklist.state(of: row), ticked: checklist.hasTicked(row), onAction: act)
                     }
                 }
             }
@@ -61,8 +61,8 @@ struct BeforeYouStartSheet: View {
                 onReady()
                 return
             }
-            for row in LocationChecklist.Row.allCases where old.state(of: row) != new.state(of: row) {
-                AccessibilityNotification.Announcement(ChecklistText.spoken(row, new.state(of: row))).post()
+            if let announcement = ChecklistText.announcement(from: old, to: new) {
+                AccessibilityNotification.Announcement(announcement).post()
             }
         }
     }
