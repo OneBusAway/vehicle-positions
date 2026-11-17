@@ -57,7 +57,7 @@ type importKind struct {
 	Columns []importColumn
 	Notes   []string
 	preview func(context.Context, CSVImporter, []importRecord) ([]importRowView, error)
-	run     func(context.Context, CSVImporter, []importRecord) ([]importRowView, error)
+	run     func(context.Context, CSVImporter, importPreview, []importRecord) ([]importRowView, error)
 }
 
 func (k importKind) columnNames() []string {
@@ -85,8 +85,10 @@ var importKinds = map[string]importKind{
 		preview: func(ctx context.Context, imp CSVImporter, recs []importRecord) ([]importRowView, error) {
 			return previewRows(ctx, recs, vehicleRows, imp.PlanVehicleImport)
 		},
-		run: func(ctx context.Context, imp CSVImporter, recs []importRecord) ([]importRowView, error) {
-			return runRows(ctx, recs, vehicleRows, imp.ImportVehicles)
+		run: func(ctx context.Context, imp CSVImporter, preview importPreview, recs []importRecord) ([]importRowView, error) {
+			return runRows(ctx, recs, vehicleRows, func(ctx context.Context, rows []vehicleImportRow) ([]importOutcome, error) {
+				return imp.ImportVehicles(ctx, preview, rows)
+			})
 		},
 	},
 	"drivers": {
@@ -106,9 +108,9 @@ var importKinds = map[string]importKind{
 		preview: func(ctx context.Context, imp CSVImporter, recs []importRecord) ([]importRowView, error) {
 			return previewRows(ctx, recs, driverRows, imp.PlanDriverImport)
 		},
-		run: func(ctx context.Context, imp CSVImporter, recs []importRecord) ([]importRowView, error) {
+		run: func(ctx context.Context, imp CSVImporter, preview importPreview, recs []importRecord) ([]importRowView, error) {
 			return runRows(ctx, recs, driverRows, func(ctx context.Context, rows []driverImportRow) ([]importOutcome, error) {
-				return imp.ImportDrivers(ctx, rows, generateDriverPassword)
+				return imp.ImportDrivers(ctx, preview, rows, generateDriverPassword)
 			})
 		},
 	},
@@ -392,25 +394,27 @@ func signImport(secret []byte, kind string, now time.Time, data []byte) importTo
 	}
 }
 
-// openImport returns the file a confirm form carries, if the signature holds
-// and the preview is less than importPreviewLifetime old.
-func openImport(secret []byte, kind string, form url.Values, now time.Time) ([]byte, error) {
+// openImport returns the file a confirm form carries, and the preview it
+// comes from, if the signature holds and the preview is less than
+// importPreviewLifetime old.
+func openImport(secret []byte, kind string, form url.Values, now time.Time) ([]byte, importPreview, error) {
 	issued, err := strconv.ParseInt(form.Get("issued"), 10, 64)
 	if err != nil {
-		return nil, errImportToken
+		return nil, importPreview{}, errImportToken
 	}
 	data, err := base64.RawURLEncoding.DecodeString(form.Get("data"))
 	if err != nil {
-		return nil, errImportToken
+		return nil, importPreview{}, errImportToken
 	}
 	sig, err := base64.RawURLEncoding.DecodeString(form.Get("sig"))
 	if err != nil || !hmac.Equal(sig, importMAC(secret, kind, issued, data)) {
-		return nil, errImportToken
+		return nil, importPreview{}, errImportToken
 	}
-	if now.Sub(time.Unix(issued, 0)) > importPreviewLifetime {
-		return nil, errImportToken
+	expires := time.Unix(issued, 0).Add(importPreviewLifetime)
+	if now.After(expires) {
+		return nil, importPreview{}, errImportToken
 	}
-	return data, nil
+	return data, importPreview{Signature: sig, Expires: expires}, nil
 }
 
 // driverPasswordAlphabet leaves out 0, 1, i, l and o, which are easy to
@@ -561,7 +565,7 @@ func (ui *adminUI) importConfirm(w http.ResponseWriter, r *http.Request) {
 		ui.renderImportForm(w, r, http.StatusBadRequest, kind, "Invalid form submission.")
 		return
 	}
-	data, err := openImport(ui.jwtSecret, kind.Name, r.PostForm, time.Now())
+	data, preview, err := openImport(ui.jwtSecret, kind.Name, r.PostForm, time.Now())
 	if err != nil {
 		ui.renderImportForm(w, r, http.StatusBadRequest, kind, "this preview has expired or was changed: upload the file again")
 		return
@@ -574,7 +578,11 @@ func (ui *adminUI) importConfirm(w http.ResponseWriter, r *http.Request) {
 		ui.renderImportForm(w, r, http.StatusUnprocessableEntity, kind, err.Error())
 		return
 	}
-	views, err := kind.run(r.Context(), ui.importer, recs)
+	views, err := kind.run(r.Context(), ui.importer, preview, recs)
+	if errors.Is(err, ErrPreviewImported) {
+		ui.renderImportForm(w, r, http.StatusConflict, kind, "this preview was already imported: to import the file again, upload it again")
+		return
+	}
 	if err != nil {
 		slog.Error("import: write", "kind", kind.Name, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

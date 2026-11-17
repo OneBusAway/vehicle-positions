@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -54,7 +55,11 @@ func (l *LoginRateLimiter) Stop() { l.once.Do(func() { close(l.stop) }) }
 // closed once the map hit capacity (a map-filling DoS from one IP). When the
 // IP is not blocked, a single Allow call still consumes budget from both
 // dimensions, matching prior behavior.
+//
+// Sign-in matches an email in any case, so the email's window is keyed
+// lower-case: typing it in another case doesn't buy a fresh window.
 func (l *LoginRateLimiter) Allow(ip, email string) bool {
+	email = strings.ToLower(email)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
@@ -72,6 +77,7 @@ func (l *LoginRateLimiter) Allow(ip, email string) bool {
 // charges every attempt up front, which bounds the attempts in flight at
 // once. An attacker can't trigger either refund without valid credentials.
 func (l *LoginRateLimiter) RecordSuccess(ip, email string) {
+	email = strings.ToLower(email)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.byEmail, email)

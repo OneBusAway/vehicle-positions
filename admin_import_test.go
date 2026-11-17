@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
@@ -27,19 +28,20 @@ import (
 func (n *noopStore) PlanVehicleImport(_ context.Context, rows []vehicleImportRow) ([]importOutcome, error) {
 	return make([]importOutcome, len(rows)), nil
 }
-func (n *noopStore) ImportVehicles(_ context.Context, rows []vehicleImportRow) ([]importOutcome, error) {
+func (n *noopStore) ImportVehicles(_ context.Context, _ importPreview, rows []vehicleImportRow) ([]importOutcome, error) {
 	return make([]importOutcome, len(rows)), nil
 }
 func (n *noopStore) PlanDriverImport(_ context.Context, rows []driverImportRow) ([]importOutcome, error) {
 	return make([]importOutcome, len(rows)), nil
 }
-func (n *noopStore) ImportDrivers(_ context.Context, rows []driverImportRow, _ func() string) ([]importOutcome, error) {
+func (n *noopStore) ImportDrivers(_ context.Context, _ importPreview, rows []driverImportRow, _ func() string) ([]importOutcome, error) {
 	return make([]importOutcome, len(rows)), nil
 }
 
-// fakeImporter records the rows each import call gets. A plan says every row
-// is new unless planned is set; an import returns its plan, with a password
-// and an account id for each new driver, unless imported is set.
+// fakeImporter records the rows and the preview each import call gets. A
+// plan says every row is new unless planned is set; an import returns its
+// plan, with a password and an account id for each new driver, unless
+// imported is set.
 type fakeImporter struct {
 	planned  []importOutcome
 	imported []importOutcome
@@ -50,6 +52,7 @@ type fakeImporter struct {
 	vehicleImports [][]vehicleImportRow
 	driverPlans    [][]driverImportRow
 	driverImports  [][]driverImportRow
+	previews       []importPreview
 }
 
 func (f *fakeImporter) plan(n int) []importOutcome {
@@ -68,8 +71,9 @@ func (f *fakeImporter) PlanVehicleImport(_ context.Context, rows []vehicleImport
 	return f.plan(len(rows)), f.err
 }
 
-func (f *fakeImporter) ImportVehicles(_ context.Context, rows []vehicleImportRow) ([]importOutcome, error) {
+func (f *fakeImporter) ImportVehicles(_ context.Context, preview importPreview, rows []vehicleImportRow) ([]importOutcome, error) {
 	f.vehicleImports = append(f.vehicleImports, rows)
+	f.previews = append(f.previews, preview)
 	time.Sleep(f.delay) // stands in for a slow import
 	if f.imported != nil {
 		return f.imported, f.err
@@ -82,8 +86,9 @@ func (f *fakeImporter) PlanDriverImport(_ context.Context, rows []driverImportRo
 	return f.plan(len(rows)), f.err
 }
 
-func (f *fakeImporter) ImportDrivers(_ context.Context, rows []driverImportRow, newPassword func() string) ([]importOutcome, error) {
+func (f *fakeImporter) ImportDrivers(_ context.Context, preview importPreview, rows []driverImportRow, newPassword func() string) ([]importOutcome, error) {
 	f.driverImports = append(f.driverImports, rows)
+	f.previews = append(f.previews, preview)
 	if f.imported != nil {
 		return f.imported, f.err
 	}
@@ -646,14 +651,18 @@ func TestOpenImport(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := openImport(testSecret, "vehicles", tc.form, tc.at)
+			got, preview, err := openImport(testSecret, "vehicles", tc.form, tc.at)
 			if tc.ok {
 				require.NoError(t, err)
 				assert.Equal(t, data, got)
+				sig, err := base64.RawURLEncoding.DecodeString(tok.Sig)
+				require.NoError(t, err)
+				assert.Equal(t, importPreview{Signature: sig, Expires: now.Add(importPreviewLifetime)}, preview)
 				return
 			}
 			assert.ErrorIs(t, err, errImportToken)
 			assert.Nil(t, got)
+			assert.Zero(t, preview)
 		})
 	}
 }
@@ -772,4 +781,29 @@ func TestHashPasswords(t *testing.T) {
 	cancel()
 	_, err = hashPasswords(ctx, map[int]string{0: "abcd-efgh-jkmn"})
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// The confirm hands the store the preview's own signature and the end of its
+// lifetime, which the store records so the preview is imported only once.
+func TestImportConfirm_PassesThePreview(t *testing.T) {
+	imp := &fakeImporter{}
+	ui := newImportTestUI(t, imp)
+	issued := time.Now().Add(-10 * time.Minute)
+	form := signedForm("drivers", driversHeader+"ana@example.org,Ana,\n", issued)
+	w := confirmImport(t, ui, "drivers", form)
+	require.Equal(t, http.StatusOK, w.Code, pageText(w))
+
+	sig, err := base64.RawURLEncoding.DecodeString(form.Get("sig"))
+	require.NoError(t, err)
+	require.Len(t, imp.previews, 1)
+	assert.Equal(t, sig, imp.previews[0].Signature)
+	assert.Equal(t, time.Unix(issued.Unix(), 0).Add(importPreviewLifetime), imp.previews[0].Expires)
+}
+
+func TestImportConfirm_AlreadyImported(t *testing.T) {
+	ui := newImportTestUI(t, &fakeImporter{err: ErrPreviewImported})
+	w := confirmImport(t, ui, "vehicles", signedForm("vehicles", vehiclesHeader+"bus-1,Bus 1,\n", time.Now()))
+	require.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, pageText(w), "this preview was already imported: to import the file again, upload it again")
+	assert.NotContains(t, w.Body.String(), "Imported</h3>")
 }

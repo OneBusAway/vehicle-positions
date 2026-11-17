@@ -49,29 +49,29 @@ SELECT id, name, email, role, active, created_at, updated_at
 FROM users
 WHERE id = $1;
 
--- name: ListUsersByEmailFold :many
--- Emails are stored as they were typed, and the CSV import lower-cases them,
--- so it finds an account whatever the case. Two stored addresses can differ
--- only in case, hence :many.
-SELECT id, name, email, role, active
+-- name: GetUserByEmail :one
+-- Matches the email in any case, for sign-in and for the CSV import:
+-- users_email_lower_key holds lower(email) unique and serves the lookup.
+SELECT id, name, email, password_hash, role, active, created_at, updated_at
 FROM users
-WHERE lower(email) = lower(sqlc.arg(email))
-ORDER BY id;
+WHERE lower(email) = lower(sqlc.arg(email));
 
 -- name: CreateUser :one
+-- Every account is made here, so every stored email is lower-case.
 INSERT INTO users (name, email, password_hash, role)
-VALUES ($1, $2, $3, $4)
+VALUES (sqlc.arg(name), lower(sqlc.arg(email)), sqlc.arg(password_hash), sqlc.arg(role))
 RETURNING id, name, email, role, active, created_at, updated_at;
 
 -- name: UpdateUser :one
 -- updated_at is maintained by the set_users_updated_at trigger. A role change
 -- ends every token issued before it (sessions_valid_after), so giving the old
 -- role back later cannot revive them. The role read in the CASE is the row's
--- value before this update.
+-- value before this update. The email is stored lower-case, as CreateUser
+-- stores it.
 UPDATE users
-SET name = $1, email = $2, role = $3,
-    sessions_valid_after = CASE WHEN role <> $3 THEN NOW() ELSE sessions_valid_after END
-WHERE id = $4
+SET name = sqlc.arg(name), email = lower(sqlc.arg(email)), role = sqlc.arg(role),
+    sessions_valid_after = CASE WHEN role <> sqlc.arg(role) THEN NOW() ELSE sessions_valid_after END
+WHERE id = sqlc.arg(id)
 RETURNING id, name, email, role, active, created_at, updated_at;
 
 -- name: DeleteUser :execrows
@@ -498,3 +498,13 @@ SELECT EXISTS (
     WHERE id = sqlc.arg(id) AND active AND role = sqlc.arg(role)
       AND (sessions_valid_after IS NULL OR sessions_valid_after < sqlc.arg(issued_at))
 );
+
+-- name: RecordImportConfirmation :execrows
+-- No row is inserted for a signature already recorded: that preview was
+-- imported.
+INSERT INTO import_confirmations (signature, expires_at)
+VALUES (sqlc.arg(signature), sqlc.arg(expires_at))
+ON CONFLICT (signature) DO NOTHING;
+
+-- name: DeleteImportConfirmationsBefore :exec
+DELETE FROM import_confirmations WHERE expires_at < sqlc.arg(cutoff);

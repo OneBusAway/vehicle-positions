@@ -26,6 +26,11 @@ type GtfsFeedCache struct {
 	FetchedAt pgtype.Timestamptz
 }
 
+type ImportConfirmation struct {
+	Signature []byte
+	ExpiresAt pgtype.Timestamptz
+}
+
 type LocationPoint struct {
 	ID              int64
 	VehicleID       string

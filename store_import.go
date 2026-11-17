@@ -8,9 +8,11 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -57,12 +59,48 @@ type driverImportRow struct {
 
 // CSVImporter plans and runs the admin site's CSV imports. A plan only reads.
 // An import plans the rows again inside one transaction and writes all of
-// them, or nothing when any row has an error.
+// them, or nothing when any row has an error, and it imports a preview only
+// once.
 type CSVImporter interface {
 	PlanVehicleImport(ctx context.Context, rows []vehicleImportRow) ([]importOutcome, error)
-	ImportVehicles(ctx context.Context, rows []vehicleImportRow) ([]importOutcome, error)
+	ImportVehicles(ctx context.Context, preview importPreview, rows []vehicleImportRow) ([]importOutcome, error)
 	PlanDriverImport(ctx context.Context, rows []driverImportRow) ([]importOutcome, error)
-	ImportDrivers(ctx context.Context, rows []driverImportRow, newPassword func() string) ([]importOutcome, error)
+	ImportDrivers(ctx context.Context, preview importPreview, rows []driverImportRow, newPassword func() string) ([]importOutcome, error)
+}
+
+// importPreview is the confirmed preview an import comes from: the signature
+// that makes it unique, and when it stops being confirmable.
+type importPreview struct {
+	Signature []byte
+	Expires   time.Time
+}
+
+// ErrPreviewImported is returned for a preview that was already imported.
+// Without it, an admin could confirm a preview again within its hour and, for
+// example, bring back a driver deleted since the first import.
+var ErrPreviewImported = errors.New("preview already imported")
+
+// claimPreview records preview as imported, in the import's transaction: a
+// second confirm finds the record and imports nothing, and a confirm that
+// fails rolls the record back, leaving the preview usable. A record is
+// dropped an hour after its preview expired, which leaves room for clocks
+// that differ between servers.
+func claimPreview(ctx context.Context, q *db.Queries, preview importPreview) error {
+	cutoff := pgtype.Timestamptz{Time: time.Now().Add(-importPreviewLifetime), Valid: true}
+	if err := q.DeleteImportConfirmationsBefore(ctx, cutoff); err != nil {
+		return fmt.Errorf("delete old import confirmations: %w", err)
+	}
+	n, err := q.RecordImportConfirmation(ctx, db.RecordImportConfirmationParams{
+		Signature: preview.Signature,
+		ExpiresAt: pgtype.Timestamptz{Time: preview.Expires, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("record import confirmation: %w", err)
+	}
+	if n == 0 {
+		return ErrPreviewImported
+	}
+	return nil
 }
 
 var _ CSVImporter = (*Store)(nil)
@@ -119,7 +157,7 @@ func wasValue(v string) string {
 // transaction. Every row was validated before the call, and a vehicle row has
 // no reason to fail that only the database knows, so a row error here means
 // another admin changed the same vehicle meanwhile, and nothing is written.
-func (s *Store) ImportVehicles(ctx context.Context, rows []vehicleImportRow) ([]importOutcome, error) {
+func (s *Store) ImportVehicles(ctx context.Context, preview importPreview, rows []vehicleImportRow) ([]importOutcome, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -127,6 +165,9 @@ func (s *Store) ImportVehicles(ctx context.Context, rows []vehicleImportRow) ([]
 	defer rollbackTx(tx)
 	q := s.queries.WithTx(tx)
 
+	if err := claimPreview(ctx, q, preview); err != nil {
+		return nil, err
+	}
 	outcomes, err := planVehicles(ctx, q, rows)
 	if err != nil {
 		return nil, err
@@ -186,22 +227,17 @@ func planDrivers(ctx context.Context, q *db.Queries, rows []driverImportRow) ([]
 	outcomes := make([]importOutcome, len(rows))
 	plans := make([]driverPlan, len(rows))
 	for i, row := range rows {
-		accounts, err := q.ListUsersByEmailFold(ctx, row.Email)
-		if err != nil {
-			return nil, nil, fmt.Errorf("find account for line %d: %w", row.Line, err)
-		}
 		o := importOutcome{Status: importNew}
 		p := driverPlan{assign: row.VehicleIDs}
+		u, err := q.GetUserByEmail(ctx, row.Email)
 		switch {
-		case len(accounts) > 1:
-			outcomes[i] = importOutcome{Status: importError, Reason: "more than one account has this email, in different cases"}
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return nil, nil, fmt.Errorf("find account for line %d: %w", row.Line, err)
+		case u.Role != roleDriver:
+			outcomes[i] = importOutcome{Status: importError, Reason: "this email belongs to an admin account"}
 			continue
-		case len(accounts) == 1:
-			u := accounts[0]
-			if u.Role != roleDriver {
-				outcomes[i] = importOutcome{Status: importError, Reason: "this email belongs to an admin account"}
-				continue
-			}
+		default:
 			assigned, err := q.ListVehiclesByUser(ctx, u.ID)
 			if err != nil {
 				return nil, nil, fmt.Errorf("list assignments of user %d: %w", u.ID, err)
@@ -270,7 +306,7 @@ func assignmentProblem(vehicleID string, err error) (reason string, ok bool) {
 // outside the transaction, says which rows need one, and they are hashed in
 // parallel before the transaction opens. The rows are planned again inside
 // it; one that turned new since then has no password and fails the import.
-func (s *Store) ImportDrivers(ctx context.Context, rows []driverImportRow, newPassword func() string) ([]importOutcome, error) {
+func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows []driverImportRow, newPassword func() string) ([]importOutcome, error) {
 	outcomes, _, err := planDrivers(ctx, s.queries, rows)
 	if err != nil {
 		return nil, err
@@ -296,6 +332,9 @@ func (s *Store) ImportDrivers(ctx context.Context, rows []driverImportRow, newPa
 	defer rollbackTx(tx)
 	q := s.queries.WithTx(tx)
 
+	if err := claimPreview(ctx, q, preview); err != nil {
+		return nil, err
+	}
 	outcomes, plans, err := planDrivers(ctx, q, rows)
 	if err != nil {
 		return nil, err

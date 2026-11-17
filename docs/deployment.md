@@ -859,6 +859,21 @@ docker compose exec db psql -U vehicle_positions -d vehicle_positions \
   -c "SELECT pg_size_pretty(pg_total_relation_size('location_points'))"
 ```
 
+The upgrade that adds migration 000024 makes sign-in match an email in any
+case and stores every email lower-case, so two accounts can no longer share an
+address in different cases. Where they do, the oldest active one keeps the
+address and each other one becomes `name+duplicate-<id>@domain`, which still
+signs in with its own password. To list them before you upgrade:
+
+```bash
+sudo -u postgres psql -d vehicle_positions -c "SELECT id, email, active FROM users
+  WHERE lower(email) IN (SELECT lower(email) FROM users GROUP BY 1 HAVING count(*) > 1)
+  ORDER BY lower(email), id"
+```
+
+Afterwards, search Users for `+duplicate` and give each one a real address
+or deactivate it.
+
 Read the release notes for new default-on surfaces before you upgrade. The
 admin UI is the example the README calls out: it did not exist in earlier
 versions and it is **on by default**, so an upgrade exposes `/admin` unless you
