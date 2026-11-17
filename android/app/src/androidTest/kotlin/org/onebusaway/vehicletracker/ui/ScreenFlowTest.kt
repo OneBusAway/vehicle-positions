@@ -39,6 +39,7 @@ import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -457,17 +458,23 @@ class ScreenFlowTest {
         compose.setContent { PreflightContent("4317", rows, canContinue, onBack, onContinue, onRowAction) }
     }
 
+    /** The end of a row as TalkBack reads it: the row's name, then its state. */
+    private fun rowSays(title: Int, state: Int) =
+        hasContentDescription(resources.getString(R.string.preflight_row_state, getString(title), getString(state)))
+
     @Test
     fun preflight_saysEachRowsStateInWords() {
         showChecklist(checklist(ALLOWED, ALLOWED, ALLOWED, SKIPPED, NEXT, NOT_REACHED))
 
         compose.onNode(hasText(getString(R.string.preflight_title)) and isHeading()).assertIsDisplayed()
         compose.onNodeWithText(resources.getString(R.string.preflight_message, "4317")).assertIsDisplayed()
-        assertEquals(3, compose.onAllNodes(hasText(getString(R.string.preflight_allowed)) and announcedPolitely).fetchSemanticsNodes().size)
-        compose.onNode(hasText(getString(R.string.preflight_skipped)) and announcedPolitely).assertIsDisplayed()
+        for (title in listOf(R.string.preflight_location, R.string.preflight_precise, R.string.preflight_background)) {
+            compose.onNode(rowSays(title, R.string.preflight_allowed) and announcedPolitely).assertIsDisplayed()
+        }
+        compose.onNode(rowSays(R.string.preflight_notifications, R.string.preflight_skipped) and announcedPolitely).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.preflight_skipped_why)).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.preflight_notifications_why)).assertDoesNotExist()
-        compose.onNode(hasText(getString(R.string.preflight_next)) and announcedPolitely).performScrollTo().assertIsDisplayed()
+        compose.onNode(rowSays(R.string.preflight_battery, R.string.preflight_next) and announcedPolitely).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.preflight_battery_why)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.preflight_location_services_why)).performScrollTo().assertIsDisplayed()
     }

@@ -434,6 +434,8 @@
     <string name="preflight_allowed">Allowed</string>
     <string name="preflight_skipped">Skipped</string>
     <string name="preflight_next">Next</string>
+    <!-- What TalkBack reads at the end of a row: the row's name, then one of the three above, e.g. "Location, Allowed". -->
+    <string name="preflight_row_state">%1$s, %2$s</string>
     <!-- In place of a row's reason once the driver has said no to something the app can do without. -->
     <string name="preflight_skipped_why">Not allowed. Reports still work.</string>
     <string name="preflight_location_needed">Location is needed to report</string>
