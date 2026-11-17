@@ -402,13 +402,24 @@ func tripGaps(points []LocationPoint, after time.Duration, loc *time.Location) [
 // vehicle location export. One download holds at most maxHistoryLimit
 // reports, the newest of its window, so a longer trip is split into windows of
 // at most that many, each ending the second before the next begins. Reports
-// sent in the same second are never split between two windows.
+// sent in the same second are never split between two windows, as a window
+// is whole seconds: a part ends before such a second, or, when the second
+// alone holds more than one download, after it, and that download is short
+// of the second's oldest reports. The export pages by nothing finer.
 func tripCSVParts(vehicleID string, points []LocationPoint, loc *time.Location) []tripCSVPart {
 	parts := make([]tripCSVPart, 0)
 	for start := 0; start < len(points); {
 		end := min(start+maxHistoryLimit, len(points))
-		for end < len(points) && end > start+1 && points[end].Timestamp == points[end-1].Timestamp {
-			end--
+		cut := end
+		for cut > start && cut < len(points) && points[cut].Timestamp == points[cut-1].Timestamp {
+			cut--
+		}
+		if cut > start {
+			end = cut
+		} else {
+			for end < len(points) && points[end].Timestamp == points[end-1].Timestamp {
+				end++
+			}
 		}
 		from, to := points[start].Timestamp, points[end-1].Timestamp
 		if end < len(points) {

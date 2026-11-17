@@ -431,6 +431,25 @@ func TestTripCSVParts(t *testing.T) {
 		assert.Empty(t, tripCSVParts("bus-1", nil, time.UTC))
 	})
 
+	// No phone sends 1,500 reports in one second, but if one did, the windows
+	// must still be ones the export accepts. Whole seconds can't split that
+	// second, so its part is the second alone.
+	t.Run("a second holding more than one download", func(t *testing.T) {
+		points := every(10, func(i int) int64 { return start + int64(i) })
+		points = append(points, every(1500, func(int) int64 { return start + 10 })...)
+		points = append(points, every(5, func(i int) int64 { return start + 11 + int64(i) })...)
+
+		parts := tripCSVParts("bus-1", points, time.UTC)
+		require.Len(t, parts, 3)
+		var windows [][2]int64
+		for _, part := range parts {
+			from, to := csvWindow(t, part)
+			require.LessOrEqual(t, from, to, "the export refuses from after to")
+			windows = append(windows, [2]int64{from, to})
+		}
+		assert.Equal(t, [][2]int64{{start, start + 9}, {start + 10, start + 10}, {start + 11, start + 15}}, windows)
+	})
+
 	// Each window must hold every report once, and no more than one download
 	// returns, however the reports fall across seconds.
 	for _, tc := range []struct {
