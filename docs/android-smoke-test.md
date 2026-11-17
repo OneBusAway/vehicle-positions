@@ -825,6 +825,72 @@ For a trip started or resumed in the app, Android 16 lets the restart keep
 location and reports carry on; Android may refuse it on other versions, which
 ends as above. Nothing crashes either way.
 
+**Seen on** Google APIs emulators. On API 36 (Android 16), as above: the
+refusal logged once, nothing in the crash buffer and no "did not then call
+startForeground" a minute later, **Reports paused** made a sound, and **Resume
+trip** brought the reports back with no second `POST /api/v1/trips/start`. On
+API 32 (Android 12L) nothing crashed either, but **Reports paused** never
+showed: Android started the service in the foreground without location
+(`Foreground service started from background can not have
+location/camera/microphone access`), its notification kept saying "Reporting",
+and no report reached the server until the app was opened 3.5 minutes later, on
+Tracking rather than **Resume**. Reports then came back with no second
+`POST /api/v1/trips/start`.
+
+### Check 4e: A restore from backup, then Resume, then Sign in
+
+Android's backup keeps the stored trip but leaves the session out
+(`backup_rules.xml` and `data_extraction_rules.xml`), so a phone restored or
+moved mid-trip knows a trip is open but has nobody signed in. Resume asks for a
+sign-in to the trip's own server before it reports anything.
+
+This uses the emulator's local backup transport. Note the one
+`adb shell bmgr list transports` marks with `*`, and select it again afterwards.
+
+1. With the trip running, back the app up:
+
+   ```bash
+   adb shell bmgr enable true
+   adb shell bmgr transport com.android.localtransport/.LocalTransport
+   adb shell bmgr backupnow org.onebusaway.vehicletracker
+   # Package org.onebusaway.vehicletracker with result: Success
+   ```
+
+2. Uninstall the app and install the same build again (from `android/`). The
+   install restores the backup by itself (`restoreAtInstall` in
+   `adb logcat -d -s BackupManagerService`) but gives back none of the app's
+   permissions, so grant them again before opening it:
+
+   ```bash
+   adb uninstall org.onebusaway.vehicletracker
+   adb install app/build/outputs/apk/debug/app-debug.apk
+   adb shell run-as org.onebusaway.vehicletracker ls files/datastore   # trip_state, no session
+   for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION POST_NOTIFICATIONS; do
+     adb shell pm grant org.onebusaway.vehicletracker android.permission.$p   # the last from Android 13
+   done
+   ```
+
+3. Open the app.
+
+**Expected outcome:** **Resume your trip?** with the trip's card, as in Check
+4b, though nobody is signed in.
+
+4. Tap **Resume trip**.
+
+**Expected outcome:** **Sign in again**, under **Your trip is still open**. The
+trip's server is on a line of its own (`Server 10.0.2.2:8081`), not in a field,
+so it can't be changed. Email is empty: it was kept with the session.
+
+5. Sign in as `driver@example.com` / `driverpass123` with **Sign in and keep
+   reporting**, then tap **Resume trip** again.
+
+**Expected outcome:** Sign in goes back to **Resume your trip?**, and **Resume
+trip** opens Tracking. Reports reach the server again on the same trip, with no
+second `POST /api/v1/trips/start` (count as in Check 4b).
+
+**Seen on** the API 36 Google APIs emulator (Android 16), as above at every
+step.
+
 ### Check 5 — Ending the trip stops everything and the vehicle drops from the feed
 
 1. Reopen the app (if not already open) and tap **End trip** on the trip bar.
