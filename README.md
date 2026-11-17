@@ -26,13 +26,21 @@ server reads, with its default and what a bad value does, is in
 For production — Postgres, reverse proxy and TLS, systemd, backups, monitoring
 and APK distribution — see [`docs/deployment.md`](docs/deployment.md).
 
+To watch the whole system run on your machine, `make demo` starts it with a
+sample agency's schedule and simulated vehicles: see
+[`docs/demo.md`](docs/demo.md). How the server held up with 50, 100 and 200
+vehicles on one CPU and 1 GB is in [`docs/load-test.md`](docs/load-test.md).
+
 ### Admin web UI
 
 The server also ships a server-rendered admin web UI at `/admin` — sign in,
 dashboard, live fleet map with per-trip trails, vehicle CRUD (with CSV export
-of location history), user CRUD, vehicle assignments, and trip history. It's
-built into the same binary and enabled by default; set
-`ADMIN_UI_ENABLED=false` to disable it entirely (the route returns 404).
+of location history), user CRUD, vehicle assignments, and trip history. It
+also has Alerts (vehicles gone quiet, not moving or off their route, and a
+block's next trip not started), Reports, feed health, feed API keys, and a
+Driver setup page with the setup link and its QR code. It's built into the
+same binary and enabled by default; set `ADMIN_UI_ENABLED=false` to disable it
+entirely (the route returns 404).
 
 Day-to-day instructions for operators — onboarding drivers, managing vehicles,
 watching the feed — are in [`docs/operator-manual.md`](docs/operator-manual.md).
@@ -130,7 +138,7 @@ unparseable value logs and falls back to its default.
 | `RIDER_MAX_SHAPE_DISTANCE` | `60` | Metres from shape (plus reported accuracy) for a point to match. |
 | `RIDER_MAX_SPEED` | `35` | Metres per second; implied along-shape speed above this is implausible. |
 | `RIDER_SCHEDULE_EARLY` / `RIDER_SCHEDULE_LATE` | `15m` / `90m` | Schedule-adherence window. |
-| `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest accepted point (of any outcome) is older than this stops contributing to the feed. The position published for it is always its latest *matched* point. |
+| `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest *matched* point is older than this stops contributing to the feed, even while its phone keeps sending points that don't match. That matched point is the position published for it. |
 | `RIDER_POINT_RETENTION` | `168h` | `ride_points` rows older than this are deleted hourly. |
 
 These settings also appear, alongside every other variable the server reads, in
@@ -185,7 +193,8 @@ The companion driver app lives in [`android/`](android/) (Gradle root —
 open that directory in Android Studio). It's a Kotlin/Jetpack Compose app
 (min SDK 26 / target SDK 36) that drivers use to log in, select their
 vehicle and route, and report their location to the server for the duration
-of a trip.
+of a trip. A new driver gets a three-screen welcome after the first sign-in and
+two tips on the real screens, and Help in the account menu explains each status.
 
 Build the debug APK:
 
@@ -207,9 +216,10 @@ The iOS counterpart lives in [`ios/VehicleTracker`](ios/VehicleTracker) (XcodeGe
 project; `xcodegen generate` builds the `.xcodeproj`). Drivers sign in, pick a
 vehicle and a GTFS run from the server's catalog, and report positions while
 the trip runs; the car screen shows the route, the next stop and the schedule
-deviation through a CarPlay navigation scene. Adherence is computed on the
-phone from the trip geometry the server serves, with the server's own
-thresholds. Setup and tests: [`docs/development.md`](docs/development.md#ios-driver-app);
+deviation through a CarPlay navigation scene. A new driver gets a three-screen
+welcome before the pickers and two tips on the real screens. Adherence is
+computed on the phone from the trip geometry the server serves, with the
+server's own thresholds. Setup and tests: [`docs/development.md`](docs/development.md#ios-driver-app);
 end-to-end walkthrough: [`docs/ios-smoke-test.md`](docs/ios-smoke-test.md);
 design: [`docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md`](docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md).
 Running in a real car needs Apple's CarPlay navigation entitlement; the

@@ -183,7 +183,7 @@ verified against the schedule configured under [GTFS schedule](#gtfs-schedule).
 | `RIDER_MAX_SPEED` | `35` | Optional | Metres per second; an implied along-shape speed above this is treated as implausible. Must be positive; zero, negative, `NaN`, `Inf` or unparseable warns and defaults. |
 | `RIDER_SCHEDULE_EARLY` | `15m` | Optional | How far ahead of schedule a trip may run and still be matched. Unparseable warns and defaults; unlike the durations above, zero and negative values are accepted, since this is a tolerance window rather than an interval. |
 | `RIDER_SCHEDULE_LATE` | `90m` | Optional | How far behind schedule a trip may run and still be matched. Same handling as `RIDER_SCHEDULE_EARLY`. |
-| `RIDER_POINT_MAX_AGE` | `90s` | Optional | A ride whose latest accepted point is older than this stops contributing to the feed. Must be positive; zero, negative or unparseable warns and defaults. |
+| `RIDER_POINT_MAX_AGE` | `90s` | Optional | A ride whose latest matched point is older than this stops contributing to the feed. Must be positive; zero, negative or unparseable warns and defaults. |
 
 Rider mode shares `JWT_SECRET` with the rest of the API. Rider tokens carry
 `role: "rider"` and are rejected on the driver and admin APIs, and vice versa.

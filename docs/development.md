@@ -211,9 +211,12 @@ need JDK 17, Maven and `jq`; no database or Docker.
      /tmp/feed-snapshots/*.results.json | sort | uniq -c
    ```
 
-Two warnings are expected today: `W006` for the vehicle whose driver knows
-only the route, and `W009` because the feed does not set
-`schedule_relationship`. Any line starting with `E` is what fails CI.
+Two warnings are expected today, once per snapshot, both for the vehicle whose
+driver knows only the route: `W006` because its trip has no `trip_id`, and
+`W009` (`schedule_relationship` not populated) because a route alone names no
+trip to be scheduled against. Every trip the feed does name is `SCHEDULED`, or
+`UNSCHEDULED` when `frequencies.txt` runs it by headway. Any line starting with
+`E` is what fails CI.
 
 ## Simulating Vehicle Traffic
 
@@ -239,10 +242,13 @@ run ends; delete them from the admin UI if they pile up.
 
 Two consequences worth knowing:
 
-- Startup makes one login per vehicle plus the simulator's own admin login, and
-  the server allows ten logins per IP per minute. Ten vehicles is therefore
-  eleven logins and already meets the limiter. The simulator waits it out rather
-  than failing, so runs of that size take a minute or two to get going.
+- Startup makes one login per vehicle plus the simulator's own admin login, one
+  at a time. The server allows ten logins per IP per minute, but a successful
+  login hands its attempt back, so only failed ones use up that budget and a
+  run of any size signs in without meeting the limiter. If a driver login is
+  refused anyway, say because other clients behind the same address are
+  failing theirs, the simulator waits and tries again. The admin login at
+  startup does not retry: a refusal there stops the simulator.
 - `-interval` now has to be 5 s or slower, but it no longer has to grow with
   `-vehicles`. The simulator warns at startup if the interval is too fast.
 

@@ -155,7 +155,7 @@ Riders are verified against the schedule in [GTFS schedule](#gtfs-schedule).
 | `RIDER_MAX_SPEED` | `35` | Metres per second; a higher implied along-shape speed is treated as implausible. |
 | `RIDER_SCHEDULE_EARLY` | `15m` | How early a trip may be running and still match. |
 | `RIDER_SCHEDULE_LATE` | `90m` | How late a trip may be running and still match. |
-| `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest accepted point is older than this stops contributing to the feed. |
+| `RIDER_POINT_MAX_AGE` | `90s` | A ride whose latest matched point is older than this stops contributing to the feed. |
 | `RIDER_POINT_RETENTION` | `168h` | `ride_points` rows older than this are deleted hourly. |
 
 Every rider-mode value above except `RIDER_SCHEDULE_EARLY` and
