@@ -6,7 +6,8 @@ import Testing
 /// What Share diagnostics sends: the app, the iPhone, the server, the
 /// location grants and recent errors, and never a position, a token, the
 /// email, or a vehicle or trip id (walkthrough spec §9).
-@Suite struct DiagnosticsTests {
+// One at a time: the log tests write to and read from the one process log.
+@Suite(.serialized) struct DiagnosticsTests {
     let device = DeviceFacts(version: "1.0.0 (7)", system: "26.4", model: "iPhone17,3", location: .allowed,
                              precise: false, locationServicesOn: true)
     let made = Date(timeIntervalSince1970: 1_794_355_200) // 2026-11-11 00:00 UTC
@@ -151,14 +152,16 @@ import Testing
     // MARK: Reading the app's own log
 
     /// The app's error lines once the one carrying `probe` can be read: the
-    /// log takes a moment to hand back a line just written.
-    func readBack(_ probe: String) async throws -> [LoggedError] {
+    /// log takes a moment to hand back a line just written. Read whole unless
+    /// a `limit` is given, so errors other suites log at the same moment
+    /// cannot push the probe out of what is read.
+    func readBack(_ probe: String, limit: Int = .max) async throws -> [LoggedError] {
         for _ in 0..<20 {
-            let read = try #require(DiagnosticsFile.recentErrors())
+            let read = try #require(DiagnosticsFile.recentErrors(limit: limit))
             if read.contains(where: { $0.pieces.contains(.shown(probe)) }) { return read }
             try await Task.sleep(for: .milliseconds(100))
         }
-        return try #require(DiagnosticsFile.recentErrors())
+        return try #require(DiagnosticsFile.recentErrors(limit: limit))
     }
 
     /// The app reads its own error lines back from the system's log, with
@@ -177,7 +180,7 @@ import Testing
         #expect(abs(line.date.timeIntervalSinceNow) < 60)
     }
 
-    /// The newest lines, in the order they were logged, even in one instant.
+    /// The app's lines in the order they were logged, even in one instant.
     @Test func theAppsOwnLinesComeOldestFirst() async throws {
         let probe = UUID().uuidString
         let log = Logger(subsystem: DiagnosticsReport.subsystem, category: "diagnostics-order")
@@ -189,8 +192,6 @@ import Testing
             if case .shown(let step) = line.pieces.first { step } else { nil }
         }
         #expect(steps == ["first", "second", "third"])
-        #expect(read.last?.pieces.contains(.shown(probe)) == true, "the newest line is last")
-        #expect(read.count <= DiagnosticsReport.errorLimit)
     }
 
     /// With more lines than the file takes, the newest are the ones kept.
@@ -200,29 +201,41 @@ import Testing
         for step in 1...(DiagnosticsReport.errorLimit + 5) {
             log.error("\(String(step), privacy: .public) of \(probe, privacy: .public)")
         }
-        let read = try await readBack(probe)
+        let read = try await readBack(probe, limit: DiagnosticsReport.errorLimit)
         #expect(read.count == DiagnosticsReport.errorLimit)
         let steps = read.filter { $0.pieces.contains(.shown(probe)) }.compactMap { line -> String? in
             if case .shown(let step) = line.pieces.first { step } else { nil }
         }
         #expect(steps.last == String(DiagnosticsReport.errorLimit + 5))
         #expect(!steps.contains("1"), "the oldest went")
+        #expect(DiagnosticsFile.recentErrors()?.count == DiagnosticsReport.errorLimit, "the file takes the newest 50")
+        let all = try #require(DiagnosticsFile.recentErrors(limit: .max)).filter { $0.pieces.contains(.shown(probe)) }
+        #expect(all.count == DiagnosticsReport.errorLimit + 5, "a read with no limit keeps every line")
     }
 
-    /// The file the share sheet gets: its name, and the text.
-    @Test func theShareSheetGetsOneSmallTextFile() async throws {
-        let folder = URL.temporaryDirectory.appending(path: UUID().uuidString)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let url = try await DiagnosticsFile(host: "tracker.example.org").export(to: folder, contentType: .utf8PlainText)
+    // MARK: The file
+
+    /// The file the share sheet gets: its name and its text. It is deleted
+    /// once the share sheet is done with it.
+    @Test func theShareSheetGetsOneSmallTextFileThenItGoes() async throws {
+        let url = try await DiagnosticsFile(host: "tracker.example.org").write(grants: LocationGrants(location: .allowed, precise: true))
         let text = try String(contentsOf: url, encoding: .utf8)
         #expect(url.lastPathComponent == "Vehicle Tracker diagnostics.txt")
         #expect(text.hasPrefix("Vehicle Tracker diagnostics\nMade: "))
         #expect(text.contains("\nServer: tracker.example.org\n"))
         #expect(text.contains("\nApp: \(AccountMenu.versionNumber(Bundle.main.infoDictionary))\n"))
+        #expect(text.contains("\nLocation: allowed\nPrecise location: allowed\n"))
         #expect(text.utf8.count < 20_000)
-        // Precision says nothing until location is allowed.
-        let allowed = text.contains("\nLocation: allowed\n")
-        #expect(text.contains("\nPrecise location: n/a\n") != allowed)
+
+        DiagnosticsFile.remove(url)
+        #expect(!FileManager.default.fileExists(atPath: url.path(percentEncoded: false)))
+    }
+
+    /// Precision says nothing until location is allowed, whatever iOS reports.
+    @Test func theFileSaysNothingOfPrecisionWithoutLocation() async throws {
+        let url = try await DiagnosticsFile(host: "h").write(grants: LocationGrants(location: .notAllowed, precise: true))
+        defer { DiagnosticsFile.remove(url) }
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.contains("\nLocation: not allowed\nPrecise location: n/a\n"))
     }
 }

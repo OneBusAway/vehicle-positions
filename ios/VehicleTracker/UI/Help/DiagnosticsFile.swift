@@ -1,27 +1,18 @@
 import CoreLocation
-import CoreTransferable
 import OSLog
-import UniformTypeIdentifiers
 
 /// What Share diagnostics hands the share sheet: one small text file, read
-/// and written when the app the driver picks asks for it, never while Help
-/// draws. The app sends it nowhere itself.
-nonisolated struct DiagnosticsFile: Transferable {
+/// and written when the driver taps Share diagnostics, never while Help
+/// draws, and deleted once the share sheet closes. The app sends it nowhere
+/// itself.
+nonisolated struct DiagnosticsFile {
     /// The server's host, as Help's About row shows it.
     let host: String
 
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .utf8PlainText) { file in
-            let grants = await LocationGrants.read()
-            let url = try await file.write(grants: grants)
-            return SentTransferredFile(url)
-        }
-    }
-
-    /// Off the main thread: Apple warns that asking whether Location
-    /// Services are on can block, and the log is read from the start of the
-    /// app's run.
-    @concurrent private func write(grants: LocationGrants) async throws -> URL {
+    /// Writes the file and returns where. Off the main thread: Apple warns
+    /// that asking whether Location Services are on can block, and the log is
+    /// read from the start of the app's run.
+    @concurrent func write(grants: LocationGrants) async throws -> URL {
         let device = DeviceFacts(
             version: AccountMenu.versionNumber(Bundle.main.infoDictionary),
             system: Self.systemVersion(),
@@ -35,6 +26,11 @@ nonisolated struct DiagnosticsFile: Transferable {
         let url = URL.temporaryDirectory.appending(path: DiagnosticsReport.fileName)
         try Data(text.utf8).write(to: url, options: .atomic)
         return url
+    }
+
+    /// Deletes a file `write` made, once the share sheet is done with it.
+    static func remove(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
     }
 
     /// "26.4", or "26.4.1" with a patch.
@@ -57,11 +53,11 @@ nonisolated struct DiagnosticsFile: Transferable {
         }
     }
 
-    /// The app's newest error and fault lines since it opened, oldest first:
-    /// iOS lets an app read only its own process's log. Nil when the log
-    /// cannot be read. The store hands back its oldest line first even when
-    /// asked for the newest, so all are read and the last kept.
-    static func recentErrors() -> [LoggedError]? {
+    /// The app's newest `limit` error and fault lines since it opened, oldest
+    /// first: iOS lets an app read only its own process's log. Nil when the
+    /// log cannot be read. The store hands back its oldest line first even
+    /// when asked for the newest, so all are read and the last kept.
+    static func recentErrors(limit: Int = DiagnosticsReport.errorLimit) -> [LoggedError]? {
         do {
             let store = try OSLogStore(scope: .currentProcessIdentifier)
             let entries = try store.getEntries(matching: NSPredicate(format: "subsystem == %@", DiagnosticsReport.subsystem))
@@ -69,7 +65,7 @@ nonisolated struct DiagnosticsFile: Transferable {
             for case let entry as OSLogEntryLog in entries where entry.level == .error || entry.level == .fault {
                 errors.append(LoggedError(entry))
             }
-            return Array(errors.suffix(DiagnosticsReport.errorLimit))
+            return Array(errors.suffix(limit))
         } catch {
             return nil
         }

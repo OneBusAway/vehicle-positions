@@ -105,6 +105,6 @@ nonisolated enum HelpText {
     }
 
     static var shareDiagnosticsDetail: String {
-        String(localized: "Sends the app version, the iPhone model and recent errors. No positions, no sign-in details, no email.", comment: "Help: under 'Share diagnostics', what the file holds and what it never holds.")
+        String(localized: "Sends the app version, the iPhone model, the server, what the app is allowed to do and recent errors. No positions, no sign-in details, no email.", comment: "Help: under 'Share diagnostics', what the file holds and what it never holds.")
     }
 }

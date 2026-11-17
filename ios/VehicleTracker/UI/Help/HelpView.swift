@@ -1,4 +1,6 @@
+import OSLog
 import SwiftUI
+import UIKit
 
 extension EnvironmentValues {
     /// Pushes Help on the pickers' stack. Set by `PickerFlow` only, so the
@@ -29,6 +31,11 @@ struct OpenHelpAction: Equatable {
 struct HelpView: View {
     @Environment(TripSession.self) private var session
     @State private var showingWelcome = false
+    /// The file being written for the share sheet.
+    @State private var writing = false
+    /// The file the share sheet has, until it closes.
+    @State private var shared: URL?
+    private let log = Logger(subsystem: DiagnosticsReport.subsystem, category: "help")
 
     private var host: String { AccountMenu.serverText(session.settings.serverURL) }
 
@@ -55,9 +62,17 @@ struct HelpView: View {
                 SectionTitle(text: HelpText.aboutSection)
             }
             Section {
-                ShareLink(item: DiagnosticsFile(host: host), preview: SharePreview(DiagnosticsReport.title)) {
-                    Label(HelpText.shareDiagnostics, systemImage: "square.and.arrow.up")
+                Button(action: share) {
+                    HStack {
+                        Label(HelpText.shareDiagnostics, systemImage: "square.and.arrow.up")
+                        Spacer()
+                        if writing {
+                            ProgressView()
+                        }
+                    }
                 }
+                .disabled(writing || shared != nil)
+                .background(ShareSheet(file: $shared))
             } footer: {
                 Text(HelpText.shareDiagnosticsDetail)
             }
@@ -70,6 +85,46 @@ struct HelpView: View {
         .fullScreenCover(isPresented: $showingWelcome) {
             WelcomeView { showingWelcome = false }
         }
+    }
+
+    /// Writes the file, then hands it to the share sheet. Location access is
+    /// read here, on the main thread, and the rest off it.
+    private func share() {
+        writing = true
+        let grants = LocationGrants.read()
+        let file = DiagnosticsFile(host: host)
+        Task {
+            defer { writing = false }
+            do {
+                shared = try await file.write(grants: grants)
+            } catch {
+                log.error("could not write the diagnostics file: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+}
+
+/// The system share sheet with one file. UIKit's, not SwiftUI's ShareLink:
+/// only UIKit's says when the sheet has closed, and then the file is
+/// deleted.
+private struct ShareSheet: UIViewControllerRepresentable {
+    @Binding var file: URL?
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ host: UIViewController, context: Context) {
+        guard let url = file, host.presentedViewController == nil else { return }
+        let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = host.view
+        // Called once the sheet has closed, whether the driver sent the file
+        // or not.
+        sheet.completionWithItemsHandler = { _, _, _, _ in
+            DiagnosticsFile.remove(url)
+            file = nil
+        }
+        host.present(sheet, animated: true)
     }
 }
 

@@ -47,7 +47,7 @@ import Testing
         #expect(HelpText.aboutSection == "About")
         #expect(HelpText.version == "Version")
         #expect(HelpText.shareDiagnostics == "Share diagnostics")
-        #expect(HelpText.shareDiagnosticsDetail == "Sends the app version, the iPhone model and recent errors. No positions, no sign-in details, no email.")
+        #expect(HelpText.shareDiagnosticsDetail == "Sends the app version, the iPhone model, the server, what the app is allowed to do and recent errors. No positions, no sign-in details, no email.")
     }
 
     @Test func noWordSaysBus() {
