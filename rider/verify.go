@@ -17,7 +17,7 @@ type Thresholds struct {
 	FutureWindow       time.Duration // how far ahead of the clock a reported timestamp may be
 	ScheduleEarly      time.Duration // how far ahead of schedule a trip may run
 	ScheduleLate       time.Duration // how far behind schedule a trip may run
-	PointMaxAge        time.Duration // how long an accepted point stays usable (Session.Fresh / Aggregator)
+	PointMaxAge        time.Duration // how old a ride's latest matched point may be and still count (Session.Fresh / Aggregator)
 	MaxRegression      float64       // metres a vehicle may slip backwards along the shape before it is implausible
 	CorroborationBase  float64       // along-shape gap to a trusted vehicle that always counts as agreement
 	ContradictionExtra float64       // gap beyond the allowance that turns disagreement into contradiction
