@@ -46,6 +46,7 @@ type appStore interface {
 	AssignmentDeleter
 	AssignmentListerByUser
 	AssignmentListerByVehicle
+	CSVImporter
 	TripStarter
 	TripEnder
 	TripByIDEnder

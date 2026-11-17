@@ -85,6 +85,7 @@ type adminUI struct {
 	vehicleCreator VehicleCreator
 	userManager    userManager
 	assignments    assignmentManager
+	importer       CSVImporter
 	apiKeys        APIKeyManager
 	tokenChecker   TokenChecker
 	tokenRevoker   TokenRevoker
@@ -122,6 +123,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 		vehicleCreator: store,
 		userManager:    store,
 		assignments:    store,
+		importer:       store,
 		apiKeys:        store,
 		tokenChecker:   store,
 		tokenRevoker:   store,
@@ -162,6 +164,10 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("POST /admin/users/{id}/vehicles", protect(http.HandlerFunc(ui.userAssignVehicle)))
 	mux.Handle("POST /admin/users/{id}/vehicles/{vehicleID}/remove", protect(http.HandlerFunc(ui.userUnassignVehicle)))
 	mux.Handle("GET /admin/driver-setup", protect(http.HandlerFunc(ui.driverSetupPage)))
+	mux.Handle("GET /admin/import/{kind}", protect(http.HandlerFunc(ui.importPage)))
+	mux.Handle("GET /admin/import/{kind}/template.csv", protect(http.HandlerFunc(ui.importTemplate)))
+	mux.Handle("POST /admin/import/{kind}", protect(http.HandlerFunc(ui.importUpload)))
+	mux.Handle("POST /admin/import/{kind}/confirm", protect(http.HandlerFunc(ui.importConfirm)))
 	mux.Handle("GET /admin/trips", protect(http.HandlerFunc(ui.tripsPage)))
 	mux.Handle("GET /admin/trips/{id}", protect(http.HandlerFunc(ui.tripDetailPage)))
 	mux.Handle("GET /admin/reports", protect(http.HandlerFunc(ui.reportsPage)))

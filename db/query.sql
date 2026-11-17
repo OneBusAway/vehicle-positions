@@ -49,6 +49,15 @@ SELECT id, name, email, role, active, created_at, updated_at
 FROM users
 WHERE id = $1;
 
+-- name: ListUsersByEmailFold :many
+-- Emails are stored as they were typed, and the CSV import lower-cases them,
+-- so it finds an account whatever the case. Two stored addresses can differ
+-- only in case, hence :many.
+SELECT id, name, email, role, active
+FROM users
+WHERE lower(email) = lower(sqlc.arg(email))
+ORDER BY id;
+
 -- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, role)
 VALUES ($1, $2, $3, $4)
