@@ -2277,9 +2277,12 @@ components:
           type: string
           deprecated: true
           description: |
-            Deprecated alias repeating `access_token` verbatim. Kept so clients
-            written against the original single-token response keep working;
-            new clients should read `access_token`.
+            Deprecated alias repeating `access_token` verbatim, so it expires
+            with it after `expires_in` seconds (15 minutes by default). It stays
+            in the response for good, with no planned removal, so clients
+            written against the original single-token response keep parsing
+            it, but a client that never calls `POST /api/v1/auth/refresh` gets
+            a `401` once it expires. New clients should read `access_token`.
         access_token:
           type: string
           description: JWT bearer token (HS256), valid for `expires_in` seconds.

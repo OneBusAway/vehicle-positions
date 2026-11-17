@@ -620,9 +620,9 @@ blocked rider still receives normal responses, so an abuser learns nothing from
 them, but their points are never persisted or published.
 
 A ride contributes to the feed only while it is `Verified`, not ended, fresh
-(its latest *accepted* point — of whatever outcome — is younger than
-`RIDER_POINT_MAX_AGE`, so a rider whose phone is still reporting is judged on
-that, not on the last point that happened to match) and its rider is not
+(its latest *matched* point is younger than `RIDER_POINT_MAX_AGE`, so a run of
+off-route points too short to reject the ride can't keep a minutes-old match
+looking live) and its rider is not
 blocked — and then only if that rider is `Trusted`, or the ride has been
 corroborated by the trusted feed, or a second rider on the same trip
 independently agrees within 100 m.
