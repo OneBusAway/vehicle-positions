@@ -294,6 +294,34 @@ vehicle** button. The server checks the assignment on every location report
 too, which is why **Remove** refuses while the driver is on a trip on that
 vehicle: the trip would keep running with every report refused.
 
+### Many at once: import a CSV file
+
+**Import from CSV** on **Vehicles** and on **Users** sets up a whole fleet and
+its drivers from a spreadsheet. Import the vehicles first, so the drivers file
+can assign them.
+
+1. Click **Import from CSV**, then **Download the template**. Fill it in and
+   save it as **CSV UTF-8**. The first line names the columns, in any order:
+   - Vehicles: `id`, `label` and `agency_tag`, checked as on **New vehicle**.
+   - Drivers: `email`, `name` and `vehicle_ids`, the vehicles to assign,
+     separated by spaces (`101 102`). Each must exist and be active. Emails are
+     saved in lower case.
+2. Choose the file and click **Preview**. Each line is marked **New**,
+   **Update**, **Unchanged** or **Error**, with the reason for an error in the
+   words the forms use. A file holds up to 200 rows and 256 KB.
+3. If any line has an error, nothing can be imported: fix the file and upload
+   it again. Otherwise click **Confirm import** within an hour. Every line is
+   saved, or none is.
+4. The result lists what was created and updated. Each new driver has a
+   password and a **Setup sheet** link. The passwords are shown only on this
+   page, so give each driver theirs with their sheet; if one is lost, set a new
+   one with **Edit**.
+
+An existing vehicle takes the file's label and agency tag. An existing driver
+gets only the new name and the listed vehicles added: an import never changes a
+password or a role, never removes an assignment, never activates or deactivates
+anything, and refuses a line whose email belongs to an admin.
+
 ---
 
 ## 7. Onboarding a driver
