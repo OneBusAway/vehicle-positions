@@ -27,8 +27,18 @@ data class MapRecord(
     val rejected: RejectedMap? = null,
 )
 
+/**
+ * [server] is the server that gave [url], as [org.onebusaway.vehicletracker.data.normalizedServerUrl] gives it. It is
+ * null in a record saved by a build from before maps were tied to a server.
+ */
 @Serializable
-data class StoredMap(val url: String, val fileName: String, val version: FileVersion, val checkedAtEpochSec: Long)
+data class StoredMap(
+    val url: String,
+    val fileName: String,
+    val version: FileVersion,
+    val checkedAtEpochSec: Long,
+    val server: String? = null,
+)
 
 @Serializable
 data class PendingDownload(val url: String, val fileName: String, val version: FileVersion? = null)
