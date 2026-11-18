@@ -19,6 +19,7 @@ func TestLoadTemplates(t *testing.T) {
 		assert.Contains(t, tmpls.admin, view, "admin view %q should be parsed", view)
 	}
 	assert.Contains(t, tmpls.public, "login.html")
+	assert.Contains(t, tmpls.public, "error.html")
 }
 
 // TestRenderUnknownViewWritesCleanError verifies that rendering a view absent

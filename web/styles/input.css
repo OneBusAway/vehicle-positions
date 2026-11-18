@@ -287,7 +287,7 @@
     .pic.play .chip-heard { animation: rise-in 350ms var(--ease-emph) 1500ms both; }
     .pic.play .n b:nth-child(1) { animation: pic-n1 1ms linear 2200ms forwards; }
     .pic.play .n b:nth-child(2) { opacity: 0; animation: pic-n2 700ms steps(1) 2200ms forwards; }
-    .pic.play .n b:nth-child(3) { opacity: 0; animation: fade-in 1ms linear 2900ms forwards; }
+    .pic.play .n b:nth-child(3) { opacity: 0; animation: pic-n3 1ms linear 2900ms forwards; }
   }
   @media (prefers-reduced-motion: reduce) {
     .pic .n b:nth-child(1), .pic .n b:nth-child(2) { display: none; }
@@ -297,6 +297,7 @@
   @keyframes pic-lit { to { background: var(--primary-container); color: var(--on-primary-container); } }
   @keyframes pic-n1 { to { opacity: 0; } }
   @keyframes pic-n2 { 0% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes pic-n3 { to { opacity: 1; } }
   .login { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); background: var(--surface); }
   .login-form { align-self: center; justify-self: center; width: 100%; max-width: 440px; padding: 32px 28px; }
   .login-pic { padding: 20px; display: grid; }
@@ -437,6 +438,37 @@
   .chart .dot { fill: var(--tone, var(--chart-1)); }
   .chart .ok-band { fill: var(--ok); opacity: 0.1; }
   .chart .bar-ok { fill: var(--ok); }
+
+  /* Sign in */
+  .login { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); background: var(--surface); }
+  .login-form { align-self: center; justify-self: center; width: 100%; max-width: 440px; padding: 32px 28px; }
+  .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; font: 500 18px/24px var(--font-sans); }
+  .login-brand .brand-mark { width: 44px; height: 44px; border-radius: 11px; }
+  .login-form .h1 { font-size: 32px; line-height: 40px; }
+  .login-form .lede { margin: 6px 0 24px; }
+  .login-form .banner { margin-bottom: 16px; }
+  .login-form form { display: grid; gap: 16px; }
+  .login-form form .btn { height: 48px; margin-top: 4px; border-radius: 24px; font-size: 15px; }
+  .login-form .help { margin-top: 20px; }
+  .login-pic { display: grid; padding: 20px; }
+  .login-pic .pic { height: 100%; min-height: 420px; }
+  @media (max-width: 860px) {
+    .login { grid-template-columns: minmax(0, 1fr); }
+    .login-pic { order: -1; padding: 16px 16px 0; }
+    .login-pic .pic { min-height: 240px; height: 34vh; }
+    .login-form { padding-top: 20px; }
+  }
+
+  /* The page that stands in for one that answered with an error */
+  .error-page { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-rows: auto 1fr; padding: 24px; }
+  .error-home { display: inline-flex; align-items: center; gap: 10px; justify-self: start; color: var(--ink); font: 500 15px/20px var(--font-sans); }
+  .error-what { place-self: center; max-width: 460px; text-align: center; }
+  .error-mark { display: grid; place-items: center; margin-bottom: 20px; }
+  .error-mark .veh-marker { width: 56px; height: 56px; border-width: 4px; }
+  .error-code { font: 500 13px/18px var(--font-sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .error-what .h1 { margin: 4px 0 8px; }
+  .error-what .lede { margin: 0 auto 24px; }
+  .error-ways { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 
   /* Rider mode and Feed health */
   .tile-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px; }

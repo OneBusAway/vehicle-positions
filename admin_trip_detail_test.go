@@ -95,7 +95,7 @@ func TestTripDetailPage_StoreErrors(t *testing.T) {
 	} {
 		w := requestAdminPage(t, newTripDetailMux(t, store, r), "/admin/trips/1")
 		assert.Equal(t, http.StatusInternalServerError, w.Code, name)
-		assert.Contains(t, w.Body.String(), "internal server error", name)
+		assert.Contains(t, w.Body.String(), serverErrorTitle, name)
 	}
 }
 

@@ -80,9 +80,26 @@ func TestAdminLoginPageRenders(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), `method="post"`)
-	assert.Contains(t, w.Body.String(), `action="/admin/login"`)
-	assert.NotContains(t, w.Body.String(), "signup")
+	body := w.Body.String()
+	assert.Contains(t, body, `method="post"`)
+	assert.Contains(t, body, `action="/admin/login"`)
+	assert.NotContains(t, body, "signup")
+	assert.Contains(t, body, "<title>Sign in · Vehicle Tracker</title>")
+	assert.Contains(t, body, `<h1 class="h1">Sign in</h1>`)
+	assert.Contains(t, body, `<div class="picture pic play" aria-hidden="true">`, "the apps' welcome picture, which says nothing a reader needs")
+	assert.NotContains(t, body, `role="alert"`)
+	assert.NotContains(t, body, `role="status"`, "nobody was sent here from another page")
+	assert.NotContains(t, body, "Transit Tracker")
+
+	// Sent here from a page, the visitor is told why and goes back after.
+	req = httptest.NewRequest(http.MethodGet, "/admin/login?next=%2Fadmin%2Ftrips%3Fstatus%3Dactive", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	body = w.Body.String()
+	assert.Contains(t, body, `role="status"`)
+	assert.Contains(t, body, "You are signed out. Sign in to carry on where you were.")
+	assert.Contains(t, body, `<input type="hidden" name="next" value="/admin/trips?status=active">`)
 }
 
 func TestAdminLoginFlow(t *testing.T) {
@@ -114,6 +131,9 @@ func TestAdminLoginFlow(t *testing.T) {
 		w := post(admin.Email, "nope")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		assert.Contains(t, w.Body.String(), "Invalid email or password")
+		assert.Contains(t, w.Body.String(), `<div class="banner banner-error" role="alert">`)
+		assert.Contains(t, w.Body.String(), `value="boss@test.com"`, "the email is kept, the password is not")
+		assert.NotContains(t, w.Body.String(), "nope")
 	})
 	t.Run("unknown email re-renders 401 identically", func(t *testing.T) {
 		w := post("ghost@test.com", "nope")
@@ -2240,7 +2260,7 @@ func TestAdminUI_PasswordResetFailureIs500(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 }
 
 // TestAdminUI_DeactivateFailureIs500 pins the same for deactivation, so a
@@ -2254,5 +2274,5 @@ func TestAdminUI_DeactivateFailureIs500(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 }

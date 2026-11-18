@@ -151,7 +151,9 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 // static assets — that's the caller's responsibility (main's handler
 // construction), keeping this function focused on admin routes only.
 func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
-	protect := requireAdminPage(ui.jwtSecret, ui.tokenChecker)
+	// Every page behind the guard answers a bare error with the error page.
+	guard := requireAdminPage(ui.jwtSecret, ui.tokenChecker)
+	protect := func(next http.Handler) http.Handler { return guard(ui.errorPages(next)) }
 
 	mux.HandleFunc("GET /admin/login", ui.loginPage)
 	mux.HandleFunc("POST /admin/login", ui.loginSubmit)
@@ -192,6 +194,10 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("GET /admin/api-keys", protect(http.HandlerFunc(ui.apiKeysPage)))
 	mux.Handle("POST /admin/api-keys", protect(http.HandlerFunc(ui.apiKeyCreate)))
 	mux.Handle("POST /admin/api-keys/{id}/deactivate", protect(http.HandlerFunc(ui.apiKeyDeactivate)))
+	// An address under /admin/ that is no page: signed in, the error page
+	// says so; signed out, the guard sends the visitor to sign in like any
+	// other, which tells them nothing about which pages exist.
+	mux.Handle("GET /admin/", protect(http.NotFoundHandler()))
 }
 
 func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +279,7 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 // writes the status line after a successful render).
 func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email, next string) {
 	renderInto(w, status, ui.tmpl.public, "login.html", "login.html", map[string]interface{}{
-		"Title": "Sign In", "Error": errMsg, "Email": email, "Next": next,
+		"Title": "Sign in", "Error": errMsg, "Email": email, "Next": next,
 	})
 }
 

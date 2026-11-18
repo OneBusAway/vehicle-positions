@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Vehicle Tracker</title>
+<link rel="preload" href="/static/fonts/google-sans-flex.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/css/admin.css">
+<noscript><style>.js-only{display:none!important}</style></noscript>
+<script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+<main class="error-page">
+  <a class="error-home" href="/admin/map">{{template "brand-mark-sm"}}Vehicle Tracker</a>
+  <div class="error-what rise">
+    <div class="error-mark"><span class="veh-marker{{if .Lost}} no-bearing{{else}} quiet{{end}}" aria-hidden="true">{{template "arrow"}}</span></div>
+    <div class="error-code">Error {{.Status}}</div>
+    <h1 class="h1">{{.Title}}</h1>
+    <p class="lede">{{.Text}}</p>
+    <div class="error-ways">{{if .Retry}}<a class="btn btn-primary" href="{{.Retry}}">Try again</a>{{else if .Back}}<button class="btn btn-primary js-only" type="button" onclick="history.back()">Go back</button>{{end}}<a class="btn{{if not (or .Retry .Back)}} btn-primary{{end}}" href="/admin/map">Go to the live map</a></div>
+  </div>
+</main>
+</body>
+</html>

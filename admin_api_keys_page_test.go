@@ -171,7 +171,7 @@ func TestAPIKeysPage_StoreError(t *testing.T) {
 			w := requestAdminPage(t, mux, "/admin/api-keys")
 
 			assert.Equal(t, http.StatusInternalServerError, w.Code)
-			assert.Contains(t, w.Body.String(), "internal server error")
+			assert.Contains(t, w.Body.String(), serverErrorTitle)
 			assert.NotContains(t, w.Body.String(), "connection refused")
 		})
 	}
@@ -335,7 +335,7 @@ func TestAPIKeyCreate_StoreError(t *testing.T) {
 	w := postAdminForm(t, mux, "/admin/api-keys", "name=OneBusAway")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 	assert.NotContains(t, w.Body.String(), "connection refused")
 	assert.Empty(t, rawAPIKeyPattern.FindString(w.Body.String()), "a key that was not stored must not be shown")
 }
@@ -412,7 +412,7 @@ func TestAPIKeyDeactivate_StoreError(t *testing.T) {
 	w := postAdminForm(t, mux, "/admin/api-keys/3/deactivate", "")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 	assert.NotContains(t, w.Body.String(), "connection refused")
 	assert.Empty(t, flashCodeSet(w), "a failed deactivation must not reach the flash")
 }

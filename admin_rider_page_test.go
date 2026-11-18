@@ -420,10 +420,10 @@ func TestRiderPage_Errors(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{"status fails", fakeRiderPageSource{err: assert.AnError}, &recordingRideLister{}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, "internal server error"},
+		{"status fails", fakeRiderPageSource{err: assert.AnError}, &recordingRideLister{}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, serverErrorTitle},
 		{"unknown filter", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{}, &fakeActiveTrips{}, "/admin/rider?status=pending", http.StatusBadRequest, "status must be active or ended"},
-		{"rides fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{err: assert.AnError}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, "internal server error"},
-		{"driver trips fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{rides: active}, &errActiveTrips{}, "/admin/rider", http.StatusInternalServerError, "internal server error"},
+		{"rides fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{err: assert.AnError}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, serverErrorTitle},
+		{"driver trips fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{rides: active}, &errActiveTrips{}, "/admin/rider", http.StatusInternalServerError, serverErrorTitle},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
