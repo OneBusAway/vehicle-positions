@@ -600,12 +600,31 @@ func expiry(s *Session, now time.Time) (EndReason, bool) {
 // the rider's latest *matched* point: an off-route or implausible point is not
 // a position anyone should be told the vehicle is at.
 type estimateMember struct {
-	rideID      string
-	riderID     string
-	along       float64
+	rideID  string
+	riderID string
+	// along is where the rider's own point puts them, and the only place
+	// they vouch for another rider from (publishable).
+	along float64
+	// placed is where runs hands the rider to the estimate's median and trim
+	// when that is not along; nil is along.
+	placed      *float64
 	speed       float64
 	timestamp   time.Time
 	publishable bool
+}
+
+// weighedAt is where the estimate's median and trim take the member to be.
+func (m estimateMember) weighedAt() float64 {
+	if m.placed != nil {
+		return *m.placed
+	}
+	return m.along
+}
+
+// placedAt is m handed to the estimate at along, its own place kept.
+func (m estimateMember) placedAt(along float64) estimateMember {
+	m.placed = &along
+	return m
 }
 
 // tripGroup is the riders contributing to one trip: those whose ride is live,
@@ -638,11 +657,26 @@ type tripGroup struct {
 // riders standing together are on one vehicle, whatever speed an old point
 // gave. Otherwise it is grouped with the other such riders standing near it,
 // and the group is placed where its newest point is carried. It joins the run
-// whose vehicle is nearest that place, within runSplitDistance, with its
-// riders counted where they are carried, so the estimate does not trim them
-// and the run's own riders out against each other; a run's vehicle is where
-// its newest point is carried. A group that reaches no run is a run of its
-// own, as its points stand.
+// whose vehicle is nearest that place, within runSplitDistance; a run's
+// vehicle is where its newest point is carried. A group that reaches no run
+// is a run of its own, as its points stand.
+//
+// A run that takes in such riders has them weighed against its own in the
+// estimate, so all of them are handed to it as they would be at one moment,
+// the newest rider's point. The riders who make the run are carried there
+// from their own points, no more than outlierDistance each. A rider on it by
+// standing near them is placed at the run's vehicle, and a group that joins
+// it at the group's own place: each where the newest point it stands with is
+// carried, never from its own older point, which would carry a point taken at
+// speed before its vehicle stopped far past where the vehicle is. A run of
+// only the riders who make it is weighed as they reported.
+//
+// Where a rider is placed is for the estimate's median and trim alone.
+// Whether the run may be published is still decided on where the riders' own
+// points put them (publishable): a rider placed where another rider's point
+// is carried always agrees with that rider, and vouches for nothing. A rider
+// of a group that joins a run vouches from where their own point is carried,
+// and every other rider from where their point stands.
 //
 // A trip run by timetable has one run a day, and its riders stay one group,
 // as far apart as they are.
@@ -682,8 +716,10 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 		fresh = append(fresh, standing{along: m.along, run: len(runs) - 1})
 	}
 	vehicles := make([]float64, len(runs))
+	own := make([]int, len(runs))
 	for i, run := range runs {
 		vehicles[i] = vehicle(run.members)
+		own[i] = len(run.members)
 	}
 
 	var lone [][]estimateMember
@@ -693,7 +729,7 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 				return cmp.Compare(math.Abs(x.along-m.along), math.Abs(y.along-m.along))
 			})
 			if math.Abs(near.along-m.along) <= runSplitDistance {
-				runs[near.run].members = append(runs[near.run].members, m)
+				runs[near.run].members = append(runs[near.run].members, m.placedAt(vehicles[near.run]))
 				continue
 			}
 		}
@@ -716,7 +752,15 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 		}
 		for _, m := range group {
 			m.along += carry(m)
-			runs[best].members = append(runs[best].members, m)
+			runs[best].members = append(runs[best].members, m.placedAt(at))
+		}
+	}
+	for i, run := range runs[:len(own)] {
+		if len(run.members) == own[i] {
+			continue
+		}
+		for j, m := range run.members[:own[i]] {
+			run.members[j] = m.placedAt(m.along + carry(m))
 		}
 	}
 	return runs
@@ -827,7 +871,9 @@ func (g *tripGroup) canEstimate() bool {
 
 // publishable reports whether the group may be published: either one rider is
 // trusted enough on their own, or two different riders put the vehicle in the
-// same place, which is the crowd standing in for a trusted feed.
+// same place, which is the crowd standing in for a trusted feed. It compares
+// where the riders' own points put them, never where runs placed them for the
+// estimate: two riders placed at one spot agree whatever they reported.
 func (g *tripGroup) publishable() bool {
 	for _, m := range g.members {
 		if m.publishable {
@@ -844,22 +890,22 @@ func (g *tripGroup) publishable() bool {
 	return false
 }
 
-// within returns the members no further than limit from along.
+// within returns the members weighed no further than limit from along.
 func within(members []estimateMember, along, limit float64) []estimateMember {
 	kept := make([]estimateMember, 0, len(members))
 	for _, m := range members {
-		if math.Abs(m.along-along) <= limit {
+		if math.Abs(m.weighedAt()-along) <= limit {
 			kept = append(kept, m)
 		}
 	}
 	return kept
 }
 
-// medianAlong is the median position along the shape of the members.
+// medianAlong is the median of where along the shape the members are weighed.
 func medianAlong(members []estimateMember) float64 {
 	alongs := make([]float64, len(members))
 	for i, m := range members {
-		alongs[i] = m.along
+		alongs[i] = m.weighedAt()
 	}
 	return median(alongs)
 }
