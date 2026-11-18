@@ -17,6 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.onebusaway.vehicletracker.data.FakeSessionStore
+import org.onebusaway.vehicletracker.data.Session
 import java.io.File
 
 /**
@@ -36,6 +38,8 @@ class MapRepositoryTest {
     private lateinit var store: MapFileStore
     private val server = FakeMapServer()
     private val fetcher = FakeFetcher()
+    private val signedIn = Session("https://a.example.org/", "jwt", 0L, email = "d@example.com")
+    private val sessions = FakeSessionStore().apply { state.value = signedIn }
 
     private fun TestScope.setUp() {
         dir = tempFolder.newFolder("map")
@@ -55,7 +59,7 @@ class MapRepositoryTest {
 
     /** A repository starting up, as at app start, with its first look at the directory done. */
     private fun TestScope.started(): MapRepository =
-        MapRepository(server, store, fetcher, backgroundScope, now = { clock }).also { settle() }
+        MapRepository(server, store, fetcher, backgroundScope, sessions, now = { clock }).also { settle() }
 
     private fun TestScope.statesOf(repository: MapRepository): List<MapFileState> {
         val states = mutableListOf<MapFileState>()
@@ -278,6 +282,75 @@ class MapRepositoryTest {
         assertEquals(MapFileState.Failed(MapFailure.NETWORK), repository.state.value)
     }
 
+    /** How often the server is asked in the hour after a failed first check, once the session becomes [next]. */
+    private fun TestScope.asksOnceSignedInAs(next: Session): Int {
+        setUp()
+        server.default = MapServerAnswer.Unreachable
+        val repository = started()
+        repository.refresh()
+        settle()
+        assertEquals(1, server.askedAt.size)
+
+        sessions.state.value = next
+        advanceTimeBy(60 * 60_000L)
+        return server.askedAt.size
+    }
+
+    // The server asks whoever is signed in when it runs, so a retry left going would ask the next sign-in's server.
+    @Test fun `a retry stops once its driver signs out`() = runTest {
+        assertEquals(1, asksOnceSignedInAs(signedIn.copy(token = null)))
+    }
+
+    @Test fun `a retry stops once another server is signed in`() = runTest {
+        assertEquals(1, asksOnceSignedInAs(signedIn.copy(serverUrl = "https://b.example.org/")))
+    }
+
+    @Test fun `a retry stops once another driver is signed in`() = runTest {
+        assertEquals(1, asksOnceSignedInAs(signedIn.copy(email = "e@example.com")))
+    }
+
+    @Test fun `a refreshed token keeps the retry going`() = runTest {
+        assertTrue(asksOnceSignedInAs(signedIn.copy(token = "jwt2", issuedAtEpochSec = 900L)) > 1)
+    }
+
+    // A refresh used to be skipped while the last sign-in's retry waited, up to 5 min, and that retry then asked.
+    @Test fun `a refresh for the next sign-in asks at once, and retries from 5 s again`() = runTest {
+        setUp()
+        server.default = MapServerAnswer.Unreachable
+        val repository = started()
+        repository.refresh()
+        advanceTimeBy(5 * 60_000L)
+        val before = server.askedAt.size
+
+        sessions.state.value = signedIn.copy(serverUrl = "https://b.example.org/")
+        val start = testScheduler.currentTime
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+
+        val asked = server.askedAt.drop(before)
+        assertEquals("at once", start, asked.first())
+        assertEquals("only the new retries", listOf(5_000L, 10_000L, 20_000L), asked.zipWithNext { a, b -> b - a }.take(3))
+    }
+
+    @Test fun `a check under way for the last sign-in is stopped, not finished beside the next one's`() = runTest {
+        setUp()
+        val repository = started()
+        val gate = CompletableDeferred<Unit>()
+        server.gate = gate
+        server.default = MapServerAnswer.NoMap
+        repository.refresh()
+        runCurrent()
+
+        sessions.state.value = signedIn.copy(serverUrl = "https://b.example.org/")
+        repository.refresh()
+        runCurrent()
+        gate.complete(Unit)
+        settle()
+
+        assertEquals("both asked", 2, server.askedAt.size)
+        assertEquals("only the new sign-in's check went on", 1, server.answered)
+    }
+
     @Test fun `with a map here, a failed check waits for the next refresh`() = runTest {
         setUp()
         val map = mapHere(checkedAt = clock - day)
@@ -447,12 +520,14 @@ class MapRepositoryTest {
         val answers = ArrayDeque<MapServerAnswer>()
         var default: MapServerAnswer = MapServerAnswer.File(url)
         val askedAt = mutableListOf<Long>()
+        var answered = 0
         var now: () -> Long = { 0 }
         var gate: CompletableDeferred<Unit>? = null
 
         override suspend fun ask(): MapServerAnswer {
             askedAt += now()
             gate?.await()
+            answered++
             return answers.removeFirstOrNull() ?: default
         }
     }
