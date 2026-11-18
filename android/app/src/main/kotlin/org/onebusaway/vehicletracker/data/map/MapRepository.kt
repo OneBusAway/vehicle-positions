@@ -4,11 +4,14 @@ import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,7 +33,8 @@ internal const val LAST_RETRY_MS = 5 * 60_000L
  * first copy is here, a network failure is tried again after 5 s, then twice as long each time up
  * to every 5 min. Anything else waits for the next [refresh]: a phone too full for the file rarely
  * empties itself, and each try would cost the driver data. So does a failed check once there is a
- * map.
+ * map. Retries are for the driver and server signed in when the refresh began: they stop once
+ * that sign-in ends, and a refresh for the next one starts afresh.
  *
  * A file a map may have open is never changed or deleted (maplibre-native #3658: MapLibre crashes
  * if it is). A newer version downloads under a new name and the state moves to it, so the next
@@ -43,6 +47,7 @@ class MapRepository @Inject constructor(
     private val store: MapFileStore,
     private val fetcher: MapFileFetcher,
     private val scope: CoroutineScope,
+    private val sessionStore: SessionStore,
     @param:EpochSecondsClock private val now: () -> Long,
 ) : MapFileSource {
     private val _state = MutableStateFlow<MapFileState>(MapFileState.None)
@@ -51,17 +56,33 @@ class MapRepository @Inject constructor(
     private val started: Job = scope.launch { orLogged("Reading the map record", otherwise = {}) { start() } }
     private val lock = Any()
     private var running: Job? = null
+    private var runningFor: SignIn? = null
 
-    /** Asks for the map, or checks the one here is current, unless a refresh is already under way. */
+    /**
+     * Asks for the map, or checks the one here is current, unless a refresh for the same sign-in is already under
+     * way. One for an earlier sign-in is stopped first.
+     */
     fun refresh() {
-        synchronized(lock) {
-            if (running?.isActive == true) return
-            running = scope.launch {
-                started.join()
-                keepTrying()
+        scope.launch {
+            val signIn = orLogged("Reading the session", otherwise = { null }) { signIn() }
+            synchronized(lock) {
+                if (running?.isActive == true && runningFor == signIn) return@launch
+                val previous = running
+                runningFor = signIn
+                running = scope.launch {
+                    previous?.cancelAndJoin()
+                    started.join()
+                    keepTrying(signIn)
+                }
             }
         }
     }
+
+    /** Who the map is being asked for: the server and driver signed in, or null when nobody is. */
+    private data class SignIn(val serverUrl: String?, val email: String?)
+
+    private suspend fun signIn(): SignIn? =
+        sessionStore.session.first().takeIf { it.token != null }?.let { SignIn(it.serverUrl, it.email) }
 
     private suspend fun start() {
         val record = store.load()
@@ -77,10 +98,13 @@ class MapRepository @Inject constructor(
 
     private enum class Outcome { DONE, RETRY }
 
-    private suspend fun keepTrying() {
+    private suspend fun keepTrying(signIn: SignIn?) {
         var wait = FIRST_RETRY_MS
         while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false) }) { check() } == Outcome.RETRY) {
             delay(wait)
+            // The server asks whoever is signed in by now. After a sign-out, or with another driver or server, this
+            // retry is no longer theirs: the next sign-in's own refresh asks.
+            if (orLogged("Reading the session", otherwise = { null }) { signIn() } != signIn) return
             wait = (wait * 2).coerceAtMost(LAST_RETRY_MS)
         }
     }

@@ -87,7 +87,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 private const val TIMEOUT_MS = HOLD_TIMEOUT_SEC * 1000
 private const val MARIA = "maria@metro.example"
 private const val RUNS_PATH = "/api/v1/gtfs/routes/R1/trips"
-private const val MAP_PATH = "/api/v1/map"
 
 private const val T1_JSON =
     """{"id":"T1","route_id":"R1","headsign":"North","direction_id":0,"service_date":"20260922",""" +
@@ -256,9 +255,7 @@ class RunStartConfirmTest {
     private fun assertStartedNothing() {
         assertNull("no start in flight", (runs.uiState.value as RunsUiState.Loaded).startingRunId)
         assertEquals("no /trips/start", 0, requests.count { it.endsWith("/api/v1/trips/start") })
-        // Not the map: ResumeEndTest signs in to a server that refuses, so MapRepository keeps retrying in the app's
-        // scope after it ends, and its next try asks whichever server is signed in then, which can be this one.
-        assertEquals("only the runs were asked for", listOf(RUNS_PATH), requests.filterNot { it.endsWith(MAP_PATH) })
+        assertEquals("only the runs were asked for", listOf(RUNS_PATH), requests.toList())
     }
 
     @Test
