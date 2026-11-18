@@ -513,10 +513,8 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 
 	alerts := ui.listAlertsForShell(r)
 	quietFor := make(map[string]string)
-	for _, a := range alerts {
-		if a.Kind == alertQuiet {
-			quietFor[a.Trip.VehicleID] = humanizeDuration(time.Duration(a.DurationSeconds) * time.Second)
-		}
+	for id, a := range quietVehicles(alerts) {
+		quietFor[id] = humanizeDuration(time.Duration(a.DurationSeconds) * time.Second)
 	}
 	lastSeen := make(map[string]string)
 	for _, v := range ui.tracker.ActiveVehicles() {

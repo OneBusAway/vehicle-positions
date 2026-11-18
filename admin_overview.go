@@ -88,12 +88,16 @@ type overviewView struct {
 
 	OnTrip   int
 	Vehicles int
-	// Units is a mark for each vehicle on a trip, reporting ones first:
-	// "seg-ok" or "seg-warn". It is empty when there are too many to draw
-	// one each, and the two counts are drawn in proportion instead.
+	// Units is a mark for each vehicle on a trip: "seg-ok" for one that is
+	// reporting, "seg-unknown" for one yet to report and "seg-warn" for a
+	// quiet one, in that order. It is empty when there are too many to draw
+	// one each, and the counts are drawn in proportion instead.
 	Units     []string
 	Reporting int
 	Quiet     int
+	// Waiting is the vehicles on a trip that have not reported yet and are
+	// not quiet yet: a trip in its first minutes.
+	Waiting int
 
 	OnTime onTimeSplit
 	// ReportsURL opens Analytics on today.
@@ -294,14 +298,11 @@ func newOverviewView(in overviewInput) overviewView {
 	for _, v := range in.tracked {
 		tracked[v.VehicleID] = v
 	}
-	quiet := make(map[string]struct{})
+	quiet := quietVehicles(in.alerts)
 	notStarted := 0
 	var longest int64
 	for _, a := range in.alerts {
-		switch a.Kind {
-		case alertQuiet:
-			quiet[a.Trip.VehicleID] = struct{}{}
-		case alertNotStarted:
+		if a.Kind == alertNotStarted {
 			notStarted++
 		}
 		longest = max(longest, a.DurationSeconds)
@@ -325,6 +326,7 @@ func newOverviewView(in overviewInput) overviewView {
 		Vehicles:    in.vehicles,
 		Reporting:   reporting,
 		Quiet:       len(quiet),
+		Waiting:     max(0, len(in.trips)-reporting-len(quiet)),
 		ReportsURL:  "/admin/reports",
 		HasSchedule: in.ix != nil,
 		NotStarted:  notStarted,
@@ -338,9 +340,12 @@ func newOverviewView(in overviewInput) overviewView {
 	}
 	if len(in.trips) <= overviewMaxUnits {
 		for i := 0; i < len(in.trips); i++ {
-			if i < len(in.trips)-len(quiet) {
+			switch {
+			case i < v.Reporting:
 				v.Units = append(v.Units, "seg-ok")
-			} else {
+			case i < v.Reporting+v.Waiting:
+				v.Units = append(v.Units, "seg-unknown")
+			default:
 				v.Units = append(v.Units, "seg-warn")
 			}
 		}
@@ -426,7 +431,7 @@ func onTimeShares(rep *serviceReport) onTimeSplit {
 // A vehicle is placed where the tracker last put it along its trip's shape; a
 // vehicle not yet placed, or gone from the tracker, is counted on its route
 // and not drawn.
-func overviewRoutes(ix *rider.Index, trips map[string]ActiveTripInfo, tracked map[string]*VehicleState, quiet map[string]struct{}, today *serviceReport) []overviewRoute {
+func overviewRoutes(ix *rider.Index, trips map[string]ActiveTripInfo, tracked map[string]*VehicleState, quiet map[string]alertEntry, today *serviceReport) []overviewRoute {
 	byRoute := make(map[string][]string)
 	for vehicleID, trip := range trips {
 		byRoute[trip.RouteID] = append(byRoute[trip.RouteID], vehicleID)
@@ -566,8 +571,8 @@ func overviewAttentionList(alerts []alertEntry, settings alertSettings, ix *ride
 			item.Title = "Trip " + row.GtfsTripID + " has not started"
 			item.URL = row.TripURL
 		}
-		// Every detail newAlertRow writes starts with an ASCII capital.
-		if row.Route.Name != "" {
+		// A detail newAlertRow writes starts with an ASCII capital.
+		if row.Route.Name != "" && row.Detail != "" {
 			item.Detail = "Route " + row.Route.Name + ", " + strings.ToLower(row.Detail[:1]) + row.Detail[1:]
 		}
 		list = append(list, item)

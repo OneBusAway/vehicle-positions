@@ -177,7 +177,7 @@ func TestShell_AccountMenu(t *testing.T) {
 		assert.Contains(t, body, `<form method="post" action="/admin/logout">`)
 	})
 
-	t.Run("the session's email when the row cannot be read", func(t *testing.T) {
+	t.Run("the session's email when its user is gone", func(t *testing.T) {
 		logs := captureLogs(t)
 		ui, mux := newShellMux(t)
 		wireFakeUserStore(ui, newFakeUserStore(), newFakeAssignmentStore())
@@ -186,7 +186,21 @@ func TestShell_AccountMenu(t *testing.T) {
 
 		assert.Contains(t, body, `aria-label="Account">A</button>`)
 		assert.Contains(t, body, "admin@test.com")
-		assert.Contains(t, logs.String(), "account menu: read user")
+		assert.Contains(t, logs.String(), `level=WARN msg="account menu: the session's user no longer exists" user_id=9`)
+		assert.NotContains(t, logs.String(), "level=ERROR")
+	})
+
+	t.Run("the session's email when the database fails, logged as the server's fault", func(t *testing.T) {
+		logs := captureLogs(t)
+		ui, mux := newShellMux(t)
+		ui.userManager = failingUserGetter{newFakeUserStore()}
+
+		body := getAdminPage(t, mux, "/admin/vehicles")
+
+		assert.Contains(t, body, `aria-label="Account">A</button>`)
+		assert.Contains(t, body, "admin@test.com")
+		assert.Contains(t, logs.String(), `level=ERROR msg="account menu: read user" user_id=9 error="connection refused"`)
+		assert.NotContains(t, body, "connection refused")
 	})
 }
 
@@ -255,4 +269,41 @@ func TestMorePage(t *testing.T) {
 	}
 	assert.Contains(t, body, "<h2>Test Admin, admin@test.com</h2>")
 	assert.Contains(t, body, `<form method="post" action="/admin/logout"><button class="line-row more-row" type="submit">`, "signing out works there without JavaScript")
+}
+
+func TestQuietVehicles(t *testing.T) {
+	now := time.Now()
+	quiet := alertEntry{Kind: alertQuiet, DurationSeconds: 240, Trip: alertTrip("bus-2", now)}
+	alerts := []alertEntry{
+		{Kind: alertNotMoving, Trip: alertTrip("bus-1", now)},
+		quiet,
+		{Kind: alertOffRoute, Trip: alertTrip("bus-3", now)},
+	}
+
+	assert.Equal(t, map[string]alertEntry{"bus-2": quiet}, quietVehicles(alerts), "only a quiet alert makes a vehicle quiet")
+	assert.Empty(t, quietVehicles(nil))
+}
+
+// TestFleetNow_AgreesWithTheOverview: the top bar and the Overview count the
+// same vehicles as reporting and as quiet.
+func TestFleetNow_AgreesWithTheOverview(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	in := overviewTestInput(t, ix)
+	ui := newTestAdminUI(t)
+	for _, v := range in.tracked {
+		ui.tracker.Update(&LocationReport{VehicleID: v.VehicleID, Timestamp: time.Now().Unix()})
+	}
+
+	bar := ui.fleetNow(in.alerts)
+	overview := newOverviewView(in)
+
+	assert.Equal(t, fleetCounts{Reporting: 2, Quiet: 1}, bar)
+	assert.Equal(t, bar.Reporting, overview.Reporting)
+	assert.Equal(t, bar.Quiet, overview.Quiet)
+}
+
+func TestStepLine_OneStep(t *testing.T) {
+	line := stepLine{N: 1, Of: 1}
+	assert.Equal(t, []stepStop{{Left: "0.0"}}, line.Stops())
+	assert.Equal(t, "0.0", line.VehicleLeft())
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -84,17 +85,26 @@ type fleetCounts struct {
 	Quiet     int
 }
 
+// quietVehicles are the vehicles an open alert calls quiet, each with its
+// alert. It is the one place that says which vehicles are quiet, for the top
+// bar, the Overview and the Vehicles list alike.
+func quietVehicles(alerts []alertEntry) map[string]alertEntry {
+	quiet := make(map[string]alertEntry)
+	for _, a := range alerts {
+		if a.Kind == alertQuiet {
+			quiet[a.Trip.VehicleID] = a
+		}
+	}
+	return quiet
+}
+
 // fleetNow counts the fleet from the open alerts and the tracker. A vehicle
 // that has gone quiet stays in the tracker until the staleness threshold
 // passes, so it is taken out of the reporting count by its id rather than
-// counted on both sides.
+// counted on both sides. The tracker drops a vehicle when its trip ends, so
+// the vehicles counted here are the ones on a trip that the Overview counts.
 func (ui *adminUI) fleetNow(alerts []alertEntry) fleetCounts {
-	quiet := make(map[string]struct{})
-	for _, a := range alerts {
-		if a.Kind == alertQuiet {
-			quiet[a.Trip.VehicleID] = struct{}{}
-		}
-	}
+	quiet := quietVehicles(alerts)
 	reporting := 0
 	for _, v := range ui.tracker.ActiveVehicles() {
 		if _, isQuiet := quiet[v.VehicleID]; !isQuiet {
@@ -126,8 +136,11 @@ func (ui *adminUI) account(r *http.Request) shellAccount {
 	id, err := strconv.ParseInt(sub, 10, 64)
 	if err != nil {
 		slog.Warn("account menu: session sub is not a user id", "sub", sub, "error", err)
-	} else if user, err := ui.userManager.GetUser(r.Context(), id); err != nil {
-		slog.Warn("account menu: read user", "user_id", id, "error", err)
+	} else if user, err := ui.userManager.GetUser(r.Context(), id); errors.Is(err, ErrUserNotFound) {
+		// The account was deleted while its session was still good.
+		slog.Warn("account menu: the session's user no longer exists", "user_id", id)
+	} else if err != nil {
+		slog.Error("account menu: read user", "user_id", id, "error", err)
 	} else {
 		acct.Name = user.Name
 		acct.Email = user.Email
@@ -176,6 +189,10 @@ type stepStop struct {
 }
 
 func (s stepLine) at(step int) float64 {
+	// A line of one step has nowhere to go but its start.
+	if s.Of < 2 {
+		return 0
+	}
 	return float64(step-1) * 100 / float64(s.Of-1)
 }
 

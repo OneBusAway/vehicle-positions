@@ -306,7 +306,7 @@
   .welcome-lede { margin: 8px 0 24px; font-size: 16px; line-height: 24px; }
   .welcome-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 24px; align-items: stretch; }
   .steps-line.welcome-line { margin-bottom: 20px; }
-  .steps-line.welcome-line .the-line { width: 220px; }
+  .welcome-line > span { white-space: nowrap; }
   .step-title { display: block; font: 500 16px/22px var(--font-sans); }
   .ov-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
   .ov-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -380,8 +380,7 @@
   .range-date { display: inline-flex; align-items: center; gap: 2px; }
   .range-date .input { width: auto; }
   .range-date .btn { margin-left: 6px; }
-  .icon-btn.off { opacity: 0.4; cursor: default; }
-  .icon-btn.off:hover { background: transparent; }
+  .icon-btn.off { opacity: 0.4; pointer-events: none; }
   .h1.an-route { display: flex; align-items: center; gap: 12px; }
   .row-link.an-route { display: inline-flex; align-items: center; gap: 10px; }
   .an-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
@@ -456,7 +455,7 @@
   /* A run of steps drawn as the Line (the import and the welcome), the import's file box, and a
      password shown once */
   .steps-line { display: flex; align-items: center; gap: 16px; margin: 0 0 18px; }
-  .steps-line .the-line { width: 200px; height: 34px; flex: none; margin-left: 13px; }
+  .steps-line .the-line { width: 200px; min-width: 72px; height: 34px; flex: 0 1 auto; margin-left: 13px; }
   .steps-line .the-line .track { top: 14px; }
   .steps-line .the-line .fill { background: var(--primary); }
   .steps-line .the-line .stop { top: 11px; }
@@ -771,6 +770,7 @@
   .stack > i { height: 100%; border-radius: 4px; min-width: 3px; transform-origin: left center; }
   .seg-early { background: var(--early); background-image: repeating-linear-gradient(135deg, transparent 0 3px, rgb(255 255 255 / 0.45) 3px 4.5px); }
   .seg-ok { background: var(--ok); }
+  .seg-unknown { background: var(--line-strong); }
   .seg-late { background: var(--late); background-image: repeating-linear-gradient(45deg, transparent 0 3px, rgb(255 255 255 / 0.45) 3px 4.5px); }
   .seg-warn { background: var(--warn); }
   .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font: 400 12px/16px var(--font-sans); color: var(--ink-2); }

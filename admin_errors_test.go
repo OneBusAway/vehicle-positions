@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // serverErrorTitle is the headline of the page an admin sees when a page's
@@ -131,19 +132,31 @@ func TestErrorPages_WithoutItsTemplate(t *testing.T) {
 	assert.Equal(t, "404 page not found\n", w.Body.String())
 }
 
+// deadlineRecorder is a response writer that takes a write deadline, as the
+// server's own does, and remembers the one it was given.
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (d *deadlineRecorder) SetWriteDeadline(t time.Time) error {
+	d.deadline = t
+	return nil
+}
+
 // TestErrorPages_KeepsTheWriteDeadline: the import page moves its write
 // deadline through http.ResponseController, which has to reach the server's
 // own writer through the one errorPages puts in front of it.
 func TestErrorPages_KeepsTheWriteDeadline(t *testing.T) {
-	var deadlineErr error
-	w := errorPagesFor(t, func(w http.ResponseWriter, _ *http.Request) {
-		deadlineErr = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Minute))
-	}, http.MethodPost, "/admin/import/users/confirm")
+	ui := newTestAdminUI(t)
+	w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	want := time.Now().Add(time.Minute)
 
-	// The recorder has no deadline to set, which is the answer of the writer
-	// underneath; a writer that could not be reached answers differently.
-	assert.ErrorIs(t, deadlineErr, http.ErrNotSupported)
-	assert.Equal(t, http.StatusOK, w.Code)
+	ui.errorPages(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, http.NewResponseController(w).SetWriteDeadline(want))
+	})).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/admin/import/users/confirm", nil))
+
+	assert.Equal(t, want, w.deadline, "the deadline reached the writer underneath")
 }
 
 // TestAdminPages_NoSuchPage: an address under /admin/ that is no page is the
@@ -167,6 +180,16 @@ func TestAdminPages_NoSuchPage(t *testing.T) {
 		assert.Equal(t, http.StatusSeeOther, w.Code, "role %q", role)
 		assert.True(t, strings.HasPrefix(w.Header().Get("Location"), "/admin/login"), "role %q", role)
 	}
+
+	// The catch-all is for a page asked for. A form sent to an address that
+	// is no page is refused by the router, in plain text, as a form sent to a
+	// page that takes none is.
+	req := httptest.NewRequest(http.MethodPost, "/admin/no-such-page", nil)
+	req.AddCookie(cookieFor(t, "admin"))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "<html")
 
 	// A page asked for a record that cannot be is the same page.
 	w = requestAdminPage(t, mux, "/admin/driver-setup?user=not-a-number")

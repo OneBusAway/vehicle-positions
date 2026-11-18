@@ -75,11 +75,13 @@
      server's counts; after that the live answer is asked for every 10 s and the alerts on every third. */
   var pulse = $("#pulse"), age = $("#pulse-age"), heardAt = Date.now(), quiet = {}, polls = 0;
   function span(s) { return s < 2 ? "just now" : s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
+  /* The counts are a live region: written only when they change, so nothing is read out again. */
+  function say(el, n) { if (el.textContent !== String(n)) el.textContent = n; }
   VT.heard = function (live) {
     heardAt = Date.now();
     var reporting = live.vehicles.filter(function (v) { return !quiet[v.vehicle_id]; }).length;
     pulse.dataset.state = reporting ? "live" : "idle";
-    $("#pulse-reporting").textContent = reporting;
+    say($("#pulse-reporting"), reporting);
     if (!reduce) { pulse.classList.remove("beat"); void pulse.offsetWidth; pulse.classList.add("beat"); }
   };
   VT.lost = function () { pulse.dataset.state = "stale"; };
@@ -87,7 +89,7 @@
     quiet = {};
     list.alerts.forEach(function (a) { if (a.kind === "quiet") quiet[a.trip.vehicle_id] = true; });
     var n = Object.keys(quiet).length;
-    $("#pulse-quiet").textContent = n;
+    say($("#pulse-quiet"), n);
     $("#pulse-q").hidden = !n;
     $$("[data-alert-count]").forEach(function (c) { c.textContent = list.count || ""; c.hidden = !list.count; });
     $$("[data-alert-link]").forEach(function (a) { a.setAttribute("aria-label", list.count ? "Alerts, " + list.count + " open" : "Alerts"); });
@@ -160,9 +162,10 @@
     if (!b || !navigator.clipboard) return;
     navigator.clipboard.writeText(document.getElementById(b.dataset.copyFrom).textContent).then(function () {
       var old = b.innerHTML;
+      b.setAttribute("aria-live", "polite");
       b.textContent = "Copied";
       setTimeout(function () { b.innerHTML = old; }, 1500);
-    });
+    }, function () {});
   });
 
   /* A file dropped on the import box goes into its file field. */
@@ -194,7 +197,7 @@
     shown.forEach(function (it, i) {
       if (it.g !== group) {
         group = it.g;
-        var h = document.createElement("div"); h.className = "palette-group"; h.textContent = group; list.appendChild(h);
+        var h = document.createElement("div"); h.className = "palette-group"; h.setAttribute("role", "presentation"); h.textContent = group; list.appendChild(h);
       }
       var a = document.createElement("a"), text = document.createElement("span"), sub = document.createElement("span");
       a.className = "palette-item"; a.href = it.h; a.id = "palette-" + i;
