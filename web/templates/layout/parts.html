@@ -15,7 +15,7 @@
 
 {{define "step-line"}}<span class="the-line" role="img" aria-label="Step {{.N}} of {{.Of}}{{with .Name}}: {{.}}{{end}}"><span class="track"></span><span class="track fill" style="right:{{.FillRight}}%"></span>{{range .Stops}}<span class="stop{{if .Done}} done{{end}}" style="left:{{.Left}}%"></span>{{end}}<span class="veh" style="left:{{.VehicleLeft}}%">{{template "arrow"}}</span></span>{{end}}
 
-{{define "ot-stack"}}<span class="stack grow-x" role="img" aria-label="{{.Early}}% early, {{.Percent}}% on time, {{.Late}}% late">{{if .Early}}<i class="seg-early" style="width:{{.Early}}%"></i>{{end}}<i class="seg-ok" style="width:{{.Percent}}%"></i>{{if .Late}}<i class="seg-late" style="width:{{.Late}}%"></i>{{end}}</span>{{end}}
+{{define "ot-stack"}}<span class="stack grow-x" role="img" aria-label="{{.Early}}% early, {{.Percent}}% on time, {{.Late}}% late">{{if .Early}}<i class="seg-early" style="width:{{.Early}}%"></i>{{end}}<i class="seg-ok" style="flex:1"></i>{{if .Late}}<i class="seg-late" style="width:{{.Late}}%"></i>{{end}}</span>{{end}}
 
 {{define "bar-chart"}}
 <div class="chart-box">{{with .PeakLabel}}<span class="chart-y">{{.}}</span>{{end}}
@@ -26,4 +26,16 @@
   </svg>
 </div>
 <div class="chart-x">{{range .Ticks}}<span>{{.}}</span>{{end}}</div>
+{{end}}
+
+{{define "line-chart"}}
+<svg class="chart" viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-label="{{.Name}}">
+  {{range .Grid}}<line class="grid" x1="{{$.Left}}" x2="{{$.Right}}" y1="{{.Y}}" y2="{{.Y}}"/><text x="{{$.LabelX}}" y="{{.LabelY}}" text-anchor="end">{{.Label}}</text>{{end}}
+  {{with .PrevPath}}<path class="line-prev" d="{{.}}"/>{{end}}
+  {{with .Path}}<path class="line draw-in" pathLength="1" d="{{.}}"/>{{end}}
+  {{range .Dots}}<circle class="dot" cx="{{.X}}" cy="{{.Y}}" r="3"/>{{end}}
+  {{with .Last}}<circle class="pt pop" cx="{{.X}}" cy="{{.Y}}" r="4.5"/>{{end}}
+  {{range .Labels}}<text x="{{.X}}" y="{{$.BaseY}}" text-anchor="{{.Anchor}}">{{.Text}}</text>{{end}}
+  {{range .Hits}}<rect class="hit" x="{{.X}}" y="{{$.PlotY}}" width="{{.W}}" height="{{$.PlotH}}" data-tip="{{.Tip}}"/>{{end}}
+</svg>
 {{end}}

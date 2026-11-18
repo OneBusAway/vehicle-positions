@@ -1,132 +1,132 @@
 {{define "content"}}
-<div class="p-4 lg:p-5">
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
-      <div>
-        {{if .Route}}
-        <a href="{{.AllRoutesURL}}" class="text-xs font-semibold text-sky-600 hover:text-sky-800">&larr; All routes</a>
-        <h3 class="display-font text-lg font-bold text-slate-900">{{.Route.Name}}</h3>
-        {{else}}
-        <h3 class="display-font text-lg font-bold text-slate-900">Service report</h3>
-        {{end}}
-        {{if .DayLabel}}<p class="mt-0.5 text-xs text-slate-400">{{.DayLabel}}. Times in {{.Timezone}}.</p>{{end}}
-      </div>
-      <form method="get" action="/admin/reports" class="flex flex-wrap items-center gap-2">
-        {{if .RouteID}}<input type="hidden" name="route_id" value="{{.RouteID}}">{{end}}
-        <input type="date" name="date" value="{{.Date}}" aria-label="Service day" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">Show</button>
-        {{if .CSVURL}}<a href="{{.CSVURL}}" class="text-xs font-semibold text-sky-600 hover:text-sky-800">Download CSV</a>{{end}}
-      </form>
-    </div>
-
-    {{if .Error}}
-    <p class="px-5 py-6 text-center text-sm text-rose-700" role="alert">{{.Error}}</p>
-    {{else if .NoRoute}}
-    <p class="px-5 py-6 text-center text-sm text-slate-400">Route {{.RouteID}} has no trips scheduled on this day. <a href="{{.AllRoutesURL}}" class="font-semibold text-sky-600 hover:text-sky-800">All routes</a></p>
-    {{else if .Route}}
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Trip</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Scheduled</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">First stop</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Last stop</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">On time</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{range .Trips}}
-          <tr class="transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-4">
-              <p class="whitespace-nowrap font-mono text-xs text-slate-500">{{.GtfsTripID}}</p>
-              {{if .Headsign}}<p class="text-xs text-slate-400">{{.Headsign}}</p>{{end}}
-            </td>
-            <td class="whitespace-nowrap px-5 py-4 text-slate-500">{{.Scheduled}}</td>
-            <td class="px-5 py-4">
-              {{range .Runs}}
-              <p class="whitespace-nowrap"><span class="font-semibold text-slate-900">{{.Vehicle}}</span> <span class="text-slate-500">{{.Driver}}</span> <a href="{{.TrailURL}}" class="text-xs font-semibold text-sky-600 hover:text-sky-800">View trail</a></p>
-              {{else}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">Not run</span>
-              {{end}}
-            </td>
-            {{if .Runs}}
-            <td class="whitespace-nowrap px-5 py-4">{{template "report-deviation" .Departure}}</td>
-            <td class="whitespace-nowrap px-5 py-4">{{template "report-deviation" .Arrival}}</td>
-            <td class="whitespace-nowrap px-5 py-4">
-              <p class="font-semibold text-slate-900">{{if .OnTime}}{{.OnTime}}{{else}}unknown{{end}}</p>
-              {{if .Unknown}}<p class="text-xs text-slate-400">{{.Unknown}} unknown</p>{{end}}
-            </td>
-            {{else}}
-            <td class="px-5 py-4"></td>
-            <td class="px-5 py-4"></td>
-            <td class="px-5 py-4"></td>
-            {{end}}
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Scheduled</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Ran</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">On time</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Unknown</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500"><span class="sr-only">Trips</span></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{range .Routes}}
-          <tr class="transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-4">
-              <p class="whitespace-nowrap font-semibold text-slate-900">{{.Name}}</p>
-              <p class="font-mono text-xs text-slate-400">{{.RouteID}}</p>
-            </td>
-            <td class="px-5 py-4 text-slate-500">{{.Scheduled}}</td>
-            <td class="px-5 py-4 text-slate-500">{{.Ran}}</td>
-            <td class="whitespace-nowrap px-5 py-4">
-              {{if .OnTime}}
-              <p class="font-semibold text-slate-900">{{.OnTime}}</p>
-              <p class="text-xs text-slate-400">{{.Early}} early, {{.Late}} late</p>
-              {{else if .Ran}}
-              <p class="text-slate-400">unknown</p>
-              {{else}}
-              <p class="text-slate-400">none ran</p>
-              {{end}}
-            </td>
-            <td class="px-5 py-4 text-slate-500">{{.Unknown}}</td>
-            <td class="px-5 py-4"><a href="{{.TripsURL}}" class="whitespace-nowrap text-xs font-semibold text-sky-600 hover:text-sky-800">Trips &rarr;</a></td>
-          </tr>
-          {{else}}
-          <tr>
-            <td class="px-5 py-6 text-center text-slate-400" colspan="6">No trips scheduled on this day.</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{end}}
-
-    {{if .DayLabel}}
-    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/60 px-5 py-4 text-xs">
-      <a href="{{.PrevURL}}" class="font-semibold text-sky-600 hover:text-sky-800">&larr; Previous day</a>
-      <a href="{{.NextURL}}" class="font-semibold text-sky-600 hover:text-sky-800">Next day &rarr;</a>
-    </div>
-    <p class="border-t border-slate-200/60 px-5 py-4 text-xs text-slate-400">A stop is on time when the vehicle left it from {{.OnTimeEarly}} early to {{.OnTimeLate}} late, or reached the last stop in that window. A stop with no report within {{.FixWindow}} either side of the vehicle passing it is unknown, and the on-time share leaves it out.</p>
-    {{end}}
+<div class="page-head">
+  <div class="page-head-main">
+    {{if or .Route .NoRoute}}<a class="back" href="{{.AllRoutesURL}}">{{template "icon-sm" "arrow_back"}}All routes</a>{{end}}
+    <h2 class="h1{{if .Route}} an-route{{end}}">{{with .Route}}{{template "route-badge-lg" .Badge}}{{end}}{{.Headline}}</h2>
+    {{with .Lede}}<p class="lede">{{.}}</p>{{end}}
   </div>
+</div>
+
+{{if .NoSchedule}}
+<div class="card"><div class="empty"><span class="step-icon">{{template "icon-lg" "route"}}</span><div class="empty-title">The GTFS schedule has not loaded</div><p>Check that GTFS_STATIC_URL names a GTFS zip the server can reach, and look at the server's log. This page fills in from the first trip after the schedule loads.</p><a class="btn btn-tonal" href="https://github.com/OneBusAway/vehicle-positions/blob/main/docs/configuration.md" target="_blank" rel="noopener">{{template "icon" "open_in_new"}}How to load a schedule</a></div></div>
+{{else}}
+<form class="range-bar" method="get" action="/admin/reports">
+  {{with .Range}}<div class="seg" role="group" aria-label="Period">{{range .}}<a href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div>{{end}}
+  {{if .RouteID}}<input type="hidden" name="route_id" value="{{.RouteID}}">{{else if .OneDay}}<input type="hidden" name="range" value="day">{{else}}{{if ne .Metric "on_time"}}<input type="hidden" name="metric" value="{{.Metric}}">{{end}}{{if .CompareOff}}<input type="hidden" name="compare" value="off">{{end}}{{end}}
+  <span class="range-date">
+    {{with .PrevURL}}<a class="icon-btn" href="{{.}}" aria-label="Earlier">{{template "icon" "chevron_left"}}</a>{{end}}
+    <input class="input input-sm" type="date" name="date" value="{{.Date}}" aria-label="{{if .OneDay}}Service day{{else}}Last day shown{{end}}"{{if .Error}} aria-invalid="true" aria-describedby="date-error"{{end}}>
+    {{if .NextURL}}<a class="icon-btn" href="{{.NextURL}}" aria-label="Later">{{template "icon" "chevron_right"}}</a>{{else if .PrevURL}}<span class="icon-btn off" aria-hidden="true">{{template "icon" "chevron_right"}}</span>{{end}}
+    <button class="btn btn-sm btn-outline" type="submit">Show</button>
+  </span>
+  {{with .Compare}}<a class="chip" href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{if .Current}}{{template "icon-sm" "check"}}{{end}}{{.Label}}<span class="sr-only">{{if .Current}}, on{{else}}, off{{end}}</span></a>{{end}}
+  <span style="flex:1"></span>
+  {{with .CSVURL}}<a class="btn btn-outline" href="{{.}}">{{template "icon" "download"}}Download CSV</a>{{end}}
+</form>
+
+{{if .Error}}
+<div class="banner banner-error" role="alert" id="date-error">{{template "icon" "error"}}<div>{{.Error}}</div></div>
+{{else if .NoRoute}}
+<div class="card"><div class="empty"><span class="step-icon">{{template "icon-lg" "route"}}</span><div class="empty-title">Nothing scheduled</div><p>Route {{.RouteID}} has no trips scheduled on this day.</p><a class="btn" href="{{.AllRoutesURL}}">All routes</a></div></div>
+{{else if .Route}}
+{{template "analytics-tiles" .}}
+<section class="card" aria-labelledby="an-trips">
+  <div class="card-head"><h3 id="an-trips" style="flex:1">Scheduled trips</h3><span class="sub">First and last stop against the timetable</span></div>
+  <div class="table-wrap"><table class="table cards">
+    <thead><tr><th>Trip</th><th>Scheduled</th><th class="hide-md">Vehicle</th><th>First stop</th><th>Last stop</th><th class="right">On time</th><th><span class="sr-only">Replay</span></th></tr></thead>
+    <tbody>
+      {{range .Trips}}
+      <tr><td class="nowrap">{{if .Runs}}<a class="row-link" href="{{(index .Runs 0).TrailURL}}">{{.GtfsTripID}}</a>{{else}}<span class="strong">{{.GtfsTripID}}</span>{{end}}{{with .Headsign}}<span class="sub">to {{.}}</span>{{end}}</td><td class="num nowrap" data-label="Scheduled">{{.Scheduled}}</td><td class="nowrap{{if .Runs}} hide-md{{end}}">{{range .Runs}}<span style="display:block">{{.Vehicle}}<span class="sub hide-phone">{{.Driver}}</span></span>{{else}}<span class="pill pill-warn">Not run</span>{{end}}</td><td{{if .Runs}} data-label="First stop"{{end}}>{{if .Runs}}{{template "deviation" .Departure}}{{end}}</td><td{{if .Runs}} data-label="Last stop"{{end}}>{{if .Runs}}{{template "deviation" .Arrival}}{{end}}</td><td class="num right c-side nowrap">{{if .Runs}}{{if .OnTime}}{{.OnTime}}<span class="only-phone muted"> on time</span>{{else}}<span class="muted">no stop judged</span>{{end}}{{if .NoReport}}<span class="sub hide-phone">{{.NoReport}} with no report</span>{{end}}{{end}}</td><td class="right c-actions">{{range .Runs}}<a class="btn btn-sm btn-plain" href="{{.TrailURL}}" aria-label="Replay {{.Vehicle}} on {{$.Route.Name}}">{{template "icon-sm" "play_arrow"}}Replay</a>{{end}}</td></tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{template "analytics-rule" .}}
+</section>
+{{else}}
+{{if .Metrics}}
+<section class="card an-trend" aria-label="{{.Trend.Label}} by day">
+  <nav class="metrics" aria-label="Measure">
+    {{range .Metrics}}<a class="metric" href="{{.URL}}"{{if .Selected}} aria-current="true"{{end}}><span class="tile-label">{{.Label}}</span><span class="tile-value{{with .Tone}} tone-{{.}}{{end}}">{{.Value}}</span><span class="tile-note">{{.Note}}</span></a>{{end}}
+  </nav>
+  <div class="an-chart{{with .Trend.Tone}} line-{{.}}{{end}}">
+    <div class="legend" style="justify-content:flex-end;margin-bottom:4px"><span><i class="line-key"></i>{{.Trend.Period}}</span>{{with .Trend.Before}}<span><i style="background:var(--chart-neutral)"></i>{{.}}</span>{{end}}</div>
+    <div class="chart-wrap">{{template "line-chart" .Trend.Chart}}</div>
+  </div>
+  <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Day</th><th class="right">{{.Trend.Label}}</th>{{with .Trend.Before}}<th class="right">{{.}}</th>{{end}}</tr></thead><tbody>{{range .Trend.Rows}}<tr><td>{{.Day}}</td><td class="num right">{{.Value}}</td>{{if $.Trend.Before}}<td class="num right muted">{{.Before}}</td>{{end}}</tr>{{end}}</tbody></table></div></details>
+</section>
+{{else}}
+{{template "analytics-tiles" .}}
+{{end}}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><pattern id="hatch-early" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="var(--early)"/><rect width="1.6" height="5" fill="#fff" opacity=".45"/></pattern><pattern id="hatch-late" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="5" height="5" fill="var(--late)"/><rect width="1.6" height="5" fill="#fff" opacity=".45"/></pattern></defs></svg>
+<div class="an-grid">
+  <section class="card an-wide" aria-labelledby="an-routes">
+    <div class="card-head"><h3 id="an-routes" style="flex:1">By route</h3><span class="legend"><span><i class="seg-early"></i>Early</span><span><i class="seg-ok"></i>On time</span><span><i class="seg-late"></i>Late</span></span></div>
+    {{if .Routes}}
+    <div class="table-wrap"><table class="table cards">
+      <thead><tr><th>Route</th><th class="right">Trips run</th><th>On time</th><th class="right">Early</th><th class="right">Late</th><th class="right">No report</th><th><span class="sr-only">Trips</span></th></tr></thead>
+      <tbody>
+        {{range .Routes}}
+        <tr><td><a class="row-link an-route" href="{{.TripsURL}}">{{template "route-badge" .Badge}}{{.Name}}</a></td><td class="num right nowrap" data-label="Trips run">{{.Ran}} <span class="muted">of {{.Scheduled}}</span></td><td style="min-width:180px">{{if .OnTime}}<div class="an-share"><b class="num">{{.OnTime}}</b><span style="flex:1">{{template "ot-stack" .Split}}</span></div><span class="only-phone" style="display:block;margin-top:2px">{{.OnTime}} on time, {{.EarlyShare}} early, {{.LateShare}} late, {{.Unknown}} no report</span>{{else if .Ran}}<span class="muted">no stop judged</span>{{else}}<span class="muted">none ran</span>{{end}}</td><td class="num right tone-early hide-phone">{{.EarlyShare}}</td><td class="num right tone-late hide-phone">{{.LateShare}}</td><td class="num right muted hide-phone">{{.Unknown}}</td><td class="right c-actions"><a class="icon-btn" href="{{.TripsURL}}" aria-label="Trips on {{.Name}}">{{template "icon" "chevron_right"}}</a></td></tr>
+        {{end}}
+      </tbody>
+    </table></div>
+    {{template "analytics-rule" .}}
+    {{else}}
+    <p class="card-note">{{if .OneDay}}No trips scheduled on this day.{{else}}No trips scheduled on these days.{{end}}</p>
+    {{end}}
+  </section>
+  <section class="card" aria-labelledby="an-hours">
+    <div class="card-head"><h3 id="an-hours" style="flex:1">Early and late by hour of day</h3><span class="legend"><span><i class="seg-early"></i>Early</span><span><i class="seg-late"></i>Late</span></span></div>
+    {{with .Hours}}
+    <div class="an-plot">{{template "hour-chart" .}}</div>
+    <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Trips leaving from</th><th class="right">Trips</th><th class="right">On time</th><th class="right">Early</th><th class="right">Late</th></tr></thead><tbody>{{range .Rows}}<tr><td class="num">{{.Hour}}</td><td class="num right">{{.Trips}}</td><td class="num right">{{.OnTime}}</td><td class="num right">{{.Early}}</td><td class="num right">{{.Late}}</td></tr>{{end}}</tbody></table></div></details>
+    {{else}}
+    <p class="card-note">No stop was judged, so there is nothing to draw.</p>
+    {{end}}
+  </section>
+  <section class="card" aria-labelledby="an-hist">
+    <div class="card-head"><h3 id="an-hist" style="flex:1">How early and how late</h3><span class="sub">Minutes at the last stop</span></div>
+    {{with .Histogram}}
+    <div class="an-plot">{{template "hist-chart" .}}</div>
+    {{with $.HistogramLeftOut}}<p class="card-note">{{if eq . 1}}1 trip that ran had no report at its last stop and is left out.{{else}}{{.}} trips that ran had no report at their last stop and are left out.{{end}}</p>{{end}}
+    <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>At the last stop</th><th class="right">Trips</th></tr></thead><tbody>{{range .Rows}}<tr><td>{{.Minutes}}</td><td class="num right">{{.Trips}}</td></tr>{{end}}</tbody></table></div></details>
+    {{else}}
+    <p class="card-note">No trip had a report at its last stop, so there is nothing to draw.</p>
+    {{end}}
+  </section>
+</div>
+{{end}}
+<div class="tip" id="tip" aria-hidden="true"></div>
+{{end}}
+{{end}}
+
+{{define "analytics-tiles"}}
+<div class="rise tiles an-tiles">
+  <div class="card tile"><span class="tile-label">On time</span>{{if .Tiles.Split.Known}}<span class="tile-value"><span class="count-up" data-count="{{.Tiles.Split.Percent}}">{{.Tiles.Split.Percent}}</span>%</span><span class="tile-foot">{{template "ot-stack" .Tiles.Split}}</span>{{else}}<span class="tile-value muted">None</span><span class="tile-note">No stop was judged</span>{{end}}</div>
+  <div class="card tile"><span class="tile-label">Trips run</span><span class="tile-value"><span class="count-up" data-count="{{.Tiles.Ran}}">{{.Tiles.Ran}}</span><span class="tile-unit">of {{.Tiles.Scheduled}}</span></span><span class="tile-note">{{.Tiles.NotRun}} not run{{if .IsToday}} yet{{end}}</span></div>
+  <div class="card tile"><span class="tile-label">Early</span>{{if .Tiles.Split.Known}}<span class="tile-value tone-early"><span class="count-up" data-count="{{.Tiles.Split.Early}}">{{.Tiles.Split.Early}}</span>%</span>{{else}}<span class="tile-value muted">None</span>{{end}}<span class="tile-note">{{if eq .Tiles.Early 1}}1 stop{{else}}{{.Tiles.Early}} stops{{end}} more than {{.OnTimeEarly}} ahead</span></div>
+  <div class="card tile"><span class="tile-label">Late</span>{{if .Tiles.Split.Known}}<span class="tile-value tone-late"><span class="count-up" data-count="{{.Tiles.Split.Late}}">{{.Tiles.Split.Late}}</span>%</span>{{else}}<span class="tile-value muted">None</span>{{end}}<span class="tile-note">{{if eq .Tiles.Late 1}}1 stop{{else}}{{.Tiles.Late}} stops{{end}} more than {{.OnTimeLate}} behind</span></div>
 </div>
 {{end}}
 
-{{define "report-deviation"}}
-{{if eq .Tone "on-time"}}<span class="font-semibold text-emerald-700">{{.Text}}</span>
-{{else if eq .Tone "early"}}<span class="font-semibold text-amber-700">{{.Text}}</span>
-{{else if eq .Tone "late"}}<span class="font-semibold text-rose-700">{{.Text}}</span>
-{{else}}<span class="text-slate-400">{{.Text}}</span>{{end}}
+{{define "analytics-rule"}}
+<div class="card-foot">A stop is on time when the vehicle left it from {{.OnTimeEarly}} early to {{.OnTimeLate}} late, or reached the last stop in that window. A stop with no report within {{.FixWindow}} either side of the vehicle passing it is left out.</div>
+{{end}}
+
+{{define "hour-chart"}}
+<svg class="chart" viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-label="{{.Name}}">
+  {{range .Grid}}<line class="grid" x1="{{$.Left}}" x2="{{$.Width}}" y1="{{.Y}}" y2="{{.Y}}"/><text x="{{$.LabelX}}" y="{{.LabelY}}" text-anchor="end">{{.Label}}</text>{{end}}
+  <line class="axis" x1="{{.Left}}" x2="{{.Width}}" y1="{{.AxisY}}" y2="{{.AxisY}}"/>
+  <g class="grow-y">{{range .Bars}}{{if .LateH}}<rect x="{{.X}}" y="{{.LateY}}" width="{{.W}}" height="{{.LateH}}" rx="2" fill="url(#hatch-late)"/>{{end}}{{if .EarlyH}}<rect x="{{.X}}" y="{{.EarlyY}}" width="{{.W}}" height="{{.EarlyH}}" rx="2" fill="url(#hatch-early)"/>{{end}}{{end}}</g>
+  {{range .Bars}}<rect class="hit" x="{{.HitX}}" y="0" width="{{.HitW}}" height="{{$.AxisY}}" data-tip="{{.Tip}}"/>{{if .Label}}<text x="{{.LabelX}}" y="{{$.BaseY}}" text-anchor="middle">{{.Label}}</text>{{end}}{{end}}
+</svg>
+{{end}}
+
+{{define "hist-chart"}}
+<svg class="chart" viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-label="{{.Name}}">
+  <line class="axis" x1="0" x2="{{.Width}}" y1="{{.AxisY}}" y2="{{.AxisY}}"/>
+  <rect class="ok-band" x="{{.BandX}}" y="4" width="{{.BandW}}" height="{{.BandH}}" rx="4"/><text x="{{.BandLabelX}}" y="16" text-anchor="middle">counted as on time</text>
+  <g class="grow-y">{{range .Bars}}{{if .OnTimeH}}<rect class="bar-ok" x="{{.X}}" y="{{.OnTimeY}}" width="{{.W}}" height="{{.OnTimeH}}" rx="2"/>{{end}}{{if .EarlyH}}<rect x="{{.X}}" y="{{.EarlyY}}" width="{{.W}}" height="{{.EarlyH}}" rx="2" fill="url(#hatch-early)"/>{{end}}{{if .LateH}}<rect x="{{.X}}" y="{{.LateY}}" width="{{.W}}" height="{{.LateH}}" rx="2" fill="url(#hatch-late)"/>{{end}}{{end}}</g>
+  {{range .Bars}}<rect class="hit" x="{{.HitX}}" y="0" width="{{.HitW}}" height="{{$.AxisY}}" data-tip="{{.Tip}}"/>{{if .Label}}<text x="{{.LabelX}}" y="{{$.BaseY}}" text-anchor="middle">{{.Label}}</text>{{end}}{{end}}
+</svg>
 {{end}}

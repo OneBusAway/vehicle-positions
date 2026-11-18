@@ -27,30 +27,26 @@ func stopsReport(onTime, early, late int) *serviceReport {
 }
 
 func TestOnTimeShares(t *testing.T) {
-	assert.Equal(t, overviewOnTime{}, onTimeShares(stopsReport(0, 0, 0)), "nothing judged says nothing")
-	assert.Equal(t, overviewOnTime{Known: true, Percent: 86, Early: 3, Late: 11}, onTimeShares(stopsReport(86, 3, 11)))
+	assert.Equal(t, onTimeSplit{}, onTimeShares(stopsReport(0, 0, 0)), "nothing judged says nothing")
+	assert.Equal(t, onTimeSplit{Known: true, Percent: 86, Early: 3, Late: 11}, onTimeShares(stopsReport(86, 3, 11)))
 
-	// Thirds round to 33 each; on time takes what is left, so the bar's
-	// three parts fill it.
-	thirds := onTimeShares(stopsReport(1, 1, 1))
-	assert.Equal(t, 100, thirds.Percent+thirds.Early+thirds.Late)
-	assert.Equal(t, overviewOnTime{Known: true, Percent: 34, Early: 33, Late: 33}, thirds)
+	assert.Equal(t, onTimeSplit{Known: true, Percent: 33, Early: 33, Late: 33}, onTimeShares(stopsReport(1, 1, 1)), "each share is rounded on its own")
 
 	two := &serviceReport{Routes: []routeReport{{StopsOnTime: 3, StopsLate: 1}, {StopsOnTime: 5, StopsEarly: 1}}}
-	assert.Equal(t, overviewOnTime{Known: true, Percent: 80, Early: 10, Late: 10}, onTimeShares(two), "summed over routes")
+	assert.Equal(t, onTimeSplit{Known: true, Percent: 80, Early: 10, Late: 10}, onTimeShares(two), "summed over routes")
 }
 
 func TestOverviewLede(t *testing.T) {
-	today := overviewOnTime{Known: true, Percent: 86}
+	today := onTimeSplit{Known: true, Percent: 86}
 	for _, tc := range []struct {
 		name        string
 		hasSchedule bool
-		today       overviewOnTime
+		today       onTimeSplit
 		yesterday   *serviceReport
 		want        string
 	}{
-		{"no schedule", false, overviewOnTime{}, nil, "No schedule is loaded, so nothing is judged against a timetable."},
-		{"nothing judged", true, overviewOnTime{}, stopsReport(9, 0, 1), "No stop has been passed yet today."},
+		{"no schedule", false, onTimeSplit{}, nil, "No schedule is loaded, so nothing is judged against a timetable."},
+		{"nothing judged", true, onTimeSplit{}, stopsReport(9, 0, 1), "No stop has been passed yet today."},
 		{"no yesterday", true, today, nil, "86% of the stops passed today were on time."},
 		{"yesterday not judged", true, today, stopsReport(0, 0, 0), "86% of the stops passed today were on time."},
 		{"up", true, today, stopsReport(83, 0, 17), "86% of the stops passed today were on time, 3 points up on yesterday."},
@@ -147,8 +143,8 @@ func TestNewOverviewView(t *testing.T) {
 	assert.Equal(t, []string{"seg-ok", "seg-ok", "seg-warn"}, v.Units)
 	assert.Equal(t, "America/Los_Angeles", v.Timezone)
 
-	assert.Equal(t, overviewOnTime{Known: true, Percent: 86, Early: 3, Late: 11}, v.OnTime)
-	assert.Equal(t, "/admin/reports?date=2026-09-02", v.ReportsURL)
+	assert.Equal(t, onTimeSplit{Known: true, Percent: 86, Early: 3, Late: 11}, v.OnTime)
+	assert.Equal(t, "/admin/reports?date=2026-09-02&range=day", v.ReportsURL)
 	assert.Equal(t, 2, v.TripsRun)
 	assert.Equal(t, 2, v.TripsScheduled, "the trip due in a minute is not scheduled so far; the one due now is")
 	assert.True(t, v.HasSchedule)
@@ -405,7 +401,7 @@ func TestDashboardPage_Overview(t *testing.T) {
 	assert.Contains(t, body, `<h2 class="h1" data-live="headline">1 of 1 vehicle is reporting</h2>`)
 	assert.Contains(t, body, "America/Los_Angeles time")
 	assert.Contains(t, body, `<span class="count-up" data-count="1" data-live="on-trip">1</span><span class="tile-unit" data-live="vehicles">of 14 vehicles</span>`)
-	assert.Contains(t, body, `<a class="card tile" href="/admin/reports?date=2026-09-02">`)
+	assert.Contains(t, body, `<a class="card tile" href="/admin/reports?date=2026-09-02&amp;range=day">`)
 	assert.Contains(t, body, `<a class="line-row" href="/admin/reports?date=2026-09-02&amp;route_id=R1" data-route="R1">`)
 	assert.Contains(t, body, `<span class="veh" style="left:50.0%" data-veh="bus-1" title="Bus &lt;1&gt;">`, "the vehicle halfway along its route, its label escaped")
 	assert.Equal(t, 3, strings.Count(body, `<span class="stop" style="left:`), "T1's stops")

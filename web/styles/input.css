@@ -403,13 +403,40 @@
     #trip-stops { grid-column: auto !important; }
   }
 
-  /* Analytics: the metric tabs */
+  /* Analytics */
+  .range-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .range-date { display: inline-flex; align-items: center; gap: 2px; }
+  .range-date .input { width: auto; }
+  .range-date .btn { margin-left: 6px; }
+  .icon-btn.off { opacity: 0.4; cursor: default; }
+  .icon-btn.off:hover { background: transparent; }
+  .h1.an-route { display: flex; align-items: center; gap: 12px; }
+  .row-link.an-route { display: inline-flex; align-items: center; gap: 10px; }
+  .an-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .an-tiles .tile { min-height: 120px; }
+  .an-trend { overflow: hidden; margin-bottom: 16px; }
+  .an-chart { padding: 8px 18px 14px; }
+  .an-plot { padding: 0 18px 14px; }
+  .an-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; margin-bottom: 16px; }
+  .an-wide { grid-column: 1 / -1; }
+  .an-share { display: flex; align-items: center; gap: 10px; }
+  .an-share b { font-weight: 500; min-width: 48px; }
+  .an-table { border-top: 1px solid var(--line); }
+  .an-table > summary { cursor: pointer; border-top: 0; color: var(--primary); font-weight: 500; }
+  .an-table > .table-wrap { max-height: 260px; }
   .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border-bottom: 1px solid var(--line); }
-  .metric { display: flex; flex-direction: column; gap: 2px; padding: 14px 18px; color: var(--ink); position: relative; border-right: 1px solid var(--line); transition: background-color var(--t-out) linear; }
+  .metric { display: flex; flex-direction: column; gap: 2px; padding: 14px 18px; background: var(--bg); color: var(--ink); position: relative; border-right: 1px solid var(--line); transition: background-color var(--t-out) linear; }
   .metric:hover { background: var(--surface-2); text-decoration: none; }
-  .metric[aria-selected="true"] { background: var(--surface); }
-  .metric[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: var(--primary); }
-  .metric[aria-selected="false"] { background: var(--bg); }
+  .metric[aria-current="true"] { background: var(--surface); }
+  .metric[aria-current="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: var(--primary); }
+  .metric .tile-value { font-size: 30px; line-height: 38px; }
+  .line-ok { --tone: var(--ok); }
+  .line-early { --tone: var(--early); }
+  .line-late { --tone: var(--late); }
+  .legend .line-key { background: var(--tone, var(--chart-1)); }
+  .chart .dot { fill: var(--tone, var(--chart-1)); }
+  .chart .ok-band { fill: var(--ok); opacity: 0.1; }
+  .chart .bar-ok { fill: var(--ok); }
 
   /* API keys: the key that was just made */
   .newkey { align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
@@ -735,13 +762,13 @@
   .chart-y { position: absolute; left: 0; top: -2px; font-size: 12px; line-height: 16px; color: var(--ink-3); background: var(--surface); padding-right: 6px; }
   .chart .grid { stroke: var(--line); stroke-width: 1; }
   .chart .axis { stroke: var(--line-strong); stroke-width: 1; }
-  .chart .line { fill: none; stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart .line { fill: none; stroke: var(--tone, var(--chart-1)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .chart .line-prev { fill: none; stroke: var(--chart-neutral); stroke-width: 1.5; stroke-dasharray: 4 4; }
   .chart .area { fill: var(--primary); opacity: 0.1; }
   .chart .band { fill: var(--chart-neutral); opacity: 0.16; }
   .chart .bar { fill: var(--chart-1); }
   .chart .bar-warn { fill: var(--warn); }
-  .chart .pt { fill: var(--surface); stroke: var(--chart-1); stroke-width: 2; }
+  .chart .pt { fill: var(--surface); stroke: var(--tone, var(--chart-1)); stroke-width: 2; }
   .chart .hit { fill: transparent; }
   .chart .cross { stroke: var(--outline); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0; }
   .tip { position: absolute; z-index: 40; pointer-events: none; padding: 8px 10px; border-radius: 8px; background: var(--problem); color: var(--on-problem); font: 400 12px/16px var(--font-sans); box-shadow: var(--shadow-2); white-space: nowrap; opacity: 0; transition: opacity var(--t-out) linear; }

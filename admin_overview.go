@@ -23,10 +23,24 @@ import (
 const overviewReportTTL = time.Minute
 
 // overviewReports are the two service reports the Overview reads, each kept
-// for overviewReportTTL.
+// for overviewReportTTL. Analytics reads the same two through it.
 type overviewReports struct {
 	today     reportCache
 	yesterday reportCache
+}
+
+// report is the service report for day, where today is today's service date.
+// Today's and yesterday's are the kept ones; an older day is the reporter's
+// to keep.
+func (o *overviewReports) report(ctx context.Context, reports *serviceReporter, ix *rider.Index, today, day time.Time) (*serviceReport, error) {
+	date := day.Format(reportDateLayout)
+	switch {
+	case day.Equal(today):
+		return o.today.get(ctx, reports, ix, date)
+	case day.Equal(today.AddDate(0, 0, -1)):
+		return o.yesterday.get(ctx, reports, ix, date)
+	}
+	return reports.report(ctx, date)
 }
 
 // reportCache keeps one day's service report for overviewReportTTL. The zero
@@ -81,7 +95,7 @@ type overviewView struct {
 	Reporting int
 	Quiet     int
 
-	OnTime overviewOnTime
+	OnTime onTimeSplit
 	// ReportsURL opens Analytics on today.
 	ReportsURL string
 
@@ -108,16 +122,6 @@ type overviewProblem struct {
 	Text   string
 	URL    string
 	Action string
-}
-
-// overviewOnTime is how the stops passed today stood against the timetable,
-// as whole percentages of the stops judged. Known is false when none has
-// been judged, and the shares then say nothing.
-type overviewOnTime struct {
-	Known   bool
-	Percent int
-	Early   int
-	Late    int
 }
 
 // overviewRoute is one route with a trip running: its badge, how many of its
@@ -224,14 +228,14 @@ func (ui *adminUI) dashboardPage(w http.ResponseWriter, r *http.Request) {
 	if ix != nil {
 		// ServiceDate writes the date in the layout it is parsed with here.
 		day, _ := time.Parse(gtfsDateLayout, ix.ServiceDate(now))
-		if today, err = ui.overview.today.get(ctx, ui.reports, ix, day.Format(reportDateLayout)); err != nil {
+		if today, err = ui.overview.report(ctx, ui.reports, ix, day, day); err != nil {
 			slog.Error("overview: today's report", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		// The reporter keeps the day before once its service is over; until
 		// then it is worked out afresh like today's, so it is kept here too.
-		if yesterday, err = ui.overview.yesterday.get(ctx, ui.reports, ix, day.AddDate(0, 0, -1).Format(reportDateLayout)); err != nil {
+		if yesterday, err = ui.overview.report(ctx, ui.reports, ix, day, day.AddDate(0, 0, -1)); err != nil {
 			slog.Error("overview: yesterday's report", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -382,7 +386,7 @@ func overviewHeadline(reporting, onTrip int) string {
 
 // overviewLede says how today's stops stand against the timetable, and
 // against yesterday's when yesterday has stops to compare with.
-func overviewLede(hasSchedule bool, today overviewOnTime, yesterday *serviceReport) string {
+func overviewLede(hasSchedule bool, today onTimeSplit, yesterday *serviceReport) string {
 	switch {
 	case !hasSchedule:
 		return "No schedule is loaded, so nothing is judged against a timetable."
@@ -409,24 +413,9 @@ func overviewLede(hasSchedule bool, today overviewOnTime, yesterday *serviceRepo
 	return lede + "."
 }
 
-// onTimeShares adds up a report's stops over its routes, as whole
-// percentages of the stops judged. Early and late are rounded and on time
-// takes what is left, so the three add up to 100.
-func onTimeShares(rep *serviceReport) overviewOnTime {
-	var onTime, early, late int
-	for _, route := range rep.Routes {
-		onTime += route.StopsOnTime
-		early += route.StopsEarly
-		late += route.StopsLate
-	}
-	judged := onTime + early + late
-	if judged == 0 {
-		return overviewOnTime{}
-	}
-	share := func(n int) int { return int(math.Round(float64(n) * 100 / float64(judged))) }
-	s := overviewOnTime{Known: true, Early: share(early), Late: share(late)}
-	s.Percent = 100 - s.Early - s.Late
-	return s
+// onTimeShares adds up a report's stops over its routes.
+func onTimeShares(rep *serviceReport) onTimeSplit {
+	return dayCounts(rep).split()
 }
 
 // overviewRoutes is a row for each route with a trip running, in the

@@ -145,11 +145,7 @@ func TestTripDetail_AgreesWithTheReportsPage(t *testing.T) {
 				}
 			}
 			assert.Equal(t, want.OnTime, formatPercent(counts.onTimePercent()), "on time")
-			if want.Unknown != "" {
-				assert.Equal(t, want.Unknown, formatPercent(counts.unknownPercent()), "unknown")
-			} else {
-				assert.Zero(t, counts.unknown)
-			}
+			assert.Equal(t, want.NoReport, counts.unknown, "stops with no report")
 		})
 	}
 }
