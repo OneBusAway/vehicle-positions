@@ -7,3 +7,8 @@
 {{define "brand-mark-sm"}}<span class="brand-mark brand-mark-sm">{{template "brand-art"}}</span>{{end}}
 
 {{define "arrow"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 19.5 21 12 17.2 4.5 21Z"/></svg>{{end}}
+
+{{define "route-badge"}}{{if .Name}}<span class="route"{{if .Color}} style="background-color: {{.Color}}; color: {{.TextColor}}"{{end}}{{with .LongName}} title="{{.}}"{{end}}>{{.Name}}</span>{{end}}{{end}}
+{{define "route-badge-lg"}}{{if .Name}}<span class="route route-lg"{{if .Color}} style="background-color: {{.Color}}; color: {{.TextColor}}"{{end}}{{with .LongName}} title="{{.}}"{{end}}>{{.Name}}</span>{{end}}{{end}}
+
+{{define "deviation"}}{{if eq .Tone "on-time"}}<span class="pill pill-ok">On time</span> <span class="muted">{{.Signed}}</span>{{else if eq .Tone "early"}}<span class="pill pill-early">{{.Text}}</span>{{else if eq .Tone "late"}}<span class="pill pill-late">{{.Text}}</span>{{else}}<span class="muted">no report</span>{{end}}{{end}}

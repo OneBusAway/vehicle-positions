@@ -53,6 +53,10 @@ type reportRunRow struct {
 type reportDeviation struct {
 	Text string
 	Tone string
+	// Signed is the deviation as a signed time, "+0:20" late or "-0:40"
+	// early, which is shown beside "On time": a vehicle inside the window is
+	// never called late in green.
+	Signed string
 }
 
 func reportsPageURL(date, routeID string) string {
@@ -214,13 +218,16 @@ func formatDeviation(seconds *int, s reportSettings) reportDeviation {
 	d := time.Duration(*seconds) * time.Second
 	abs := d.Abs()
 	text := fmt.Sprintf("%d:%02d", int(abs.Minutes()), int(abs.Seconds())%60)
+	signed := text
 	switch {
 	case d > 0:
+		signed = "+" + text
 		text += " late"
 	case d < 0:
+		signed = "-" + text
 		text += " early"
 	}
-	return reportDeviation{Text: text, Tone: s.verdict(d).tone()}
+	return reportDeviation{Text: text, Tone: s.verdict(d).tone(), Signed: signed}
 }
 
 // tone names a verdict for the page to colour by.

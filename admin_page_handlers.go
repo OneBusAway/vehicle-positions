@@ -15,6 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // adminUIConfig holds the runtime knobs for the admin UI that vary by
@@ -1461,38 +1463,85 @@ func (ui *adminUI) userUnassignVehicle(w http.ResponseWriter, r *http.Request) {
 }
 
 // tripRow is a single row in the trips table: a trip's joined display fields
-// plus pre-formatted start/end times and duration, ready for the template.
+// with its route's badge and headsign from the schedule, and its times on the
+// page's clock, ready for the template.
 type tripRow struct {
 	ID           int64
 	VehicleLabel string
 	DriverName   string
-	RouteID      string
+	Route        tripRoute
+	Headsign     string
 	GtfsTripID   string
-	Start        string
-	End          string
-	Status       string
-	Duration     string
+	StartClock   string
+	StartDay     string
+	// EndClock is empty while the trip is running.
+	EndClock string
+	Duration string
+	Status   string
+	Active   bool
 }
 
-// formatTripTimestamp renders a trip's start/end time in the admin UI's
-// fixed UTC display format, regardless of the server's local timezone.
+// formatTripTimestamp renders a time in the admin UI's fixed UTC display
+// format, regardless of the server's local timezone.
 func formatTripTimestamp(t time.Time) string {
 	return t.UTC().Format("2006-01-02 15:04") + " UTC"
 }
 
-// formatTripDuration renders how long a completed trip took, rounded to the
-// nearest minute. Active trips (nil end) have no duration yet.
-func formatTripDuration(start time.Time, end *time.Time) string {
-	if end == nil {
-		return "—"
+// pageLocation is the clock an admin page writes a trip's times on: the
+// agency's when a schedule is loaded, else UTC.
+func pageLocation(ix *rider.Index) *time.Location {
+	if ix == nil {
+		return time.UTC
 	}
-	d := end.Sub(start).Round(time.Minute)
+	return ix.Timezone()
+}
+
+// formatDay is the day t falls on, on the page's clock: "17 Nov", with the
+// year when it is not now's.
+func formatDay(t time.Time, loc *time.Location, now time.Time) string {
+	local := t.In(loc)
+	if local.Year() != now.In(loc).Year() {
+		return local.Format("2 Jan 2006")
+	}
+	return local.Format("2 Jan")
+}
+
+// formatMinutes renders how long something took, rounded to the nearest
+// minute: "45 min", "1 h 45 min".
+func formatMinutes(d time.Duration) string {
+	d = d.Round(time.Minute)
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
+	switch {
+	case h == 0:
+		return fmt.Sprintf("%d min", m)
+	case m == 0:
+		return fmt.Sprintf("%d h", h)
+	default:
+		return fmt.Sprintf("%d h %d min", h, m)
 	}
-	return fmt.Sprintf("%dm", m)
+}
+
+// tripsHeadline is the Trips page's headline, from the count of running
+// trips.
+func tripsHeadline(running int) string {
+	switch running {
+	case 0:
+		return "No trips are running"
+	case 1:
+		return "1 trip is running"
+	default:
+		return strconv.Itoa(running) + " trips are running"
+	}
+}
+
+// statusLink is one choice of the Trips page's status filter.
+type statusLink struct {
+	Label   string
+	URL     string
+	Current bool
+	// Count is shown beside the label when it is not zero.
+	Count int
 }
 
 // tripsPageURL builds a /admin/trips link preserving the current filter
@@ -1551,6 +1600,13 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 		trips = trips[:adminPageSize]
 	}
 
+	running, err := ui.stats.CountActiveTrips(ctx)
+	if err != nil {
+		slog.Error("trips: count active trips", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	allVehicles, err := ui.vehicles.ListVehicles(ctx)
 	if err != nil {
 		slog.Error("trips: list vehicles", "error", err)
@@ -1565,33 +1621,56 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(activeVehicles, func(i, j int) bool { return activeVehicles[i].ID < activeVehicles[j].ID })
 
+	ix := ui.reports.index()
+	loc := pageLocation(ix)
+	now := time.Now()
 	rows := make([]tripRow, 0, len(trips))
 	for _, t := range trips {
 		row := tripRow{
 			ID:           t.ID,
 			VehicleLabel: t.VehicleLabel,
 			DriverName:   t.DriverName,
-			RouteID:      t.RouteID,
+			Route:        routeBadge(ix, t.RouteID),
 			GtfsTripID:   t.GtfsTripID,
-			Start:        formatTripTimestamp(t.StartTime),
-			End:          "—",
+			StartClock:   t.StartTime.In(loc).Format("15:04"),
+			StartDay:     formatDay(t.StartTime, loc, now),
 			Status:       t.Status,
-			Duration:     formatTripDuration(t.StartTime, t.EndTime),
+			Active:       t.Status == "active",
+		}
+		if ix != nil {
+			if info, ok := ix.Trip(t.GtfsTripID); ok {
+				row.Headsign = info.Headsign
+			}
 		}
 		if t.EndTime != nil {
-			row.End = formatTripTimestamp(*t.EndTime)
+			row.EndClock = t.EndTime.In(loc).Format("15:04")
+			row.Duration = formatMinutes(t.EndTime.Sub(t.StartTime))
+		} else {
+			row.Duration = formatMinutes(now.Sub(t.StartTime)) + " so far"
 		}
 		rows = append(rows, row)
+	}
+
+	// Each choice of status flips only the status, so a search in progress
+	// survives it, and starts over at page 1.
+	statuses := []statusLink{
+		{Label: "All", URL: tripsPageURL("", vehicleID, q, 1), Current: status == ""},
+		{Label: "Running", URL: tripsPageURL("active", vehicleID, q, 1), Current: status == "active", Count: running},
+		{Label: "Completed", URL: tripsPageURL("completed", vehicleID, q, 1), Current: status == "completed"},
 	}
 
 	ui.renderAdmin(w, r, http.StatusOK, "trips.html", map[string]interface{}{
 		"Title":     "Trips",
 		"Page":      "trips",
+		"Headline":  tripsHeadline(running),
+		"Timezone":  loc.String(),
 		"Trips":     rows,
 		"Vehicles":  activeVehicles,
 		"Status":    status,
+		"Statuses":  statuses,
 		"VehicleID": vehicleID,
 		"Q":         q,
+		"Filtered":  status != "" || vehicleID != "" || q != "",
 		"Shown":     newPagerCount(len(rows), "trip", "trips"),
 		"PageNum":   page,
 		"HasMore":   hasMore,

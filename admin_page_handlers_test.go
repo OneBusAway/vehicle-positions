@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // fakeUserFetcher is a minimal UserFetcher backed by an in-memory map, used by
@@ -36,11 +38,14 @@ func (f *fakeUserFetcher) GetUserByEmail(_ context.Context, email string) (*User
 	return u, nil
 }
 
+// newTestAdminUI is the admin UI over a store with nothing in it and no
+// schedule loaded, as on a server that has just started.
 func newTestAdminUI(t *testing.T) *adminUI {
 	t.Helper()
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
-	ui, err := newAdminUI(&noopStore{}, tracker, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
+	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return nil }, testReportSettings)
+	ui, err := newAdminUI(&noopStore{}, tracker, newAlertWatcher(&noopStore{}, testAlertSettings), reports, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
 	require.NoError(t, err)
 	t.Cleanup(ui.loginLimiter.Stop)
 	return ui
@@ -263,7 +268,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		{"dashboard", "/admin/dashboard", "Active Trips"},
 		{"vehicles", "/admin/vehicles", "New vehicle"},
 		{"users", "/admin/users", "New user"},
-		{"trips", "/admin/trips", "No trips found."},
+		{"trips", "/admin/trips", "No trips yet"},
 		{"map", "/admin/map", "Live map"},
 		{"api keys", "/admin/api-keys", "No API keys yet"},
 	}
@@ -1604,9 +1609,9 @@ func TestUserAssignVehicle_UnknownVehicle(t *testing.T) {
 }
 
 // TestTripsPageRendersRealTrips verifies the trips table renders a seeded
-// trip's vehicle label, driver name, UTC-suffixed start/end times, duration,
-// and a "View trail" link into the map trail view — and that the old mock
-// data is gone.
+// trip's vehicle label, driver name, start and end times on the page's clock
+// (UTC with no schedule loaded), duration, and a link to the trip's page, and
+// that the old mock data is gone.
 func TestTripsPageRendersRealTrips(t *testing.T) {
 	ui := newTestAdminUI(t)
 	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
@@ -1629,17 +1634,19 @@ func TestTripsPageRendersRealTrips(t *testing.T) {
 	assert.Contains(t, body, "Asha Patel")
 	assert.Contains(t, body, "12")
 	assert.Contains(t, body, "trip-99")
-	assert.Contains(t, body, "2026-01-02 07:00 UTC")
-	assert.Contains(t, body, "2026-01-02 08:45 UTC")
-	assert.Contains(t, body, "1h 45m")
-	assert.Contains(t, body, `href="/admin/map?trip_id=42"`)
+	assert.Contains(t, body, "Times are UTC time.")
+	assert.Contains(t, body, `data-label="Started">07:00<span class="sub hide-phone">2 Jan`)
+	assert.Contains(t, body, `08:45<span class="sub">1 h 45 min</span>`)
+	assert.Contains(t, body, `<span class="route">12</span>`, "a route the schedule does not have goes by its id")
+	assert.Contains(t, body, `<span class="muted">Completed</span>`)
+	assert.Contains(t, body, `href="/admin/trips/42"`)
 	assert.NotContains(t, body, "T001", "mock data must be gone")
 	assert.NotContains(t, body, "Tom Hiddlestone", "mock data must be gone")
 }
 
 // TestTripsPageActiveTripHasNoEndOrDuration verifies an active trip (nil
-// EndTime) renders em-dashes for end time and duration rather than zero
-// values.
+// EndTime) says how long it has run so far in place of an end time, rather
+// than zero values.
 func TestTripsPageActiveTripHasNoEndOrDuration(t *testing.T) {
 	ui := newTestAdminUI(t)
 	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
@@ -1657,8 +1664,9 @@ func TestTripsPageActiveTripHasNoEndOrDuration(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, "2026-01-02 07:00 UTC")
-	assert.Contains(t, body, "—")
+	assert.Contains(t, body, `data-label="Started">07:00<`)
+	assert.Regexp(t, `<td class="hide-phone hide-md nowrap"><span class="muted">\d+ h( \d+ min)? so far</span></td>`, body)
+	assert.Contains(t, body, `<span class="pill pill-ok">Running</span>`)
 }
 
 // TestTripsPageFilterPassthrough verifies status/vehicle_id/q/page query
@@ -1768,7 +1776,8 @@ func TestTripsPageEmptyState(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "No trips found.")
+	assert.Contains(t, w.Body.String(), "No trips yet")
+	assert.Contains(t, w.Body.String(), `<h2 class="h1">No trips are running</h2>`)
 }
 
 // TestTripsPageStoreErrorReturns500 verifies a ListTrips failure produces a
@@ -1830,7 +1839,7 @@ func TestTripsPageEndTripButtonOnActiveRowsOnly(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, `<form method="post" action="/admin/trips/43/end" class="shrink-0" onsubmit="return confirm('End this trip? Do this only when the driver phone cannot end it.')">`)
+	assert.Contains(t, body, `<form method="post" action="/admin/trips/43/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip">`)
 	assert.NotContains(t, body, `action="/admin/trips/42/end"`)
 	assert.Equal(t, 1, strings.Count(body, ">End trip</button>"))
 }

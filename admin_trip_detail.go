@@ -15,8 +15,8 @@ import (
 )
 
 // defaultTrailColor is the trail's colour when the schedule gives the route
-// none: the teal the live map draws a trail in.
-const defaultTrailColor = "#0f766e"
+// none: the admin pages' own green.
+const defaultTrailColor = "#3B6939"
 
 // gtfsColorPattern is a GTFS route_color or route_text_color: six hex digits
 // and no '#'.
@@ -32,14 +32,20 @@ type tripDetail struct {
 	GtfsTripID   string
 	Headsign     string
 	BlockID      string
-	Start        string
-	End          string
-	Status       string
-	Active       bool
-	Duration     string
-	Reports      int
-	FirstReport  string
-	LastReport   string
+	// RouteLine names where the trip goes, from the route's long name and
+	// the trip's headsign: "Thika Road to Roysambu". Empty with neither.
+	RouteLine  string
+	StartClock string
+	StartDay   string
+	// EndClock and EndDay are empty while the trip is running.
+	EndClock    string
+	EndDay      string
+	Status      string
+	Active      bool
+	Duration    string
+	Reports     int
+	FirstReport string
+	LastReport  string
 	// Timezone is the clock every time on the page is on: the agency's when
 	// the schedule is loaded, else UTC.
 	Timezone string
@@ -47,6 +53,14 @@ type tripDetail struct {
 	// and Summary is then the trip's row as the Reports page shows it.
 	Timetable bool
 	Summary   reportTripRow
+	// LastStop is how the trip stood against the timetable at the last
+	// stop it passed, for the header; nil when no stop has been judged.
+	LastStop *reportDeviation
+	// StopsOnTime is the stat strip's count, "2 of 4 passed", and
+	// StopsSummary the sentence above the stops; both empty with no
+	// timetable.
+	StopsOnTime  string
+	StopsSummary string
 	// Note says why the page has no stops, or no timetable for them.
 	Note  string
 	Stops []tripStopRow
@@ -78,8 +92,10 @@ type tripStopRow struct {
 	// the last stop's arrival; "" when there is no timetable.
 	Scheduled string
 	// Passed is when the vehicle left the stop, or reached the last one; ""
-	// when that is not known.
+	// when that is not known. PassedAt is the same moment in unix seconds,
+	// which the replay's timeline places the stop by, and zero with it.
 	Passed    string
+	PassedAt  int64
 	Deviation reportDeviation
 	// Ahead is a stop a running trip has not got to yet.
 	Ahead bool
@@ -169,10 +185,11 @@ func newTripDetail(trip TripSummary, points []LocationPoint, ix *rider.Index, s 
 		VehicleID:    trip.VehicleID,
 		VehicleLabel: trip.VehicleLabel,
 		DriverName:   trip.DriverName,
-		Route:        tripRoute{ID: trip.RouteID, Name: trip.RouteID},
+		Route:        routeBadge(ix, trip.RouteID),
 		GtfsTripID:   trip.GtfsTripID,
-		Start:        formatTripTime(trip.StartTime, loc),
-		End:          "—",
+		RouteLine:    routeBadge(ix, trip.RouteID).LongName,
+		StartClock:   trip.StartTime.In(loc).Format("15:04"),
+		StartDay:     formatDay(trip.StartTime, loc, now),
 		Status:       trip.Status,
 		Active:       trip.Status == "active",
 		Reports:      len(points),
@@ -194,11 +211,15 @@ func newTripDetail(trip TripSummary, points []LocationPoint, ix *rider.Index, s 
 		OnTimeLate:  humanizeDuration(s.onTimeLate),
 		FixWindow:   humanizeDuration(reportFixWindow),
 	}
+	if d.Route.Color != "" {
+		d.Map.Color = d.Route.Color
+	}
 	if trip.EndTime != nil {
-		d.End = formatTripTime(*trip.EndTime, loc)
-		d.Duration = formatTripDuration(trip.StartTime, trip.EndTime)
+		d.EndClock = trip.EndTime.In(loc).Format("15:04")
+		d.EndDay = formatDay(*trip.EndTime, loc, now)
+		d.Duration = formatMinutes(trip.EndTime.Sub(trip.StartTime))
 	} else {
-		d.Duration = formatTripDuration(trip.StartTime, &now) + " so far"
+		d.Duration = formatMinutes(now.Sub(trip.StartTime)) + " so far"
 	}
 	if len(points) > 0 {
 		d.FirstReport = reportClock(points[0], loc)
@@ -211,12 +232,6 @@ func newTripDetail(trip TripSummary, points []LocationPoint, ix *rider.Index, s 
 		}
 		return d
 	}
-	if route, ok := ix.Route(trip.RouteID); ok {
-		d.Route = newTripRoute(route)
-		if d.Route.Color != "" {
-			d.Map.Color = d.Route.Color
-		}
-	}
 	if trip.GtfsTripID == "" {
 		return d
 	}
@@ -226,6 +241,12 @@ func newTripDetail(trip TripSummary, points []LocationPoint, ix *rider.Index, s 
 		return d
 	}
 	d.Headsign, d.BlockID = info.Headsign, info.BlockID
+	switch {
+	case d.RouteLine != "" && d.Headsign != "":
+		d.RouteLine += " to " + d.Headsign
+	case d.Headsign != "":
+		d.RouteLine = "To " + d.Headsign
+	}
 	for _, stop := range info.StopTimes {
 		d.Map.Stops = append(d.Map.Stops, tripMapStop{Name: stop.StopName, Lat: stop.Pos.Lat, Lon: stop.Pos.Lon})
 	}
@@ -275,10 +296,50 @@ func newTripDetail(trip TripSummary, points []LocationPoint, ix *rider.Index, s 
 	d.Timetable = true
 	d.Summary = newReportTripRow(rep, tr, day)
 	d.Stops = tripStopRows(info, fixes, reached, &tripTimetable{dayStart: dayStart, settings: s}, loc, day)
+	d.summarizeStops(tr)
 	if info.ShapeFromStops {
 		d.Note = fmt.Sprintf("Trip %s has no shape in the GTFS schedule, so the vehicle can't be placed along it and every stop is unknown, as on the Reports page.", trip.GtfsTripID)
 	}
 	return d
+}
+
+// summarizeStops fills what the header, the stat strip and the Stops card say
+// about the stops as a whole. The counts are tr's, the trip as the Analytics
+// page judges it, so the two pages cannot disagree; a stop with no report is
+// one the vehicle has gone past without being placed at it.
+func (d *tripDetail) summarizeStops(tr tripReport) {
+	judged := tr.StopsOnTime + tr.StopsEarly + tr.StopsLate
+	noReport := 0
+	for i := range d.Stops {
+		row := &d.Stops[i]
+		if !row.Timed || row.Ahead {
+			continue
+		}
+		if row.Passed == "" {
+			noReport++
+			continue
+		}
+		d.LastStop = &row.Deviation
+	}
+	if judged == 0 {
+		d.StopsSummary = "No stop could be judged"
+		if d.Active {
+			d.StopsSummary = "Nothing to judge yet"
+		}
+		return
+	}
+	d.StopsOnTime = fmt.Sprintf("%d of %d passed", tr.StopsOnTime, judged)
+	d.StopsSummary = fmt.Sprintf("On time at %d of the %s passed", tr.StopsOnTime, countOf(judged, "stop", "stops"))
+	if d.Active {
+		d.StopsSummary = fmt.Sprintf("On time so far at %d of the %s passed", tr.StopsOnTime, countOf(judged, "stop", "stops"))
+	}
+	switch noReport {
+	case 0:
+	case 1:
+		d.StopsSummary += "; 1 has no report"
+	default:
+		d.StopsSummary += fmt.Sprintf("; %d have no report", noReport)
+	}
 }
 
 // tripTimetable is the run of a trip the stops are judged against: its
@@ -315,6 +376,7 @@ func tripStopRows(trip *rider.TripInfo, fixes []placedFix, reached float64, tt *
 		at, passed := passedAt(fixes, target)
 		if passed {
 			row.Passed = formatPassedTime(at, loc, day)
+			row.PassedAt = at.Unix()
 		}
 		if tt != nil {
 			row.Scheduled = formatScheduledTime(tt.dayStart.Add(due), loc, day)
@@ -348,7 +410,7 @@ func formatPassedTime(t time.Time, loc *time.Location, day time.Time) string {
 	return text
 }
 
-// formatTripTime is a trip's start or end on the page's clock, with the zone.
+// formatTripTime is a time on the page's clock, with the day and the zone.
 func formatTripTime(t time.Time, loc *time.Location) string {
 	return t.In(loc).Format("2006-01-02 15:04 MST")
 }
@@ -358,9 +420,22 @@ func reportClock(p LocationPoint, loc *time.Location) string {
 	return time.Unix(p.Timestamp, 0).In(loc).Format("15:04:05")
 }
 
-// newTripRoute is route's badge. GTFS colours a route with no route_color
-// white and its text black; a route with no colour here keeps the page's own
-// badge colours instead, as a white badge would vanish into the page.
+// routeBadge is the badge of the route with this id: its name and colours
+// from the schedule ix, or the bare id on the page's own grey when ix is nil
+// or does not have the route.
+func routeBadge(ix *rider.Index, routeID string) tripRoute {
+	if ix != nil {
+		if route, ok := ix.Route(routeID); ok {
+			return newTripRoute(route)
+		}
+	}
+	return tripRoute{ID: routeID, Name: routeID}
+}
+
+// newTripRoute is route's badge. A route with no route_color keeps the page's
+// own badge colours: GTFS would have it white, which vanishes into the page.
+// The text is black or white, whichever reads better on the route's colour,
+// so the badge stays readable whatever the feed's route_text_color says.
 func newTripRoute(route rider.RouteInfo) tripRoute {
 	r := tripRoute{ID: route.ID, Name: route.ShortName, LongName: route.LongName}
 	if r.Name == "" {
@@ -371,12 +446,30 @@ func newTripRoute(route rider.RouteInfo) tripRoute {
 	}
 	if gtfsColorPattern.MatchString(route.Color) {
 		r.Color = "#" + route.Color
-		r.TextColor = "#000000"
-		if gtfsColorPattern.MatchString(route.TextColor) {
-			r.TextColor = "#" + route.TextColor
-		}
+		r.TextColor = readableOn(route.Color)
 	}
 	return r
+}
+
+// readableOn is black or white, whichever has the higher WCAG contrast
+// against hex, six hex digits as gtfsColorPattern matches them.
+func readableOn(hex string) string {
+	rgb, err := strconv.ParseUint(hex, 16, 32)
+	if err != nil {
+		return "#000000"
+	}
+	linear := func(c uint64) float64 {
+		v := float64(c&0xff) / 255
+		if v <= 0.03928 {
+			return v / 12.92
+		}
+		return math.Pow((v+0.055)/1.055, 2.4)
+	}
+	luminance := 0.2126*linear(rgb>>16) + 0.7152*linear(rgb>>8) + 0.0722*linear(rgb)
+	if (luminance+0.05)/0.05 > 1.05/(luminance+0.05) {
+		return "#000000"
+	}
+	return "#FFFFFF"
 }
 
 // tripGaps returns each stretch of more than after between one report and the

@@ -356,9 +356,24 @@
     .alert-row > * { grid-column: 1 !important; }
   }
 
-  /* The trip page's replay */
+  /* The trip page and its replay. The line is dragged with a pointer; the range input over it, which
+     cannot be seen, is what the keyboard and a screen reader use. */
+  .trip-head { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-bottom: 16px; }
+  .trip-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .kv.strip { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); padding: 14px 18px; margin-bottom: 16px; }
+  .split-wide { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; align-items: start; }
+  .replay-map { position: relative; height: min(56vh, 520px); min-height: 320px; }
+  .replay-empty { position: absolute; left: 50%; top: 16px; z-index: 500; transform: translateX(-50%); padding: 8px 14px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-2); font-weight: 500; }
+  .replay-controls { display: grid; gap: 10px; padding: 14px 18px 16px; }
   .recorder { position: relative; }
+  .recorder-label { position: absolute; left: 0; top: -2px; font-size: 12px; line-height: 16px; }
+  .recorder .the-line { height: 34px; cursor: pointer; touch-action: none; }
+  .recorder .the-line .track { top: 14px; }
+  .recorder .the-line .stop { top: 11px; }
+  .recorder .the-line .veh { top: 4px; transition: none; }
   .recorder .gap { position: absolute; top: 14px; height: 6px; background: repeating-linear-gradient(135deg, var(--warn) 0 3px, transparent 3px 6px); border-radius: 3px; }
+  .recorder input { position: absolute; inset: auto 0 0 0; width: 100%; height: 34px; margin: 0; opacity: 0; pointer-events: none; }
+  .recorder input:focus-visible + .the-line .veh { outline: 2px solid var(--primary); outline-offset: 2px; }
   @media (max-width: 900px) {
     #trip-stops { grid-column: auto !important; }
   }
@@ -549,6 +564,8 @@
   .form-card { display: grid; gap: 18px; padding: 20px; }
   .form-actions { display: flex; justify-content: flex-end; gap: 8px; }
   .clip { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .route-to { display: inline-flex; align-items: center; gap: 8px; }
+  .card-note { margin: 0; padding: 0 18px 16px; color: var(--ink-2); }
   .who { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .line-row.assigned { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; min-height: 56px; }
   .card-foot.assign { gap: 8px; padding-top: 12px; padding-bottom: 12px; }

@@ -84,14 +84,14 @@ func TestReportsPage_RouteTrips(t *testing.T) {
 	t1 := byID["T1"]
 	assert.Equal(t, "08:00 to 08:10", t1.Scheduled)
 	assert.Equal(t, []reportRunRow{{Vehicle: "Bus T1", Driver: "Driver T1", TrailURL: "/admin/trips/1"}}, t1.Runs)
-	assert.Equal(t, reportDeviation{Text: "0:06 late", Tone: "on-time"}, t1.Departure)
-	assert.Equal(t, reportDeviation{Text: "0:16 early", Tone: "on-time"}, t1.Arrival)
+	assert.Equal(t, reportDeviation{Text: "0:06 late", Tone: "on-time", Signed: "+0:06"}, t1.Departure)
+	assert.Equal(t, reportDeviation{Text: "0:16 early", Tone: "on-time", Signed: "-0:16"}, t1.Arrival)
 	assert.Equal(t, "100.0%", t1.OnTime)
 	assert.Equal(t, "", t1.Unknown, "nothing unknown, nothing to say")
 
-	assert.Equal(t, reportDeviation{Text: "2:54 early", Tone: "early"}, byID["RE"].Departure)
-	assert.Equal(t, reportDeviation{Text: "7:06 late", Tone: "late"}, byID["RL"].Departure)
-	assert.Equal(t, reportDeviation{Text: "3:34 late", Tone: "on-time"}, byID["RL"].Arrival)
+	assert.Equal(t, reportDeviation{Text: "2:54 early", Tone: "early", Signed: "-2:54"}, byID["RE"].Departure)
+	assert.Equal(t, reportDeviation{Text: "7:06 late", Tone: "late", Signed: "+7:06"}, byID["RL"].Departure)
+	assert.Equal(t, reportDeviation{Text: "3:34 late", Tone: "on-time", Signed: "+3:34"}, byID["RL"].Arrival)
 	assert.Equal(t, "33.3%", byID["RG"].Unknown)
 	assert.Equal(t, "00:10 next day to 00:20 next day", byID["RM"].Scheduled)
 

@@ -162,16 +162,22 @@ func TestTripDetail_TimetabledTrip(t *testing.T) {
 	trip, points := fixtureTrip(t, ix, 1)
 	d := newTripDetail(trip, points, ix, testReportSettings, 5*time.Minute, reportFixtureNow)
 	assert.Equal(t, "America/Los_Angeles", d.Timezone)
-	assert.Equal(t, "2026-09-02 07:57 PDT", d.Start)
+	assert.Equal(t, "07:57", d.StartClock)
+	assert.Equal(t, "2 Sep", d.StartDay)
+	assert.Equal(t, "Straight to North", d.RouteLine)
 	assert.Equal(t, tripRoute{ID: "R1", Name: "1", LongName: "Straight", Color: "#0077C0", TextColor: "#FFFFFF"}, d.Route)
 	assert.Equal(t, "#0077C0", d.Map.Color, "the trail is in the route's colour")
 	assert.Equal(t, "North", d.Headsign)
 	assert.Empty(t, d.Note)
 	assert.Equal(t, []tripStopRow{
-		{Sequence: 1, Name: "Stop ST1", Scheduled: "08:00", Passed: "08:00:06", Deviation: reportDeviation{Text: "0:06 late", Tone: "on-time"}, Timed: true},
-		{Sequence: 2, Name: "Stop ST2", Scheduled: "08:05", Passed: "08:08:16", Deviation: reportDeviation{Text: "3:16 late", Tone: "on-time"}, Timed: true},
-		{Sequence: 3, Name: "Stop ST3", Scheduled: "08:10", Passed: "08:09:44", Deviation: reportDeviation{Text: "0:16 early", Tone: "on-time"}, Timed: true},
+		{Sequence: 1, Name: "Stop ST1", Scheduled: "08:00", Passed: "08:00:06", PassedAt: reportDayStart.Add(hms(8, 0, 6)).Unix(), Deviation: reportDeviation{Text: "0:06 late", Tone: "on-time", Signed: "+0:06"}, Timed: true},
+		{Sequence: 2, Name: "Stop ST2", Scheduled: "08:05", Passed: "08:08:16", PassedAt: reportDayStart.Add(hms(8, 8, 16)).Unix(), Deviation: reportDeviation{Text: "3:16 late", Tone: "on-time", Signed: "+3:16"}, Timed: true},
+		{Sequence: 3, Name: "Stop ST3", Scheduled: "08:10", Passed: "08:09:44", PassedAt: reportDayStart.Add(hms(8, 9, 44)).Unix(), Deviation: reportDeviation{Text: "0:16 early", Tone: "on-time", Signed: "-0:16"}, Timed: true},
 	}, d.Stops)
+	require.NotNil(t, d.LastStop)
+	assert.Equal(t, d.Stops[2].Deviation, *d.LastStop, "the header's verdict is the last stop passed")
+	assert.Equal(t, "3 of 3 passed", d.StopsOnTime)
+	assert.Equal(t, "On time at 3 of the 3 stops passed", d.StopsSummary)
 	assert.Len(t, d.Map.Stops, 3)
 	assert.Len(t, d.Map.Shape, 3, "S1's three points")
 
@@ -180,6 +186,8 @@ func TestTripDetail_TimetabledTrip(t *testing.T) {
 	require.Equal(t, "RG", trip.GtfsTripID)
 	d = newTripDetail(trip, points, ix, testReportSettings, 5*time.Minute, reportFixtureNow)
 	assert.Equal(t, tripStopRow{Sequence: 2, Name: "Stop ST2", Scheduled: "13:05", Deviation: reportDeviation{Text: "unknown", Tone: "unknown"}, Timed: true}, d.Stops[1])
+	assert.Equal(t, "2 of 2 passed", d.StopsOnTime)
+	assert.Equal(t, "On time at 2 of the 2 stops passed; 1 has no report", d.StopsSummary)
 
 	// RM runs after midnight on the service day before the calendar day.
 	trip, points = fixtureTrip(t, ix, 5)
@@ -249,11 +257,14 @@ func TestTripDetail_RunningTripStopsAhead(t *testing.T) {
 		assert.NotEmpty(t, row.Scheduled, row.Name)
 	}
 	assert.Equal(t, "100.0%", d.Summary.OnTime)
+	assert.Equal(t, "1 of 1 passed", d.StopsOnTime)
+	assert.Equal(t, "On time so far at 1 of the 1 stop passed", d.StopsSummary)
 
 	body := renderTripDetailContent(t, d)
 	assert.Contains(t, body, "On time so far at")
-	assert.Contains(t, body, "not yet")
-	assert.NotContains(t, body, ">unknown<")
+	assert.Contains(t, body, `<span class="muted">not yet</span>`)
+	assert.NotContains(t, body, `<span class="muted">no report</span>`, "a stop ahead of a running trip is not one with no report")
+	assert.Contains(t, body, `<span class="pill pill-ok">On time at the last stop</span>`)
 
 	// The same reports from a finished trip: what it never reached is unknown.
 	trip.Status = "completed"
@@ -291,10 +302,12 @@ func TestTripDetail_HeadwayTrip(t *testing.T) {
 	assert.Equal(t, reportTripRow{}, d.Summary)
 	assert.Contains(t, d.Note, "no timetable")
 	assert.Equal(t, []tripStopRow{
-		{Sequence: 1, Name: "Stop ST1", Passed: "09:20:06", Timed: true},
-		{Sequence: 2, Name: "Stop ST2", Passed: "09:28:16", Timed: true},
-		{Sequence: 3, Name: "Stop ST3", Passed: "09:29:44", Timed: true},
+		{Sequence: 1, Name: "Stop ST1", Passed: "09:20:06", PassedAt: reportDayStart.Add(hms(9, 20, 6)).Unix(), Timed: true},
+		{Sequence: 2, Name: "Stop ST2", Passed: "09:28:16", PassedAt: reportDayStart.Add(hms(9, 28, 16)).Unix(), Timed: true},
+		{Sequence: 3, Name: "Stop ST3", Passed: "09:29:44", PassedAt: reportDayStart.Add(hms(9, 29, 44)).Unix(), Timed: true},
 	}, d.Stops)
+	assert.Nil(t, d.LastStop, "nothing is judged with no timetable")
+	assert.Empty(t, d.StopsOnTime)
 
 	body := renderTripDetailContent(t, d)
 	assert.NotContains(t, body, "Scheduled")
@@ -346,7 +359,7 @@ func TestTripDetail_NoStopsToShow(t *testing.T) {
 
 	d := newTripDetail(trip, points, nil, testReportSettings, 5*time.Minute, reportFixtureNow)
 	assert.Equal(t, "UTC", d.Timezone)
-	assert.Equal(t, "2026-09-02 14:57 UTC", d.Start)
+	assert.Equal(t, "14:57", d.StartClock)
 	assert.Equal(t, "The GTFS schedule is not loaded, so the trip's stops can't be shown.", d.Note)
 	assert.Empty(t, d.Stops)
 	assert.Equal(t, defaultTrailColor, d.Map.Color)
@@ -519,14 +532,18 @@ func TestTripDetailPage_CompletedTrip(t *testing.T) {
 	mux := newTripDetailMux(t, &fakeTripTrailStore{trip: &trip, points: points}, r)
 
 	body := getAdminPage(t, mux, "/admin/trips/1")
-	assert.Contains(t, body, "Times in America/Los_Angeles.")
+	assert.Contains(t, body, "Straight to North. Times are America/Los_Angeles time.")
 	assert.Contains(t, body, "Bus T1")
 	assert.Contains(t, body, "Driver T1")
 	assert.Contains(t, body, `style="background-color: #0077C0; color: #FFFFFF"`, "the route badge in its colours")
-	assert.Contains(t, body, "2026-09-02 08:12 PDT")
-	assert.Contains(t, body, "15m")
+	assert.Contains(t, body, `<dt>Started</dt><dd>07:57 <span class="muted" style="font-weight:400">2 Sep</span></dd>`)
+	assert.Contains(t, body, `<dt>Ended</dt><dd>08:12 `)
+	assert.Contains(t, body, "<dd>15 min</dd>")
+	assert.Contains(t, body, "<dt>Stops on time</dt><dd>3 of 3 passed</dd>")
 	assert.Contains(t, body, "08:08:16")
-	assert.Contains(t, body, "3:16 late")
+	assert.Contains(t, body, `<span class="pill pill-ok">On time</span> <span class="muted">&#43;3:16</span>`, "inside the window a stop is on time, with the difference beside it")
+	assert.NotContains(t, body, "3:16 late", "a green pill never says late")
+	assert.Contains(t, body, `data-passed="`+strconv.FormatInt(reportDayStart.Add(hms(8, 8, 16)).Unix(), 10)+`" data-stop="Stop ST2"`, "the timeline places a stop by when it was passed")
 	assert.Contains(t, body, "No gap of over 5 min between reports.")
 	assert.NotContains(t, body, `action="/admin/trips/1/end"`, "a finished trip can't be ended")
 	assert.NotContains(t, body, "New reports are added")
@@ -554,7 +571,8 @@ func TestTripDetailPage_ActiveTrip(t *testing.T) {
 
 	body := getAdminPage(t, mux, "/admin/trips/1")
 	assert.Contains(t, body, `action="/admin/trips/1/end"`, "End trip, through the Trips page's handler")
-	assert.Contains(t, body, `onsubmit="return confirm('End this trip? Do this only when the driver phone cannot end it.')"`)
+	assert.Contains(t, body, `<form method="post" action="/admin/trips/1/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip">`)
+	assert.Contains(t, body, `<span class="pill pill-ok">Running</span>`)
 	assert.Contains(t, body, "so far")
 	assert.Contains(t, body, "New reports are added every 10 seconds.")
 	assert.True(t, pageTripMap(t, body).Active, "the script fetches the trail again")
@@ -581,5 +599,8 @@ func TestTripsPage_LinksTheTripPage(t *testing.T) {
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 
-	assert.Contains(t, getAdminPage(t, mux, "/admin/trips"), `<a href="/admin/trips/42" class="text-sky-600 hover:text-sky-800">42</a>`)
+	body := getAdminPage(t, mux, "/admin/trips")
+	assert.Contains(t, body, `<a class="row-link" href="/admin/trips/42"><span class="hide-phone">Trip 42</span><span class="only-phone">Bus One</span></a>`)
+	assert.Contains(t, body, `<a class="icon-btn" href="/admin/trips/42" aria-label="Open trip 42">`)
+	assert.NotContains(t, body, "/admin/map?trip_id=", "a trip opens on its own page, not on the live map")
 }
