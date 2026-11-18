@@ -123,6 +123,17 @@ func (q *Queries) CheckUserVehicleAssignmentForShare(ctx context.Context, arg Ch
 	return i, err
 }
 
+const countActiveAPIKeys = `-- name: CountActiveAPIKeys :one
+SELECT COUNT(*) FROM api_keys WHERE active = true
+`
+
+func (q *Queries) CountActiveAPIKeys(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAPIKeys)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countActiveTrips = `-- name: CountActiveTrips :one
 SELECT COUNT(*) FROM trips WHERE status = 'active'
 `

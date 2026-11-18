@@ -65,6 +65,13 @@ type assignmentManager interface {
 	AssignmentListerByUser
 }
 
+// apiKeyPageStore is what the API keys page needs: the key operations the
+// JSON API uses, and the count of active keys for the page's headline.
+type apiKeyPageStore interface {
+	APIKeyManager
+	APIKeyCounter
+}
+
 // adminUI owns the parsed templates and dependencies for all admin pages.
 type adminUI struct {
 	tmpl           *embeddedTemplates
@@ -86,7 +93,7 @@ type adminUI struct {
 	userManager    userManager
 	assignments    assignmentManager
 	importer       CSVImporter
-	apiKeys        APIKeyManager
+	apiKeys        apiKeyPageStore
 	rider          riderPageSource
 	rides          RideLister
 	tokenChecker   TokenChecker
@@ -424,13 +431,19 @@ func (ui *adminUI) dashboardPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// humanizeAge renders how long ago t was, in a compact human form: "just
-// now" for anything under a minute, then whole minutes, then whole hours.
+// humanizeAge renders how long ago t was, the one way every admin page writes
+// an age: "just now", then whole seconds, minutes and hours.
 func humanizeAge(t time.Time) string {
-	age := time.Since(t)
+	return ageText(time.Since(t))
+}
+
+// ageText is humanizeAge for an age already worked out.
+func ageText(age time.Duration) string {
 	switch {
-	case age < time.Minute:
+	case age < 2*time.Second:
 		return "just now"
+	case age < time.Minute:
+		return fmt.Sprintf("%d s ago", int(age.Seconds()))
 	case age < time.Hour:
 		return fmt.Sprintf("%d min ago", int(age.Minutes()))
 	default:
@@ -475,6 +488,21 @@ func adminPageNumber(q url.Values) int {
 	return 1
 }
 
+// pagerCount is how many rows a list page shows, for the pager under it.
+// The lists know only whether there is a next page, never a total, so the
+// pager says "50 vehicles shown" and not "of 213".
+type pagerCount struct {
+	N    int
+	Text string
+}
+
+func newPagerCount(n int, one, many string) pagerCount {
+	if n == 0 {
+		return pagerCount{Text: "No " + many}
+	}
+	return pagerCount{N: n, Text: countOf(n, one, many)}
+}
+
 // adminPageOffset converts a page number into the SQL offset for a page of
 // adminPageSize rows. maxAdminPage keeps the result well inside int32, the
 // offset type the paged store queries take.
@@ -483,15 +511,28 @@ func adminPageOffset(page int) int {
 }
 
 // vehicleRow is a single row in the vehicle list table: the vehicle's
-// stored fields plus whatever live state we can join in (last-seen from the
-// tracker, current driver from the active-trips map).
+// stored fields plus whatever live state we can join in (its last report
+// from the tracker and the open alerts, its driver from the active trips).
 type vehicleRow struct {
 	ID        string
 	Label     string
 	AgencyTag string
 	Active    bool
-	LastSeen  string
+	Report    vehicleReport
 	Driver    string
+}
+
+// Name is what the list calls the vehicle: its label, or its id when it has
+// none.
+func (v vehicleRow) Name() string { return cmp.Or(v.Label, v.ID) }
+
+// vehicleReport is what the list says about a vehicle's last report. State
+// is "live" (heard from within the staleness threshold), "quiet" (an open
+// alert says it has gone quiet), "waiting" (on a trip, no report yet) or
+// "off" (not on a trip).
+type vehicleReport struct {
+	State string
+	Text  string
 }
 
 // vehiclesPageURL builds an /admin/vehicles link preserving the current
@@ -548,10 +589,11 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 		vehicles = vehicles[:adminPageSize]
 	}
 
-	reporting := ui.tracker.ActiveVehicles()
-	lastSeen := make(map[string]string, len(reporting))
-	for _, v := range reporting {
-		lastSeen[v.VehicleID] = humanizeAge(v.UpdatedAt)
+	total, err := ui.stats.CountActiveVehicles(ctx)
+	if err != nil {
+		slog.Error("vehicles: count active vehicles", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 
 	tripsByVehicle, err := ui.activeTrips.ListActiveTripsByVehicle(ctx)
@@ -561,12 +603,34 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	alerts := ui.listAlertsForShell(r)
+	quietFor := make(map[string]string)
+	for _, a := range alerts {
+		if a.Kind == alertQuiet {
+			quietFor[a.Trip.VehicleID] = humanizeDuration(time.Duration(a.DurationSeconds) * time.Second)
+		}
+	}
+	lastSeen := make(map[string]string)
+	for _, v := range ui.tracker.ActiveVehicles() {
+		lastSeen[v.VehicleID] = humanizeAge(v.UpdatedAt)
+	}
+
 	rows := make([]vehicleRow, 0, len(vehicles))
 	for _, v := range vehicles {
 		row := vehicleRow{ID: v.ID, Label: v.Label, AgencyTag: v.AgencyTag, Active: v.Active}
-		row.LastSeen = lastSeen[v.ID]
-		if trip, ok := tripsByVehicle[v.ID]; ok {
+		trip, onTrip := tripsByVehicle[v.ID]
+		if onTrip {
 			row.Driver = trip.DriverName
+		}
+		switch {
+		case quietFor[v.ID] != "":
+			row.Report = vehicleReport{State: "quiet", Text: "Quiet " + quietFor[v.ID]}
+		case lastSeen[v.ID] != "":
+			row.Report = vehicleReport{State: "live", Text: lastSeen[v.ID]}
+		case onTrip:
+			row.Report = vehicleReport{State: "waiting", Text: "No report yet"}
+		default:
+			row.Report = vehicleReport{State: "off", Text: "Not on a trip"}
 		}
 		rows = append(rows, row)
 	}
@@ -576,20 +640,45 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 	toggled := filter
 	toggled.IncludeInactive = !filter.IncludeInactive
 
-	ui.renderAdmin(w, r, http.StatusOK, "vehicles.html", map[string]interface{}{
+	ui.renderAdminWithAlerts(w, r, http.StatusOK, "vehicles.html", map[string]interface{}{
 		"Title":             "Vehicles",
 		"Page":              "vehicles",
+		"Headline":          vehiclesHeadline(total, ui.fleetNow(alerts).Reporting),
+		"Total":             total,
+		"Filtered":          filter.Q != "" || filter.AgencyTag != "",
 		"Vehicles":          rows,
 		"IncludeInactive":   filter.IncludeInactive,
 		"AgencyTag":         filter.AgencyTag,
 		"Q":                 filter.Q,
-		"Shown":             len(rows),
+		"Shown":             newPagerCount(len(rows), "vehicle", "vehicles"),
 		"PageNum":           page,
 		"HasMore":           hasMore,
 		"PrevURL":           vehiclesPageURL(filter, page-1),
 		"NextURL":           vehiclesPageURL(filter, page+1),
 		"ToggleInactiveURL": vehiclesPageURL(toggled, 1),
-	})
+	}, alerts)
+}
+
+// vehiclesHeadline is the Vehicles page's headline: how many vehicles are
+// active and how many of them are reporting now.
+func vehiclesHeadline(total, reporting int) string {
+	if total == 0 {
+		return "No vehicles yet"
+	}
+	now := "none reporting now"
+	if reporting > 0 {
+		now = strconv.Itoa(reporting) + " reporting now"
+	}
+	return countOf(total, "vehicle", "vehicles") + ", " + now
+}
+
+// countOf writes n with the singular or plural noun: "1 vehicle", "14
+// vehicles".
+func countOf(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
 }
 
 // vehicleFormData carries the vehicle_form.html template's fields for both
@@ -601,21 +690,32 @@ type vehicleFormData struct {
 	Label     string
 	AgencyTag string
 	Error     string
+	// ErrorField names the field Error is about ("id"), so the form can mark
+	// it; empty when the error is about the submission as a whole.
+	ErrorField string
+	// Active is whether the vehicle being edited is active, which decides
+	// the Deactivate or Activate button. It is nil when that was not read (a
+	// new vehicle, or a submission that could not be parsed), and the button
+	// is then left off.
+	Active *bool
 }
 
+// Name is the vehicle's label, or its id when it has none.
+func (d vehicleFormData) Name() string { return cmp.Or(d.Label, d.ID) }
+
+// IsActive reports whether the vehicle being edited is known to be active.
+func (d vehicleFormData) IsActive() bool { return d.Active != nil && *d.Active }
+
 func (ui *adminUI) renderVehicleForm(w http.ResponseWriter, r *http.Request, status int, data vehicleFormData) {
-	title := "New Vehicle"
+	title := "New vehicle"
 	if data.IsEdit {
-		title = "Edit Vehicle"
+		title = "Edit vehicle"
 	}
 	ui.renderAdmin(w, r, status, "vehicle_form.html", map[string]interface{}{
-		"Title":     title,
-		"Page":      "vehicles",
-		"IsEdit":    data.IsEdit,
-		"ID":        data.ID,
-		"Label":     data.Label,
-		"AgencyTag": data.AgencyTag,
-		"Error":     data.Error,
+		"Title":       title,
+		"Page":        "vehicles",
+		"Form":        data,
+		"MaxIDLength": maxVehicleIDLength,
 	})
 }
 
@@ -645,7 +745,7 @@ func (ui *adminUI) vehicleCreate(w http.ResponseWriter, r *http.Request) {
 	agencyTag := r.PostFormValue("agency_tag")
 
 	if err := validateVehicleID(id); err != nil {
-		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: err.Error()})
+		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: err.Error(), ErrorField: "id"})
 		return
 	}
 
@@ -656,7 +756,7 @@ func (ui *adminUI) vehicleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !created {
-		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: "vehicle id already exists"})
+		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: "vehicle id already exists", ErrorField: "id"})
 		return
 	}
 	setFlash(w, "vehicle_created")
@@ -678,7 +778,7 @@ func (ui *adminUI) vehicleEditPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	ui.renderVehicleForm(w, r, http.StatusOK, vehicleFormData{IsEdit: true, ID: v.ID, Label: v.Label, AgencyTag: v.AgencyTag})
+	ui.renderVehicleForm(w, r, http.StatusOK, vehicleFormData{IsEdit: true, ID: v.ID, Label: v.Label, AgencyTag: v.AgencyTag, Active: &v.Active})
 }
 
 // vehicleUpdate saves label/agency_tag edits for an existing vehicle. The id
@@ -766,9 +866,30 @@ type userRow struct {
 	ID           int64
 	Name         string
 	Email        string
+	Initials     string
 	Role         string
 	Active       bool
 	VehicleCount int
+}
+
+// MayDrive is how many vehicles a driver is assigned: "1 vehicle", "3
+// vehicles".
+func (u userRow) MayDrive() string { return countOf(u.VehicleCount, "vehicle", "vehicles") }
+
+// roleLink is one choice of the Drivers and users page's role filter.
+type roleLink struct {
+	Label   string
+	URL     string
+	Current bool
+}
+
+// usersHeadline is the Drivers and users page's headline, from the counts of
+// active accounts.
+func usersHeadline(drivers, admins int) string {
+	if drivers == 0 {
+		return "No drivers yet"
+	}
+	return countOf(drivers, "driver", "drivers") + " and " + countOf(admins, "admin", "admins")
 }
 
 // usersPageURL builds an /admin/users link preserving the current filter
@@ -827,6 +948,18 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	drivers, err := ui.stats.CountActiveUsersByRole(ctx, roleDriver)
+	if err != nil {
+		slog.Error("users: count active drivers", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	admins, err := ui.stats.CountActiveUsersByRole(ctx, roleAdmin)
+	if err != nil {
+		slog.Error("users: count active admins", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	hasMore := len(users) > adminPageSize
 	if hasMore {
 		users = users[:adminPageSize]
@@ -844,10 +977,20 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 			ID:           u.ID,
 			Name:         u.Name,
 			Email:        u.Email,
+			Initials:     initials(u.Name, u.Email),
 			Role:         u.Role,
 			Active:       u.Active,
 			VehicleCount: len(assignments),
 		})
+	}
+
+	// Each choice of role flips only the role, so a search in progress
+	// survives it, and starts over at page 1.
+	roles := make([]roleLink, 0, 3)
+	for _, choice := range []struct{ role, label string }{{"", "Everyone"}, {roleDriver, "Drivers"}, {roleAdmin, "Admins"}} {
+		f := filter
+		f.Role = choice.role
+		roles = append(roles, roleLink{Label: choice.label, URL: usersPageURL(f, 1), Current: filter.Role == choice.role})
 	}
 
 	// The active-only link flips only that one filter, so a search in
@@ -856,13 +999,16 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 	toggled.ActiveOnly = !filter.ActiveOnly
 
 	ui.renderAdmin(w, r, http.StatusOK, "users.html", map[string]interface{}{
-		"Title":           "Users",
+		"Title":           "Drivers and users",
 		"Page":            "users",
+		"Headline":        usersHeadline(drivers, admins),
 		"Users":           rows,
 		"Role":            filter.Role,
+		"Roles":           roles,
 		"Q":               filter.Q,
 		"ActiveOnly":      filter.ActiveOnly,
-		"Shown":           len(rows),
+		"Filtered":        filter.Role != "" || filter.Q != "" || filter.ActiveOnly,
+		"Shown":           newPagerCount(len(rows), "account", "accounts"),
 		"PageNum":         page,
 		"HasMore":         hasMore,
 		"PrevURL":         usersPageURL(filter, page-1),
@@ -879,37 +1025,46 @@ type assignmentRow struct {
 	Label     string
 }
 
+// Name is the vehicle's label, or its id when it has none.
+func (a assignmentRow) Name() string { return cmp.Or(a.Label, a.VehicleID) }
+
 // userFormData carries the user_form.html template's fields for both the
 // create and edit flows (distinguished by IsEdit), including any submitted
 // values and validation error to re-render on failure. Assignments and
 // AvailableVehicles are only populated (and only rendered) in edit mode.
 type userFormData struct {
-	IsEdit            bool
-	ID                string
-	Name              string
-	Email             string
-	Role              string
-	Error             string
+	IsEdit bool
+	ID     string
+	Name   string
+	Email  string
+	Role   string
+	Error  string
+	// ErrorField names the field Error is about ("name", "email", "password"
+	// or "role"), so the form can mark it; empty when the error is about the
+	// submission as a whole.
+	ErrorField string
+	// Active is whether the account being edited is active, which decides
+	// the Deactivate or Activate button and the setup sheet link. It is nil
+	// when that was not read (a new user, or a form re-rendered with an
+	// error), and those are then left off.
+	Active            *bool
 	Assignments       []assignmentRow
 	AvailableVehicles []VehicleResponse
 }
 
+// IsActive reports whether the account being edited is known to be active.
+func (d userFormData) IsActive() bool { return d.Active != nil && *d.Active }
+
 func (ui *adminUI) renderUserForm(w http.ResponseWriter, r *http.Request, status int, data userFormData) {
-	title := "New User"
+	title := "New user"
 	if data.IsEdit {
-		title = "Edit User"
+		title = "Edit user"
 	}
 	ui.renderAdmin(w, r, status, "user_form.html", map[string]interface{}{
 		"Title":             title,
 		"Page":              "users",
-		"IsEdit":            data.IsEdit,
-		"ID":                data.ID,
-		"Name":              data.Name,
-		"Email":             data.Email,
-		"Role":              data.Role,
-		"Error":             data.Error,
-		"Assignments":       data.Assignments,
-		"AvailableVehicles": data.AvailableVehicles,
+		"Form":              data,
+		"MinPasswordLength": minPasswordLength,
 	})
 }
 
@@ -941,29 +1096,29 @@ func (ui *adminUI) userCreate(w http.ResponseWriter, r *http.Request) {
 	// aren't trustworthy — enforce it server-side with the same error text as
 	// the JSON API (handleCreateUser).
 	if name == "" {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "name is required"})
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "name is required", ErrorField: "name"})
 		return
 	}
 	if email == "" {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email is required"})
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email is required", ErrorField: "email"})
 		return
 	}
 	if !validEmail(email) {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email is not valid"})
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email is not valid", ErrorField: "email"})
 		return
 	}
 	if err := validatePassword(password); err != nil {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: err.Error()})
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: err.Error(), ErrorField: "password"})
 		return
 	}
 	if !validUserRole(role) {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "role must be driver or admin"})
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "role must be driver or admin", ErrorField: "role"})
 		return
 	}
 
 	if _, err := ui.userManager.CreateUser(r.Context(), name, email, password, role); err != nil {
 		if errors.Is(err, ErrDuplicateEmail) {
-			ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email already exists"})
+			ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "email already exists", ErrorField: "email"})
 			return
 		}
 		slog.Error("user create: create user", "email", email, "error", err)
@@ -1043,14 +1198,15 @@ func (ui *adminUI) userEditPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	data.Active = &u.Active
 	ui.renderUserForm(w, r, http.StatusOK, data)
 }
 
 // renderUserEditError re-renders the edit form for id with the submitted
-// name/email/role values and an error message, refetching the current
-// assignments/available-vehicles for the assignments section so it isn't
-// blank on a validation failure.
-func (ui *adminUI) renderUserEditError(w http.ResponseWriter, r *http.Request, status int, id int64, name, email, role, errMsg string) {
+// name/email/role values, an error message and the field it is about,
+// refetching the current assignments/available-vehicles for the assignments
+// section so it isn't blank on a validation failure.
+func (ui *adminUI) renderUserEditError(w http.ResponseWriter, r *http.Request, status int, id int64, name, email, role, field, errMsg string) {
 	data, err := ui.buildUserFormData(r.Context(), id, name, email, role)
 	if err != nil {
 		slog.Error("user edit: rebuild form data", "user_id", id, "error", err)
@@ -1058,6 +1214,7 @@ func (ui *adminUI) renderUserEditError(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 	data.Error = errMsg
+	data.ErrorField = field
 	ui.renderUserForm(w, r, status, data)
 }
 
@@ -1084,24 +1241,24 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 	// Server-side required checks mirroring the JSON API (handleUpdateUser);
 	// the form's client-side `required` attributes aren't trustworthy.
 	if name == "" {
-		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "name is required")
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "name", "name is required")
 		return
 	}
 	if email == "" {
-		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email is required")
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email", "email is required")
 		return
 	}
 	if !validEmail(email) {
-		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email is not valid")
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email", "email is not valid")
 		return
 	}
 	if !validUserRole(role) {
-		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role must be driver or admin")
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role", "role must be driver or admin")
 		return
 	}
 	if password != "" {
 		if err := validatePassword(password); err != nil {
-			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, err.Error())
+			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "password", err.Error())
 			return
 		}
 	}
@@ -1128,7 +1285,7 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if admins <= 1 {
-			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "cannot demote the last active admin")
+			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role", "cannot demote the last active admin")
 			return
 		}
 	}
@@ -1139,7 +1296,7 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrDuplicateEmail) {
-			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email already exists")
+			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email", "email already exists")
 			return
 		}
 		slog.Error("user update: update user", "user_id", id, "error", err)
@@ -1435,7 +1592,7 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 		"Status":    status,
 		"VehicleID": vehicleID,
 		"Q":         q,
-		"Shown":     len(rows),
+		"Shown":     newPagerCount(len(rows), "trip", "trips"),
 		"PageNum":   page,
 		"HasMore":   hasMore,
 		"PrevURL":   tripsPageURL(status, vehicleID, q, page-1),

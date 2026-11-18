@@ -371,7 +371,23 @@
   .metric[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: var(--primary); }
   .metric[aria-selected="false"] { background: var(--bg); }
 
-  /* CSV import: the file box */
+  /* API keys: the key that was just made */
+  .newkey { align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .keybox { margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--surface); font: 500 13px/18px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; user-select: all; }
+
+  /* CSV import: its three steps drawn as the Line, the file box, and a password shown once */
+  .steps-line { display: flex; align-items: center; gap: 16px; margin: 0 0 18px; }
+  .steps-line .the-line { width: 200px; height: 34px; flex: none; margin-left: 13px; }
+  .steps-line .the-line .track { top: 14px; }
+  .steps-line .the-line .fill { right: 100%; background: var(--primary); }
+  .steps-line .the-line .stop { top: 11px; }
+  .steps-line .the-line .stop.done { box-shadow: inset 0 0 0 6px var(--primary); }
+  .steps-line .the-line .veh { top: 4px; left: 0; background: var(--primary); color: var(--on-primary); transition: none; }
+  .steps-line[data-step="2"] .the-line .fill { right: 50%; }
+  .steps-line[data-step="2"] .the-line .veh { left: 50%; }
+  .steps-line[data-step="3"] .the-line .fill { right: 0; }
+  .steps-line[data-step="3"] .the-line .veh { left: 100%; }
+  .pw { font: 500 15px/20px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.5px; white-space: nowrap; }
   form.card > * { min-width: 0; }
   .drop input { max-width: 100%; font: inherit; color: var(--ink-2); }
   .drop input::file-selector-button { height: 36px; margin-right: 12px; padding: 0 16px; border: 0; border-radius: 18px; background: var(--selected); color: var(--on-selected); font: 500 14px/20px var(--font-sans); cursor: pointer; }
@@ -502,6 +518,7 @@
   .icon-btn .count { position: absolute; right: 2px; top: 2px; }
   .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--selected); color: var(--on-selected); font: 500 13px/1 var(--font-sans); flex: none; }
   button.avatar { border: 0; cursor: pointer; }
+  .avatar.admin { background: var(--primary-container); color: var(--on-primary-container); }
   .account-menu { position: fixed; inset: 60px 16px auto auto; margin: 0; padding: 8px; border: 0; width: 240px; color: var(--ink); }
   .account-who { padding: 8px 12px 10px; }
   .theme-mark { width: 18px; height: 18px; margin: 1px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 2px currentColor; background: linear-gradient(90deg, currentColor 50%, transparent 0); }
@@ -512,6 +529,7 @@
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
   .card-head { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 18px; font: 500 15px/20px var(--font-sans); }
   .card > .line-row:first-child { border-top: 0; }
+  .card > .table-wrap:first-child { border-radius: 12px 12px 0 0; }
   .card-head .sub { font: 400 13px/18px var(--font-sans); color: var(--ink-3); }
   .card-foot { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); }
   .float { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-2); }
@@ -519,6 +537,22 @@
   .h2 { font: 500 22px/28px var(--font-sans); }
   .lede { font-size: 15px; line-height: 22px; color: var(--ink-2); max-width: 78ch; }
   .muted { color: var(--ink-3); }
+
+  /* Page head: a way back, the headline, one sentence, and the page's actions */
+  .page-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+  .page-head-main { flex: 1; min-width: 260px; }
+  .page-head .lede { margin: 4px 0 0; }
+  .page-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .back { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin-bottom: 2px; font-weight: 500; font-size: 13px; }
+  .card-head.filters { flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; }
+  .card-head h3 { flex: 1; font: inherit; }
+  .form-card { display: grid; gap: 18px; padding: 20px; }
+  .form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .clip { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .line-row.assigned { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; min-height: 56px; }
+  .card-foot.assign { gap: 8px; padding-top: 12px; padding-bottom: 12px; }
+  .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; }
   .num, .table td, .tile-value, .age, .pulse, .count, .kv dd, .chart text, .chart-x, .pager, .chip .n { font-variant-numeric: tabular-nums; }
 
   /* Stat tile */
@@ -619,17 +653,19 @@
   /* Empty, loading, toast, dialog */
   .empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 24px; text-align: center; color: var(--ink-2); }
   .empty-title { font: 500 16px/22px var(--font-sans); color: var(--ink); }
+  .empty .step-icon { border-radius: 50%; }
+  .empty p { margin: 0; max-width: 52ch; }
   .skeleton { border-radius: 6px; background: var(--surface-3); animation: skeleton 1.4s ease-in-out infinite; }
   .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 8px 8px 16px; border-radius: 12px; background: var(--problem); color: var(--on-problem); font: 500 14px/20px var(--font-sans); box-shadow: var(--shadow-3); }
   .toast .icon { color: var(--amber); }
   .toast.ok .icon { color: #7ee08a; }
   .toast button { color: var(--on-problem); }
-  dialog.dialog { border: 0; padding: 0; border-radius: 24px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-3); width: min(440px, calc(100vw - 32px)); }
+  dialog.dialog { margin: auto; border: 0; padding: 0; border-radius: 24px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-3); width: min(440px, calc(100vw - 32px)); }
   dialog.dialog::backdrop { background: var(--scrim); }
   .dialog-body { padding: 24px 24px 8px; }
   .dialog-title { font: 500 20px/26px var(--font-sans); margin-bottom: 8px; }
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px 20px; }
-  dialog.palette { border: 0; padding: 0; margin-top: 12vh; border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-3); width: min(640px, calc(100vw - 32px)); overflow: hidden; }
+  dialog.palette { border: 0; padding: 0; margin: 12vh auto auto; border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-3); width: min(640px, calc(100vw - 32px)); overflow: hidden; }
   dialog.palette::backdrop { background: var(--scrim); }
   .palette-input { display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 18px; border-bottom: 1px solid var(--line); }
   .palette-input input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 17px/24px var(--font-sans); }

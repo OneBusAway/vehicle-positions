@@ -82,6 +82,52 @@
     if (!t.hasAttribute("data-toast-stay")) setTimeout(close, 6000);
   });
 
+  /* A real dialog in place of confirm(). Without JS the form posts as it is. */
+  var dlg;
+  document.addEventListener("submit", function (ev) {
+    var f = ev.target;
+    if (!f.dataset.confirm) return;
+    ev.preventDefault();
+    if (!dlg) {
+      dlg = document.createElement("dialog");
+      dlg.className = "dialog";
+      dlg.setAttribute("aria-labelledby", "confirm-title");
+      dlg.innerHTML = '<div class="dialog-body"><h2 class="dialog-title" id="confirm-title"></h2><p class="muted" style="margin:0"></p></div><div class="dialog-actions"><button class="btn" type="button" data-no>Cancel</button><button class="btn btn-danger-fill" type="button" data-yes></button></div>';
+      document.body.appendChild(dlg);
+      $("[data-no]", dlg).addEventListener("click", function () { dlg.close(); });
+    }
+    $(".dialog-title", dlg).textContent = f.dataset.confirm;
+    $("p", dlg).textContent = f.dataset.confirmText || "";
+    var yes = $("[data-yes]", dlg);
+    yes.textContent = f.dataset.confirmOk || "OK";
+    yes.onclick = function () { dlg.close(); f.submit(); };
+    dlg.showModal();
+  });
+
+  /* Copy buttons take the text of the element they name, so a key or a password is on the page once. */
+  document.addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-copy-from]");
+    if (!b || !navigator.clipboard) return;
+    navigator.clipboard.writeText(document.getElementById(b.dataset.copyFrom).textContent).then(function () {
+      var old = b.innerHTML;
+      b.textContent = "Copied";
+      setTimeout(function () { b.innerHTML = old; }, 1500);
+    });
+  });
+
+  /* A file dropped on the import box goes into its file field. */
+  $$(".drop").forEach(function (d) {
+    ["dragenter", "dragover"].forEach(function (n) {
+      d.addEventListener(n, function (ev) { ev.preventDefault(); d.classList.add("over"); });
+    });
+    d.addEventListener("dragleave", function () { d.classList.toggle("over", false); });
+    d.addEventListener("drop", function (ev) {
+      ev.preventDefault();
+      d.classList.toggle("over", false);
+      if (ev.dataTransfer.files.length) $("input", d).files = ev.dataTransfer.files;
+    });
+  });
+
   /* Search: jump to a page, route, vehicle, driver or trip. "/" or Ctrl K opens it. Pages come from the
      menu, routes from the schedule (asked for once), the rest from the list endpoints as the term is typed. */
   var pal = $("#palette"), q = $("#palette-q"), list = $("#palette-list"), shown = [], found = [], sel = 0, routes = null, asked = 0, timer = 0;

@@ -21,6 +21,7 @@ type fakeAPIKeyManager struct {
 	keys          []APIKey
 	createErr     error
 	listErr       error
+	countErr      error
 	deactivateErr error
 	deactivated   []int64
 }
@@ -51,6 +52,19 @@ func (f *fakeAPIKeyManager) ListAPIKeysPage(_ context.Context, limit, offset int
 	end := min(start+limit, len(f.keys))
 	keys := make([]APIKey, 0, end-start)
 	return append(keys, f.keys[start:end]...), nil
+}
+
+func (f *fakeAPIKeyManager) CountActiveAPIKeys(_ context.Context) (int, error) {
+	if f.countErr != nil {
+		return 0, f.countErr
+	}
+	active := 0
+	for _, k := range f.keys {
+		if k.Active {
+			active++
+		}
+	}
+	return active, nil
 }
 
 func (f *fakeAPIKeyManager) DeactivateAPIKey(_ context.Context, id int64) error {

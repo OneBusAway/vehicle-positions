@@ -92,6 +92,28 @@ func TestStore_DeactivateAPIKey(t *testing.T) {
 	assert.NotNil(t, fetched.LastUsedAt, "revoking keeps last_used_at, which is what an operator investigating the key needs")
 }
 
+func TestStore_CountActiveAPIKeys(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clearAPIKeys(t, store)
+	t.Cleanup(func() { clearAPIKeys(t, store) })
+
+	n, err := store.CountActiveAPIKeys(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, n, "no keys, none active")
+
+	kept, err := store.CreateAPIKey(ctx, "kept", hashAPIKey("kept-key"))
+	require.NoError(t, err)
+	revoked, err := store.CreateAPIKey(ctx, "revoked", hashAPIKey("revoked-key"))
+	require.NoError(t, err)
+	require.NoError(t, store.DeactivateAPIKey(ctx, revoked.ID))
+
+	n, err = store.CountActiveAPIKeys(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "a revoked key is not counted")
+	require.NotZero(t, kept.ID)
+}
+
 func TestStore_DeactivateAPIKey_NotFound(t *testing.T) {
 	store := newTestStore(t)
 	clearAPIKeys(t, store)

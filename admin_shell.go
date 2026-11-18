@@ -63,12 +63,8 @@ type shellAccount struct {
 type shellData struct {
 	Nav        []navGroup
 	AlertCount int
-	// Reporting is the vehicles heard from within the staleness threshold
-	// that no open alert calls quiet, and Quiet the vehicles on a running
-	// trip that have gone quiet. Together they are the pulse in the top bar.
-	Reporting int
-	Quiet     int
-	Account   shellAccount
+	fleetCounts
+	Account shellAccount
 }
 
 // AlertsLabel names the links to the Alerts page for a screen reader, which
@@ -80,11 +76,19 @@ func (s shellData) AlertsLabel() string {
 	return "Alerts, " + strconv.Itoa(s.AlertCount) + " open"
 }
 
-// shell works out the shell's data from the open alerts and the tracker. A
-// vehicle that has gone quiet stays in the tracker until the staleness
-// threshold passes, so it is taken out of the reporting count by its id
-// rather than counted on both sides.
-func (ui *adminUI) shell(r *http.Request, alerts []alertEntry) shellData {
+// fleetCounts is the pulse in the top bar: Reporting is the vehicles heard
+// from within the staleness threshold that no open alert calls quiet, and
+// Quiet the vehicles on a running trip that have gone quiet.
+type fleetCounts struct {
+	Reporting int
+	Quiet     int
+}
+
+// fleetNow counts the fleet from the open alerts and the tracker. A vehicle
+// that has gone quiet stays in the tracker until the staleness threshold
+// passes, so it is taken out of the reporting count by its id rather than
+// counted on both sides.
+func (ui *adminUI) fleetNow(alerts []alertEntry) fleetCounts {
 	quiet := make(map[string]struct{})
 	for _, a := range alerts {
 		if a.Kind == alertQuiet {
@@ -97,12 +101,16 @@ func (ui *adminUI) shell(r *http.Request, alerts []alertEntry) shellData {
 			reporting++
 		}
 	}
+	return fleetCounts{Reporting: reporting, Quiet: len(quiet)}
+}
+
+// shell works out the shell's data from the open alerts and the tracker.
+func (ui *adminUI) shell(r *http.Request, alerts []alertEntry) shellData {
 	return shellData{
-		Nav:        adminNav,
-		AlertCount: len(alerts),
-		Reporting:  reporting,
-		Quiet:      len(quiet),
-		Account:    ui.account(r),
+		Nav:         adminNav,
+		AlertCount:  len(alerts),
+		fleetCounts: ui.fleetNow(alerts),
+		Account:     ui.account(r),
 	}
 }
 

@@ -265,7 +265,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		{"users", "/admin/users", "New user"},
 		{"trips", "/admin/trips", "No trips found."},
 		{"map", "/admin/map", "Live map"},
-		{"api keys", "/admin/api-keys", "No feed API keys yet."},
+		{"api keys", "/admin/api-keys", "No API keys yet"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -641,7 +641,7 @@ func TestVehiclesPagePaginates(t *testing.T) {
 	registerAdminUI(mux, ui)
 
 	first := getAdminPage(t, mux, "/admin/vehicles")
-	assert.Equal(t, adminPageSize, strings.Count(first, "/edit\""), "page 1 must hold exactly one page of rows")
+	assert.Equal(t, adminPageSize, strings.Count(first, `<a class="row-link`), "page 1 must hold exactly one page of rows")
 	assert.Contains(t, first, "Bus 001")
 	assert.Contains(t, first, fmt.Sprintf("Bus %03d", adminPageSize))
 	assert.NotContains(t, first, fmt.Sprintf("Bus %03d", adminPageSize+1), "the next page's first row must not leak onto page 1")
@@ -649,7 +649,7 @@ func TestVehiclesPagePaginates(t *testing.T) {
 	assert.NotContains(t, first, "Previous", "page 1 has no previous page")
 
 	second := getAdminPage(t, mux, "/admin/vehicles?page=2")
-	assert.Equal(t, 5, strings.Count(second, "/edit\""), "the last page holds the remaining rows")
+	assert.Equal(t, 5, strings.Count(second, `<a class="row-link`), "the last page holds the remaining rows")
 	assert.Contains(t, second, fmt.Sprintf("Bus %03d", adminPageSize+1))
 	assert.NotContains(t, second, fmt.Sprintf("Bus %03d", adminPageSize), "page 1's last row must not repeat on page 2")
 	assert.Contains(t, second, `href="/admin/vehicles?page=1"`)
@@ -1076,7 +1076,7 @@ func TestUsersPagePaginates(t *testing.T) {
 	registerAdminUI(mux, ui)
 
 	first := getAdminPage(t, mux, "/admin/users")
-	assert.Equal(t, adminPageSize, strings.Count(first, "/edit\""), "page 1 must hold exactly one page of rows")
+	assert.Equal(t, adminPageSize, strings.Count(first, `<a class="row-link"`), "page 1 must hold exactly one page of rows")
 	assert.Contains(t, first, "Driver 001")
 	assert.Contains(t, first, fmt.Sprintf("Driver %03d", adminPageSize))
 	assert.NotContains(t, first, fmt.Sprintf("Driver %03d", adminPageSize+1), "the next page's first row must not leak onto page 1")
@@ -1084,7 +1084,7 @@ func TestUsersPagePaginates(t *testing.T) {
 	assert.NotContains(t, first, "Previous", "page 1 has no previous page")
 
 	second := getAdminPage(t, mux, "/admin/users?page=2")
-	assert.Equal(t, 5, strings.Count(second, "/edit\""), "the last page holds the remaining rows")
+	assert.Equal(t, 5, strings.Count(second, `<a class="row-link"`), "the last page holds the remaining rows")
 	assert.Contains(t, second, fmt.Sprintf("Driver %03d", adminPageSize+1))
 	assert.NotContains(t, second, fmt.Sprintf("Driver %03d", adminPageSize), "page 1's last row must not repeat on page 2")
 	assert.Contains(t, second, `href="/admin/users?page=1"`)
@@ -1150,11 +1150,11 @@ func TestUsersPageListsRealData(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, "Ada Admin")
 	assert.Contains(t, body, "ada@test.com")
-	assert.Contains(t, body, "Admin")
+	assert.Contains(t, body, `<span class="pill plain">Admin</span>`)
 	assert.Contains(t, body, "Dana Driver")
-	assert.Contains(t, body, "Driver")
-	assert.Contains(t, body, "Deactivated")
-	assert.Contains(t, body, ">1<") // Dana's assigned-vehicle count
+	assert.Contains(t, body, `<span class="muted">Driver</span>`)
+	assert.Contains(t, body, `<span class="pill plain">Deactivated</span>`)
+	assert.Contains(t, body, `data-label="May drive">1 vehicle<`) // Dana's assigned-vehicle count
 	assert.NotContains(t, body, "Chaitanya K", "mock data must be gone")
 	assert.NotContains(t, body, "Last Seen", "mock Last Seen column must be dropped")
 }
@@ -1268,7 +1268,7 @@ func TestUserEditPage(t *testing.T) {
 		assert.Contains(t, body, "Bus One", "currently-assigned vehicle should be listed")
 		assert.Contains(t, body, "Bus Two", "unassigned active vehicle should be selectable")
 		assert.NotContains(t, body, "Retired Bus", "inactive vehicles must not be offered for assignment")
-		assert.Contains(t, body, "leave blank to keep current")
+		assert.Contains(t, body, "leave blank to keep the current one")
 	})
 
 	t.Run("unknown id 404s", func(t *testing.T) {
@@ -2151,8 +2151,12 @@ func TestUsersPage_FilterFormPrefills(t *testing.T) {
 	body := getAdminPage(t, mux, "/admin/users?q=amina&role=admin")
 
 	assert.Contains(t, body, `name="q" placeholder="Search name or email" value="amina"`)
-	assert.Contains(t, body, `<option value="admin" selected>Admin</option>`,
-		"the role select must show the active filter")
+	assert.Contains(t, body, `<a href="/admin/users?page=1&amp;q=amina&amp;role=admin" aria-current="true">Admins</a>`,
+		"the role control must show the active filter")
+	assert.Contains(t, body, `<a href="/admin/users?page=1&amp;q=amina">Everyone</a>`,
+		"another role keeps the search in progress")
+	assert.Contains(t, body, `<input type="hidden" name="role" value="admin">`,
+		"a new search keeps the role")
 	assert.Contains(t, body, `href="/admin/users?active=1&amp;page=1&amp;q=amina&amp;role=admin"`,
 		"the hide-deactivated toggle must keep the search in progress")
 }

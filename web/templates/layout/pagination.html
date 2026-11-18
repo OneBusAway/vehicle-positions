@@ -1,5 +1,5 @@
 {{define "pagination"}}
-{{if or (gt .PageNum 1) .HasMore}}
-<div class="pager"><span style="flex:1">{{.Shown}} shown, page {{.PageNum}}</span>{{if gt .PageNum 1}}<a class="btn btn-sm btn-outline" href="{{.PrevURL}}">{{template "icon-sm" "chevron_left"}}Previous</a>{{end}}{{if .HasMore}}<a class="btn btn-sm btn-outline" href="{{.NextURL}}">Next{{template "icon-sm" "chevron_right"}}</a>{{end}}</div>
+{{if or .Shown.N (gt .PageNum 1)}}
+<div class="pager"><span style="flex:1">{{.Shown.Text}} shown, page {{.PageNum}}</span>{{if gt .PageNum 1}}<a class="btn btn-sm btn-outline" href="{{.PrevURL}}">{{template "icon-sm" "chevron_left"}}Previous</a>{{end}}{{if .HasMore}}<a class="btn btn-sm btn-outline" href="{{.NextURL}}">Next{{template "icon-sm" "chevron_right"}}</a>{{end}}</div>
 {{end}}
 {{end}}

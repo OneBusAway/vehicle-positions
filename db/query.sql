@@ -439,6 +439,9 @@ UPDATE api_keys
 SET active = false, updated_at = NOW()
 WHERE id = $1;
 
+-- name: CountActiveAPIKeys :one
+SELECT COUNT(*) FROM api_keys WHERE active = true;
+
 -- name: RevokeToken :exec
 -- Idempotent: logging out twice must not error.
 INSERT INTO revoked_tokens (jti, user_id, expires_at)

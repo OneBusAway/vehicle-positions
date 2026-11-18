@@ -50,14 +50,19 @@ type importColumn struct {
 // importKind is one of the two imports. preview checks a file and plans it
 // without writing; run checks it again and imports it.
 type importKind struct {
-	Name    string
-	Title   string
-	Page    string
-	ListURL string
-	Columns []importColumn
-	Notes   []string
-	preview func(context.Context, CSVImporter, []importRecord) ([]importRowView, error)
-	run     func(context.Context, CSVImporter, importPreview, []importRecord) ([]importRowView, error)
+	Name  string
+	Title string
+	Page  string
+	// ListURL and ListName are the list page an import belongs to, which the
+	// pages link back to.
+	ListURL  string
+	ListName string
+	// One and Many name what a row of the file is: "vehicle", "vehicles".
+	One, Many string
+	Columns   []importColumn
+	Notes     []string
+	preview   func(context.Context, CSVImporter, []importRecord) ([]importRowView, error)
+	run       func(context.Context, CSVImporter, importPreview, []importRecord) ([]importRowView, error)
 }
 
 func (k importKind) columnNames() []string {
@@ -70,10 +75,13 @@ func (k importKind) columnNames() []string {
 
 var importKinds = map[string]importKind{
 	"vehicles": {
-		Name:    "vehicles",
-		Title:   "Import vehicles",
-		Page:    "vehicles",
-		ListURL: "/admin/vehicles",
+		Name:     "vehicles",
+		Title:    "Import vehicles",
+		Page:     "vehicles",
+		ListURL:  "/admin/vehicles",
+		ListName: "Vehicles",
+		One:      "vehicle",
+		Many:     "vehicles",
 		Columns: []importColumn{
 			{"id", "Required. Letters, digits, dots, hyphens and underscores, up to 50 characters."},
 			{"label", "The name shown in the admin pages, up to 255 characters."},
@@ -92,10 +100,13 @@ var importKinds = map[string]importKind{
 		},
 	},
 	"drivers": {
-		Name:    "drivers",
-		Title:   "Import drivers",
-		Page:    "users",
-		ListURL: "/admin/users",
+		Name:     "drivers",
+		Title:    "Import drivers",
+		Page:     "users",
+		ListURL:  "/admin/users",
+		ListName: "Drivers and users",
+		One:      "driver",
+		Many:     "drivers",
 		Columns: []importColumn{
 			{"email", "Required. Saved in lower case, and matched to an existing account whatever its case."},
 			{"name", "Required."},
@@ -346,6 +357,35 @@ type importCounts struct {
 	New, Update, Unchanged, Error int
 }
 
+// ErrorRows is the check page's count of rows the file has to change: "1
+// row", "2 rows".
+func (c importCounts) ErrorRows() string {
+	return countOf(c.Error, "row", "rows")
+}
+
+// importStep is where an import is, for the step line above each of its
+// three pages.
+type importStep struct {
+	N    int
+	Name string
+	Hint string
+}
+
+var (
+	importStepUpload = importStep{N: 1, Name: "Upload", Hint: "upload the file"}
+	importStepCheck  = importStep{N: 2, Name: "Check", Hint: "check what it changes"}
+	importStepDone   = importStep{N: 3, Name: "Done", Hint: "done"}
+)
+
+// importDoneHeadline is the result page's headline: how many rows the import
+// made new.
+func importDoneHeadline(kind importKind, c importCounts) string {
+	if c.New == 0 {
+		return "Import finished"
+	}
+	return countOf(c.New, kind.One, kind.Many) + " imported"
+}
+
 func countImport(views []importRowView) importCounts {
 	var c importCounts
 	for _, v := range views {
@@ -463,7 +503,7 @@ func (ui *adminUI) renderImport(w http.ResponseWriter, r *http.Request, status i
 }
 
 func (ui *adminUI) renderImportForm(w http.ResponseWriter, r *http.Request, status int, kind importKind, errMsg string) {
-	ui.renderImport(w, r, status, kind, map[string]interface{}{"Error": errMsg})
+	ui.renderImport(w, r, status, kind, map[string]interface{}{"Step": importStepUpload, "Error": errMsg})
 }
 
 // importPage shows the upload form.
@@ -537,7 +577,7 @@ func (ui *adminUI) importUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	counts := countImport(views)
-	page := map[string]interface{}{"Rows": views, "Counts": counts}
+	page := map[string]interface{}{"Step": importStepCheck, "Rows": views, "Counts": counts}
 	status := http.StatusOK
 	if counts.Error > 0 {
 		status = http.StatusUnprocessableEntity
@@ -591,7 +631,7 @@ func (ui *adminUI) importConfirm(w http.ResponseWriter, r *http.Request) {
 	counts := countImport(views)
 	if counts.Error > 0 {
 		ui.renderImport(w, r, http.StatusUnprocessableEntity, kind, map[string]interface{}{
-			"Rows": views, "Counts": counts, "NotImported": true,
+			"Step": importStepCheck, "Rows": views, "Counts": counts, "NotImported": true,
 		})
 		return
 	}
@@ -606,6 +646,7 @@ func (ui *adminUI) importConfirm(w http.ResponseWriter, r *http.Request) {
 	// The page holds the new drivers' passwords, so no cache keeps a copy.
 	w.Header().Set("Cache-Control", "no-store")
 	ui.renderImport(w, r, http.StatusOK, kind, map[string]interface{}{
-		"Result": true, "Done": done, "Counts": counts,
+		"Step": importStepDone, "Result": true, "Done": done, "Counts": counts,
+		"Headline": importDoneHeadline(kind, counts),
 	})
 }

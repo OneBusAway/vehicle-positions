@@ -1,70 +1,75 @@
 {{define "content"}}
-<div class="p-4 lg:p-5">
-  <div class="table-card mx-auto max-w-xl overflow-hidden rounded-[20px] border border-white/80 p-6 sm:p-8">
-    <h3 class="display-font text-lg font-bold text-slate-900">{{if .IsEdit}}Edit User{{else}}New User{{end}}</h3>
-    <p class="mt-0.5 text-xs text-slate-400">{{if .IsEdit}}Update this account's details or password.{{else}}Create a new admin or driver account.{{end}}</p>
-
-    {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{.Error}}</div>{{end}}
-
-    <form method="post" action="{{if .IsEdit}}/admin/users/{{.ID}}{{else}}/admin/users{{end}}" class="mt-6 space-y-4">
-      <div>
-        <label for="name" class="mb-1.5 block text-sm font-semibold text-slate-700">Name</label>
-        <input id="name" name="name" type="text" required value="{{.Name}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-      </div>
-      <div>
-        <label for="email" class="mb-1.5 block text-sm font-semibold text-slate-700">Email</label>
-        <input id="email" name="email" type="email" required value="{{.Email}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-      </div>
-      <div>
-        <label for="password" class="mb-1.5 block text-sm font-semibold text-slate-700">{{if .IsEdit}}New password (leave blank to keep current){{else}}Password{{end}}</label>
-        <input id="password" name="password" type="password" {{if not .IsEdit}}required{{end}} class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-      </div>
-      <div>
-        <label for="role" class="mb-1.5 block text-sm font-semibold text-slate-700">Role</label>
-        <select id="role" name="role" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-          <option value="driver" {{if eq .Role "driver"}}selected{{end}}>Driver</option>
-          <option value="admin" {{if eq .Role "admin"}}selected{{end}}>Admin</option>
-        </select>
-      </div>
-      <div class="flex items-center gap-3">
-        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">{{if .IsEdit}}Save changes{{else}}Create user{{end}}</button>
-        <a href="/admin/users" class="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</a>
-      </div>
-    </form>
-
-    {{if .IsEdit}}
-    <div class="mt-8 border-t border-slate-200/60 pt-6">
-      <h4 class="text-sm font-bold text-slate-900">Assigned vehicles</h4>
-      <p class="mt-0.5 text-xs text-slate-400">{{len .Assignments}} assigned</p>
-
-      <ul class="mt-4 space-y-2">
-        {{if not .Assignments}}
-        <li class="text-sm text-slate-400">No vehicles assigned.</li>
-        {{end}}
-        {{range .Assignments}}
-        <li class="flex items-center justify-between rounded-2xl border border-line bg-white px-4 py-3 text-sm">
-          <span class="font-semibold text-slate-900">{{.Label}}</span>
-          <form method="post" action="/admin/users/{{$.ID}}/vehicles/{{.VehicleID}}/remove" onsubmit="return confirm('Remove this vehicle assignment?')">
-            <button type="submit" class="text-xs font-semibold text-rose-600 hover:text-rose-800">Remove</button>
-          </form>
-        </li>
-        {{end}}
-      </ul>
-
-      {{if .AvailableVehicles}}
-      <form method="post" action="/admin/users/{{.ID}}/vehicles" class="mt-4 flex items-center gap-3">
-        <select name="vehicle_id" class="flex-1 rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-          {{range .AvailableVehicles}}
-          <option value="{{.ID}}">{{.Label}}</option>
-          {{end}}
-        </select>
-        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Assign</button>
-      </form>
+{{with .Form}}
+<div style="max-width:{{if .IsEdit}}960px{{else}}640px{{end}}">
+  <div class="page-head">
+    <div class="page-head-main">
+      <a class="back" href="/admin/users">{{template "icon-sm" "arrow_back"}}Drivers and users</a>
+      <h2 class="h1">{{if not .IsEdit}}New user{{else if .Name}}{{.Name}}{{else}}Edit user{{end}}</h2>
+      <p class="lede">{{if .IsEdit}}Update this account, its password, or the vehicles the driver may pick.{{else}}Add a driver for the app, or an admin for this site.{{end}}</p>
+    </div>
+    {{if .Active}}
+    <div class="page-actions">
+      {{if and .IsActive (eq .Role "driver")}}<a class="btn btn-tonal" href="/admin/driver-setup?user={{.ID}}">{{template "icon" "qr_code_2"}}Setup sheet</a>{{end}}
+      {{if .IsActive}}
+      <form method="post" action="/admin/users/{{.ID}}/deactivate" data-confirm="Deactivate this account?" data-confirm-text="{{.Name}} is signed out everywhere and cannot sign in again until you turn the account back on." data-confirm-ok="Deactivate"><button class="btn btn-outline" type="submit">Deactivate</button></form>
       {{else}}
-      <p class="mt-4 text-xs text-slate-400">No active vehicles available to assign.</p>
+      <form method="post" action="/admin/users/{{.ID}}/activate"><button class="btn btn-tonal" type="submit">Activate</button></form>
       {{end}}
     </div>
     {{end}}
   </div>
+  <div class="split">
+    <form class="card form-card" method="post" action="{{if .IsEdit}}/admin/users/{{.ID}}{{else}}/admin/users{{end}}">
+      {{if .Error}}<div class="banner banner-error" role="alert">{{template "icon" "error"}}<div><b style="font-weight:500">The account was not saved.</b> {{if .ErrorField}}Fix the field marked below.{{else}}{{.Error}}{{end}}</div></div>{{end}}
+      <div class="field">
+        <label class="label" for="name">Name</label>
+        <input class="input" id="name" name="name" type="text" required value="{{.Name}}" autocomplete="name"{{if eq .ErrorField "name"}} aria-invalid="true" aria-describedby="name-err"{{end}}>
+        {{if eq .ErrorField "name"}}<div class="field-error" id="name-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
+      </div>
+      <div class="field">
+        <label class="label" for="email">Email</label>
+        <input class="input" id="email" name="email" type="email" required value="{{.Email}}" autocomplete="email"{{if eq .ErrorField "email"}} aria-invalid="true" aria-describedby="email-err email-help"{{else}} aria-describedby="email-help"{{end}}>
+        {{if eq .ErrorField "email"}}<div class="field-error" id="email-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
+        <div class="help" id="email-help">A driver signs in to the app with this address.</div>
+      </div>
+      <div class="field">
+        <label class="label" for="password">{{if .IsEdit}}New password <span class="muted" style="font-weight:400">(leave blank to keep the current one)</span>{{else}}Password{{end}}</label>
+        <input class="input" id="password" name="password" type="password"{{if not .IsEdit}} required{{end}} autocomplete="new-password"{{if eq .ErrorField "password"}} aria-invalid="true" aria-describedby="password-err password-help"{{else}} aria-describedby="password-help"{{end}}>
+        {{if eq .ErrorField "password"}}<div class="field-error" id="password-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
+        <div class="help" id="password-help">At least {{$.MinPasswordLength}} characters.{{if .IsEdit}} Changing it ends the account's sessions, so the driver signs in again.{{end}}</div>
+      </div>
+      <div class="field">
+        <label class="label" for="role">Role</label>
+        <select class="select" id="role" name="role"{{if eq .ErrorField "role"}} aria-invalid="true" aria-describedby="role-err"{{end}}>
+          <option value="driver"{{if eq .Role "driver"}} selected{{end}}>Driver</option>
+          <option value="admin"{{if eq .Role "admin"}} selected{{end}}>Admin</option>
+        </select>
+        {{if eq .ErrorField "role"}}<div class="field-error" id="role-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
+      </div>
+      <div class="form-actions"><a class="btn" href="/admin/users">Cancel</a><button class="btn btn-primary" type="submit">{{if .IsEdit}}Save changes{{else}}Create user{{end}}</button></div>
+    </form>
+    {{if .IsEdit}}
+    <section class="card" aria-labelledby="may-drive">
+      <div class="card-head"><h3 id="may-drive">Vehicles this driver may pick</h3><span class="sub">{{len .Assignments}} assigned</span></div>
+      {{range .Assignments}}
+      <div class="line-row assigned">{{template "icon" "directions_bus"}}<span style="min-width:0"><span class="clip" style="font-weight:500">{{.Name}}</span><span class="muted" style="font-size:12px">{{.VehicleID}}</span></span><form method="post" action="/admin/users/{{$.Form.ID}}/vehicles/{{.VehicleID}}/remove" data-confirm="Remove this vehicle?" data-confirm-text="The driver will no longer see {{.Name}} in the app." data-confirm-ok="Remove"><button class="btn btn-sm btn-plain" type="submit">Remove</button></form></div>
+      {{else}}
+      <div class="line-row assigned"><span></span><span class="muted">No vehicles assigned. The driver has nothing to pick in the app.</span></div>
+      {{end}}
+      {{if .AvailableVehicles}}
+      <form class="card-foot assign" method="post" action="/admin/users/{{.ID}}/vehicles">
+        <select class="select input-sm" name="vehicle_id" aria-label="Vehicle to assign" style="flex:1">
+          {{range .AvailableVehicles}}<option value="{{.ID}}">{{if .Label}}{{.Label}}{{else}}{{.ID}}{{end}}</option>
+          {{end}}
+        </select>
+        <button class="btn btn-sm btn-tonal" type="submit">Assign</button>
+      </form>
+      {{else}}
+      <div class="card-foot">No more active vehicles to assign.</div>
+      {{end}}
+    </section>
+    {{end}}
+  </div>
 </div>
+{{end}}
 {{end}}

@@ -1,135 +1,129 @@
-{{define "import-status"}}
-{{if eq . "new"}}<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>New</span>
-{{else if eq . "update"}}<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>Update</span>
-{{else if eq . "unchanged"}}<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>Unchanged</span>
-{{else}}<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>Error</span>
-{{end}}
+{{define "import-status"}}{{if eq . "new"}}<span class="pill plain">New</span>{{else if eq . "update"}}<span class="pill plain">Update</span>{{else if eq . "unchanged"}}<span class="pill">Unchanged</span>{{else}}<span class="pill pill-warn">Fix this row</span>{{end}}{{end}}
+
+{{define "import-steps"}}
+<div class="steps-line" data-step="{{.N}}" role="img" aria-label="Step {{.N}} of 3: {{.Name}}">
+  <span class="the-line"><span class="track"></span><span class="track fill"></span><span class="stop{{if gt .N 1}} done{{end}}" style="left:0"></span><span class="stop{{if gt .N 2}} done{{end}}" style="left:50%"></span><span class="stop" style="left:100%"></span><span class="veh">{{template "arrow"}}</span></span>
+  <span style="font-weight:500">Step {{.N}} of 3<span class="muted" style="font-weight:400">, {{.Hint}}</span></span>
+</div>
 {{end}}
 
 {{define "content"}}
-<div class="p-4 lg:p-5">
 {{if .Result}}
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
-      <div>
-        <h3 class="display-font text-lg font-bold text-slate-900">Imported</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{.Counts.New}} new, {{.Counts.Update}} updated, {{.Counts.Unchanged}} unchanged</p>
-      </div>
-      <a href="{{.Kind.ListURL}}" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">Done</a>
-    </div>
-    {{if and (eq .Kind.Name "drivers") .Counts.New}}
-    <div class="mx-5 mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="note">These passwords are shown only on this page. Give each driver theirs with their setup sheet. If one is lost, set a new password with Edit on the Users page.</div>
-    {{end}}
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            {{/* The key, and for a new driver the password and sheet, come first: at phone width the rows scroll sideways. */}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">{{(index .Kind.Columns 0).Name}}</th>
-            {{if eq .Kind.Name "drivers"}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Password</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Setup</th>
-            {{end}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Status</th>
-            {{range slice .Kind.Columns 1}}<th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">{{.Name}}</th>{{end}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Details</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{if not .Done}}
-          <tr><td class="px-5 py-6 text-center text-slate-400" colspan="7">Nothing to change: every row matches what is saved.</td></tr>
-          {{end}}
-          {{range .Done}}
-          <tr>
-            <td class="px-5 py-3 font-mono text-xs text-slate-700">{{index .Cells 0}}</td>
-            {{if eq $.Kind.Name "drivers"}}
-            <td class="px-5 py-3">{{if .Password}}<span class="whitespace-nowrap font-mono text-sm font-semibold text-slate-900 select-all">{{.Password}}</span>{{else}}<span class="text-xs text-slate-400">unchanged</span>{{end}}</td>
-            <td class="px-5 py-3"><a href="/admin/driver-setup?user={{.UserID}}" class="whitespace-nowrap text-xs font-semibold text-sky-600 hover:text-sky-800">Setup sheet</a></td>
-            {{end}}
-            <td class="px-5 py-3">{{template "import-status" .Status}}</td>
-            {{range slice .Cells 1}}<td class="px-5 py-3 text-slate-700">{{.}}</td>{{end}}
-            <td class="px-5 py-3 text-xs text-slate-500">{{.Changes}}{{if and .Changes .Note}}; {{end}}{{.Note}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
+<div class="page-head">
+  <div class="page-head-main">
+    <h2 class="h1">{{.Headline}}</h2>
+    <p class="lede">{{.Counts.Update}} updated, {{.Counts.Unchanged}} unchanged.</p>
   </div>
-{{else if .Rows}}
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
-      <div>
-        <h3 class="display-font text-lg font-bold text-slate-900">Preview</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{.Counts.New}} new, {{.Counts.Update}} to update, {{.Counts.Unchanged}} unchanged, {{.Counts.Error}} with errors</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-3">
-        <a href="/admin/import/{{.Kind.Name}}" class="rounded-2xl border border-slate-200 bg-white/75 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Choose another file</a>
-        {{with .Token}}
-        {{/* A second click would replace this page's result with one that has no passwords. */}}
-        <form method="post" action="/admin/import/{{$.Kind.Name}}/confirm" onsubmit="this.querySelector('button').disabled = true">
-          <input type="hidden" name="data" value="{{.Data}}">
-          <input type="hidden" name="issued" value="{{.Issued}}">
-          <input type="hidden" name="sig" value="{{.Sig}}">
-          <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">Confirm import</button>
-        </form>
-        {{end}}
-      </div>
-    </div>
-    {{if .Counts.Error}}
-    <div class="alert alert-error mx-5 mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{if .NotImported}}Nothing was imported.{{else}}Nothing can be imported until every row is right.{{end}} Fix the rows marked Error in your file and upload it again.</div>
-    {{else if not .Token}}
-    <div class="mx-5 mt-4 rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-700" role="status">Nothing to import: every row matches what is saved.</div>
-    {{end}}
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Line</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Status</th>
-            {{range .Kind.Columns}}<th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">{{.Name}}</th>{{end}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Details</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{range .Rows}}
-          <tr>
-            <td class="px-5 py-3 text-xs text-slate-400">{{.Line}}</td>
-            <td class="px-5 py-3">{{template "import-status" .Status}}</td>
-            {{range $i, $cell := .Cells}}<td class="px-5 py-3 {{if eq $i 0}}font-mono text-xs text-slate-700{{else}}text-slate-700{{end}}">{{$cell}}</td>{{end}}
-            <td class="px-5 py-3 text-xs">{{if .Reason}}<span class="font-semibold text-rose-700">{{.Reason}}</span>{{else}}<span class="text-slate-500">{{.Changes}}{{if and .Changes .Note}}; {{end}}{{.Note}}</span>{{end}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-  </div>
-{{else}}
-  <div class="table-card mx-auto max-w-xl overflow-hidden rounded-[20px] border border-white/80 p-6 sm:p-8">
-    <h3 class="display-font text-lg font-bold text-slate-900">{{.Kind.Title}}</h3>
-    <p class="mt-0.5 text-xs text-slate-400">Upload a CSV file to see what it would change. Nothing is saved until you confirm.</p>
-
-    {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{.Error}}</div>{{end}}
-
-    <ul class="mt-5 space-y-2 rounded-2xl border border-line bg-white px-4 py-3 text-sm">
-      {{range .Kind.Columns}}<li><span class="font-mono text-xs font-semibold text-slate-900">{{.Name}}</span> <span class="text-slate-600">{{.Help}}</span></li>{{end}}
-    </ul>
-    <div class="mt-4 space-y-2 text-xs text-slate-500">
-      {{range .Kind.Notes}}<p>{{.}}</p>{{end}}
-    </div>
-
-    <form method="post" action="/admin/import/{{.Kind.Name}}" enctype="multipart/form-data" class="mt-6 space-y-4">
-      <div>
-        <label for="file" class="mb-1.5 block text-sm font-semibold text-slate-700">CSV file</label>
-        <input id="file" name="file" type="file" accept=".csv,text/csv" required class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900">
-        <p class="mt-1.5 text-xs text-slate-400">Up to {{.MaxRows}} rows and {{.MaxKB}} KB, saved as CSV UTF-8. The first line names the columns, in any order.</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-3">
-        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Preview</button>
-        <a href="/admin/import/{{.Kind.Name}}/template.csv" class="text-sm font-semibold text-sky-600 hover:text-sky-800">Download the template</a>
-        <a href="{{.Kind.ListURL}}" class="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</a>
-      </div>
-    </form>
-  </div>
-{{end}}
+  <div class="page-actions"><a class="btn btn-primary" href="{{.Kind.ListURL}}">Done</a></div>
 </div>
+{{template "import-steps" .Step}}
+{{if and (eq .Kind.Name "drivers") .Counts.New}}
+<div class="banner banner-warn" role="note" style="margin-bottom:16px">{{template "icon" "key"}}<div><b style="font-weight:500">These passwords are shown only on this page.</b> Give each driver theirs with their setup sheet. If one is lost, set a new password with Edit on the Drivers and users page.</div></div>
+{{end}}
+<section class="card">
+  {{if .Done}}
+  <div class="table-wrap">
+    <table class="table cards">
+      <thead>
+        <tr>
+          <th>{{(index .Kind.Columns 0).Name}}</th>
+          {{if eq .Kind.Name "drivers"}}<th>Password</th>{{end}}
+          <th>Status</th>
+          {{range slice .Kind.Columns 1}}<th>{{.Name}}</th>{{end}}
+          <th>Details</th>
+          {{if eq .Kind.Name "drivers"}}<th><span class="sr-only">Setup sheet</span></th>{{end}}
+        </tr>
+      </thead>
+      <tbody>
+        {{range $n, $row := .Done}}
+        <tr>
+          <td class="c-main strong" style="overflow-wrap:anywhere">{{index .Cells 0}}</td>
+          {{if eq $.Kind.Name "drivers"}}<td data-label="Password">{{if .Password}}<span id="pw-{{$n}}" class="pw select-all">{{.Password}}</span> <button class="btn btn-sm js-only" type="button" data-copy-from="pw-{{$n}}">{{template "icon-sm" "content_copy"}}Copy</button>{{else}}<span class="muted">unchanged</span>{{end}}</td>{{end}}
+          <td class="c-side">{{template "import-status" .Status}}</td>
+          {{range $i, $cell := .Cells}}{{if $i}}<td{{if $cell}} data-label="{{(index $.Kind.Columns $i).Name}}"{{end}}>{{$cell}}</td>{{end}}{{end}}
+          <td class="muted">{{.Changes}}{{if and .Changes .Note}}; {{end}}{{.Note}}</td>
+          {{if eq $.Kind.Name "drivers"}}<td class="right"><a class="btn btn-sm btn-tonal" href="/admin/driver-setup?user={{.UserID}}">{{template "icon-sm" "qr_code_2"}}Setup sheet</a></td>{{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "check"}}</span><div class="empty-title">Nothing to change</div><p>Nothing to change: every row matches what is saved.</p></div>
+  {{end}}
+</section>
+{{else if .Rows}}
+<div class="page-head">
+  <div class="page-head-main">
+    <a class="back" href="/admin/import/{{.Kind.Name}}">{{template "icon-sm" "arrow_back"}}Choose another file</a>
+    <h2 class="h1">Check the import</h2>
+    <p class="lede">{{len .Rows}} {{if eq (len .Rows) 1}}row{{else}}rows{{end}} in the file. Nothing is saved until you confirm.</p>
+  </div>
+</div>
+{{template "import-steps" .Step}}
+{{if .Counts.Error}}
+<div class="banner banner-error" role="alert" style="margin-bottom:16px">{{template "icon" "error"}}<div><b style="font-weight:500">{{if .NotImported}}Nothing was imported.{{else}}Nothing can be imported until every row is right.{{end}}</b> Fix the {{.Counts.ErrorRows}} marked below in your file and upload it again.</div></div>
+{{else if not .Token}}
+<div class="banner" role="status" style="margin-bottom:16px">{{template "icon" "info"}}<div>Nothing to import: every row matches what is saved.</div></div>
+{{end}}
+<section class="card">
+  <div class="card-head" style="flex-wrap:wrap">
+    <span style="flex:1;display:flex;gap:8px;flex-wrap:wrap">{{if .Counts.Error}}<span class="pill pill-warn">{{.Counts.ErrorRows}} to fix</span>{{end}}{{if .Counts.New}}<span class="pill plain">{{.Counts.New}} new</span>{{end}}{{if .Counts.Update}}<span class="pill plain">{{.Counts.Update}} to update</span>{{end}}{{if .Counts.Unchanged}}<span class="pill">{{.Counts.Unchanged}} unchanged</span>{{end}}</span>
+    {{with .Token}}
+    {{/* A second click would replace this page's result with one that has no passwords. */}}
+    <form method="post" action="/admin/import/{{$.Kind.Name}}/confirm" onsubmit="this.querySelector('button').disabled = true">
+      <input type="hidden" name="data" value="{{.Data}}">
+      <input type="hidden" name="issued" value="{{.Issued}}">
+      <input type="hidden" name="sig" value="{{.Sig}}">
+      <button class="btn btn-primary" type="submit">Confirm import</button>
+    </form>
+    {{else}}
+    <button class="btn btn-primary" type="button" disabled>Confirm import</button>
+    {{end}}
+  </div>
+  <div class="table-wrap">
+    <table class="table table-dense cards">
+      <thead><tr><th class="hide-phone">Line</th><th>Status</th>{{range .Kind.Columns}}<th>{{.Name}}</th>{{end}}<th>Details</th></tr></thead>
+      <tbody>
+        {{range .Rows}}
+        <tr>
+          <td class="num muted hide-phone">{{.Line}}</td>
+          <td class="c-side">{{template "import-status" .Status}}</td>
+          {{range $i, $cell := .Cells}}<td{{if eq $i 0}} class="c-main" style="overflow-wrap:anywhere"{{else if $cell}} data-label="{{(index $.Kind.Columns $i).Name}}"{{end}}>{{$cell}}</td>{{end}}
+          {{if .Reason}}<td class="tone-warn strong">Line {{.Line}}: {{.Reason}}</td>{{else}}<td class="muted">{{.Changes}}{{if and .Changes .Note}}; {{end}}{{.Note}}</td>{{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{else}}
+<div style="max-width:760px">
+  <div class="page-head">
+    <div class="page-head-main">
+      <a class="back" href="{{.Kind.ListURL}}">{{template "icon-sm" "arrow_back"}}{{.Kind.ListName}}</a>
+      <h2 class="h1">{{.Kind.Title}}</h2>
+      <p class="lede">Upload a CSV file to see what it would change. Nothing is saved until you confirm.</p>
+    </div>
+  </div>
+  {{template "import-steps" .Step}}
+  <form class="card form-card" method="post" action="/admin/import/{{.Kind.Name}}" enctype="multipart/form-data">
+    {{if .Error}}<div class="banner banner-error" role="alert">{{template "icon" "error"}}<div><b style="font-weight:500">The file was not read.</b> {{.Error}}</div></div>{{end}}
+    <label class="drop" for="file">{{template "icon-lg" "upload_file"}}<span style="font:500 16px/22px var(--font-sans)">Choose a CSV file</span><span class="muted"><span class="js-only">or drop it here. </span>Up to {{.MaxRows}} rows and {{.MaxKB}} KB, saved as CSV UTF-8.</span><input id="file" name="file" type="file" accept=".csv,text/csv" required style="margin-top:8px"></label>
+    <div>
+      <div class="label" style="margin-bottom:8px">The first line names the columns, in any order</div>
+      <div class="table-wrap">
+        <table class="table table-dense">
+          <tbody>
+            {{range .Kind.Columns}}<tr><td class="strong nowrap">{{.Name}}</td><td>{{.Help}}</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="banner">{{template "icon" "info"}}<div>{{range $i, $note := .Kind.Notes}}{{if $i}} {{end}}{{$note}}{{end}}</div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><a class="btn" href="/admin/import/{{.Kind.Name}}/template.csv">{{template "icon" "download"}}Download the template</a><span style="flex:1"></span><a class="btn" href="{{.Kind.ListURL}}">Cancel</a><button class="btn btn-primary" type="submit">Check the file</button></div>
+  </form>
+</div>
+{{end}}
 {{end}}

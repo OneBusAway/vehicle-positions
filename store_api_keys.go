@@ -27,9 +27,15 @@ type APIKeyManager interface {
 	DeactivateAPIKey(ctx context.Context, id int64) error
 }
 
+// APIKeyCounter counts the keys that are not revoked.
+type APIKeyCounter interface {
+	CountActiveAPIKeys(ctx context.Context) (int, error)
+}
+
 var (
 	_ APIKeyStore   = (*Store)(nil)
 	_ APIKeyManager = (*Store)(nil)
+	_ APIKeyCounter = (*Store)(nil)
 )
 
 // GetAPIKeyByHash returns the key with the given hash, active or not, so
@@ -81,6 +87,16 @@ func (s *Store) ListAPIKeysPage(ctx context.Context, limit, offset int) ([]APIKe
 		keys = append(keys, toAPIKey(row))
 	}
 	return keys, nil
+}
+
+// CountActiveAPIKeys returns the number of keys that are not revoked. Used by
+// the admin API keys page's headline.
+func (s *Store) CountActiveAPIKeys(ctx context.Context) (int, error) {
+	n, err := s.queries.CountActiveAPIKeys(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count active api keys: %w", err)
+	}
+	return int(n), nil
 }
 
 // DeactivateAPIKey revokes a key by clearing its active flag. The row is kept

@@ -130,7 +130,7 @@ func TestSidebar_AlertBadge(t *testing.T) {
 
 		body := getAdminPage(t, mux, "/admin/api-keys")
 
-		assert.Contains(t, body, "Feed API keys")
+		assert.Contains(t, body, `<h1 class="topbar-title">API keys</h1>`)
 		assert.NotRegexp(t, alertBadge, body)
 		assert.Contains(t, logs.String(), "sidebar: list alerts")
 	})

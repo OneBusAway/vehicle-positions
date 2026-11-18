@@ -69,6 +69,7 @@ type appStore interface {
 	RidePointPruner
 	APIKeyStore
 	APIKeyManager
+	APIKeyCounter
 	TokenRevoker
 	TokenChecker
 	RefreshTokenCreator
