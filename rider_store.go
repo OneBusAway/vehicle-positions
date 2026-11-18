@@ -130,7 +130,7 @@ type RideFinisher interface {
 	EndAllActiveRides(ctx context.Context, reason string) (int64, error)
 }
 
-// RideLister lists rides by status, newest first.
+// RideLister lists rides by status, or of any status for "", newest first.
 type RideLister interface {
 	ListRides(ctx context.Context, status string, limit, offset int) ([]Ride, error)
 }
@@ -347,13 +347,16 @@ func (s *Store) EndAllActiveRides(ctx context.Context, reason string) (int64, er
 	return n, nil
 }
 
-// ListRides returns rides with the given status, newest first.
+// ListRides returns rides with the given status, or of any status when it is
+// empty, newest first.
 func (s *Store) ListRides(ctx context.Context, status string, limit, offset int) ([]Ride, error) {
-	rows, err := s.queries.ListRides(ctx, db.ListRidesParams{
-		Status: status,
-		Limit:  int32(limit),
-		Offset: int32(offset),
-	})
+	var rows []db.Ride
+	var err error
+	if status == "" {
+		rows, err = s.queries.ListRidesOfAnyStatus(ctx, db.ListRidesOfAnyStatusParams{Limit: int32(limit), Offset: int32(offset)})
+	} else {
+		rows, err = s.queries.ListRides(ctx, db.ListRidesParams{Status: status, Limit: int32(limit), Offset: int32(offset)})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list rides: %w", err)
 	}

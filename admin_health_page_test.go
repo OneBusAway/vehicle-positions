@@ -55,20 +55,59 @@ func TestTopReason(t *testing.T) {
 	}
 }
 
-func TestNewHealthStrip(t *testing.T) {
-	strip := newHealthStrip(healthPeriod{
-		Reports: reportOutcomes{Accepted: 90, Invalid: 6, RateLimited: 4},
-		Feed:    feedOutcomes{Served: 40, Refused: 7, Invalid: 2, ServerError: 1},
+func TestNewHealthSummary(t *testing.T) {
+	at := func(minute int) time.Time { return healthTestStart.Add(time.Duration(minute) * time.Minute) }
+	summary := newHealthSummary(feedHealthResponse{
+		LastHour: healthPeriod{
+			Reports: reportOutcomes{Accepted: 1490, Invalid: 6, RateLimited: 4},
+			Feed:    feedOutcomes{Served: 40, Refused: 7, Invalid: 2, ServerError: 1},
+		},
+		Minutes: []healthMinute{
+			{Minute: at(0), Feed: feedOutcomes{Served: 3}},
+			{Minute: at(1), Feed: feedOutcomes{Served: 1, Refused: 2}},
+			{Minute: at(2), Feed: feedOutcomes{Refused: 5}},
+		},
 	})
-	assert.Equal(t, healthStrip{
-		ReportsAccepted: 90,
+	assert.Equal(t, healthSummary{
+		ReportsAccepted: 1490,
+		PerMinute:       "About 25 a minute",
 		ReportsRejected: 10,
-		ErrorRate:       "10.0%",
+		ErrorRate:       "0.7%",
 		TopReason:       "invalid",
-		FeedFetches:     50,
+		FeedServed:      40,
+		LastFetch:       "09:16",
 		FeedRefused:     7,
-		FeedFailed:      3,
-	}, strip)
+	}, summary, "the last fetch is the newest minute one was served in, not refused in")
+
+	rate := func(accepted uint64) string {
+		return newHealthSummary(feedHealthResponse{LastHour: healthPeriod{Reports: reportOutcomes{Accepted: accepted}}}).PerMinute
+	}
+	assert.Equal(t, "None in the last hour", rate(0))
+	assert.Equal(t, "Under 1 a minute", rate(29))
+	assert.Equal(t, "About 1 a minute", rate(30))
+	assert.Equal(t, "About 2 a minute", rate(90))
+	assert.Empty(t, newHealthSummary(feedHealthResponse{}).LastFetch)
+}
+
+func TestHealthHeadline(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		p    healthPeriod
+		want string
+	}{
+		{"nothing at all", healthPeriod{}, "Nothing has come in during the last hour"},
+		{"reports and fetches", healthPeriod{Reports: reportOutcomes{Accepted: 9}, Feed: feedOutcomes{Served: 3}}, "Reports and the feed are healthy"},
+		{"a few turned away", healthPeriod{Reports: reportOutcomes{Accepted: 9, Invalid: 2, RateLimited: 2}}, "Reports and the feed are healthy"},
+		{"as many turned away as taken", healthPeriod{Reports: reportOutcomes{Accepted: 4, Invalid: 4}}, "Reports and the feed are healthy"},
+		{"more turned away than taken", healthPeriod{Reports: reportOutcomes{Accepted: 4, Unauthorized: 5}}, "Most reports were rejected in the last hour"},
+		{"only refused fetches", healthPeriod{Feed: feedOutcomes{Refused: 3}}, "Reports and the feed are healthy"},
+		{"one failed", healthPeriod{Reports: reportOutcomes{Accepted: 9}, Feed: feedOutcomes{ServerError: 1}}, "The server failed 1 request in the last hour"},
+		{"several failed", healthPeriod{Reports: reportOutcomes{Accepted: 1, ServerError: 2, Invalid: 9}, Feed: feedOutcomes{ServerError: 1}}, "The server failed 3 requests in the last hour"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, healthHeadline(tc.p))
+		})
+	}
 }
 
 func TestHealthPageData_NewestMinuteFirst(t *testing.T) {
@@ -95,7 +134,7 @@ func TestHealthPageData_NewestMinuteFirst(t *testing.T) {
 // the layout, from the same snapshot the JSON endpoint serves.
 func renderHealthContent(t *testing.T, snap feedHealthResponse) string {
 	t.Helper()
-	tmpl, err := template.ParseFS(files, "web/templates/views/health.html")
+	tmpl, err := template.ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/health.html")
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	require.NoError(t, tmpl.ExecuteTemplate(&buf, "content", healthPageData(snap)))
@@ -190,27 +229,40 @@ func TestHealthPage_AgreesWithTheJSON(t *testing.T) {
 		healthCountText(snap.LastHour.Feed.Served), healthCountText(snap.LastHour.Feed.Refused), healthCountText(snap.LastHour.Feed.Invalid), healthCountText(snap.LastHour.Feed.ServerError),
 	}
 	assert.Equal(t, []string{"10", "1", "2", "3", "4", "8", "5", "6", "7"}, want)
-	assert.Equal(t, want, healthColumn(summary, 1))
-	assert.Equal(t, want, healthColumn(summary, 2), "the server started within the hour, so the total is the hour")
+	// The outcome's name has no class, so the two counts are the cells read.
+	assert.Equal(t, want, healthColumn(summary, 0))
+	assert.Equal(t, want, healthColumn(summary, 1), "the server started within the hour, so the total is the hour")
 
 	rows := healthTableRows(t, page, "health-minutes")
 	require.Len(t, rows, healthWindowMinutes)
 	assert.Equal(t, []string{"09:16", "1", "0", "0", "0", "0", "0", "0", "0", "0"}, healthCellTexts(rows[0]))
 	assert.Equal(t, []string{"09:15", "9", "1", "2", "3", "4", "8", "5", "6", "7"}, healthCellTexts(rows[1]))
 
-	// The highlight marks a rejection in the minute it happened, and only then.
-	assert.Contains(t, rows[1][2].class, "text-rose-700")
-	assert.NotContains(t, rows[0][2].class, "text-rose-700")
+	// A rejection stands out in the minute it happened, and only then.
+	assert.Equal(t, "num right tone-warn strong", rows[1][2].class)
+	assert.Equal(t, "num right muted", rows[0][2].class)
+	assert.Contains(t, page, `<span class="tile-value tone-warn"><span class="count-up" data-count="10">10</span>`)
 
 	assert.Contains(t, page, "2026-11-14 09:15 UTC")
-	assert.Contains(t, page, "50.0% of reports rejected in the last hour.")
+	assert.Contains(t, page, `<h2 class="h1">The server failed 11 requests in the last hour</h2>`)
+	assert.Contains(t, page, `<span class="count-up" data-count="10">10</span></span><span class="tile-note">Under 1 a minute</span>`)
+	assert.Contains(t, page, `<span class="count-up" data-count="10">10</span></span><span class="tile-note">50.0% of reports, mostly server error</span>`)
+	assert.Contains(t, page, `<span class="count-up" data-count="8">8</span></span><span class="tile-note">Last one at 09:15 UTC</span>`)
+	assert.Contains(t, page, `<span class="count-up" data-count="5">5</span></span><span class="tile-note">Missing or bad API key</span>`)
+	assert.Contains(t, page, `role="img" aria-label="Location reports a minute over the last hour: 60 bars, the highest 19"`)
+	assert.Contains(t, page, `data-tip="09:15|9 accepted, 10 rejected"`)
+	assert.Contains(t, page, `role="img" aria-label="Feed fetches served a minute over the last hour: 60 bars, the highest 8"`)
+	assert.Contains(t, page, `data-tip="09:15|8 served"`)
+	assert.Contains(t, page, "Most in a minute: 19")
 }
 
 func healthCountText(n uint64) string { return strconv.FormatUint(n, 10) }
 
 func TestHealthPage_NoReports(t *testing.T) {
 	page := renderHealthContent(t, newFeedHealth(newHealthTestClock(healthTestStart).now).snapshot())
-	assert.Contains(t, page, "No reports in the last hour.")
+	assert.Contains(t, page, `<h2 class="h1">Nothing has come in during the last hour</h2>`)
+	assert.Contains(t, page, `<span class="tile-value"><span class="count-up" data-count="0">0</span></span><span class="tile-note">No reports in the last hour</span>`, "nothing rejected is not amber")
+	assert.Contains(t, page, `<span class="tile-note">None in the last hour</span>`)
 	assert.Len(t, healthTableRows(t, page, "health-minutes"), healthWindowMinutes)
 }
 
@@ -266,8 +318,11 @@ func TestHealthPage_ServedPageAgreesWithTheAPI(t *testing.T) {
 		healthCountText(p.Feed.Served), healthCountText(p.Feed.Refused), healthCountText(p.Feed.Invalid), healthCountText(p.Feed.ServerError),
 	}
 	require.Equal(t, []string{"7", "1", "0", "0", "1", "0", "1", "0", "0"}, want)
-	assert.Equal(t, want, healthColumn(healthTableRows(t, page, "health-summary"), 1))
-	assert.Contains(t, page, "22.2% of reports rejected in the last hour.")
+	assert.Equal(t, want, healthColumn(healthTableRows(t, page, "health-summary"), 0))
+	assert.Contains(t, page, "22.2% of reports, mostly invalid")
+	assert.Contains(t, page, `<h1 class="topbar-title">Feed health</h1>`)
+	assert.Contains(t, page, `<h2 class="h1">The server failed 1 request in the last hour</h2>`)
+	assert.Contains(t, page, `<div class="tip" id="tip" aria-hidden="true"></div>`)
 }
 
 func TestHealthPage_SignedOutIsRefused(t *testing.T) {

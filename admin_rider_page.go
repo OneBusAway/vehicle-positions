@@ -1,10 +1,10 @@
 package main
 
 import (
-	"cmp"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -46,8 +46,9 @@ type riderPageFeed struct {
 
 // riderRideRow is one ride in the Rider mode page's list.
 type riderRideRow struct {
-	TripID    string
-	StartDate string
+	TripID string
+	// StartDay is the service day of the trip, as "2 Sep 2026".
+	StartDay string
 	// DriverTrip is the one driver trip of this server running the same
 	// scheduled trip, for an active ride; 0 when there is none, or more than
 	// one and the page can't tell which vehicle the rider is on.
@@ -55,14 +56,18 @@ type riderRideRow struct {
 	Route        tripRoute
 	State        string
 	Corroborated bool
-	// Riders and InFeed are the trip's now, for an active ride only.
+	// Live is whether the ride is in progress. Riders and InFeed are the
+	// trip's now, for a ride in progress only.
+	Live          bool
 	Riders        int
 	InFeed        bool
 	PointsMatched int
 	PointsTotal   int
-	Started       string
-	Ended         string
-	EndReason     string
+	// Started and Ended are times of day on the agency's clock; Ended is ""
+	// for a ride in progress.
+	Started   string
+	Ended     string
+	EndReason string
 }
 
 // riderPage renders the Rider mode page: what rider mode is doing, from the
@@ -87,9 +92,10 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// With no status the list is every ride, which the store lists for "".
 	query := r.URL.Query()
-	rideStatus := cmp.Or(query.Get("status"), "active")
-	if !riderRideStatuses[rideStatus] {
+	rideStatus := query.Get("status")
+	if rideStatus != "" && !riderRideStatuses[rideStatus] {
 		http.Error(w, "status must be active or ended", http.StatusBadRequest)
 		return
 	}
@@ -108,9 +114,8 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 
 	// An ended ride's trip may be a run from days ago, so only rides in
 	// progress are matched with what is on the road now.
-	live := rideStatus == "active"
 	driverTrips := map[string]int64{}
-	if live {
+	if slices.ContainsFunc(rides, func(ride Ride) bool { return ride.Status == "active" }) {
 		active, err := ui.activeTrips.ListActiveTripsByVehicle(ctx)
 		if err != nil {
 			slog.Error("rider page: list active trips by vehicle", "error", err)
@@ -128,7 +133,7 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 	rows := make([]riderRideRow, 0, len(rides))
 	for _, ride := range rides {
 		row := newRiderRideRow(ride, ix, loc)
-		if live {
+		if row.Live {
 			row.DriverTrip = driverTrips[ride.TripID]
 			row.InFeed, row.Riders = ui.rider.TripNow(rider.TripKey{TripID: ride.TripID, StartDate: ride.StartDate})
 		}
@@ -145,6 +150,11 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 	data["Rides"] = status.Rides
 	data["Timezone"] = loc.String()
 	data["Status"] = rideStatus
+	data["Statuses"] = []statusLink{
+		{Label: "All", URL: "/admin/rider", Current: rideStatus == ""},
+		{Label: "In progress", URL: "/admin/rider?status=active", Current: rideStatus == "active"},
+		{Label: "Ended", URL: "/admin/rider?status=ended", Current: rideStatus == "ended"},
+	}
 	data["List"] = rows
 	data["Shown"] = newPagerCount(len(rows), "ride", "rides")
 	data["PageNum"] = page
@@ -159,22 +169,22 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 func newRiderRideRow(ride Ride, ix *rider.Index, loc *time.Location) riderRideRow {
 	row := riderRideRow{
 		TripID:        ride.TripID,
-		StartDate:     ride.StartDate,
-		Route:         tripRoute{ID: ride.RouteID, Name: ride.RouteID},
+		StartDay:      ride.StartDate,
+		Route:         routeBadge(ix, ride.RouteID),
 		State:         ride.State,
 		Corroborated:  ride.Corroborated,
+		Live:          ride.Status == "active",
 		PointsMatched: ride.PointsMatched,
 		PointsTotal:   ride.PointsTotal,
-		Started:       formatTripTime(ride.StartedAt, loc),
+		Started:       ride.StartedAt.In(loc).Format("15:04"),
 		EndReason:     strings.ReplaceAll(ride.EndReason, "_", " "),
 	}
-	if ix != nil {
-		if route, ok := ix.Route(ride.RouteID); ok {
-			row.Route = newTripRoute(route)
-		}
+	// A start date the schedule's layout cannot read is shown as it is.
+	if day, err := time.Parse(gtfsDateLayout, ride.StartDate); err == nil {
+		row.StartDay = day.Format("2 Jan 2006")
 	}
 	if ride.EndedAt != nil {
-		row.Ended = formatTripTime(*ride.EndedAt, loc)
+		row.Ended = ride.EndedAt.In(loc).Format("15:04")
 	}
 	return row
 }
@@ -236,7 +246,9 @@ func riderPageTime(rfc3339 string, loc *time.Location) string {
 // set, for the prev/next links.
 func riderPageURL(status string, page int) string {
 	v := url.Values{}
-	v.Set("status", status)
+	if status != "" {
+		v.Set("status", status)
+	}
 	v.Set("page", strconv.Itoa(page))
 	return "/admin/rider?" + v.Encode()
 }

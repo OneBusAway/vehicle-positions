@@ -1337,6 +1337,55 @@ func (q *Queries) ListRides(ctx context.Context, arg ListRidesParams) ([]Ride, e
 	return items, nil
 }
 
+const listRidesOfAnyStatus = `-- name: ListRidesOfAnyStatus :many
+SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides ORDER BY started_at DESC, id DESC LIMIT $1 OFFSET $2
+`
+
+type ListRidesOfAnyStatusParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListRidesOfAnyStatus(ctx context.Context, arg ListRidesOfAnyStatusParams) ([]Ride, error) {
+	rows, err := q.db.Query(ctx, listRidesOfAnyStatus, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Ride
+	for rows.Next() {
+		var i Ride
+		if err := rows.Scan(
+			&i.ID,
+			&i.RiderID,
+			&i.TripID,
+			&i.StartDate,
+			&i.RouteID,
+			&i.VehicleID,
+			&i.BoardingStopID,
+			&i.DestinationStopID,
+			&i.Status,
+			&i.State,
+			&i.Corroborated,
+			&i.EndReason,
+			&i.PointsTotal,
+			&i.PointsMatched,
+			&i.PointsCorroborated,
+			&i.PointsContradicted,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTrails = `-- name: ListTrails :many
 SELECT t.id, p.latitude, p.longitude, p.bearing, p.speed, p.accuracy,
        p.timestamp, p.trip_id, p.received_at

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -256,4 +257,32 @@ func TestRiderStore_RecordRidePointsDoesNotResurrectEndedRide(t *testing.T) {
 	points, err := store.queries.CountRidePointsForRide(context.Background(), ride.ID)
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, points, "no points are appended to an ended ride")
+}
+
+// TestRiderStore_ListRidesOfAnyStatus: with no status the list is every
+// ride, in progress or ended, newest first. The table outlives the test run,
+// so the two rides are found among whatever else is there.
+func TestRiderStore_ListRidesOfAnyStatus(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	ended := startTestRide(t, store, registerTestRider(t, store).ID)
+	_, err := store.FinishRide(ctx, ended.ID, RideOutcome{EndReason: "arrived", Progress: RideProgress{State: "pending"}})
+	require.NoError(t, err)
+	active := startTestRide(t, store, registerTestRider(t, store).ID)
+
+	rides, err := store.ListRides(ctx, "", 200, 0)
+	require.NoError(t, err)
+	at := func(id string) int {
+		return slices.IndexFunc(rides, func(r Ride) bool { return r.ID == id })
+	}
+	require.GreaterOrEqual(t, at(ended.ID), 0, "the ended ride is listed")
+	require.GreaterOrEqual(t, at(active.ID), 0, "and so is the one in progress")
+	assert.Less(t, at(active.ID), at(ended.ID), "newest first")
+	assert.Equal(t, "ended", rides[at(ended.ID)].Status)
+	assert.Equal(t, "active", rides[at(active.ID)].Status)
+
+	page, err := store.ListRides(ctx, "", 1, at(ended.ID))
+	require.NoError(t, err)
+	require.Len(t, page, 1)
+	assert.Equal(t, ended.ID, page[0].ID, "the offset counts rides of every status")
 }

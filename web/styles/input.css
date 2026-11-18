@@ -438,6 +438,14 @@
   .chart .ok-band { fill: var(--ok); opacity: 0.1; }
   .chart .bar-ok { fill: var(--ok); }
 
+  /* Rider mode and Feed health */
+  .tile-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .tile-row .tile { min-height: 124px; }
+  .rider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 16px; margin-bottom: 16px; }
+  .rider-kv { padding: 4px 18px 16px; }
+  .ride-route { display: inline-flex; align-items: center; gap: 8px; }
+  .wrap { overflow-wrap: anywhere; }
+
   /* API keys: the key that was just made */
   .newkey { align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
   .keybox { margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--surface); font: 500 13px/18px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; user-select: all; }

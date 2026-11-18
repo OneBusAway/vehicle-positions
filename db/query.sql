@@ -393,6 +393,9 @@ UPDATE rides SET status = 'ended', ended_at = NOW(), end_reason = $1, updated_at
 -- name: ListRides :many
 SELECT * FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3;
 
+-- name: ListRidesOfAnyStatus :many
+SELECT * FROM rides ORDER BY started_at DESC, id DESC LIMIT $1 OFFSET $2;
+
 -- Points are appended in one pgx batch per request. The EXISTS guard keeps a
 -- late batch from appending points to a ride that has already ended, matching
 -- the "status = 'active'" guard on UpdateRideProgress.

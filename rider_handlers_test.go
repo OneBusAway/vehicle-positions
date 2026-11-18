@@ -133,7 +133,7 @@ func (f *fakeRiderStore) ListRides(_ context.Context, status string, limit, offs
 	defer f.mu.Unlock()
 	var out []Ride
 	for _, r := range f.rides {
-		if r.Status == status {
+		if status == "" || r.Status == status {
 			out = append(out, *r)
 		}
 	}

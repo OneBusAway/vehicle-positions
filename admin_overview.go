@@ -173,6 +173,9 @@ type overviewSystemRow struct {
 // overviewMaxUnits is the most vehicles the first tile draws a mark each for.
 const overviewMaxUnits = 30
 
+// overviewChartHeight is the height the last hour's reports are drawn at.
+const overviewChartHeight = 84
+
 // overviewMaxStops is the most stops a route's Line draws. A long route's
 // stops are thinned to this many, its first and last always kept.
 const overviewMaxStops = 24
@@ -330,7 +333,7 @@ func newOverviewView(in overviewInput) overviewView {
 		Attention:   overviewAttentionList(in.alerts, in.settings, in.ix, loc),
 		Accepted:    in.health.LastHour.Reports.Accepted,
 		Rejected:    in.health.LastHour.Reports.Rejected(),
-		Chart:       reportsPerMinuteChart(in.health, loc),
+		Chart:       reportsPerMinuteChart(in.health, loc, overviewChartHeight),
 		System:      overviewSystem(in, loc),
 	}
 	if len(in.trips) <= overviewMaxUnits {
@@ -573,8 +576,8 @@ func overviewAttentionList(alerts []alertEntry, settings alertSettings, ix *ride
 }
 
 // reportsPerMinuteChart is the last hour's location reports, a bar a minute
-// with the rejected ones stacked on the accepted.
-func reportsPerMinuteChart(health feedHealthResponse, loc *time.Location) barChartView {
+// with the rejected ones stacked on the accepted, its minutes on loc's clock.
+func reportsPerMinuteChart(health feedHealthResponse, loc *time.Location, height int) barChartView {
 	bars := make([]chartBar, 0, len(health.Minutes))
 	for _, m := range health.Minutes {
 		bars = append(bars, chartBar{
@@ -585,7 +588,7 @@ func reportsPerMinuteChart(health feedHealthResponse, loc *time.Location) barCha
 	}
 	return newBarChart(bars, barChartOptions{
 		Name:     "Location reports a minute over the last hour",
-		Height:   84,
+		Height:   height,
 		Unit:     "accepted",
 		WarnUnit: "rejected",
 		Peak:     "Most in a minute",
