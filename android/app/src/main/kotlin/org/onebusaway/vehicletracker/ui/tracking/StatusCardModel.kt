@@ -102,8 +102,9 @@ private fun judged(adherence: Adherence, zone: ZoneId): StatusCardModel {
 
 /**
  * Whether TalkBack reads the waiting line out as it goes from [before] to [now]: as it comes, as it turns between will
- * send and won't send, and as the count drops while the backlog uploads. Not as each report adds one while there is no
- * connection: that would be every report.
+ * send and won't send, and as the count drops because fixes left the queue, as the backlog uploads. Not as each report
+ * adds one while there is no connection, nor as a fix ages out while the phone stays offline: after a day of that,
+ * either would be every report.
  */
 internal fun speaksWaiting(before: ReportsWaiting?, now: ReportsWaiting): Boolean =
-    before == null || before.outlook != now.outlook || now.count < before.count
+    before == null || before.outlook != now.outlook || (now.count < before.count && now.queued < before.queued)

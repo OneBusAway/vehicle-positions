@@ -26,8 +26,12 @@ enum class WaitingOutlook {
     NEVER,
 }
 
-/** Reports saved for want of a connection, waiting on the phone to go to the server for location history. */
-data class ReportsWaiting(val count: Int, val outlook: WaitingOutlook)
+/**
+ * Reports saved for want of a connection, waiting on the phone to go to the server for location history. [queued] is
+ * every fix the queue holds, the too old ones as well, so a drop in [count] tells whether fixes left the queue or only
+ * aged out in it.
+ */
+data class ReportsWaiting(val count: Int, val outlook: WaitingOutlook, val queued: Int = count)
 
 /**
  * What the queue holds at [nowEpochSec], as the status card and the notification say it: null while it holds no fix
@@ -41,7 +45,7 @@ internal fun reportsWaiting(contents: QueueContents, session: Session, nowEpochS
     val serverUrl = session.serverUrl
     val email = session.email
     val ours = serverUrl != null && email != null && contents.owner == offlineQueueAccount(serverUrl, email)
-    return ReportsWaiting(count, if (ours) WaitingOutlook.WILL_SEND else WaitingOutlook.NEVER)
+    return ReportsWaiting(count, if (ours) WaitingOutlook.WILL_SEND else WaitingOutlook.NEVER, contents.timestamps.size)
 }
 
 /** The reports waiting in [OfflineFixQueue] for the driver signed in, as they change. */
