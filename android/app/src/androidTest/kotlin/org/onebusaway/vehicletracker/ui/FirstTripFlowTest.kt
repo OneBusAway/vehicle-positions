@@ -240,7 +240,7 @@ class FirstTripFlowTest {
                             onReauthRequired = {},
                             viewModel = viewModel {
                                 val ender = TripEnder(tripRepository, trips, geometry, NoReportsService, sessions)
-                                TrackingViewModel(tracking, trips, ender, NoStreetMap, WaitingReports(FileOfflineFixQueue(queueFile), sessions))
+                                TrackingViewModel(tracking, trips, ender, NoStreetMap, WaitingReports(FileOfflineFixQueue(queueFile), sessions, clock))
                             },
                             sentCountTip = viewModel { SentCountTipViewModel(tips, tracking) },
                         )

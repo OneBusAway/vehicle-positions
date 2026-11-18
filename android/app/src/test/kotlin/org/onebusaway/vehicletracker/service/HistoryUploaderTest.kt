@@ -15,7 +15,9 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.onebusaway.vehicletracker.data.FakeOfflineFixQueue
 import org.onebusaway.vehicletracker.data.FileOfflineFixQueue
+import org.onebusaway.vehicletracker.data.MAX_HISTORY_AGE_SEC
 import org.onebusaway.vehicletracker.data.OccupancyStatus
+import org.onebusaway.vehicletracker.data.reportsWaiting
 import org.onebusaway.vehicletracker.data.api.ApiFactory
 import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
 import org.onebusaway.vehicletracker.data.api.TrackerApi
@@ -63,6 +65,29 @@ class HistoryUploaderTest {
         val points = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject.getValue("points").jsonArray
         assertEquals(2, points.size)
         points.forEach { assertFalse(it.jsonObject.containsKey("occupancy_status")) }
+        server.shutdown()
+    }
+
+    // What the waiting count says will send is what goes: both ask tooOldToUpload. Read at one fixed moment, so no
+    // clock tick between queueing the fixes and uploading them can move one across the limit.
+    @Test fun `a fix at the age limit is sent and one a second older dropped, as the count said`() = runTest {
+        val now = 1_000_000L
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"saved":1,"invalid":0}"""))
+        val queue = FakeOfflineFixQueue()
+        queue.add(queuedFix("van-1", timestamp = now - MAX_HISTORY_AGE_SEC - 1))
+        queue.add(queuedFix("van-1", timestamp = now - MAX_HISTORY_AGE_SEC))
+        val uploader = uploaderFor(ApiFactory { "jwt" }.create(server.url("/").toString()), queue)
+        val counted = reportsWaiting(queue.contents.value, signedInDriver, now)?.count
+
+        assertEquals(HistoryUpload.BATCH_SENT, uploader.upload(nowEpochSec = now))
+
+        assertEquals(1, server.requestCount)
+        val points = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject.getValue("points").jsonArray
+        val sent = points.map { it.jsonObject.getValue("timestamp").toString().toLong() }
+        assertEquals("only the fix at the limit", listOf(now - MAX_HISTORY_AGE_SEC), sent)
+        assertEquals("the count said as many", points.size, counted)
+        assertEquals("the older one dropped, not kept", 0, queue.queued.size)
         server.shutdown()
     }
 }

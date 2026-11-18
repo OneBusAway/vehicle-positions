@@ -107,7 +107,8 @@ class OccupancyReportTest {
         val tripRepository = TripRepository(api, trips, DataStoreVehiclePrefsStore(context.vehiclePrefsDataStore), sessions, clock = { 0L })
         val geometry = FileTripGeometryStore(File(context.cacheDir, "occupancy-test-geometry"))
         val ender = TripEnder(tripRepository, trips, geometry, NoService, sessions)
-        val viewModel = TrackingViewModel(TrackingRepository(), trips, ender, NoMapFile, WaitingReports(queue, sessions))
+        val waiting = WaitingReports(queue, sessions, clock = { System.currentTimeMillis() / 1000 })
+        val viewModel = TrackingViewModel(TrackingRepository(), trips, ender, NoMapFile, waiting)
         compose.setContent { TrackingScreen(onTripEnded = {}, onReauthRequired = {}, viewModel = viewModel) }
         compose.waitUntil(TIMEOUT_SEC * 1000) { viewModel.uiState.value.activeTrip != null }
 

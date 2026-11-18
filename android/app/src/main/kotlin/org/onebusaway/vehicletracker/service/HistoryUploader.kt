@@ -10,6 +10,7 @@ import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.data.api.toHistoryPoint
 import org.onebusaway.vehicletracker.data.offlineQueueAccount
+import org.onebusaway.vehicletracker.data.tooOldToUpload
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
@@ -19,12 +20,6 @@ private const val TAG = "HistoryUploader"
 
 /** The most fixes one history upload carries; the server takes at most 500. */
 private const val HISTORY_BATCH = 500
-
-/**
- * How old a queued fix may be and still be uploaded: the server takes a day, less a margin for the
- * phone's clock and the time the upload takes.
- */
-private const val MAX_HISTORY_AGE_SEC = 24 * 3600L - 600L
 
 /** Refusals a history upload would get again however often it were retried. */
 private val PERMANENT_HISTORY_REFUSALS = setOf(400, 403, 404)
@@ -97,7 +92,7 @@ class HistoryUploader @Inject constructor(
             return HistoryUpload.NOT_SIGNED_IN
         }
         var batch = offlineQueue.oldest(HISTORY_BATCH)
-        val expired = batch.takeWhile { nowEpochSec - it.timestamp > MAX_HISTORY_AGE_SEC }.size
+        val expired = batch.takeWhile { tooOldToUpload(it.timestamp, nowEpochSec) }.size
         if (expired > 0) {
             offlineQueue.remove(batch.take(expired))
             batch = offlineQueue.oldest(HISTORY_BATCH)
