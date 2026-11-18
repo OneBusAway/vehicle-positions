@@ -596,7 +596,7 @@ func TestImportConfirm_DriversResult(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, pageText(w))
 	body := pageText(w)
 
-	m := regexp.MustCompile(`select-all">([^<]*)</span>`).FindAllStringSubmatch(body, -1)
+	m := regexp.MustCompile(`class="pw">([^<]*)</span>`).FindAllStringSubmatch(body, -1)
 	require.Len(t, m, 1, "one password, for the one new driver")
 	assert.Regexp(t, driverPasswordPattern, m[0][1])
 	assert.Contains(t, body, `href="/admin/driver-setup?user=100"`)

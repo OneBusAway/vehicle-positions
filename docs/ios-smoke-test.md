@@ -505,8 +505,8 @@ within one two-minute access token from Check 3b.
 
 1. With the trip reporting, deactivate the driver: open `$BASE/admin` in a
    browser and sign in as `admin@test.com` again (the new secret from Check 3b
-   ended that session too), then on **Users** click **Deactivate** on the
-   driver's row and confirm.
+   ended that session too), then on **Drivers and users** click **Deactivate**
+   on the driver's row and confirm.
 
 **Expected outcome:** within about two minutes, when the app's access token
 runs out, the status card is replaced by the **Signed out** card (ink by day,

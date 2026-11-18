@@ -1,6 +1,7 @@
+/* Tailwind is here for its reset and its build. It reads no file for utility classes: every page is
+   written with the components below, so a word in a template or a script can never turn into a
+   stray utility. The few utilities the live map still names are written out at the end of this file. */
 @import "tailwindcss" source(none);
-@source "../templates/**/*.html";
-@source "../static/js/**/*.js";
 
 /* Vehicle Tracker admin: design tokens.
    Colour comes from the driver apps (android .../ui/theme/Color.kt and the iOS colour sets), so the
@@ -36,8 +37,6 @@
   --early: #ba2b23;
   --nodata: #636367;
   --ok-fill: #006600;
-  --late-fill: #0055b3;
-  --early-fill: #a51d17;
   --nodata-fill: #58585c;
   --ok-soft: #e3f4de;
   --late-soft: #e1edfb;
@@ -51,7 +50,6 @@
   --error: #ba1a1a;
   --error-soft: #ffdad6;
   --chart-1: #4c8048;
-  --chart-2: #7a5ea8;
   --chart-neutral: #9aa0a6;
   --map-vehicle-edge: #ffffff;
   --veh-fill: #1f1f1f;
@@ -112,7 +110,6 @@
     --error: #ffb4ab;
     --error-soft: #5c1512;
     --chart-1: #6fa568;
-    --chart-2: #b9a3e0;
     --chart-neutral: #8e918f;
     --map-vehicle-edge: #131314;
     --veh-fill: #e3e3e3;
@@ -155,7 +152,6 @@
   --error: #ffb4ab;
   --error-soft: #5c1512;
   --chart-1: #6fa568;
-  --chart-2: #b9a3e0;
   --chart-neutral: #8e918f;
   --map-vehicle-edge: #131314;
   --veh-fill: #e3e3e3;
@@ -172,35 +168,11 @@
 }
 :root[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.86) saturate(0.5); }
 
+/* Tailwind's own theme: the font its reset gives the page, and none of its palette. No file is read
+   for utilities, so nothing else of its theme would ever reach the built stylesheet. */
 @theme inline {
   --font-sans: "Google Sans Flex", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --color-white: #ffffff;
-  --color-black: #000000;
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-surface-3: var(--surface-3);
-  --color-ink: var(--ink);
-  --color-ink-2: var(--ink-2);
-  --color-ink-3: var(--ink-3);
-  --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
-  --color-primary: var(--primary);
-  --color-on-primary: var(--on-primary);
-  --color-selected: var(--selected);
-  --color-on-selected: var(--on-selected);
-  --color-ok: var(--ok);
-  --color-late: var(--late);
-  --color-early: var(--early);
-  --color-nodata: var(--nodata);
-  --color-warn: var(--warn);
-  --color-warn-soft: var(--warn-soft);
-  --color-error: var(--error);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --color-*: initial;
 }
 
 @layer base {
@@ -246,7 +218,6 @@
 @keyframes grow-y { from { transform: scaleY(0); } }
 @keyframes grow-x { from { transform: scaleX(0); } }
 @keyframes tone { from { background-color: var(--selected); } }
-@keyframes skeleton { 50% { opacity: 0.55; } }
 
 /* Rules one page owns. They come before the shared components, so a component wins a tie. */
 @layer components {
@@ -491,7 +462,7 @@
   .steps-line .the-line .stop { top: 11px; }
   .steps-line .the-line .stop.done { box-shadow: inset 0 0 0 6px var(--primary); }
   .steps-line .the-line .veh { top: 4px; background: var(--primary); color: var(--on-primary); transition: none; }
-  .pw { font: 500 15px/20px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.5px; white-space: nowrap; }
+  .pw { font: 500 15px/20px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.5px; white-space: nowrap; user-select: all; }
   form.card > * { min-width: 0; }
   .drop input { max-width: 100%; font: inherit; color: var(--ink-2); }
   .drop input::file-selector-button { height: 36px; margin-right: 12px; padding: 0 16px; border: 0; border-radius: 18px; background: var(--selected); color: var(--on-selected); font: 500 14px/20px var(--font-sans); cursor: pointer; }
@@ -558,6 +529,7 @@
 }
 
 @layer components {
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border-width: 0; }
   .icon { width: 20px; height: 20px; flex: none; fill: currentColor; }
   .icon-sm { width: 16px; height: 16px; }
   .icon-lg { width: 24px; height: 24px; }
@@ -636,10 +608,8 @@
   .btn-outline:hover { background: var(--surface-2); }
   .btn-plain { color: var(--ink-2); }
   .btn-plain:hover { background: var(--surface-2); color: var(--ink); }
-  .btn-danger { color: var(--error); }
   .btn-danger-fill { background: var(--error); color: var(--surface); }
   .btn-danger-fill:hover { background: color-mix(in srgb, var(--error) 88%, var(--ink)); }
-  .btn-danger:hover { background: color-mix(in srgb, var(--error) 8%, transparent); }
   .btn-sm { height: 32px; padding: 0 12px; border-radius: 16px; font-size: 13px; }
   .btn[disabled], .btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
   .icon-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 20px; background: transparent; color: var(--ink-2); cursor: pointer; position: relative; flex: none; transition: background-color var(--t-out) linear; }
@@ -706,11 +676,8 @@
   .pill-late { background: var(--late-soft); color: var(--late); }
   .pill-early { background: var(--early-soft); color: var(--early); }
   .pill-warn { background: var(--warn-soft); color: var(--warn-text); }
-  .pill-error { background: var(--error-soft); color: var(--error); }
-  .tone-ok { color: var(--ok); }
   .tone-late { color: var(--late); }
   .tone-early { color: var(--early); }
-  .tone-nodata { color: var(--nodata); }
   .tone-warn { color: var(--warn-text); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
   .dot-quiet { background: var(--warn); }
@@ -722,7 +689,6 @@
   .chip[aria-pressed="true"], .chip[aria-current="true"] { background: var(--selected); color: var(--on-selected); box-shadow: none; }
   .chip .n { font-weight: 400; color: var(--ink-3); }
   .chip[aria-pressed="true"] .n { color: var(--on-selected); }
-  .chip-warn { color: var(--warn-text); }
 
   /* Forms */
   .field { display: flex; flex-direction: column; gap: 6px; }
@@ -768,15 +734,9 @@
   .table .strong { font-weight: 500; }
   .table .sub { display: block; font-size: 12px; line-height: 16px; color: var(--ink-3); }
   .table-dense td { height: 44px; }
-  .th-sort { display: inline-flex; align-items: center; gap: 4px; color: inherit; }
   .row-link { color: var(--ink); font-weight: 500; }
   .actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
   .pager { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); }
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
-  .tab { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; color: var(--ink-2); font: 500 14px/20px var(--font-sans); border: 0; background: transparent; cursor: pointer; }
-  .tab:hover { color: var(--ink); text-decoration: none; }
-  .tab[aria-selected="true"], .tab[aria-current="page"] { color: var(--primary); }
-  .tab[aria-selected="true"]::after, .tab[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--primary); }
   .seg { display: inline-flex; padding: 3px; border-radius: 20px; background: var(--surface-2); gap: 2px; }
   .seg > * { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border: 0; border-radius: 16px; background: transparent; color: var(--ink-2); font: 500 13px/18px var(--font-sans); cursor: pointer; white-space: nowrap; }
   .seg > *:hover { text-decoration: none; color: var(--ink); }
@@ -787,7 +747,6 @@
   .empty-title { font: 500 16px/22px var(--font-sans); color: var(--ink); }
   .empty .step-icon { border-radius: 50%; }
   .empty p { margin: 0; max-width: 52ch; }
-  .skeleton { border-radius: 6px; background: var(--surface-3); animation: skeleton 1.4s ease-in-out infinite; }
   .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 8px 8px 16px; border-radius: 12px; background: var(--problem); color: var(--on-problem); font: 500 14px/20px var(--font-sans); box-shadow: var(--shadow-3); }
   .toast .icon { color: var(--amber); }
   .toast.ok .icon { color: #7ee08a; }
@@ -810,11 +769,9 @@
   /* Data marks */
   .stack { display: flex; gap: 2px; height: 8px; }
   .stack > i { height: 100%; border-radius: 4px; min-width: 3px; transform-origin: left center; }
-  .stack-lg { height: 12px; }
   .seg-early { background: var(--early); background-image: repeating-linear-gradient(135deg, transparent 0 3px, rgb(255 255 255 / 0.45) 3px 4.5px); }
   .seg-ok { background: var(--ok); }
   .seg-late { background: var(--late); background-image: repeating-linear-gradient(45deg, transparent 0 3px, rgb(255 255 255 / 0.45) 3px 4.5px); }
-  .seg-unknown { background: var(--line-strong); }
   .seg-warn { background: var(--warn); }
   .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font: 400 12px/16px var(--font-sans); color: var(--ink-2); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -831,12 +788,10 @@
   .chart .line { fill: none; stroke: var(--tone, var(--chart-1)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .chart .line-prev { fill: none; stroke: var(--chart-neutral); stroke-width: 1.5; stroke-dasharray: 4 4; }
   .chart .area { fill: var(--primary); opacity: 0.1; }
-  .chart .band { fill: var(--chart-neutral); opacity: 0.16; }
   .chart .bar { fill: var(--chart-1); }
   .chart .bar-warn { fill: var(--warn); }
   .chart .pt { fill: var(--surface); stroke: var(--tone, var(--chart-1)); stroke-width: 2; }
   .chart .hit { fill: transparent; }
-  .chart .cross { stroke: var(--outline); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0; }
   .tip { position: absolute; z-index: 40; pointer-events: none; padding: 8px 10px; border-radius: 8px; background: var(--problem); color: var(--on-problem); font: 400 12px/16px var(--font-sans); box-shadow: var(--shadow-2); white-space: nowrap; opacity: 0; transition: opacity var(--t-out) linear; }
   .tip b { font-weight: 500; display: block; }
   .tip.show { opacity: 1; }
@@ -873,8 +828,7 @@
   .veh-marker.quiet svg { fill: #fff; }
   .veh-marker.quiet { background: var(--nodata-fill); border-color: var(--amber); box-shadow: 0 0 0 2px #1f1f1f, 0 2px 6px rgb(0 0 0 / 0.3); }
   .veh-marker.quiet::after { content: ""; position: absolute; right: -4px; top: -4px; width: 11px; height: 11px; border-radius: 50%; background: var(--amber); border: 2px solid #1f1f1f; box-sizing: border-box; }
-  .veh-marker.selected { outline: 6px solid color-mix(in srgb, var(--primary) 34%, transparent); }
-  .veh-marker.selected { width: 38px; height: 38px; margin: -4px; }
+  .veh-marker.selected { width: 38px; height: 38px; margin: -4px; outline: 6px solid color-mix(in srgb, var(--primary) 34%, transparent); }
   .veh-marker.selected svg { width: 20px; height: 20px; }
   .leaflet-tile-pane { filter: saturate(0.62) contrast(0.94) brightness(1.03); }
   .stop-marker { width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid #6b6b6b; box-sizing: border-box; }
@@ -913,7 +867,6 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .the-line .veh { transition: none !important; }
-    .skeleton { animation: none; }
   }
 
   /* Narrow desktop (a small laptop, a tablet): the rail is icons, the least important columns go. */
@@ -980,84 +933,110 @@
 /* Leaflet's own stylesheet is not in a layer, and unlayered rules beat layered ones whatever their
    specificity. So what restyles Leaflet sits outside the layers too, and admin.css loads after leaflet.css. */
 .leaflet-container { font-family: var(--font-sans); background: var(--surface-3); }
-.leaflet-container .leaflet-tile { filter: none; }
 .leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 84%, transparent); color: var(--ink-3); font-size: 11px; }
 .leaflet-container .leaflet-control-attribution a { color: var(--ink-2); }
-.leaflet-container .leaflet-bar { border: 0; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-2); }
-.leaflet-container .leaflet-bar a { width: 40px; height: 40px; line-height: 40px; background: var(--surface); color: var(--ink-2); border-bottom-color: var(--line); }
 .leaflet-container .leaflet-tooltip { background: var(--problem); color: var(--on-problem); border: 0; border-radius: 8px; padding: 5px 8px; font: 500 12px/16px var(--font-sans); box-shadow: var(--shadow-2); }
 .leaflet-container .leaflet-tooltip::before { display: none; }
 
-/* What the pages not yet redone still use. Each rule leaves with its page; the marker and popup rules
-   stay until the live map is redone. */
-@theme {
-  --font-display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --shadow-soft: 0 24px 70px rgba(15, 23, 42, 0.16);
-}
-
-:root {
-  --panel: rgba(255, 255, 255, 0.8);
-  --panel-strong: rgba(255, 255, 255, 0.94);
-  --text-strong: #0f172a;
-  --text-soft: #5b6473;
-  --sidebar-top: #0b1728;
-  --sidebar-bottom: #13233d;
-  --teal: #0f766e;
+/* What the live map still uses until it is redone: its panels, its popup and its marker. Its markup
+   and its script are written with Tailwind's utility names and are left as they are for now, so the
+   utilities they name are written out here with Tailwind's own values, in the layer Tailwind puts
+   them in. That is smaller than having Tailwind generate them, which brings its variables and
+   property rules along for one page. All of it leaves with that page. */
+@layer utilities {
+  .pointer-events-auto { pointer-events: auto; }
+  .pointer-events-none { pointer-events: none; }
+  .absolute { position: absolute; }
+  .relative { position: relative; }
+  .inset-0 { inset: 0; }
+  .inset-x-0 { inset-inline: 0; }
+  .top-4 { top: 1rem; }
+  .bottom-4 { bottom: 1rem; }
+  .left-4 { left: 1rem; }
+  .z-\[500\] { z-index: 500; }
+  .mb-3 { margin-bottom: 0.75rem; }
+  .flex { display: flex; }
+  .grid { display: grid; }
+  .hidden { display: none; }
+  .inline-flex { display: inline-flex; }
+  .h-2 { height: 0.5rem; }
+  .h-2\.5 { height: 0.625rem; }
+  .h-7 { height: 1.75rem; }
+  .h-8 { height: 2rem; }
+  .w-2 { width: 0.5rem; }
+  .w-2\.5 { width: 0.625rem; }
+  .w-8 { width: 2rem; }
+  .w-px { width: 1px; }
+  .min-w-0 { min-width: 0; }
+  .flex-1 { flex: 1; }
+  .shrink-0 { flex-shrink: 0; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .justify-center { justify-content: center; }
+  .gap-1\.5 { gap: 0.375rem; }
+  .gap-3 { gap: 0.75rem; }
+  .gap-4 { gap: 1rem; }
+  .gap-5 { gap: 1.25rem; }
+  :where(.space-y-2 > :not(:last-child)) { margin-block-end: 0.5rem; }
+  :where(.space-y-4 > :not(:last-child)) { margin-block-end: 1rem; }
+  .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .overflow-hidden { overflow: hidden; }
+  .rounded-lg { border-radius: 0.5rem; }
+  .rounded-xl { border-radius: 0.75rem; }
+  .rounded-2xl { border-radius: 1rem; }
+  .rounded-\[20px\] { border-radius: 20px; }
+  .rounded-\[24px\] { border-radius: 24px; }
+  .rounded-full { border-radius: 9999px; }
+  .border { border-style: solid; border-width: 1px; }
+  .border-white\/70 { border-color: rgb(255 255 255 / 0.7); }
+  .border-white\/80 { border-color: rgb(255 255 255 / 0.8); }
+  .bg-emerald-500 { background-color: oklch(69.6% 0.17 162.48); }
+  .bg-slate-50\/80 { background-color: oklch(98.4% 0.003 247.858 / 0.8); }
+  .bg-slate-200 { background-color: oklch(92.9% 0.013 255.508); }
+  .bg-teal-600 { background-color: oklch(60% 0.118 184.704); }
+  .p-2\.5 { padding: 0.625rem; }
+  .p-4 { padding: 1rem; }
+  .px-4 { padding-inline: 1rem; }
+  .px-5 { padding-inline: 1.25rem; }
+  .py-2\.5 { padding-block: 0.625rem; }
+  .py-3 { padding-block: 0.75rem; }
+  .text-center { text-align: center; }
+  .text-2xl { font-size: 1.5rem; line-height: calc(2 / 1.5); }
+  .text-sm { font-size: 0.875rem; line-height: calc(1.25 / 0.875); }
+  .text-xs { font-size: 0.75rem; line-height: calc(1 / 0.75); }
+  .text-\[10px\] { font-size: 10px; }
+  .font-medium { font-weight: 500; }
+  .font-semibold { font-weight: 600; }
+  .font-bold { font-weight: 700; }
+  .tracking-\[0\.18em\] { letter-spacing: 0.18em; }
+  .text-emerald-700 { color: oklch(50.8% 0.118 165.612); }
+  .text-slate-400 { color: oklch(70.4% 0.04 256.788); }
+  .text-slate-500 { color: oklch(55.4% 0.046 257.417); }
+  .text-slate-600 { color: oklch(44.6% 0.043 257.281); }
+  .text-slate-700 { color: oklch(37.2% 0.044 257.287); }
+  .text-slate-900 { color: oklch(20.8% 0.042 265.755); }
+  .text-white { color: #fff; }
+  .uppercase { text-transform: uppercase; }
+  .shadow-md { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+  .shadow-lg { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+  .shadow-xl { box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); }
+  @media (min-width: 64rem) {
+    .lg\:grid-cols-\[1fr_280px\] { grid-template-columns: 1fr 280px; }
+    .lg\:p-5 { padding: 1.25rem; }
+  }
 }
 
 .glass-panel {
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.8);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
 }
 
-.page-shell {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.86));
-  box-shadow:
-    0 18px 48px rgba(15, 23, 42, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
-}
-
-.sidebar-shell {
-  background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.14), transparent 18rem),
-    linear-gradient(180deg, var(--sidebar-top), var(--sidebar-bottom));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 42px rgba(8, 15, 30, 0.36);
-}
-
-.sidebar-link {
-  position: relative;
-  overflow: hidden;
-}
-
-.sidebar-link::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, rgba(14, 165, 233, 0.16), rgba(45, 212, 191, 0.08));
-  opacity: 0;
-  transition: opacity 160ms ease;
-}
-
-.sidebar-link:hover::before,
-.sidebar-link[data-active="true"]::before {
-  opacity: 1;
-}
-
 .table-card {
-  background: var(--panel-strong);
+  background: rgba(255, 255, 255, 0.94);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
-}
-
-.stat-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 249, 255, 0.9));
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.07);
 }
 
 .leaflet-popup-content-wrapper {
@@ -1091,18 +1070,18 @@
 .map-popup__title {
   font-size: 1rem;
   font-weight: 700;
-  color: var(--text-strong);
+  color: #0f172a;
 }
 
 .map-popup__meta {
   display: grid;
   gap: 0.55rem;
   font-size: 0.84rem;
-  color: var(--text-soft);
+  color: #5b6473;
 }
 
 .map-popup__meta strong {
-  color: var(--text-strong);
+  color: #0f172a;
 }
 
 .bus-marker {
@@ -1152,40 +1131,4 @@
     transform: scale(1.3);
     opacity: 0;
   }
-}
-
-.login-body {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), transparent 28rem),
-    linear-gradient(180deg, #eef6ff 0%, #dceaf6 100%);
-  color: #0f172a;
-}
-
-.login-card {
-  margin-left: auto;
-  margin-right: auto;
-  display: flex;
-  min-height: 100vh;
-  max-width: 28rem;
-  flex-direction: column;
-  justify-content: center;
-  padding-left: 1rem;
-  padding-right: 1rem;
-  padding-top: 2rem;
-  padding-bottom: 2rem;
-}
-
-.login-sub {
-  color: #475569;
-}
-
-.alert {
-  font-size: 0.875rem;
-}
-
-.alert-error {
-  border: 1px solid #fecdd3;
-  background: #fff1f2;
-  color: #be123c;
 }

@@ -36,7 +36,7 @@
         <label class="label" for="password">{{if .IsEdit}}New password <span class="muted" style="font-weight:400">(leave blank to keep the current one)</span>{{else}}Password{{end}}</label>
         <input class="input" id="password" name="password" type="password"{{if not .IsEdit}} required{{end}} autocomplete="new-password"{{if eq .ErrorField "password"}} aria-invalid="true" aria-describedby="password-err password-help"{{else}} aria-describedby="password-help"{{end}}>
         {{if eq .ErrorField "password"}}<div class="field-error" id="password-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
-        <div class="help" id="password-help">At least {{$.MinPasswordLength}} characters.{{if .IsEdit}} Changing it ends the account's sessions, so the driver signs in again.{{end}}</div>
+        <div class="help" id="password-help">At least {{$.MinPasswordLength}} characters.{{if .IsEdit}} A session that is already open keeps working until it expires. To lock someone out now, deactivate the account.{{end}}</div>
       </div>
       <div class="field">
         <label class="label" for="role">Role</label>

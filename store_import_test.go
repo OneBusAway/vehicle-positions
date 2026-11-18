@@ -429,7 +429,7 @@ func TestAdminImport_DatabaseRoundTrip(t *testing.T) {
 	require.Equal(t, http.StatusOK, preview.Code, pageText(preview))
 	w = confirmImport(t, ui, "drivers", confirmForm(t, preview.Body.String()))
 	require.Equal(t, http.StatusOK, w.Code, pageText(w))
-	m := regexp.MustCompile(`select-all">([^<]*)</span>`).FindStringSubmatch(w.Body.String())
+	m := regexp.MustCompile(`class="pw">([^<]*)</span>`).FindStringSubmatch(w.Body.String())
 	require.NotNil(t, m, "the result page shows the new driver's password")
 
 	user, err := store.GetUserByEmail(context.Background(), "imp-ana@example.org")

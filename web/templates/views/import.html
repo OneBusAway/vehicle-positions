@@ -35,7 +35,7 @@
         {{range $n, $row := .Done}}
         <tr>
           <td class="c-main strong" style="overflow-wrap:anywhere">{{index .Cells 0}}</td>
-          {{if eq $.Kind.Name "drivers"}}<td data-label="Password">{{if .Password}}<span id="pw-{{$n}}" class="pw select-all">{{.Password}}</span> <button class="btn btn-sm js-only" type="button" data-copy-from="pw-{{$n}}">{{template "icon-sm" "content_copy"}}Copy</button>{{else}}<span class="muted">unchanged</span>{{end}}</td>{{end}}
+          {{if eq $.Kind.Name "drivers"}}<td data-label="Password">{{if .Password}}<span id="pw-{{$n}}" class="pw">{{.Password}}</span> <button class="btn btn-sm js-only" type="button" data-copy-from="pw-{{$n}}">{{template "icon-sm" "content_copy"}}Copy</button>{{else}}<span class="muted">unchanged</span>{{end}}</td>{{end}}
           <td class="c-side">{{template "import-status" .Status}}</td>
           {{range $i, $cell := .Cells}}{{if $i}}<td{{if $cell}} data-label="{{(index $.Kind.Columns $i).Name}}"{{end}}>{{$cell}}</td>{{end}}{{end}}
           <td class="muted">{{.Changes}}{{if and .Changes .Note}}; {{end}}{{.Note}}</td>

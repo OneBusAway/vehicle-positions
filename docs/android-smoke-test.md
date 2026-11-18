@@ -637,7 +637,7 @@ held back by a slow refresh can arrive close behind the next one.)
 
 3. Deactivate the driver: open `$BASE/admin` in a browser and sign in as
    `admin@test.com` again (the new secret ended that session too), then on
-   **Users** click **Deactivate** on the driver's row and confirm.
+   **Drivers and users** click **Deactivate** on the driver's row and confirm.
 
 **Expected outcome:** within about two minutes, when the access token on the
 phone runs out, **Signed out** takes the status card's place: "Reports have

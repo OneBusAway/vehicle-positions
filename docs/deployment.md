@@ -1266,10 +1266,10 @@ It fills in your server's address from the address you opened the page at,
 which behind the nginx site in section 7 comes out as `https://` once
 `TRUST_PROXY_HEADERS=true` is set (section 7.3). Change it there if drivers'
 phones reach the server at another address. **Print the sheet** prints one
-page, on A4 or Letter, that takes a new driver through installing the app,
-scanning the code and signing in. On the **Users** page, **Setup sheet** on an
-active driver's row prints the same sheet with that driver's name and email on
-it. Neither sheet has a password on it, and the link holds only the server,
+A5 page, which A4 and Letter both hold, that takes a new driver through
+installing the app, scanning the code and signing in. On the **Drivers and
+users** page, **Setup sheet** on an active driver's row prints the same sheet
+with that driver's name and email on it. Neither sheet has a password on it, and the link holds only the server,
 because that is all the apps take from a link.
 
 A setup link looks like this:
