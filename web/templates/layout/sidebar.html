@@ -1,93 +1,21 @@
 {{define "sidebar"}}
-<aside class="sidebar-shell glass-panel flex shrink-0 print:hidden flex-col overflow-hidden rounded-[28px] border border-white/10 text-white lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)] lg:w-72">
-  <div class="border-b border-white/10 px-5 py-5">
-    <div class="flex items-center gap-3">
-      <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl shadow-lg shadow-cyan-950/30">
-        &#128652;
-      </div>
-      <div>
-        <p class="display-font text-lg font-bold tracking-tight">Transit Tracker</p>
-        <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Fleet Operations</p>
-      </div>
-    </div>
-  </div>
+<nav class="rail" aria-label="Main">
+  <a class="rail-brand" href="/admin">{{template "brand-mark"}}<span class="rail-label">Vehicle Tracker</span></a>
+  {{range .Shell.Nav}}
+  <div class="rail-group">{{.Title}}</div>
+  {{range .Items}}
+  <a class="rail-item" href="{{.Href}}"{{if eq .Page $.Page}} aria-current="page"{{end}} title="{{.Label}}"{{if .Alerts}} aria-label="{{$.Shell.AlertsLabel}}" data-alert-link{{end}}>{{template "icon" .Icon}}<span class="rail-label">{{.Label}}</span>{{if .Alerts}}<span class="count" id="alert-count" data-alert-count{{if not $.Shell.AlertCount}} hidden{{end}}>{{with $.Shell.AlertCount}}{{.}}{{end}}</span>{{end}}</a>
+  {{end}}
+  {{end}}
+  <div class="rail-foot"><button class="rail-item js-only" type="button" data-rail-toggle title="Fold or open the menu">{{template "icon" "menu_open"}}<span class="rail-label">Fold menu</span></button></div>
+</nav>
+{{end}}
 
-  <nav class="flex-1 space-y-1.5 p-3 text-sm">
-    <a href="/admin/map"
-       data-active="{{if eq .Page "map"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "map"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128506;</span>
-      Live Map
-    </a>
-    <a href="/admin/dashboard"
-       data-active="{{if eq .Page "dashboard"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "dashboard"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128200;</span>
-      Dashboard
-    </a>
-    <a href="/admin/alerts"
-       data-active="{{if eq .Page "alerts"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "alerts"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128276;</span>
-      Alerts
-      {{if .AlertCount}}<span id="alert-count" class="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{{.AlertCount}}</span>{{end}}
-    </a>
-    <a href="/admin/vehicles"
-       data-active="{{if eq .Page "vehicles"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "vehicles"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128652;</span>
-      Vehicles
-    </a>
-    <a href="/admin/users"
-       data-active="{{if eq .Page "users"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "users"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128101;</span>
-      Users
-    </a>
-    <a href="/admin/driver-setup"
-       data-active="{{if eq .Page "driver-setup"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "driver-setup"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128241;</span>
-      Driver setup
-    </a>
-    <a href="/admin/trips"
-       data-active="{{if eq .Page "trips"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "trips"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128339;</span>
-      Trips
-    </a>
-    <a href="/admin/reports"
-       data-active="{{if eq .Page "reports"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "reports"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128202;</span>
-      Reports
-    </a>
-    <a href="/admin/api-keys"
-       data-active="{{if eq .Page "api-keys"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "api-keys"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128273;</span>
-      Feed API keys
-    </a>
-    <a href="/admin/rider"
-       data-active="{{if eq .Page "rider"}}true{{else}}false{{end}}"
-       class="sidebar-link flex items-center gap-3 rounded-2xl px-3.5 py-3 transition-colors
-              {{if eq .Page "rider"}}bg-white/10 text-white ring-1 ring-white/10{{else}}text-slate-300 hover:bg-white/5 hover:text-white{{end}}">
-      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-base">&#128694;</span>
-      Rider mode
-    </a>
-  </nav>
-
-  <div class="border-t border-white/10 px-5 py-4">
-    <p class="text-xs text-slate-500">v0.1.0</p>
-  </div>
-</aside>
+{{define "tabbar"}}
+<nav class="tabbar" aria-label="Main">
+  <a href="/admin/map"{{if eq .Page "map"}} aria-current="page"{{end}}><span class="icon-wrap">{{template "icon" "map"}}</span>Live map</a>
+  <a href="/admin/alerts"{{if eq .Page "alerts"}} aria-current="page"{{end}} aria-label="{{.Shell.AlertsLabel}}" data-alert-link><span class="icon-wrap">{{template "icon" "notifications"}}<span class="count" data-alert-count{{if not .Shell.AlertCount}} hidden{{end}}>{{with .Shell.AlertCount}}{{.}}{{end}}</span></span>Alerts</a>
+  <a href="/admin/dashboard"{{if eq .Page "dashboard"}} aria-current="page"{{end}}><span class="icon-wrap">{{template "icon" "space_dashboard"}}</span>Overview</a>
+  <a href="/admin/more"{{if eq .Page "more"}} aria-current="page"{{end}}><span class="icon-wrap">{{template "icon" "menu"}}</span>More</a>
+</nav>
 {{end}}

@@ -264,7 +264,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		{"vehicles", "/admin/vehicles", "New vehicle"},
 		{"users", "/admin/users", "New user"},
 		{"trips", "/admin/trips", "No trips found."},
-		{"map", "/admin/map", "Live Map"},
+		{"map", "/admin/map", "Live map"},
 		{"api keys", "/admin/api-keys", "No feed API keys yet."},
 	}
 	for _, tc := range cases {
@@ -668,7 +668,7 @@ func TestVehiclesPageInvalidPageFallsBack(t *testing.T) {
 		t.Run("page="+page, func(t *testing.T) {
 			body := getAdminPage(t, mux, "/admin/vehicles?page="+page)
 			assert.Contains(t, body, "Bus 001", "an invalid page must render page 1")
-			assert.Contains(t, body, "Page 1")
+			assert.Contains(t, body, "shown, page 1")
 		})
 	}
 }
@@ -1103,7 +1103,7 @@ func TestUsersPageInvalidPageFallsBack(t *testing.T) {
 		t.Run("page="+page, func(t *testing.T) {
 			body := getAdminPage(t, mux, "/admin/users?page="+page)
 			assert.Contains(t, body, "Driver 001", "an invalid page must render page 1")
-			assert.Contains(t, body, "Page 1")
+			assert.Contains(t, body, "shown, page 1")
 		})
 	}
 }

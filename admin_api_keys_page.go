@@ -70,6 +70,7 @@ func (ui *adminUI) renderAPIKeys(w http.ResponseWriter, r *http.Request, status 
 		"Error":      form.Error,
 		"NewKey":     form.NewKey,
 		"NewKeyName": form.NewKeyName,
+		"Shown":      len(rows),
 		"PageNum":    page,
 		"HasMore":    hasMore,
 		"PrevURL":    apiKeysPageURL(page - 1),

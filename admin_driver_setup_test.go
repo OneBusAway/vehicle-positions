@@ -84,8 +84,8 @@ func requestDriverSetup(t *testing.T, ui *adminUI, target string, header http.He
 var (
 	setupLinkPattern   = regexp.MustCompile(`obavehicletracker://[^<"\s]*`)
 	serverInputPattern = regexp.MustCompile(`<input id="server" name="server"[^>]* value="([^"]*)"`)
-	qrViewBoxPattern   = regexp.MustCompile(`<svg [^>]*viewBox="0 0 (\d+) (\d+)"`)
-	qrPathPattern      = regexp.MustCompile(`<path fill="#000" d="([^"]*)"`)
+	qrViewBoxPattern   = regexp.MustCompile(`<svg [^>]*viewBox="0 0 (\d+) (\d+)"[^>]* aria-label="` + qrLabel + `"`)
+	qrPathPattern      = regexp.MustCompile(`<rect width="\d+" height="\d+" fill="#fff"/><path fill="#000" d="([^"]*)"`)
 	qrRunPattern       = regexp.MustCompile(`M(\d+) (\d+)h(\d+)v1h-(\d+)z`)
 )
 
@@ -163,7 +163,7 @@ func TestDriverSetupPage_RequiresAdminSession(t *testing.T) {
 	t.Run("admin", func(t *testing.T) {
 		w := requestDriverSetup(t, ui, "/admin/driver-setup", nil)
 		require.Equal(t, http.StatusOK, w.Code)
-		assert.Regexp(t, `href="/admin/driver-setup"\s+data-active="true"`, w.Body.String(), "the sidebar must mark Driver setup as the page open")
+		assert.Equal(t, railOpen, railLink(w.Body.String(), "/admin/driver-setup"), "the menu must mark Driver setup as the page open")
 	})
 }
 
@@ -265,7 +265,7 @@ func TestDriverSetupPage_RefusesAddress(t *testing.T) {
 			assert.Contains(t, body, tc.want)
 			assert.Equal(t, tc.server, pageServerInput(t, body), "the field keeps what was typed so it can be fixed")
 			assert.Empty(t, pageSetupLinks(body), "no link for an address the apps refuse")
-			assert.NotContains(t, body, "<svg", "no QR code for an address the apps refuse")
+			assert.NotContains(t, body, qrLabel, "no QR code for an address the apps refuse")
 		})
 	}
 }

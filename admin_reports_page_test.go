@@ -241,7 +241,7 @@ func TestReportsPage_SignedIn(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	body := rec.Body.String()
 	assert.Contains(t, body, "<title>Reports")
-	assert.Regexp(t, `href="/admin/reports"\s+data-active="true"`, body, "the sidebar marks Reports as the page open")
+	assert.Equal(t, railOpen, railLink(body, "/admin/reports"), "the menu marks Analytics as the page open")
 	assert.Contains(t, body, "1 Straight")
 	assert.Contains(t, body, "64.3%")
 

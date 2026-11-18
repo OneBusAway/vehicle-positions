@@ -308,6 +308,13 @@
     .login-form { padding-top: 20px; }
   }
 
+  /* The whole menu as a page: the phone's More tab */
+  .more-group { margin-bottom: 12px; }
+  .more-group .card-head { min-height: 44px; }
+  .more-group h2 { font: 400 13px/18px var(--font-sans); color: var(--ink-3); }
+  .line-row.more-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 14px; min-height: 56px; font: 500 16px/22px var(--font-sans); }
+  button.more-row { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: transparent; text-align: left; cursor: pointer; }
+
   /* Overview */
   .ov-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
   .ov-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -429,9 +436,13 @@
   .rail-item[aria-current="page"] { background: var(--selected); color: var(--on-selected); }
   .rail-item .count { margin-left: auto; }
   .rail-foot { margin-top: auto; padding-top: 8px; }
+  button.rail-item { border: 0; background: transparent; width: 100%; cursor: pointer; }
+  .brand-mark { display: block; flex: none; width: 36px; height: 36px; border-radius: 9px; overflow: hidden; background: linear-gradient(#73c144, #489437); }
+  .brand-mark svg { display: block; width: 100%; height: 100%; }
+  .brand-mark-sm { width: 32px; height: 32px; border-radius: 8px; }
   .shell[data-rail="folded"] { --rail: 72px; }
   .shell[data-rail="folded"] .rail { align-items: center; }
-  .shell[data-rail="folded"] .rail-label, .shell[data-rail="folded"] .rail-brand span { display: none; }
+  .shell[data-rail="folded"] .rail-label { display: none; }
   .shell[data-rail="folded"] .rail-group { height: 1px; padding: 0; margin: 9px 2px; background: var(--line); font-size: 0; align-self: stretch; }
   .shell[data-rail="folded"] .rail-item { width: 48px; justify-content: center; padding: 0; }
   .shell[data-rail="folded"] .rail-item .count { position: absolute; right: 2px; top: 1px; margin: 0; }
@@ -452,7 +463,7 @@
   .pulse:hover { text-decoration: none; background: var(--surface-2); }
   .pulse b { font-weight: 500; color: var(--ink); }
   .pulse-sep { width: 1px; height: 14px; background: var(--line); }
-  .pulse-q { display: inline-flex; align-items: center; gap: 8px; }
+  .pulse-q, .pulse-counts { display: inline-flex; align-items: center; gap: 8px; }
   .pulse[data-known="0"] b, .pulse[data-known="0"] .pulse-q, .pulse[data-known="0"] .pulse-sep { display: none; }
   .pulse-mark { width: 18px; height: 18px; flex: none; color: var(--ok); }
   .pulse-mark path { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
@@ -490,6 +501,11 @@
   .count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--warn); color: var(--surface); font: 600 11px/1 var(--font-sans); }
   .icon-btn .count { position: absolute; right: 2px; top: 2px; }
   .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--selected); color: var(--on-selected); font: 500 13px/1 var(--font-sans); flex: none; }
+  button.avatar { border: 0; cursor: pointer; }
+  .account-menu { position: fixed; inset: 60px 16px auto auto; margin: 0; padding: 8px; border: 0; width: 240px; color: var(--ink); }
+  .account-who { padding: 8px 12px 10px; }
+  .theme-mark { width: 18px; height: 18px; margin: 1px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 2px currentColor; background: linear-gradient(90deg, currentColor 50%, transparent 0); }
+  .theme-mark-lg { width: 20px; height: 20px; margin: 2px; }
   .kbd { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font: 500 12px/1 ui-monospace, Menlo, Consolas, monospace; }
 
   /* Surfaces */
@@ -736,7 +752,7 @@
   @media (min-width: 768px) and (max-width: 1199px) {
     .shell { --rail: 72px; }
     .shell .rail { align-items: center; }
-    .shell .rail-label, .shell .rail-brand span, .shell .rail-foot { display: none; }
+    .shell .rail-label, .shell .rail-foot { display: none; }
     .shell .rail-group { height: 1px; padding: 0; margin: 9px 2px; background: var(--line); font-size: 0; align-self: stretch; }
     .shell .rail-item { width: 48px; justify-content: center; padding: 0; }
     .shell .rail-item .count { position: absolute; right: 2px; top: 1px; margin: 0; }

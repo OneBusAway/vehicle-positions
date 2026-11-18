@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -86,27 +85,15 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, newAlertRow(a, ui.alerts.settings))
 	}
 
-	ui.renderAdmin(w, r, http.StatusOK, "alerts.html", map[string]interface{}{
+	ui.renderAdminWithAlerts(w, r, http.StatusOK, "alerts.html", map[string]interface{}{
 		"Title":            "Alerts",
 		"Page":             "alerts",
 		"Alerts":           rows,
-		"AlertCount":       len(rows),
 		"QuietAfter":       humanizeDuration(ui.alerts.settings.quietAfter),
 		"StoppedAfter":     humanizeDuration(ui.alerts.settings.stoppedAfter),
 		"StoppedRadius":    fmt.Sprintf("%.0f m", stoppedRadius),
 		"OffRouteDistance": fmt.Sprintf("%.0f m", ui.alerts.settings.offRouteDistance),
 		"OffRouteAfter":    humanizeDuration(ui.alerts.settings.offRouteAfter),
 		"NotStartedAfter":  humanizeDuration(ui.alerts.settings.notStartedAfter),
-	})
-}
-
-// alertCount is the number on the sidebar's Alerts badge. A badge is not worth
-// failing a page over, so an error is logged and the badge left off.
-func (ui *adminUI) alertCount(ctx context.Context) int {
-	alerts, err := ui.alerts.list(ctx, time.Now())
-	if err != nil {
-		slog.Error("sidebar: list alerts", "error", err)
-		return 0
-	}
-	return len(alerts)
+	}, alerts)
 }

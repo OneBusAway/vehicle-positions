@@ -146,6 +146,7 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 	data["Timezone"] = loc.String()
 	data["Status"] = rideStatus
 	data["List"] = rows
+	data["Shown"] = len(rows)
 	data["PageNum"] = page
 	data["HasMore"] = hasMore
 	data["PrevURL"] = riderPageURL(rideStatus, page-1)

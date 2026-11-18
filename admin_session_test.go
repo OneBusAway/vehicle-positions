@@ -81,7 +81,7 @@ func TestFlashRoundTrip(t *testing.T) {
 	req.AddCookie(c)
 	w2 := httptest.NewRecorder()
 	msg := takeFlash(w2, req)
-	assert.Equal(t, "Vehicle created.", msg)
+	assert.Equal(t, flash{Text: "Vehicle created."}, msg)
 	// clearing set-cookie present
 	require.NotEmpty(t, w2.Result().Cookies())
 	assert.Equal(t, -1, w2.Result().Cookies()[0].MaxAge)
@@ -89,7 +89,7 @@ func TestFlashRoundTrip(t *testing.T) {
 	// unknown code renders nothing
 	req3 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req3.AddCookie(&http.Cookie{Name: flashCookieName, Value: "<script>x</script>"})
-	assert.Equal(t, "", takeFlash(httptest.NewRecorder(), req3))
+	assert.Zero(t, takeFlash(httptest.NewRecorder(), req3))
 }
 
 // TestAdminCookiePath_RejectsRevokedToken is the divergence guard from the

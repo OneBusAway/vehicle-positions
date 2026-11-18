@@ -88,6 +88,10 @@ func newDriverSetup(server string) (driverSetup, error) {
 	}, nil
 }
 
+// qrLabel names the QR code for a screen reader. It is fixed text, so qrSVG
+// may write it into the SVG.
+const qrLabel = "QR code of the setup link"
+
 // qrSVG draws content as a QR code: black modules on a white square, with the
 // four-module margin scanners need around the code. The viewBox counts
 // modules, so the code stays sharp at any size on screen or paper. Medium
@@ -104,7 +108,7 @@ func qrSVG(content string) (template.HTML, error) {
 	size := len(bitmap)
 
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" shape-rendering="crispEdges" role="img" aria-label="QR code of the setup link">`, size, size)
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" shape-rendering="crispEdges" role="img" aria-label="%s">`, size, size, qrLabel)
 	fmt.Fprintf(&b, `<rect width="%d" height="%d" fill="#fff"/><path fill="#000" d="`, size, size)
 	// One subpath per run of dark modules in a row.
 	for y, row := range bitmap {

@@ -33,6 +33,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 		"health.html",
 		"import.html",
 		"map.html",
+		"more.html",
 		"reports.html",
 		"rider.html",
 		"trips.html",

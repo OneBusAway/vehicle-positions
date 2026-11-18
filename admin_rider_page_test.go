@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -330,7 +329,7 @@ func TestRiderPage_Paging(t *testing.T) {
 	require.Len(t, page2, 1)
 	assert.Contains(t, page2[0], "trip-050")
 	assert.Contains(t, body, `href="/admin/rider?page=1&amp;status=ended"`)
-	assert.NotContains(t, body, "Next &rarr;")
+	assert.NotContains(t, body, ">Next<")
 
 	assert.Equal(t, []string{
 		fmt.Sprintf("ended limit=%d offset=0", adminPageSize+1),
@@ -429,18 +428,11 @@ func TestRiderPage_Errors(t *testing.T) {
 	}
 }
 
-var riderSidebarLink = regexp.MustCompile(`href="/admin/rider"\s+data-active="(true|false)"`)
-
 func TestRiderPage_SidebarEntry(t *testing.T) {
 	mux, _ := newRiderPageMux(t, riderOff{}, &recordingRideLister{}, nil)
 
-	link := riderSidebarLink.FindStringSubmatch(getAdminPage(t, mux, "/admin/health"))
-	require.NotNil(t, link, "every admin page links to Rider mode, on or off")
-	assert.Equal(t, "false", link[1])
-
-	link = riderSidebarLink.FindStringSubmatch(getAdminPage(t, mux, "/admin/rider"))
-	require.NotNil(t, link)
-	assert.Equal(t, "true", link[1], "the entry is marked on its own page")
+	assert.Equal(t, railLinked, railLink(getAdminPage(t, mux, "/admin/health"), "/admin/rider"), "every admin page links to Rider mode, on or off")
+	assert.Equal(t, railOpen, railLink(getAdminPage(t, mux, "/admin/rider"), "/admin/rider"), "the entry is marked on its own page")
 }
 
 // TestRiderPage_ServedFromTheRiderService drives the page through newHandler,

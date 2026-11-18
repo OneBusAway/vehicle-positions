@@ -148,6 +148,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.HandleFunc("POST /admin/logout", ui.logout)
 	mux.HandleFunc("GET /admin", ui.rootRedirect)
 	mux.HandleFunc("GET /admin/{$}", ui.rootRedirect)
+	mux.Handle("GET /admin/more", protect(http.HandlerFunc(ui.morePage)))
 	mux.Handle("GET /admin/dashboard", protect(http.HandlerFunc(ui.dashboardPage)))
 	mux.Handle("GET /admin/map", protect(http.HandlerFunc(ui.mapPage)))
 	mux.Handle("GET /admin/alerts", protect(http.HandlerFunc(ui.alertsPage)))
@@ -286,15 +287,19 @@ func (ui *adminUI) logout(w http.ResponseWriter, r *http.Request) {
 
 // renderAdmin renders an admin page through the shared base.html layout,
 // which pulls in the view's {{define "content"}} block, and threads through
-// any pending flash message and the sidebar's alert count, unless the page
-// has worked that out already. takeFlash's clearing Set-Cookie must land
-// before the status line is committed, which renderInto guarantees by calling
-// WriteHeader(status) only after the template has rendered successfully.
+// any pending flash message and the shell's data. takeFlash's clearing
+// Set-Cookie must land before the status line is committed, which renderInto
+// guarantees by calling WriteHeader(status) only after the template has
+// rendered successfully.
 func (ui *adminUI) renderAdmin(w http.ResponseWriter, r *http.Request, status int, view string, data map[string]interface{}) {
+	ui.renderAdminWithAlerts(w, r, status, view, data, ui.listAlertsForShell(r))
+}
+
+// renderAdminWithAlerts is renderAdmin for a page that has listed the open
+// alerts itself, so the shell counts the same list the page shows.
+func (ui *adminUI) renderAdminWithAlerts(w http.ResponseWriter, r *http.Request, status int, view string, data map[string]interface{}, alerts []alertEntry) {
 	data["Flash"] = takeFlash(w, r)
-	if _, ok := data["AlertCount"]; !ok {
-		data["AlertCount"] = ui.alertCount(r.Context())
-	}
+	data["Shell"] = ui.shell(r, alerts)
 	renderInto(w, status, ui.tmpl.admin, view, "base.html", data)
 }
 
@@ -312,7 +317,7 @@ func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
 		tripID = raw
 	}
 	ui.renderAdmin(w, r, http.StatusOK, "map.html", map[string]interface{}{
-		"Title":  "Live Map",
+		"Title":  "Live map",
 		"Page":   "map",
 		"TripID": tripID,
 	})
@@ -578,6 +583,7 @@ func (ui *adminUI) vehiclesPage(w http.ResponseWriter, r *http.Request) {
 		"IncludeInactive":   filter.IncludeInactive,
 		"AgencyTag":         filter.AgencyTag,
 		"Q":                 filter.Q,
+		"Shown":             len(rows),
 		"PageNum":           page,
 		"HasMore":           hasMore,
 		"PrevURL":           vehiclesPageURL(filter, page-1),
@@ -856,6 +862,7 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 		"Role":            filter.Role,
 		"Q":               filter.Q,
 		"ActiveOnly":      filter.ActiveOnly,
+		"Shown":           len(rows),
 		"PageNum":         page,
 		"HasMore":         hasMore,
 		"PrevURL":         usersPageURL(filter, page-1),
@@ -1428,6 +1435,7 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 		"Status":    status,
 		"VehicleID": vehicleID,
 		"Q":         q,
+		"Shown":     len(rows),
 		"PageNum":   page,
 		"HasMore":   hasMore,
 		"PrevURL":   tripsPageURL(status, vehicleID, q, page-1),

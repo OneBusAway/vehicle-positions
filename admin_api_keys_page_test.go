@@ -101,7 +101,7 @@ func TestAPIKeysPage_EmptyState(t *testing.T) {
 	assert.Contains(t, body, "No feed API keys yet.")
 	assert.Contains(t, body, `action="/admin/api-keys"`, "the create form is there before the first key")
 	assert.NotContains(t, body, "/deactivate")
-	assert.NotContains(t, body, "Page 1", "one empty page has no pagination")
+	assert.NotContains(t, body, "shown, page 1", "one empty page has no pagination")
 }
 
 // TestAPIKeysPage_Paginates verifies the list shows at most one page of keys,
@@ -152,7 +152,7 @@ func TestAPIKeysPage_PageOutOfRange(t *testing.T) {
 		t.Run("page="+page, func(t *testing.T) {
 			body := getAdminPage(t, mux, "/admin/api-keys?page="+page)
 			assert.Contains(t, body, "Consumer 001", "an invalid page must render page 1")
-			assert.Contains(t, body, "Page 1")
+			assert.Contains(t, body, "shown, page 1")
 		})
 	}
 }
@@ -186,19 +186,15 @@ func TestAPIKeysPage_ShowsDeactivatedFlash(t *testing.T) {
 // page and is marked as the current one only on its own page.
 func TestAdminSidebar_LinksToAPIKeys(t *testing.T) {
 	mux := newAPIKeysMux(t, &fakeAPIKeyManager{})
-	link := regexp.MustCompile(`href="/admin/api-keys"\s+data-active="(true|false)"`)
-
-	for path, wantActive := range map[string]string{
-		"/admin/api-keys":  "true",
-		"/admin/dashboard": "false",
-		"/admin/users":     "false",
+	for path, want := range map[string]railState{
+		"/admin/api-keys":  railOpen,
+		"/admin/dashboard": railLinked,
+		"/admin/users":     railLinked,
 	} {
 		t.Run(path, func(t *testing.T) {
 			body := getAdminPage(t, mux, path)
-			match := link.FindStringSubmatch(body)
-			require.NotNil(t, match, "the sidebar must link to the Feed API keys page")
-			assert.Equal(t, wantActive, match[1])
-			assert.Contains(t, body, "Feed API keys")
+			assert.Equal(t, want, railLink(body, "/admin/api-keys"))
+			assert.Contains(t, body, `<span class="rail-label">API keys</span>`)
 		})
 	}
 }
