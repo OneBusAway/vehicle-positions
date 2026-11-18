@@ -195,77 +195,81 @@ func TestTripGroup_Runs(t *testing.T) {
 		members []estimateMember
 		want    [][]string
 		// placed is where along the shape each rider is handed to the
-		// estimate, for the cases that check it.
-		placed map[string]float64
+		// estimate, and own where their own point puts them, which is what
+		// they vouch for another rider from, for the cases that check them.
+		placed, own map[string]float64
 	}{
 		{"500 m apart now are two runs",
 			[]estimateMember{rider("a", 600, 1.7, 0), rider("b", 100, 1.7, 0)},
-			[][]string{{"a"}, {"b"}}, nil},
+			[][]string{{"a"}, {"b"}}, nil, nil},
 		{"240 m back on a point 10 s older at 15 m/s is 90 m back now",
 			[]estimateMember{rider("a", 500, 15, 0), rider("b", 260, 15, 10*time.Second)},
-			[][]string{{"a", "b"}}, nil},
+			[][]string{{"a", "b"}}, nil, nil},
 		{"240 m apart now are two runs",
 			[]estimateMember{rider("a", 500, 15, 0), rider("b", 260, 15, 0)},
-			[][]string{{"a"}, {"b"}}, nil},
+			[][]string{{"a"}, {"b"}}, nil, nil},
 		{"a run whose newest point has no speed is where that point stands",
 			[]estimateMember{rider("F", 500, -1, 80*time.Second), rider("N", 1000, 0, 0), rider("S", 270, 15, 28*time.Second)},
-			[][]string{{"F", "S"}, {"N"}}, nil},
+			[][]string{{"F", "S"}, {"N"}}, nil, nil},
 		{"a speed past MaxSpeed is taken as MaxSpeed",
 			[]estimateMember{rider("a", 600, 1.7, 0), rider("b", 100, 100, 5*time.Second)},
-			[][]string{{"a"}, {"b"}}, nil},
+			[][]string{{"a"}, {"b"}}, nil, nil},
 		{"no rider is carried past now by a clock that runs ahead",
 			[]estimateMember{rider("a", 600, 1.7, -30*time.Second), rider("b", 300, 10, 0)},
-			[][]string{{"a"}, {"b"}}, nil},
+			[][]string{{"a"}, {"b"}}, nil, nil},
 		{"a run whose newest point is from a clock that runs ahead is not carried back",
 			[]estimateMember{rider("F", 600, 15, -30*time.Second), rider("S", 150, 15, 40*time.Second)},
-			[][]string{{"F", "S"}}, nil},
+			[][]string{{"F", "S"}}, nil, nil},
 		{"a point taken at speed before the vehicle stopped does not set its rider apart",
 			[]estimateMember{rider("a", 500, 0, 0), rider("b", 480, 15, 60*time.Second)},
-			[][]string{{"a", "b"}}, nil},
+			[][]string{{"a", "b"}}, nil, nil},
 		{"a point taken at speed before the vehicle stopped is not carried into the run ahead",
 			[]estimateMember{rider("B", 100, 0, 0), rider("A", 0, 15, 60*time.Second), rider("C", 700, 0, 0)},
 			[][]string{{"A", "B"}, {"C"}},
-			map[string]float64{"B": 100, "A": 100, "C": 700}},
+			map[string]float64{"B": 100, "A": 100, "C": 700},
+			map[string]float64{"B": 100, "A": 0, "C": 700}},
 		{"a lone point carried on joins the run it reaches",
 			[]estimateMember{rider("X", 0, 0, 0), rider("Y", 300, 15, 35*time.Second), rider("Z", 800, 0, 0)},
-			[][]string{{"X"}, {"Y", "Z"}}, nil},
+			[][]string{{"X"}, {"Y", "Z"}}, nil, nil},
 		{"a lone point carried on past the run ahead is another run",
 			[]estimateMember{rider("A", 0, 15, 80*time.Second), rider("C", 700, 0, 0)},
-			[][]string{{"A"}, {"C"}}, nil},
+			[][]string{{"A"}, {"C"}}, nil, nil},
 		{"a stale point between two runs does not link them",
 			[]estimateMember{rider("R1", 0, 0, 0), rider("S", 180, 15, 60*time.Second), rider("R2", 350, 0, 0)},
-			[][]string{{"R1"}, {"R2", "S"}}, nil},
+			[][]string{{"R1"}, {"R2", "S"}}, nil, nil},
 		{"a lone point carried past a run joins the run it reaches beyond",
 			[]estimateMember{rider("P", 0, 15, 60*time.Second), rider("Q", 400, 0, 0), rider("W", 900, 0, 0)},
-			[][]string{{"P", "W"}, {"Q"}}, nil},
+			[][]string{{"P", "W"}, {"Q"}}, nil, nil},
 		{"a lone point carried on joins the nearest run within reach",
 			[]estimateMember{rider("F1", 400, 0, 0), rider("F2", 650, 0, 0), rider("S", 150, 15, 30*time.Second)},
-			[][]string{{"F1"}, {"F2", "S"}}, nil},
+			[][]string{{"F1"}, {"F2", "S"}}, nil, nil},
 		{"a run's vehicle is where its newest point is carried",
 			[]estimateMember{rider("M1", 500, 0, 0), rider("M2", 450, 1, 90*time.Second), rider("S", 240, 15, 32*time.Second)},
-			[][]string{{"M1", "M2"}, {"S"}}, nil},
+			[][]string{{"M1", "M2"}, {"S"}}, nil, nil},
 		{"stale points standing together are one run with no run near them",
 			[]estimateMember{rider("N", 2000, 0, 0), rider("T1", 0, 15, 60*time.Second), rider("T2", 50, 15, 70*time.Second)},
-			[][]string{{"N"}, {"T1", "T2"}}, nil},
+			[][]string{{"N"}, {"T1", "T2"}}, nil, nil},
 		{"a run's own riders are carried to the moment a group joining it is placed at",
 			[]estimateMember{rider("F", 500, 1, 80*time.Second), rider("S", 0, 15, 50*time.Second), rider("N", 1000, 0, 0)},
 			[][]string{{"F", "S"}, {"N"}},
-			map[string]float64{"F": 580, "S": 750, "N": 1000}},
+			map[string]float64{"F": 580, "S": 750, "N": 1000},
+			map[string]float64{"F": 500, "S": 750, "N": 1000}},
 		{"a stale group joining a run is placed where its newest point is carried",
 			[]estimateMember{rider("F", 500, 0, 0), rider("S1", 0, 10, 50*time.Second), rider("S2", 50, 12, 70*time.Second), rider("S3", 60, 12, 70*time.Second)},
 			[][]string{{"F", "S1", "S2", "S3"}},
-			map[string]float64{"F": 500, "S1": 500, "S2": 500, "S3": 500}},
+			map[string]float64{"F": 500, "S1": 500, "S2": 500, "S3": 500},
+			map[string]float64{"F": 500, "S1": 500, "S2": 890, "S3": 900}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Which riders share a run, whatever order runs() lists them in.
 			var got [][]string
-			placed := make(map[string]float64)
+			placed, own := make(map[string]float64), make(map[string]float64)
 			for _, run := range (&tripGroup{trip: f.t1, members: tc.members}).runs(DefaultThresholds(), at) {
 				var ids []string
 				for _, m := range run.members {
 					ids = append(ids, m.riderID)
-					placed[m.riderID] = m.along
+					placed[m.riderID], own[m.riderID] = m.weighedAt(), m.along
 				}
 				slices.Sort(ids)
 				got = append(got, ids)
@@ -274,6 +278,9 @@ func TestTripGroup_Runs(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 			for id, want := range tc.placed {
 				assert.InDelta(t, want, placed[id], 1, "where %s is handed to the estimate", id)
+			}
+			for id, want := range tc.own {
+				assert.InDelta(t, want, own[id], 1, "where %s's own point puts them", id)
 			}
 		})
 	}
@@ -343,7 +350,13 @@ func TestAggregator_StaleRiderCarriedOntoARunIsPublishedWithIt(t *testing.T) {
 // from up to 50 m back.
 func (f *aggFixture) rideTo(t *testing.T, id string, along, speed float64, at time.Time) {
 	t.Helper()
-	f.addSession(id, "rider-"+id, TierTrusted)
+	f.rideToAs(t, id, TierTrusted, along, speed, at)
+}
+
+// rideToAs is rideTo for a rider of the given tier.
+func (f *aggFixture) rideToAs(t *testing.T, id string, tier Tier, along, speed float64, at time.Time) {
+	t.Helper()
+	f.addSession(id, "rider-"+id, tier)
 	var pts []Point
 	for i := 5; i >= 0; i-- {
 		pts = append(pts, Point{Pos: f.t1.Shape.PointAt(max(0, along-float64(i)*10)), Accuracy: 5, Speed: speed,
@@ -376,4 +389,56 @@ func TestAggregator_StaleRiderJoiningAMovingRunKeepsItsRider(t *testing.T) {
 	require.Len(t, at, 2, "F's run and N's are both published: %v", at)
 	assert.InDelta(t, 665, at[0], 30)
 	assert.InDelta(t, 1000, at[1], 30)
+}
+
+// Whether a run may be published is decided on where its riders' own points
+// put them, not on where a stale rider is placed for the estimate: a rider
+// placed where another rider's point is carried always agrees with that
+// rider, and vouches for nothing. No rider here is trusted, so a run is
+// published only if two of its riders vouch for each other.
+func TestAggregator_PlacedRiderVouchesOnlyFromItsOwnPoint(t *testing.T) {
+	type ride struct {
+		id           string
+		along, speed float64
+		age          time.Duration
+	}
+	tests := []struct {
+		name      string
+		rides     []ride
+		published bool
+		// at is where along the shape the run is published.
+		at float64
+	}{
+		{"a stale rider standing 160 m from the run's rider does not vouch for it",
+			[]ride{{"F", 500, 0, 0}, {"S", 340, 15, 30 * time.Second}}, false, 0},
+		{"a stale rider standing 60 m from the run's rider vouches for it and is weighed at its vehicle",
+			[]ride{{"F", 500, 0, 0}, {"S", 440, 15, 30 * time.Second}}, true, 500},
+		{"a stale group placed at one spot does not vouch for itself",
+			[]ride{{"F", 720, 0, 0}, {"T1", 100, 10, 50 * time.Second}, {"T2", 250, 10, 60 * time.Second}}, false, 0},
+		{"a stale point carried onto the run's rider vouches for it",
+			[]ride{{"F", 600, 0, 0}, {"T1", 100, 10, 50 * time.Second}}, true, 600},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAggFixture(t)
+			headwayT1(f)
+			now := f.base.Add(10 * time.Minute)
+			for _, r := range tc.rides {
+				f.rideToAs(t, r.id, TierNew, r.along, r.speed, now.Add(-r.age))
+			}
+			now = now.Add(2 * time.Second)
+
+			est := f.agg.Estimates(now, noCover)
+			reported, riders := f.agg.TripStatus(TripKey{"T1", "20260902"}, now, noCover)
+			require.Equal(t, len(tc.rides), riders, "every rider counts towards the trip")
+			assert.Equal(t, tc.published, reported)
+			if !tc.published {
+				assert.Empty(t, est)
+				return
+			}
+			require.Len(t, est, 1)
+			assert.Equal(t, len(tc.rides), est[0].Riders)
+			assert.InDelta(t, tc.at, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 10)
+		})
+	}
 }
