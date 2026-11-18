@@ -43,7 +43,7 @@ class TrackingOccupancyTest {
         val sessions = FakeSessionStore()
         val api = TrackerApiProvider { error("ending the trip is not part of these tests") }
         val ender = TripEnder(TripRepository(api, store, FakeVehiclePrefsStore(), sessions, clock = { 0L }), store, FakeTripGeometryStore(), FakeServiceController(), sessions)
-        val waiting = WaitingReports(FakeOfflineFixQueue(), sessions)
+        val waiting = WaitingReports(FakeOfflineFixQueue(), sessions, clock = { 0L })
         return TrackingViewModel(TrackingRepository(), store, ender, FakeMapFileSource(), waiting).also { advanceUntilIdle() }
     }
 

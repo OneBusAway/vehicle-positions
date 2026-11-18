@@ -3,7 +3,7 @@ package org.onebusaway.vehicletracker.ui
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -49,8 +49,10 @@ class TrackingWaitingTest {
         val api = TrackerApiProvider { error("ending the trip is not part of these tests") }
         val tripRepository = TripRepository(api, trips, FakeVehiclePrefsStore(), sessions, clock = { 0L })
         val ender = TripEnder(tripRepository, trips, FakeTripGeometryStore(), FakeServiceController(), sessions)
-        return TrackingViewModel(TrackingRepository(), trips, ender, FakeMapFileSource(), WaitingReports(queue, sessions))
-            .also { advanceUntilIdle() }
+        // The clock starts at 1,000 s, after every fix these tests queue, and moves on with the virtual time. Each step
+        // runs only what is due now: advancing until idle would run the clock on until every fix had aged out.
+        val waiting = WaitingReports(queue, sessions, clock = { 1_000L + testScheduler.currentTime / 1000 })
+        return TrackingViewModel(TrackingRepository(), trips, ender, FakeMapFileSource(), waiting).also { runCurrent() }
     }
 
     @Test fun `the count goes from the queue to the screen, from 0 to 1 to many and back to 0`() = runTest(dispatcher) {
@@ -59,15 +61,15 @@ class TrackingWaitingTest {
         assertNull("nothing queued", vm.uiState.value.waiting)
 
         queue.add(queuedFix("van-1", timestamp = 1L))
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(ReportsWaiting(1, WaitingOutlook.WILL_SEND), vm.uiState.value.waiting)
 
         (2L..37L).forEach { queue.add(queuedFix("van-1", timestamp = it)) }
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(ReportsWaiting(37, WaitingOutlook.WILL_SEND), vm.uiState.value.waiting)
 
         queue.remove(queue.oldest(37))
-        advanceUntilIdle()
+        runCurrent()
         assertNull("all uploaded", vm.uiState.value.waiting)
     }
 

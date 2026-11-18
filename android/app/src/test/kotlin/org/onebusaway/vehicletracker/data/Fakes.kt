@@ -206,9 +206,9 @@ class FakeOfflineFixQueue : OfflineFixQueue {
     }
     override suspend fun owner() = owner
 
-    private val held = MutableStateFlow(QueueContents(0, null))
+    private val held = MutableStateFlow(QueueContents(emptyList(), null))
     override val contents = held.asStateFlow()
     private fun publish() {
-        held.value = QueueContents(queued.size, owner)
+        held.value = QueueContents(queued.map { it.timestamp }, owner)
     }
 }

@@ -24,6 +24,21 @@ import java.nio.file.StandardCopyOption
 const val OFFLINE_QUEUE_CAPACITY = 8_640
 
 /**
+ * How old a queued fix may be and still be uploaded: the server takes a day, less a margin for the
+ * phone's clock and the time the upload takes.
+ */
+const val MAX_HISTORY_AGE_SEC = 24 * 3600L - 600L
+
+/** The first second at which a fix taken at [timestampEpochSec] is too old to upload. */
+fun tooOldToUploadFrom(timestampEpochSec: Long) = timestampEpochSec + MAX_HISTORY_AGE_SEC + 1
+
+/**
+ * Whether a fix taken at [timestampEpochSec] is too old to upload at [nowEpochSec]. The uploads drop such fixes
+ * rather than send them, and the waiting count leaves them out, so the two agree.
+ */
+fun tooOldToUpload(timestampEpochSec: Long, nowEpochSec: Long) = nowEpochSec >= tooOldToUploadFrom(timestampEpochSec)
+
+/**
  * Reports the phone could not send for want of a connection, oldest first, kept to be uploaded
  * for location history once it can (`POST /api/v1/locations/history`). They never go to the
  * realtime feed: by then they describe where the bus was, not where it is.
@@ -55,14 +70,14 @@ interface OfflineFixQueue {
     suspend fun owner(): String?
 
     /**
-     * How many fixes the queue holds and whose they are, as they are now and again after every change. The fixes are
-     * read when this is first collected, if nothing has read them yet.
+     * When the queued fixes were taken and whose they are, as they are now and again after every change. The fixes
+     * are read when this is first collected, if nothing has read them yet.
      */
     val contents: Flow<QueueContents>
 }
 
-/** What [OfflineFixQueue] holds: how many fixes, and the account it was last handed to. */
-data class QueueContents(val count: Int, val owner: String?)
+/** What [OfflineFixQueue] holds: when each fix was taken, oldest first, and the account it was last handed to. */
+data class QueueContents(val timestamps: List<Long>, val owner: String?)
 
 /** The account [OfflineFixQueue.claimFor] compares: the same server and email however they were typed. */
 fun offlineQueueAccount(serverUrl: String, email: String) = "${serverUrl.trimEnd('/')} ${email.trim().lowercase()}"
@@ -143,7 +158,7 @@ class FileOfflineFixQueue(
                 // Once the fixes have been read; before then, reading them reads the owner too.
                 queue?.let { q ->
                     knownOwner = account
-                    held.value = QueueContents(q.size, account)
+                    held.value = QueueContents(q.map { it.timestamp }, account)
                 }
             } catch (e: IOException) {
                 // The next sign-in then drops the fixes, as it would have without this claim.
@@ -163,7 +178,7 @@ class FileOfflineFixQueue(
             try {
                 block(q)
             } finally {
-                held.value = QueueContents(q.size, knownOwner)
+                held.value = QueueContents(q.map { it.timestamp }, knownOwner)
             }
         }
     }

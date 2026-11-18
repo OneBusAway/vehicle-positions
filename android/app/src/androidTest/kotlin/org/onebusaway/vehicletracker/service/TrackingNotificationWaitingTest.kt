@@ -25,8 +25,10 @@ class TrackingNotificationWaitingTest {
     fun itSaysHowManyAreWaiting_andThatTheyWillSend() {
         assertEquals("1 report to send when online", line(TrackingProblem.NO_NETWORK, ReportsWaiting(1, WaitingOutlook.WILL_SEND)))
         assertEquals("37 reports to send when online", line(TrackingProblem.NONE, ReportsWaiting(37, WaitingOutlook.WILL_SEND)))
-        // The phone keeps up to 8,640, so the count is grouped as the phone's language groups it.
-        assertEquals("1,244 reports to send when online", line(TrackingProblem.NO_NETWORK, ReportsWaiting(1244, WaitingOutlook.WILL_SEND)))
+        // The phone keeps up to 8,640, so the count is grouped as the phone's language groups it: 1,244 in English, 1.244
+        // in German.
+        val grouped = String.format(context.resources.configuration.locales[0], "%,d", 1244)
+        assertEquals("$grouped reports to send when online", line(TrackingProblem.NO_NETWORK, ReportsWaiting(1244, WaitingOutlook.WILL_SEND)))
     }
 
     @Test
