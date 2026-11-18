@@ -315,7 +315,27 @@
   .line-row.more-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 14px; min-height: 56px; font: 500 16px/22px var(--font-sans); }
   button.more-row { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: transparent; text-align: left; cursor: pointer; }
 
-  /* Overview */
+  /* Overview, and the welcome it is until there is a vehicle and a driver */
+  .ov-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 16px; }
+  .ov-now { text-align: right; font-size: 13px; line-height: 18px; }
+  .hero-what { display: flex; align-items: center; gap: 8px; color: var(--amber); font: 500 14px/20px var(--font-sans); }
+  .hero-count { font: 500 26px/32px var(--font-sans); }
+  .hero-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; line-height: 20px; opacity: 0.92; }
+  .hero-foot b { color: var(--amber); font-weight: 500; white-space: nowrap; }
+  .ov-hero-ok { display: grid; gap: 6px; padding: 18px 20px; margin-bottom: 12px; }
+  .ov-hero-ok .hero-what { color: #fff; }
+  .stack.ov-units { gap: 4px; }
+  .route-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .route-share { display: block; font: 500 16px/20px var(--font-sans); }
+  .line-row.attention { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; min-height: 64px; }
+  .attention .step-icon.alert-icon { width: 36px; height: 36px; }
+  .line-row.system { grid-template-columns: 20px minmax(0, 1fr) auto; gap: 12px; min-height: 58px; }
+  .h1.display { font-size: 36px; line-height: 44px; font-weight: 400; }
+  .welcome-lede { margin: 8px 0 24px; font-size: 16px; line-height: 24px; }
+  .welcome-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 24px; align-items: stretch; }
+  .steps-line.welcome-line { margin-bottom: 20px; }
+  .steps-line.welcome-line .the-line { width: 220px; }
+  .step-title { display: block; font: 500 16px/22px var(--font-sans); }
   .ov-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
   .ov-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   .ov-routes, .ov-reports { grid-column: 1; }
@@ -395,18 +415,15 @@
   .newkey { align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
   .keybox { margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--surface); font: 500 13px/18px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; user-select: all; }
 
-  /* CSV import: its three steps drawn as the Line, the file box, and a password shown once */
+  /* A run of steps drawn as the Line (the import and the welcome), the import's file box, and a
+     password shown once */
   .steps-line { display: flex; align-items: center; gap: 16px; margin: 0 0 18px; }
   .steps-line .the-line { width: 200px; height: 34px; flex: none; margin-left: 13px; }
   .steps-line .the-line .track { top: 14px; }
-  .steps-line .the-line .fill { right: 100%; background: var(--primary); }
+  .steps-line .the-line .fill { background: var(--primary); }
   .steps-line .the-line .stop { top: 11px; }
   .steps-line .the-line .stop.done { box-shadow: inset 0 0 0 6px var(--primary); }
-  .steps-line .the-line .veh { top: 4px; left: 0; background: var(--primary); color: var(--on-primary); transition: none; }
-  .steps-line[data-step="2"] .the-line .fill { right: 50%; }
-  .steps-line[data-step="2"] .the-line .veh { left: 50%; }
-  .steps-line[data-step="3"] .the-line .fill { right: 0; }
-  .steps-line[data-step="3"] .the-line .veh { left: 100%; }
+  .steps-line .the-line .veh { top: 4px; background: var(--primary); color: var(--on-primary); transition: none; }
   .pw { font: 500 15px/20px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.5px; white-space: nowrap; }
   form.card > * { min-width: 0; }
   .drop input { max-width: 100%; font: inherit; color: var(--ink-2); }

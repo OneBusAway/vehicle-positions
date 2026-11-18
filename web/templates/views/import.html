@@ -1,10 +1,7 @@
 {{define "import-status"}}{{if eq . "new"}}<span class="pill plain">New</span>{{else if eq . "update"}}<span class="pill plain">Update</span>{{else if eq . "unchanged"}}<span class="pill">Unchanged</span>{{else}}<span class="pill pill-warn">Fix this row</span>{{end}}{{end}}
 
 {{define "import-steps"}}
-<div class="steps-line" data-step="{{.N}}" role="img" aria-label="Step {{.N}} of 3: {{.Name}}">
-  <span class="the-line"><span class="track"></span><span class="track fill"></span><span class="stop{{if gt .N 1}} done{{end}}" style="left:0"></span><span class="stop{{if gt .N 2}} done{{end}}" style="left:50%"></span><span class="stop" style="left:100%"></span><span class="veh">{{template "arrow"}}</span></span>
-  <span style="font-weight:500">Step {{.N}} of 3<span class="muted" style="font-weight:400">, {{.Hint}}</span></span>
-</div>
+<div class="steps-line">{{template "step-line" .}}<span style="font-weight:500">Step {{.N}} of {{.Of}}<span class="muted" style="font-weight:400">, {{.Hint}}</span></span></div>
 {{end}}
 
 {{define "content"}}

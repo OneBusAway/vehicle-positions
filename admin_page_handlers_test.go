@@ -265,7 +265,7 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		path string
 		want string
 	}{
-		{"dashboard", "/admin/dashboard", "Active Trips"},
+		{"dashboard", "/admin/dashboard", "Get your first vehicle on the map"},
 		{"vehicles", "/admin/vehicles", "New vehicle"},
 		{"users", "/admin/users", "New user"},
 		{"trips", "/admin/trips", "No trips yet"},
@@ -367,42 +367,6 @@ func TestAdminLoginPageRedirectsWhenAlreadyAuthenticated(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
-}
-
-// TestDashboardRendersRealCounts verifies the dashboard renders live stats
-// (from a fake stats store), the tracker's active-vehicle count/recent
-// activity, and that the old mock data is gone.
-func TestDashboardRendersRealCounts(t *testing.T) {
-	ui := newTestAdminUI(t)
-	ui.stats = &fakeAdminStats{vehicles: 7, drivers: 5, trips: 3}
-	ui.tracker.Update(&LocationReport{VehicleID: "bus-1", TripID: "g1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
-	mux := http.NewServeMux()
-	registerAdminUI(mux, ui)
-	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
-	req.AddCookie(cookieFor(t, "admin"))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	body := w.Body.String()
-	assert.Contains(t, body, ">7<")   // total vehicles stat
-	assert.Contains(t, body, ">5<")   // drivers stat
-	assert.Contains(t, body, ">3<")   // active trips stat
-	assert.Contains(t, body, "bus-1") // recent activity row (label falls back to id)
-	assert.NotContains(t, body, "Bus 001", "mock data must be gone")
-}
-
-// TestDashboardRecentActivityEmptyState covers the empty-state row when the
-// tracker has no active vehicles.
-func TestDashboardRecentActivityEmptyState(t *testing.T) {
-	ui := newTestAdminUI(t)
-	mux := http.NewServeMux()
-	registerAdminUI(mux, ui)
-	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
-	req.AddCookie(cookieFor(t, "admin"))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "No vehicles have reported recently")
 }
 
 // TestDashboardStoreErrorReturns500 verifies a stats-store failure produces a

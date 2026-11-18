@@ -12,3 +12,18 @@
 {{define "route-badge-lg"}}{{if .Name}}<span class="route route-lg"{{if .Color}} style="background-color: {{.Color}}; color: {{.TextColor}}"{{end}}{{with .LongName}} title="{{.}}"{{end}}>{{.Name}}</span>{{end}}{{end}}
 
 {{define "deviation"}}{{if eq .Tone "on-time"}}<span class="pill pill-ok">On time</span> <span class="muted">{{.Signed}}</span>{{else if eq .Tone "early"}}<span class="pill pill-early">{{.Text}}</span>{{else if eq .Tone "late"}}<span class="pill pill-late">{{.Text}}</span>{{else}}<span class="muted">no report</span>{{end}}{{end}}
+
+{{define "step-line"}}<span class="the-line" role="img" aria-label="Step {{.N}} of {{.Of}}{{with .Name}}: {{.}}{{end}}"><span class="track"></span><span class="track fill" style="right:{{.FillRight}}%"></span>{{range .Stops}}<span class="stop{{if .Done}} done{{end}}" style="left:{{.Left}}%"></span>{{end}}<span class="veh" style="left:{{.VehicleLeft}}%">{{template "arrow"}}</span></span>{{end}}
+
+{{define "ot-stack"}}<span class="stack grow-x" role="img" aria-label="{{.Early}}% early, {{.Percent}}% on time, {{.Late}}% late">{{if .Early}}<i class="seg-early" style="width:{{.Early}}%"></i>{{end}}<i class="seg-ok" style="width:{{.Percent}}%"></i>{{if .Late}}<i class="seg-late" style="width:{{.Late}}%"></i>{{end}}</span>{{end}}
+
+{{define "bar-chart"}}
+<div class="chart-box">{{with .PeakLabel}}<span class="chart-y">{{.}}</span>{{end}}
+  <svg class="chart" viewBox="0 0 {{.Width}} {{.Height}}" preserveAspectRatio="none" role="img" aria-label="{{.Name}}" style="height:{{.Height}}px">
+    <line class="grid" x1="0" x2="{{.Width}}" y1="{{.GridY}}" y2="{{.GridY}}"/><line class="axis" x1="0" x2="{{.Width}}" y1="{{.AxisY}}" y2="{{.AxisY}}"/>
+    <g class="grow-y">{{range .Bars}}{{if .H}}<rect class="bar" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="1.5"/>{{end}}{{if .WarnH}}<rect class="bar-warn" x="{{.X}}" y="{{.WarnY}}" width="{{.W}}" height="{{.WarnH}}" rx="1.5"/>{{end}}{{end}}</g>
+    {{range .Bars}}<rect class="hit" x="{{.HitX}}" y="0" width="{{.HitW}}" height="{{$.Height}}" data-tip="{{.Tip}}"/>{{end}}
+  </svg>
+</div>
+<div class="chart-x">{{range .Ticks}}<span>{{.}}</span>{{end}}</div>
+{{end}}

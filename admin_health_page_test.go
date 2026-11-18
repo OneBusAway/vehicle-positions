@@ -285,22 +285,23 @@ func TestHealthPage_SignedOutIsRefused(t *testing.T) {
 	assert.NotContains(t, w.Body.String(), "last_hour")
 }
 
-func TestDashboard_FeedHealthStrip(t *testing.T) {
+// TestDashboard_FeedHealth: the Overview's report card and its Feed line are
+// the last hour's counts, with a way through to the Feed health page.
+func TestDashboard_FeedHealth(t *testing.T) {
 	tests := []struct {
 		name     string
 		record   func(h *feedHealth)
 		contains []string
-		absent   []string
 	}{
 		{
 			name:   "nothing yet",
 			record: func(h *feedHealth) {},
 			contains: []string{
-				`<span class="font-semibold text-slate-700">0</span> accepted`,
-				`<span class="font-semibold text-slate-700">0</span> rejected</span>`,
-				`<span class="font-semibold text-slate-700">0</span> refused key</span>`,
+				`</i>0 accepted</span>`,
+				`</i>0 rejected</span>`,
+				`No fetches in the last hour`,
+				`<span class="pill plain">Idle</span>`,
 			},
-			absent: []string{"mostly", "failed"},
 		},
 		{
 			name: "rejections and refused fetches",
@@ -314,16 +315,19 @@ func TestDashboard_FeedHealthStrip(t *testing.T) {
 				h.record(healthFeed, http.StatusInternalServerError)
 			},
 			contains: []string{
-				`<span class="font-semibold text-slate-700">3</span> accepted`,
-				`<span class="font-semibold text-rose-700">1</span> rejected (25.0%, mostly rate limited)`,
-				`Feed fetches, last hour: <span class="font-semibold text-slate-700">3</span>`,
-				`<span class="font-semibold text-rose-700">1</span> refused key, <span class="font-semibold text-rose-700">1</span> failed`,
+				`</i>3 accepted</span>`,
+				`</i>1 rejected</span>`,
+				`Most in a minute: 4`,
+				`data-tip="` + healthTestStart.UTC().Format("15:04") + `|3 accepted, 1 rejected"`,
+				`1 fetch served in the last hour, last at ` + healthTestStart.UTC().Format("15:04"),
+				`<span class="pill pill-warn">Errors</span>`,
 			},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ui := newTestAdminUI(t)
+			ui.stats = &fakeAdminStats{vehicles: 1, drivers: 1}
 			ui.health = newFeedHealth(newHealthTestClock(healthTestStart).now)
 			tc.record(ui.health)
 			mux := http.NewServeMux()
@@ -336,21 +340,19 @@ func TestDashboard_FeedHealthStrip(t *testing.T) {
 			require.Equal(t, http.StatusOK, w.Code)
 
 			body := w.Body.String()
-			assert.Contains(t, body, `href="/admin/health"`)
+			assert.Contains(t, body, `<a class="line-row system" href="/admin/health">`)
 			for _, s := range tc.contains {
 				assert.Contains(t, body, s)
-			}
-			for _, s := range tc.absent {
-				assert.NotContains(t, body, s)
 			}
 		})
 	}
 }
 
-// The strip is the last hour, not the total since the server started.
-func TestDashboard_FeedHealthStripIsTheLastHour(t *testing.T) {
+// The report card is the last hour, not the total since the server started.
+func TestDashboard_FeedHealthIsTheLastHour(t *testing.T) {
 	clock := newHealthTestClock(healthTestStart)
 	ui := newTestAdminUI(t)
+	ui.stats = &fakeAdminStats{vehicles: 1, drivers: 1}
 	ui.health = newFeedHealth(clock.now)
 	for range 5 {
 		ui.health.record(healthReports, http.StatusCreated)
@@ -368,6 +370,6 @@ func TestDashboard_FeedHealthStripIsTheLastHour(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	body := w.Body.String()
-	assert.Contains(t, body, `<span class="font-semibold text-slate-700">1</span> accepted`)
-	assert.Contains(t, body, `<span class="font-semibold text-rose-700">1</span> rejected (50.0%, mostly invalid)`)
+	assert.Contains(t, body, `</i>1 accepted</span>`)
+	assert.Contains(t, body, `</i>1 rejected</span>`)
 }

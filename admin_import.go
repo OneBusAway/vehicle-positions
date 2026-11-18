@@ -363,18 +363,11 @@ func (c importCounts) ErrorRows() string {
 	return countOf(c.Error, "row", "rows")
 }
 
-// importStep is where an import is, for the step line above each of its
-// three pages.
-type importStep struct {
-	N    int
-	Name string
-	Hint string
-}
-
+// The step line above each of an import's three pages.
 var (
-	importStepUpload = importStep{N: 1, Name: "Upload", Hint: "upload the file"}
-	importStepCheck  = importStep{N: 2, Name: "Check", Hint: "check what it changes"}
-	importStepDone   = importStep{N: 3, Name: "Done", Hint: "done"}
+	importStepUpload = stepLine{N: 1, Of: 3, Name: "Upload", Hint: "upload the file"}
+	importStepCheck  = stepLine{N: 2, Of: 3, Name: "Check", Hint: "check what it changes"}
+	importStepDone   = stepLine{N: 3, Of: 3, Name: "Done", Hint: "done"}
 )
 
 // importDoneHeadline is the result page's headline: how many rows the import

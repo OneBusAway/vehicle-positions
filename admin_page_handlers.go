@@ -82,6 +82,7 @@ type adminUI struct {
 	alerts         *alertWatcher
 	reports        *serviceReporter
 	health         *feedHealth
+	overview       overviewReports
 	stats          adminStatsStore
 	activeTrips    ActiveTripLister
 	trips          TripLister
@@ -329,107 +330,6 @@ func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
 		"Title":  "Live map",
 		"Page":   "map",
 		"TripID": tripID,
-	})
-}
-
-// dashboardRow is a single row in the dashboard's recent-activity table: a
-// vehicle's label, its current route (if it has an active trip), and how
-// long ago it last reported.
-type dashboardRow struct {
-	Label    string
-	RouteID  string
-	LastSeen string
-}
-
-// recentActivityLimit caps the dashboard's recent-activity table so it stays
-// scannable regardless of fleet size.
-const recentActivityLimit = 10
-
-// dashboardPage renders the admin dashboard: aggregate stats from the store,
-// the tracker's live feed status, and the most recently reported vehicles
-// joined with their labels and (if any) active trip's route.
-func (ui *adminUI) dashboardPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	totalVehicles, err := ui.stats.CountActiveVehicles(ctx)
-	if err != nil {
-		slog.Error("dashboard: count active vehicles", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	totalDrivers, err := ui.stats.CountActiveUsersByRole(ctx, roleDriver)
-	if err != nil {
-		slog.Error("dashboard: count active drivers", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	activeTripCount, err := ui.stats.CountActiveTrips(ctx)
-	if err != nil {
-		slog.Error("dashboard: count active trips", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	vehicleList, err := ui.vehicles.ListVehicles(ctx)
-	if err != nil {
-		slog.Error("dashboard: list vehicles", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	labels := make(map[string]string, len(vehicleList))
-	for _, v := range vehicleList {
-		labels[v.ID] = v.Label
-	}
-
-	tripsByVehicle, err := ui.activeTrips.ListActiveTripsByVehicle(ctx)
-	if err != nil {
-		slog.Error("dashboard: list active trips by vehicle", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	status := ui.tracker.Status()
-
-	active := ui.tracker.ActiveVehicles()
-	sort.Slice(active, func(i, j int) bool { return active[i].UpdatedAt.After(active[j].UpdatedAt) })
-	if len(active) > recentActivityLimit {
-		active = active[:recentActivityLimit]
-	}
-	recent := make([]dashboardRow, 0, len(active))
-	for _, v := range active {
-		label := v.VehicleID
-		if l, ok := labels[v.VehicleID]; ok {
-			label = l
-		}
-		var routeID string
-		if trip, ok := tripsByVehicle[v.VehicleID]; ok {
-			routeID = trip.RouteID
-		}
-		recent = append(recent, dashboardRow{
-			Label:    label,
-			RouteID:  routeID,
-			LastSeen: humanizeAge(v.UpdatedAt),
-		})
-	}
-
-	lastUpdate := "never"
-	if status.LastUpdate != nil {
-		lastUpdate = humanizeAge(*status.LastUpdate)
-	}
-
-	ui.renderAdmin(w, r, http.StatusOK, "dashboard.html", map[string]interface{}{
-		"Title":              "Dashboard",
-		"Page":               "dashboard",
-		"TotalVehicles":      totalVehicles,
-		"ActiveVehicles":     status.ActiveVehicles,
-		"TotalDrivers":       totalDrivers,
-		"ActiveTrips":        activeTripCount,
-		"LastUpdate":         lastUpdate,
-		"StalenessThreshold": humanizeDuration(ui.cfg.stalenessThreshold),
-		"RecentVehicles":     recent,
-		"Health":             newHealthStrip(ui.health.snapshot().LastHour),
 	})
 }
 

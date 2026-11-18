@@ -38,6 +38,39 @@
     });
   });
 
+  /* Numbers count to their value once, and from their old value when they change. */
+  var fmt = new Intl.NumberFormat("en");
+  VT.setCount = function (el, to) {
+    var from = Number(el.dataset.shown || 0);
+    el.dataset.count = to;
+    if (reduce || from === to) { el.textContent = fmt.format(to); el.dataset.shown = to; return; }
+    var t0 = performance.now();
+    cancelAnimationFrame(el._raf);
+    (function step(now) {
+      var p = Math.min(1, (now - t0) / 600), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt.format(Math.round(from + (to - from) * e));
+      if (p < 1) el._raf = requestAnimationFrame(step); else el.dataset.shown = to;
+    })(t0);
+  };
+  $$(".count-up[data-count]").forEach(function (el) { VT.setCount(el, Number(el.dataset.count)); });
+
+  /* A chart's value under the pointer. The same numbers are in the page as text. */
+  var tip = $("#tip");
+  if (tip) {
+    document.addEventListener("pointermove", function (ev) {
+      var hit = ev.target.closest(".chart .hit[data-tip]");
+      if (!hit) { tip.classList.toggle("show", false); return; }
+      var parts = hit.dataset.tip.split("|"), b = document.createElement("b");
+      b.textContent = parts[0];
+      tip.textContent = "";
+      tip.appendChild(b);
+      tip.appendChild(document.createTextNode(parts[1] || ""));
+      tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 12, ev.clientX + 14) + window.scrollX + "px";
+      tip.style.top = ev.clientY - 12 - tip.offsetHeight + window.scrollY + "px";
+      tip.classList.add("show");
+    });
+  }
+
   /* The pulse: how many vehicles are reporting, and how old that answer is. The page arrives with the
      server's counts; after that the live answer is asked for every 10 s and the alerts on every third. */
   var pulse = $("#pulse"), age = $("#pulse-age"), heardAt = Date.now(), quiet = {}, polls = 0;
@@ -60,7 +93,7 @@
     $$("[data-alert-link]").forEach(function (a) { a.setAttribute("aria-label", list.count ? "Alerts, " + list.count + " open" : "Alerts"); });
   };
   function poll() {
-    if (document.hidden || VT.ownsPulse) return;
+    if (document.hidden) return;
     var alerts = polls++ % 3 ? Promise.resolve() : VT.getJSON("/api/v1/admin/alerts").then(VT.alerts).catch(function () {});
     alerts.then(function () { return VT.getJSON("/api/v1/admin/vehicles/live"); }).then(VT.heard, VT.lost);
   }

@@ -156,6 +156,49 @@ func initials(name, email string) string {
 	return b.String()
 }
 
+// stepLine is where someone is in a short run of steps, drawn as the Line: a
+// stop for each step, filled up to the current one, with the vehicle on it.
+type stepLine struct {
+	// N is the current step, counted from 1, of Of steps.
+	N  int
+	Of int
+	// Name says what step N is, for a screen reader, and Hint what happens
+	// in it, after "Step N of Of". Both may be empty.
+	Name string
+	Hint string
+}
+
+// stepStop is one step's stop on the line: how far along it sits, a
+// percentage, and whether the step is behind the current one.
+type stepStop struct {
+	Left string
+	Done bool
+}
+
+func (s stepLine) at(step int) float64 {
+	return float64(step-1) * 100 / float64(s.Of-1)
+}
+
+// Stops are the line's stops, one for each step.
+func (s stepLine) Stops() []stepStop {
+	stops := make([]stepStop, 0, s.Of)
+	for step := 1; step <= s.Of; step++ {
+		stops = append(stops, stepStop{Left: strconv.FormatFloat(s.at(step), 'f', 1, 64), Done: step < s.N})
+	}
+	return stops
+}
+
+// VehicleLeft is how far along the line the vehicle sits, a percentage.
+func (s stepLine) VehicleLeft() string {
+	return strconv.FormatFloat(s.at(s.N), 'f', 1, 64)
+}
+
+// FillRight is how far from the line's end its filled part stops, a
+// percentage.
+func (s stepLine) FillRight() string {
+	return strconv.FormatFloat(100-s.at(s.N), 'f', 1, 64)
+}
+
 // listAlertsForShell is the open alerts for a page that does not show them
 // itself. A badge is not worth failing a page over, so an error is logged
 // and the shell drawn with no alerts.
