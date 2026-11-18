@@ -82,6 +82,23 @@
     if (!t.hasAttribute("data-toast-stay")) setTimeout(close, 6000);
   });
 
+  /* Chips that show the alerts of one kind. The Alerts page reloads itself every 30 s, so the chip picked
+     is kept for the tab. */
+  var chips = $$("[data-filter]");
+  function showKind(kind) {
+    chips.forEach(function (c) { c.setAttribute("aria-pressed", String(c.dataset.filter === kind)); });
+    $$("[data-kind]").forEach(function (row) { row.hidden = kind !== "all" && row.dataset.kind !== kind; });
+  }
+  chips.forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      showKind(chip.dataset.filter);
+      try { sessionStorage.setItem("alert-kind", chip.dataset.filter); } catch (e) {}
+    });
+  });
+  if (chips.length) {
+    try { showKind(sessionStorage.getItem("alert-kind") || "all"); } catch (e) {}
+  }
+
   /* A real dialog in place of confirm(). Without JS the form posts as it is. */
   var dlg;
   document.addEventListener("submit", function (ev) {

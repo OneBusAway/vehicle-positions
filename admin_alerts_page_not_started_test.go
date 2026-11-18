@@ -67,7 +67,7 @@ func TestAlertsPage_NotStarted(t *testing.T) {
 	assert.Contains(t, body, "Next on block B1, due 6 min ago")
 	assert.Contains(t, body, "Van 7")
 	assert.Contains(t, body, "Achieng")
-	assert.Contains(t, body, ">T7</td>", "the trip not started, not the one run")
+	assert.Contains(t, body, "Achieng, trip T7</span>", "the trip not started, not the one run")
 	assert.Contains(t, body, `href="/admin/trips/7"`, "the last trip's page, whose map starts where the vehicle last reported")
 	assert.Contains(t, body, `href="/admin/trips?page=1&amp;vehicle_id=van-7"`, "the vehicle's trips, since none is running")
 	badge := alertBadge.FindStringSubmatch(body)

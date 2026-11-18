@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // alertsPageRefresh is how often, in seconds, the Alerts page reloads itself.
@@ -15,14 +17,23 @@ const alertsPageRefresh = "30"
 
 // alertRow is one alert on the Alerts page.
 type alertRow struct {
-	Quiet        bool
-	Kind         string
-	Detail       string
+	// Kind is the alert's kind as the API names it, which the page's chips
+	// show and hide rows by; Title is the kind in words, and Icon its symbol
+	// in web/static/icons.svg.
+	Kind   string
+	Title  string
+	Icon   string
+	Detail string
+	// Since is when the alert began, on the page's clock.
+	Since        string
 	VehicleID    string
 	VehicleLabel string
 	DriverName   string
-	RouteID      string
-	GtfsTripID   string
+	Route        tripRoute
+	// RouteLine names where the trip goes, as on the trip page; empty when
+	// the schedule does not have the trip.
+	RouteLine  string
+	GtfsTripID string
 	// MapURL opens the trip's page, whose map starts on the vehicle's last
 	// report. The live map would not do: it drops a vehicle
 	// STALENESS_THRESHOLD after its last report.
@@ -32,40 +43,83 @@ type alertRow struct {
 	TripURL string
 }
 
-// newAlertRow is a's row, with the off-route distance from settings.
-func newAlertRow(a alertEntry, settings alertSettings) alertRow {
+// alertKindCount is one of the Alerts page's chips: a kind, or "all", and how
+// many alerts of it are open.
+type alertKindCount struct {
+	Kind  string
+	Label string
+	Count int
+}
+
+// alertKinds are the kinds in the order the chips show them, with each kind
+// in words and its symbol.
+var alertKinds = []struct{ kind, title, icon string }{
+	{alertQuiet, "Gone quiet", "signal_disconnected"},
+	{alertNotMoving, "Not moving", "stop_circle"},
+	{alertOffRoute, "Off route", "wrong_location"},
+	{alertNotStarted, "Not started", "pending_actions"},
+}
+
+// newAlertRow is a's row, with the off-route distance from settings, the
+// route's badge and the trip's headsign from the schedule ix (nil when none
+// is loaded), and its time on the clock loc.
+func newAlertRow(a alertEntry, settings alertSettings, ix *rider.Index, loc *time.Location) alertRow {
 	duration := humanizeDuration(time.Duration(a.DurationSeconds) * time.Second)
 	row := alertRow{
-		Quiet:        a.Kind == alertQuiet,
+		Kind:         a.Kind,
+		Since:        a.Since.In(loc).Format("15:04"),
 		VehicleID:    a.Trip.VehicleID,
 		VehicleLabel: a.Trip.VehicleLabel,
 		DriverName:   a.Trip.DriverName,
-		RouteID:      a.Trip.RouteID,
 		GtfsTripID:   a.Trip.GtfsTripID,
 		MapURL:       "/admin/trips/" + strconv.FormatInt(a.Trip.ID, 10),
 		TripURL:      tripsPageURL("active", a.Trip.VehicleID, "", 1),
 	}
+	routeID := a.Trip.RouteID
 	switch a.Kind {
 	case alertQuiet:
-		row.Kind = "Gone quiet"
 		row.Detail = "No report for " + duration
 	case alertOffRoute:
-		row.Kind = "Off route"
 		row.Detail = fmt.Sprintf("Over %.0f m from its route for %s", settings.offRouteDistance, duration)
 	case alertNotStarted:
 		// The vehicle and driver are the last trip's, the route and trip the
-		// one not started. The vehicle has no trip running for View trip to
-		// open, so it opens all of the vehicle's trips.
-		row.Kind = "Not started"
+		// one not started. The vehicle has no trip running for Trip to open,
+		// so it opens all of the vehicle's trips.
 		row.Detail = fmt.Sprintf("Next on block %s, due %s ago", a.NextTrip.BlockID, duration)
-		row.RouteID = a.NextTrip.RouteID
+		routeID = a.NextTrip.RouteID
 		row.GtfsTripID = a.NextTrip.GtfsTripID
 		row.TripURL = tripsPageURL("", a.Trip.VehicleID, "", 1)
 	default:
-		row.Kind = "Not moving"
 		row.Detail = fmt.Sprintf("Under %.0f m in %s", stoppedRadius, duration)
 	}
+	for _, k := range alertKinds {
+		if k.kind == a.Kind {
+			row.Title, row.Icon = k.title, k.icon
+		}
+	}
+	row.Route = routeBadge(ix, routeID)
+	row.RouteLine = row.Route.LongName
+	if ix != nil {
+		if info, ok := ix.Trip(row.GtfsTripID); ok && info.Headsign != "" {
+			row.RouteLine = "To " + info.Headsign
+			if row.Route.LongName != "" {
+				row.RouteLine = row.Route.LongName + " to " + info.Headsign
+			}
+		}
+	}
 	return row
+}
+
+// alertsHeadline is the Alerts page's headline, from the count of open alerts.
+func alertsHeadline(open int) string {
+	switch open {
+	case 0:
+		return "No alerts are open"
+	case 1:
+		return "1 alert is open"
+	default:
+		return strconv.Itoa(open) + " alerts are open"
+	}
 }
 
 // alertsPage renders the current alerts, longest-running first.
@@ -80,15 +134,26 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ix := ui.reports.index()
+	loc := pageLocation(ix)
 	rows := make([]alertRow, 0, len(alerts))
+	byKind := make(map[string]int, len(alertKinds))
 	for _, a := range alerts {
-		rows = append(rows, newAlertRow(a, ui.alerts.settings))
+		rows = append(rows, newAlertRow(a, ui.alerts.settings, ix, loc))
+		byKind[a.Kind]++
+	}
+	kinds := make([]alertKindCount, 0, len(alertKinds)+1)
+	kinds = append(kinds, alertKindCount{Kind: "all", Label: "All", Count: len(rows)})
+	for _, k := range alertKinds {
+		kinds = append(kinds, alertKindCount{Kind: k.kind, Label: k.title, Count: byKind[k.kind]})
 	}
 
 	ui.renderAdminWithAlerts(w, r, http.StatusOK, "alerts.html", map[string]interface{}{
 		"Title":            "Alerts",
 		"Page":             "alerts",
+		"Headline":         alertsHeadline(len(rows)),
 		"Alerts":           rows,
+		"Kinds":            kinds,
 		"QuietAfter":       humanizeDuration(ui.alerts.settings.quietAfter),
 		"StoppedAfter":     humanizeDuration(ui.alerts.settings.stoppedAfter),
 		"StoppedRadius":    fmt.Sprintf("%.0f m", stoppedRadius),

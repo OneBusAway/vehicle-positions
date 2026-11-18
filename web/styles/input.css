@@ -344,6 +344,11 @@
 
   /* Alerts */
   .alert-row { display: grid; grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 18px; }
+  .alert-kinds { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .alert-list { display: grid; gap: 10px; }
+  .step-icon.alert-icon { width: 44px; height: 44px; border-radius: 50%; background: var(--warn-soft); color: var(--warn); }
+  .alert-vehicle { font: 500 16px/22px var(--font-sans); }
+  .alert-what { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
   .rules { margin-top: 16px; font-size: 13px; }
   .rules summary { cursor: pointer; color: var(--primary); font-weight: 500; }
   .empty-ok .empty .icon { color: var(--ok); }
