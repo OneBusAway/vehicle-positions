@@ -60,24 +60,32 @@
   function headsign(v) { return heads[v.gtfs_trip_id] || ""; }
   function speed(v) { return Math.round(v.speed * 3.6) + " km/h"; }
   function pads() { return { paddingTopLeft: [listOpen && !phone.matches ? 352 : 24, 84], paddingBottomRight: [picked && !phone.matches ? 384 : 72, phone.matches ? 220 : 48] }; }
-  // A rebuilt list or chip row keeps the keyboard where it was.
-  function keepFocus(host, build) {
+  // A rebuilt list, chip row or card keeps the keyboard where it was, or on the fallback when that control is gone.
+  function keepFocus(host, build, fallback) {
     var key = host.contains(document.activeElement) ? document.activeElement.dataset.key : null;
     build();
-    var again = key && host.querySelector('[data-key="' + CSS.escape(key) + '"]');
+    var again = key && (host.querySelector('[data-key="' + CSS.escape(key) + '"]') || (fallback && fallback()));
     if (again) again.focus({ preventScroll: true });
   }
 
-  /* The schedule: route names and colours, each trip's headsign, and a trip's line and stops when a vehicle is picked. */
+  /* The schedule: route names and colours, each trip's headsign, and a trip's line and stops when a vehicle is picked.
+     The live answer never waits for it, so the names can arrive after the vehicles. */
+  var routesAsking = false;
   function loadRoutes() {
-    return VT.getJSON(GTFS + "/routes").then(function (d) {
+    if (routesAsking) return;
+    routesAsking = true;
+    VT.getJSON(GTFS + "/routes").then(function (d) {
+      routesAsking = false;
       routes = {};
       d.routes.forEach(function (r) { r.hex = hex(r.color); routes[r.id] = r; });
       routesOk = true;
       chipSig = listSig = "";
-      Object.keys(markers).forEach(function (id) { delete markers[id].route; upsert(markers[id].v, true); });
+      Object.keys(markers).forEach(function (id) { delete markers[id].route; });
+      restyle();
       if (last) { chips(last); list(last); }
-    }, function () {});
+      if (card && markers[picked]) { card.key = ""; cardUpdate(markers[picked].v); }
+      if (answered && !Object.keys(markers).length) placeOnSchedule();
+    }, function () { routesAsking = false; });
   }
   function learnHeadsigns(live) {
     live.vehicles.forEach(function (v) {
@@ -151,6 +159,7 @@
     m.mk.getElement().style.display = shown(v) ? "" : "none";
   }
   function shown(v) { return filter === "all" || (filter === "attn" ? needs(v) : (v.route_id || "") === filter); }
+  function restyle() { Object.keys(markers).forEach(function (id) { upsert(markers[id].v, true); }); }
 
   // Markers are updated fifty to a frame, so a poll with 200 vehicles never blocks a frame for long.
   function draw(live, firstPaint) {
@@ -204,7 +213,7 @@
     var host = $("map-chips"), attn = live.vehicles.filter(needs).length, per = {};
     live.vehicles.forEach(function (v) { var k = v.route_id || ""; per[k] = (per[k] || 0) + 1; });
     // A filter that no vehicle matches any more goes back to All, so the map never stands empty with vehicles on it.
-    if (filter === "attn" ? !attn : filter !== "all" && !(filter in per)) { filter = "all"; Object.keys(markers).forEach(function (id) { upsert(markers[id].v, true); }); }
+    if (filter === "attn" ? !attn : filter !== "all" && !(filter in per)) { filter = "all"; restyle(); }
     var sig = filter + "|" + attn + "|" + JSON.stringify(per);
     if (sig === chipSig) return;
     chipSig = sig;
@@ -218,8 +227,7 @@
         b.appendChild(h("span", "n", String(n)));
         b.addEventListener("click", function () {
           filter = key;
-          Object.keys(markers).forEach(function (id) { upsert(markers[id].v, true); });
-          chips(last); list(last); fit(true);
+          restyle(); chips(last); list(last); fit(true);
         });
         host.appendChild(b);
       }
@@ -245,9 +253,10 @@
       if (!shown(v)) return;
       (groups[key] = groups[key] || []).push(v);
       if (folds && closed[key] == null) closed[key] = true;
-      keys.push(folds && closed[key] ? key + (n ? "!" : "") : v.vehicle_id + (n ? "!" : ""));
+      // Each vehicle's route and name are in the signature, so one that changes route or is renamed moves.
+      keys.push(folds && closed[key] ? [key, n] : [key, v.vehicle_id, v.label, n]);
     });
-    var sig = filter + "|" + folds + "|" + keys.join(",");
+    var sig = JSON.stringify([filter, folds, keys]);
     if (sig === listSig) {
       live.vehicles.forEach(function (v) {
         var r = rows[v.vehicle_id]; if (!r) return;
@@ -296,16 +305,16 @@
   }
 
   /* The picked vehicle: its card, its trip's line and stops. */
-  var picks = 0;
+  var picks = 0, tripAsks = 0;
   function pick(id) {
-    var mine = ++picks;
+    var mine = ++picks, ask = ++tripAsks;
     if (picked && markers[picked]) { markers[picked].el.classList.remove("selected"); markers[picked].mk.setZIndexOffset(markers[picked].attn ? 1000 : 0); }
     if (picked && rows[picked]) rows[picked].row.removeAttribute("aria-current");
     picked = id; follow = false; routeLayer.clearLayers();
     var shell = $("map-detail");
     if (!id || !markers[id]) { shell.hidden = true; card = null; return; }
     if (rows[id]) rows[id].row.setAttribute("aria-current", "true");
-    var m = markers[id], v = m.v, r = routes[v.route_id];
+    var m = markers[id], v = m.v;
     m.el.classList.add("selected");
     m.mk.setZIndexOffset(2000);
     var fromList = $("map-list").contains(document.activeElement);
@@ -320,32 +329,38 @@
       var o = pads(); o.animate = !reduce;
       map.panInside(markers[id].mk.getLatLng(), o);
     });
+    showTrip(v, ask);
+  }
+  // The trip's line and stops, once the schedule answers, unless another pick or a new trip has come first.
+  function showTrip(v, ask) {
     if (!v.gtfs_trip_id) return;
     trip(v.gtfs_trip_id).then(function (t) {
-      if (!t || mine !== picks || !t.shape.points.length) return;
-      if (t.headsign && !heads[t.id]) { heads[t.id] = t.headsign; cardUpdate(markers[id].v); }
-      var dark = getComputedStyle(document.documentElement).colorScheme === "dark";
+      if (!t || ask !== tripAsks || !t.shape.points.length) return;
+      var r = routes[v.route_id], dark = getComputedStyle(document.documentElement).colorScheme === "dark";
       L.polyline(t.shape.points, { color: dark ? "#0B0B0C" : "#FFFFFF", weight: 10, interactive: false }).addTo(routeLayer);
       L.polyline(t.shape.points, { color: (r && r.hex) || "#3B6939", weight: 5.5, interactive: false }).addTo(routeLayer);
       t.stops.forEach(function (s) {
         L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "", html: '<div class="stop-marker"></div>', iconSize: [12, 12], iconAnchor: [6, 6] }), keyboard: false })
           .bindTooltip(h("span", "", s.name), { direction: "top", offset: [0, -6] }).addTo(routeLayer);
       });
+      if (t.headsign && !heads[t.id]) { heads[t.id] = t.headsign; cardUpdate(markers[v.vehicle_id].v); }
     });
   }
 
   // The card is built once for each pick and then only its words change, so the keyboard keeps its place on it.
+  // A new trip, route or name builds it again.
+  function cardKey(v) { return JSON.stringify([v.route_id, v.gtfs_trip_id, v.trip_db_id, v.label]); }
   function detail(v) {
     var host = $("map-detail");
     host.textContent = "";
-    card = { id: v.vehicle_id };
+    card = { id: v.vehicle_id, key: cardKey(v) };
     var head = h("div", "veh-head");
     head.appendChild(badge(v.route_id, true));
     var t = h("div"); t.style.cssText = "flex:1;min-width:0";
     t.appendChild(h("div", "veh-name", v.label));
     card.route = t.appendChild(h("div", "muted"));
     head.appendChild(t);
-    var x = card.close = h("button", "icon-btn"); x.type = "button"; x.setAttribute("aria-label", "Close"); x.appendChild(icon("close"));
+    var x = card.close = h("button", "icon-btn"); x.type = "button"; x.dataset.key = "close"; x.setAttribute("aria-label", "Close"); x.appendChild(icon("close"));
     x.addEventListener("click", function () { closeCard(false); }); head.appendChild(x);
     host.appendChild(head);
 
@@ -363,15 +378,15 @@
     host.appendChild(dl);
 
     var acts = h("div"); acts.style.cssText = "display:flex;gap:8px;flex-wrap:wrap";
-    var f = card.follow = h("button", "btn"); f.type = "button";
+    var f = card.follow = h("button", "btn"); f.type = "button"; f.dataset.key = "follow";
     f.appendChild(icon("near_me")); card.followWord = f.appendChild(document.createTextNode(""));
     f.addEventListener("click", function () {
       follow = !follow; followShown();
       if (follow && markers[picked]) map.panTo(markers[picked].mk.getLatLng(), { animate: !reduce });
     });
     acts.appendChild(f);
-    if (v.trip_db_id != null) { var a = h("a", "btn btn-outline", "Open trip"); a.href = "/admin/trips/" + v.trip_db_id; acts.appendChild(a); }
-    var e = h("a", "btn", "Vehicle"); e.href = "/admin/vehicles/" + encodeURIComponent(v.vehicle_id) + "/edit"; acts.appendChild(e);
+    if (v.trip_db_id != null) { var a = h("a", "btn btn-outline", "Open trip"); a.dataset.key = "trip"; a.href = "/admin/trips/" + v.trip_db_id; acts.appendChild(a); }
+    var e = h("a", "btn", "Vehicle"); e.dataset.key = "vehicle"; e.href = "/admin/vehicles/" + encodeURIComponent(v.vehicle_id) + "/edit"; acts.appendChild(e);
     host.appendChild(acts);
     cardUpdate(v);
   }
@@ -383,6 +398,12 @@
   }
   function cardUpdate(v) {
     if (!card || card.id !== v.vehicle_id) return;
+    if (card.key !== cardKey(v)) {
+      routeLayer.clearLayers();
+      keepFocus($("map-detail"), function () { detail(v); }, function () { return card.close; });
+      showTrip(v, ++tripAsks);
+      return;
+    }
     var q = isQuiet(v), al = q ? null : alertOf(v), warn = q || !!al, hs = headsign(v);
     card.route.textContent = routeName(v.route_id) + (hs ? " to " + hs : "");
     card.state.classList.toggle("warn", warn);
@@ -425,22 +446,33 @@
 
   /* Polling. This page asks for the live answer itself, so the shell's pulse takes its news from here. */
   VT.ownsPulse = true;
-  var first = true, polls = 0, asked = 0, answered = 0;
+  var first = true, polls = 0, asked = 0, answered = 0, alertsAsked = 0, alertsAnswered = 0, alertSig = "[]";
+  // Alerts change slowly, so they are asked for on every third poll, on their own: the positions never wait for
+  // them, and an older answer that comes late is dropped.
+  function askAlerts(forPoll) {
+    var mine = ++alertsAsked;
+    VT.getJSON(el.dataset.alertsUrl).then(function (a) {
+      if (mine < alertsAnswered) return;
+      alertsAnswered = mine;
+      var by = {};
+      a.alerts.forEach(function (x) { if (x.trip && !by[x.trip.vehicle_id]) by[x.trip.vehicle_id] = x; });
+      alertBy = by;
+      if (VT.alerts) VT.alerts(a);
+      var sig = JSON.stringify(Object.keys(by).map(function (id) { return [id, by[id].kind]; }));
+      // Positions already drawn without these alerts are drawn again for what needs attention now.
+      if (sig !== alertSig && answered >= forPoll && last) { restyle(); chips(last); list(last); if (picked && markers[picked]) cardUpdate(markers[picked].v); }
+      alertSig = sig;
+    }, function () {});
+  }
   function poll() {
     if (document.hidden) return;
-    if (!routesOk && polls) loadRoutes();
+    if (!routesOk) loadRoutes();
     var mine = ++asked;
-    // Alerts change slowly, so they are asked for on every third poll. A failure there never holds the map back.
-    var al = polls++ % 3 === 0 ? VT.getJSON(el.dataset.alertsUrl).then(function (a) {
-      alertBy = {};
-      a.alerts.forEach(function (x) { if (x.trip && !alertBy[x.trip.vehicle_id]) alertBy[x.trip.vehicle_id] = x; });
-      if (VT.alerts) VT.alerts(a);
-    }, function () {}) : Promise.resolve();
-    // Only the newest answer is drawn. A failure of the requests is "no answer"; an error drawing it is not.
-    Promise.all([VT.getJSON(el.dataset.liveUrl), al]).then(function (got) {
+    if (polls++ % 3 === 0) askAlerts(mine);
+    // Only the newest answer is drawn. A failure of the request is "no answer"; an error drawing it is not.
+    VT.getJSON(el.dataset.liveUrl).then(function (live) {
       if (mine < answered) return;
       answered = mine;
-      var live = got[0];
       lastOk = Date.now(); draw(live, first); first = false;
       learnHeadsigns(live);
       if (VT.heard) VT.heard(live);
@@ -458,7 +490,7 @@
       }
     });
   }
-  loadRoutes().then(function () { poll(); setInterval(poll, POLL); });
+  poll(); setInterval(poll, POLL);
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) return;
     first = !Object.keys(markers).length;
