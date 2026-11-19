@@ -291,7 +291,8 @@ func TestDriverSetupPage_DriverSheet(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, `<div class="sheet-for">For Asha Rao</div>`)
 	assert.Contains(t, body, "Sign in with your email address, <b>asha.rao@agency.example</b>, and your password.")
-	assert.Contains(t, body, `<input type="hidden" name="user" value="7">`, "changing the address must keep the driver's sheet")
+	_, selected := pickerOptions(t, body)
+	assert.Equal(t, "7", selected, "changing the address must keep the driver's sheet")
 	// The apps take only the server from a link, so the driver's sheet has
 	// the same link and code as anyone's, and nothing secret.
 	assert.Equal(t, []string{exampleSetupLink}, pageSetupLinks(body))
@@ -306,7 +307,8 @@ func TestDriverSetupPage_GeneralSheetHasNoEmail(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
 	assert.Contains(t, body, "the email address your agency gave you")
-	assert.NotContains(t, body, `name="user"`)
+	_, selected := pickerOptions(t, body)
+	assert.Equal(t, "", selected, "no driver is chosen")
 	assert.NotContains(t, body, `class="sheet-for"`)
 }
 

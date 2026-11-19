@@ -1,0 +1,20 @@
+{{/* One driver's setup sheet (setupSheet). The Driver setup page shows one; an import's result prints one per imported driver. */}}
+{{define "setup-sheet"}}
+<article class="sheet" aria-label="Sheet for the driver">
+  <div class="sheet-stub"><span class="the-line sheet-line" aria-hidden="true"><span class="track"></span><span class="stop reached" style="top:0%"></span><span class="stop" style="top:33.3%"></span><span class="stop" style="top:66.7%"></span><span class="stop" style="top:100%"></span><span class="veh" style="top:0%">{{template "arrow"}}</span></span></div>
+  <div class="sheet-body">
+    <div class="sheet-brand">{{template "brand-mark"}}<div><div class="sheet-app">OBA Vehicle Tracker</div>{{with .Name}}<div class="sheet-for">For {{.}}</div>{{end}}</div></div>
+    <h3 class="sheet-title">Set up the app<br>on your phone</h3>
+    <div class="sheet-main">
+      <div class="sheet-qr">{{.Setup.QR}}<div class="sheet-host">{{.Setup.Host}}</div></div>
+      <ol class="sheet-steps" role="list">
+        <li><span class="sheet-n" aria-hidden="true">1</span><span>Install OBA Vehicle Tracker on your phone.</span></li>
+        <li><span class="sheet-n" aria-hidden="true">2</span><span>Scan this code: on an iPhone with the Camera app, on Android with Google Lens. Open the link it shows.</span></li>
+        <li><span class="sheet-n" aria-hidden="true">3</span><span>When the app asks <b>Use {{.Setup.Host}}?</b>, tap <b>Use this server</b>.</span></li>
+        <li><span class="sheet-n" aria-hidden="true">4</span><span>Sign in with {{with .Email}}your email address, <b>{{.}}</b>,{{else}}the email address your agency gave you{{end}} and {{with .Password}}this password: <b class="pw">{{.}}</b>. Keep it to yourself.{{else}}your password.{{end}}</span></li>
+      </ol>
+    </div>
+    <div class="sheet-fallback">If the code won't scan, type this address as the server on the sign-in screen: <b>{{.Server}}</b></div>
+  </div>
+</article>
+{{end}}

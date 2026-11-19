@@ -10,7 +10,15 @@
 <div class="setup-grid">
   <div class="no-print setup-side">
     <form class="card setup-card" method="get" action="/admin/driver-setup">
-      {{with .User}}<input type="hidden" name="user" value="{{.ID}}">{{end}}
+      <div class="field">
+        <label class="label" for="user">Driver</label>
+        <select class="select" id="user" name="user" aria-describedby="user-help">
+          <option value="">Anyone: no name on the sheet</option>
+          {{range .Drivers}}<option value="{{.ID}}"{{if and $.User (eq .ID $.User.ID)}} selected{{end}}>{{.Name}} ({{.Email}})</option>
+          {{end}}
+        </select>
+        <div class="help" id="user-help">The sheet names the driver and the email address they sign in with.{{if .MoreDrivers}} This lists the {{len .Drivers}} newest drivers; for another, use Setup sheet on their row in Drivers and users.{{end}}</div>
+      </div>
       <div class="field">
         <label class="label" for="server">Server address</label>
         <input id="server" name="server" class="input" type="url" required value="{{.Server}}" aria-describedby="srv-help{{if .Error}} srv-err{{end}}"{{if .Error}} aria-invalid="true"{{end}}>
@@ -34,24 +42,6 @@
     {{end}}
   </div>
 
-  {{with .Setup}}
-  <article class="sheet" aria-label="Sheet for the driver">
-    <div class="sheet-stub"><span class="the-line sheet-line" aria-hidden="true"><span class="track"></span><span class="stop reached" style="top:0%"></span><span class="stop" style="top:33.3%"></span><span class="stop" style="top:66.7%"></span><span class="stop" style="top:100%"></span><span class="veh" style="top:0%">{{template "arrow"}}</span></span></div>
-    <div class="sheet-body">
-      <div class="sheet-brand">{{template "brand-mark"}}<div><div class="sheet-app">OBA Vehicle Tracker</div>{{with $.User}}<div class="sheet-for">For {{.Name}}</div>{{end}}</div></div>
-      <h3 class="sheet-title">Set up the app<br>on your phone</h3>
-      <div class="sheet-main">
-        <div class="sheet-qr">{{.QR}}<div class="sheet-host">{{.Host}}</div></div>
-        <ol class="sheet-steps" role="list">
-          <li><span class="sheet-n" aria-hidden="true">1</span><span>Install OBA Vehicle Tracker on your phone.</span></li>
-          <li><span class="sheet-n" aria-hidden="true">2</span><span>Scan this code: on an iPhone with the Camera app, on Android with Google Lens. Open the link it shows.</span></li>
-          <li><span class="sheet-n" aria-hidden="true">3</span><span>When the app asks <b>Use {{.Host}}?</b>, tap <b>Use this server</b>.</span></li>
-          <li><span class="sheet-n" aria-hidden="true">4</span><span>Sign in with {{with $.User}}your email address, <b>{{.Email}}</b>,{{else}}the email address your agency gave you{{end}} and your password.</span></li>
-        </ol>
-      </div>
-      <div class="sheet-fallback">If the code won't scan, type this address as the server on the sign-in screen: <b>{{$.Server}}</b></div>
-    </div>
-  </article>
-  {{end}}
+  {{with .Sheet}}{{template "setup-sheet" .}}{{end}}
 </div>
 {{end}}

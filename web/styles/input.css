@@ -494,6 +494,8 @@
   .sheet-fallback { margin-top: 20px; padding-top: 14px; border-top: 1px dashed #c4c7c5; font-size: 13px; line-height: 18px; color: #444746; }
   .sheet-fallback b { color: #1f1f1f; }
   .setup-grid { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  /* An import's sheets, one per driver, are only for printing. */
+  .sheets { display: none; }
   .setup-side { display: grid; gap: 16px; }
   .setup-card { display: grid; gap: 12px; padding: 18px; }
   .setup-link { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font: 500 12px/18px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; user-select: all; }
@@ -525,6 +527,7 @@
     .sheet-steps { gap: 10px; font-size: 14px; line-height: 20px; }
     .sheet-fallback { margin-top: 16px; padding-top: 12px; }
     h2.h1, .lede { display: none; }
+    .sheets { display: block; }
   }
 }
 
