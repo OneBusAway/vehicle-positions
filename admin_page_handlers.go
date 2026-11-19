@@ -1562,6 +1562,12 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 	ix := ui.reports.index()
 	loc := pageLocation(ix)
 	now := time.Now()
+	lateness, err := ui.tripsLateness(ctx, trips, ix, now)
+	if err != nil {
+		slog.Error("trips: work out lateness", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	rows := make([]tripRow, 0, len(trips))
 	for _, t := range trips {
 		row := tripRow{
@@ -1603,6 +1609,7 @@ func (ui *adminUI) tripsPage(w http.ResponseWriter, r *http.Request) {
 		"Headline":  tripsHeadline(running),
 		"Timezone":  loc.String(),
 		"Trips":     rows,
+		"Lateness":  lateness,
 		"Vehicles":  activeVehicles,
 		"Status":    status,
 		"Statuses":  statuses,
