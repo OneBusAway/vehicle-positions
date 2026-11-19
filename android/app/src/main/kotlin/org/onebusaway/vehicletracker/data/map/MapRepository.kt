@@ -40,7 +40,8 @@ internal const val LAST_RETRY_MS = 5 * 60_000L
  * while a retry waits, as when the driver signs out and back in, asks at once and retries from 5 s.
  *
  * The map belongs to the server that gave it. One from another server shows another agency's
- * streets, so it leaves the screen and the server signed in is asked at once.
+ * streets, so it leaves the screen and the server signed in is asked at once. Until that server's
+ * map replaces it, signing in to the first server again puts it back on the screen.
  *
  * A file a map may have open is never changed or deleted (maplibre-native #3658: MapLibre crashes
  * if it is). A newer version downloads under a new name and the state moves to it, so the next
@@ -147,6 +148,8 @@ class MapRepository @Inject constructor(
         // Its file stays until the next start either way, as a map on screen may be reading it.
         val current = kept?.takeIf { it.server == signedInTo || it.server == null }
         if (kept != null && current == null && _state.value is MapFileState.Ready) _state.value = MapFileState.None
+        // Back from a server whose check left nothing in its place, this server's map goes on the screen again.
+        if (current != null && _state.value !is MapFileState.Ready) _state.value = MapFileState.Ready(store.file(current.fileName))
         if (current?.server == signedInTo && record.pending == null && isRecent(current.checkedAtEpochSec)) return Outcome.DONE
 
         val url = when (val answer = server.ask()) {
@@ -171,9 +174,10 @@ class MapRepository @Inject constructor(
         val known = if (kept?.url == url) kept.version else rejected?.version
         val firstCopy = current == null
         var shownPercent = -1
+        var shown: MapFileState.Downloading? = null
 
-        val result = try {
-            fetcher.fetch(
+        return try {
+            val result = fetcher.fetch(
                 FetchRequest(url, store.partFile(pending.fileName), store.file(pending.fileName), pending.version, known),
                 onVersion = { version -> store.save(store.load().copy(pending = pending.copy(version = version))) },
                 onProgress = { bytes, total ->
@@ -181,45 +185,46 @@ class MapRepository @Inject constructor(
                     val percent = downloadPercent(bytes, total)
                     if (firstCopy && percent != shownPercent) {
                         shownPercent = percent
-                        _state.value = MapFileState.Downloading(bytes, total)
+                        shown = MapFileState.Downloading(bytes, total).also { _state.value = it }
                     }
                 },
             )
-        } catch (e: CancellationException) {
-            // Stopped for the next sign-in, whose check may end without saying anything, as when it is signed out.
-            if (_state.value is MapFileState.Downloading) _state.value = MapFileState.None
-            throw e
-        }
-        return when (result) {
-            FetchResult.Unchanged -> {
-                val latest = store.load().copy(pending = null)
-                if (kept?.url == url) {
-                    store.save(latest.copy(current = kept.copy(checkedAtEpochSec = now(), server = signedInTo)))
-                    _state.value = MapFileState.Ready(store.file(kept.fileName))
-                    Outcome.DONE
-                } else {
-                    // The host still serves the file that was turned down.
-                    store.save(latest.copy(rejected = rejected?.copy(atEpochSec = now())))
-                    failed(MapFailure.INVALID_FILE, retry = false)
-                }
-            }
-            is FetchResult.Complete -> {
-                store.save(MapRecord(current = StoredMap(url, pending.fileName, result.version, now(), signedInTo)))
-                _state.value = MapFileState.Ready(store.file(pending.fileName))
-                Log.i(TAG, "Map file ready, ${result.length} bytes")
-                Outcome.DONE
-            }
-            is FetchResult.Failed -> {
-                Log.w(TAG, "Map file not downloaded: ${result.reason}")
-                when (result.reason) {
-                    MapFailure.INVALID_FILE -> {
-                        store.save(store.load().copy(pending = null, rejected = RejectedMap(url, result.version ?: FileVersion(), now())))
+            when (result) {
+                FetchResult.Unchanged -> {
+                    val latest = store.load().copy(pending = null)
+                    if (kept?.url == url) {
+                        store.save(latest.copy(current = kept.copy(checkedAtEpochSec = now(), server = signedInTo)))
+                        _state.value = MapFileState.Ready(store.file(kept.fileName))
+                        Outcome.DONE
+                    } else {
+                        // The host still serves the file that was turned down.
+                        store.save(latest.copy(rejected = rejected?.copy(atEpochSec = now())))
                         failed(MapFailure.INVALID_FILE, retry = false)
                     }
-                    MapFailure.NO_SPACE, MapFailure.CLEARTEXT_BLOCKED, MapFailure.UNEXPECTED -> failed(result.reason, retry = false)
-                    MapFailure.NETWORK -> failed(MapFailure.NETWORK)
+                }
+                is FetchResult.Complete -> {
+                    store.save(MapRecord(current = StoredMap(url, pending.fileName, result.version, now(), signedInTo)))
+                    _state.value = MapFileState.Ready(store.file(pending.fileName))
+                    Log.i(TAG, "Map file ready, ${result.length} bytes")
+                    Outcome.DONE
+                }
+                is FetchResult.Failed -> {
+                    Log.w(TAG, "Map file not downloaded: ${result.reason}")
+                    when (result.reason) {
+                        MapFailure.INVALID_FILE -> {
+                            store.save(store.load().copy(pending = null, rejected = RejectedMap(url, result.version ?: FileVersion(), now())))
+                            failed(MapFailure.INVALID_FILE, retry = false)
+                        }
+                        MapFailure.NO_SPACE, MapFailure.CLEARTEXT_BLOCKED, MapFailure.UNEXPECTED -> failed(result.reason, retry = false)
+                        MapFailure.NETWORK -> failed(MapFailure.NETWORK)
+                    }
                 }
             }
+        } catch (e: CancellationException) {
+            // Stopped for the next sign-in, while downloading or saving what came, whose check may end without saying
+            // anything, as when it is signed out. Only this check's progress is cleared.
+            if (shown != null && _state.value == shown) _state.value = MapFileState.None
+            throw e
         }
     }
 

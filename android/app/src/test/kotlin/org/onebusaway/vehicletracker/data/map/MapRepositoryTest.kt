@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.data.map
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -10,6 +11,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -284,6 +286,66 @@ class MapRepositoryTest {
         assertEquals("retried as with no map here", 2, server.askedAt.size)
     }
 
+    /** Signed in to B from A with A's map here, B's check ending with [onB], then signed in to A again. */
+    private suspend fun TestScope.backFromB(onB: MapServerAnswer): MapRepository {
+        setUp()
+        mapHere()
+        val repository = started()
+        server.answers += onB
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        settle()
+        assertEquals("B's check left the map off the screen", 1, server.askedAt.size)
+        assertFalse(repository.state.value is MapFileState.Ready)
+
+        sessions.state.value = signedIn.copy(token = "jwt2", issuedAtEpochSec = 900L)
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+        return repository
+    }
+
+    // B's check ended without a map in A's place, and the map stayed blank until the next start or the day's check.
+    @Test fun `back on the last server from one that can't be reached, its map is shown again without asking`() = runTest {
+        val repository = backFromB(MapServerAnswer.Unreachable)
+
+        assertEquals(MapFileState.Ready(File(dir, "map-a.pmtiles")), repository.state.value)
+        assertEquals("B's retry stopped and A was not asked", 1, server.askedAt.size)
+        assertTrue(fetcher.requests.isEmpty())
+    }
+
+    @Test fun `back on the last server from one that refused the token, its map is shown again without asking`() = runTest {
+        val repository = backFromB(MapServerAnswer.SignedOut)
+
+        assertEquals(MapFileState.Ready(File(dir, "map-a.pmtiles")), repository.state.value)
+        assertEquals(1, server.askedAt.size)
+    }
+
+    // B's first download left its part file pending, so A is asked: the map is shown again while it is.
+    @Test fun `back on the last server during the next one's first download, its map is shown while it can't be reached`() = runTest {
+        setUp()
+        val map = mapHere()
+        val repository = started()
+        server.answers += MapServerAnswer.File("https://b-maps.example.org/b.pmtiles")
+        server.default = MapServerAnswer.Unreachable
+        fetcher.steps += FakeFetcher.Step { request, onVersion, onProgress ->
+            onVersion(v1)
+            request.part.writeText("partial")
+            onProgress(10, 100)
+            awaitCancellation()
+        }
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        settle()
+        assertEquals(MapFileState.Downloading(10, 100), repository.state.value)
+
+        sessions.state.value = signedIn.copy(token = "jwt2", issuedAtEpochSec = 900L)
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals("asked once, then left for the next refresh as a map is here", 2, server.askedAt.size)
+    }
+
     @Test fun `the same file from another server is only checked, not downloaded again`() = runTest {
         setUp()
         val map = mapHere(server = serverB)
@@ -485,6 +547,59 @@ class MapRepositoryTest {
 
         assertEquals(2, server.askedAt.size)
         assertEquals(MapFileState.None, repository.state.value)
+    }
+
+    // The next sign-in's refresh lands as the download finishes: the check is stopped while the record is saved.
+    @Test fun `a first download stopped as it is saved doesn't leave its progress showing`() = runTest {
+        setUp()
+        server.answers += MapServerAnswer.File(url)
+        server.answers += MapServerAnswer.SignedOut
+        lateinit var repository: MapRepository
+        fetcher.steps += FakeFetcher.Step { request, _, onProgress ->
+            onProgress(100, 100)
+            request.target.writeText("map")
+            sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+            repository.refresh()
+            FetchResult.Complete(v1, 3)
+        }
+        repository = started()
+        repository.refresh()
+        settle()
+
+        assertEquals(2, server.askedAt.size)
+        assertEquals(MapFileState.None, repository.state.value)
+    }
+
+    // A refresh stopped while it waits for the last one to stop no longer waits for it, so the one after can start
+    // while the first is still stopping.
+    @Test fun `a check still stopping leaves the next check's progress showing`() = runTest {
+        setUp()
+        fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
+            onProgress(10, 100)
+            try {
+                awaitCancellation()
+            } finally {
+                withContext(NonCancellable) { delay(1_000) }
+            }
+        }
+        fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
+            onProgress(20, 100)
+            awaitCancellation()
+        }
+        val repository = started()
+        repository.refresh()
+        settle()
+
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        runCurrent()
+        sessions.state.value = signedIn.copy(email = "e@example.com")
+        repository.refresh()
+        runCurrent()
+        assertEquals(MapFileState.Downloading(20, 100), repository.state.value)
+        settle()
+
+        assertEquals(MapFileState.Downloading(20, 100), repository.state.value)
     }
 
     @Test fun `with a map here, a failed check waits for the next refresh`() = runTest {
