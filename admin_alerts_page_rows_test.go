@@ -56,6 +56,21 @@ func TestAlertsPage_Rows(t *testing.T) {
 	assert.Contains(t, body, `<a class="btn btn-sm btn-outline" href="/admin/trips?page=1&amp;status=active&amp;vehicle_id=bus-quiet">Trip</a>`)
 }
 
+// TestAlertsPage_KindWithNoAlert: a chip can pick a kind with no open alert,
+// Off route in twoAlerts, so the list carries a hidden line the script shows
+// then. With no alert open at all the page says All clear instead.
+func TestAlertsPage_KindWithNoAlert(t *testing.T) {
+	const none = `<div class="card" id="alert-none" hidden><div class="empty"><div class="empty-title">No open alerts of this kind</div>`
+
+	body := getAdminPage(t, newAlertsMux(t, twoAlerts(time.Now())), "/admin/alerts")
+	assert.Contains(t, body, none)
+	assert.Less(t, strings.Index(body, `id="alert-list"`), strings.Index(body, none), "the line comes after the rows")
+
+	empty := getAdminPage(t, newAlertsMux(t, newAlertWatcher(&fakeTripLister{}, testAlertSettings)), "/admin/alerts")
+	assert.NotContains(t, empty, `id="alert-none"`)
+	assert.Contains(t, empty, `<div class="empty-title">All clear</div>`)
+}
+
 // TestNewAlertRow_RouteFromTheSchedule: with a schedule the row carries the
 // route's badge and where the trip goes, and for a block's next trip those
 // are the trip not started, not the one run.

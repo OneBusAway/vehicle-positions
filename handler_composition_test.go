@@ -85,6 +85,21 @@ func TestAdminScriptsPutStopNamesInAsText(t *testing.T) {
 	}
 }
 
+// TestAdminScriptsNeverSpreadIntoMathMaxOrMin: Math.max(...list) passes every
+// item as an argument, and a trail of over about 100,000 reports runs out of
+// stack with a RangeError. A reduce has no limit.
+func TestAdminScriptsNeverSpreadIntoMathMaxOrMin(t *testing.T) {
+	h := newTestHandler(t, true)
+	spread := regexp.MustCompile(`Math\.(?:max|min)\([^;]*?\.\.\.`)
+	for _, path := range []string{"/static/js/app.js", "/static/js/line.js", "/static/js/map.js", "/static/js/trip_detail.js"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code, path)
+		assert.Empty(t, spread.FindAllString(w.Body.String(), -1), "%s spreads a list into Math.max or Math.min", path)
+	}
+}
+
 // TestAdminMapScriptFollowsOSMTilePolicy pins what the map script owes
 // OpenStreetMap's tile usage policy
 // (https://operations.osmfoundation.org/policies/tiles/), read through the

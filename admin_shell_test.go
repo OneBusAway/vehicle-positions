@@ -299,6 +299,23 @@ func TestMorePage(t *testing.T) {
 	assert.Contains(t, body, `<form method="post" action="/admin/logout"><button class="line-row more-row" type="submit">`, "signing out works there without JavaScript")
 }
 
+// TestAccountMenuWithoutPopovers: Sign out is in the account menu, a popover.
+// app.js sends a browser without popovers to the More page instead, which has
+// Sign out too, so the button it looks for must be the one the header draws.
+func TestAccountMenuWithoutPopovers(t *testing.T) {
+	ui, mux := newShellMux(t)
+	wireFakeUserStore(ui, newFakeUserStore(UserResponse{ID: 9, Name: "Test Admin", Email: "admin@test.com", Role: roleAdmin, Active: true}), newFakeAssignmentStore())
+
+	body := getAdminPage(t, mux, "/admin/more")
+	require.Contains(t, body, `<button class="avatar" type="button" popovertarget="account" aria-label="Account">`)
+	require.Contains(t, body, `<form method="post" action="/admin/logout">`, "the More page signs out")
+
+	script, err := fs.ReadFile(files, "web/static/js/app.js")
+	require.NoError(t, err)
+	assert.Contains(t, string(script), `if (!("popover" in HTMLElement.prototype)) {`)
+	assert.Contains(t, string(script), `$$('[popovertarget="account"]').forEach(function (b) { b.addEventListener("click", function () { location.href = "/admin/more"; }); });`)
+}
+
 func TestQuietVehicles(t *testing.T) {
 	now := time.Now()
 	quiet := alertEntry{Kind: alertQuiet, DurationSeconds: 240, Trip: alertTrip("bus-2", now)}

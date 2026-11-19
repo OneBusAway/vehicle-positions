@@ -87,10 +87,13 @@ The bar across the top is on every page:
   those on a trip that have gone quiet. The last part says how long ago the
   page heard from the server, such as **updated 4 s ago**. It keeps itself
   current, and reads **no answer for 40 s** when the server stops answering.
+  With several admin tabs open, one of them asks the server and shares the
+  answer with the others.
 - The bell shows how many alerts are open and opens **Alerts**.
 - The circle with your initials opens a small menu with **Light or dark**,
   which switches the pages' colours, and **Sign out**. On a phone both are on
-  **More**.
+  **More**. In a browser too old for that menu, the circle opens **More**
+  instead.
 
 ---
 
@@ -565,7 +568,8 @@ Each row names the vehicle, driver, route and GTFS trip, and says how long:
 **No report for 7 min**, **Under 50 m in 12 min**, **Over 60 m from its route
 for 6 min** or **Next on block 12, due 7 min ago**, and when the alert opened.
 The longest-running alert is at the top. The buttons above the list each name
-a kind and how many alerts of it are open; pick one to show only those.
+a kind and how many alerts of it are open; pick one to show only those. A kind
+with none open says so, and **All** shows every alert again.
 **Last position** opens the trip's page (see [A trip's page](#a-trips-page)),
 whose map starts where the vehicle last reported, even after it has dropped
 off the Live map. **Trip** opens **Trips** on that trip, where **End trip**
@@ -659,7 +663,8 @@ agency's clock, which the page names (UTC if the schedule is not loaded).
 
 - The top shows the vehicle, the route in its colour, whether the trip is
   **Running** or **Completed**, and how it stood at its last stop. Under it
-  are the driver, GTFS trip and block, when it started and ended, how long it
+  are the driver, the vehicle's ID when its name is something else, the GTFS
+  trip and block, when it started and ended, how long it
   took, how many of its stops were on time and how many reports the phone
   sent. An active trip has **End trip** here too; it works as on **Trips** and
   takes you back there.
@@ -672,7 +677,9 @@ agency's clock, which the page names (UTC if the schedule is not loaded).
   **60x**. Drag along the line, or use the arrow keys, to step through the
   reports one at a time. The replay needs JavaScript; the rest of the page
   does not.
-- **Stops** lists each stop with when it was due, when the vehicle left it
+- **Stops** starts with the trip's scheduled times and, once the trip is over,
+  how it left the first stop and reached the last. Then it lists each stop
+  with when it was due, when the vehicle left it
   (reached it, for the last stop) and how early or late that was, by the same
   rule as **Analytics**, so the two pages agree. A stop inside the on-time
   window says **On time** in green with the difference beside it. An early

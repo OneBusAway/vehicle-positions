@@ -530,7 +530,9 @@ func TestTripDetailPage_CompletedTrip(t *testing.T) {
 	body := getAdminPage(t, mux, "/admin/trips/1")
 	assert.Contains(t, body, "Straight to North. Times are America/Los_Angeles time.")
 	assert.Contains(t, body, "Bus T1")
+	assert.Contains(t, body, "<dt>Vehicle ID</dt><dd>bus-T1</dd>", "the vehicle's id beside its label")
 	assert.Contains(t, body, "Driver T1")
+	assert.Contains(t, body, `<p class="card-note">Scheduled 08:00 to 08:10. First stop <span class="pill pill-ok">On time</span> <span class="muted">&#43;0:06</span>, last stop <span class="pill pill-ok">On time</span> <span class="muted">-0:16</span>.</p>`, "the Stops card says the scheduled times and how the trip left the first stop and reached the last")
 	assert.Contains(t, body, `style="background-color: #0077C0; color: #FFFFFF"`, "the route badge in its colours")
 	assert.Contains(t, body, `<dt>Started</dt><dd>07:57 <span class="muted" style="font-weight:400">2 Sep</span></dd>`)
 	assert.Contains(t, body, `<dt>Ended</dt><dd>08:12 `)
@@ -570,8 +572,22 @@ func TestTripDetailPage_ActiveTrip(t *testing.T) {
 	assert.Contains(t, body, `<form method="post" action="/admin/trips/1/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip">`)
 	assert.Contains(t, body, `<span class="pill pill-ok">Running</span>`)
 	assert.Contains(t, body, "so far")
+	assert.Contains(t, body, `<p class="card-note">Scheduled 08:00 to 08:10.</p>`, "a running trip has not reached its last stop, so the line stops at the times")
 	assert.Contains(t, body, "New reports are added every 10 seconds.")
 	assert.True(t, pageTripMap(t, body).Active, "the script fetches the trail again")
+}
+
+// TestTripDetail_VehicleIDWhenItDiffers: the stat strip names the vehicle's id
+// only when its label is something else, so a vehicle with no label of its own
+// is not named twice.
+func TestTripDetail_VehicleIDWhenItDiffers(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	trip, points := fixtureTrip(t, ix, 1)
+	trip.VehicleLabel = trip.VehicleID
+
+	body := renderTripDetailContent(t, newTripDetail(trip, points, ix, testReportSettings, 5*time.Minute, reportFixtureNow))
+	assert.NotContains(t, body, "<dt>Vehicle ID</dt>")
+	assert.Contains(t, body, "bus-T1", "the label, which is the id")
 }
 
 func TestTripDetailPage_Gaps(t *testing.T) {
