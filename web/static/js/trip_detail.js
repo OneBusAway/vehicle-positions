@@ -135,7 +135,8 @@
       tick.title = row.dataset.stop;
       ticks.appendChild(tick);
     });
-    const fastest = Math.max(10, ...points.map(p => p.speed || 0));
+    // A reduce rather than spreading the speeds into Math.max, which runs out of stack on a trail of over about 100,000 reports.
+    const fastest = points.reduce((most, p) => Math.max(most, p.speed || 0), 10);
     let path = "";
     let area = "";
     let pen = false;
