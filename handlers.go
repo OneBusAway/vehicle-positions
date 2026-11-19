@@ -396,11 +396,7 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 		}
 		// Placed when the report was accepted (Tracker.UpdateAuthorized); the
 		// feed only reads it.
-		if v.StopID != "" {
-			status := gtfsrt.VehiclePosition_IN_TRANSIT_TO
-			if v.StoppedAt {
-				status = gtfsrt.VehiclePosition_STOPPED_AT
-			}
+		if status, ok := stopStatus(v); ok {
 			entity.Vehicle.StopId = proto.String(v.StopID)
 			entity.Vehicle.CurrentStopSequence = proto.Uint32(uint32(v.StopSequence))
 			entity.Vehicle.CurrentStatus = status.Enum()
@@ -455,6 +451,20 @@ func scheduleRelationship(frequencyBased bool) *gtfsrt.TripDescriptor_ScheduleRe
 		return gtfsrt.TripDescriptor_UNSCHEDULED.Enum()
 	}
 	return gtfsrt.TripDescriptor_SCHEDULED.Enum()
+}
+
+// stopStatus is the current_status of a driver vehicle at its stop: STOPPED_AT
+// or IN_TRANSIT_TO, and false when its latest report named no stop. The feed
+// and the admin live view both read it, so they cannot disagree.
+func stopStatus(v *VehicleState) (gtfsrt.VehiclePosition_VehicleStopStatus, bool) {
+	switch {
+	case v.StopID == "":
+		return 0, false
+	case v.StoppedAt:
+		return gtfsrt.VehiclePosition_STOPPED_AT, true
+	default:
+		return gtfsrt.VehiclePosition_IN_TRANSIT_TO, true
+	}
 }
 
 // riderEntity renders one rider-consensus trip estimate as a FeedEntity. The

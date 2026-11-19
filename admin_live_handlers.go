@@ -31,8 +31,13 @@ type liveVehicleEntry struct {
 	TripDBID   *int64   `json:"trip_db_id"`
 	RouteID    *string  `json:"route_id"`
 	DriverName *string  `json:"driver_name"`
-	ReportedAt int64    `json:"reported_at"`
-	UpdatedAt  string   `json:"updated_at"` // RFC3339 UTC
+	// StopID, StopSequence and CurrentStatus are the stop the feed names for
+	// the vehicle (stopStatus), all null when its latest report named none.
+	StopID        *string `json:"stop_id"`
+	StopSequence  *int    `json:"stop_sequence"`
+	CurrentStatus *string `json:"current_status"`
+	ReportedAt    int64   `json:"reported_at"`
+	UpdatedAt     string  `json:"updated_at"` // RFC3339 UTC
 }
 
 type liveVehiclesResponse struct {
@@ -81,6 +86,11 @@ func handleLiveVehicles(tracker *Tracker, vehicles VehicleManager, trips ActiveT
 				GtfsTripID: state.TripID,
 				ReportedAt: state.Timestamp,
 				UpdatedAt:  state.UpdatedAt.UTC().Format(time.RFC3339),
+			}
+
+			if status, ok := stopStatus(state); ok {
+				stopID, sequence, name := state.StopID, state.StopSequence, status.String()
+				entry.StopID, entry.StopSequence, entry.CurrentStatus = &stopID, &sequence, &name
 			}
 
 			if trip, ok := activeTrips[state.VehicleID]; ok {
