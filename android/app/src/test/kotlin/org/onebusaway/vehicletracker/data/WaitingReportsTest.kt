@@ -117,14 +117,14 @@ class WaitingReportsTest {
         val pastLimit = atLimit - 1
 
         assertEquals(
-            ReportsWaiting(1, WILL_SEND),
+            ReportsWaiting(1, WILL_SEND, queued = 2),
             reportsWaiting(QueueContents(listOf(pastLimit, atLimit), account), signedIn(), NOW),
         )
         assertNull("only too old to send", reportsWaiting(QueueContents(listOf(pastLimit), account), signedIn(), NOW))
         // Older ones wouldn't go under any sign-in, so the sign-in isn't why: they aren't counted as won't send either.
         assertEquals(
             "another sign-in's",
-            ReportsWaiting(1, NEVER),
+            ReportsWaiting(1, NEVER, queued = 2),
             reportsWaiting(QueueContents(listOf(pastLimit, atLimit), null), signedIn(), NOW),
         )
     }
@@ -143,7 +143,7 @@ class WaitingReportsTest {
             expectNoEvents()
             advanceTimeBy(1)
             runCurrent()
-            assertEquals("the older aged out", ReportsWaiting(1, WILL_SEND), awaitItem())
+            assertEquals("the older aged out, still queued", ReportsWaiting(1, WILL_SEND, queued = 2), awaitItem())
             advanceTimeBy(54_999)
             runCurrent()
             expectNoEvents()

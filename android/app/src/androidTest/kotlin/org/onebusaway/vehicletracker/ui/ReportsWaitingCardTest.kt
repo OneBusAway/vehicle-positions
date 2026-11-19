@@ -113,6 +113,19 @@ class ReportsWaitingCardTest {
         assertEquals("the last line is back", before, compose.onNode(hasText(lastLine)).fetchSemanticsNode().boundsInRoot)
     }
 
+    // Offline for days, the count dips as each fix ages out in the queue: about once a report (#463).
+    @Test
+    fun quietAsAFixAgesOut_readOutAsAnUploadSends() {
+        showTracking()
+        show(ReportsWaiting(37, WaitingOutlook.WILL_SEND, queued = 40))
+
+        show(ReportsWaiting(36, WaitingOutlook.WILL_SEND, queued = 40))
+        assertFalse("quiet as one ages out", line("36 reports to send when online").speaks)
+
+        show(ReportsWaiting(6, WaitingOutlook.WILL_SEND, queued = 6))
+        assertTrue("read out as an upload sends", line("6 reports to send when online").speaks)
+    }
+
     @Test
     fun reportsThatWillNeverSend_sayThat() {
         showTracking()
