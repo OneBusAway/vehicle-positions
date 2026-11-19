@@ -2,7 +2,7 @@
 <div class="page-head">
   <div class="page-head-main">
     <h2 class="h1">{{.Headline}}</h2>
-    <p class="lede">Every trip a driver has started, newest first. Times are {{.Timezone}} time.</p>
+    <p class="lede">Every trip a driver has started, newest first. A running trip shows how early or late it was at the last stop it passed. Times are {{.Timezone}} time.</p>
   </div>
 </div>
 <section class="card">
@@ -32,7 +32,7 @@
           <td class="nowrap"><span class="route-to">{{template "route-badge" .Route}}{{with .Headsign}}<span>to {{.}}</span>{{end}}</span></td>
           <td class="nowrap" data-label="Started">{{.StartClock}}<span class="sub hide-phone">{{.StartDay}}</span><span class="only-phone">, {{.StartDay}}, {{if .EndClock}}ended {{.EndClock}}{{else}}{{.Duration}}{{end}}</span></td>
           <td class="hide-phone hide-md nowrap">{{if .EndClock}}{{.EndClock}}<span class="sub">{{.Duration}}</span>{{else}}<span class="muted">{{.Duration}}</span>{{end}}</td>
-          <td class="c-side">{{if .Active}}<span class="pill pill-ok">Running</span>{{else if eq .Status "completed"}}<span class="muted">Completed</span>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td>
+          <td class="c-side nowrap">{{if .Active}}<span class="pill pill-ok">Running</span>{{with index $.Lateness .ID}}<span class="sub">{{if eq .Tone "on-time"}}On time {{.Signed}}{{else}}<span class="tone-{{.Tone}}">{{.Text}}</span>{{end}}</span>{{end}}{{else if eq .Status "completed"}}<span class="muted">Completed</span>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td>
           <td class="c-actions"><div class="actions">
             {{if .Active}}<form method="post" action="/admin/trips/{{.ID}}/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip"><button class="btn btn-sm btn-plain" type="submit">End trip</button></form>{{end}}
             <a class="icon-btn" href="/admin/trips/{{.ID}}" aria-label="Open trip {{.ID}}">{{template "icon" "chevron_right"}}</a>
