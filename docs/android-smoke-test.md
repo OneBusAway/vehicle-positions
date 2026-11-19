@@ -801,7 +801,9 @@ tells the driver until they open the app.
 Taking background location away kills the app, and Android starts the tracking
 service again by itself. From Android 14, Android can refuse that restart
 location access, as it does after a reboot or an update restarted reporting
-(Check 4c). The app then posts **Reports paused** and stops the service.
+(Check 4c). Android 11 to 13 let the same restart run without location
+instead, and the app asks Android whether it has any. Either way the app then
+posts **Reports paused** and stops the service.
 
 1. With the trip reporting after an update as in Check 4c step 2, and the app
    not opened since, take background location away (the same as choosing
@@ -813,7 +815,8 @@ location access, as it does after a reboot or an update restarted reporting
    ```
 
 **Expected outcome:** within a few seconds the log shows
-`Android refused the tracking service a permission it needs`, once. The app
+`Android refused the tracking service a permission it needs` (on Android 11 to
+13, `Not reporting from a restart without location`), once. The app
 has not crashed (`adb logcat -d -b crash` shows nothing from it), no service is
 running (`adb shell dumpsys activity services LocationTrackingService` is
 empty), and **Reports paused**, "Open the app to keep reporting.", has made a
@@ -821,21 +824,16 @@ sound. Tapping it opens **Resume your trip?**, and **Resume trip** brings the
 reports back with location only while using the app, with no second
 `POST /api/v1/trips/start`.
 
-For a trip started or resumed in the app, Android 16 lets the restart keep
-location and reports carry on; Android may refuse it on other versions, which
-ends as above. Nothing crashes either way.
+For a trip started or resumed in the app, Android 12L and 16 let the restart
+keep location and reports carry on; Android may refuse it on other versions,
+which ends as above. Nothing crashes either way.
 
-**Seen on** Google APIs emulators. On API 36 (Android 16), as above: the
-refusal logged once, nothing in the crash buffer and no "did not then call
-startForeground" a minute later, **Reports paused** made a sound, and **Resume
-trip** brought the reports back with no second `POST /api/v1/trips/start`. On
-API 32 (Android 12L) nothing crashed either, but **Reports paused** never
-showed: Android started the service in the foreground without location
-(`Foreground service started from background can not have
-location/camera/microphone access`), its notification kept saying "Reporting",
-and no report reached the server until the app was opened 3.5 minutes later, on
-Tracking rather than **Resume**. Reports then came back with no second
-`POST /api/v1/trips/start`.
+**Seen on** Google APIs emulators, API 32 (Android 12L) and API 36 (Android
+16), as above: the log line once, nothing in the crash buffer and no "did not
+then call startForeground" a minute later, **Reports paused** made a sound, and
+**Resume trip** brought the reports back with no second
+`POST /api/v1/trips/start`. On API 32, a trip last resumed in the app kept
+reporting through the same revoke.
 
 ### Check 4e: A restore from backup, then Resume, then Sign in
 
