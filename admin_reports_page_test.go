@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -771,4 +773,179 @@ func TestReportsPage_DriverSession(t *testing.T) {
 	api := serve(h, "/api/v1/admin/reports/service", cookieFor(t, "driver"))
 	assert.Equal(t, http.StatusForbidden, api.Code)
 	assert.Zero(t, store.reads)
+}
+
+// heldReportStore holds the read of each day's trips until the test lets that
+// day go, so a test can see which days are worked out at the same time. The
+// day whose read fails, if any, fails at once.
+type heldReportStore struct {
+	loc  *time.Location
+	fail string
+	err  error
+
+	mu       sync.Mutex
+	gates    map[string]chan struct{}
+	held     map[string]bool
+	mostHeld int
+	read     []string
+}
+
+func newHeldReportStore(ix *rider.Index) *heldReportStore {
+	return &heldReportStore{loc: ix.Timezone(), gates: make(map[string]chan struct{}), held: make(map[string]bool)}
+}
+
+// gate is the channel that lets date's read go, made on first use.
+func (s *heldReportStore) gate(date string) chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	g, ok := s.gates[date]
+	if !ok {
+		g = make(chan struct{})
+		s.gates[date] = g
+	}
+	return g
+}
+
+func (s *heldReportStore) release(date string) { close(s.gate(date)) }
+
+// ListTripsStartedBetween reads from the start of the day before the one
+// reported, which in the fixture's late summer is that day's local midnight.
+func (s *heldReportStore) ListTripsStartedBetween(ctx context.Context, from, _ time.Time) ([]TripSummary, error) {
+	date := from.In(s.loc).AddDate(0, 0, 1).Format(reportDateLayout)
+	s.mu.Lock()
+	s.read = append(s.read, date)
+	s.mu.Unlock()
+	if date == s.fail {
+		return nil, s.err
+	}
+	gate := s.gate(date)
+	s.mu.Lock()
+	s.held[date] = true
+	s.mostHeld = max(s.mostHeld, len(s.held))
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.held, date)
+		s.mu.Unlock()
+	}()
+	select {
+	case <-gate:
+		return make([]TripSummary, 0), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (s *heldReportStore) ListTrails(context.Context, []int64) (map[int64][]LocationPoint, error) {
+	return make(map[int64][]LocationPoint), nil
+}
+
+// heldDays are the days whose reads are waiting now, oldest first.
+func (s *heldReportStore) heldDays() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	days := make([]string, 0, len(s.held))
+	for d := range s.held {
+		days = append(days, d)
+	}
+	slices.Sort(days)
+	return days
+}
+
+func (s *heldReportStore) readDays() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.read)
+}
+
+type analyticsDaysResult struct {
+	reps []*serviceReport
+	err  error
+}
+
+// heldWeek is the week analyticsDays is asked for in these tests, oldest
+// first, a month before today so no day goes through the Overview's cache.
+var heldWeek = []string{"2026-08-27", "2026-08-28", "2026-08-29", "2026-08-30", "2026-08-31", "2026-09-01", "2026-09-02"}
+
+// startAnalyticsDays works out heldWeek against store in the background.
+func startAnalyticsDays(ctx context.Context, store serviceReportStore, ix *rider.Index) <-chan analyticsDaysResult {
+	today := reportDay.AddDate(0, 0, 30)
+	r := newServiceReporter(store, func() *rider.Index { return ix }, testReportSettings)
+	r.now = func() time.Time { return reportDayStart.AddDate(0, 0, 30) }
+	done := make(chan analyticsDaysResult, 1)
+	go func() {
+		reps, err := analyticsDays(ctx, r, &overviewReports{}, ix, today, reportDay, len(heldWeek))
+		done <- analyticsDaysResult{reps, err}
+	}()
+	return done
+}
+
+func awaitAnalyticsDays(t *testing.T, done <-chan analyticsDaysResult) analyticsDaysResult {
+	t.Helper()
+	select {
+	case res := <-done:
+		return res
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "analyticsDays did not return")
+		return analyticsDaysResult{}
+	}
+}
+
+func TestAnalyticsDays_WorksOutAFewAtOnceOldestFirst(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	done := startAnalyticsDays(context.Background(), store, ix)
+
+	first, rest := heldWeek[:analyticsDaysAtOnce], heldWeek[analyticsDaysAtOnce:]
+	require.Eventually(t, func() bool { return slices.Equal(first, store.heldDays()) }, 5*time.Second, time.Millisecond,
+		"the oldest days are read at the same time")
+	assert.Never(t, func() bool { return len(store.heldDays()) > analyticsDaysAtOnce }, 100*time.Millisecond, time.Millisecond,
+		"no more days start while those are read")
+
+	// Let them go newest first, so they finish out of order.
+	for i := len(first) - 1; i >= 0; i-- {
+		store.release(first[i])
+	}
+	require.Eventually(t, func() bool { return slices.Equal(rest, store.heldDays()) }, 5*time.Second, time.Millisecond)
+	for i := len(rest) - 1; i >= 0; i-- {
+		store.release(rest[i])
+	}
+
+	res := awaitAnalyticsDays(t, done)
+	require.NoError(t, res.err)
+	dates := make([]string, 0, len(res.reps))
+	for _, rep := range res.reps {
+		dates = append(dates, rep.Date)
+	}
+	assert.Equal(t, heldWeek, dates, "oldest first, as before")
+	assert.Equal(t, analyticsDaysAtOnce, store.mostHeld)
+}
+
+func TestAnalyticsDays_AFailedDayStopsTheRest(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	store.fail = heldWeek[0]
+	store.err = errors.New("the trips could not be read")
+	done := startAnalyticsDays(context.Background(), store, ix)
+
+	// The days already being read are let go only by the failure.
+	res := awaitAnalyticsDays(t, done)
+	require.ErrorIs(t, res.err, store.err)
+	assert.Nil(t, res.reps)
+	assert.Subset(t, heldWeek[:analyticsDaysAtOnce], store.readDays(), "no day starts after the failure")
+}
+
+func TestAnalyticsDays_ACancelledRequestStopsTheRest(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startAnalyticsDays(ctx, store, ix)
+
+	require.Eventually(t, func() bool { return len(store.heldDays()) == analyticsDaysAtOnce }, 5*time.Second, time.Millisecond)
+	cancel()
+
+	res := awaitAnalyticsDays(t, done)
+	require.ErrorIs(t, res.err, context.Canceled)
+	assert.Nil(t, res.reps)
+	assert.ElementsMatch(t, heldWeek[:analyticsDaysAtOnce], store.readDays(), "no day starts after the request ends")
 }
