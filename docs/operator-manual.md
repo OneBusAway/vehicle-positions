@@ -92,7 +92,8 @@ The bar across the top is on every page:
 - The bell shows how many alerts are open and opens **Alerts**.
 - The circle with your initials opens a small menu with **Light or dark**,
   which switches the pages' colours, and **Sign out**. On a phone both are on
-  **More**.
+  **More**. In a browser too old for that menu, the circle opens **More**
+  instead.
 
 ---
 

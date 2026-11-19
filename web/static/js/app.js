@@ -38,6 +38,12 @@
     });
   });
 
+  /* The account menu, with Sign out, is a popover. A browser without popovers opens the account page
+     instead, which has Sign out too. */
+  if (!("popover" in HTMLElement.prototype)) {
+    $$('[popovertarget="account"]').forEach(function (b) { b.addEventListener("click", function () { location.href = "/admin/more"; }); });
+  }
+
   /* Numbers count to their value once, and from their old value when they change. */
   var fmt = new Intl.NumberFormat("en");
   VT.setCount = function (el, to) {
