@@ -1,12 +1,15 @@
 package org.onebusaway.vehicletracker.service
 
+import android.app.AppOpsManager
 import android.app.Notification
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.Build
 import android.os.IBinder
+import android.os.Process
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -52,7 +55,7 @@ private const val LIVE_FIX_INTERVAL_MS = 1_000L
  * in the background with location only while in use. From Android 14, startForeground throws when Android does not
  * let that restart use location, as after [RestartTracking] started the service. Android is asked rather than the
  * permissions checked first: it lets the same restart keep location for a trip started in the app, and the
- * permissions are the same in both cases.
+ * permissions are the same in both cases. Android 11 to 13 never refuse, so [restartWithoutLocation] asks there.
  */
 internal fun startForegroundOrAskDriver(startForeground: () -> Unit, resumeNotifier: ResumeNotifier): Boolean {
     // Only the two ways Android documents refusing the start, as in RestartTracking: anything else is a bug.
@@ -72,11 +75,21 @@ internal fun startForegroundOrAskDriver(startForeground: () -> Unit, resumeNotif
 }
 
 /**
+ * Whether the tracking service, started again by Android, has to ask the driver instead of reporting. Android 11 to 13
+ * let that restart claim foreground status without location when location is allowed only while the app is in use and
+ * the service was last started in the background, so its notification would say "Reporting" while nothing is sent.
+ * From Android 14, startForeground throws instead ([startForegroundOrAskDriver]). As there, Android is asked
+ * ([locationAllowed]) rather than the permissions checked: a restart of a trip started in the app keeps location.
+ */
+internal fun restartWithoutLocation(sdk: Int, startedAgainByAndroid: Boolean, locationAllowed: Boolean): Boolean =
+    sdk in Build.VERSION_CODES.R until Build.VERSION_CODES.UPSIDE_DOWN_CAKE && startedAgainByAndroid && !locationAllowed
+
+/**
  * Foreground service that owns the fused-location request and hands each fix to [TripReporter]
  * and [AdherenceTracker]. Framework-glue shell only: the send loop / status machine lives in
  * [TripReporter] (Task 6), the per-fix judgement in [AdherenceTracker] and the answer to a refused
- * foreground start in [startForegroundOrAskDriver], all covered by JVM tests; nothing else here
- * is separately unit tested.
+ * foreground start in [startForegroundOrAskDriver] and to a restart without location in
+ * [restartWithoutLocation], all covered by JVM tests; nothing else here is separately unit tested.
  *
  * It asks for a fix every second while the tracking screen is open, so the map and the panel
  * move with the vehicle, and every [REPORT_INTERVAL_MS] otherwise.
@@ -180,6 +193,15 @@ class LocationTrackingService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            // A START_STICKY restart comes with no intent.
+            val startedAgainByAndroid = intent == null
+            if (restartWithoutLocation(Build.VERSION.SDK_INT, startedAgainByAndroid, locationAllowed())) {
+                // As when startForeground is refused: the trip stays stored, so the app opens on Resume.
+                Log.w(TAG, "Not reporting from a restart without location")
+                askToResume()
+                stopSelf()
+                return START_NOT_STICKY
+            }
             activeTrip = trip
             // Read off the phone rather than refetched, so adherence works offline and picks up
             // again after a relaunch, as on iOS.
@@ -216,6 +238,18 @@ class LocationTrackingService : Service() {
             Log.w(TAG, "Missing location permission for background restart; entering degraded mode", e)
             locationUpdatesActive = false
             askToResume()
+        }
+    }
+
+    /**
+     * Whether Android lets this process use location right now, as it judges it for the foreground service: with
+     * location allowed only while in use, a service it started in the background gets none.
+     */
+    private fun locationAllowed(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+        val appOps = getSystemService(AppOpsManager::class.java)
+        return listOf(AppOpsManager.OPSTR_FINE_LOCATION, AppOpsManager.OPSTR_COARSE_LOCATION).any { op ->
+            appOps.unsafeCheckOpNoThrow(op, Process.myUid(), packageName) == AppOpsManager.MODE_ALLOWED
         }
     }
 
