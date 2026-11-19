@@ -240,7 +240,7 @@ func TestImportPage(t *testing.T) {
 		assert.Contains(t, body, `action="/admin/import/`+kind+`" enctype="multipart/form-data"`)
 		assert.Contains(t, body, `href="/admin/import/`+kind+`/template.csv"`)
 		for _, col := range importKinds[kind].Columns {
-			assert.Contains(t, body, ">"+col.Name+"</span>")
+			assert.Contains(t, body, `<td class="strong nowrap">`+col.Name+`</td>`)
 		}
 	}
 }
@@ -250,7 +250,7 @@ func TestImportListPages_LinkToImport(t *testing.T) {
 	for page, kind := range map[string]string{"/admin/vehicles": "vehicles", "/admin/users": "drivers"} {
 		w := sendImport(t, ui, http.MethodGet, page, "", nil)
 		require.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), `<a href="/admin/import/`+kind+`"`, page)
+		assert.Contains(t, w.Body.String(), `<a class="btn btn-outline" href="/admin/import/`+kind+`">`, page)
 	}
 }
 
@@ -293,7 +293,9 @@ func TestImportUpload_VehicleRowErrors(t *testing.T) {
 			require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 			body := pageText(w)
 			assert.Contains(t, body, tc.want)
-			assert.Contains(t, body, "1 new, 0 to update, 0 unchanged, 1 with errors")
+			assert.Contains(t, body, `<span class="pill pill-warn">1 row to fix</span>`)
+			assert.Contains(t, body, `<span class="pill plain">1 new</span>`)
+			assert.Contains(t, body, "Fix the 1 row marked below in your file and upload it again.")
 			assert.NotContains(t, body, `name="sig"`, "a file with an error can't be confirmed")
 			require.Len(t, imp.vehiclePlans, 1)
 			assert.Equal(t, []vehicleImportRow{{Line: 2, ID: "ok-1", Label: "Fine"}}, imp.vehiclePlans[0], "only the rows that pass are planned")
@@ -356,7 +358,7 @@ func TestImportUpload_DuplicateRows(t *testing.T) {
 		w := uploadImport(t, ui, "vehicles", vehiclesHeader+"bus-1,A,\nBus-1,B,\nbus-2,C,\nbus-1,D,\n")
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		assert.Contains(t, pageText(w), "vehicle id is already on line 2")
-		assert.Contains(t, pageText(w), "3 new, 0 to update, 0 unchanged, 1 with errors", "ids differing in case are different vehicles")
+		assert.Contains(t, pageText(w), `<span class="pill pill-warn">1 row to fix</span><span class="pill plain">3 new</span>`, "ids differing in case are different vehicles")
 		require.Len(t, imp.vehiclePlans, 1)
 		assert.Len(t, imp.vehiclePlans[0], 3)
 	})
@@ -541,7 +543,9 @@ func TestImportUpload_PreviewStatuses(t *testing.T) {
 	w := uploadImport(t, ui, "vehicles", vehiclesHeader+"bus-1,A,\nbus-2,B,north\nbus-3,C,\n")
 	require.Equal(t, http.StatusOK, w.Code)
 	body := pageText(w)
-	assert.Contains(t, body, "1 new, 1 to update, 1 unchanged, 0 with errors")
+	assert.Contains(t, body, `<span class="pill plain">1 new</span><span class="pill plain">1 to update</span><span class="pill">1 unchanged</span>`)
+	assert.NotContains(t, body, "to fix")
+	assert.Contains(t, body, "3 rows in the file.")
 	assert.Contains(t, body, "label was Old; agency tag was empty")
 	assert.Contains(t, body, "stays deactivated")
 	assert.Contains(t, body, "Confirm import")
@@ -574,7 +578,8 @@ func TestImportConfirm_ImportsWhatWasPreviewed(t *testing.T) {
 	require.Len(t, imp.vehicleImports, 1)
 	assert.Equal(t, imp.vehiclePlans[0], imp.vehicleImports[0])
 	body := pageText(w)
-	assert.Contains(t, body, "2 new, 0 updated, 0 unchanged")
+	assert.Contains(t, body, `<h2 class="h1">2 vehicles imported</h2>`)
+	assert.Contains(t, body, "0 updated, 0 unchanged.")
 	assert.Contains(t, body, "bus-2")
 	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 }
@@ -591,13 +596,14 @@ func TestImportConfirm_DriversResult(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, pageText(w))
 	body := pageText(w)
 
-	m := regexp.MustCompile(`select-all">([^<]*)</span>`).FindAllStringSubmatch(body, -1)
+	m := regexp.MustCompile(`class="pw">([^<]*)</span>`).FindAllStringSubmatch(body, -1)
 	require.Len(t, m, 1, "one password, for the one new driver")
 	assert.Regexp(t, driverPasswordPattern, m[0][1])
 	assert.Contains(t, body, `href="/admin/driver-setup?user=100"`)
 	assert.Contains(t, body, `href="/admin/driver-setup?user=101"`)
 	assert.NotContains(t, body, "cy@example.org", "an unchanged driver isn't listed")
-	assert.Contains(t, body, "1 new, 1 updated, 1 unchanged")
+	assert.Contains(t, body, `<h2 class="h1">1 driver imported</h2>`)
+	assert.Contains(t, body, "1 updated, 1 unchanged.")
 	assert.Contains(t, body, "These passwords are shown only on this page.")
 	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 }
@@ -742,7 +748,7 @@ func TestImportConfirm_OutlastsWriteTimeout(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Contains(t, string(body), "1 new, 0 updated, 0 unchanged")
+	assert.Contains(t, string(body), "1 vehicle imported")
 }
 
 var driverPasswordPattern = regexp.MustCompile(`^[abcdefghjkmnpqrstuvwxyz23456789]{4}-[abcdefghjkmnpqrstuvwxyz23456789]{4}-[abcdefghjkmnpqrstuvwxyz23456789]{4}$`)
@@ -805,5 +811,5 @@ func TestImportConfirm_AlreadyImported(t *testing.T) {
 	w := confirmImport(t, ui, "vehicles", signedForm("vehicles", vehiclesHeader+"bus-1,Bus 1,\n", time.Now()))
 	require.Equal(t, http.StatusConflict, w.Code)
 	assert.Contains(t, pageText(w), "this preview was already imported: to import the file again, upload it again")
-	assert.NotContains(t, w.Body.String(), "Imported</h3>")
+	assert.NotContains(t, w.Body.String(), "imported</h2>")
 }

@@ -1,33 +1,39 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{.Title}} — Transit Tracker</title>
-  <link rel="stylesheet" href="/static/css/admin.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Vehicle Tracker</title>
+<link rel="preload" href="/static/fonts/google-sans-flex.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/css/admin.css">
+<script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
-<body class="login-body">
-  <main class="login-card">
-    <section class="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-soft backdrop-blur-xl sm:p-8">
-      <p class="text-xs font-semibold uppercase tracking-[0.28em] text-sky-700">Access</p>
-      <h1 class="font-display mt-2 text-3xl font-bold tracking-tight text-ink">Transit Tracker</h1>
-      <p class="login-sub mt-1 text-sm text-slate-600">Fleet operations sign in</p>
-
-      {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{.Error}}</div>{{end}}
-
-      <form method="post" action="/admin/login" class="mt-6 space-y-4">
-        {{with .Next}}<input type="hidden" name="next" value="{{.}}">{{end}}
-        <div>
-          <label for="email" class="mb-1.5 block text-sm font-semibold text-slate-700">Email</label>
-          <input id="email" name="email" type="email" required autocomplete="username" value="{{.Email}}" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-        </div>
-        <div>
-          <label for="password" class="mb-1.5 block text-sm font-semibold text-slate-700">Password</label>
-          <input id="password" name="password" type="password" required autocomplete="current-password" class="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-        </div>
-        <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Sign in</button>
-      </form>
-    </section>
-  </main>
+<body>
+<main class="login">
+  <section class="login-form">
+    <div class="login-brand">{{template "brand-mark"}}<span>Vehicle Tracker</span></div>
+    <h1 class="h1">Sign in</h1>
+    <p class="lede">See every vehicle the moment its driver starts a trip.</p>
+    {{if .Error}}<div class="banner banner-error" role="alert">{{template "icon" "error"}}<div>{{.Error}}</div></div>
+    {{else if .Next}}<div class="banner" role="status">{{template "icon" "info"}}<div>You are signed out. Sign in to carry on where you were.</div></div>{{end}}
+    <form method="post" action="/admin/login">
+      {{with .Next}}<input type="hidden" name="next" value="{{.}}">{{end}}
+      <div class="field"><label class="label" for="email">Email</label><input class="input" id="email" name="email" type="email" required autocomplete="username" value="{{.Email}}"></div>
+      <div class="field"><label class="label" for="password">Password</label><input class="input" id="password" name="password" type="password" required autocomplete="current-password"></div>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+    </form>
+    <p class="help">Drivers sign in to the app on their phone, not here.</p>
+  </section>
+  <section class="login-pic">
+    <div class="picture pic play" aria-hidden="true">
+      <i class="road" style="left:0;right:0;top:42%;height:10px"></i><i class="road" style="left:0;right:0;top:74%;height:8px"></i><i class="road" style="left:12%;top:0;bottom:0;width:8px"></i><i class="road" style="left:62%;top:0;bottom:0;width:10px"></i><i class="road" style="left:86%;top:42%;bottom:0;width:8px"></i>
+      <i class="park" style="left:66%;top:48%;width:16%;height:20%"></i><i class="park" style="left:16%;top:8%;width:14%;height:12%"></i>
+      <i class="rt"></i><i class="st next" style="top:24%"></i><i class="st" style="top:68%"></i>
+      <span class="riders">{{template "icon" "person"}}{{template "icon" "person"}}{{template "icon" "person"}}</span>
+      <span class="veh"><span class="ring go g1"></span><span class="ring go g2"></span><span class="ring go g3"></span><span class="ring still1"></span><span class="ring still2"></span><span class="disc">{{template "arrow"}}</span></span>
+      <span class="chip-heard">{{template "icon" "cloud_done"}}<span><span class="n"><b>1</b><b>2</b><b>3</b></span> reports heard</span></span>
+    </div>
+  </section>
+</main>
 </body>
 </html>

@@ -1,49 +1,57 @@
 {{define "content"}}
-<div class="grid gap-4 p-4 lg:grid-cols-2 lg:items-start lg:p-5 print:p-0">
-  <section class="table-card rounded-[20px] border border-white/80 p-5 sm:p-6 print:hidden">
-    <h3 class="display-font text-lg font-bold text-slate-900">Setup link</h3>
-    <p class="mt-0.5 text-xs text-slate-400">A driver scans the code or opens the link, and the app fills in this server on its sign-in screen. The link holds only the server's address, never an email or a password.</p>
+<div class="page-head">
+  <div class="page-head-main">
+    <h2 class="h1">Hand each driver this sheet</h2>
+    <p class="lede">A driver scans the code and the app fills in this server on its sign-in screen. The code holds only the server's address, never an email or a password.</p>
+  </div>
+  {{if .Setup}}<div class="page-actions no-print js-only"><button class="btn btn-primary" type="button" onclick="window.print()">{{template "icon" "print"}}Print the sheet</button></div>{{end}}
+</div>
 
-    <form method="get" action="/admin/driver-setup" class="mt-5">
+<div class="setup-grid">
+  <div class="no-print setup-side">
+    <form class="card setup-card" method="get" action="/admin/driver-setup">
       {{with .User}}<input type="hidden" name="user" value="{{.ID}}">{{end}}
-      <label for="server" class="mb-1.5 block text-sm font-semibold text-slate-700">Server address</label>
-      <div class="flex flex-wrap gap-2">
-        <input id="server" name="server" type="url" required value="{{.Server}}" class="min-w-0 flex-1 rounded-2xl border border-line bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Update</button>
+      <div class="field">
+        <label class="label" for="server">Server address</label>
+        <input id="server" name="server" class="input" type="url" required value="{{.Server}}" aria-describedby="srv-help{{if .Error}} srv-err{{end}}"{{if .Error}} aria-invalid="true"{{end}}>
+        {{if .Error}}<div class="field-error" id="srv-err">{{template "icon-sm" "error"}}<span role="alert">{{.Error}}</span></div>{{end}}
+        <div class="help" id="srv-help">Filled in from the address this page was opened at. Change it if drivers' phones reach the server at another one.</div>
       </div>
-      <p class="mt-1.5 text-xs text-slate-400">Filled in from the address this page was opened at. Change it if drivers' phones reach the server at another one.</p>
+      <button class="btn btn-tonal" type="submit">Update the sheet</button>
     </form>
-
-    {{if .Error}}<div class="alert alert-error mt-4 rounded-2xl px-4 py-3 text-sm" role="alert">{{.Error}}</div>{{end}}
-
     {{with .Setup}}
-    {{if .Insecure}}<div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">Drivers' phones take only an https:// address, so the apps will not use this link. If a proxy serves this site over https, set TRUST_PROXY_HEADERS=true, or type the https address above.</div>{{end}}
-    <p class="mt-5 text-sm font-semibold text-slate-700">Link</p>
-    <p class="mt-1.5 break-all rounded-2xl border border-line bg-white px-4 py-3 font-mono text-xs text-slate-900 select-all">{{.Link}}</p>
-    <p class="mt-1.5 text-xs text-slate-400">Some chat and email apps don't make this link tappable. The QR code works everywhere.</p>
-    <button type="button" onclick="window.print()" class="mt-5 inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Print the sheet</button>
+    {{if .Insecure}}<div class="banner banner-warn" role="alert">{{template "icon" "warning"}}<div>Drivers' phones take only an https:// address, so the apps will not use this link. If a proxy serves this site over https, set TRUST_PROXY_HEADERS=true, or type the https address above.</div></div>{{end}}
+    <div class="card setup-card">
+      <div class="label">Setup link</div>
+      <div class="setup-link" id="setup-link">{{.Link}}</div>
+      <div class="js-only"><button class="btn btn-sm btn-outline" type="button" data-copy-from="setup-link">{{template "icon-sm" "content_copy"}}Copy link</button></div>
+      <div class="help">Some chat and email apps don't make this link tappable. The code works everywhere.</div>
+    </div>
+    <div class="card setup-card">
+      <div class="label">What the driver sees after scanning</div>
+      <div class="phone"><div class="phone-screen"><div class="phone-ask">Use {{.Host}}?</div><div class="phone-note">The app will send your trips to this server.</div><span class="btn btn-primary">Use this server</span><span class="btn">Cancel</span></div></div>
+    </div>
     {{end}}
-  </section>
+  </div>
 
   {{with .Setup}}
-  <section class="table-card rounded-[20px] border border-white/80 p-6 sm:p-8 print:rounded-none print:border-0 print:p-0 print:shadow-none!" aria-label="Sheet for the driver">
-    <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-700/70">OBA Vehicle Tracker</p>
-    <h3 class="display-font mt-1 text-2xl font-bold text-slate-900 print:text-3xl">Set up the app on your phone</h3>
-    {{with $.User}}<p class="mt-2 text-sm text-slate-700 print:text-base">For <span class="font-semibold">{{.Name}}</span></p>{{end}}
-
-    <div class="mx-auto mt-6 w-full max-w-64 print:w-[70mm] print:max-w-none">{{.QR}}</div>
-    <p class="mt-2 text-center text-xs text-slate-500 print:text-sm">{{.Host}}</p>
-
-    <ol class="mt-6 list-decimal space-y-3 pl-5 text-sm text-slate-800 print:text-base">
-      <li>Install OBA Vehicle Tracker on your phone.</li>
-      <li>Scan this code: on an iPhone with the Camera app, on Android with Google Lens. Open the link it shows.</li>
-      <li>When the app asks <span class="font-semibold">Use {{.Host}}?</span>, tap <span class="font-semibold">Use this server</span>.</li>
-      <li>Sign in with {{with $.User}}your email address, <span class="font-semibold">{{.Email}}</span>,{{else}}the email address your agency gave you{{end}} and your password.</li>
-    </ol>
-
-    <p class="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-500 print:text-sm">If the code won't scan, type this address as the server on the sign-in screen:</p>
-    <p class="mt-1 break-all font-mono text-sm text-slate-800">{{$.Server}}</p>
-  </section>
+  <article class="sheet" aria-label="Sheet for the driver">
+    <div class="sheet-stub"><span class="the-line sheet-line" aria-hidden="true"><span class="track"></span><span class="stop reached" style="top:0%"></span><span class="stop" style="top:33.3%"></span><span class="stop" style="top:66.7%"></span><span class="stop" style="top:100%"></span><span class="veh" style="top:0%">{{template "arrow"}}</span></span></div>
+    <div class="sheet-body">
+      <div class="sheet-brand">{{template "brand-mark"}}<div><div class="sheet-app">OBA Vehicle Tracker</div>{{with $.User}}<div class="sheet-for">For {{.Name}}</div>{{end}}</div></div>
+      <h3 class="sheet-title">Set up the app<br>on your phone</h3>
+      <div class="sheet-main">
+        <div class="sheet-qr">{{.QR}}<div class="sheet-host">{{.Host}}</div></div>
+        <ol class="sheet-steps" role="list">
+          <li><span class="sheet-n" aria-hidden="true">1</span><span>Install OBA Vehicle Tracker on your phone.</span></li>
+          <li><span class="sheet-n" aria-hidden="true">2</span><span>Scan this code: on an iPhone with the Camera app, on Android with Google Lens. Open the link it shows.</span></li>
+          <li><span class="sheet-n" aria-hidden="true">3</span><span>When the app asks <b>Use {{.Host}}?</b>, tap <b>Use this server</b>.</span></li>
+          <li><span class="sheet-n" aria-hidden="true">4</span><span>Sign in with {{with $.User}}your email address, <b>{{.Email}}</b>,{{else}}the email address your agency gave you{{end}} and your password.</span></li>
+        </ol>
+      </div>
+      <div class="sheet-fallback">If the code won't scan, type this address as the server on the sign-in screen: <b>{{$.Server}}</b></div>
+    </div>
+  </article>
   {{end}}
 </div>
 {{end}}

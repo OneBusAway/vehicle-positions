@@ -46,8 +46,9 @@ Two things are worth knowing up front:
 ## 2. Signing in
 
 1. In a browser, go to `https://your-server/admin`.
-2. You land on the sign-in page, headed **Transit Tracker** / **Fleet
-   operations sign in**.
+2. You land on the sign-in page, headed **Sign in**. If a page sent you there
+   because you were signed out, it says so and takes you back to that page
+   after.
 3. Enter your **Email** and **Password** and click **Sign in**.
 
 The very first admin account is created during installation, from the
@@ -65,58 +66,83 @@ allows only a handful of sign-in attempts per email address and per network
 address in any one minute, and then makes you pause.
 
 **Changing your own password.** There is no separate profile page. Go to
-**Users**, click **Edit** on your own row, type a new password into **New
-password (leave blank to keep current)**, and click **Save changes**. Passwords
+**Drivers and users**, click **Edit** on your own row, type a new password into
+**New password**, and click **Save changes**. Passwords
 must be at least 8 characters and no more than 72 bytes — in practice 72
 letters, or fewer if you use accented letters or other non-English characters.
 
-Once signed in, the left sidebar takes you to **Live Map**, **Dashboard**,
-**Alerts**, **Vehicles**, **Users**, **Trips**, **Reports** and **Feed API
-keys**. **Sign out** is at the top right of every page.
+Signing in opens **Overview**. The menu down the left side has three groups:
+**Live map**, **Alerts** and **Trips**; **Overview**, **Analytics**, **Rider
+mode** and **Feed health**; and **Vehicles**, **Drivers and users**, **Driver
+setup** and **API keys**. **Fold menu** at its foot shrinks it to icons. On a
+phone the menu is a bar along the bottom, with the rest of the pages under
+**More**.
+
+The bar across the top is on every page:
+
+- The search box finds vehicles, drivers, trips and routes from anywhere.
+  Press **/** to jump to it.
+- Beside it, **9 reporting** counts the vehicles reporting now and **2 quiet**
+  those on a trip that have gone quiet. The last part says how long ago the
+  page heard from the server, such as **updated 4 s ago**. It keeps itself
+  current, and reads **no answer for 40 s** when the server stops answering.
+- The bell shows how many alerts are open and opens **Alerts**.
+- The circle with your initials opens a small menu with **Light or dark**,
+  which switches the pages' colours, and **Sign out**. On a phone both are on
+  **More**.
 
 ---
 
-## 3. Dashboard
+## 3. Overview
 
-**Dashboard** is the one-screen health check. Four numbers across the top:
+**Overview** is the one-screen health check. Until you have added a vehicle
+and a driver it shows a welcome in its place, with the four steps to your
+first vehicle on the map.
 
-| Card | What it counts |
+The headline says how many of the vehicles on a trip are reporting, such as
+**9 of 11 vehicles are reporting**, and the line under it how the stops passed
+today stood against the timetable, set against yesterday. When something needs
+a look, a dark line above the tiles says what, with a way to it. Four tiles
+follow, and each opens the page behind it:
+
+| Tile | What it counts |
 |---|---|
-| **Active Fleet** | Vehicles you have registered and not deactivated. It does not mean they are moving. |
-| **Active Now** | Vehicles that have reported a position within the staleness threshold. These are the ones in the feed right now. |
-| **Drivers** | Accounts with the driver role that are not deactivated. |
-| **Active Trips** | Trips that have been started and not yet ended. |
+| **On a trip now** | Vehicles with a trip started and not ended, of the vehicles you have registered and not deactivated. Under it is a mark for each: green for one that is reporting, amber for one that has gone quiet. |
+| **On time today** | The share of the stops passed today that were on time, with the shares early and late under it. [Analytics](#analytics) has the rule. |
+| **Trips today** | Scheduled trips a driver has run today, of those due to have left by now, with how many are running and how many vehicles have not started their next trip. |
+| **Open alerts** | How many alerts are open, and how long the oldest has been. |
 
-Below them is a thin strip:
+Below the tiles:
 
-| Field | What it means |
-|---|---|
-| **Feed last updated** | How long ago *any* vehicle the server is still tracking last reported — "just now", "3 min ago". It is **never** whenever the server is tracking no vehicles at all, which in practice means nothing has reported for roughly the last 5 to 10 minutes: the server forgets a vehicle once it passes the staleness threshold. **never** is also what you see after a restart if nothing has reported in the last few minutes. Treat it as "recently" or "not recently", not as a long-term record. |
-| **Staleness threshold** | How long a vehicle may go without reporting before it drops out of the feed and out of **Active Now**. Default 5 min; changing it is a server setting (`STALENESS_THRESHOLD`), not a UI control. |
-| **Reports, last hour** | Position reports from driver phones the server accepted and rejected in the last hour. When any were rejected it adds the share rejected and the most common reason. |
-| **Feed fetches, last hour** | How many times consumers fetched the feed, how many were refused for their API key, and how many failed for another reason. |
+- **Routes right now** draws each route with a trip running as a line, its
+  stops as ticks and each vehicle where it is along the route. A vehicle that
+  has gone quiet is grey. Beside each line is the route's on-time share today.
+- **Needs attention** lists the three alerts open longest.
+- **Location reports, last hour** is a bar for each minute: the reports the
+  server accepted, with any it rejected stacked on them in amber.
+- The last card is three lines. **Feed** says how many times the feed was
+  fetched in the last hour and when it last was. **Schedule** says how many
+  routes and trips your GTFS schedule has and when it was loaded. **Rider
+  mode** says whether it is on. Each opens its page.
 
-**Feed health →** opens the full counts; see [Feed health](#feed-health).
+The page brings itself up to date every 10 seconds, and each vehicle slides to
+where it now is.
 
-The **Recent Activity** table lists the ten most recently reporting vehicles
-with their **Vehicle** label, **Route** (the route of their current trip, or a
-dash if they have none) and **Last Update**. **View all →** goes to the vehicle
-list. When nothing has reported lately it says **No vehicles have reported
-recently.**
-
-The healthy picture during service hours is: **Active Now** roughly equal to the
-number of buses you expect out, **Active Trips** matching it, and **Feed last
-updated** saying "just now".
+The healthy picture during service hours is: the headline counting every
+vehicle you expect out, **Open alerts** at 0, and the top bar saying
+**updated** a few seconds ago.
 
 ---
 
 ## 4. Vehicles
 
-**Vehicles** lists every vehicle under the heading **All Vehicles**, with
-columns **ID**, **Label**, **Agency tag**, **Status**, **Last seen**, **Driver**
-and **Actions**. By default only active vehicles are shown; **Show deactivated**
-adds the deactivated ones and turns into **Hide deactivated**. Long lists are
-paged with **← Previous** / **Next →** at the bottom.
+**Vehicles** lists every vehicle under a headline that counts them, such as
+**14 vehicles, 9 reporting now**. Its columns are **Vehicle** (the label, with
+the id under it), **Agency tag**, **Status**, **Last report**, **Driver now**
+and **Actions**. Search by id or label with the box above the list and
+**Apply**. By default only active vehicles are shown; **Show deactivated** adds
+the deactivated ones and reads **Showing deactivated** while it is on. Long
+lists are paged with **Previous** and **Next** at the bottom.
 
 ### Add a vehicle
 
@@ -147,16 +173,16 @@ genuinely needs a different id, create a new one and deactivate the old one.
 ### Deactivate and reactivate
 
 There is no delete button, by design. Use **Deactivate** on the row; a
-confirmation asks **Deactivate this vehicle?** The vehicle disappears from the
+dialog asks **Deactivate this vehicle?** The vehicle disappears from the
 default list, can no longer be assigned to a driver, and stops being offered to
 drivers in the app. Its history is kept. To bring it back, click **Show
-deactivated**, then **Activate** on the row (**Reactivate this vehicle?**).
+deactivated**, then **Activate** on the row.
 
 Deactivating does not stop a trip that is already running.
 
 ### Export location history
 
-The **CSV** link on each row downloads that vehicle's recent location points as
+**Reports** on each row downloads that vehicle's recent location points as
 a spreadsheet file named `<vehicle-id>_locations.csv`. It contains the last
 **24 hours**, up to **1,000 points**, with one row per position:
 
@@ -178,8 +204,11 @@ contact; it is a database query, not a button.
 
 ## 5. Drivers and admins
 
-**Users** lists every account under **All Users**, with **Name**, **Email**,
-**Role**, **Status**, **Vehicles** (how many are assigned) and **Actions**.
+**Drivers and users** lists every account under a headline that counts them,
+such as **11 drivers and 1 admin**. Its columns are **Name** (with the email
+under it), **Role**, **Status**, **May drive** (how many vehicles are
+assigned) and **Actions**. Search by name or email, or show one role, with the
+controls above the list.
 
 There are exactly two roles:
 
@@ -204,15 +233,16 @@ password reset.
 
 ### Reset a password
 
-1. **Users** → **Edit** on the row.
-2. Type the new password into **New password (leave blank to keep current)**.
-   Leave the field empty if you only want to change the name, email or role.
+1. **Drivers and users** → **Edit** on the row.
+2. Type the new password into **New password**. Leave the field empty if you
+   only want to change the name, email or role.
 3. Click **Save changes**.
 
 ### Deactivate an account
 
-Click **Deactivate** on the row and confirm **Deactivate this user?** The person
-can no longer sign in — to the admin UI or the app. **Activate** puts them back.
+Click **Deactivate** on the row and confirm **Deactivate this account?** The
+person can no longer sign in, to the admin UI or the app. **Activate** puts
+them back.
 
 **Important:** deactivating cuts off sessions that are already open, as well
 as blocking new sign-ins. A phone or browser that signed in earlier is refused
@@ -273,14 +303,14 @@ server, which signs everyone out.
 A driver can only start a trip on a vehicle assigned to them. Assignments live
 on the user's edit page.
 
-1. **Users** → **Edit** on the driver's row.
-2. Scroll to **Assigned vehicles**. It shows what they have now, or **No
-   vehicles assigned.**
+1. **Drivers and users** → **Edit** on the driver's row.
+2. Scroll to **Vehicles this driver may pick**. It shows what they have now,
+   or **No vehicles assigned.**
 3. Pick a vehicle from the dropdown and click **Assign**. You get **Vehicle
-   assigned.** Only active vehicles appear in the dropdown; if there are none,
-   you see **No active vehicles available to assign.**
+   assigned.** Only active vehicles the driver does not have yet appear in the
+   dropdown; if there are none, you see **No more active vehicles to assign.**
 4. To take one away, click **Remove** beside it and confirm **Remove this
-   vehicle assignment?** You get **Vehicle unassigned.** If the driver is on a
+   vehicle?** You get **Vehicle unassigned.** If the driver is on a
    trip on that vehicle, it stays assigned and you get **The driver is on a
    trip on this vehicle. End it on Trips, then remove the vehicle.**
 
@@ -296,26 +326,28 @@ vehicle: the trip would keep running with every report refused.
 
 ### Many at once: import a CSV file
 
-**Import from CSV** on **Vehicles** and on **Users** sets up a whole fleet and
-its drivers from a spreadsheet. Import the vehicles first, so the drivers file
-can assign them.
+**Import from CSV** on **Vehicles** and **Import drivers** on **Drivers and
+users** set up a whole fleet and its drivers from a spreadsheet. Import the
+vehicles first, so the drivers file can assign them. The line across the top of
+the page shows which of the three steps you are on.
 
-1. Click **Import from CSV**, then **Download the template**. Fill it in and
-   save it as **CSV UTF-8**. The first line names the columns, in any order:
+1. Click **Import from CSV** or **Import drivers**, then **Download the
+   template**. Fill it in and save it as **CSV UTF-8**. The first line names
+   the columns, in any order:
    - Vehicles: `id`, `label` and `agency_tag`, checked as on **New vehicle**.
    - Drivers: `email`, `name` and `vehicle_ids`, the vehicles to assign,
      separated by spaces (`101 102`). Each must exist and be active. Emails are
      saved in lower case.
-2. Choose the file and click **Preview**. Each line is marked **New**,
-   **Update**, **Unchanged** or **Error**, with the reason for an error in the
-   words the forms use. A file holds up to 200 rows and 256 KB.
+2. Choose the file and click **Check the file**. Each line is marked **New**,
+   **Update**, **Unchanged** or **Fix this row**, with the reason in the words
+   the forms use. A file holds up to 200 rows and 256 KB.
 3. If any line has an error, nothing can be imported: fix the file and upload
    it again. Otherwise click **Confirm import** within an hour. Every line is
    saved, or none is.
 4. The result lists what was created and updated. Each new driver has a
-   password and a **Setup sheet** link. The passwords are shown only on this
-   page, so give each driver theirs with their sheet; if one is lost, set a new
-   one with **Edit**.
+   password, with **Copy** beside it, and a **Setup sheet** link. The
+   passwords are shown only on this page, so give each driver theirs with
+   their sheet; if one is lost, set a new one with **Edit**.
 
 An existing vehicle takes the file's label and agency tag. An existing driver
 gets only the new name and the listed vehicles added: an import never changes a
@@ -444,7 +476,7 @@ notification disappears, and the vehicle drops out of the feed once its last
 report ages past the staleness threshold. If the server cannot be reached at
 that moment the app offers **Trip not ended yet** with **Try again** and **End
 on this phone**. **End on this phone** stops the phone at once, but the trip stays
-**Active** on your **Trips** page until the driver starts their next trip: the
+**Running** on your **Trips** page until the driver starts their next trip: the
 app sends the end just before that start, so the trip's end time shows when the
 next one began, not when the run finished.
 
@@ -456,9 +488,9 @@ run finishes.
 
 ## 8. Watching the fleet
 
-### Live Map
+### Live map
 
-**Live Map** shows every vehicle that has reported within the staleness
+**Live map** shows every vehicle that has reported within the staleness
 threshold, refreshing about every 10 seconds on its own. It shows
 driver-reported vehicles only.
 
@@ -468,7 +500,7 @@ driver-reported vehicles only.
   **Updated** ("how long ago").
 - **Fleet Status** on the right lists the same vehicles as rows.
 - If nothing is reporting you get the banner **No vehicles to show right now.**
-  and **No vehicles reporting.** in the sidebar.
+  and **No vehicles reporting.** in the list beside the map.
 
 ### Alerts
 
@@ -476,7 +508,7 @@ driver-reported vehicles only.
 
 - **Gone quiet**: the vehicle has sent no report for over 3 minutes. The phone
   may have lost signal or been switched off, or the app may have stopped. At 5
-  minutes the vehicle also drops off the Live Map and out of the feed.
+  minutes the vehicle also drops off the Live map and out of the feed.
 - **Not moving**: the vehicle is still reporting but has moved under 50 m in 10
   minutes. It may have broken down or be stuck in traffic. A driver waiting at
   the first stop before departure shows here too.
@@ -503,26 +535,29 @@ driver-reported vehicles only.
 
 Each row names the vehicle, driver, route and GTFS trip, and says how long:
 **No report for 7 min**, **Under 50 m in 12 min**, **Over 60 m from its route
-for 6 min** or **Next on block 12, due 7 min ago**. The longest-running alert is at the top. **View on map** opens the
-trip's page (see [A trip's page](#a-trips-page)), whose map starts where the
-vehicle last reported, even after it has dropped off the Live Map. **View
-trip** opens **Trips** on that trip, where **End trip** is.
+for 6 min** or **Next on block 12, due 7 min ago**, and when the alert opened.
+The longest-running alert is at the top. The buttons above the list each name
+a kind and how many alerts of it are open; pick one to show only those.
+**Last position** opens the trip's page (see [A trip's page](#a-trips-page)),
+whose map starts where the vehicle last reported, even after it has dropped
+off the Live map. **Trip** opens **Trips** on that trip, where **End trip**
+is.
 
-For an off-route vehicle, **View on map** shows the way it has gone since the
-trip started. Ask the driver whether a road is closed. If they have finished
-the trip, end it from **View trip**. If vehicles on one route keep showing as
+For an off-route vehicle, **Last position** shows the way it has gone since
+the trip started. Ask the driver whether a road is closed. If they have
+finished the trip, end it from **Trip**. If vehicles on one route keep showing as
 off route at the same place, the route's shape in your GTFS feed is probably
 wrong there: tell whoever maintains the feed.
 
 For a vehicle that has not started its next trip, the row shows the trip it
 should be on, with the vehicle and driver of the block's last trip. Call the
-driver. **View trip** opens all of that vehicle's trips, since none is running.
+driver. **Trip** opens all of that vehicle's trips, since none is running.
 
 An alert clears by itself when the vehicle reports again, moves on or comes
 back to its route, and when its trip ends. A position the phone is unsure of
 (a poor GPS fix) neither raises nor clears **Off route**. The page reloads
-every 30 seconds. The **Alerts** item in the sidebar shows how many there are
-on every page, counted when that page loaded.
+every 30 seconds. The count beside **Alerts** in the menu, and on the bell at
+the top, is on every page and keeps itself current.
 Unless your server posts them to a chat channel (see
 [Alerts on your phone](#alerts-on-your-phone)), keep the page open during
 service. Your server
@@ -569,46 +604,51 @@ that posts the alert's text to a channel.
 
 ### Trips and trails
 
-**Trips** is the history, headed **Trip History**. Each row shows **Trip**,
-**Vehicle**, **Driver**, **Route**, **GTFS trip**, **Start**, **End**,
-**Status** and **Duration**. Filter with the status dropdown (**All statuses**,
-**Active**, **Completed**), the vehicle dropdown (**All vehicles**), and the
-search box ("Search driver, route, trip id") — then click **Apply**.
+**Trips** is the history, under a headline that counts the trips running now.
+Each row shows **Trip**, **Vehicle**, **Driver**, **Route**, **Started**,
+**Ended**, **Status** and **Actions**. Show **All**, **Running** or
+**Completed** trips with the buttons above the list, pick one vehicle from the
+dropdown (**All vehicles**), or search by driver, route or trip id, then click
+**Apply**.
 
-Click **View trail** on any trip to open the map on that trip alone: the route
-actually driven as a line, with a **Start** and an **End** marker, and the
-sidebar replaced by **Trip Detail** showing driver, route, status and times.
-Click the number in the **Trip** column for the trip's own page, below.
+Click a trip to open its page, below, with the route it drove on a map.
 
 An active trip also has **End trip**. It ends the trip for good, the same as
 the driver ending it. Use it when a driver sees **You already have a trip
 running. End it before starting another.** and their phone no longer shows
-that trip. Confirm **End this trip? Do this only when the driver phone cannot
-end it.**, the page says **Trip ended. The driver can start a new trip.**, and
-the driver taps the run again. If a phone does still show the trip, ending it
+that trip. The dialog asks **End this trip?** and says to do it only when the
+driver's phone cannot. Confirm with **End trip**, the page says **Trip ended.
+The driver can start a new trip.**, and the driver taps the run again. If a phone does still show the trip, ending it
 there is safe: on Android **End trip** finishes as usual, and on an iPhone
 **End locally anyway** is right when the app says **Could not end the trip**,
 because the server has already ended it.
 
 ### A trip's page
 
-One trip has a page of its own, opened from the number in the **Trip** column
-of **Trips**, **View on map** on **Alerts**, or **View trail** in **Reports**.
-Its times are on your agency's clock, which the page names (UTC if the
-schedule is not loaded).
+One trip has a page of its own, opened from its row on **Trips**, **Last
+position** on **Alerts**, or **Replay** in **Analytics**. Its times are on your
+agency's clock, which the page names (UTC if the schedule is not loaded).
 
-- The top shows the vehicle, driver, route in its colour, GTFS trip and
-  block, start, end, status, duration and how many reports the phone sent. An
-  active trip has **End trip** here too; it works as on **Trips** and takes
-  you back there.
+- The top shows the vehicle, the route in its colour, whether the trip is
+  **Running** or **Completed**, and how it stood at its last stop. Under it
+  are the driver, GTFS trip and block, when it started and ended, how long it
+  took, how many of its stops were on time and how many reports the phone
+  sent. An active trip has **End trip** here too; it works as on **Trips** and
+  takes you back there.
 - The map draws the trail in the route's colour over the trip's route in
   grey, with its stops. A dashed line is a gap: more than 5 minutes (the
   staleness threshold) with no report. The marker starts on the last report.
-  **Play** replays the trip at **1x**, **10x** or **60x**, and the slider, or
-  the arrow keys on it, step through the reports one at a time.
+- Under the map is the trip drawn as a line from its first report to its
+  last, with a tick for each stop, a hatched stretch for each gap and the
+  vehicle's speed above it. **Play** replays the trip at **1x**, **10x** or
+  **60x**. Drag along the line, or use the arrow keys, to step through the
+  reports one at a time. The replay needs JavaScript; the rest of the page
+  does not.
 - **Stops** lists each stop with when it was due, when the vehicle left it
   (reached it, for the last stop) and how early or late that was, by the same
-  rule and colours as **Reports**, so the two pages agree. A stop your
+  rule as **Analytics**, so the two pages agree. A stop inside the on-time
+  window says **On time** in green with the difference beside it. An early
+  stop is red and a late one is blue, as in the OneBusAway apps. A stop your
   schedule does not mark as a timepoint shows its time but is not counted. On
   a running trip, a stop the vehicle has not got to yet says **not yet**. A
   trip run by headway shows only when it passed each stop, and a trip started
@@ -620,46 +660,71 @@ schedule is not loaded).
 - An open page of an active trip adds new reports every 10 seconds.
 
 A trip run twice, say by a second vehicle after a breakdown, shows each run on
-its own page, while **Reports** takes each stop from whichever run passed it
+its own page, while **Analytics** takes each stop from whichever run passed it
 first.
 
-### Reports
+### Analytics
 
-**Reports** answers two questions about a day of service: did the scheduled
-trips run, and did they run on time. It opens on yesterday. Pick another day
-with the date box and **Show**, or step through days with **Previous day** and
-**Next day**.
+**Analytics** answers two questions about your service: did the scheduled
+trips run, and did they run on time. Its headline is the answer in a sentence,
+such as **On time was 86% over the last 7 days**, and the line under it names
+the route pulling the share down, when one is.
 
-Each route with service that day has a row:
+It opens on the seven days that end yesterday. **Day** shows one day and
+**7 days** a week. The date box picks the last day shown: choose a date and
+click **Show**, or step back and forward with the arrows beside it. Every
+choice is in the page's address, so a bookmark is a saved report.
 
-- **Scheduled**: the trips the schedule has on that day, holidays included.
-- **Ran**: how many of them a driver ran. A driver's trip counts for the run
-  of its GTFS trip nearest to when the driver started it, so a trip started a
-  few minutes before midnight, or run after midnight, lands on the right day.
+Over seven days:
+
+- Five figures cross the top: **On time**, **Trips run**, **Early**, **Late**
+  and **Stops with no report**. Click one to draw it day by day in the chart
+  under them. With **Compare with the 7 days before** on, the week before is
+  drawn behind as a dashed line and each figure says how many points it moved.
+- **By route** has a row for each route with service, added up over the days.
+- **Early and late by hour of day** shows, for the trips leaving in each hour,
+  the share of their stops that were late, with the share that were early
+  stacked on it. On time is the space above.
+- **How early and how late** counts trips by the minute they reached their
+  last stop against the timetable, with the on-time window shaded.
+
+A single day has four tiles in place of the five figures and their chart.
+**Show these numbers as a table** under each chart opens the same numbers as a
+table.
+
+The columns of **By route**:
+
+- **Trips run**: how many of the trips the schedule has, holidays included, a
+  driver ran. A driver's trip counts for the run of its GTFS trip nearest to
+  when the driver started it, so a trip started a few minutes before
+  midnight, or run after midnight, lands on the right day.
 - **On time**: the share of stops the vehicles passed from 1 minute early to 5
-  minutes late, with how many stops were early and late under it. A stop
-  counts when the vehicle leaves it, the last stop when the vehicle reaches it,
-  so a driver waiting at the first stop before departure is not early. When
-  the agency's schedule marks timepoints, only those stops are counted.
-- **Unknown**: the share of stops the report cannot judge, because the phone
-  sent nothing within 2 minutes either side of the vehicle passing the stop.
-  They are left out of **On time** rather than counted late. A high number
-  usually means phones losing signal or the app being stopped. A trip whose
-  schedule has no route shape is unknown everywhere.
+  minutes late, with a bar that splits early, on time and late. A stop counts
+  when the vehicle leaves it, the last stop when the vehicle reaches it, so a
+  driver waiting at the first stop before departure is not early. When the
+  agency's schedule marks timepoints, only those stops are counted.
+- **Early** and **Late**: the shares of the stops judged that were outside
+  that window. Early is red and late is blue, as in the OneBusAway apps.
+- **No report**: the share of stops the report cannot judge, because the
+  phone sent nothing within 2 minutes either side of the vehicle passing the
+  stop. They are left out of **On time** rather than counted late. A high
+  number usually means phones losing signal or the app being stopped. A trip
+  whose schedule has no route shape has no report everywhere.
 
-**Trips →** opens the route's trips for the day, by departure. Each shows
-when it was scheduled, the vehicle and driver that ran it (**Not run** if
-none), how early or late it left the first stop and reached the last, and its
-own on-time share. **View trail** opens the trip's page, with its time at
-every stop.
+Click a route to open its trips for the last day shown, by departure. Each
+shows when it was scheduled, the vehicle and driver that ran it (**Not run** if
+none), how it left the first stop and reached the last, and its own on-time
+share. Inside the on-time window a stop says **On time** with the difference
+beside it; outside it, how early or late. **Replay** opens the trip's page,
+with its time at every stop. **All routes** goes back.
 
-**Download CSV** saves the route rows for the day as a spreadsheet. Today's
-report is worked out again each time you open it, so it fills in as the day
-goes on. A past day is kept once its service has ended, so points a phone
-uploads later from its offline queue show in it only after the server next
-reloads the schedule, daily by default. Your server administrator can change
-the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and `REPORT_ON_TIME_LATE`, see
-[`configuration.md`](configuration.md)).
+**Download CSV**, on a single day, saves that day's route rows as a
+spreadsheet. Today's figures are worked out afresh at most once a minute, so
+they fill in as the day goes on. A past day is kept once its service has
+ended, so points a phone uploads later from its offline queue show in it only
+after the server next reloads the schedule, daily by default. Your server
+administrator can change the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and
+`REPORT_ON_TIME_LATE`, see [`configuration.md`](configuration.md)).
 
 ### The feed itself
 
@@ -692,20 +757,21 @@ vehicle has reported inside the staleness window.
 If your server administrator has turned on feed authentication, opening either
 address in a browser shows `missing API key` instead — a browser cannot send the
 key the feed now requires. That is expected, and it does not mean the feed is
-down. Make yourself a key (see [Feed API keys](#feed-api-keys) below) and check
+down. Make yourself a key (see [API keys](#api-keys) below) and check
 the feed with
 `curl -H "X-API-Key: <your key>" "https://your-server/gtfs-rt/vehicle-positions?format=json"`.
 
-### Feed API keys
+### API keys
 
 When feed authentication is on, every consumer of the feed needs a key, and
-you make and revoke those keys on the **Feed API keys** page. With it off the
+you make and revoke those keys on the **API keys** page. With it off the
 page still works, but the feed does not ask for a key.
 
 To give a consumer a key, type who it is for into **New key for** and click
 **Create key**. The name is only a label for you, for example "OneBusAway". The
-page then shows the key under **Copy it now. It cannot be shown again.** Copy it
-before you leave the page and pass it to the consumer privately; they send it in
+page then shows the key under **Copy it now. It cannot be shown again.** Copy
+it, with **Copy key** or by hand, before you leave the page and pass it to the
+consumer privately; they send it in
 an `X-API-Key` header on every request. The server keeps no readable copy, so a
 lost key cannot be looked up: make a new one and deactivate the old one.
 
@@ -716,18 +782,22 @@ touching the others. **Last used** says **never** until the key's first request
 and is updated at most once a minute after that.
 
 To cut a consumer off, click **Deactivate** on its row and confirm **Deactivate
-this key? It cannot be turned back on.** The feed refuses that key from its next
-request. There is no reactivate: if the consumer should have access again, make
+this key?** The dialog says it cannot be turned back on. The feed refuses that
+key from its next request. There is no reactivate: if the consumer should have access again, make
 it a new key.
 
 ### Feed health
 
-**Feed health** (the **Feed health →** link on the Dashboard) shows what became
-of every position report the driver phones sent and every fetch of the feed,
-minute by minute for the last hour, plus totals. The counts are kept in memory:
+**Feed health** shows what became of every position report the driver phones
+sent and every fetch of the feed, minute by minute for the last hour, plus
+totals. Its headline says in a sentence whether anything is wrong, four tiles
+give the last hour's counts, and two charts draw the reports and the fetches
+a minute. The counts are kept in memory:
 a server restart starts them again, and the page says when counting began. It
 reloads every minute. Your IT contact can read the same numbers from
 `GET /api/v1/admin/health`.
+
+The **Outcomes** table:
 
 | Row | What it means |
 |---|---|
@@ -741,8 +811,9 @@ reloads every minute. Your IT contact can read the same numbers from
 | **Bad request** | The consumer asked for an address the feed does not understand. |
 | **Server error** | The server failed to build the feed. |
 
-The **Per minute** table shows the same counts for each minute, newest first,
-with any rejection in red. Use it to find when a problem started.
+**Show the last hour minute by minute** opens the same counts for each minute,
+newest first, with any rejection in amber. Use it to find when a problem
+started.
 
 **When the rejected share climbs**, look at the most common reason:
 
@@ -750,7 +821,7 @@ with any rejection in red. Use it to find when a problem started.
   that is no longer running, for example one ended from **Trips**. Ask them to
   start their trip again. If it began right after an app update, tell your IT
   contact.
-- **signed out or not allowed**: check **Users** and **Vehicles** for an account
+- **signed out or not allowed**: check **Drivers and users** and **Vehicles** for an account
   or vehicle you deactivated, or an assignment you removed. A short burst right
   after you do that is expected; it stops once the driver signs in again.
 - **rate limited**: a phone sending too often, usually one running an old or
@@ -771,33 +842,35 @@ reports, not as rejections. **Alerts** tells you which vehicle has gone quiet.
 
 **Before service**
 
-1. Open **Dashboard**. Confirm **Active Fleet** matches the number of buses you
-   expect to be available and **Drivers** matches your roster.
-2. Check **Trips** filtered to **Active**. It should be empty. Anything left
-   over is yesterday's trip that was never ended — see section 12.
-3. Before the first bus reports, **Feed last updated** will read **never** and
-   **Active Now** will be 0. That is normal, not a fault.
-4. As the first buses pull out, confirm **Active Now** and **Active Trips**
-   start climbing and **Feed last updated** changes to "just now".
+1. Open **Vehicles** and **Drivers and users**. Confirm the headlines count
+   the vehicles you expect to be available and the drivers on your roster.
+2. Check **Trips** with **Running** chosen. It should be empty. Anything left
+   over is yesterday's trip that was never ended; see section 12.
+3. Before the first vehicle reports, **Overview** says **No vehicles are on a
+   trip** and the top bar says **0 reporting**. That is normal, not a fault.
+4. As the first vehicles pull out, confirm the headline on **Overview** starts
+   counting them and the top bar's count climbs.
 
 **During service**
 
-1. Keep **Live Map** open. Every bus that should be out should be a marker.
-2. A bus that vanishes from the map has stopped reporting for longer than the
-   staleness threshold — call the driver before assuming a fault.
+1. Keep **Live map** or **Overview** open. Every vehicle that should be out
+   should be a marker on the map and on its route's line on **Overview**.
+2. A vehicle that vanishes from the map has stopped reporting for longer than
+   the staleness threshold. It shows on **Alerts** first, as **Gone quiet**;
+   call the driver before assuming a fault.
 3. Spot-check the feed with `?format=json` if a rider or OneBusAway reports
    something missing.
 
 **After service**
 
 1. **Trips** → **Completed**: every run of the day should be there, with a
-   sensible **Duration**.
-2. **Trips** → **Active**: should be empty. Every trip still listed as
-   **Active** is a driver who did not tap **End trip**. Ask them to reopen the
-   app and end it; the app remembers the trip and will take them straight back
-   to the tracking screen.
-3. **Dashboard**: **Active Trips** back to 0, **Active Now** back to 0 a few
-   minutes after the last bus.
+   sensible length under **Ended**.
+2. **Trips** → **Running**: should be empty. Every trip still listed as
+   **Running** is a driver who did not tap **End trip**. Ask them to reopen
+   the app and end it; the app remembers the trip and will take them straight
+   back to the tracking screen.
+3. **Overview**: **On a trip now** back to 0, and the top bar back to **0
+   reporting** a few minutes after the last vehicle.
 
 ---
 
@@ -812,10 +885,10 @@ changes nothing at all about the driver-reported feed.
 
 ### The Rider mode page
 
-**Rider mode** in the sidebar shows what it is doing. When rider mode is off,
+**Rider mode** in the menu shows what it is doing. When rider mode is off,
 the page says so and names the setting that turns it on. When it is on:
 
-- **Riders**, **Rides**, **In the feed** and **Trusted feeds**: how many rider
+- **Riders**, **Rides in progress**, **In the feed** and **Trusted feeds**: how many rider
   phones have registered (and how many are trusted or blocked), how many rides
   are in progress, how many vehicles riders are placing in the feed right now,
   and how many trusted feeds are set.
@@ -825,10 +898,10 @@ the page says so and names the setting that turns it on. When it is on:
   contact told the server to believe, and whether its last poll worked. A
   rider whose position a trusted feed agrees with is **Confirmed**. Your own
   drivers' positions always count as trusted.
-- **Rides**: in progress or ended, newest first, 50 to a page. Each shows the
-  trip and route the rider picked, whether the ride is **Pending** (not enough
-  matching positions yet), **Verified** or **Rejected**, and how many of its
-  positions matched. For a ride in progress, **Riders on trip** counts the
+- **Rides**: every ride, newest first, 50 to a page; **In progress** and
+  **Ended** show only those. Each shows the trip and route the rider picked,
+  whether the ride is **Pending** (not enough matching positions yet),
+  **Verified** or **Rejected**, and how many of its positions matched. For a ride in progress, **Riders on trip** counts the
   riders whose recent positions count for that trip, **In the feed** marks a
   trip the riders are placing, and **Driver trip** opens the page of the one
   driver trip running the same scheduled trip. An ended ride shows why it ended.
@@ -843,7 +916,7 @@ and the README's rider-mode section.
 
 Rider-derived vehicles are labelled **Rider-reported** and their ids look like
 `rider:<trip id>:<date>`, so they are never confused with your own vehicles. They
-never appear on the **Live Map**, which shows driver-reported vehicles only.
+never appear on the **Live map**, which shows driver-reported vehicles only.
 A trip your own drivers are already reporting is never published from rider
 data — but only when the driver picked the specific scheduled trip, not just a
 route. If a driver only entered a route, the server has no scheduled trip to
@@ -865,7 +938,7 @@ itself.
 
 Taken together this is a **per-driver movement history**, and it should be
 treated like one. Anyone with an admin account can see any vehicle's positions:
-the **Live Map**, the trip trails, and the **CSV** export on the vehicle list.
+the **Live map**, the trip trails, and the **CSV** export on the vehicle list.
 Drivers can see none of it — the app has no history screen, and driver accounts
 cannot open `/admin`. So the real access control here is how many admin
 accounts you hand out. Keep the number small, and deactivate accounts when
@@ -893,16 +966,16 @@ points are.
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| Driver sees **You're not assigned to vehicle 4317.** after tapping a run on **Choose a run** | The vehicle is not assigned to that driver, or the assignment was removed. | **Users** → **Edit** the driver → **Assigned vehicles** → pick the vehicle → **Assign**. Then have them tap the run again. |
-| Driver sees **You already have a trip running. End it before starting another.** | An earlier trip was never ended, usually because it was started on another phone or the app was reinstalled. | Have the driver open the app on the phone that started the trip; it returns to the tracking screen for the old trip, where **End trip** ends it. Confirm on **Trips** → **Active** that it is gone. If the app no longer knows about the trip, end it yourself: **Trips** → **Active** → **Apply**, then **End trip** on the driver's row and confirm. Then have them tap the run again. |
+| Driver sees **You're not assigned to vehicle 4317.** after tapping a run on **Choose a run** | The vehicle is not assigned to that driver, or the assignment was removed. | **Drivers and users** → **Edit** the driver → **Vehicles this driver may pick** → pick the vehicle → **Assign**. Then have them tap the run again. |
+| Driver sees **You already have a trip running. End it before starting another.** | An earlier trip was never ended, usually because it was started on another phone or the app was reinstalled. | Have the driver open the app on the phone that started the trip; it returns to the tracking screen for the old trip, where **End trip** ends it. Confirm on **Trips** → **Running** that it is gone. If the app no longer knows about the trip, end it yourself: **Trips** → **Running**, then **End trip** on the driver's row and confirm. Then have them tap the run again. |
 | Driver sees **No vehicles are assigned to you** | No active vehicle is assigned to that account. | Check the vehicle is not deactivated (**Vehicles** → **Show deactivated**), then assign it (section 6) and have the driver tap **Check again**. |
 | One vehicle missing from the feed and the map, others fine | That phone has stopped reporting for longer than the staleness threshold: no signal, app closed, trip never started, phone battery dead, or Android killed the app in the background. | Ask the driver what the line under the status card says. **No connection** is a coverage problem and clears itself. If the app is not on the tracking screen at all, the trip was never started or was ended. If it keeps dying when the screen locks, the background-location permission is not **"Allow all the time"**: redo step 6 of section 7. After the phone restarts or the app updates, reporting starts again by itself once the driver unlocks the phone, but only with **"Allow all the time"** and for a trip started less than 12 hours ago; otherwise a **Reports paused** notification asks the driver to open the app and tap **Resume trip**. A phone that was force-stopped, by the driver or by an aggressive battery saver (some Xiaomi, Samsung and Huawei phones), reports nothing until the driver opens the app, which also shows **Resume trip**: see the battery note in the [README's section 3.2](../README.md#32-android-driver-app-kotlin) and [dontkillmyapp.com](https://dontkillmyapp.com) for that phone's settings. |
-| Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Dashboard**: if **Feed last updated** says **never** (nothing has reported for several minutes) and **Active Trips** is 0, it is the phones — start with two or three drivers. If **Active Trips** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |
+| Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Overview**: if the top bar says **0 reporting** and **On a trip now** is 0, it is the phones, so start with two or three drivers. If **On a trip now** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |
 | Driver phone shows **Signed out** | The sign-in could not be renewed: the account was deactivated or deleted, or its password changed, the phone went a week without using the app, or the driver signed out on another phone. | Have the driver tap **Sign in** on that card and sign in again. If you have since deactivated the account, sign-in is refused, which is the intended outcome. |
-| A driver or admin cannot sign in and insists the password is right | The account is deactivated. Deactivation is deliberately indistinguishable from a wrong password on the sign-in screen. | **Users** → find the row → if **Status** reads **Deactivated**, click **Activate** and confirm **Reactivate this user?** |
-| Someone you deactivated is still reporting, or their phone still works | Deactivating cuts off open sessions at once, so either the account is not deactivated or the phone is signed in with another account. | Confirm the row shows **Deactivated** on **Users**. Then find the vehicle's trip on **Trips** and read its **Driver** column to see which account is reporting. |
+| A driver or admin cannot sign in and insists the password is right | The account is deactivated. Deactivation is deliberately indistinguishable from a wrong password on the sign-in screen. | **Drivers and users** → **Show deactivated** → find the row → if **Status** reads **Deactivated**, click **Activate**. |
+| Someone you deactivated is still reporting, or their phone still works | Deactivating cuts off open sessions at once, so either the account is not deactivated or the phone is signed in with another account. | Confirm the row shows **Deactivated** on **Drivers and users**. Then find the vehicle's trip on **Trips** and read its **Driver** column to see which account is reporting. |
 | Driver phone shows **Phone clock is wrong** | The phone's clock is wrong, so the server is rejecting its reports. | On the phone, turn on automatic date and time in Android settings, then restart the app. The line under the status card goes away once reports are accepted again. |
-| Vehicles show on your **Live Map** but not in OneBusAway | The server and OneBusAway are using different GTFS schedules. Drivers pick their route and run from the server's schedule, so the ids they send are that schedule's, and OBA can only match ids from its own. | Ask your IT contact to check that the server's `GTFS_STATIC_URL` and OneBusAway use the same GTFS static feed, and that OBA is pointed at the feed address. |
+| Vehicles show on your **Live map** but not in OneBusAway | The server and OneBusAway are using different GTFS schedules. Drivers pick their route and run from the server's schedule, so the ids they send are that schedule's, and OBA can only match ids from its own. | Ask your IT contact to check that the server's `GTFS_STATIC_URL` and OneBusAway use the same GTFS static feed, and that OBA is pointed at the feed address. |
 | **Deactivate** on a user returns a plain page saying **cannot deactivate the last active admin** | It is the only active admin account left. | Use your browser's Back button, create or reactivate another admin, then try again. |
 | Vehicle form rejects an id | The id has spaces or other characters, or is over 50 characters, or already exists. | Use only letters, digits, dots, hyphens and underscores; keep it to at most 50 characters; check **Show deactivated** in case the id belongs to a deactivated vehicle. |
 | `/admin` returns "not found" | The admin UI was switched off at install time (`ADMIN_UI_ENABLED=false`). | Ask your IT contact to enable it — see [`deployment.md` §3](deployment.md#3-configuration-reference). |

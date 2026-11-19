@@ -1,207 +1,63 @@
 {{define "content"}}
-<div class="space-y-5 p-4 lg:p-5">
-
-  {{if not .Enabled}}
-  <div id="rider-off" class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="px-5 py-4">
-      <h3 class="display-font text-lg font-bold text-slate-900">Rider mode</h3>
-      <p class="mt-1 text-sm text-slate-500">Rider mode is off; it turns on when the server is started with <span class="font-mono text-xs text-slate-700">RIDER_MODE_ENABLED=true</span>, and <span class="font-mono text-xs text-slate-700">TRUSTED_GTFS_RT_URLS</span> adds trusted feeds (see the <a href="https://github.com/OneBusAway/vehicle-positions/blob/main/docs/configuration.md#rider-mode" class="font-semibold text-sky-600 hover:text-sky-800">rider mode settings</a>).</p>
-    </div>
+<div class="page-head">
+  <div class="page-head-main">
+    <h2 class="h1">{{if .Enabled}}Rider mode is on{{else}}Rider mode is off{{end}}</h2>
+    <p class="lede">{{if .Enabled}}Riders pick their trip in a rider app and share where they are. The server checks each one against the schedule and puts a trip on the map only when no driver is already reporting it.{{else}}With it on, people riding a trip can share where they are, and the map can show a trip no driver is reporting.{{end}}</p>
   </div>
-  {{else}}
-
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">Riders</p>
-      <p id="rider-total" class="display-font mt-2 text-4xl font-bold text-slate-900">{{.Riders.Total}}</p>
-      <p class="mt-2 text-xs text-slate-400">{{.Riders.Trusted}} trusted, {{.Riders.Blocked}} blocked</p>
-    </div>
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">Rides</p>
-      <p id="rider-active" class="display-font mt-2 text-4xl font-bold text-sky-700">{{.Rides.Active}}</p>
-      <p class="mt-2 text-xs text-slate-400">In progress</p>
-    </div>
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">In the feed</p>
-      <p id="rider-publishable" class="display-font mt-2 text-4xl font-bold text-emerald-700">{{.Rides.Publishable}}</p>
-      <p class="mt-2 text-xs text-slate-400">Vehicles placed by riders</p>
-    </div>
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">Trusted feeds</p>
-      <p id="rider-feeds" class="display-font mt-2 text-4xl font-bold text-slate-900">{{len .Feeds}}</p>
-      <p class="mt-2 text-xs text-slate-400">Plus your own drivers</p>
-    </div>
-  </div>
-
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="border-b border-slate-200/60 px-5 py-4">
-      <h3 class="display-font text-lg font-bold text-slate-900">Rider mode is on</h3>
-      <p class="mt-1 text-sm text-slate-500">Riders pick their trip in a rider app, and their phones report where they are. Each position is checked against the schedule and the route's shape. A trusted feed that puts its own vehicle in the same place confirms the rider. A vehicle goes in the feed from riders only when one trusted rider, or two riders who agree, are on it, and never when a trusted feed or one of your drivers already reports that trip.</p>
-    </div>
-    <div id="rider-schedule" class="px-5 py-4">
-      <h4 class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Schedule riders are checked against</h4>
-      {{with .Schedule}}
-      <dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3 lg:grid-cols-4">
-        <div class="min-w-0">
-          <dt class="text-xs text-slate-400">Source</dt>
-          <dd class="mt-1 break-all font-mono text-xs text-slate-700">{{.Source}}</dd>
-        </div>
-        <div class="min-w-0">
-          <dt class="text-xs text-slate-400">Loaded</dt>
-          <dd class="mt-1 text-slate-700">{{$.ScheduleLoaded}}</dd>
-        </div>
-        <div class="min-w-0">
-          <dt class="text-xs text-slate-400">Trips</dt>
-          <dd class="mt-1 tabular-nums text-slate-700">{{.Trips}}</dd>
-        </div>
-        <div class="min-w-0">
-          <dt class="text-xs text-slate-400">Shapes</dt>
-          <dd class="mt-1 tabular-nums text-slate-700">{{.Shapes}}</dd>
-        </div>
-        <div class="min-w-0">
-          <dt class="text-xs text-slate-400">Timezone</dt>
-          <dd class="mt-1 text-slate-700">{{.Timezone}}</dd>
-        </div>
-      </dl>
-      {{else}}
-      <p class="mt-2 text-sm text-slate-500">The schedule has not loaded yet, so no ride can be checked.</p>
-      {{end}}
-    </div>
-  </div>
-
-  <div id="rider-trusted-feeds" class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="border-b border-slate-200/60 px-5 py-4">
-      <h3 class="display-font text-base font-bold text-slate-900">Trusted feeds</h3>
-      <p class="mt-0.5 text-xs text-slate-400">GTFS-realtime vehicle positions you already believe, polled to confirm riders. Your own drivers' positions always count as trusted.</p>
-    </div>
-    {{if .Feeds}}
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Feed</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">State</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Last success</th>
-            <th class="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicles</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{range .Feeds}}
-          <tr>
-            <td class="px-5 py-4">
-              <span class="whitespace-nowrap font-mono text-xs text-slate-700">{{.URL}}</span>
-              {{if .LastError}}<p class="mt-1 break-all text-xs text-rose-700">{{.LastError}}</p>{{end}}
-            </td>
-            <td class="px-5 py-4">
-              {{if eq .State "failing"}}
-              <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>Failing</span>
-              {{else if eq .State "waiting"}}
-              <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>Not polled yet</span>
-              {{else}}
-              <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Working</span>
-              {{end}}
-            </td>
-            <td class="px-5 py-4 text-slate-500">{{if .LastSuccess}}{{.LastSuccess}}{{else}}Never{{end}}</td>
-            <td class="px-5 py-4 text-right tabular-nums text-slate-500">{{.Entities}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <p class="px-5 py-4 text-sm text-slate-500">No trusted feed is set, so only your own drivers' positions can confirm a rider.</p>
-    {{end}}
-  </div>
-
-  <div id="rider-rides" class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
-      <div>
-        <h3 class="display-font text-base font-bold text-slate-900">Rides</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{len .List}} rides shown, newest first. Times in {{.Timezone}}.</p>
-      </div>
-      <form method="get" action="/admin/rider" class="flex flex-wrap items-center gap-2">
-        <select name="status" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-          <option value="active" {{if eq .Status "active"}}selected{{end}}>In progress</option>
-          <option value="ended" {{if eq .Status "ended"}}selected{{end}}>Ended</option>
-        </select>
-        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">Apply</button>
-      </form>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Trip</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Ride</th>
-            {{if eq .Status "active"}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Riders on trip</th>
-            {{end}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Trusted feed</th>
-            <th class="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Points</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Started</th>
-            {{if eq .Status "ended"}}
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Ended</th>
-            {{end}}
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{if not .List}}
-          <tr>
-            <td class="px-5 py-6 text-center text-slate-400" colspan="7">{{if eq .Status "active"}}No rides in progress.{{else}}No ended rides.{{end}}</td>
-          </tr>
-          {{end}}
-          {{range .List}}
-          <tr class="ride-row transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-4">
-              <span class="font-mono text-xs font-medium text-slate-900">{{.TripID}}</span>
-              <p class="text-xs text-slate-400">{{.StartDate}}</p>
-              {{if .DriverTrip}}<a href="/admin/trips/{{.DriverTrip}}" class="whitespace-nowrap text-xs font-semibold text-sky-600 hover:text-sky-800">Driver trip {{.DriverTrip}} &rarr;</a>{{end}}
-            </td>
-            <td class="px-5 py-4">
-              {{if .Route.ID}}
-              {{if .Route.Color}}
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" style="background-color: {{.Route.Color}}; color: {{.Route.TextColor}}">{{.Route.Name}}</span>
-              {{else}}
-              <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{{.Route.Name}}</span>
-              {{end}}
-              {{else}}<span class="text-slate-400">&mdash;</span>{{end}}
-            </td>
-            <td class="px-5 py-4">
-              {{if eq .State "verified"}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Verified</span>
-              {{else if eq .State "rejected"}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>Rejected</span>
-              {{else if eq .State "pending"}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>Pending</span>
-              {{else}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>{{.State}}</span>
-              {{end}}
-            </td>
-            {{if eq $.Status "active"}}
-            <td class="px-5 py-4">
-              <span class="tabular-nums text-slate-700">{{.Riders}}</span>
-              {{if .InFeed}}<span class="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">In the feed</span>{{end}}
-            </td>
-            {{end}}
-            <td class="px-5 py-4">{{if .Corroborated}}<span class="font-semibold text-emerald-700">Confirmed</span>{{else}}<span class="text-slate-400">No</span>{{end}}</td>
-            <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums text-slate-500">{{.PointsMatched}} of {{.PointsTotal}}</td>
-            <td class="whitespace-nowrap px-5 py-4 text-slate-500">{{.Started}}</td>
-            {{if eq $.Status "ended"}}
-            <td class="px-5 py-4 text-slate-500">
-              <span class="whitespace-nowrap">{{.Ended}}</span>
-              {{if .EndReason}}<p class="text-xs text-slate-400">{{.EndReason}}</p>{{end}}
-            </td>
-            {{end}}
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    <p class="border-t border-slate-200/60 px-5 py-3 text-xs text-slate-400">Points: the rider's positions that matched the trip, of all they sent. Trusted feed: a trusted vehicle position agreed with the rider. {{if eq .Status "active"}}Riders on trip: riders whose checked, recent positions count for the trip now. {{end}}Also available as JSON from <span class="font-mono">GET /api/v1/admin/rider/rides</span>.</p>
-    {{template "pagination" .}}
-  </div>
-
-  {{end}}
 </div>
+
+{{if not .Enabled}}
+<div class="card" id="rider-off"><div class="empty"><span class="step-icon">{{template "icon-lg" "hail"}}</span><div class="empty-title">Turn it on when the server starts</div><p>Start the server with RIDER_MODE_ENABLED=true. Nothing else changes for drivers. TRUSTED_GTFS_RT_URLS adds feeds you already trust.</p><a class="btn btn-tonal" href="https://github.com/OneBusAway/vehicle-positions/blob/main/docs/configuration.md#rider-mode" target="_blank" rel="noopener">{{template "icon" "open_in_new"}}How to turn it on</a></div></div>
+{{else}}
+<div class="rise tile-row">
+  <div class="card tile"><span class="tile-label">Riders</span><span class="tile-value" id="rider-total"><span class="count-up" data-count="{{.Riders.Total}}">{{.Riders.Total}}</span></span><span class="tile-note">{{.Riders.Trusted}} trusted, {{.Riders.Blocked}} blocked</span></div>
+  <div class="card tile"><span class="tile-label">Rides in progress</span><span class="tile-value" id="rider-active"><span class="count-up" data-count="{{.Rides.Active}}">{{.Rides.Active}}</span></span><span class="tile-note">Riders sharing where they are</span></div>
+  <div class="card tile"><span class="tile-label">In the feed</span><span class="tile-value" id="rider-publishable"><span class="count-up" data-count="{{.Rides.Publishable}}">{{.Rides.Publishable}}</span></span><span class="tile-note">Vehicles placed by riders</span></div>
+  <div class="card tile"><span class="tile-label">Trusted feeds</span><span class="tile-value" id="rider-feeds">{{len .Feeds}}</span><span class="tile-note">Plus your own drivers</span></div>
+</div>
+
+<div class="rider-grid">
+  <section class="card" id="rider-schedule" aria-labelledby="schedule-title">
+    <div class="card-head"><h3 id="schedule-title">Schedule riders are checked against</h3></div>
+    {{with .Schedule}}
+    <dl class="kv rider-kv"><div><dt>Source</dt><dd class="wrap">{{.Source}}</dd></div><div><dt>Loaded</dt><dd>{{$.ScheduleLoaded}}</dd></div><div><dt>Trips</dt><dd>{{.Trips}}</dd></div><div><dt>Shapes</dt><dd>{{.Shapes}}</dd></div><div><dt>Timezone</dt><dd>{{.Timezone}}</dd></div></dl>
+    {{else}}
+    <p class="card-note">The schedule has not loaded yet, so no ride can be checked.</p>
+    {{end}}
+  </section>
+  <section class="card" id="rider-trusted-feeds" aria-labelledby="feeds-title">
+    <div class="card-head"><h3 id="feeds-title">Trusted feeds</h3></div>
+    {{if .Feeds}}
+    <p class="card-note">GTFS-realtime vehicle positions you already believe, polled to confirm riders. Your own drivers' positions always count as trusted.</p>
+    <div class="table-wrap"><table class="table table-dense">
+      <thead><tr><th>Feed</th><th>State</th><th>Last success</th><th class="right">Vehicles</th></tr></thead>
+      <tbody>
+        {{range .Feeds}}
+        <tr><td><span class="wrap">{{.URL}}</span>{{with .LastError}}<span class="sub wrap">{{.}}</span>{{end}}</td><td class="nowrap">{{if eq .State "failing"}}<span class="pill pill-warn">Failing</span>{{else if eq .State "waiting"}}<span class="pill plain">Not polled yet</span>{{else}}<span class="pill pill-ok">Working</span>{{end}}</td><td>{{if .LastSuccess}}{{.LastSuccess}}{{else}}Never{{end}}</td><td class="num right">{{.Entities}}</td></tr>
+        {{end}}
+      </tbody>
+    </table></div>
+    {{else}}
+    <div class="empty"><span class="step-icon">{{template "icon-lg" "sensors"}}</span><div class="empty-title">No trusted feed is set</div><p>Only your own drivers' positions can confirm a rider. Add one with TRUSTED_GTFS_RT_URLS.</p></div>
+    {{end}}
+  </section>
+</div>
+
+<section class="card" id="rider-rides" aria-labelledby="rides-title">
+  <div class="card-head filters"><h3 id="rides-title" style="flex:1 1 220px">Rides<span class="sub" style="margin-left:10px">Newest first. Times are {{.Timezone}} time.</span></h3><div class="seg" role="group" aria-label="Rides shown">{{range .Statuses}}<a href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div></div>
+  {{if .List}}
+  <div class="table-wrap"><table class="table cards">
+    <thead><tr><th>Trip</th><th>Route</th><th>Ride</th><th>Riders on trip</th><th class="hide-phone hide-md">Trusted feed</th><th class="hide-phone hide-md">Points matched</th><th>Started</th></tr></thead>
+    <tbody>
+      {{range .List}}
+      <tr class="ride-row"><td class="nowrap"><span class="strong">{{.TripID}}</span><span class="sub">{{.StartDay}}</span>{{if .DriverTrip}}<a class="sub" style="color:var(--primary)" href="/admin/trips/{{.DriverTrip}}">Driver trip {{.DriverTrip}}</a>{{end}}</td><td class="nowrap">{{if .Route.ID}}<span class="ride-route">{{template "route-badge" .Route}}{{with .Route.LongName}}<span>{{.}}</span>{{end}}</span>{{end}}</td><td class="c-side">{{if eq .State "verified"}}<span class="pill pill-ok">Verified</span>{{else if eq .State "rejected"}}<span class="pill pill-warn">Rejected</span>{{else if eq .State "pending"}}<span class="pill plain">Pending</span>{{else}}<span class="pill plain">{{.State}}</span>{{end}}</td><td class="num nowrap"{{if .Live}} data-label="Riders on trip"{{end}}>{{if .Live}}{{.Riders}}{{if .InFeed}} <span class="pill pill-ok">In the feed</span>{{end}}{{end}}</td><td class="hide-phone hide-md">{{if .Corroborated}}Confirmed{{else}}<span class="muted">No</span>{{end}}</td><td class="num hide-phone hide-md">{{.PointsMatched}} of {{.PointsTotal}}</td><td class="num nowrap" data-label="Started">{{.Started}}{{if .Ended}}<span class="sub">ended {{.Ended}}{{with .EndReason}}, {{.}}{{end}}</span>{{end}}</td></tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "hail"}}</span><div class="empty-title">{{if eq .Status "active"}}No rides in progress.{{else if eq .Status "ended"}}No ended rides.{{else}}No rides yet{{end}}</div><p>A ride shows here when a rider picks a trip in a rider app and starts sharing where they are.</p></div>
+  {{end}}
+  {{template "pagination" .}}
+</section>
+{{end}}
 {{end}}

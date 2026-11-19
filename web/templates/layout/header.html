@@ -1,13 +1,21 @@
 {{define "header"}}
-<header class="glass-panel flex shrink-0 print:hidden items-center justify-between border-b border-slate-200/70 px-5 py-4 lg:px-7">
-  <div>
-    <p class="text-xs font-semibold uppercase tracking-[0.28em] text-sky-700/70">Transit control</p>
-    <h1 class="display-font mt-1 text-xl font-bold tracking-tight text-slate-900">{{.Title}}</h1>
-  </div>
-  <div class="flex items-center gap-3">
-    <form method="post" action="/admin/logout">
-      <button type="submit" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/75 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Sign out</button>
-    </form>
+<header class="topbar">
+  <span class="only-phone">{{template "brand-mark-sm"}}</span>
+  <h1 class="topbar-title">{{.Title}}</h1>
+  <button class="search js-only" type="button" data-palette-open aria-label="Search vehicles, drivers, trips and routes">{{template "icon" "search"}}<span class="search-text">Search vehicles, drivers, trips and routes</span><span class="kbd">/</span></button>
+  <span style="flex:1"></span>
+  <a class="pulse" href="/admin/map" id="pulse" data-state="{{if .Shell.Reporting}}live{{else}}idle{{end}}" title="Open the live map">
+    <svg class="pulse-mark" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="14" r="2.2"/><path class="arc-1" d="M5.2 10.4a5.4 5.4 0 0 1 7.6 0"/><path class="arc-2" d="M2.4 7.4a9.4 9.4 0 0 1 13.2 0"/></svg>
+    <span class="pulse-counts" aria-live="polite"><b><span id="pulse-reporting">{{.Shell.Reporting}}</span><span class="pulse-word"> reporting</span></b><span class="pulse-q" id="pulse-q"{{if not .Shell.Quiet}} hidden{{end}}><span class="pulse-sep"></span><span class="tone-warn" style="font-weight:500"><span id="pulse-quiet">{{.Shell.Quiet}}</span> quiet</span></span></span>
+    <span class="pulse-sep hide-phone js-only"></span><span class="pulse-age js-only" id="pulse-age">updated just now</span>
+  </a>
+  <button class="icon-btn only-phone js-only" type="button" data-palette-open aria-label="Search">{{template "icon" "search"}}</button>
+  <a class="icon-btn hide-phone" href="/admin/alerts" aria-label="{{.Shell.AlertsLabel}}" data-alert-link>{{template "icon" "notifications"}}<span class="count" data-alert-count{{if not .Shell.AlertCount}} hidden{{end}}>{{with .Shell.AlertCount}}{{.}}{{end}}</span></a>
+  <button class="avatar" type="button" popovertarget="account" aria-label="Account">{{.Shell.Account.Initials}}</button>
+  <div id="account" popover class="float account-menu">
+    <div class="account-who">{{with .Shell.Account.Name}}<div style="font-weight:500">{{.}}</div>{{end}}<div class="muted" style="font-size:13px">{{.Shell.Account.Email}}</div></div>
+    <button class="rail-item js-only" type="button" data-theme-toggle><span class="theme-mark"></span><span>Light or dark</span></button>
+    <form method="post" action="/admin/logout"><button class="rail-item" type="submit">{{template "icon" "logout"}}<span>Sign out</span></button></form>
   </div>
 </header>
 {{end}}

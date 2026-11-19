@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // fakeUserFetcher is a minimal UserFetcher backed by an in-memory map, used by
@@ -36,11 +38,14 @@ func (f *fakeUserFetcher) GetUserByEmail(_ context.Context, email string) (*User
 	return u, nil
 }
 
+// newTestAdminUI is the admin UI over a store with nothing in it and no
+// schedule loaded, as on a server that has just started.
 func newTestAdminUI(t *testing.T) *adminUI {
 	t.Helper()
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
-	ui, err := newAdminUI(&noopStore{}, tracker, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
+	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return nil }, testReportSettings)
+	ui, err := newAdminUI(&noopStore{}, tracker, newAlertWatcher(&noopStore{}, testAlertSettings), reports, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
 	require.NoError(t, err)
 	t.Cleanup(ui.loginLimiter.Stop)
 	return ui
@@ -75,9 +80,26 @@ func TestAdminLoginPageRenders(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), `method="post"`)
-	assert.Contains(t, w.Body.String(), `action="/admin/login"`)
-	assert.NotContains(t, w.Body.String(), "signup")
+	body := w.Body.String()
+	assert.Contains(t, body, `method="post"`)
+	assert.Contains(t, body, `action="/admin/login"`)
+	assert.NotContains(t, body, "signup")
+	assert.Contains(t, body, "<title>Sign in · Vehicle Tracker</title>")
+	assert.Contains(t, body, `<h1 class="h1">Sign in</h1>`)
+	assert.Contains(t, body, `<div class="picture pic play" aria-hidden="true">`, "the apps' welcome picture, which says nothing a reader needs")
+	assert.NotContains(t, body, `role="alert"`)
+	assert.NotContains(t, body, `role="status"`, "nobody was sent here from another page")
+	assert.NotContains(t, body, "Transit Tracker")
+
+	// Sent here from a page, the visitor is told why and goes back after.
+	req = httptest.NewRequest(http.MethodGet, "/admin/login?next=%2Fadmin%2Ftrips%3Fstatus%3Dactive", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	body = w.Body.String()
+	assert.Contains(t, body, `role="status"`)
+	assert.Contains(t, body, "You are signed out. Sign in to carry on where you were.")
+	assert.Contains(t, body, `<input type="hidden" name="next" value="/admin/trips?status=active">`)
 }
 
 func TestAdminLoginFlow(t *testing.T) {
@@ -109,6 +131,9 @@ func TestAdminLoginFlow(t *testing.T) {
 		w := post(admin.Email, "nope")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		assert.Contains(t, w.Body.String(), "Invalid email or password")
+		assert.Contains(t, w.Body.String(), `<div class="banner banner-error" role="alert">`)
+		assert.Contains(t, w.Body.String(), `value="boss@test.com"`, "the email is kept, the password is not")
+		assert.NotContains(t, w.Body.String(), "nope")
 	})
 	t.Run("unknown email re-renders 401 identically", func(t *testing.T) {
 		w := post("ghost@test.com", "nope")
@@ -260,12 +285,12 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 		path string
 		want string
 	}{
-		{"dashboard", "/admin/dashboard", "Active Trips"},
+		{"dashboard", "/admin/dashboard", "Get your first vehicle on the map"},
 		{"vehicles", "/admin/vehicles", "New vehicle"},
 		{"users", "/admin/users", "New user"},
-		{"trips", "/admin/trips", "No trips found."},
-		{"map", "/admin/map", "Live Map"},
-		{"api keys", "/admin/api-keys", "No feed API keys yet."},
+		{"trips", "/admin/trips", "No trips yet"},
+		{"map", "/admin/map", "Live map"},
+		{"api keys", "/admin/api-keys", "No API keys yet"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -362,42 +387,6 @@ func TestAdminLoginPageRedirectsWhenAlreadyAuthenticated(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
-}
-
-// TestDashboardRendersRealCounts verifies the dashboard renders live stats
-// (from a fake stats store), the tracker's active-vehicle count/recent
-// activity, and that the old mock data is gone.
-func TestDashboardRendersRealCounts(t *testing.T) {
-	ui := newTestAdminUI(t)
-	ui.stats = &fakeAdminStats{vehicles: 7, drivers: 5, trips: 3}
-	ui.tracker.Update(&LocationReport{VehicleID: "bus-1", TripID: "g1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix()})
-	mux := http.NewServeMux()
-	registerAdminUI(mux, ui)
-	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
-	req.AddCookie(cookieFor(t, "admin"))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	body := w.Body.String()
-	assert.Contains(t, body, ">7<")   // total vehicles stat
-	assert.Contains(t, body, ">5<")   // drivers stat
-	assert.Contains(t, body, ">3<")   // active trips stat
-	assert.Contains(t, body, "bus-1") // recent activity row (label falls back to id)
-	assert.NotContains(t, body, "Bus 001", "mock data must be gone")
-}
-
-// TestDashboardRecentActivityEmptyState covers the empty-state row when the
-// tracker has no active vehicles.
-func TestDashboardRecentActivityEmptyState(t *testing.T) {
-	ui := newTestAdminUI(t)
-	mux := http.NewServeMux()
-	registerAdminUI(mux, ui)
-	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
-	req.AddCookie(cookieFor(t, "admin"))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "No vehicles have reported recently")
 }
 
 // TestDashboardStoreErrorReturns500 verifies a stats-store failure produces a
@@ -641,7 +630,7 @@ func TestVehiclesPagePaginates(t *testing.T) {
 	registerAdminUI(mux, ui)
 
 	first := getAdminPage(t, mux, "/admin/vehicles")
-	assert.Equal(t, adminPageSize, strings.Count(first, "/edit\""), "page 1 must hold exactly one page of rows")
+	assert.Equal(t, adminPageSize, strings.Count(first, `<a class="row-link`), "page 1 must hold exactly one page of rows")
 	assert.Contains(t, first, "Bus 001")
 	assert.Contains(t, first, fmt.Sprintf("Bus %03d", adminPageSize))
 	assert.NotContains(t, first, fmt.Sprintf("Bus %03d", adminPageSize+1), "the next page's first row must not leak onto page 1")
@@ -649,7 +638,7 @@ func TestVehiclesPagePaginates(t *testing.T) {
 	assert.NotContains(t, first, "Previous", "page 1 has no previous page")
 
 	second := getAdminPage(t, mux, "/admin/vehicles?page=2")
-	assert.Equal(t, 5, strings.Count(second, "/edit\""), "the last page holds the remaining rows")
+	assert.Equal(t, 5, strings.Count(second, `<a class="row-link`), "the last page holds the remaining rows")
 	assert.Contains(t, second, fmt.Sprintf("Bus %03d", adminPageSize+1))
 	assert.NotContains(t, second, fmt.Sprintf("Bus %03d", adminPageSize), "page 1's last row must not repeat on page 2")
 	assert.Contains(t, second, `href="/admin/vehicles?page=1"`)
@@ -668,7 +657,7 @@ func TestVehiclesPageInvalidPageFallsBack(t *testing.T) {
 		t.Run("page="+page, func(t *testing.T) {
 			body := getAdminPage(t, mux, "/admin/vehicles?page="+page)
 			assert.Contains(t, body, "Bus 001", "an invalid page must render page 1")
-			assert.Contains(t, body, "Page 1")
+			assert.Contains(t, body, "shown, page 1")
 		})
 	}
 }
@@ -1076,7 +1065,7 @@ func TestUsersPagePaginates(t *testing.T) {
 	registerAdminUI(mux, ui)
 
 	first := getAdminPage(t, mux, "/admin/users")
-	assert.Equal(t, adminPageSize, strings.Count(first, "/edit\""), "page 1 must hold exactly one page of rows")
+	assert.Equal(t, adminPageSize, strings.Count(first, `<a class="row-link"`), "page 1 must hold exactly one page of rows")
 	assert.Contains(t, first, "Driver 001")
 	assert.Contains(t, first, fmt.Sprintf("Driver %03d", adminPageSize))
 	assert.NotContains(t, first, fmt.Sprintf("Driver %03d", adminPageSize+1), "the next page's first row must not leak onto page 1")
@@ -1084,7 +1073,7 @@ func TestUsersPagePaginates(t *testing.T) {
 	assert.NotContains(t, first, "Previous", "page 1 has no previous page")
 
 	second := getAdminPage(t, mux, "/admin/users?page=2")
-	assert.Equal(t, 5, strings.Count(second, "/edit\""), "the last page holds the remaining rows")
+	assert.Equal(t, 5, strings.Count(second, `<a class="row-link"`), "the last page holds the remaining rows")
 	assert.Contains(t, second, fmt.Sprintf("Driver %03d", adminPageSize+1))
 	assert.NotContains(t, second, fmt.Sprintf("Driver %03d", adminPageSize), "page 1's last row must not repeat on page 2")
 	assert.Contains(t, second, `href="/admin/users?page=1"`)
@@ -1103,7 +1092,7 @@ func TestUsersPageInvalidPageFallsBack(t *testing.T) {
 		t.Run("page="+page, func(t *testing.T) {
 			body := getAdminPage(t, mux, "/admin/users?page="+page)
 			assert.Contains(t, body, "Driver 001", "an invalid page must render page 1")
-			assert.Contains(t, body, "Page 1")
+			assert.Contains(t, body, "shown, page 1")
 		})
 	}
 }
@@ -1150,11 +1139,11 @@ func TestUsersPageListsRealData(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, "Ada Admin")
 	assert.Contains(t, body, "ada@test.com")
-	assert.Contains(t, body, "Admin")
+	assert.Contains(t, body, `<span class="pill plain">Admin</span>`)
 	assert.Contains(t, body, "Dana Driver")
-	assert.Contains(t, body, "Driver")
-	assert.Contains(t, body, "Deactivated")
-	assert.Contains(t, body, ">1<") // Dana's assigned-vehicle count
+	assert.Contains(t, body, `<span class="muted">Driver</span>`)
+	assert.Contains(t, body, `<span class="pill plain">Deactivated</span>`)
+	assert.Contains(t, body, `data-label="May drive">1 vehicle<`) // Dana's assigned-vehicle count
 	assert.NotContains(t, body, "Chaitanya K", "mock data must be gone")
 	assert.NotContains(t, body, "Last Seen", "mock Last Seen column must be dropped")
 }
@@ -1268,7 +1257,7 @@ func TestUserEditPage(t *testing.T) {
 		assert.Contains(t, body, "Bus One", "currently-assigned vehicle should be listed")
 		assert.Contains(t, body, "Bus Two", "unassigned active vehicle should be selectable")
 		assert.NotContains(t, body, "Retired Bus", "inactive vehicles must not be offered for assignment")
-		assert.Contains(t, body, "leave blank to keep current")
+		assert.Contains(t, body, "leave blank to keep the current one")
 	})
 
 	t.Run("unknown id 404s", func(t *testing.T) {
@@ -1604,9 +1593,9 @@ func TestUserAssignVehicle_UnknownVehicle(t *testing.T) {
 }
 
 // TestTripsPageRendersRealTrips verifies the trips table renders a seeded
-// trip's vehicle label, driver name, UTC-suffixed start/end times, duration,
-// and a "View trail" link into the map trail view — and that the old mock
-// data is gone.
+// trip's vehicle label, driver name, start and end times on the page's clock
+// (UTC with no schedule loaded), duration, and a link to the trip's page, and
+// that the old mock data is gone.
 func TestTripsPageRendersRealTrips(t *testing.T) {
 	ui := newTestAdminUI(t)
 	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
@@ -1629,17 +1618,19 @@ func TestTripsPageRendersRealTrips(t *testing.T) {
 	assert.Contains(t, body, "Asha Patel")
 	assert.Contains(t, body, "12")
 	assert.Contains(t, body, "trip-99")
-	assert.Contains(t, body, "2026-01-02 07:00 UTC")
-	assert.Contains(t, body, "2026-01-02 08:45 UTC")
-	assert.Contains(t, body, "1h 45m")
-	assert.Contains(t, body, `href="/admin/map?trip_id=42"`)
+	assert.Contains(t, body, "Times are UTC time.")
+	assert.Contains(t, body, `data-label="Started">07:00<span class="sub hide-phone">2 Jan`)
+	assert.Contains(t, body, `08:45<span class="sub">1 h 45 min</span>`)
+	assert.Contains(t, body, `<span class="route">12</span>`, "a route the schedule does not have goes by its id")
+	assert.Contains(t, body, `<span class="muted">Completed</span>`)
+	assert.Contains(t, body, `href="/admin/trips/42"`)
 	assert.NotContains(t, body, "T001", "mock data must be gone")
 	assert.NotContains(t, body, "Tom Hiddlestone", "mock data must be gone")
 }
 
 // TestTripsPageActiveTripHasNoEndOrDuration verifies an active trip (nil
-// EndTime) renders em-dashes for end time and duration rather than zero
-// values.
+// EndTime) says how long it has run so far in place of an end time, rather
+// than zero values.
 func TestTripsPageActiveTripHasNoEndOrDuration(t *testing.T) {
 	ui := newTestAdminUI(t)
 	start := time.Date(2026, 1, 2, 7, 0, 0, 0, time.UTC)
@@ -1657,8 +1648,9 @@ func TestTripsPageActiveTripHasNoEndOrDuration(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, "2026-01-02 07:00 UTC")
-	assert.Contains(t, body, "—")
+	assert.Contains(t, body, `data-label="Started">07:00<`)
+	assert.Regexp(t, `<td class="hide-phone hide-md nowrap"><span class="muted">\d+ h( \d+ min)? so far</span></td>`, body)
+	assert.Contains(t, body, `<span class="pill pill-ok">Running</span>`)
 }
 
 // TestTripsPageFilterPassthrough verifies status/vehicle_id/q/page query
@@ -1768,7 +1760,8 @@ func TestTripsPageEmptyState(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "No trips found.")
+	assert.Contains(t, w.Body.String(), "No trips yet")
+	assert.Contains(t, w.Body.String(), `<h2 class="h1">No trips are running</h2>`)
 }
 
 // TestTripsPageStoreErrorReturns500 verifies a ListTrips failure produces a
@@ -1830,7 +1823,7 @@ func TestTripsPageEndTripButtonOnActiveRowsOnly(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, `<form method="post" action="/admin/trips/43/end" class="shrink-0" onsubmit="return confirm('End this trip? Do this only when the driver phone cannot end it.')">`)
+	assert.Contains(t, body, `<form method="post" action="/admin/trips/43/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip">`)
 	assert.NotContains(t, body, `action="/admin/trips/42/end"`)
 	assert.Equal(t, 1, strings.Count(body, ">End trip</button>"))
 }
@@ -2151,8 +2144,12 @@ func TestUsersPage_FilterFormPrefills(t *testing.T) {
 	body := getAdminPage(t, mux, "/admin/users?q=amina&role=admin")
 
 	assert.Contains(t, body, `name="q" placeholder="Search name or email" value="amina"`)
-	assert.Contains(t, body, `<option value="admin" selected>Admin</option>`,
-		"the role select must show the active filter")
+	assert.Contains(t, body, `<a href="/admin/users?page=1&amp;q=amina&amp;role=admin" aria-current="true">Admins</a>`,
+		"the role control must show the active filter")
+	assert.Contains(t, body, `<a href="/admin/users?page=1&amp;q=amina">Everyone</a>`,
+		"another role keeps the search in progress")
+	assert.Contains(t, body, `<input type="hidden" name="role" value="admin">`,
+		"a new search keeps the role")
 	assert.Contains(t, body, `href="/admin/users?active=1&amp;page=1&amp;q=amina&amp;role=admin"`,
 		"the hide-deactivated toggle must keep the search in progress")
 }
@@ -2263,7 +2260,7 @@ func TestAdminUI_PasswordResetFailureIs500(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 }
 
 // TestAdminUI_DeactivateFailureIs500 pins the same for deactivation, so a
@@ -2277,5 +2274,5 @@ func TestAdminUI_DeactivateFailureIs500(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 }

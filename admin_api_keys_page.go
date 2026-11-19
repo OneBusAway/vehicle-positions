@@ -7,17 +7,19 @@ import (
 	"strconv"
 )
 
-// apiKeyRow is a single row in the Feed API keys table. There is no key
-// column: only a key's hash is stored, so the page can never show one again.
+// apiKeyRow is a single row in the API keys table. There is no key column:
+// only a key's hash is stored, so the page can never show one again.
 type apiKeyRow struct {
 	ID       int64
 	Name     string
 	Created  string
 	LastUsed string
 	Active   bool
+	// New marks the key this response has just made, which the page tints.
+	New bool
 }
 
-// apiKeyForm is the state of the create form on the Feed API keys page: the
+// apiKeyForm is the state of the create form on the API keys page: the
 // submitted name and error to re-render after a refused submission, or the
 // new key after an accepted one. NewKey is set only on the response to the
 // POST that made the key.
@@ -32,29 +34,56 @@ func apiKeysPageURL(page int) string {
 	return "/admin/api-keys?page=" + strconv.Itoa(page)
 }
 
-// listAPIKeysPage reads the keys for one page of the list, plus the first key
-// of the next page if there is one, which is how renderAPIKeys knows to link
-// to it.
-func (ui *adminUI) listAPIKeysPage(r *http.Request, page int) ([]APIKey, error) {
-	return ui.apiKeys.ListAPIKeysPage(r.Context(), adminPageSize+1, adminPageOffset(page))
+// apiKeysList is what one page of the API keys page is drawn from: the keys
+// for that page, plus the first key of the next page if there is one, which
+// is how renderAPIKeys knows to link to it, and how many keys are active.
+type apiKeysList struct {
+	keys   []APIKey
+	active int
 }
 
-// renderAPIKeys renders one page of keys with the create form above it. keys
-// is what listAPIKeysPage read for that page, and may hold one key past it.
-func (ui *adminUI) renderAPIKeys(w http.ResponseWriter, r *http.Request, status int, keys []APIKey, page int, form apiKeyForm) {
+func (ui *adminUI) listAPIKeysPage(r *http.Request, page int) (apiKeysList, error) {
+	keys, err := ui.apiKeys.ListAPIKeysPage(r.Context(), adminPageSize+1, adminPageOffset(page))
+	if err != nil {
+		return apiKeysList{}, err
+	}
+	active, err := ui.apiKeys.CountActiveAPIKeys(r.Context())
+	if err != nil {
+		return apiKeysList{}, err
+	}
+	return apiKeysList{keys: keys, active: active}, nil
+}
+
+// apiKeysHeadline is the API keys page's headline.
+func apiKeysHeadline(active int) string {
+	switch active {
+	case 0:
+		return "No keys are active"
+	case 1:
+		return "1 key is active"
+	default:
+		return strconv.Itoa(active) + " keys are active"
+	}
+}
+
+// renderAPIKeys renders one page of keys with the create form above it. list
+// is what listAPIKeysPage read for that page.
+func (ui *adminUI) renderAPIKeys(w http.ResponseWriter, r *http.Request, status int, list apiKeysList, page int, form apiKeyForm) {
+	keys := list.keys
 	hasMore := len(keys) > adminPageSize
 	if hasMore {
 		keys = keys[:adminPageSize]
 	}
 
 	rows := make([]apiKeyRow, 0, len(keys))
-	for _, k := range keys {
+	for i, k := range keys {
 		row := apiKeyRow{
 			ID:       k.ID,
 			Name:     k.Name,
 			Created:  formatTripTimestamp(k.CreatedAt),
 			LastUsed: "never",
 			Active:   k.Active,
+			New:      form.NewKey != "" && i == 0,
 		}
 		if k.LastUsedAt != nil {
 			row.LastUsed = formatTripTimestamp(*k.LastUsedAt)
@@ -63,13 +92,15 @@ func (ui *adminUI) renderAPIKeys(w http.ResponseWriter, r *http.Request, status 
 	}
 
 	ui.renderAdmin(w, r, status, "api_keys.html", map[string]interface{}{
-		"Title":      "Feed API keys",
+		"Title":      "API keys",
 		"Page":       "api-keys",
+		"Headline":   apiKeysHeadline(list.active),
 		"Keys":       rows,
 		"Name":       form.Name,
 		"Error":      form.Error,
 		"NewKey":     form.NewKey,
 		"NewKeyName": form.NewKeyName,
+		"Shown":      newPagerCount(len(rows), "key", "keys"),
 		"PageNum":    page,
 		"HasMore":    hasMore,
 		"PrevURL":    apiKeysPageURL(page - 1),
@@ -77,17 +108,17 @@ func (ui *adminUI) renderAPIKeys(w http.ResponseWriter, r *http.Request, status 
 	})
 }
 
-// apiKeysPage renders the feed API keys, newest first, with the form that
+// apiKeysPage renders the feed's API keys, newest first, with the form that
 // makes a new one.
 func (ui *adminUI) apiKeysPage(w http.ResponseWriter, r *http.Request) {
 	page := adminPageNumber(r.URL.Query())
-	keys, err := ui.listAPIKeysPage(r, page)
+	list, err := ui.listAPIKeysPage(r, page)
 	if err != nil {
 		slog.Error("api keys: list api keys", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	ui.renderAPIKeys(w, r, http.StatusOK, keys, page, apiKeyForm{})
+	ui.renderAPIKeys(w, r, http.StatusOK, list, page, apiKeyForm{})
 }
 
 // apiKeyCreate makes a key from the form's name and answers with the list
@@ -99,10 +130,11 @@ func (ui *adminUI) apiKeysPage(w http.ResponseWriter, r *http.Request) {
 // issueAPIKey, the same two the JSON API uses, so the form and the API cannot
 // disagree about either.
 //
-// The first page is read before the key is made. Reading it afterwards would
-// leave a failed read with a stored key and no page to show it on.
+// The first page and the count are read before the key is made. Reading them
+// afterwards would leave a failed read with a stored key and no page to show
+// it on.
 func (ui *adminUI) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
-	keys, err := ui.listAPIKeysPage(r, 1)
+	list, err := ui.listAPIKeysPage(r, 1)
 	if err != nil {
 		slog.Error("api key create: list api keys", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -110,12 +142,12 @@ func (ui *adminUI) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		ui.renderAPIKeys(w, r, http.StatusBadRequest, keys, 1, apiKeyForm{Error: "Invalid form submission."})
+		ui.renderAPIKeys(w, r, http.StatusBadRequest, list, 1, apiKeyForm{Error: "Invalid form submission."})
 		return
 	}
 	req := createAPIKeyRequest{Name: r.PostFormValue("name")}
 	if err := req.validate(); err != nil {
-		ui.renderAPIKeys(w, r, http.StatusUnprocessableEntity, keys, 1, apiKeyForm{Name: req.Name, Error: err.Error()})
+		ui.renderAPIKeys(w, r, http.StatusUnprocessableEntity, list, 1, apiKeyForm{Name: req.Name, Error: err.Error()})
 		return
 	}
 
@@ -128,8 +160,9 @@ func (ui *adminUI) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Keeps the page, and the key on it, out of the browser's cache.
 	w.Header().Set("Cache-Control", "no-store")
-	keys = append([]APIKey{*key}, keys...)
-	ui.renderAPIKeys(w, r, http.StatusOK, keys, 1, apiKeyForm{NewKey: rawKey, NewKeyName: key.Name})
+	list.keys = append([]APIKey{*key}, list.keys...)
+	list.active++
+	ui.renderAPIKeys(w, r, http.StatusOK, list, 1, apiKeyForm{NewKey: rawKey, NewKeyName: key.Name})
 }
 
 // apiKeyDeactivate revokes a key from its row on the list. It mirrors

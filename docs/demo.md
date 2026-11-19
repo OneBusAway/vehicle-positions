@@ -43,7 +43,7 @@ at all.
 **The admin map.** Open the map link and sign in. Nine vehicles are on the
 road within a few seconds, three on each route. Each reports its position
 every six seconds and the map refreshes every ten. **Trips** lists each
-vehicle's trips, and **View trail** on one draws where that trip has been.
+vehicle's trips, and opening one draws where that trip has been.
 
 **The feed.** `/gtfs-rt/vehicle-positions` is the GTFS Realtime feed, as
 protobuf. Add `?format=json` to read it:

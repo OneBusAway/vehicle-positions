@@ -14,25 +14,32 @@ import (
 
 const flashCookieName = "vp_flash"
 
-// flashMessages maps opaque flash codes to the fixed strings the layout
+// flash is a message shown once, on the next admin page rendered. Warn marks
+// one that says something did not go through, which the page draws in amber.
+type flash struct {
+	Text string
+	Warn bool
+}
+
+// flashMessages maps opaque flash codes to the fixed messages the layout
 // renders. Cookie values are attacker-writable, so free text is never
 // rendered — unknown codes yield nothing (spec §4.6).
-var flashMessages = map[string]string{
-	"vehicle_created":     "Vehicle created.",
-	"vehicle_updated":     "Vehicle updated.",
-	"vehicle_deactivated": "Vehicle deactivated.",
-	"vehicle_activated":   "Vehicle reactivated.",
-	"user_created":        "User created.",
-	"user_updated":        "User updated.",
-	"user_deactivated":    "User deactivated.",
-	"user_activated":      "User reactivated.",
-	"vehicle_assigned":    "Vehicle assigned.",
-	"vehicle_unassigned":  "Vehicle unassigned.",
-	"unassign_on_trip":    "The driver is on a trip on this vehicle. End it on Trips, then remove the vehicle.",
-	"api_key_deactivated": "API key deactivated.",
-	"trip_ended":          "Trip ended. The driver can start a new trip.",
-	"trip_already_ended":  "That trip had already ended.",
-	"logout_failed":       "Couldn't sign out. Try again.",
+var flashMessages = map[string]flash{
+	"vehicle_created":     {Text: "Vehicle created."},
+	"vehicle_updated":     {Text: "Vehicle updated."},
+	"vehicle_deactivated": {Text: "Vehicle deactivated."},
+	"vehicle_activated":   {Text: "Vehicle reactivated."},
+	"user_created":        {Text: "User created."},
+	"user_updated":        {Text: "User updated."},
+	"user_deactivated":    {Text: "User deactivated."},
+	"user_activated":      {Text: "User reactivated."},
+	"vehicle_assigned":    {Text: "Vehicle assigned."},
+	"vehicle_unassigned":  {Text: "Vehicle unassigned."},
+	"unassign_on_trip":    {Text: "The driver is on a trip on this vehicle. End it on Trips, then remove the vehicle.", Warn: true},
+	"api_key_deactivated": {Text: "API key deactivated."},
+	"trip_ended":          {Text: "Trip ended. The driver can start a new trip."},
+	"trip_already_ended":  {Text: "That trip had already ended."},
+	"logout_failed":       {Text: "Couldn't sign out. Try again.", Warn: true},
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trustProxy bool) {
@@ -187,11 +194,12 @@ func setFlash(w http.ResponseWriter, code string) {
 	})
 }
 
-// takeFlash reads, clears, and resolves the flash cookie to its message.
-func takeFlash(w http.ResponseWriter, r *http.Request) string {
+// takeFlash reads, clears, and resolves the flash cookie to its message. It
+// returns the zero flash when there is none to show.
+func takeFlash(w http.ResponseWriter, r *http.Request) flash {
 	c, err := r.Cookie(flashCookieName)
 	if err != nil || c.Value == "" {
-		return ""
+		return flash{}
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: flashCookieName, Value: "", Path: "/", MaxAge: -1,
@@ -200,7 +208,7 @@ func takeFlash(w http.ResponseWriter, r *http.Request) string {
 	msg, ok := flashMessages[c.Value]
 	if !ok {
 		slog.Debug("unknown flash code ignored", "code", c.Value)
-		return ""
+		return flash{}
 	}
 	return msg
 }

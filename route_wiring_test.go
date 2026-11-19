@@ -32,7 +32,7 @@ func (n *noopStore) ListUsersPage(_ context.Context, _ UserFilter) ([]UserRespon
 	return make([]UserResponse, 0), nil
 }
 func (n *noopStore) GetUser(_ context.Context, _ int64) (*UserResponse, error) {
-	return nil, nil
+	return &UserResponse{}, nil
 }
 func (n *noopStore) CreateUser(_ context.Context, _, _, _, _ string) (*UserResponse, error) {
 	return nil, nil
@@ -153,6 +153,9 @@ func (n *noopStore) CreateAPIKey(_ context.Context, _, _ string) (*APIKey, error
 }
 func (n *noopStore) ListAPIKeysPage(_ context.Context, _, _ int) ([]APIKey, error) {
 	return make([]APIKey, 0), nil
+}
+func (n *noopStore) CountActiveAPIKeys(_ context.Context) (int, error) {
+	return 0, nil
 }
 func (n *noopStore) DeactivateAPIKey(_ context.Context, _ int64) error {
 	return nil
@@ -421,6 +424,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 		path   string
 	}{
 		{"GET", "/admin/dashboard"},
+		{"GET", "/admin/more"},
 		{"GET", "/admin/map"},
 		{"GET", "/admin/alerts"},
 		{"GET", "/admin/vehicles"},

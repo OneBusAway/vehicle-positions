@@ -33,6 +33,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 		"health.html",
 		"import.html",
 		"map.html",
+		"more.html",
 		"reports.html",
 		"rider.html",
 		"trips.html",
@@ -56,15 +57,22 @@ func loadTemplates() (*embeddedTemplates, error) {
 		admin[view] = tmpl
 	}
 
-	login, err := template.ParseFS(files, "web/templates/views/login.html")
-	if err != nil {
-		return nil, fmt.Errorf("parse public view %q: %w", "login.html", err)
+	// The pages with no shell around them: sign in, and what stands in for
+	// a page that answered with an error.
+	public := make(map[string]*template.Template)
+	for _, view := range []string{"login.html", "error.html"} {
+		tmpl, err := template.ParseFS(
+			files,
+			path.Join("web/templates/views", view),
+			"web/templates/layout/parts.html",
+		)
+		if err != nil {
+			return nil, fmt.Errorf("parse public view %q: %w", view, err)
+		}
+		public[view] = tmpl
 	}
 
-	return &embeddedTemplates{
-		public: map[string]*template.Template{"login.html": login},
-		admin:  admin,
-	}, nil
+	return &embeddedTemplates{public: public, admin: admin}, nil
 }
 
 // renderInto looks up the parsed template set by view name and executes

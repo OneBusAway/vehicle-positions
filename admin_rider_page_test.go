@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -67,7 +66,7 @@ func (f *recordingRideLister) ListRides(_ context.Context, status string, limit,
 	}
 	var out []Ride
 	for _, r := range f.rides {
-		if r.Status == status {
+		if status == "" || r.Status == status {
 			out = append(out, r)
 		}
 	}
@@ -142,8 +141,8 @@ func TestRiderPage_Off(t *testing.T) {
 	mux, _ := newRiderPageMux(t, riderOff{}, rides, nil)
 
 	body := getAdminPage(t, mux, "/admin/rider")
+	assert.Contains(t, body, `<h2 class="h1">Rider mode is off</h2>`)
 	off := riderPageSection(t, body, "rider-off")
-	assert.Contains(t, off, "Rider mode is off")
 	assert.Contains(t, off, "RIDER_MODE_ENABLED=true")
 	assert.Contains(t, off, "TRUSTED_GTFS_RT_URLS")
 	assert.Contains(t, off, `href="https://github.com/OneBusAway/vehicle-positions/blob/main/docs/configuration.md#rider-mode"`)
@@ -164,16 +163,17 @@ func TestRiderPage_OnWithNoRides(t *testing.T) {
 	assert.Contains(t, schedule, "rider/testdata/fixture.zip")
 	zone := time.Now().In(env.index.Timezone()).Format("MST")
 	assert.Contains(t, schedule, zone+", just now", "loaded, on the agency's clock")
-	assert.Contains(t, schedule, `<dd class="mt-1 tabular-nums text-slate-700">4</dd>`, "the schedule's trips")
+	assert.Contains(t, schedule, `<dt>Trips</dt><dd>4</dd>`, "the schedule's trips")
 	assert.Contains(t, schedule, "America/Los_Angeles")
 
 	assert.Contains(t, riderPageSection(t, body, "rider-trusted-feeds"), "No trusted feed is set")
-	assert.Contains(t, body, `id="rider-total" class="display-font mt-2 text-4xl font-bold text-slate-900">0<`)
-	assert.Contains(t, body, `id="rider-active" class="display-font mt-2 text-4xl font-bold text-sky-700">0<`)
-	assert.Contains(t, body, "No rides in progress.")
+	assert.Contains(t, body, `id="rider-total"><span class="count-up" data-count="0">0</span>`)
+	assert.Contains(t, body, `id="rider-active"><span class="count-up" data-count="0">0</span>`)
+	assert.Contains(t, body, "No rides yet")
 	assert.Empty(t, riderRideRows(t, body))
-	assert.Contains(t, body, "Times in America/Los_Angeles.")
+	assert.Contains(t, body, "Times are America/Los_Angeles time.")
 
+	assert.Contains(t, getAdminPage(t, mux, "/admin/rider?status=active"), "No rides in progress.")
 	assert.Contains(t, getAdminPage(t, mux, "/admin/rider?status=ended"), "No ended rides.")
 }
 
@@ -184,7 +184,7 @@ func TestRiderPage_ScheduleNotLoaded(t *testing.T) {
 
 	body := getAdminPage(t, mux, "/admin/rider")
 	assert.Contains(t, riderPageSection(t, body, "rider-schedule"), "The schedule has not loaded yet")
-	assert.Contains(t, body, "Times in UTC.", "no schedule, no agency clock")
+	assert.Contains(t, body, "Times are UTC time.", "no schedule, no agency clock")
 }
 
 func TestRiderPage_OnWithRides(t *testing.T) {
@@ -207,47 +207,48 @@ func TestRiderPage_OnWithRides(t *testing.T) {
 		Status: "ended", State: "rejected", EndReason: "off_route", PointsTotal: 9, PointsMatched: 2,
 		StartedAt: ended.Add(-20 * time.Minute), EndedAt: &ended}
 
-	body := getAdminPage(t, riderEnvMux(t, env), "/admin/rider")
-	assert.Contains(t, body, `id="rider-total" class="display-font mt-2 text-4xl font-bold text-slate-900">4<`)
+	body := getAdminPage(t, riderEnvMux(t, env), "/admin/rider?status=active")
+	assert.Contains(t, body, `id="rider-total"><span class="count-up" data-count="4">4</span>`)
 	assert.Contains(t, body, "1 trusted, 1 blocked")
-	assert.Contains(t, body, `id="rider-active" class="display-font mt-2 text-4xl font-bold text-sky-700">2<`)
-	assert.Contains(t, body, `id="rider-publishable" class="display-font mt-2 text-4xl font-bold text-emerald-700">1<`)
-	assert.Contains(t, body, "Riders on trip")
-	assert.NotContains(t, body, ">Ended</th>")
+	assert.Contains(t, body, `id="rider-active"><span class="count-up" data-count="2">2</span>`)
+	assert.Contains(t, body, `id="rider-publishable"><span class="count-up" data-count="1">1</span>`)
+	assert.Contains(t, body, `<a href="/admin/rider?status=active" aria-current="true">In progress</a>`)
 
 	rows := riderRideRows(t, body)
 	require.Len(t, rows, 2, "the two rides in progress")
 	for _, row := range rows {
-		assert.Contains(t, row, ">T1</span>")
-		assert.Contains(t, row, "20260902")
-		assert.Contains(t, row, "background-color: #0077C0", "route R1's colour")
-		assert.Contains(t, row, `color: #FFFFFF">1</span>`, "route R1's short name")
-		assert.Contains(t, row, `<span class="tabular-nums text-slate-700">1</span>`, "one rider counts towards T1: the verified one")
-		assert.Contains(t, row, "In the feed")
+		assert.Contains(t, row, `<span class="strong">T1</span><span class="sub">2 Sep 2026</span>`)
+		assert.Contains(t, row, `<span class="route" style="background-color: #0077C0; color: #FFFFFF" title="Straight">1</span><span>Straight</span>`, "route R1's badge and name")
+		assert.Contains(t, row, `data-label="Riders on trip">1 <span class="pill pill-ok">In the feed</span></td>`, "one rider counts towards T1: the verified one")
 		assert.NotContains(t, row, "/admin/trips/", "no driver is on T1")
+		assert.NotContains(t, row, "ended ")
 	}
 	verifiedRow := findRideRow(t, rows, "Verified")
+	assert.Contains(t, verifiedRow, `<span class="pill pill-ok">Verified</span>`)
 	assert.Contains(t, verifiedRow, "5 of 5")
-	assert.Contains(t, verifiedRow, ">No</span>", "no trusted feed confirmed it")
+	assert.Contains(t, verifiedRow, `<span class="muted">No</span>`, "no trusted feed confirmed it")
 	pendingRow := findRideRow(t, rows, "Pending")
+	assert.Contains(t, pendingRow, `<span class="pill plain">Pending</span>`)
 	assert.Contains(t, pendingRow, "0 of 0")
 
 	body = getAdminPage(t, riderEnvMux(t, env), "/admin/rider?status=ended")
-	assert.Contains(t, body, ">Ended</th>")
-	assert.NotContains(t, body, "Riders on trip")
 	rows = riderRideRows(t, body)
 	require.Len(t, rows, 2, "the two ended rides")
 	arrivedRow := findRideRow(t, rows, ">T3</span>")
 	assert.Contains(t, arrivedRow, "Pending")
-	assert.Contains(t, arrivedRow, ">arrived</p>")
-	assert.Contains(t, arrivedRow, `bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">2</span>`, "route R2 has no colour, so the page's own")
+	assert.Regexp(t, `<span class="sub">ended \d\d:\d\d, arrived</span>`, arrivedRow)
+	assert.Contains(t, arrivedRow, `<span class="route" title="Loop">2</span>`, "route R2 has no colour, so the page's own")
 	rejectedRow := findRideRow(t, rows, ">T4</span>")
-	assert.Contains(t, rejectedRow, "Rejected")
-	assert.Contains(t, rejectedRow, ">off route</p>")
+	assert.Contains(t, rejectedRow, `<span class="pill pill-warn">Rejected</span>`, "amber: a rejected ride is the rider's, not a fault")
 	assert.Contains(t, rejectedRow, "2 of 9")
-	assert.Contains(t, rejectedRow, "2026-09-02 09:10 PDT", "started, on the agency's clock")
-	assert.Contains(t, rejectedRow, "2026-09-02 09:30 PDT", "ended, on the agency's clock")
-	assert.NotContains(t, rejectedRow, "In the feed")
+	assert.Contains(t, rejectedRow, `data-label="Started">09:10<span class="sub">ended 09:30, off route</span>`, "on the agency's clock")
+	for _, row := range rows {
+		assert.NotContains(t, row, "In the feed")
+		assert.Contains(t, row, `<td class="num nowrap"></td>`, "no riders on a trip that is over")
+	}
+
+	rows = riderRideRows(t, getAdminPage(t, riderEnvMux(t, env), "/admin/rider"))
+	assert.Len(t, rows, 4, "with no filter, every ride")
 }
 
 // riderEnvMux serves env's rider service and store on the admin UI.
@@ -271,7 +272,7 @@ func TestRiderPage_ConfirmedByTrustedFeed(t *testing.T) {
 	row := findRideRow(t, riderRideRows(t, getAdminPage(t, riderEnvMux(t, env), "/admin/rider")), ">T1</span>")
 	assert.Contains(t, row, "Confirmed")
 	assert.NotContains(t, row, "In the feed", "the trusted feed speaks for T1, so the riders' position is left out")
-	assert.Contains(t, row, `<span class="tabular-nums text-slate-700">1</span>`, "the rider still counts")
+	assert.Contains(t, row, `data-label="Riders on trip">1</td>`, "the rider still counts")
 }
 
 func TestRiderPage_TrustedFeeds(t *testing.T) {
@@ -284,7 +285,7 @@ func TestRiderPage_TrustedFeeds(t *testing.T) {
 
 	feeds := riderPageSection(t, getAdminPage(t, riderEnvMux(t, env), "/admin/rider"), "rider-trusted-feeds")
 	assert.Contains(t, feeds, "Your own drivers' positions always count as trusted.")
-	rows := strings.Split(feeds, "<tr>")[1:]
+	rows := strings.Split(feeds[strings.Index(feeds, "<tbody>"):], "<tr>")[1:]
 	require.Len(t, rows, 3)
 	row := func(url string) string {
 		t.Helper()
@@ -297,11 +298,11 @@ func TestRiderPage_TrustedFeeds(t *testing.T) {
 		return ""
 	}
 	working := row("https://agency.example/working")
-	assert.Contains(t, working, "Working")
+	assert.Contains(t, working, `<span class="pill pill-ok">Working</span>`)
 	assert.Contains(t, working, "1 min ago")
 	assert.Contains(t, working, ">12</td>")
 	failing := row("https://agency.example/failing")
-	assert.Contains(t, failing, "Failing")
+	assert.Contains(t, failing, `<span class="pill pill-warn">Failing</span>`)
 	assert.Contains(t, failing, "status 503")
 	assert.Contains(t, failing, "1 h ago", "when it last worked")
 	waiting := row("https://agency.example/new")
@@ -330,7 +331,7 @@ func TestRiderPage_Paging(t *testing.T) {
 	require.Len(t, page2, 1)
 	assert.Contains(t, page2[0], "trip-050")
 	assert.Contains(t, body, `href="/admin/rider?page=1&amp;status=ended"`)
-	assert.NotContains(t, body, "Next &rarr;")
+	assert.NotContains(t, body, ">Next<")
 
 	assert.Equal(t, []string{
 		fmt.Sprintf("ended limit=%d offset=0", adminPageSize+1),
@@ -338,13 +339,13 @@ func TestRiderPage_Paging(t *testing.T) {
 	}, store.calls)
 }
 
-func TestRiderPage_DefaultsToRidesInProgress(t *testing.T) {
+func TestRiderPage_DefaultsToEveryRide(t *testing.T) {
 	store := &recordingRideLister{}
 	mux, _ := newRiderPageMux(t, fakeRiderPageSource{status: enabledRiderStatus()}, store, nil)
 
 	body := getAdminPage(t, mux, "/admin/rider")
-	assert.Contains(t, body, `<option value="active" selected>`)
-	assert.Equal(t, []string{fmt.Sprintf("active limit=%d offset=0", adminPageSize+1)}, store.calls)
+	assert.Contains(t, body, `<a href="/admin/rider" aria-current="true">All</a><a href="/admin/rider?status=active">In progress</a><a href="/admin/rider?status=ended">Ended</a>`)
+	assert.Equal(t, []string{fmt.Sprintf(" limit=%d offset=0", adminPageSize+1)}, store.calls, "the store lists every ride for no status")
 }
 
 func TestRiderPage_DriverTripLink(t *testing.T) {
@@ -362,15 +363,21 @@ func TestRiderPage_DriverTripLink(t *testing.T) {
 		"veh-3": {TripID: 44, GtfsTripID: "T3"},
 	}}
 
-	rows := riderRideRows(t, getAdminPage(t, mux, "/admin/rider"))
+	rows := riderRideRows(t, getAdminPage(t, mux, "/admin/rider?status=active"))
 	require.Len(t, rows, 3)
-	assert.Contains(t, findRideRow(t, rows, ">T1</span>"), `<a href="/admin/trips/42"`, "one driver runs T1")
+	assert.Contains(t, findRideRow(t, rows, ">T1</span>"), `href="/admin/trips/42">Driver trip 42</a>`, "one driver runs T1")
 	assert.NotContains(t, findRideRow(t, rows, ">T3</span>"), "/admin/trips/", "two drivers run T3, so the rider could be on either")
 	assert.NotContains(t, findRideRow(t, rows, ">T4</span>"), "/admin/trips/", "no driver runs T4")
 
 	ended := riderRideRows(t, getAdminPage(t, mux, "/admin/rider?status=ended"))
 	require.Len(t, ended, 1)
 	assert.NotContains(t, ended[0], "/admin/trips/", "an ended ride's run is not the one on the road now")
+
+	// With every ride listed, only the one in progress on T1 has the link.
+	all := riderRideRows(t, getAdminPage(t, mux, "/admin/rider"))
+	require.Len(t, all, 4)
+	assert.Contains(t, findRideRow(t, all, "2 Sep 2026</span><a"), `href="/admin/trips/42"`)
+	assert.NotContains(t, findRideRow(t, all, "1 Sep 2026"), "/admin/trips/")
 }
 
 func TestRiderPage_EscapesRiderText(t *testing.T) {
@@ -413,10 +420,10 @@ func TestRiderPage_Errors(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{"status fails", fakeRiderPageSource{err: assert.AnError}, &recordingRideLister{}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, "internal server error"},
+		{"status fails", fakeRiderPageSource{err: assert.AnError}, &recordingRideLister{}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, serverErrorTitle},
 		{"unknown filter", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{}, &fakeActiveTrips{}, "/admin/rider?status=pending", http.StatusBadRequest, "status must be active or ended"},
-		{"rides fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{err: assert.AnError}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, "internal server error"},
-		{"driver trips fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{rides: active}, &errActiveTrips{}, "/admin/rider", http.StatusInternalServerError, "internal server error"},
+		{"rides fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{err: assert.AnError}, &fakeActiveTrips{}, "/admin/rider", http.StatusInternalServerError, serverErrorTitle},
+		{"driver trips fail", fakeRiderPageSource{status: enabledRiderStatus()}, &recordingRideLister{rides: active}, &errActiveTrips{}, "/admin/rider", http.StatusInternalServerError, serverErrorTitle},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -429,18 +436,11 @@ func TestRiderPage_Errors(t *testing.T) {
 	}
 }
 
-var riderSidebarLink = regexp.MustCompile(`href="/admin/rider"\s+data-active="(true|false)"`)
-
 func TestRiderPage_SidebarEntry(t *testing.T) {
 	mux, _ := newRiderPageMux(t, riderOff{}, &recordingRideLister{}, nil)
 
-	link := riderSidebarLink.FindStringSubmatch(getAdminPage(t, mux, "/admin/health"))
-	require.NotNil(t, link, "every admin page links to Rider mode, on or off")
-	assert.Equal(t, "false", link[1])
-
-	link = riderSidebarLink.FindStringSubmatch(getAdminPage(t, mux, "/admin/rider"))
-	require.NotNil(t, link)
-	assert.Equal(t, "true", link[1], "the entry is marked on its own page")
+	assert.Equal(t, railLinked, railLink(getAdminPage(t, mux, "/admin/health"), "/admin/rider"), "every admin page links to Rider mode, on or off")
+	assert.Equal(t, railOpen, railLink(getAdminPage(t, mux, "/admin/rider"), "/admin/rider"), "the entry is marked on its own page")
 }
 
 // TestRiderPage_ServedFromTheRiderService drives the page through newHandler,

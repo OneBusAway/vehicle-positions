@@ -1,55 +1,37 @@
 {{define "content"}}
-<div class="p-4 lg:p-5">
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="border-b border-slate-200/60 px-5 py-4">
-      <h3 class="display-font text-lg font-bold text-slate-900">Alerts</h3>
-      <p class="mt-0.5 text-xs text-slate-400">Vehicles on a running trip that have sent no report for over {{.QuietAfter}}, or have moved under {{.StoppedRadius}} in {{.StoppedAfter}}, or have been more than {{.OffRouteDistance}} from their route for over {{.OffRouteAfter}}, and vehicles whose block's next trip has not started over {{.NotStartedAfter}} after it was due. This page reloads every 30 seconds.</p>
-    </div>
-    {{if not .Alerts}}
-    <p class="px-5 py-6 text-center text-sm text-slate-400">No alerts. No vehicle on a running trip has gone quiet, left its route or stopped moving. No block's next trip is late to start.</p>
-    {{else}}
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Alert</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Driver</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">GTFS trip</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{range .Alerts}}
-          <tr class="transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-4">
-              {{if .Quiet}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>{{.Kind}}</span>
-              {{else}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>{{.Kind}}</span>
-              {{end}}
-              <p class="mt-1.5 whitespace-nowrap text-xs text-slate-500">{{.Detail}}</p>
-            </td>
-            <td class="px-5 py-4">
-              <p class="font-semibold text-slate-900">{{.VehicleLabel}}</p>
-              <p class="font-mono text-xs text-slate-400">{{.VehicleID}}</p>
-            </td>
-            <td class="px-5 py-4 text-slate-500">{{.DriverName}}</td>
-            <td class="px-5 py-4 text-slate-500">{{.RouteID}}</td>
-            <td class="px-5 py-4 font-mono text-xs text-slate-400">{{.GtfsTripID}}</td>
-            <td class="px-5 py-4">
-              <div class="flex items-center gap-3 whitespace-nowrap text-xs font-semibold">
-                <a href="{{.MapURL}}" class="text-sky-600 hover:text-sky-800">View on map</a>
-                <a href="{{.TripURL}}" class="text-sky-600 hover:text-sky-800">View trip</a>
-              </div>
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{end}}
+<div class="page-head">
+  <div class="page-head-main">
+    <h2 class="h1">{{.Headline}}</h2>
+    {{if .Alerts}}<p class="lede">Longest open first.</p>{{end}}
   </div>
+  <div class="page-actions"><span class="age"><span class="dot"></span>Updates every 30 seconds</span></div>
 </div>
+<div class="alert-kinds js-only" role="group" aria-label="Show alerts by kind">
+  {{range $i, $k := .Kinds}}<button class="chip" type="button" data-filter="{{.Kind}}" aria-pressed="{{if $i}}false{{else}}true{{end}}">{{.Label}} <span class="n">{{.Count}}</span></button>
+  {{end}}
+</div>
+{{if .Alerts}}
+<div class="alert-list rise" id="alert-list">
+  {{range .Alerts}}
+  <article class="card alert-row" data-kind="{{.Kind}}">
+    <span class="step-icon alert-icon hide-phone">{{template "icon" .Icon}}</span>
+    <div style="min-width:0">
+      <h3 class="alert-vehicle" title="{{.VehicleID}}">{{.VehicleLabel}}</h3>
+      <div class="alert-what"><span class="pill pill-warn">{{.Title}}</span><span class="muted" style="font-size:13px">{{.Detail}}, open since {{.Since}}</span></div>
+    </div>
+    <div style="min-width:0;display:flex;align-items:center;gap:10px">
+      {{template "route-badge" .Route}}
+      <span style="min-width:0">{{with .RouteLine}}<span class="clip">{{.}}</span>{{end}}<span class="muted" style="font-size:12px">{{.DriverName}}{{if .GtfsTripID}}, trip {{.GtfsTripID}}{{end}}</span></span>
+    </div>
+    <div class="actions"><a class="btn btn-sm btn-tonal" href="{{.MapURL}}">{{template "icon-sm" "pin_drop"}}Last position</a><a class="btn btn-sm btn-outline" href="{{.TripURL}}">Trip</a></div>
+  </article>
+  {{end}}
+</div>
+{{else}}
+<div class="card empty-ok"><div class="empty"><span class="step-icon">{{template "icon-lg" "check_circle"}}</span><div class="empty-title">All clear</div><p>No vehicle on a running trip has gone quiet, left its route or stopped moving, and no block's next trip is late to start.</p></div></div>
+{{end}}
+<details class="rules">
+  <summary>What raises an alert</summary>
+  <p class="muted" style="margin:8px 0 0;max-width:78ch">Vehicles on a running trip that have sent no report for over {{.QuietAfter}}, or have moved under {{.StoppedRadius}} in {{.StoppedAfter}}, or have been more than {{.OffRouteDistance}} from their route for over {{.OffRouteAfter}}, and vehicles whose block's next trip has not started over {{.NotStartedAfter}} after it was due. This page reloads every 30 seconds.</p>
+</details>
 {{end}}

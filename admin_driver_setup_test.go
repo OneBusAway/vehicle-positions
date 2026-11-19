@@ -84,8 +84,8 @@ func requestDriverSetup(t *testing.T, ui *adminUI, target string, header http.He
 var (
 	setupLinkPattern   = regexp.MustCompile(`obavehicletracker://[^<"\s]*`)
 	serverInputPattern = regexp.MustCompile(`<input id="server" name="server"[^>]* value="([^"]*)"`)
-	qrViewBoxPattern   = regexp.MustCompile(`<svg [^>]*viewBox="0 0 (\d+) (\d+)"`)
-	qrPathPattern      = regexp.MustCompile(`<path fill="#000" d="([^"]*)"`)
+	qrViewBoxPattern   = regexp.MustCompile(`<svg [^>]*viewBox="0 0 (\d+) (\d+)"[^>]* aria-label="` + qrLabel + `"`)
+	qrPathPattern      = regexp.MustCompile(`<rect width="\d+" height="\d+" fill="#fff"/><path fill="#000" d="([^"]*)"`)
 	qrRunPattern       = regexp.MustCompile(`M(\d+) (\d+)h(\d+)v1h-(\d+)z`)
 )
 
@@ -163,7 +163,7 @@ func TestDriverSetupPage_RequiresAdminSession(t *testing.T) {
 	t.Run("admin", func(t *testing.T) {
 		w := requestDriverSetup(t, ui, "/admin/driver-setup", nil)
 		require.Equal(t, http.StatusOK, w.Code)
-		assert.Regexp(t, `href="/admin/driver-setup"\s+data-active="true"`, w.Body.String(), "the sidebar must mark Driver setup as the page open")
+		assert.Equal(t, railOpen, railLink(w.Body.String(), "/admin/driver-setup"), "the menu must mark Driver setup as the page open")
 	})
 }
 
@@ -210,7 +210,14 @@ func TestDriverSetupPage_QREncodesTheLink(t *testing.T) {
 	body := w.Body.String()
 	assert.Equal(t, []string{exampleSetupLink}, pageSetupLinks(body))
 	assertQREncodes(t, body, exampleSetupLink)
-	assert.Contains(t, body, "Use tracker.example.org?", "the sheet must name the host the app asks about")
+	assert.Contains(t, body, "<b>Use tracker.example.org?</b>", "the sheet must name the host the app asks about")
+	assert.Contains(t, body, `<div class="phone-ask">Use tracker.example.org?</div>`, "and so must the preview of the app's question")
+	assert.Contains(t, body, `<h2 class="h1">Hand each driver this sheet</h2>`)
+	assert.Contains(t, body, `<div class="setup-link" id="setup-link">`+exampleSetupLink+`</div>`)
+	assert.Contains(t, body, `data-copy-from="setup-link"`, "Copy reads the link from the page, so the link is on it once")
+	assert.Contains(t, body, `<div class="page-actions no-print js-only"><button class="btn btn-primary" type="button" onclick="window.print()">`)
+	assert.Contains(t, body, `<article class="sheet" aria-label="Sheet for the driver">`)
+	assert.Contains(t, body, `<div class="sheet-fallback">If the code won't scan, type this address as the server on the sign-in screen: <b>https://tracker.example.org</b></div>`)
 }
 
 func TestDriverSetupPage_TypedAddress(t *testing.T) {
@@ -265,7 +272,11 @@ func TestDriverSetupPage_RefusesAddress(t *testing.T) {
 			assert.Contains(t, body, tc.want)
 			assert.Equal(t, tc.server, pageServerInput(t, body), "the field keeps what was typed so it can be fixed")
 			assert.Empty(t, pageSetupLinks(body), "no link for an address the apps refuse")
-			assert.NotContains(t, body, "<svg", "no QR code for an address the apps refuse")
+			assert.NotContains(t, body, qrLabel, "no QR code for an address the apps refuse")
+			assert.Contains(t, body, `aria-describedby="srv-help srv-err" aria-invalid="true">`)
+			assert.Contains(t, body, `<div class="field-error" id="srv-err">`)
+			assert.NotContains(t, body, `<article class="sheet"`, "nor a sheet to print")
+			assert.NotContains(t, body, "window.print()")
 		})
 	}
 }
@@ -278,8 +289,8 @@ func TestDriverSetupPage_DriverSheet(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, "Asha Rao")
-	assert.Contains(t, body, "asha.rao@agency.example")
+	assert.Contains(t, body, `<div class="sheet-for">For Asha Rao</div>`)
+	assert.Contains(t, body, "Sign in with your email address, <b>asha.rao@agency.example</b>, and your password.")
 	assert.Contains(t, body, `<input type="hidden" name="user" value="7">`, "changing the address must keep the driver's sheet")
 	// The apps take only the server from a link, so the driver's sheet has
 	// the same link and code as anyone's, and nothing secret.
@@ -296,6 +307,25 @@ func TestDriverSetupPage_GeneralSheetHasNoEmail(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, "the email address your agency gave you")
 	assert.NotContains(t, body, `name="user"`)
+	assert.NotContains(t, body, `class="sheet-for"`)
+}
+
+// TestDriverSetupPage_EscapesTheDriver: a driver's name and email are what an
+// admin typed, and the address is what this one did.
+func TestDriverSetupPage_EscapesTheDriver(t *testing.T) {
+	ui := newTestAdminUI(t)
+	users := newFakeUserStore(UserResponse{ID: 7, Name: `<img src=x onerror=alert(1)>`, Email: `"><script>alert(2)</script>@agency.example`, Role: roleDriver, Active: true})
+	wireFakeUserStore(ui, users, newFakeAssignmentStore())
+
+	w := requestDriverSetup(t, ui, "https://tracker.example.org/admin/driver-setup?user=7&server="+url.QueryEscape(`https://tracker.example.org/<b>"x"</b>`), nil)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.NotContains(t, body, "<img src=x")
+	assert.NotContains(t, body, "<script>alert(2)")
+	assert.NotContains(t, body, `<b>"x"</b>`)
+	assert.Contains(t, body, `<div class="sheet-for">For &lt;img src=x onerror=alert(1)&gt;</div>`)
+	assert.Contains(t, body, `<b>https://tracker.example.org/&lt;b&gt;&#34;x&#34;&lt;/b&gt;</b>`)
 }
 
 // failingUserGetter is a user store whose lookups fail, as a lost database

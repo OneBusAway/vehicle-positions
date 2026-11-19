@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // healthPageRefresh is how often, in seconds, the Feed health page reloads
@@ -10,34 +11,69 @@ import (
 // JavaScript. The counts are per minute, so reloading faster shows nothing new.
 const healthPageRefresh = "60"
 
-// healthStrip is the last hour's counts as the dashboard's feed health strip
-// shows them.
-type healthStrip struct {
+// healthChartHeight is the height the page's two bar charts are drawn at.
+const healthChartHeight = 130
+
+// healthSummary is the last hour as the Feed health page's tiles show it.
+type healthSummary struct {
 	ReportsAccepted uint64
+	// PerMinute is the accepted reports as a rate over the hour.
+	PerMinute       string
 	ReportsRejected uint64
 	// ErrorRate is the share of reports rejected, as "2.5%"; empty when no
 	// report came in, since a rate of nothing is not 0%.
 	ErrorRate string
 	// TopReason is the most common reason for a rejection; empty when
 	// nothing was rejected.
-	TopReason   string
-	FeedFetches uint64
+	TopReason  string
+	FeedServed uint64
+	// LastFetch is the minute the newest fetch was served in, on the UTC
+	// clock the page's minutes are on; empty when none was in the hour.
+	LastFetch   string
 	FeedRefused uint64
-	// FeedFailed is fetches refused for a reason other than the key: a bad
-	// request or a server error.
-	FeedFailed uint64
 }
 
-func newHealthStrip(p healthPeriod) healthStrip {
-	return healthStrip{
+func newHealthSummary(snap feedHealthResponse) healthSummary {
+	p := snap.LastHour
+	s := healthSummary{
 		ReportsAccepted: p.Reports.Accepted,
+		PerMinute:       "None in the last hour",
 		ReportsRejected: p.Reports.Rejected(),
 		ErrorRate:       errorRate(p.Reports),
 		TopReason:       topReason(p.Reports),
-		FeedFetches:     p.Feed.Total(),
+		FeedServed:      p.Feed.Served,
 		FeedRefused:     p.Feed.Refused,
-		FeedFailed:      p.Feed.Invalid + p.Feed.ServerError,
 	}
+	switch perMinute := (p.Reports.Accepted + healthWindowMinutes/2) / healthWindowMinutes; {
+	case perMinute > 0:
+		s.PerMinute = fmt.Sprintf("About %d a minute", perMinute)
+	case p.Reports.Accepted > 0:
+		s.PerMinute = "Under 1 a minute"
+	}
+	for _, m := range snap.Minutes {
+		if m.Feed.Served > 0 {
+			s.LastFetch = m.Minute.UTC().Format("15:04")
+		}
+	}
+	return s
+}
+
+// healthHeadline is the page's one sentence. Reports the server turned away
+// are a fact about the phones, not an alarm, until they outnumber the ones it
+// took; a request the server failed is the server's own fault.
+func healthHeadline(p healthPeriod) string {
+	failed := p.Reports.ServerError + p.Feed.ServerError
+	switch {
+	case failed == 1:
+		return "The server failed 1 request in the last hour"
+	case failed > 0:
+		return fmt.Sprintf("The server failed %d requests in the last hour", failed)
+	case p.Reports.Rejected() > p.Reports.Accepted:
+		return "Most reports were rejected in the last hour"
+	case p.Reports.Total()+p.Feed.Total() == 0:
+		return "Nothing has come in during the last hour"
+	}
+	return "Reports and the feed are healthy"
 }
 
 func errorRate(r reportOutcomes) string {
@@ -88,14 +124,26 @@ func healthPageData(snap feedHealthResponse) map[string]interface{} {
 			Feed:    m.Feed,
 		})
 	}
+	fetches := make([]chartBar, 0, len(snap.Minutes))
+	for _, m := range snap.Minutes {
+		fetches = append(fetches, chartBar{Label: m.Minute.UTC().Format("15:04"), Value: m.Feed.Served})
+	}
 	return map[string]interface{}{
 		"Title":    "Feed health",
 		"Page":     "health",
+		"Headline": healthHeadline(snap.LastHour),
 		"Since":    formatTripTimestamp(snap.Since),
-		"Strip":    newHealthStrip(snap.LastHour),
+		"Summary":  newHealthSummary(snap),
 		"LastHour": snap.LastHour,
 		"Total":    snap.Total,
 		"Minutes":  rows,
+		"Reports":  reportsPerMinuteChart(snap, time.UTC, healthChartHeight),
+		"Fetches": newBarChart(fetches, barChartOptions{
+			Name:   "Feed fetches served a minute over the last hour",
+			Height: healthChartHeight,
+			Unit:   "served",
+			Peak:   "Most in a minute",
+		}),
 	}
 }
 

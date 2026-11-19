@@ -1,85 +1,52 @@
 {{define "content"}}
-<div class="p-4 lg:p-5">
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
-      <div>
-        <h3 class="display-font text-lg font-bold text-slate-900">Trip History</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{len .Trips}} trips shown</p>
-      </div>
-      <form method="get" action="/admin/trips" class="flex flex-wrap items-center gap-2">
-        <select name="status" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-          <option value="" {{if eq .Status ""}}selected{{end}}>All statuses</option>
-          <option value="active" {{if eq .Status "active"}}selected{{end}}>Active</option>
-          <option value="completed" {{if eq .Status "completed"}}selected{{end}}>Completed</option>
-        </select>
-        <select name="vehicle_id" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-          <option value="" {{if eq .VehicleID ""}}selected{{end}}>All vehicles</option>
-          {{$vehicleID := .VehicleID}}
-          {{range .Vehicles}}
-          <option value="{{.ID}}" {{if eq $vehicleID .ID}}selected{{end}}>{{.Label}}</option>
-          {{end}}
-        </select>
-        <input type="text" name="q" placeholder="Search driver, route, trip id" value="{{.Q}}" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-        <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">Apply</button>
-      </form>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Trip</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Driver</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">GTFS trip</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Start</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">End</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Status</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Duration</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{if not .Trips}}
-          <tr>
-            <td class="px-5 py-6 text-center text-slate-400" colspan="10">No trips found.</td>
-          </tr>
-          {{end}}
-          {{range .Trips}}
-          <tr class="transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-4 font-mono text-xs font-medium"><a href="/admin/trips/{{.ID}}" class="text-sky-600 hover:text-sky-800">{{.ID}}</a></td>
-            <td class="px-5 py-4 font-semibold text-slate-900">{{.VehicleLabel}}</td>
-            <td class="px-5 py-4 text-slate-500">{{.DriverName}}</td>
-            <td class="px-5 py-4 text-slate-500">{{.RouteID}}</td>
-            <td class="px-5 py-4 font-mono text-xs text-slate-400">{{.GtfsTripID}}</td>
-            <td class="px-5 py-4 text-slate-500">{{.Start}}</td>
-            <td class="px-5 py-4 text-slate-400">{{.End}}</td>
-            <td class="px-5 py-4">
-              {{if eq .Status "active"}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Active</span>
-              {{else if eq .Status "completed"}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>Completed</span>
-              {{else}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"><span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>{{.Status}}</span>
-              {{end}}
-            </td>
-            <td class="px-5 py-4 text-slate-400">{{.Duration}}</td>
-            <td class="px-5 py-4">
-              <div class="flex items-center gap-3 text-xs font-semibold">
-                <a href="/admin/map?trip_id={{.ID}}" class="text-sky-600 hover:text-sky-800">View trail</a>
-                {{if eq .Status "active"}}
-                <form method="post" action="/admin/trips/{{.ID}}/end" class="shrink-0" onsubmit="return confirm('End this trip? Do this only when the driver phone cannot end it.')">
-                  <button type="submit" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">End trip</button>
-                </form>
-                {{end}}
-              </div>
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{template "pagination" .}}
+<div class="page-head">
+  <div class="page-head-main">
+    <h2 class="h1">{{.Headline}}</h2>
+    <p class="lede">Every trip a driver has started, newest first. Times are {{.Timezone}} time.</p>
   </div>
 </div>
+<section class="card">
+  {{/* No page param: a new search starts over at page 1. status rides along so the search survives it. */}}
+  <form class="card-head filters" method="get" action="/admin/trips">
+    {{if .Status}}<input type="hidden" name="status" value="{{.Status}}">{{end}}
+    <div class="seg" role="group" aria-label="Status">{{range .Statuses}}<a href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}{{if .Count}} <span class="muted">{{.Count}}</span>{{end}}</a>{{end}}</div>
+    <select class="select input-sm" name="vehicle_id" aria-label="Vehicle" style="width:auto;max-width:220px">
+      <option value="">All vehicles</option>
+      {{range .Vehicles}}<option value="{{.ID}}"{{if eq .ID $.VehicleID}} selected{{end}}>{{if .Label}}{{.Label}}{{else}}{{.ID}}{{end}}</option>
+      {{end}}
+    </select>
+    <span style="flex:1"></span>
+    <input class="input input-sm" type="search" name="q" placeholder="Search driver, route, trip id" value="{{.Q}}" aria-label="Search trips" style="max-width:280px">
+    <button class="btn btn-sm btn-tonal" type="submit">Apply</button>
+  </form>
+  {{if .Trips}}
+  <div class="table-wrap">
+    <table class="table cards">
+      <thead><tr><th>Trip</th><th class="hide-phone">Vehicle</th><th class="hide-md">Driver</th><th>Route</th><th>Started</th><th class="hide-phone hide-md">Ended</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {{range .Trips}}
+        <tr>
+          <td class="nowrap"><a class="row-link" href="/admin/trips/{{.ID}}"><span class="hide-phone">Trip {{.ID}}</span><span class="only-phone">{{.VehicleLabel}}</span></a><span class="sub">{{.GtfsTripID}}</span></td>
+          <td class="hide-phone nowrap">{{.VehicleLabel}}</td>
+          <td class="hide-md nowrap" data-label="Driver">{{.DriverName}}</td>
+          <td class="nowrap"><span class="route-to">{{template "route-badge" .Route}}{{with .Headsign}}<span>to {{.}}</span>{{end}}</span></td>
+          <td class="nowrap" data-label="Started">{{.StartClock}}<span class="sub hide-phone">{{.StartDay}}</span><span class="only-phone">, {{.StartDay}}, {{if .EndClock}}ended {{.EndClock}}{{else}}{{.Duration}}{{end}}</span></td>
+          <td class="hide-phone hide-md nowrap">{{if .EndClock}}{{.EndClock}}<span class="sub">{{.Duration}}</span>{{else}}<span class="muted">{{.Duration}}</span>{{end}}</td>
+          <td class="c-side">{{if .Active}}<span class="pill pill-ok">Running</span>{{else if eq .Status "completed"}}<span class="muted">Completed</span>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td>
+          <td class="c-actions"><div class="actions">
+            {{if .Active}}<form method="post" action="/admin/trips/{{.ID}}/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip"><button class="btn btn-sm btn-plain" type="submit">End trip</button></form>{{end}}
+            <a class="icon-btn" href="/admin/trips/{{.ID}}" aria-label="Open trip {{.ID}}">{{template "icon" "chevron_right"}}</a>
+          </div></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else if or .Filtered (gt .PageNum 1)}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "route"}}</span><div class="empty-title">{{if .Q}}Nothing fits "{{.Q}}"{{else}}No trip matches{{end}}</div><p>Clear the search, or pick another vehicle or status.</p><a class="btn btn-tonal" href="/admin/trips">Clear the search</a></div>
+  {{else}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "route"}}</span><div class="empty-title">No trips yet</div><p>A trip starts when a driver picks a vehicle and a route in the app. It shows here from its first minute.</p></div>
+  {{end}}
+  {{template "pagination" .}}
+</section>
 {{end}}

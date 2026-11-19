@@ -176,7 +176,7 @@ posted again as `raised`.
 
 ## Service reports
 
-The on-time window behind the admin UI's **Reports** page and
+The on-time window behind the admin UI's **Analytics** page and
 `GET /api/v1/admin/reports/service`. A vehicle that passes a stop from
 `REPORT_ON_TIME_EARLY` early to `REPORT_ON_TIME_LATE` late is on time. The
 defaults are the cut-offs the Android driver app shows its driver.

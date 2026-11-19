@@ -1,84 +1,56 @@
 {{define "content"}}
-<div class="p-4 lg:p-5">
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 px-5 py-4">
-      <div>
-        <h3 class="display-font text-lg font-bold text-slate-900">All Vehicles</h3>
-        <p class="mt-0.5 text-xs text-slate-400">{{len .Vehicles}} {{if .IncludeInactive}}shown{{else}}active{{end}} on this page</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-3">
-        {{/* No page param: a new search starts over at page 1. include_inactive rides along so the search survives the toggle. */}}
-        <form method="get" action="/admin/vehicles" class="flex flex-wrap items-center gap-2">
-          {{if .IncludeInactive}}<input type="hidden" name="include_inactive" value="1">{{end}}
-          <input type="text" name="q" placeholder="Search id or label" value="{{.Q}}" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-          <input type="text" name="agency_tag" placeholder="Agency tag" value="{{.AgencyTag}}" class="rounded-2xl border border-line bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100">
-          <button type="submit" class="rounded-2xl border border-slate-200 bg-white/75 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Apply</button>
-        </form>
-        <a href="{{.ToggleInactiveURL}}" class="text-xs font-semibold text-sky-600 hover:text-sky-800">{{if .IncludeInactive}}Hide deactivated{{else}}Show deactivated{{end}}</a>
-        <a href="/admin/import/vehicles" class="rounded-2xl border border-slate-200 bg-white/75 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Import from CSV</a>
-        <a href="/admin/vehicles/new" class="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">New vehicle</a>
-      </div>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">ID</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Label</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Agency tag</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Status</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Last seen</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Driver</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{if not .Vehicles}}
-          <tr>
-            <td class="px-5 py-6 text-center text-slate-400" colspan="7">No vehicles found.</td>
-          </tr>
-          {{end}}
-          {{range .Vehicles}}
-          <tr class="transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-4 font-mono text-xs font-medium text-slate-400">{{.ID}}</td>
-            <td class="px-5 py-4">
-              <div class="flex items-center gap-3">
-                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-lg">&#128652;</span>
-                <p class="font-semibold text-slate-900">{{.Label}}</p>
-              </div>
-            </td>
-            <td class="px-5 py-4 text-slate-500">{{.AgencyTag}}</td>
-            <td class="px-5 py-4">
-              {{if .Active}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Active</span>
-              {{else}}
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>Deactivated</span>
-              {{end}}
-            </td>
-            <td class="px-5 py-4 text-slate-400">{{if .LastSeen}}{{.LastSeen}}{{else}}&mdash;{{end}}</td>
-            <td class="px-5 py-4 text-slate-500">{{if .Driver}}{{.Driver}}{{else}}&mdash;{{end}}</td>
-            <td class="px-5 py-4">
-              <div class="flex items-center gap-3 text-xs font-semibold">
-                <a href="/admin/vehicles/{{.ID}}/edit" class="text-sky-600 hover:text-sky-800">Edit</a>
-                {{/* limit=1000 is the endpoint's maximum; without it the export silently caps at the default 100 points. */}}
-                <a href="/api/v1/admin/vehicles/{{.ID}}/locations?format=csv&amp;limit=1000" class="text-sky-600 hover:text-sky-800">CSV</a>
-                {{if .Active}}
-                <form method="post" action="/admin/vehicles/{{.ID}}/deactivate" onsubmit="return confirm('Deactivate this vehicle?')">
-                  <button type="submit" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Deactivate</button>
-                </form>
-                {{else}}
-                <form method="post" action="/admin/vehicles/{{.ID}}/activate" onsubmit="return confirm('Reactivate this vehicle?')">
-                  <button type="submit" class="rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Activate</button>
-                </form>
-                {{end}}
-              </div>
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{template "pagination" .}}
+<div class="page-head">
+  <div class="page-head-main">
+    <h2 class="h1">{{.Headline}}</h2>
+    <p class="lede">Every vehicle a driver can pick. A vehicle shows on the map while its driver is on a trip.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="/admin/import/vehicles">{{template "icon" "upload_file"}}Import from CSV</a>
+    <a class="btn btn-primary" href="/admin/vehicles/new">{{template "icon" "add"}}New vehicle</a>
   </div>
 </div>
+<section class="card">
+  {{/* No page param: a new search starts over at page 1. include_inactive rides along so the search survives the toggle. */}}
+  <form class="card-head filters" method="get" action="/admin/vehicles">
+    {{if .IncludeInactive}}<input type="hidden" name="include_inactive" value="1">{{end}}
+    <input class="input input-sm" type="search" name="q" placeholder="Search id or label" value="{{.Q}}" aria-label="Search vehicles" style="max-width:280px">
+    <input class="input input-sm" type="text" name="agency_tag" placeholder="Agency tag" value="{{.AgencyTag}}" aria-label="Agency tag" style="max-width:160px">
+    <button class="btn btn-sm btn-tonal" type="submit">Apply</button>
+    <span style="flex:1"></span>
+    <a class="chip" href="{{.ToggleInactiveURL}}"{{if .IncludeInactive}} aria-current="true"{{end}}>{{if .IncludeInactive}}{{template "icon-sm" "check"}}Showing deactivated{{else}}Show deactivated{{end}}</a>
+  </form>
+  {{if .Vehicles}}
+  <div class="table-wrap">
+    <table class="table cards">
+      <thead><tr><th>Vehicle</th><th class="hide-phone hide-md">Agency tag</th><th>Status</th><th>Last report</th><th>Driver now</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {{range .Vehicles}}
+        <tr>
+          <td style="max-width:340px"><a class="row-link clip" href="/admin/vehicles/{{.ID}}/edit" title="{{.Name}}">{{.Name}}</a><span class="sub">{{.ID}}</span></td>
+          <td class="hide-phone hide-md">{{if .AgencyTag}}<span class="pill plain">{{.AgencyTag}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+          <td{{if .Active}} class="hide-phone"{{end}}>{{if .Active}}<span class="muted">Active</span>{{else}}<span class="pill plain">Deactivated</span>{{end}}</td>
+          <td class="num nowrap c-side">{{if eq .Report.State "live"}}<span class="age"><span class="dot"></span>{{.Report.Text}}</span>{{else if eq .Report.State "quiet"}}<span class="age tone-warn" style="font-weight:500"><span class="dot dot-quiet"></span>{{.Report.Text}}</span>{{else}}<span class="muted">{{.Report.Text}}</span>{{end}}</td>
+          <td class="nowrap{{if not .Driver}} hide-phone{{end}}"{{if .Driver}} data-label="Driver"{{end}}>{{if .Driver}}{{.Driver}}{{else}}<span class="muted">none</span>{{end}}</td>
+          <td class="c-actions"><div class="actions">
+            <a class="btn btn-sm btn-plain" href="/admin/vehicles/{{.ID}}/edit">Edit</a>
+            {{/* limit=1000 is the endpoint's maximum; without it the export silently caps at the default 100 points. */}}
+            <a class="btn btn-sm btn-plain hide-md" href="/api/v1/admin/vehicles/{{.ID}}/locations?format=csv&amp;limit=1000" title="Up to 1000 reports from the last 24 hours, as a CSV file">{{template "icon-sm" "download"}}Reports</a>
+            {{if .Active}}
+            <form class="hide-md" method="post" action="/admin/vehicles/{{.ID}}/deactivate" data-confirm="Deactivate this vehicle?" data-confirm-text="{{.Name}} leaves the map at once and drivers can no longer pick it. You can turn it back on." data-confirm-ok="Deactivate"><button class="btn btn-sm btn-plain" style="min-width:96px" type="submit">Deactivate</button></form>
+            {{else}}
+            <form method="post" action="/admin/vehicles/{{.ID}}/activate"><button class="btn btn-sm" style="min-width:96px" type="submit">Activate</button></form>
+            {{end}}
+          </div></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else if or .Filtered .IncludeInactive (gt .PageNum 1)}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "search"}}</span><div class="empty-title">No vehicle matches</div><p>Nothing saved fits this search.</p><a class="btn" href="/admin/vehicles">Clear the search</a></div>
+  {{else}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "directions_bus"}}</span><div class="empty-title">Add your first vehicle</div><p>A driver picks a vehicle when they start a trip. Add them one at a time, or import a list from a CSV file.</p><a class="btn btn-primary" href="/admin/vehicles/new">{{template "icon" "add"}}New vehicle</a></div>
+  {{end}}
+  {{template "pagination" .}}
+</section>
 {{end}}

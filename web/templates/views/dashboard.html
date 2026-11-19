@@ -1,68 +1,83 @@
+{{define "scripts"}}{{if .Overview}}<script src="/static/js/line.js" defer></script>{{end}}{{end}}
+
 {{define "content"}}
-<div class="space-y-5 p-4 lg:p-5">
-
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">Active Fleet</p>
-      <p class="display-font mt-2 text-4xl font-bold text-slate-900">{{.TotalVehicles}}</p>
-      <p class="mt-2 text-xs text-slate-400">Active vehicles</p>
+{{with .Welcome}}
+<div style="max-width:1120px">
+  <div class="steps-line welcome-line">{{template "step-line" .Line}}<span style="font-weight:500">Step {{.Line.N}} of {{.Line.Of}}</span><span style="flex:1"></span><a class="btn" href="/admin/map">Skip for now</a></div>
+  <h2 class="h1 display">Get your first vehicle on the map</h2>
+  <p class="lede welcome-lede">Four steps. A driver's phone does the rest: it reports where the vehicle is, and riders see it coming.</p>
+  <div class="welcome-grid">
+    <div class="steps rise">
+      {{range .Steps}}
+      <a class="step{{if .Done}} done{{end}}{{if .Action}} current{{end}}" href="{{.URL}}"><span class="step-icon">{{template "icon-lg" .Icon}}</span><span style="min-width:0;flex:1"><span class="step-title">{{.Title}}</span><span class="muted" style="font-size:13px">{{.Text}}</span></span>{{if .Action}}<span class="btn btn-primary">{{.Action}}</span>{{else}}<span class="step-check{{if .Done}} pop{{end}}">{{template "icon-sm" "check"}}{{if .Done}}<span class="sr-only">Done</span>{{end}}</span>{{end}}</a>
+      {{end}}
     </div>
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">Active Now</p>
-      <p class="display-font mt-2 text-4xl font-bold text-emerald-700">{{.ActiveVehicles}}</p>
-      <p class="mt-2 text-xs text-slate-400">On route</p>
-    </div>
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">Drivers</p>
-      <p class="display-font mt-2 text-4xl font-bold text-slate-900">{{.TotalDrivers}}</p>
-      <p class="mt-2 text-xs text-slate-400">Active</p>
-    </div>
-    <div class="stat-card rounded-[20px] border border-white/80 p-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">Active Trips</p>
-      <p class="display-font mt-2 text-4xl font-bold text-sky-700">{{.ActiveTrips}}</p>
-      <p class="mt-2 text-xs text-slate-400">In progress</p>
+    <div class="picture pic waiting" aria-hidden="true">
+      <i class="road" style="left:0;right:0;top:42%;height:10px"></i><i class="road" style="left:0;right:0;top:74%;height:8px"></i><i class="road" style="left:12%;top:0;bottom:0;width:8px"></i><i class="road" style="left:62%;top:0;bottom:0;width:10px"></i><i class="road" style="left:86%;top:42%;bottom:0;width:8px"></i>
+      <i class="park" style="left:66%;top:48%;width:16%;height:20%"></i><i class="park" style="left:16%;top:8%;width:14%;height:12%"></i>
+      <i class="rt"></i><i class="st next" style="top:24%"></i><i class="st" style="top:68%"></i>
+      <span class="riders">{{template "icon" "person"}}{{template "icon" "person"}}{{template "icon" "person"}}</span>
+      <span class="veh"><span class="disc">{{template "arrow"}}</span></span>
+      <span class="chip-heard"><span class="dot dot-off"></span>Waiting for the first report</span>
     </div>
   </div>
-
-  <div class="glass-panel flex flex-wrap items-center gap-x-6 gap-y-1 rounded-[16px] border border-white/70 px-5 py-3 text-xs font-medium text-slate-500">
-    <span>Feed last updated: <span class="font-semibold text-slate-700">{{.LastUpdate}}</span></span>
-    <span>Staleness threshold: <span class="font-semibold text-slate-700">{{.StalenessThreshold}}</span></span>
-    <span id="health-reports">Reports, last hour: <span class="font-semibold text-slate-700">{{.Health.ReportsAccepted}}</span> accepted, <span class="font-semibold {{if .Health.ReportsRejected}}text-rose-700{{else}}text-slate-700{{end}}">{{.Health.ReportsRejected}}</span> rejected{{if .Health.ReportsRejected}} ({{.Health.ErrorRate}}, mostly {{.Health.TopReason}}){{end}}</span>
-    <span id="health-feed">Feed fetches, last hour: <span class="font-semibold text-slate-700">{{.Health.FeedFetches}}</span>, <span class="font-semibold {{if .Health.FeedRefused}}text-rose-700{{else}}text-slate-700{{end}}">{{.Health.FeedRefused}}</span> refused key{{if .Health.FeedFailed}}, <span class="font-semibold text-rose-700">{{.Health.FeedFailed}}</span> failed{{end}}</span>
-    <a href="/admin/health" class="font-semibold text-sky-600 hover:text-sky-800">Feed health &rarr;</a>
-  </div>
-
-  <div class="table-card overflow-hidden rounded-[20px] border border-white/80">
-    <div class="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
-      <h3 class="display-font text-base font-bold text-slate-900">Recent Activity</h3>
-      <a href="/admin/vehicles" class="text-xs font-semibold text-sky-600 hover:text-sky-800">View all &rarr;</a>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50/80">
-          <tr class="text-left">
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Vehicle</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Route</th>
-            <th class="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Last Update</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          {{if not .RecentVehicles}}
-          <tr>
-            <td class="px-5 py-6 text-center text-slate-400" colspan="3">No vehicles have reported recently.</td>
-          </tr>
-          {{end}}
-          {{range .RecentVehicles}}
-          <tr class="transition-colors hover:bg-slate-50/60">
-            <td class="px-5 py-3.5 font-semibold text-slate-900">{{.Label}}</td>
-            <td class="px-5 py-3.5 text-slate-500">{{if .RouteID}}{{.RouteID}}{{else}}&mdash;{{end}}</td>
-            <td class="px-5 py-3.5 text-slate-400">{{.LastSeen}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
 </div>
+{{end}}
+{{with .Overview}}
+<div class="ov-head hide-phone">
+  <div style="flex:1"><h2 class="h1" data-live="headline">{{.Headline}}</h2><p class="lede" style="margin:4px 0 0" data-live="lede">{{.Lede}}</p></div>
+  <div class="muted ov-now" data-live="now">{{.Now}}<br>{{.Timezone}} time</div>
+</div>
+<div data-live="problem">
+  {{with .Problem}}<div class="problem hide-phone" role="status" style="margin-bottom:16px">{{template "icon" "warning"}}<span>{{.Text}}</span><a href="{{.URL}}">{{.Action}}</a></div>{{end}}
+  {{if .Problem}}
+  <a class="hero-problem only-phone" href="{{.Problem.URL}}"><span class="hero-what">{{template "icon" "warning"}}{{.Problem.Text}}</span><span class="hero-count">{{.Headline}}</span><span class="hero-foot"><span>{{.Lede}}</span><b>{{.Problem.Action}}</b></span></a>
+  {{else}}
+  <div class="hero-ok only-phone ov-hero-ok"><span class="hero-what">{{template "icon" "check_circle"}}Nothing needs a look</span><span class="hero-count">{{.Headline}}</span><span class="hero-foot"><span>{{.Lede}}</span></span></div>
+  {{end}}
+</div>
+
+<div class="ov-wrap">
+  <div class="rise ov-tiles tiles">
+    <a class="card tile" href="/admin/map"><span class="tile-label">On a trip now{{template "icon" "chevron_right"}}</span><span class="tile-value"><span class="count-up" data-count="{{.OnTrip}}" data-live="on-trip">{{.OnTrip}}</span><span class="tile-unit" data-live="vehicles">of {{.Vehicles}} {{if eq .Vehicles 1}}vehicle{{else}}vehicles{{end}}</span></span><span class="tile-foot" data-live="units">{{if .OnTrip}}<span class="stack grow-x ov-units" role="img" aria-label="{{.Reporting}} reporting{{if .Waiting}}, {{.Waiting}} yet to report{{end}}, {{.Quiet}} quiet">{{if .Units}}{{range .Units}}<i class="{{.}}" style="flex:1"></i>{{end}}{{else}}{{if .Reporting}}<i class="seg-ok" style="flex:{{.Reporting}}"></i>{{end}}{{if .Waiting}}<i class="seg-unknown" style="flex:{{.Waiting}}"></i>{{end}}{{if .Quiet}}<i class="seg-warn" style="flex:{{.Quiet}}"></i>{{end}}{{end}}</span>{{end}}</span></a>
+    <a class="card tile" href="{{.ReportsURL}}"><span class="tile-label">On time today{{template "icon" "chevron_right"}}</span>{{if .OnTime.Known}}<span class="tile-value"><span class="count-up" data-count="{{.OnTime.Percent}}" data-live="on-time">{{.OnTime.Percent}}</span>%</span><span class="tile-note" data-live="early-late">{{.OnTime.Early}}% early, {{.OnTime.Late}}% late</span><span class="tile-foot" data-live="on-time-bar">{{template "ot-stack" .OnTime}}</span>{{else}}<span class="tile-value muted">None yet</span><span class="tile-note">{{if .HasSchedule}}No stop has been passed yet today{{else}}No schedule is loaded{{end}}</span>{{end}}</a>
+    <a class="card tile" href="/admin/trips"><span class="tile-label">Trips today{{template "icon" "chevron_right"}}</span>{{if .HasSchedule}}<span class="tile-value"><span class="count-up" data-count="{{.TripsRun}}" data-live="trips-run">{{.TripsRun}}</span><span class="tile-unit" data-live="trips-scheduled">of {{.TripsScheduled}} scheduled so far</span></span>{{else}}<span class="tile-value"><span class="count-up" data-count="{{.OnTrip}}" data-live="trips-running">{{.OnTrip}}</span><span class="tile-unit">running</span></span>{{end}}<span class="tile-note" data-live="trips-note">{{.OnTrip}} running, {{.NotStarted}} not started</span></a>
+    <a class="card tile" href="/admin/alerts"><span class="tile-label">Open alerts{{template "icon" "chevron_right"}}</span><span class="tile-value"><span class="count-up" data-count="{{.AlertCount}}" data-live="alerts">{{.AlertCount}}</span></span><span class="tile-note" data-live="longest">{{if .LongestOpen}}Longest open for {{.LongestOpen}}{{else}}Nothing needs a look{{end}}</span></a>
+  </div>
+
+  <div class="ov-grid">
+    <section class="card ov-routes" aria-labelledby="ov-routes" data-live-routes>
+      <div class="card-head"><h3 id="ov-routes">Routes right now<span class="sub hide-phone" style="margin-left:10px">Each vehicle where it is along its route</span></h3></div>
+      {{range .Routes}}
+      <a class="line-row" href="{{.URL}}" data-route="{{.Route.ID}}">
+        <span class="route-name">{{template "route-badge" .Route}}<span style="min-width:0"><span class="clip" style="font-weight:500">{{.Name}}</span><span class="muted" style="font-size:12px">{{.Reporting}} of {{.OnTrip}} reporting</span></span></span>
+        <span class="the-line" data-line="{{.Route.ID}}" aria-hidden="true"><span class="track"></span>{{range .Stops}}<span class="stop" style="left:{{.}}%"></span>{{end}}{{range .Vehicles}}<span class="veh{{if .Quiet}} quiet{{end}}{{if .Back}} back{{end}}" style="left:{{.Left}}%" data-veh="{{.ID}}" title="{{.Label}}">{{template "arrow"}}</span>{{end}}</span>
+        <span style="text-align:right">{{if .OnTime}}<span class="route-share">{{.OnTime}}</span><span class="muted" style="font-size:12px">on time today</span>{{else}}<span class="muted" style="font-size:12px">No stop judged yet</span>{{end}}</span>
+      </a>
+      {{else}}
+      <p class="card-note">No vehicle is on a trip right now. A route shows here as soon as a driver starts a trip on it.</p>
+      {{end}}
+    </section>
+    <section class="card ov-att" aria-labelledby="ov-att" data-live="attention">
+      <div class="card-head"><h3 id="ov-att">Needs attention</h3>{{if .AlertCount}}<span class="count">{{.AlertCount}}</span>{{end}}</div>
+      {{range .Attention}}
+      <a class="line-row attention" href="{{.URL}}"><span class="step-icon alert-icon">{{template "icon" .Icon}}</span><span style="min-width:0"><span class="clip" style="font-weight:500">{{.Title}}</span><span class="muted" style="font-size:12px">{{.Detail}}</span></span>{{template "icon" "chevron_right"}}</a>
+      {{else}}
+      <p class="card-note">Nothing needs a look. No vehicle has gone quiet, stopped or left its route, and no trip is late to start.</p>
+      {{end}}
+      {{if .AlertCount}}<div class="card-foot"><a href="/admin/alerts" style="font-weight:500">{{if eq .AlertCount 1}}The 1 alert{{else}}All {{.AlertCount}} alerts{{end}}</a></div>{{end}}
+    </section>
+    <section class="card ov-reports" aria-labelledby="ov-reports" data-live="reports">
+      <div class="card-head" style="flex-wrap:wrap;row-gap:2px"><h3 id="ov-reports" style="flex:1 1 200px">Location reports, last hour</h3><span class="legend"><span><i style="background:var(--chart-1)"></i>{{.Accepted}} accepted</span><span><i style="background:var(--warn)"></i>{{.Rejected}} rejected</span></span></div>
+      <div style="padding:0 18px 14px">{{template "bar-chart" .Chart}}</div>
+    </section>
+    <section class="card ov-sys" aria-label="System" data-live="system">
+      {{range .System}}
+      <a class="line-row system" href="{{.URL}}">{{template "icon" .Icon}}<span style="min-width:0"><span style="display:block;font-weight:500">{{.Name}}</span><span class="muted" style="font-size:12px">{{.Detail}}</span></span><span class="pill{{if .Tone}} pill-{{.Tone}}{{else}} plain{{end}}">{{.State}}</span></a>
+      {{end}}
+    </section>
+  </div>
+</div>
+<div class="tip" id="tip" aria-hidden="true"></div>
+{{end}}
 {{end}}

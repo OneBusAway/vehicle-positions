@@ -23,7 +23,7 @@ import (
 var rawAPIKeyPattern = regexp.MustCompile(`[0-9a-f]{64}`)
 
 // newAPIKeysMux serves the admin UI over the given key store.
-func newAPIKeysMux(t *testing.T, keys APIKeyManager) *http.ServeMux {
+func newAPIKeysMux(t *testing.T, keys apiKeyPageStore) *http.ServeMux {
 	t.Helper()
 	ui := newTestAdminUI(t)
 	ui.apiKeys = keys
@@ -76,7 +76,8 @@ func TestAPIKeysPage_ListsKeys(t *testing.T) {
 
 	body := getAdminPage(t, mux, "/admin/api-keys")
 
-	assert.Contains(t, body, "2 keys on this page.")
+	assert.Contains(t, body, `<h2 class="h1">1 key is active</h2>`)
+	assert.Contains(t, body, "2 keys shown, page 1")
 	assert.Contains(t, body, "OneBusAway")
 	assert.Contains(t, body, "2026-11-01 09:30 UTC")
 	assert.Contains(t, body, "2026-11-12 18:05 UTC")
@@ -98,10 +99,11 @@ func TestAPIKeysPage_EmptyState(t *testing.T) {
 
 	body := getAdminPage(t, mux, "/admin/api-keys")
 
-	assert.Contains(t, body, "No feed API keys yet.")
+	assert.Contains(t, body, `<h2 class="h1">No keys are active</h2>`)
+	assert.Contains(t, body, "No API keys yet")
 	assert.Contains(t, body, `action="/admin/api-keys"`, "the create form is there before the first key")
 	assert.NotContains(t, body, "/deactivate")
-	assert.NotContains(t, body, "Page 1", "one empty page has no pagination")
+	assert.NotContains(t, body, "shown, page 1", "one empty page has no pagination")
 }
 
 // TestAPIKeysPage_Paginates verifies the list shows at most one page of keys,
@@ -144,7 +146,8 @@ func TestAPIKeysPage_PageOutOfRange(t *testing.T) {
 	mux := newAPIKeysMux(t, &fakeAPIKeyManager{keys: seedAPIKeys(adminPageSize + 5)})
 
 	past := getAdminPage(t, mux, "/admin/api-keys?page=9")
-	assert.Contains(t, past, "No feed API keys yet.")
+	assert.Contains(t, past, "No API keys yet")
+	assert.Contains(t, past, "No keys shown, page 9")
 	assert.Contains(t, past, `href="/admin/api-keys?page=8"`)
 	assert.NotContains(t, past, "Next")
 
@@ -152,19 +155,32 @@ func TestAPIKeysPage_PageOutOfRange(t *testing.T) {
 		t.Run("page="+page, func(t *testing.T) {
 			body := getAdminPage(t, mux, "/admin/api-keys?page="+page)
 			assert.Contains(t, body, "Consumer 001", "an invalid page must render page 1")
-			assert.Contains(t, body, "Page 1")
+			assert.Contains(t, body, "shown, page 1")
 		})
 	}
 }
 
 func TestAPIKeysPage_StoreError(t *testing.T) {
-	mux := newAPIKeysMux(t, &fakeAPIKeyManager{listErr: errors.New("connection refused")})
+	for name, store := range map[string]*fakeAPIKeyManager{
+		"the list":  {listErr: errors.New("connection refused")},
+		"the count": {countErr: errors.New("connection refused")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mux := newAPIKeysMux(t, store)
 
-	w := requestAdminPage(t, mux, "/admin/api-keys")
+			w := requestAdminPage(t, mux, "/admin/api-keys")
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
-	assert.NotContains(t, w.Body.String(), "connection refused")
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+			assert.Contains(t, w.Body.String(), serverErrorTitle)
+			assert.NotContains(t, w.Body.String(), "connection refused")
+		})
+	}
+}
+
+func TestAPIKeysHeadline(t *testing.T) {
+	assert.Equal(t, "No keys are active", apiKeysHeadline(0))
+	assert.Equal(t, "1 key is active", apiKeysHeadline(1))
+	assert.Equal(t, "2 keys are active", apiKeysHeadline(2))
 }
 
 // TestAPIKeysPage_ShowsDeactivatedFlash verifies the code apiKeyDeactivate
@@ -186,19 +202,15 @@ func TestAPIKeysPage_ShowsDeactivatedFlash(t *testing.T) {
 // page and is marked as the current one only on its own page.
 func TestAdminSidebar_LinksToAPIKeys(t *testing.T) {
 	mux := newAPIKeysMux(t, &fakeAPIKeyManager{})
-	link := regexp.MustCompile(`href="/admin/api-keys"\s+data-active="(true|false)"`)
-
-	for path, wantActive := range map[string]string{
-		"/admin/api-keys":  "true",
-		"/admin/dashboard": "false",
-		"/admin/users":     "false",
+	for path, want := range map[string]railState{
+		"/admin/api-keys":  railOpen,
+		"/admin/dashboard": railLinked,
+		"/admin/users":     railLinked,
 	} {
 		t.Run(path, func(t *testing.T) {
 			body := getAdminPage(t, mux, path)
-			match := link.FindStringSubmatch(body)
-			require.NotNil(t, match, "the sidebar must link to the Feed API keys page")
-			assert.Equal(t, wantActive, match[1])
-			assert.Contains(t, body, "Feed API keys")
+			assert.Equal(t, want, railLink(body, "/admin/api-keys"))
+			assert.Contains(t, body, `<span class="rail-label">API keys</span>`)
 		})
 	}
 }
@@ -226,7 +238,8 @@ func TestAPIKeyCreate_ShowsKeyOnce(t *testing.T) {
 	assert.Equal(t, hashAPIKey(rawKey), store.keys[0].KeyHash, "the key on the page must be the one whose hash was stored")
 	assert.NotContains(t, body, store.keys[0].KeyHash)
 
-	assert.Contains(t, body, "1 key on this page.")
+	assert.Contains(t, body, `<h2 class="h1">1 key is active</h2>`, "the headline counts the key just made")
+	assert.Contains(t, body, `<tr class="tone-in">`, "the new key's row is marked")
 	assert.Contains(t, body, "Key for OneBusAway created.")
 	assert.Contains(t, body, "It cannot be shown again.")
 	assert.Contains(t, body, `action="/admin/api-keys/1/deactivate"`, "the new key must be in the list on the same page")
@@ -322,23 +335,29 @@ func TestAPIKeyCreate_StoreError(t *testing.T) {
 	w := postAdminForm(t, mux, "/admin/api-keys", "name=OneBusAway")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 	assert.NotContains(t, w.Body.String(), "connection refused")
 	assert.Empty(t, rawAPIKeyPattern.FindString(w.Body.String()), "a key that was not stored must not be shown")
 }
 
 // TestAPIKeyCreate_ListErrorMakesNoKey pins the order in apiKeyCreate: the
-// list is read before the key is made, so a failed read cannot leave behind a
-// key whose only copy was on a page that never rendered.
+// list and the count are read before the key is made, so a failed read cannot
+// leave behind a key whose only copy was on a page that never rendered.
 func TestAPIKeyCreate_ListErrorMakesNoKey(t *testing.T) {
-	store := &fakeAPIKeyManager{listErr: errors.New("connection refused")}
-	mux := newAPIKeysMux(t, store)
+	for name, store := range map[string]*fakeAPIKeyManager{
+		"the list":  {listErr: errors.New("connection refused")},
+		"the count": {countErr: errors.New("connection refused")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mux := newAPIKeysMux(t, store)
 
-	w := postAdminForm(t, mux, "/admin/api-keys", "name=OneBusAway")
+			w := postAdminForm(t, mux, "/admin/api-keys", "name=OneBusAway")
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.NotContains(t, w.Body.String(), "connection refused")
-	assert.Empty(t, store.keys, "no key may be made when the page that shows it cannot be built")
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+			assert.NotContains(t, w.Body.String(), "connection refused")
+			assert.Empty(t, store.keys, "no key may be made when the page that shows it cannot be built")
+		})
+	}
 }
 
 // TestAPIKeyDeactivate verifies the success path deactivates the key in the
@@ -393,7 +412,7 @@ func TestAPIKeyDeactivate_StoreError(t *testing.T) {
 	w := postAdminForm(t, mux, "/admin/api-keys/3/deactivate", "")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), serverErrorTitle)
 	assert.NotContains(t, w.Body.String(), "connection refused")
 	assert.Empty(t, flashCodeSet(w), "a failed deactivation must not reach the flash")
 }
@@ -517,7 +536,7 @@ func TestAPIKeyRoutes_SignedOutGoToLogin(t *testing.T) {
 				assert.Equal(t, http.StatusSeeOther, w.Code)
 				assert.Equal(t, loginLocation(route.method, route.path), w.Header().Get("Location"))
 				assert.Zero(t, store.created+store.deactivated, "a request without an admin session must not reach the store")
-				assert.NotContains(t, w.Body.String(), "Feed API keys")
+				assert.NotContains(t, w.Body.String(), "API keys")
 			})
 		}
 	}
