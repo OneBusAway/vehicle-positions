@@ -2,6 +2,7 @@ package rider
 
 import (
 	"cmp"
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -556,4 +557,53 @@ func TestAggregator_RunsAtOneStartTimeTieGoesToTheNewerPointNotTheStamp(t *testi
 	assert.InDelta(t, 560, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 20)
 	assert.Equal(t, at.Add(-5*time.Second), est[0].Timestamp)
 	assert.Equal(t, "08:10:00", est[1].StartTime)
+}
+
+// A run stamped later than its own riders' points can be wrong about where
+// its vehicle was then: F reported at a stop 85 s before N's point, S's
+// stale point puts S on F's run, and the run is stamped at N's moment with F
+// still at the stop. The vehicle has since left: F's next report, 5 s after
+// that stamp, is 400 m on. That is further than a vehicle goes in 5 s but not
+// in the 35 s since S's point, the newest of the run's own, so the run keeps
+// its start.
+func TestAggregator_RunStartStaysWhenItsStampOutrunsItsRiders(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	at := f.base.Add(10 * time.Minute)
+	f.rideTo(t, "F", 100, 0, at.Add(-85*time.Second))
+	f.rideTo(t, "S", 50, 10, at.Add(-30*time.Second))
+	f.rideTo(t, "N", 900, 1.7, at)
+	now := at.Add(2 * time.Second)
+	first := estimateStarts(t, f, now)
+	require.Len(t, first, 2)
+
+	_, ok := f.agg.End("S", EndArrived, now)
+	require.True(t, ok)
+	moved := Point{Pos: f.t1.Shape.PointAt(500), Accuracy: 5, Speed: 8, Timestamp: at.Add(5 * time.Second)}
+	_, err := f.agg.ApplyBatch("F", []Point{moved}, nil, moved.Timestamp.Add(2*time.Second))
+	require.NoError(t, err)
+	now = moved.Timestamp.Add(2 * time.Second)
+	est := f.agg.Estimates(now, noCover)
+	require.True(t, slices.ContainsFunc(est, func(e TripEstimate) bool {
+		return math.Abs(f.t1.Shape.Project(e.Pos, nil).AlongShape-500) < 10
+	}), "F's run is published where F now is")
+	assert.Equal(t, first, estimateStarts(t, f, now))
+}
+
+// Two runs at one start_time with as many riders each, both reported by
+// phones whose clocks run ahead: the tie still goes to the newer point. A's
+// point, at 600 m, is 10 s ahead of now and B's, at 900 m, 20 s ahead; both
+// runs are stamped now, and B's is the run published.
+func TestAggregator_RunsAtOneStartTimeTieReadsClocksAheadAsReported(t *testing.T) {
+	f := newAggFixture(t)
+	f.t1.frequencies = []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(22, 0, 0), Headway: 10 * time.Minute, ExactTimes: gtfs.ScheduleBased}}
+	now := f.base.Add(10 * time.Minute)
+	f.rideTo(t, "A", 600, 1.7, now.Add(10*time.Second))
+	f.rideTo(t, "B", 900, 1.7, now.Add(20*time.Second))
+
+	est := f.agg.Estimates(now, noCover)
+	require.Len(t, est, 1)
+	assert.Equal(t, "08:00:00", est[0].StartTime)
+	assert.InDelta(t, 900, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 10)
+	assert.Equal(t, now, est[0].Timestamp)
 }

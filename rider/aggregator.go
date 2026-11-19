@@ -92,11 +92,13 @@ type Aggregator struct {
 }
 
 // riderRun is when a run of a trip its riders are on left its first stop,
-// and where along the shape and when its latest estimate put it.
+// and where along the shape and when its latest estimate put it, with the
+// newest point that estimate's riders reported.
 type riderRun struct {
-	start time.Time
-	along float64
-	at    time.Time
+	start  time.Time
+	along  float64
+	at     time.Time
+	newest time.Time
 }
 
 // NewAggregator returns an empty registry judging points with th, in tz.
@@ -442,7 +444,10 @@ func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey
 }
 
 // runPlace is where an estimate put one run of a trip, and when, with the
-// riders who put it there and the newest point they reported.
+// riders who put it there and the newest point they reported. newest is the
+// time that point gives, even from a clock running ahead: at is never after
+// the time the estimate was made, but which of two points is newer still
+// counts.
 type runPlace struct {
 	group  *tripGroup
 	along  float64
@@ -506,12 +511,12 @@ func (a *Aggregator) runStarts(key TripKey, trip *TripInfo, places []runPlace, n
 		r, p := &kept[m.run], places[m.place]
 		starts[m.place] = r.start
 		if !p.at.Before(r.at) {
-			r.along, r.at = p.along, p.at
+			r.along, r.at, r.newest = p.along, p.at, p.newest
 		}
 	}
 	for i, p := range places {
 		if !placed[i] && slices.ContainsFunc(p.group.members, func(m estimateMember) bool { return a.sessions[m.rideID] != nil }) {
-			kept = append(kept, riderRun{start: starts[i], along: p.along, at: p.at})
+			kept = append(kept, riderRun{start: starts[i], along: p.along, at: p.at, newest: p.newest})
 		}
 	}
 	if len(kept) == 0 {
@@ -526,9 +531,23 @@ func (a *Aggregator) runStarts(key TripKey, trip *TripInfo, places []runPlace, n
 // time, no more than CorroborationBase back from r's last place and no
 // further ahead than that plus MaxSpeed for the time since; back in time, the
 // other way round.
+//
+// A run weighed at another run's newest point is stamped later than any of
+// its own riders reported (tripGroup.runs), and its place is only as good as
+// their carry: a rider who reported at a stop is placed at the stop at the
+// stamp, though the vehicle may have left since. So r's place is taken to be
+// true at some time from its riders' newest point to its stamp, and p need
+// only be within reach from one of the two. A move ahead has the most time
+// from the newest point, and a move back from the stamp.
 func (a *Aggregator) couldBe(r riderRun, p runPlace) bool {
-	moved := p.along - r.along
-	elapsed := p.at.Sub(r.at).Seconds()
+	return a.reaches(r.along, r.at, p) || a.reaches(r.along, r.newest, p)
+}
+
+// reaches reports whether a vehicle at along at at could be where p puts a
+// run, as couldBe describes.
+func (a *Aggregator) reaches(along float64, at time.Time, p runPlace) bool {
+	moved := p.along - along
+	elapsed := p.at.Sub(at).Seconds()
 	if elapsed < 0 {
 		moved, elapsed = -moved, -elapsed
 	}
@@ -862,9 +881,14 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, runPlace
 		median = medianAlong(members)
 	}
 
-	place := runPlace{group: g, along: median, at: g.at, newest: newestTimestamp(members, now)}
+	place := runPlace{group: g, along: median, at: g.at, newest: newestTimestamp(members)}
 	if place.at.IsZero() {
+		// A device clock running fast must not date a position ahead of the
+		// server.
 		place.at = place.newest
+		if place.at.After(now) {
+			place.at = now
+		}
 	}
 	est := TripEstimate{
 		Key:       key,
@@ -946,17 +970,13 @@ func medianSpeed(members []estimateMember) *float64 {
 	return &v
 }
 
-// newestTimestamp is the freshest member's timestamp, never in the future: a
-// device clock running fast must not date a position ahead of the server.
-func newestTimestamp(members []estimateMember, now time.Time) time.Time {
+// newestTimestamp is the freshest member's timestamp, as its device gave it.
+func newestTimestamp(members []estimateMember) time.Time {
 	newest := members[0].timestamp
 	for _, m := range members[1:] {
 		if m.timestamp.After(newest) {
 			newest = m.timestamp
 		}
-	}
-	if newest.After(now) {
-		return now
 	}
 	return newest
 }
