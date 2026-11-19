@@ -17,9 +17,9 @@
   }).addTo(map);
   L.control.zoom({ position: "bottomright" }).addTo(map);
 
-  // busIcon returns the shared divIcon markup used for every marker (live
-  // fleet vehicles and trail start/end points). There is only one visual
-  // style now that the map no longer distinguishes idle vehicles.
+  // busIcon returns the divIcon markup used for every vehicle marker. There is
+  // only one visual style now that the map no longer distinguishes idle
+  // vehicles.
   function busIcon() {
     return L.divIcon({
       className: "",
@@ -206,84 +206,5 @@
     if (n) n.textContent = String(v);
   }
 
-  // --- trail mode ---
-  async function renderTrail(url) {
-    try {
-      const data = await fetchJSON(url);
-      // Header first so a trip with no recorded points still shows its
-      // summary alongside the empty banner.
-      renderTripHeader(data.trip);
-      const pts = (data.points || []).map(p => [p.latitude, p.longitude]);
-      if (!pts.length) {
-        document.getElementById("empty-banner")?.classList.remove("hidden");
-        return;
-      }
-      L.polyline(pts, { color: "#0f766e", weight: 5, opacity: 0.85 }).addTo(map);
-      L.marker(pts[0], { icon: busIcon() }).addTo(map).bindPopup(trailPopup("Start", data.trip));
-      L.marker(pts[pts.length - 1], { icon: busIcon() }).addTo(map).bindPopup(trailPopup("End", data.trip));
-      map.fitBounds(pts, { padding: [40, 40] });
-    } catch (e) {
-      console.error("trail load failed", e);
-    }
-  }
-
-  // trailPopup builds a Start/End marker popup from trip metadata via DOM
-  // APIs only.
-  function trailPopup(kind, trip) {
-    const wrap = document.createElement("div");
-    wrap.className = "map-popup";
-
-    const header = document.createElement("div");
-    header.className = "map-popup__header";
-    const title = document.createElement("div");
-    title.className = "map-popup__title";
-    title.textContent = kind;
-    header.appendChild(title);
-    wrap.appendChild(header);
-
-    const meta = document.createElement("div");
-    meta.className = "map-popup__meta";
-    if (trip) {
-      meta.appendChild(metaRow("Vehicle", trip.vehicle_label || trip.vehicle_id || "—"));
-      meta.appendChild(metaRow("Driver", trip.driver_name || "—"));
-      meta.appendChild(metaRow("Route", trip.route_id || "—"));
-    }
-    wrap.appendChild(meta);
-
-    return wrap;
-  }
-
-  // renderTripHeader replaces the fleet sidebar with a summary of the trip
-  // being viewed, built entirely via DOM APIs.
-  function renderTripHeader(trip) {
-    const list = document.getElementById("fleet-list");
-    if (!list || !trip) return;
-    list.textContent = "";
-    setText("fleet-title", "Trip Detail");
-
-    const card = document.createElement("div");
-    card.className = "space-y-2";
-
-    const title = document.createElement("p");
-    title.className = "text-sm font-semibold text-slate-900";
-    title.textContent = trip.vehicle_label || trip.vehicle_id || "Trip";
-    card.appendChild(title);
-
-    card.appendChild(metaRow("Driver", trip.driver_name || "—"));
-    card.appendChild(metaRow("Route", trip.route_id || "—"));
-    card.appendChild(metaRow("Status", trip.status || "—"));
-    card.appendChild(metaRow("Started", trip.start_time || "—"));
-    if (trip.end_time) card.appendChild(metaRow("Ended", trip.end_time));
-
-    list.appendChild(card);
-  }
-
-  // Mode dispatch runs last so every let-bound module state (markers, fitted,
-  // timer) is initialized before startLive's first refresh touches it.
-  const tripUrl = el.dataset.tripUrl;
-  if (tripUrl) {
-    renderTrail(tripUrl);
-  } else {
-    startLive(el.dataset.liveUrl);
-  }
+  startLive(el.dataset.liveUrl);
 })();

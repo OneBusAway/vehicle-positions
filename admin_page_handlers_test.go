@@ -321,31 +321,35 @@ func TestMapPageLiveMode(t *testing.T) {
 	assert.NotContains(t, body, "data-trip-url")
 }
 
-// TestMapPageTrailMode verifies a numeric trip_id query param tags the map
-// container with the trail-locations data attribute.
-func TestMapPageTrailMode(t *testing.T) {
+// TestMapPageTripIDRedirectsToTripPage: a trip's trail was once drawn on the
+// map with ?trip_id=N. It has its own page now, so an old link goes there.
+func TestMapPageTripIDRedirectsToTripPage(t *testing.T) {
 	ui := newTestAdminUI(t)
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
-	req := httptest.NewRequest(http.MethodGet, "/admin/map?trip_id=42", nil)
-	req.AddCookie(cookieFor(t, "admin"))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), `data-trip-url="/api/v1/admin/trips/42/locations"`)
+	for raw, want := range map[string]string{"42": "/admin/trips/42", "042": "/admin/trips/42", "+42": "/admin/trips/42"} {
+		req := httptest.NewRequest(http.MethodGet, "/admin/map?trip_id="+url.QueryEscape(raw), nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusSeeOther, w.Code, raw)
+		assert.Equal(t, want, w.Header().Get("Location"), raw)
+	}
 }
 
-// TestMapPageInvalidTripIDReturns404 verifies a non-numeric trip_id is
-// rejected as 404 rather than silently falling back to live mode.
+// TestMapPageInvalidTripIDReturns404 verifies a trip_id that can't name a
+// trip is a 404 rather than a redirect or the live map.
 func TestMapPageInvalidTripIDReturns404(t *testing.T) {
 	ui := newTestAdminUI(t)
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
-	req := httptest.NewRequest(http.MethodGet, "/admin/map?trip_id=not-a-number", nil)
-	req.AddCookie(cookieFor(t, "admin"))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	for _, raw := range []string{"not-a-number", "0", "-5", "99999999999999999999"} {
+		req := httptest.NewRequest(http.MethodGet, "/admin/map?trip_id="+url.QueryEscape(raw), nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code, raw)
+	}
 }
 
 // TestAdminRootRedirect covers both branches of rootRedirect: an

@@ -10,8 +10,7 @@
     <!-- Map -->
     <div class="relative overflow-hidden rounded-[24px] border border-white/70 shadow-xl" style="height:calc(100vh - 9rem); min-height:480px">
       <div id="main-map" class="absolute inset-0"
-           data-live-url="/api/v1/admin/vehicles/live"
-           {{if .TripID}}data-trip-url="/api/v1/admin/trips/{{.TripID}}/locations"{{end}}></div>
+           data-live-url="/api/v1/admin/vehicles/live"></div>
 
       <!-- Empty-state banner, shown by JS when there's no data to display -->
       <div id="empty-banner" class="hidden pointer-events-none absolute inset-x-0 top-4 z-[500] flex justify-center">

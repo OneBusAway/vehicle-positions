@@ -319,23 +319,22 @@ func (ui *adminUI) renderAdminWithAlerts(w http.ResponseWriter, r *http.Request,
 	renderInto(w, status, ui.tmpl.admin, view, "base.html", data)
 }
 
-// mapPage renders the live fleet map, or (with a ?trip_id= query param) a
-// single trip's trail. trip_id must be a valid int64 when present; a
-// non-numeric value produces 404 rather than silently falling back to live
-// mode, since it can't identify any real trip.
+// mapPage renders the live map. A trip's trail was once drawn here with
+// ?trip_id=N; it has its own page now, so an old link is sent there. A
+// trip_id that is not a positive number can't name a trip and is a 404.
 func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
-	tripID := ""
 	if raw := r.URL.Query().Get("trip_id"); raw != "" {
-		if _, err := strconv.ParseInt(raw, 10, 64); err != nil {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id < 1 {
 			http.NotFound(w, r)
 			return
 		}
-		tripID = raw
+		http.Redirect(w, r, "/admin/trips/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		return
 	}
 	ui.renderAdmin(w, r, http.StatusOK, "map.html", map[string]interface{}{
-		"Title":  "Live map",
-		"Page":   "map",
-		"TripID": tripID,
+		"Title": "Live map",
+		"Page":  "map",
 	})
 }
 
