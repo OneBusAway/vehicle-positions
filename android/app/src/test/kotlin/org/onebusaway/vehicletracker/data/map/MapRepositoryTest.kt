@@ -1,6 +1,8 @@
 package org.onebusaway.vehicletracker.data.map
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -9,6 +11,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -29,6 +32,8 @@ class MapRepositoryTest {
     @get:Rule val tempFolder = TemporaryFolder()
 
     private val url = "https://maps.example.org/agency.pmtiles"
+    private val serverA = "https://a.example.org"
+    private val serverB = "https://b.example.org"
     private val v1 = FileVersion(etag = "\"v1\"")
     private val v2 = FileVersion(etag = "\"v2\"")
     private var clock = 1_790_000_000L
@@ -67,9 +72,14 @@ class MapRepositoryTest {
         return states
     }
 
-    /** A map that has been here since [checkedAt], its file on disk. */
-    private suspend fun mapHere(name: String = "map-a.pmtiles", checkedAt: Long = clock, from: String = url): File {
-        store.save(MapRecord(current = StoredMap(from, name, v1, checkedAt)))
+    /** A map [server] gave, here since [checkedAt], its file on disk. */
+    private suspend fun mapHere(
+        name: String = "map-a.pmtiles",
+        checkedAt: Long = clock,
+        from: String = url,
+        server: String = serverA,
+    ): File {
+        store.save(MapRecord(current = StoredMap(from, name, v1, checkedAt, server)))
         return File(dir, name).apply { writeText("map") }
     }
 
@@ -115,7 +125,7 @@ class MapRepositoryTest {
             ),
             states,
         )
-        assertEquals(MapRecord(current = StoredMap(url, target.name, v1, clock)), store.load())
+        assertEquals(MapRecord(current = StoredMap(url, target.name, v1, clock, serverA)), store.load())
     }
 
     @Test fun `progress is shown once per percent, not once per read`() = runTest {
@@ -200,7 +210,7 @@ class MapRepositoryTest {
         val new = fetcher.requests.single().target
         assertNotEquals(old, new)
         assertEquals(MapFileState.Ready(new), repository.state.value)
-        assertEquals(StoredMap(url, new.name, v2, clock), store.load().current)
+        assertEquals(StoredMap(url, new.name, v2, clock, serverA), store.load().current)
         assertTrue("an open map may be reading it", old.exists())
 
         started()
@@ -235,6 +245,151 @@ class MapRepositoryTest {
         assertEquals(url, request.url)
         assertNull("the old URL's version says nothing about the new one", request.knownVersion)
         assertEquals(url, store.load().current!!.url)
+    }
+
+    // Otherwise the last server's map stays for up to a day, checked as current (#461).
+    @Test fun `a map from another server is not current, so this one is asked at once, and the old file waits for the next start`() = runTest {
+        setUp()
+        val old = mapHere(from = "https://b-maps.example.org/b.pmtiles", server = serverB)
+        fetcher.steps += fetcher.complete(v2, progress = listOf(50L to 100L))
+        val repository = started()
+        val states = statesOf(repository)
+
+        repository.refresh()
+        settle()
+
+        val new = fetcher.requests.single().target
+        assertNull("another file says nothing about this one", fetcher.requests.single().knownVersion)
+        assertEquals(
+            "off the screen at once, then downloaded as a first copy",
+            listOf(MapFileState.Ready(old), MapFileState.None, MapFileState.Downloading(50, 100), MapFileState.Ready(new)),
+            states,
+        )
+        assertEquals(StoredMap(url, new.name, v2, clock, serverA), store.load().current)
+        assertTrue("a map on screen may still be reading it", old.exists())
+
+        started()
+
+        assertFalse(old.exists())
+    }
+
+    @Test fun `a map from another server stays off the screen while this one can't be reached`() = runTest {
+        setUp()
+        mapHere(from = "https://b-maps.example.org/b.pmtiles", server = serverB)
+        server.default = MapServerAnswer.Unreachable
+        val repository = started()
+
+        repository.refresh()
+        advanceTimeBy(FIRST_RETRY_MS + 1)
+
+        assertEquals(MapFileState.Failed(MapFailure.NETWORK), repository.state.value)
+        assertEquals("retried as with no map here", 2, server.askedAt.size)
+    }
+
+    /** Signed in to B from A with A's map here, B's check ending with [onB], then signed in to A again. */
+    private suspend fun TestScope.backFromB(onB: MapServerAnswer): MapRepository {
+        setUp()
+        mapHere()
+        val repository = started()
+        server.answers += onB
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        settle()
+        assertEquals("B's check left the map off the screen", 1, server.askedAt.size)
+        assertFalse(repository.state.value is MapFileState.Ready)
+
+        sessions.state.value = signedIn.copy(token = "jwt2", issuedAtEpochSec = 900L)
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+        return repository
+    }
+
+    // B's check ended without a map in A's place, and the map stayed blank until the next start or the day's check.
+    @Test fun `back on the last server from one that can't be reached, its map is shown again without asking`() = runTest {
+        val repository = backFromB(MapServerAnswer.Unreachable)
+
+        assertEquals(MapFileState.Ready(File(dir, "map-a.pmtiles")), repository.state.value)
+        assertEquals("B's retry stopped and A was not asked", 1, server.askedAt.size)
+        assertTrue(fetcher.requests.isEmpty())
+    }
+
+    @Test fun `back on the last server from one that refused the token, its map is shown again without asking`() = runTest {
+        val repository = backFromB(MapServerAnswer.SignedOut)
+
+        assertEquals(MapFileState.Ready(File(dir, "map-a.pmtiles")), repository.state.value)
+        assertEquals(1, server.askedAt.size)
+    }
+
+    // B's first download left its part file pending, so A is asked: the map is shown again while it is.
+    @Test fun `back on the last server during the next one's first download, its map is shown while it can't be reached`() = runTest {
+        setUp()
+        val map = mapHere()
+        val repository = started()
+        server.answers += MapServerAnswer.File("https://b-maps.example.org/b.pmtiles")
+        server.default = MapServerAnswer.Unreachable
+        fetcher.steps += FakeFetcher.Step { request, onVersion, onProgress ->
+            onVersion(v1)
+            request.part.writeText("partial")
+            onProgress(10, 100)
+            awaitCancellation()
+        }
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        settle()
+        assertEquals(MapFileState.Downloading(10, 100), repository.state.value)
+
+        sessions.state.value = signedIn.copy(token = "jwt2", issuedAtEpochSec = 900L)
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals("asked once, then left for the next refresh as a map is here", 2, server.askedAt.size)
+    }
+
+    @Test fun `the same file from another server is only checked, not downloaded again`() = runTest {
+        setUp()
+        val map = mapHere(server = serverB)
+        fetcher.steps += fetcher.unchanged()
+        val repository = started()
+
+        repository.refresh()
+        settle()
+
+        assertEquals(v1, fetcher.requests.single().knownVersion)
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals(StoredMap(url, map.name, v1, clock, serverA), store.load().current)
+    }
+
+    // Written as an older build wrote map.json, with no server. Before this, a map was saved only while signed in, and
+    // a phone holding another server's map is the bug being fixed, so it stays shown but is asked about at once.
+    @Test fun `a map saved by an older build still loads, stays shown, and is asked about at once`() = runTest {
+        setUp()
+        File(dir, "map.json").writeText(
+            """{"current":{"url":"$url","fileName":"map-a.pmtiles","version":{"etag":"\"v1\""},"checkedAtEpochSec":$clock}}""",
+        )
+        val map = File(dir, "map-a.pmtiles").apply { writeText("map") }
+        fetcher.steps += fetcher.unchanged()
+        val repository = started()
+        val states = statesOf(repository)
+
+        assertEquals(StoredMap(url, map.name, v1, clock), store.load().current)
+        repository.refresh()
+        settle()
+
+        assertEquals("a conditional check, not a download", v1, fetcher.requests.single().knownVersion)
+        assertEquals(listOf(MapFileState.Ready(map)), states)
+        assertEquals(serverA, store.load().current!!.server)
+    }
+
+    @Test fun `with nobody signed in, nobody is asked`() = runTest {
+        setUp()
+        sessions.state.value = signedIn.copy(token = null)
+        val repository = started()
+
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+
+        assertTrue(server.askedAt.isEmpty())
     }
 
     @Test fun `one refresh at a time`() = runTest {
@@ -349,6 +504,102 @@ class MapRepositoryTest {
 
         assertEquals("both asked", 2, server.askedAt.size)
         assertEquals("only the new sign-in's check went on", 1, server.answered)
+    }
+
+    // The new sign-in's refresh used to be skipped as already under way, and wait out the old backoff (#461).
+    @Test fun `signing out and back in to the same server while a retry waits asks at once, and retries from 5 s`() = runTest {
+        setUp()
+        server.default = MapServerAnswer.Unreachable
+        val repository = started()
+        repository.refresh()
+        advanceTimeBy(5 * 60_000L)
+        val before = server.askedAt.size
+
+        sessions.state.value = signedIn.copy(token = null)
+        runCurrent()
+        sessions.state.value = signedIn.copy(token = "jwt2", issuedAtEpochSec = 900L)
+        val start = testScheduler.currentTime
+        repository.refresh()
+        advanceTimeBy(60_000L)
+
+        val asked = server.askedAt.drop(before)
+        assertEquals("at once", start, asked.first())
+        assertEquals(listOf(5_000L, 10_000L), asked.zipWithNext { a, b -> b - a }.take(2))
+    }
+
+    // Left at Downloading, the progress note stayed until a later check, never if that one ended signed out (#461).
+    @Test fun `a first download stopped for the next sign-in doesn't leave its progress showing`() = runTest {
+        setUp()
+        server.answers += MapServerAnswer.File(url)
+        server.answers += MapServerAnswer.SignedOut
+        fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
+            onProgress(10, 100)
+            awaitCancellation()
+        }
+        val repository = started()
+        repository.refresh()
+        settle()
+        assertEquals(MapFileState.Downloading(10, 100), repository.state.value)
+
+        sessions.state.value = signedIn.copy(serverUrl = "https://b.example.org/")
+        repository.refresh()
+        settle()
+
+        assertEquals(2, server.askedAt.size)
+        assertEquals(MapFileState.None, repository.state.value)
+    }
+
+    // The next sign-in's refresh lands as the download finishes: the check is stopped while the record is saved.
+    @Test fun `a first download stopped as it is saved doesn't leave its progress showing`() = runTest {
+        setUp()
+        server.answers += MapServerAnswer.File(url)
+        server.answers += MapServerAnswer.SignedOut
+        lateinit var repository: MapRepository
+        fetcher.steps += FakeFetcher.Step { request, _, onProgress ->
+            onProgress(100, 100)
+            request.target.writeText("map")
+            sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+            repository.refresh()
+            FetchResult.Complete(v1, 3)
+        }
+        repository = started()
+        repository.refresh()
+        settle()
+
+        assertEquals(2, server.askedAt.size)
+        assertEquals(MapFileState.None, repository.state.value)
+    }
+
+    // A refresh stopped while it waits for the last one to stop no longer waits for it, so the one after can start
+    // while the first is still stopping.
+    @Test fun `a check still stopping leaves the next check's progress showing`() = runTest {
+        setUp()
+        fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
+            onProgress(10, 100)
+            try {
+                awaitCancellation()
+            } finally {
+                withContext(NonCancellable) { delay(1_000) }
+            }
+        }
+        fetcher.steps += FakeFetcher.Step { _, _, onProgress ->
+            onProgress(20, 100)
+            awaitCancellation()
+        }
+        val repository = started()
+        repository.refresh()
+        settle()
+
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        runCurrent()
+        sessions.state.value = signedIn.copy(email = "e@example.com")
+        repository.refresh()
+        runCurrent()
+        assertEquals(MapFileState.Downloading(20, 100), repository.state.value)
+        settle()
+
+        assertEquals(MapFileState.Downloading(20, 100), repository.state.value)
     }
 
     @Test fun `with a map here, a failed check waits for the next refresh`() = runTest {

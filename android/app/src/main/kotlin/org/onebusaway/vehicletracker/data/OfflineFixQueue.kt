@@ -79,8 +79,11 @@ interface OfflineFixQueue {
 /** What [OfflineFixQueue] holds: when each fix was taken, oldest first, and the account it was last handed to. */
 data class QueueContents(val timestamps: List<Long>, val owner: String?)
 
+/** The server as the queue and the saved map compare it: the same base URL with or without a trailing slash. */
+fun normalizedServerUrl(serverUrl: String) = serverUrl.trimEnd('/')
+
 /** The account [OfflineFixQueue.claimFor] compares: the same server and email however they were typed. */
-fun offlineQueueAccount(serverUrl: String, email: String) = "${serverUrl.trimEnd('/')} ${email.trim().lowercase()}"
+fun offlineQueueAccount(serverUrl: String, email: String) = "${normalizedServerUrl(serverUrl)} ${email.trim().lowercase()}"
 
 /**
  * Keeps the queue as one JSON report per line in [file], so it survives the tracking service and
