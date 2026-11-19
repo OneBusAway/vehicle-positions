@@ -205,7 +205,7 @@ func (ui *adminUI) dashboardPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	if vehicles == 0 || drivers == 0 {
+	if needsWelcome(vehicles, drivers) {
 		ui.renderAdmin(w, r, http.StatusOK, "dashboard.html", map[string]interface{}{
 			"Title":   "Welcome",
 			"Page":    "dashboard",
@@ -638,6 +638,10 @@ func overviewSystem(in overviewInput, loc *time.Location) []overviewSystemRow {
 	}
 	return []overviewSystemRow{feed, schedule, riders}
 }
+
+// needsWelcome reports whether a server with these active vehicles and
+// drivers has nothing to show yet, so the welcome comes before the map.
+func needsWelcome(vehicles, drivers int) bool { return vehicles == 0 || drivers == 0 }
 
 // welcomeStep is one of the welcome's four steps.
 type welcomeStep struct {

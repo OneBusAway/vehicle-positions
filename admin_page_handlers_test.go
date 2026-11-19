@@ -120,10 +120,11 @@ func TestAdminLoginFlow(t *testing.T) {
 		return w
 	}
 
-	t.Run("success sets cookie and redirects", func(t *testing.T) {
+	t.Run("success sets cookie and lands on the live map", func(t *testing.T) {
+		ui.stats = &fakeAdminStats{vehicles: 3, drivers: 2}
 		w := post(admin.Email, "password123")
 		assert.Equal(t, http.StatusSeeOther, w.Code)
-		assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+		assert.Equal(t, "/admin/map", w.Header().Get("Location"))
 		require.NotEmpty(t, w.Result().Cookies())
 		assert.Equal(t, sessionCookieName, w.Result().Cookies()[0].Name)
 	})
@@ -366,10 +367,11 @@ func TestMapPageInvalidTripIDReturns404(t *testing.T) {
 }
 
 // TestAdminRootRedirect covers both branches of rootRedirect: an
-// authenticated visitor goes straight to the dashboard, an unauthenticated
+// authenticated visitor goes straight to the live map, an unauthenticated
 // one goes to the login page.
 func TestAdminRootRedirect(t *testing.T) {
 	ui := newTestAdminUI(t)
+	ui.stats = &fakeAdminStats{vehicles: 3, drivers: 2}
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 
@@ -379,7 +381,7 @@ func TestAdminRootRedirect(t *testing.T) {
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusSeeOther, w.Code)
-		assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+		assert.Equal(t, "/admin/map", w.Header().Get("Location"))
 	})
 
 	t.Run("unauthenticated", func(t *testing.T) {
@@ -392,10 +394,11 @@ func TestAdminRootRedirect(t *testing.T) {
 }
 
 // TestAdminLoginPageRedirectsWhenAlreadyAuthenticated ensures a signed-in
-// admin hitting the login page is bounced to the dashboard instead of seeing
+// admin hitting the login page is bounced to the live map instead of seeing
 // the form again.
 func TestAdminLoginPageRedirectsWhenAlreadyAuthenticated(t *testing.T) {
 	ui := newTestAdminUI(t)
+	ui.stats = &fakeAdminStats{vehicles: 3, drivers: 2}
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 	req := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
@@ -403,7 +406,97 @@ func TestAdminLoginPageRedirectsWhenAlreadyAuthenticated(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusSeeOther, w.Code)
-	assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+	assert.Equal(t, "/admin/map", w.Header().Get("Location"))
+}
+
+// TestAdminLandsOnMapOrWelcome drives the three ways a signed-in admin is
+// sent home: signing in with no next, /admin, and the sign-in page while
+// signed in. Each opens the live map, or the welcome while the server has no
+// vehicle or no driver yet.
+func TestAdminLandsOnMapOrWelcome(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcryptCost)
+	require.NoError(t, err)
+	admin := &User{ID: 1, Email: "boss@test.com", PasswordHash: string(hash), Role: roleAdmin, Active: true}
+	ways := map[string]func(t *testing.T) *http.Request{
+		"sign in": func(t *testing.T) *http.Request {
+			req := httptest.NewRequest(http.MethodPost, "/admin/login", strings.NewReader(url.Values{"email": {admin.Email}, "password": {"password123"}}.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			return req
+		},
+		"/admin": func(t *testing.T) *http.Request {
+			req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+			req.AddCookie(cookieFor(t, roleAdmin))
+			return req
+		},
+		"sign-in page while signed in": func(t *testing.T) *http.Request {
+			req := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
+			req.AddCookie(cookieFor(t, roleAdmin))
+			return req
+		},
+	}
+	servers := []struct {
+		name  string
+		stats *fakeAdminStats
+		want  string
+	}{
+		{"with a fleet", &fakeAdminStats{vehicles: 3, drivers: 2}, "/admin/map"},
+		{"with no vehicles yet", &fakeAdminStats{drivers: 2}, "/admin/dashboard"},
+	}
+	for way, request := range ways {
+		for _, server := range servers {
+			t.Run(way+" "+server.name, func(t *testing.T) {
+				ui := newTestAdminUI(t)
+				ui.users = &fakeUserFetcher{users: map[string]*User{admin.Email: admin}}
+				ui.stats = server.stats
+				mux := http.NewServeMux()
+				registerAdminUI(mux, ui)
+				w := httptest.NewRecorder()
+				mux.ServeHTTP(w, request(t))
+				assert.Equal(t, http.StatusSeeOther, w.Code)
+				assert.Equal(t, server.want, w.Header().Get("Location"))
+			})
+		}
+	}
+}
+
+// driverCountFails counts vehicles and fails to count drivers, so the second
+// of home's two counts is the one that fails.
+type driverCountFails struct{ fakeAdminStats }
+
+func (driverCountFails) CountActiveUsersByRole(_ context.Context, _ string) (int, error) {
+	return 0, errors.New("boom")
+}
+
+// TestAdminHome: after sign-in an admin lands on the live map, unless the
+// server has no vehicle or no driver yet, when the welcome comes first. A
+// count that fails is logged and still lands on the map.
+func TestAdminHome(t *testing.T) {
+	cases := []struct {
+		name  string
+		stats adminStatsStore
+		want  string
+		log   string
+	}{
+		{"vehicles and drivers", &fakeAdminStats{vehicles: 3, drivers: 2}, "/admin/map", ""},
+		{"no vehicles yet", &fakeAdminStats{drivers: 2}, "/admin/dashboard", ""},
+		{"no drivers yet", &fakeAdminStats{vehicles: 3}, "/admin/dashboard", ""},
+		{"vehicle count fails", &erroringAdminStats{}, "/admin/map", "admin home: count active vehicles"},
+		{"driver count fails", &driverCountFails{fakeAdminStats{vehicles: 3}}, "/admin/map", "admin home: count active drivers"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := captureLogs(t)
+			ui := newTestAdminUI(t)
+			ui.stats = tc.stats
+			assert.Equal(t, tc.want, ui.home(context.Background()))
+			if tc.log == "" {
+				assert.Empty(t, logs.String())
+			} else {
+				assert.Contains(t, logs.String(), "level=ERROR")
+				assert.Contains(t, logs.String(), tc.log)
+			}
+		})
+	}
 }
 
 // TestDashboardStoreErrorReturns500 verifies a stats-store failure produces a

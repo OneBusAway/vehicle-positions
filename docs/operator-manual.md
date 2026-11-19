@@ -71,7 +71,8 @@ address in any one minute, and then makes you pause.
 must be at least 8 characters and no more than 72 bytes — in practice 72
 letters, or fewer if you use accented letters or other non-English characters.
 
-Signing in opens **Overview**. The menu down the left side has three groups:
+Signing in opens **Live map**, or the welcome on **Overview** while the server
+has no vehicle or no driver yet. The menu down the left side has three groups:
 **Live map**, **Alerts** and **Trips**; **Overview**, **Analytics**, **Rider
 mode** and **Feed health**; and **Vehicles**, **Drivers and users**, **Driver
 setup** and **API keys**. **Fold menu** at its foot shrinks it to icons. On a

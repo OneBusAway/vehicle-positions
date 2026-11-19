@@ -202,16 +202,40 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 
 func (ui *adminUI) rootRedirect(w http.ResponseWriter, r *http.Request) {
 	if _, ok := adminClaimsFromCookie(r, ui.jwtSecret, ui.tokenChecker); ok {
-		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+		http.Redirect(w, r, ui.home(r.Context()), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }
 
+// home is where a signed-in admin starts: the live map, or the welcome on
+// the Overview while the server has no vehicle or no driver to show on it.
+// A count that fails is logged and the admin goes to the map, which does
+// not need it.
+func (ui *adminUI) home(ctx context.Context) string {
+	vehicles, err := ui.stats.CountActiveVehicles(ctx)
+	if err != nil {
+		slog.Error("admin home: count active vehicles", "error", err)
+		return "/admin/map"
+	}
+	drivers, err := ui.stats.CountActiveUsersByRole(ctx, roleDriver)
+	if err != nil {
+		slog.Error("admin home: count active drivers", "error", err)
+		return "/admin/map"
+	}
+	if needsWelcome(vehicles, drivers) {
+		return "/admin/dashboard"
+	}
+	return "/admin/map"
+}
+
 func (ui *adminUI) loginPage(w http.ResponseWriter, r *http.Request) {
 	next := loginNext(r.URL.Query().Get("next"))
 	if _, ok := adminClaimsFromCookie(r, ui.jwtSecret, ui.tokenChecker); ok {
-		http.Redirect(w, r, cmp.Or(next, "/admin/dashboard"), http.StatusSeeOther)
+		if next == "" {
+			next = ui.home(r.Context())
+		}
+		http.Redirect(w, r, next, http.StatusSeeOther)
 		return
 	}
 	ui.renderLogin(w, http.StatusOK, "", "", next)
@@ -272,7 +296,10 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, r, token, ui.cfg.trustProxy)
-	http.Redirect(w, r, cmp.Or(next, "/admin/dashboard"), http.StatusSeeOther)
+	if next == "" {
+		next = ui.home(r.Context())
+	}
+	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
 // renderLogin renders the login form with the given status (renderInto
