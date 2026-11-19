@@ -33,12 +33,17 @@ final class AppContainer {
             history: history,
             makeAPI: { url, tokens in
                 try TrackerClient(baseURL: url, tokens: tokens, refresher: refresher)
-            }
+            },
+            alerts: NotificationDriverAlerts()
         )
         self.session = session
         // iOS takes a background task only before the app finishes
         // launching, and `VehicleTrackerApp` builds this as it starts.
         history.registerBackgroundTask { [weak session] in session?.sendKeptReports() }
+        // The container is built at launch, including a background relaunch
+        // by iOS mid-trip, which is when Core Location lets the session be
+        // recreated.
+        BackgroundRelaunch.resumeIfInBackground(session)
         serverSetup = ServerSetup(session: session)
         screenAwake = ScreenAwakeCoordinator(power: DevicePowerSource(), idleTimer: ApplicationIdleTimer())
     }

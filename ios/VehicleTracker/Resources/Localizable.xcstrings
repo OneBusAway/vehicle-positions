@@ -24684,6 +24684,9 @@
         }
       }
     },
+    "Location stopped. Open the app and tap Resume." : {
+      "comment" : "Notification body: the location stream ended mid-trip and only Resume in the app restarts it."
+    },
     "Map" : {
       "comment" : "During a trip: the heading over two choices, with a picture each, of what is at the top of the map."
     },
@@ -27488,6 +27491,9 @@
         }
       }
     },
+    "Not reporting your position" : {
+      "comment" : "Notification title: the trip's reports have stopped and riders can't see the bus."
+    },
     "Not set" : {
       "comment" : "VoiceOver value of the occupancy row when the driver has not chosen one.",
       "localizations" : {
@@ -30094,6 +30100,9 @@
           }
         }
       }
+    },
+    "Open the app on iPhone to carry on reporting." : {
+      "comment" : "Notification body: iOS stopped the app's location reports in the background until the driver opens it."
     },
     "Opens in the browser" : {
       "comment" : "Privacy, under 'Your agency's privacy policy'."
@@ -50591,6 +50600,12 @@
     "The app asks for location when you start a trip." : {
       "comment" : "Settings, under 'Not ready to report', when the app has not asked for location yet."
     },
+    "The app closed during your trip and you need to sign in again. Open it to resume." : {
+      "comment" : "Notification body: iOS relaunched the app in the background mid-trip, but the sign-in had run out, so the trip can't carry on until the driver signs in."
+    },
+    "The app closed during your trip. Open it to resume." : {
+      "comment" : "Notification body: iOS relaunched the app in the background mid-trip, but the trip needs the driver to resume it."
+    },
     "The app closed while this trip was running. Reports are paused until you choose." : {
       "comment" : "Under the Resume screen's title.",
       "localizations" : {
@@ -59700,6 +59715,9 @@
           }
         }
       }
+    },
+    "You were signed out. Open the app and sign in to carry on reporting." : {
+      "comment" : "Notification body: the server refused the reports because the sign-in could not be renewed."
     },
     "You're not assigned to vehicle %@." : {
       "comment" : "Banner when the server refused a start because the driver is not assigned to the vehicle: the fleet number, e.g. 'You're not assigned to vehicle 4317.'",
