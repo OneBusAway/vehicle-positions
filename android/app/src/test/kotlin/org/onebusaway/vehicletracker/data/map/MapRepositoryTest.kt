@@ -158,6 +158,81 @@ class MapRepositoryTest {
         assertFalse("gone at the next start", map.exists())
     }
 
+    // B's "no map" used to save an empty record, so back on A the whole map downloaded again (#473).
+    @Test fun `a server with no map keeps the last server's map, shown again without asking when it is signed in`() = runTest {
+        setUp()
+        server.answers += MapServerAnswer.File(url)
+        server.answers += MapServerAnswer.NoMap
+        fetcher.steps += fetcher.complete(v1)
+        val repository = started()
+        repository.refresh()
+        settle()
+        val map = fetcher.requests.single().target
+
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        repository.refresh()
+        settle()
+
+        assertEquals("B's no map shows the plain map", MapFileState.None, repository.state.value)
+        assertEquals(MapRecord(current = StoredMap(url, map.name, v1, clock, serverA)), store.load())
+
+        sessions.state.value = signedIn.copy(token = "jwt2", issuedAtEpochSec = 900L)
+        repository.refresh()
+        advanceTimeBy(60 * 60_000L)
+
+        assertEquals(MapFileState.Ready(map), repository.state.value)
+        assertEquals("A not asked while its map is recent", 2, server.askedAt.size)
+        assertEquals("not downloaded again", 1, fetcher.requests.size)
+        started()
+        assertTrue("kept at the next start", map.exists())
+    }
+
+    // It counts as this server's, so it goes as this server's own map does.
+    @Test fun `no map from the server drops a map saved by an older build`() = runTest {
+        setUp()
+        val map = mapHere()
+        store.save(MapRecord(current = store.load().current!!.copy(server = null)))
+        server.answers += MapServerAnswer.NoMap
+        val repository = started()
+
+        repository.refresh()
+        settle()
+
+        assertEquals(MapRecord(), store.load())
+        assertEquals(MapFileState.None, repository.state.value)
+        assertTrue("a map on screen may still be reading it", map.exists())
+    }
+
+    // The client follows the session a moment behind, and used to ask A for B: A's map was then saved as B's (#473).
+    @Test fun `while the app still asks the last server, nothing is saved as the new one's map`() = runTest {
+        setUp()
+        mapHere()
+        fetcher.steps += fetcher.unchanged()
+        val repository = started()
+        sessions.state.value = signedIn.copy(serverUrl = "$serverB/")
+        server.pointsAt = serverA
+
+        repository.refresh()
+        settle()
+
+        assertEquals("asked about B", listOf(serverB), server.askedFor)
+        assertTrue("and nobody asked", server.askedAt.isEmpty())
+        assertEquals("A's map is not relabelled B's", serverA, store.load().current!!.server)
+        assertEquals("no failure shown meanwhile", MapFileState.None, repository.state.value)
+
+        server.pointsAt = null
+        server.answers += MapServerAnswer.File("https://b-maps.example.org/b.pmtiles")
+        fetcher.steps.clear()
+        fetcher.steps += fetcher.complete(v2)
+        advanceTimeBy(FIRST_RETRY_MS)
+        runCurrent()
+
+        assertEquals("B asked once the client caught up", 1, server.askedAt.size)
+        val b = store.load().current!!
+        assertEquals("https://b-maps.example.org/b.pmtiles" to serverB, b.url to b.server)
+        assertEquals(MapFileState.Ready(File(dir, b.fileName)), repository.state.value)
+    }
+
     @Test fun `a check within a day asks nobody`() = runTest {
         setUp()
         mapHere(checkedAt = clock - day + 60)
@@ -451,7 +526,7 @@ class MapRepositoryTest {
         return server.askedAt.size
     }
 
-    // The server asks whoever is signed in when it runs, so a retry left going would ask the next sign-in's server.
+    // A retry left going would keep asking about a server nobody is signed in to.
     @Test fun `a retry stops once its driver signs out`() = runTest {
         assertEquals(1, asksOnceSignedInAs(signedIn.copy(token = null)))
     }
@@ -775,7 +850,15 @@ class MapRepositoryTest {
         var now: () -> Long = { 0 }
         var gate: CompletableDeferred<Unit>? = null
 
-        override suspend fun ask(): MapServerAnswer {
+        /** The servers it was asked about. */
+        val askedFor = mutableListOf<String>()
+
+        /** The server the app's API client is still set up for, when it isn't the one asked about. */
+        var pointsAt: String? = null
+
+        override suspend fun ask(server: String): MapServerAnswer {
+            askedFor += server
+            if (pointsAt != null && pointsAt != server) return MapServerAnswer.OtherServer
             askedAt += now()
             gate?.await()
             answered++

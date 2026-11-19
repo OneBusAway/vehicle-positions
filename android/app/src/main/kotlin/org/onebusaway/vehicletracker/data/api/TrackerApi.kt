@@ -46,3 +46,6 @@ interface RefreshApi {
 fun interface TrackerApiProvider {
     fun get(): TrackerApi
 }
+
+/** A [TrackerApi] and the server URL it sends to, as the session gave it. */
+data class BoundApi(val serverUrl: String, val api: TrackerApi)

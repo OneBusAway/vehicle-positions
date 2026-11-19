@@ -1,9 +1,9 @@
 package org.onebusaway.vehicletracker.data.map
 
 import kotlinx.coroutines.CancellationException
-import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
+import org.onebusaway.vehicletracker.data.api.BoundApi
+import org.onebusaway.vehicletracker.data.normalizedServerUrl
 import retrofit2.HttpException
-import javax.inject.Inject
 
 /** What the server says about the agency's map file. */
 sealed interface MapServerAnswer {
@@ -17,18 +17,32 @@ sealed interface MapServerAnswer {
 
     /** No answer: no network, a server error, or a reply that is not one. */
     data object Unreachable : MapServerAnswer
+
+    /** Not asked: the app's API client is still set up for another server, as for a moment after a sign-in. */
+    data object OtherServer : MapServerAnswer
 }
 
 /** Asks the server where the agency's map file is. An interface so [MapRepository] can be tested without one. */
 fun interface MapServer {
-    suspend fun ask(): MapServerAnswer
+    /** Asks [server], as [normalizedServerUrl] gives it, and no other. */
+    suspend fun ask(server: String): MapServerAnswer
 }
 
-class TrackerMapServer @Inject constructor(private val apiProvider: TrackerApiProvider) : MapServer {
-    override suspend fun ask(): MapServerAnswer = try {
-        apiProvider.get().mapConfig().pmtilesUrl?.takeIf { it.isNotBlank() }
-            ?.let { MapServerAnswer.File(it) }
-            ?: MapServerAnswer.NoMap
+/**
+ * Asks through the app's API client, and only while it is set up for the server asked about. The client follows the
+ * session a moment behind, so just after a sign-in it can still send to the last server: that server's answer would be
+ * saved as the new one's map, and if it refused the old token, the request would go to it again with the new one.
+ */
+class TrackerMapServer(private val boundApi: () -> BoundApi?) : MapServer {
+    override suspend fun ask(server: String): MapServerAnswer = try {
+        val bound = boundApi()
+        if (bound == null || normalizedServerUrl(bound.serverUrl) != server) {
+            MapServerAnswer.OtherServer
+        } else {
+            bound.api.mapConfig().pmtilesUrl?.takeIf { it.isNotBlank() }
+                ?.let { MapServerAnswer.File(it) }
+                ?: MapServerAnswer.NoMap
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (e: HttpException) {

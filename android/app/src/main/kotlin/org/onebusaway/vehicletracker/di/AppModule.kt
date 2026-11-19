@@ -37,6 +37,7 @@ import org.onebusaway.vehicletracker.data.sessionDataStore
 import org.onebusaway.vehicletracker.data.tripStateDataStore
 import org.onebusaway.vehicletracker.data.vehiclePrefsDataStore
 import org.onebusaway.vehicletracker.data.api.ApiFactory
+import org.onebusaway.vehicletracker.data.api.BoundApi
 import org.onebusaway.vehicletracker.data.api.TokenRefresher
 import org.onebusaway.vehicletracker.data.api.TrackerApi
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
@@ -168,7 +169,20 @@ class ApiHolder(private val sessionStore: SessionStore, scope: CoroutineScope, c
      */
     fun api(): TrackerApi {
         ensureSeeded()
-        val url = serverUrl.orEmpty()
+        return apiFor(serverUrl.orEmpty())
+    }
+
+    /**
+     * [api] with the server URL it sends to, read once so the two agree, or null with no server. The URL follows the
+     * session a moment behind it, so a caller that must ask a given server checks it is this one.
+     */
+    fun boundApi(): BoundApi? {
+        ensureSeeded()
+        val url = serverUrl ?: return null
+        return BoundApi(url, apiFor(url))
+    }
+
+    private fun apiFor(url: String): TrackerApi {
         val existing = cachedApi
         if (existing != null && cachedApiUrl == url) return existing
         return apiFactory.create(url).also {
@@ -268,7 +282,7 @@ object AppModule {
     fun provideMapFileFetcher(): MapFileFetcher = MapFileDownloader(MapFileDownloader.client())
 
     @Provides
-    fun provideMapServer(apiProvider: TrackerApiProvider): MapServer = TrackerMapServer(apiProvider)
+    fun provideMapServer(holder: ApiHolder): MapServer = TrackerMapServer(holder::boundApi)
 
     @Provides
     fun provideMapFileSource(repository: MapRepository): MapFileSource = repository

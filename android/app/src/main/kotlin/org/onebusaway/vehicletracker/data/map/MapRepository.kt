@@ -121,8 +121,8 @@ class MapRepository @Inject constructor(
         var wait = FIRST_RETRY_MS
         while (orLogged("The map check", otherwise = { failed(MapFailure.UNEXPECTED, retry = false) }) { check(signIn.server) } == Outcome.RETRY) {
             val nudged = waitToRetry(wait)
-            // The server asks whoever is signed in by now. After a sign-out, or with another driver or server, this
-            // retry is no longer theirs: the next sign-in's own refresh asks.
+            // After a sign-out, or with another driver or server, this retry is no longer theirs: the next sign-in's own
+            // refresh asks.
             if (orLogged("Reading the session", otherwise = { null }) { signIn() } != signIn) return
             wait = if (nudged) FIRST_RETRY_MS else (wait * 2).coerceAtMost(LAST_RETRY_MS)
         }
@@ -152,16 +152,20 @@ class MapRepository @Inject constructor(
         if (current != null && _state.value !is MapFileState.Ready) _state.value = MapFileState.Ready(store.file(current.fileName))
         if (current?.server == signedInTo && record.pending == null && isRecent(current.checkedAtEpochSec)) return Outcome.DONE
 
-        val url = when (val answer = server.ask()) {
+        val url = when (val answer = server.ask(signedInTo)) {
             is MapServerAnswer.File -> answer.url
             MapServerAnswer.NoMap -> {
-                // The files stay until the next start: a map on screen may be reading one.
-                if (record != MapRecord()) store.save(MapRecord())
+                // This server's map goes. Another server's is kept for when that server is signed in again. The files
+                // stay until the next start: a map on screen may be reading one.
+                val left = MapRecord(current = kept?.takeIf { current == null })
+                if (record != left) store.save(left)
                 _state.value = MapFileState.None
                 return Outcome.DONE
             }
             MapServerAnswer.SignedOut -> return Outcome.DONE
             MapServerAnswer.Unreachable -> return failed(MapFailure.NETWORK)
+            // The client catches up with the sign-in in a moment: asked again then, with nothing shown meanwhile.
+            MapServerAnswer.OtherServer -> return Outcome.RETRY
         }
 
         val rejected = record.rejected?.takeIf { it.url == url }
