@@ -59,7 +59,11 @@
   function compass(b) { return ["North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"][Math.round((((b % 360) + 360) % 360) / 45) % 8]; }
   function headsign(v) { return heads[v.gtfs_trip_id] || ""; }
   function speed(v) { return Math.round(v.speed * 3.6) + " km/h"; }
-  function pads() { return { paddingTopLeft: [listOpen && !phone.matches ? 352 : 24, 84], paddingBottomRight: [picked && !phone.matches ? 384 : 72, phone.matches ? 220 : 48] }; }
+  // On a desktop the route chips wrap to more rows when there are many routes. The list starts below the last row,
+  // and a fit keeps the vehicles out from under them.
+  function chipsH() { return Math.max(36, $("map-chips").offsetHeight); }
+  new ResizeObserver(function () { root.style.setProperty("--chips", chipsH() + "px"); }).observe($("map-chips"));
+  function pads() { return { paddingTopLeft: [listOpen && !phone.matches ? 352 : 24, phone.matches ? 84 : chipsH() + 48], paddingBottomRight: [picked && !phone.matches ? 384 : 72, phone.matches ? 220 : 48] }; }
   // A rebuilt list, chip row or card keeps the keyboard where it was, or on the fallback when that control is gone.
   function keepFocus(host, build, fallback) {
     var key = host.contains(document.activeElement) ? document.activeElement.dataset.key : null;
@@ -182,6 +186,8 @@
       if (picked === id) { $("map-said").textContent = markers[id].v.label + " is no longer on the map."; closeCard(true); }
       map.removeLayer(markers[id].mk); delete markers[id];
     });
+    // The chips come first, so the first fit knows how many rows of them there are.
+    chips(live);
     if (firstPaint) {
       if (live.count) fit(false); else placeOnSchedule();
       requestAnimationFrame(function () { requestAnimationFrame(function () { box.classList.remove("no-glide"); }); });
@@ -189,7 +195,7 @@
     $("map-empty").hidden = live.count > 0;
     $("map-stale").hidden = true; box.classList.remove("stale");
     dense();
-    chips(live); list(live);
+    list(live);
     if (picked && markers[picked]) {
       cardUpdate(markers[picked].v);
       if (follow) map.panTo(markers[picked].mk.getLatLng(), { animate: !reduce, duration: POLL / 1000, easeLinearity: 1 });
