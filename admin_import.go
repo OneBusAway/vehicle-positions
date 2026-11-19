@@ -636,10 +636,14 @@ func (ui *adminUI) importConfirm(w http.ResponseWriter, r *http.Request) {
 			done = append(done, v)
 		}
 	}
-	// The page holds the new drivers' passwords, so no cache keeps a copy.
-	w.Header().Set("Cache-Control", "no-store")
-	ui.renderImport(w, r, http.StatusOK, kind, map[string]interface{}{
+	page := map[string]interface{}{
 		"Step": importStepDone, "Result": true, "Done": done, "Counts": counts,
 		"Headline": importDoneHeadline(kind, counts),
-	})
+	}
+	if kind.Name == "drivers" && len(done) > 0 {
+		page["Sheets"] = importSheets(r, ui.cfg.trustProxy, done)
+	}
+	// The page holds the new drivers' passwords, so no cache keeps a copy.
+	w.Header().Set("Cache-Control", "no-store")
+	ui.renderImport(w, r, http.StatusOK, kind, page)
 }

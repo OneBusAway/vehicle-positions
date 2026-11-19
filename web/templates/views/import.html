@@ -6,17 +6,20 @@
 
 {{define "content"}}
 {{if .Result}}
+{{/* With sheets to hand out, printing this page prints them, one per driver, and not the table of everyone's passwords. */}}
+<div{{if .Sheets}} class="no-print"{{end}}>
 <div class="page-head">
   <div class="page-head-main">
     <h2 class="h1">{{.Headline}}</h2>
     <p class="lede">{{.Counts.Update}} updated, {{.Counts.Unchanged}} unchanged.</p>
   </div>
-  <div class="page-actions"><a class="btn btn-primary" href="{{.Kind.ListURL}}">Done</a></div>
+  <div class="page-actions">{{if .Sheets}}<button class="btn btn-tonal js-only" type="button" onclick="window.print()">{{template "icon" "print"}}Print all sheets</button>{{end}}<a class="btn btn-primary" href="{{.Kind.ListURL}}">Done</a></div>
 </div>
 {{template "import-steps" .Step}}
 {{if and (eq .Kind.Name "drivers") .Counts.New}}
-<div class="banner banner-warn" role="note" style="margin-bottom:16px">{{template "icon" "key"}}<div><b style="font-weight:500">These passwords are shown only on this page.</b> Give each driver theirs with their setup sheet. If one is lost, set a new password with Edit on the Drivers and users page.</div></div>
+<div class="banner banner-warn" role="note" style="margin-bottom:16px">{{template "icon" "key"}}<div><b style="font-weight:500">These passwords are shown only on this page.</b> Give each driver theirs with their setup sheet{{if .Sheets}}: Print all sheets puts each new driver's password on their own sheet{{end}}. If one is lost, set a new password with Edit on the Drivers and users page.</div></div>
 {{end}}
+{{with .Sheets}}{{if (index . 0).Setup.Insecure}}<div class="banner banner-warn" role="note" style="margin-bottom:16px">{{template "icon" "warning"}}<div>Drivers' phones take only an https:// address, so the apps will not use the link on these sheets. If a proxy serves this site over https, set TRUST_PROXY_HEADERS=true.</div></div>{{end}}{{end}}
 <section class="card">
   {{if .Done}}
   <div class="table-wrap">
@@ -49,6 +52,8 @@
   <div class="empty"><span class="step-icon">{{template "icon-lg" "check"}}</span><div class="empty-title">Nothing to change</div><p>Nothing to change: every row matches what is saved.</p></div>
   {{end}}
 </section>
+</div>
+{{with .Sheets}}<div class="sheets">{{range .}}<div style="break-after:page">{{template "setup-sheet" .}}</div>{{end}}</div>{{end}}
 {{else if .Rows}}
 <div class="page-head">
   <div class="page-head-main">
