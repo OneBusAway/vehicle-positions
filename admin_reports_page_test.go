@@ -896,19 +896,18 @@ func TestAnalyticsDays_WorksOutAFewAtOnceOldestFirst(t *testing.T) {
 	store := newHeldReportStore(ix)
 	done := startAnalyticsDays(context.Background(), store, ix)
 
-	first, rest := heldWeek[:analyticsDaysAtOnce], heldWeek[analyticsDaysAtOnce:]
-	require.Eventually(t, func() bool { return slices.Equal(first, store.heldDays()) }, 5*time.Second, time.Millisecond,
-		"the oldest days are read at the same time")
-	assert.Never(t, func() bool { return len(store.heldDays()) > analyticsDaysAtOnce }, 100*time.Millisecond, time.Millisecond,
-		"no more days start while those are read")
+	for left := heldWeek; len(left) > 0; {
+		batch := left[:min(analyticsDaysAtOnce, len(left))]
+		require.Eventually(t, func() bool { return slices.Equal(batch, store.heldDays()) }, 5*time.Second, time.Millisecond,
+			"the oldest days not yet read are read at the same time")
+		assert.Never(t, func() bool { return len(store.heldDays()) > analyticsDaysAtOnce }, 100*time.Millisecond, time.Millisecond,
+			"no more days start while those are read")
 
-	// Let them go newest first, so they finish out of order.
-	for i := len(first) - 1; i >= 0; i-- {
-		store.release(first[i])
-	}
-	require.Eventually(t, func() bool { return slices.Equal(rest, store.heldDays()) }, 5*time.Second, time.Millisecond)
-	for i := len(rest) - 1; i >= 0; i-- {
-		store.release(rest[i])
+		// Let them go newest first, so they finish out of order.
+		for i := len(batch) - 1; i >= 0; i-- {
+			store.release(batch[i])
+		}
+		left = left[len(batch):]
 	}
 
 	res := awaitAnalyticsDays(t, done)

@@ -294,8 +294,10 @@ func (c reportCounts) split() onTimeSplit { return newOnTimeSplit(c.OnTime, c.Ea
 
 // analyticsDaysAtOnce is how many of a period's days are worked out at the
 // same time. Each holds a database connection while it reads its trips and
-// trails, and pgxpool keeps at least four.
-const analyticsDaysAtOnce = 4
+// trails. pgxpool allows at most max(4, NumCPU) connections by default, so 4
+// on the 1 vCPU host docs/deployment.md recommends, and two at once leaves at
+// least two free for location reports and every other query.
+const analyticsDaysAtOnce = 2
 
 // analyticsDays works out the service report of each of the days that end on
 // last, oldest first. Days are worked out analyticsDaysAtOnce at a time, so a
