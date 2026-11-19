@@ -12,7 +12,7 @@ import (
 // runStartAt is the start runStarts gives one run of key's trip that g's
 // riders put at along at at.
 func runStartAt(f *aggFixture, key TripKey, g *tripGroup, along float64, at time.Time) time.Time {
-	return f.agg.runStarts(key, f.t1, []runPlace{{group: g, along: along, at: at}}, at)[0]
+	return f.agg.runStarts(key, f.t1, []runPlace{{group: g, along: along, at: at, newest: at}}, at)[0]
 }
 
 // estimateStart is the start_time, in seconds into the service day, of the
@@ -113,6 +113,27 @@ func TestAggregator_RiderRunStartKeptAsTheRunMovesOn(t *testing.T) {
 	assert.InDelta(t, 8*3600+4*60+4, estimateStart(t, f, now), 1)
 }
 
+// A kept run is held to its latest estimate's riders, not its first's. The
+// run that left at 08:00 is 600 m on at 08:05:59, four minutes after it was
+// first kept at 200 m. Riders 400 m further on five seconds later are a run
+// that left at 07:56:04, too far ahead of it for the five seconds since its
+// riders last reported, though not for the four minutes since its first.
+func TestAggregator_KeptRunIsHeldToItsLatestRiders(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	f.addSession("r1", "rider-a", TierTrusted)
+	now := f.walkOffset(t, "r1", 100, 200, 10, 0)
+	assert.InDelta(t, 8*3600, estimateStart(t, f, now), 1)
+	now = f.walkOffset(t, "r1", 210, 600, 10, 0)
+	assert.InDelta(t, 8*3600, estimateStart(t, f, now), 1)
+
+	_, ok := f.agg.End("r1", EndArrived, now)
+	require.True(t, ok)
+	f.addSession("r2", "rider-b", TierTrusted)
+	now = f.walkOffset(t, "r2", 950, 1000, 10, -235*time.Second)
+	assert.InDelta(t, 7*3600+56*60+4, estimateStart(t, f, now), 1)
+}
+
 // Estimates lets go of the lock between finding a trip's riders and keeping
 // their run's start, so the rides it found can be removed in between. No
 // start is kept unless one of them is still registered, whether the trip has
@@ -158,7 +179,7 @@ func TestAggregator_RunStartIgnoresAnOlderEstimate(t *testing.T) {
 	newer := runStartAt(f, key, g, 900, f.base.Add(9*time.Minute))
 	older := runStartAt(f, key, g, 300, f.base.Add(3*time.Minute))
 	assert.Equal(t, newer, older)
-	assert.Equal(t, []riderRun{{start: newer, along: 900, at: f.base.Add(9 * time.Minute)}}, f.agg.runs[key])
+	assert.Equal(t, []riderRun{{start: newer, along: 900, at: f.base.Add(9 * time.Minute), newest: f.base.Add(9 * time.Minute)}}, f.agg.runs[key])
 }
 
 // A vehicle the riders put at its first stop is taken to be leaving it then,
