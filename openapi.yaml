@@ -2614,7 +2614,9 @@ components:
         vehicle and are explicitly `null` otherwise — none carry `omitempty`,
         so the key is always present. Likewise `bearing` and `speed` are
         `null` when the device did not report them, keeping "unknown"
-        distinct from a real zero.
+        distinct from a real zero, and `stop_id`, `stop_sequence` and
+        `current_status` are all `null` when the vehicle's latest report
+        named no stop of its trip.
       required:
         - vehicle_id
         - label
@@ -2626,6 +2628,9 @@ components:
         - trip_db_id
         - route_id
         - driver_name
+        - stop_id
+        - stop_sequence
+        - current_status
         - reported_at
         - updated_at
       properties:
@@ -2659,6 +2664,23 @@ components:
           type: [string, 'null']
         driver_name:
           type: [string, 'null']
+        stop_id:
+          type: [string, 'null']
+          description: |
+            The GTFS stop the vehicle is at or heading to on its trip, as the
+            GTFS-RT feed's `stop_id` names it for the same vehicle. Placed when
+            the report was accepted; null when it named no stop.
+        stop_sequence:
+          type: [integer, 'null']
+          description: |
+            That stop's `stop_sequence` in the trip, as the feed's
+            `current_stop_sequence`. May be 0; null only when `stop_id` is.
+        current_status:
+          type: [string, 'null']
+          enum: [STOPPED_AT, IN_TRANSIT_TO, null]
+          description: |
+            Whether the vehicle is at that stop or heading to it, in the
+            feed's `current_status` words. Null when `stop_id` is.
         reported_at:
           type: integer
           format: int64
