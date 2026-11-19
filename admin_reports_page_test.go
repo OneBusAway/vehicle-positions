@@ -783,15 +783,17 @@ type heldReportStore struct {
 	fail string
 	err  error
 
-	mu       sync.Mutex
-	gates    map[string]chan struct{}
-	held     map[string]bool
+	mu    sync.Mutex
+	gates map[string]chan struct{}
+	// held counts the reads of each day waiting now, so two reads of one
+	// day count as two.
+	held     map[string]int
 	mostHeld int
 	read     []string
 }
 
 func newHeldReportStore(ix *rider.Index) *heldReportStore {
-	return &heldReportStore{loc: ix.Timezone(), gates: make(map[string]chan struct{}), held: make(map[string]bool)}
+	return &heldReportStore{loc: ix.Timezone(), gates: make(map[string]chan struct{}), held: make(map[string]int)}
 }
 
 // gate is the channel that lets date's read go, made on first use.
@@ -806,7 +808,15 @@ func (s *heldReportStore) gate(date string) chan struct{} {
 	return g
 }
 
-func (s *heldReportStore) release(date string) { close(s.gate(date)) }
+// release lets date's reads go, and any later read of it at once.
+func (s *heldReportStore) release(date string) {
+	gate := s.gate(date)
+	select {
+	case <-gate:
+	default:
+		close(gate)
+	}
+}
 
 // ListTripsStartedBetween reads from the start of the day before the one
 // reported, which in the fixture's late summer is that day's local midnight.
@@ -820,12 +830,14 @@ func (s *heldReportStore) ListTripsStartedBetween(ctx context.Context, from, _ t
 	}
 	gate := s.gate(date)
 	s.mu.Lock()
-	s.held[date] = true
-	s.mostHeld = max(s.mostHeld, len(s.held))
+	s.held[date]++
+	s.mostHeld = max(s.mostHeld, s.holding())
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
-		delete(s.held, date)
+		if s.held[date]--; s.held[date] == 0 {
+			delete(s.held, date)
+		}
 		s.mu.Unlock()
 	}()
 	select {
@@ -840,13 +852,25 @@ func (s *heldReportStore) ListTrails(context.Context, []int64) (map[int64][]Loca
 	return make(map[int64][]LocationPoint), nil
 }
 
-// heldDays are the days whose reads are waiting now, oldest first.
+// holding is how many reads are waiting now. The caller holds s.mu.
+func (s *heldReportStore) holding() int {
+	n := 0
+	for _, count := range s.held {
+		n += count
+	}
+	return n
+}
+
+// heldDays are the days whose reads are waiting now, oldest first, a day read
+// twice at once listed twice.
 func (s *heldReportStore) heldDays() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	days := make([]string, 0, len(s.held))
-	for d := range s.held {
-		days = append(days, d)
+	for d, count := range s.held {
+		for range count {
+			days = append(days, d)
+		}
 	}
 	slices.Sort(days)
 	return days
@@ -867,14 +891,29 @@ type analyticsDaysResult struct {
 // first, a month before today so no day goes through the Overview's cache.
 var heldWeek = []string{"2026-08-27", "2026-08-28", "2026-08-29", "2026-08-30", "2026-08-31", "2026-09-01", "2026-09-02"}
 
-// startAnalyticsDays works out heldWeek against store in the background.
-func startAnalyticsDays(ctx context.Context, store serviceReportStore, ix *rider.Index) <-chan analyticsDaysResult {
-	today := reportDay.AddDate(0, 0, 30)
+// weekBefore is the week before heldWeek, oldest first.
+var weekBefore = []string{"2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23", "2026-08-24", "2026-08-25", "2026-08-26"}
+
+// newHeldReporter is a reporter over store a month after heldWeek, which is
+// settled by then and kept once read.
+func newHeldReporter(store serviceReportStore, ix *rider.Index) *serviceReporter {
 	r := newServiceReporter(store, func() *rider.Index { return ix }, testReportSettings)
 	r.now = func() time.Time { return reportDayStart.AddDate(0, 0, 30) }
+	return r
+}
+
+// startAnalyticsDays works out heldWeek against store in the background.
+func startAnalyticsDays(ctx context.Context, store serviceReportStore, ix *rider.Index) <-chan analyticsDaysResult {
+	return startAnalyticsWeek(ctx, newHeldReporter(store, ix), ix, reportDay)
+}
+
+// startAnalyticsWeek works out the seven days ending on last with r in the
+// background, as one request for the Analytics page does.
+func startAnalyticsWeek(ctx context.Context, r *serviceReporter, ix *rider.Index, last time.Time) <-chan analyticsDaysResult {
+	today := reportDay.AddDate(0, 0, 30)
 	done := make(chan analyticsDaysResult, 1)
 	go func() {
-		reps, err := analyticsDays(ctx, r, &overviewReports{}, ix, today, reportDay, len(heldWeek))
+		reps, err := analyticsDays(ctx, r, &overviewReports{}, ix, today, last, len(heldWeek))
 		done <- analyticsDaysResult{reps, err}
 	}()
 	return done
@@ -897,10 +936,10 @@ func TestAnalyticsDays_WorksOutAFewAtOnceOldestFirst(t *testing.T) {
 	done := startAnalyticsDays(context.Background(), store, ix)
 
 	for left := heldWeek; len(left) > 0; {
-		batch := left[:min(analyticsDaysAtOnce, len(left))]
+		batch := left[:min(reportReadsAtOnce, len(left))]
 		require.Eventually(t, func() bool { return slices.Equal(batch, store.heldDays()) }, 5*time.Second, time.Millisecond,
 			"the oldest days not yet read are read at the same time")
-		assert.Never(t, func() bool { return len(store.heldDays()) > analyticsDaysAtOnce }, 100*time.Millisecond, time.Millisecond,
+		assert.Never(t, func() bool { return len(store.heldDays()) > reportReadsAtOnce }, 100*time.Millisecond, time.Millisecond,
 			"no more days start while those are read")
 
 		// Let them go newest first, so they finish out of order.
@@ -917,7 +956,7 @@ func TestAnalyticsDays_WorksOutAFewAtOnceOldestFirst(t *testing.T) {
 		dates = append(dates, rep.Date)
 	}
 	assert.Equal(t, heldWeek, dates, "oldest first, as before")
-	assert.Equal(t, analyticsDaysAtOnce, store.mostHeld)
+	assert.Equal(t, reportReadsAtOnce, store.mostHeld)
 }
 
 func TestAnalyticsDays_AFailedDayStopsTheRest(t *testing.T) {
@@ -931,7 +970,7 @@ func TestAnalyticsDays_AFailedDayStopsTheRest(t *testing.T) {
 	res := awaitAnalyticsDays(t, done)
 	require.ErrorIs(t, res.err, store.err)
 	assert.Nil(t, res.reps)
-	assert.Subset(t, heldWeek[:analyticsDaysAtOnce], store.readDays(), "no day starts after the failure")
+	assert.Subset(t, heldWeek[:reportReadsAtOnce], store.readDays(), "no day starts after the failure")
 }
 
 func TestAnalyticsDays_ACancelledRequestStopsTheRest(t *testing.T) {
@@ -940,11 +979,146 @@ func TestAnalyticsDays_ACancelledRequestStopsTheRest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startAnalyticsDays(ctx, store, ix)
 
-	require.Eventually(t, func() bool { return len(store.heldDays()) == analyticsDaysAtOnce }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(store.heldDays()) == reportReadsAtOnce }, 5*time.Second, time.Millisecond)
 	cancel()
 
 	res := awaitAnalyticsDays(t, done)
 	require.ErrorIs(t, res.err, context.Canceled)
 	assert.Nil(t, res.reps)
-	assert.ElementsMatch(t, heldWeek[:analyticsDaysAtOnce], store.readDays(), "no day starts after the request ends")
+	assert.ElementsMatch(t, heldWeek[:reportReadsAtOnce], store.readDays(), "no day starts after the request ends")
+	assert.Eventually(t, func() bool { return len(store.heldDays()) == 0 }, 5*time.Second, time.Millisecond,
+		"the reads nobody waits for any more are cancelled")
+}
+
+// releaseAsHeld lets each day go once its read is held, checking that no more
+// than reportReadsAtOnce are held at a time, until n days have been let go.
+func releaseAsHeld(t *testing.T, store *heldReportStore, n int) {
+	t.Helper()
+	for released := make(map[string]bool); len(released) < n; {
+		want := min(reportReadsAtOnce, n-len(released))
+		require.Eventually(t, func() bool { return len(store.heldDays()) == want }, 5*time.Second, time.Millisecond,
+			"the slots are used while days are left; held %v", store.heldDays())
+		assert.Never(t, func() bool { return len(store.heldDays()) > reportReadsAtOnce }, 50*time.Millisecond, time.Millisecond,
+			"no more than %d reads at once", reportReadsAtOnce)
+		for _, d := range store.heldDays() {
+			released[d] = true
+			store.release(d)
+		}
+	}
+}
+
+func reportDates(reps []*serviceReport) []string {
+	dates := make([]string, 0, len(reps))
+	for _, rep := range reps {
+		dates = append(dates, rep.Date)
+	}
+	return dates
+}
+
+// waitingFor is how many requests wait for the read of date under way.
+func waitingFor(r *serviceReporter, date string) int {
+	day, _ := time.Parse(reportDateLayout, date)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if read, ok := r.reading[day.Format(gtfsDateLayout)]; ok {
+		return read.waiting
+	}
+	return 0
+}
+
+// Two cold loads of the same week, say an admin refreshing a slow page, read
+// each day once between them, two at a time.
+func TestAnalyticsDays_TwoRequestsForTheSameWeekShareItsReads(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	r := newHeldReporter(store, ix)
+
+	first := startAnalyticsWeek(context.Background(), r, ix, reportDay)
+	require.Eventually(t, func() bool { return len(store.heldDays()) == reportReadsAtOnce }, 5*time.Second, time.Millisecond)
+	second := startAnalyticsWeek(context.Background(), r, ix, reportDay)
+	releaseAsHeld(t, store, len(heldWeek))
+
+	for _, done := range []<-chan analyticsDaysResult{first, second} {
+		res := awaitAnalyticsDays(t, done)
+		require.NoError(t, res.err)
+		assert.Equal(t, heldWeek, reportDates(res.reps))
+	}
+	assert.ElementsMatch(t, heldWeek, store.readDays(), "each day read once")
+	assert.Equal(t, 2, store.mostHeld, "two reads at once, leaving two of the four connections a 1 vCPU host has")
+}
+
+// Two loads of different weeks, or a period and the one before it that
+// Compare reads, share the two slots too.
+func TestAnalyticsDays_TwoRequestsForDifferentWeeksShareTheSlots(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	r := newHeldReporter(store, ix)
+
+	first := startAnalyticsWeek(context.Background(), r, ix, reportDay)
+	require.Eventually(t, func() bool { return len(store.heldDays()) == reportReadsAtOnce }, 5*time.Second, time.Millisecond)
+	second := startAnalyticsWeek(context.Background(), r, ix, reportDay.AddDate(0, 0, -len(heldWeek)))
+	releaseAsHeld(t, store, len(heldWeek)+len(weekBefore))
+
+	res := awaitAnalyticsDays(t, first)
+	require.NoError(t, res.err)
+	assert.Equal(t, heldWeek, reportDates(res.reps))
+	res = awaitAnalyticsDays(t, second)
+	require.NoError(t, res.err)
+	assert.Equal(t, weekBefore, reportDates(res.reps))
+	assert.ElementsMatch(t, slices.Concat(weekBefore, heldWeek), store.readDays())
+	assert.Equal(t, 2, store.mostHeld, "two reads at once, leaving two of the four connections a 1 vCPU host has")
+}
+
+// A request that ends while its days wait for a slot stops waiting at once
+// and reads none of them.
+func TestAnalyticsDays_ACancelledRequestWaitingForASlotReadsNothing(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	r := newHeldReporter(store, ix)
+
+	first := startAnalyticsWeek(context.Background(), r, ix, reportDay)
+	require.Eventually(t, func() bool { return len(store.heldDays()) == reportReadsAtOnce }, 5*time.Second, time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	second := startAnalyticsWeek(ctx, r, ix, reportDay.AddDate(0, 0, -len(heldWeek)))
+	assert.Never(t, func() bool { return len(store.heldDays()) > reportReadsAtOnce }, 100*time.Millisecond, time.Millisecond)
+	cancel()
+
+	// The first request's reads are still held, so the second can only have
+	// returned by giving up its wait.
+	res := awaitAnalyticsDays(t, second)
+	require.ErrorIs(t, res.err, context.Canceled)
+	assert.Nil(t, res.reps)
+
+	releaseAsHeld(t, store, len(heldWeek))
+	res = awaitAnalyticsDays(t, first)
+	require.NoError(t, res.err)
+	assert.Equal(t, heldWeek, reportDates(res.reps))
+	assert.ElementsMatch(t, heldWeek, store.readDays(), "none of the second request's days is read")
+}
+
+// A request that ends does not cancel the reads it started while another
+// request waits for them: the other gets each day, read once.
+func TestAnalyticsDays_ASharedReadOutlivesTheRequestThatStartedIt(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	r := newHeldReporter(store, ix)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	first := startAnalyticsWeek(ctx, r, ix, reportDay)
+	require.Eventually(t, func() bool { return len(store.heldDays()) == reportReadsAtOnce }, 5*time.Second, time.Millisecond)
+	second := startAnalyticsWeek(context.Background(), r, ix, reportDay)
+	require.Eventually(t, func() bool { return waitingFor(r, heldWeek[0]) == 2 && waitingFor(r, heldWeek[1]) == 2 }, 5*time.Second, time.Millisecond,
+		"the second request waits for the first one's reads")
+	cancel()
+
+	res := awaitAnalyticsDays(t, first)
+	require.ErrorIs(t, res.err, context.Canceled)
+	assert.Never(t, func() bool { return !slices.Equal(heldWeek[:reportReadsAtOnce], store.heldDays()) }, 100*time.Millisecond, time.Millisecond,
+		"the reads go on for the second request")
+
+	releaseAsHeld(t, store, len(heldWeek))
+	res = awaitAnalyticsDays(t, second)
+	require.NoError(t, res.err)
+	assert.Equal(t, heldWeek, reportDates(res.reps))
+	assert.ElementsMatch(t, heldWeek, store.readDays(), "each day read once")
 }
