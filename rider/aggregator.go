@@ -56,7 +56,10 @@ type BatchResult struct {
 	Summary        RideSummary
 }
 
-// TripEstimate is the vehicle position the riders of one trip add up to.
+// TripEstimate is the vehicle position the riders of one trip add up to. Its
+// Timestamp is when that position is true: the newest point of the riders it
+// comes from, or the moment a run's riders were all weighed at
+// (tripGroup.runs), and never after the time the estimate was made.
 type TripEstimate struct {
 	Key          TripKey
 	RouteID      string
@@ -374,20 +377,24 @@ func (a *Aggregator) Estimates(now time.Time, covered func(TripKey) bool) []Trip
 // tripEstimates is an estimate for each run of key's trip that g's riders
 // can vouch for. Two runs that come out at the same start_time are one trip
 // instance to GTFS-RT, which a feed may name once, so only the one more
-// riders are on is kept, or on a tie the one with the newer point. A trip
-// run by timetable has one run, so its estimate is never one of two.
+// riders are on is kept, or on a tie the one with the newer point. That is a
+// point one of its riders reported, not the moment a run was weighed at: a
+// run weighed at another run's newest point is stamped as late as that run
+// without anyone on it having reported since. A trip run by timetable has one
+// run, so its estimate is never one of two.
 func (a *Aggregator) tripEstimates(key TripKey, g *tripGroup, now time.Time) []TripEstimate {
 	var ests []TripEstimate
 	var places []runPlace
 	for _, run := range g.runs(a.th, now) {
-		est, along, ok := run.estimate(key, now)
+		est, place, ok := run.estimate(key, now)
 		if !ok {
 			continue
 		}
 		ests = append(ests, est)
-		places = append(places, runPlace{group: run, along: along, at: est.Timestamp})
+		places = append(places, place)
 	}
 	out := make([]TripEstimate, 0, len(ests))
+	newest := make([]time.Time, 0, len(ests))
 	for i, start := range a.runStarts(key, g.trip, places, now) {
 		est := ests[i]
 		est.StartTime, est.FrequencyBased = g.trip.Run(key.StartDate, a.tz, start)
@@ -395,9 +402,10 @@ func (a *Aggregator) tripEstimates(key TripKey, g *tripGroup, now time.Time) []T
 		switch {
 		case j < 0:
 			out = append(out, est)
+			newest = append(newest, places[i].newest)
 		case est.Riders > out[j].Riders,
-			est.Riders == out[j].Riders && est.Timestamp.After(out[j].Timestamp):
-			out[j] = est
+			est.Riders == out[j].Riders && places[i].newest.After(newest[j]):
+			out[j], newest[j] = est, places[i].newest
 		}
 	}
 	return out
@@ -434,11 +442,12 @@ func (a *Aggregator) TripStatus(key TripKey, now time.Time, covered func(TripKey
 }
 
 // runPlace is where an estimate put one run of a trip, and when, with the
-// riders who put it there.
+// riders who put it there and the newest point they reported.
 type runPlace struct {
-	group *tripGroup
-	along float64
-	at    time.Time
+	group  *tripGroup
+	along  float64
+	at     time.Time
+	newest time.Time
 }
 
 // runStarts is when each of places' runs of key's trip left its first stop.
@@ -637,6 +646,10 @@ func (m estimateMember) placedAt(along float64) estimateMember {
 type tripGroup struct {
 	trip    *TripInfo
 	members []estimateMember
+	// at is the moment runs weighed every member at, when it handed them to
+	// the estimate as they would be then; zero when they are weighed as they
+	// reported.
+	at time.Time
 }
 
 // runs splits the group into the runs of its trip that its riders are on. A
@@ -668,8 +681,10 @@ type tripGroup struct {
 // standing near them is placed at the run's vehicle, and a group that joins
 // it at the group's own place: each where the newest point it stands with is
 // carried, never from its own older point, which would carry a point taken at
-// speed before its vehicle stopped far past where the vehicle is. A run of
-// only the riders who make it is weighed as they reported.
+// speed before its vehicle stopped far past where the vehicle is. Its
+// estimate is stamped with that moment, when its place is true, though the
+// newest point may be another run's. A run of only the riders who make it is
+// weighed as they reported, and stamped with its own newest point.
 //
 // Where a rider is placed is for the estimate's median and trim alone.
 // Whether the run may be published is still decided on where the riders' own
@@ -762,6 +777,7 @@ func (g *tripGroup) runs(th Thresholds, now time.Time) []*tripGroup {
 		for j, m := range run.members[:own[i]] {
 			run.members[j] = m.placedAt(m.along + carry(m))
 		}
+		run.at = until
 	}
 	return runs
 }
@@ -818,12 +834,12 @@ func (a *Aggregator) memberOfLocked(s *Session, now time.Time) (estimateMember, 
 	}, true
 }
 
-// estimate combines the group's members into one vehicle position, and how
-// far along the trip's shape it is, reporting false when the riders are not
-// credible enough to publish.
-func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, float64, bool) {
+// estimate combines the group's members into one vehicle position, and where
+// along the trip's shape and when it puts the vehicle, reporting false when
+// the riders are not credible enough to publish.
+func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, runPlace, bool) {
 	if !g.canEstimate() {
-		return TripEstimate{}, 0, false
+		return TripEstimate{}, runPlace{}, false
 	}
 
 	members := g.members
@@ -840,25 +856,29 @@ func (g *tripGroup) estimate(key TripKey, now time.Time) (TripEstimate, float64,
 		// publishable on — a trusted rider the crowd outvoted — and the
 		// survivors must then be credible on their own, or nothing is.
 		if len(kept) == 0 || !(&tripGroup{trip: g.trip, members: kept}).publishable() {
-			return TripEstimate{}, 0, false
+			return TripEstimate{}, runPlace{}, false
 		}
 		members = kept
 		median = medianAlong(members)
 	}
 
+	place := runPlace{group: g, along: median, at: g.at, newest: newestTimestamp(members, now)}
+	if place.at.IsZero() {
+		place.at = place.newest
+	}
 	est := TripEstimate{
 		Key:       key,
 		RouteID:   g.trip.RouteID,
 		Pos:       g.trip.Shape.PointAt(median),
 		Bearing:   g.trip.Shape.BearingAt(median),
 		Speed:     medianSpeed(members),
-		Timestamp: newestTimestamp(members, now),
+		Timestamp: place.at,
 		Riders:    distinctRiders(members),
 	}
 	if stop, ok := NextStop(g.trip, median); ok {
 		est.StopID, est.StopSequence = stop.StopID, stop.Sequence
 	}
-	return est, median, true
+	return est, place, true
 }
 
 // canEstimate reports whether the group can and may be turned into a position:

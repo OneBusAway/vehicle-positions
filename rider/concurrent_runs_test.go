@@ -442,3 +442,118 @@ func TestAggregator_PlacedRiderVouchesOnlyFromItsOwnPoint(t *testing.T) {
 		})
 	}
 }
+
+// A run is stamped with when its place is true. One that takes in a stale
+// rider is weighed as of the newest point in the trip, though that point is
+// another run's, and is stamped then; one of only its own riders is weighed
+// as they reported and stamped with its own newest point. F is 80 s old at
+// 500 m and 1 m/s, S 50 s old at 0 m and 15 m/s, N new at 1000 m. Ages are
+// back from N's point, and want is each run's stamp in that reckoning, the
+// run behind first.
+func TestAggregator_RunIsStampedWhenItsPlaceIsTrue(t *testing.T) {
+	type ride struct {
+		id           string
+		along, speed float64
+		age          time.Duration
+	}
+	f, s, n := ride{"F", 500, 1, 80 * time.Second}, ride{"S", 0, 15, 50 * time.Second}, ride{"N", 1000, 1.7, 0}
+	tests := []struct {
+		name  string
+		rides []ride
+		// now is when the estimates are made, after N's point.
+		now  time.Duration
+		want []time.Duration
+	}{
+		{"a run of only its own riders keeps its newest point's time",
+			[]ride{f, n}, 2 * time.Second, []time.Duration{80 * time.Second, 0}},
+		{"a run that takes in a stale rider is stamped at N's moment",
+			[]ride{f, s, n}, 2 * time.Second, []time.Duration{0, 0}},
+		{"a clock running ahead stamps both runs no later than now",
+			[]ride{f, s, n}, -10 * time.Second, []time.Duration{10 * time.Second, 10 * time.Second}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newAggFixture(t)
+			headwayT1(fx)
+			at := fx.base.Add(10 * time.Minute)
+			for _, r := range tc.rides {
+				fx.rideTo(t, r.id, r.along, r.speed, at.Add(-r.age))
+			}
+
+			est := fx.agg.Estimates(at.Add(tc.now), noCover)
+			slices.SortFunc(est, func(x, y TripEstimate) int {
+				return cmp.Compare(fx.t1.Shape.Project(x.Pos, nil).AlongShape, fx.t1.Shape.Project(y.Pos, nil).AlongShape)
+			})
+			require.Len(t, est, len(tc.want))
+			for i, age := range tc.want {
+				assert.Equal(t, at.Add(-age), est[i].Timestamp, "run %d", i)
+			}
+		})
+	}
+}
+
+// A kept run's start does not move when the run takes in a stale rider on
+// one tick and not the next. F is 60 s old at 500 m and 1.5 m/s; S, older
+// still at 85 s, is at 50 m and 8.4 m/s, carried to 764 m, and joins F's run.
+// Weighed at N's moment, F's run is 177 m on from where F's own point puts it
+// 60 s before: as far as a vehicle goes in 60 s, so each tick finds the run
+// it kept. Stamped with F's point either way, it moved 177 m in no time,
+// further than any vehicle could, and took a start of its own.
+func TestAggregator_RunStartStaysAsAStaleRiderComesAndGoes(t *testing.T) {
+	for _, staleFirst := range []bool{true, false} {
+		name := "stale rider on the second tick"
+		if staleFirst {
+			name = "stale rider on the first tick"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newAggFixture(t)
+			headwayT1(f)
+			at := f.base.Add(10 * time.Minute)
+			f.rideTo(t, "F", 500, 1.5, at.Add(-60*time.Second))
+			f.rideTo(t, "N", 1000, 1.7, at)
+			if staleFirst {
+				f.rideTo(t, "S", 50, 8.4, at.Add(-85*time.Second))
+			}
+			now := at.Add(2 * time.Second)
+			first := estimateStarts(t, f, now)
+			require.Len(t, first, 2)
+
+			if staleFirst {
+				_, ok := f.agg.End("S", EndArrived, now)
+				require.True(t, ok)
+			} else {
+				f.rideTo(t, "S", 50, 8.4, at.Add(-85*time.Second))
+			}
+			now = now.Add(time.Second)
+			est := f.agg.Estimates(now, noCover)
+			require.Len(t, est, 2)
+			assert.Equal(t, first, estimateStarts(t, f, now))
+		})
+	}
+}
+
+// Two runs at one start_time with as many riders each: the tie goes to the
+// run with the newer point, not to the one stamped later only because it was
+// weighed at a third run's newest point. Q has just reported at 30 m, on a
+// run of its own that left at 08:10. M and N, 5 s ago at 550 m and 570 m, are
+// a run that left at 08:00. So is F's, ahead at 850 m: S's stale point puts S
+// on it, so it is weighed and stamped at Q's moment, though its newest point,
+// S's, is 30 s old.
+func TestAggregator_RunsAtOneStartTimeTieGoesToTheNewerPointNotTheStamp(t *testing.T) {
+	f := newAggFixture(t)
+	f.t1.frequencies = []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(22, 0, 0), Headway: 10 * time.Minute, ExactTimes: gtfs.ScheduleBased}}
+	at := f.base.Add(10 * time.Minute)
+	f.rideTo(t, "Q", 30, 1.7, at)
+	f.rideTo(t, "M", 550, 1.7, at.Add(-10*time.Second))
+	f.rideTo(t, "N", 570, 1.7, at.Add(-5*time.Second))
+	f.rideTo(t, "F", 850, 1, at.Add(-80*time.Second))
+	f.rideTo(t, "S", 750, 10, at.Add(-30*time.Second))
+
+	est := f.agg.Estimates(at.Add(2*time.Second), noCover)
+	require.Len(t, est, 2)
+	assert.Equal(t, "08:00:00", est[0].StartTime)
+	assert.Equal(t, 2, est[0].Riders)
+	assert.InDelta(t, 560, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 20)
+	assert.Equal(t, at.Add(-5*time.Second), est[0].Timestamp)
+	assert.Equal(t, "08:10:00", est[1].StartTime)
+}
