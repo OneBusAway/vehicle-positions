@@ -24,6 +24,7 @@
 </div>
 <dl class="card kv strip" id="trip-facts">
   <div><dt>Driver</dt><dd>{{.DriverName}}</dd></div>
+  {{if ne .VehicleID .VehicleLabel}}<div><dt>Vehicle ID</dt><dd>{{.VehicleID}}</dd></div>{{end}}
   <div><dt>GTFS trip</dt><dd>{{if .GtfsTripID}}{{.GtfsTripID}}{{else}}<span class="muted" style="font-weight:400">None, route only</span>{{end}}</dd></div>
   {{with .BlockID}}<div><dt>Block</dt><dd>{{.}}</dd></div>{{end}}
   <div><dt>Started</dt><dd>{{.StartClock}} <span class="muted" style="font-weight:400">{{.StartDay}}</span></dd></div>
@@ -60,6 +61,7 @@
     {{if or .Stops .Note}}
     <section class="card" id="trip-stops" aria-labelledby="trip-stops-h" style="grid-column:span 2">
       <div class="card-head"><h3 id="trip-stops-h">Stops</h3>{{with .StopsSummary}}<span class="sub">{{.}}</span>{{end}}</div>
+      {{if .Timetable}}<p class="card-note">Scheduled {{.Summary.Scheduled}}.{{if not .Active}} First stop {{template "deviation" .Summary.Departure}}, last stop {{template "deviation" .Summary.Arrival}}.{{end}}</p>{{end}}
       {{with .Note}}<p class="card-note">{{.}}</p>{{end}}
       {{if .Stops}}
       <div class="table-wrap">

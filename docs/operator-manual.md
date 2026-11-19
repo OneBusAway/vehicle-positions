@@ -663,7 +663,8 @@ agency's clock, which the page names (UTC if the schedule is not loaded).
 
 - The top shows the vehicle, the route in its colour, whether the trip is
   **Running** or **Completed**, and how it stood at its last stop. Under it
-  are the driver, GTFS trip and block, when it started and ended, how long it
+  are the driver, the vehicle's ID when its name is something else, the GTFS
+  trip and block, when it started and ended, how long it
   took, how many of its stops were on time and how many reports the phone
   sent. An active trip has **End trip** here too; it works as on **Trips** and
   takes you back there.
@@ -676,7 +677,9 @@ agency's clock, which the page names (UTC if the schedule is not loaded).
   **60x**. Drag along the line, or use the arrow keys, to step through the
   reports one at a time. The replay needs JavaScript; the rest of the page
   does not.
-- **Stops** lists each stop with when it was due, when the vehicle left it
+- **Stops** starts with the trip's scheduled times and, once the trip is over,
+  how it left the first stop and reached the last. Then it lists each stop
+  with when it was due, when the vehicle left it
   (reached it, for the last stop) and how early or late that was, by the same
   rule as **Analytics**, so the two pages agree. A stop inside the on-time
   window says **On time** in green with the difference beside it. An early
