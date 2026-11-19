@@ -29,6 +29,8 @@
 
   var routes = {}, routesOk = false, heads = {}, askedHeads = {}, trips = {};
   var markers = {}, last = null, filter = "all", picked = null, follow = false, listOpen = !phone.matches, lastOk = 0;
+  // emptyShut: the list was closed because nothing was reporting, not by the dispatcher.
+  var emptyShut = false;
   var routeLayer = L.layerGroup().addTo(map);
   var rows = {}, listSig = "", chipSig = "", card = null;
 
@@ -47,7 +49,8 @@
     if (r && r.hex) { b.style.background = r.hex; b.style.color = ink(r.hex); }
     return b;
   }
-  function ageOf(v) { return Math.max(0, Math.round(Date.now() / 1000 - v.reported_at)); }
+  // A report's age from when the server got it, as the server's quiet alerts count it: a phone's clock can be off.
+  function ageOf(v) { return Math.max(0, Math.round((Date.now() - Date.parse(v.updated_at)) / 1000)); }
   function ageText(s) { return s < 60 ? s + " s" : Math.floor(s / 60) + " min"; }
   function agoText(s) { return s < 2 ? "just now" : ageText(s) + " ago"; }
   function isQuiet(v) { return ageOf(v) > QUIET; }
@@ -307,7 +310,9 @@
         });
       });
     });
-    if (!live.count) setList(false);
+    // With nothing reporting the list closes, and on a desktop it opens again when vehicles report, unless the
+    // dispatcher has opened or closed it since.
+    if (!live.count) { if (listOpen) { setList(false); emptyShut = true; } } else if (emptyShut) { emptyShut = false; if (!phone.matches) setList(true); }
   }
 
   /* The picked vehicle: its card, its trip's line and stops. */
@@ -427,8 +432,8 @@
   /* Controls */
   function setList(open) { listOpen = open; $("map-list").hidden = !open; $("map-list-open").hidden = open; }
   setList(listOpen);
-  $("map-list-close").addEventListener("click", function () { setList(false); $("map-list-open").focus(); });
-  $("map-list-open").addEventListener("click", function () { if (phone.matches) pick(null); setList(true); $("map-list-close").focus(); });
+  $("map-list-close").addEventListener("click", function () { emptyShut = false; setList(false); $("map-list-open").focus(); });
+  $("map-list-open").addEventListener("click", function () { emptyShut = false; if (phone.matches) pick(null); setList(true); $("map-list-close").focus(); });
   $("map-in").addEventListener("click", function () { map.zoomIn(); });
   $("map-out").addEventListener("click", function () { map.zoomOut(); });
   $("map-fit").addEventListener("click", function () { follow = false; followShown(); fit(true); });

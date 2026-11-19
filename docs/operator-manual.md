@@ -519,7 +519,9 @@ on it.
 - The buttons on the right open the list, make the map full screen, fit every
   vehicle in view, and zoom in and out.
 - If nothing is reporting the map says **No vehicles are reporting**, with
-  **Set up a driver**. If the server stops answering, the vehicles stay where
+  **Set up a driver**, and the list closes. On a computer it opens again by
+  itself when vehicles report, unless you have opened or closed it in the
+  meantime. If the server stops answering, the vehicles stay where
   they last were, dimmed, and the map says what time they are from; until it
   has answered once, the list says **Waiting for the server**.
 - With the keyboard, the buttons along the top, the list and the card are the
