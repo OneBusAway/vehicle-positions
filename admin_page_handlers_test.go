@@ -27,7 +27,9 @@ import (
 // both the login-flow tests here and anywhere else a UserFetcher double is
 // needed (merge target for any future Task 2-style fake of the same shape).
 type fakeUserFetcher struct {
-	users map[string]*User
+	users   map[string]*User
+	seen    []int64 // each last_seen_at stamp, by user id
+	seenErr error
 }
 
 func (f *fakeUserFetcher) GetUserByEmail(_ context.Context, email string) (*User, error) {
@@ -36,6 +38,11 @@ func (f *fakeUserFetcher) GetUserByEmail(_ context.Context, email string) (*User
 		return nil, ErrUserNotFound
 	}
 	return u, nil
+}
+
+func (f *fakeUserFetcher) UpdateUserLastSeen(_ context.Context, id int64) error {
+	f.seen = append(f.seen, id)
+	return f.seenErr
 }
 
 // newTestAdminUI is the admin UI over a store with nothing in it and no

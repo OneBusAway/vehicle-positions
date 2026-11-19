@@ -88,6 +88,12 @@ WHERE id = $1;
 -- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2 WHERE id = $1;
 
+-- name: UpdateUserLastSeen :exec
+-- Stamped on every successful sign-in and token refresh. The
+-- set_users_updated_at trigger skips a change to last_seen_at alone, so this
+-- does not move updated_at.
+UPDATE users SET last_seen_at = NOW() WHERE id = $1;
+
 -- name: LockUser :one
 -- Serializes rotation and revocation of one user's refresh tokens. Both take
 -- this before reading or writing refresh_tokens, so a revocation cannot run

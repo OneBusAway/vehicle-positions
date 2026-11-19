@@ -47,6 +47,10 @@ type fakeRefreshTokens struct {
 
 	createCalls  int
 	deletedUsers []int64
+
+	// seen records each last_seen_at stamp; seenErr makes the stamp fail.
+	seen    []int64
+	seenErr error
 }
 
 func newFakeRefreshTokens() *fakeRefreshTokens {
@@ -69,6 +73,11 @@ func (f *fakeRefreshTokens) CreateRefreshToken(_ context.Context, tokenHash stri
 	}
 	f.nextID++
 	return nil
+}
+
+func (f *fakeRefreshTokens) UpdateUserLastSeen(_ context.Context, id int64) error {
+	f.seen = append(f.seen, id)
+	return f.seenErr
 }
 
 func (f *fakeRefreshTokens) GetRefreshToken(_ context.Context, tokenHash string) (*RefreshToken, error) {

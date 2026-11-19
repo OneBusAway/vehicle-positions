@@ -23,6 +23,10 @@ type UserResponse struct {
 	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// LastSeenAt is when the user last signed in or renewed a session, nil
+	// if never. Only ListUsersPage fills it, for the admin Users page; the
+	// users API does not carry it yet.
+	LastSeenAt *time.Time `json:"-"`
 }
 
 var ErrUserNotFound = errors.New("user not found")
@@ -126,7 +130,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 // placeholders ever reach the SQL string.
 func (s *Store) ListUsersPage(ctx context.Context, f UserFilter) ([]UserResponse, error) {
 	query := `
-		SELECT id, name, email, role, active, created_at, updated_at
+		SELECT id, name, email, role, active, created_at, updated_at, last_seen_at
 		FROM users`
 	var conds []string
 	var args []any
@@ -155,12 +159,15 @@ func (s *Store) ListUsersPage(ctx context.Context, f UserFilter) ([]UserResponse
 	users := make([]UserResponse, 0)
 	for rows.Next() {
 		var u UserResponse
-		var createdAt, updatedAt pgtype.Timestamptz
-		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active, &createdAt, &updatedAt); err != nil {
+		var createdAt, updatedAt, lastSeenAt pgtype.Timestamptz
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active, &createdAt, &updatedAt, &lastSeenAt); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		u.CreatedAt = createdAt.Time
 		u.UpdatedAt = updatedAt.Time
+		if lastSeenAt.Valid {
+			u.LastSeenAt = &lastSeenAt.Time
+		}
 		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil {

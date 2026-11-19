@@ -57,6 +57,7 @@ type RefreshStore interface {
 	RefreshTokenRotator
 	RefreshTokenDeleter
 	UserGetter
+	UserSeenRecorder
 }
 
 // handleRefreshToken exchanges a valid refresh token for a new access token
@@ -222,6 +223,7 @@ func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limit
 		}
 
 		slog.Info("refresh token rotated", "sub", stored.UserID)
+		recordLastSeen(r.Context(), store, stored.UserID, "refresh")
 		writeJSON(w, http.StatusOK, newLoginResponse(accessToken, newRefresh, ttls.access))
 	}
 }

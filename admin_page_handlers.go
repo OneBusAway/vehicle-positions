@@ -296,6 +296,7 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, r, token, ui.cfg.trustProxy)
+	recordLastSeen(r.Context(), ui.users, user.ID, "admin login")
 	if next == "" {
 		next = ui.home(r.Context())
 	}
@@ -803,6 +804,7 @@ type userRow struct {
 	Role         string
 	Active       bool
 	VehicleCount int
+	LastSeen     string // "never" when the user has not signed in since it was first recorded
 }
 
 // MayDrive is how many vehicles a driver is assigned: "1 vehicle", "3
@@ -906,7 +908,7 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-		rows = append(rows, userRow{
+		row := userRow{
 			ID:           u.ID,
 			Name:         u.Name,
 			Email:        u.Email,
@@ -914,7 +916,12 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 			Role:         u.Role,
 			Active:       u.Active,
 			VehicleCount: len(assignments),
-		})
+			LastSeen:     "never",
+		}
+		if u.LastSeenAt != nil {
+			row.LastSeen = formatTripTimestamp(*u.LastSeenAt)
+		}
+		rows = append(rows, row)
 	}
 
 	// Each choice of role flips only the role, so a search in progress

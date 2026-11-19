@@ -30,3 +30,11 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error)
 		UpdatedAt:    row.UpdatedAt.Time,
 	}, nil
 }
+
+// UpdateUserLastSeen stamps the user's last_seen_at with the current time.
+func (s *Store) UpdateUserLastSeen(ctx context.Context, id int64) error {
+	if err := s.queries.UpdateUserLastSeen(ctx, id); err != nil {
+		return fmt.Errorf("update user last seen: %w", err)
+	}
+	return nil
+}

@@ -86,9 +86,34 @@ type LoginResponse struct {
 	ExpiresIn    int    `json:"expires_in"`
 }
 
-// UserFetcher is the store interface needed by the login handler.
+// UserFetcher is the store interface needed by the login handler: it finds
+// the user signing in and records when they did.
 type UserFetcher interface {
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
+	UserSeenRecorder
+}
+
+// UserSeenRecorder stamps a user's last_seen_at, which the admin Users page
+// shows. Password sign-ins and refresh-token renewals both stamp it, because
+// a driver whose app renews its session every day may not type a password
+// again for months.
+type UserSeenRecorder interface {
+	UpdateUserLastSeen(ctx context.Context, id int64) error
+}
+
+// lastSeenTimeout bounds the last_seen_at write, so a slow database cannot
+// hold up a sign-in that has already succeeded.
+const lastSeenTimeout = 2 * time.Second
+
+// recordLastSeen stamps last_seen_at after a successful sign-in or refresh.
+// It is a record for the Users page, not a security control, so a failed
+// write is logged and the sign-in goes ahead.
+func recordLastSeen(ctx context.Context, recorder UserSeenRecorder, userID int64, where string) {
+	ctx, cancel := context.WithTimeout(ctx, lastSeenTimeout)
+	defer cancel()
+	if err := recorder.UpdateUserLastSeen(ctx, userID); err != nil {
+		slog.Error(where+": failed to record last seen", "sub", userID, "error", err)
+	}
 }
 
 // handleLogin returns the JSON API login handler. limiter may be nil (e.g. in
@@ -167,6 +192,7 @@ func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret 
 			return
 		}
 
+		recordLastSeen(r.Context(), fetcher, user.ID, "login")
 		writeJSON(w, http.StatusOK, newLoginResponse(accessToken, refreshToken, ttls.access))
 	}
 }

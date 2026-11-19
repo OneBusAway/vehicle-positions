@@ -23,7 +23,7 @@
   {{if .Users}}
   <div class="table-wrap">
     <table class="table cards">
-      <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>May drive</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>May drive</th><th>Last seen</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         {{range .Users}}
         <tr>
@@ -31,6 +31,7 @@
           <td class="c-side nowrap">{{if eq .Role "admin"}}<span class="pill plain">Admin</span>{{else}}<span class="muted">Driver</span>{{end}}</td>
           <td{{if .Active}} class="hide-phone"{{end}}>{{if .Active}}<span class="muted">Active</span>{{else}}<span class="pill plain">Deactivated</span>{{end}}</td>
           {{if eq .Role "driver"}}<td class="num nowrap" data-label="May drive">{{.MayDrive}}</td>{{else}}<td class="hide-phone"></td>{{end}}
+          <td class="num nowrap" data-label="Last seen">{{if eq .LastSeen "never"}}<span class="muted">never</span>{{else}}{{.LastSeen}}{{end}}</td>
           <td class="c-actions"><div class="actions">
             {{if and .Active (eq .Role "driver")}}<a class="btn btn-sm btn-plain hide-md" href="/admin/driver-setup?user={{.ID}}">{{template "icon-sm" "qr_code_2"}}Setup sheet</a>{{end}}
             <a class="btn btn-sm btn-plain" href="/admin/users/{{.ID}}/edit">Edit</a>
