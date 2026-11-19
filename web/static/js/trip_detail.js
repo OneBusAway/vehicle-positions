@@ -24,7 +24,7 @@
     markerZoomAnimation: !reduceMotion,
   }).setView([0, 0], 2);
   // The same OpenStreetMap tiles, credit and Referer as the live map
-  // (admin.js), which explains the tile policy.
+  // (map.js), which explains the tile policy.
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,

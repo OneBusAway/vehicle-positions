@@ -129,6 +129,7 @@ func TestAdminLoginReturnsToNext(t *testing.T) {
 	admin := &User{ID: 1, Email: "boss@test.com", PasswordHash: string(hash), Role: roleAdmin, Active: true}
 	ui := newTestAdminUI(t)
 	ui.users = &fakeUserFetcher{users: map[string]*User{admin.Email: admin}}
+	ui.stats = &fakeAdminStats{vehicles: 3, drivers: 2}
 	mux := http.NewServeMux()
 	registerAdminUI(mux, ui)
 
@@ -175,10 +176,10 @@ func TestAdminLoginReturnsToNext(t *testing.T) {
 	})
 
 	for _, tc := range unsafeLoginNexts {
-		t.Run("sign-in with "+tc.name+" goes to the dashboard", func(t *testing.T) {
+		t.Run("sign-in with "+tc.name+" goes to the live map", func(t *testing.T) {
 			w := post("password123", tc.next)
 			assert.Equal(t, http.StatusSeeOther, w.Code)
-			assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+			assert.Equal(t, "/admin/map", w.Header().Get("Location"))
 		})
 	}
 
@@ -203,9 +204,9 @@ func TestAdminLoginReturnsToNext(t *testing.T) {
 		assert.Equal(t, "/admin/trips/42", w.Header().Get("Location"))
 	})
 
-	t.Run("already signed in with an unsafe next goes to the dashboard", func(t *testing.T) {
+	t.Run("already signed in with an unsafe next goes to the live map", func(t *testing.T) {
 		w := get("/admin/login?next=%2F%2Fevil.example", cookieFor(t, roleAdmin))
 		assert.Equal(t, http.StatusSeeOther, w.Code)
-		assert.Equal(t, "/admin/dashboard", w.Header().Get("Location"))
+		assert.Equal(t, "/admin/map", w.Header().Get("Location"))
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,25 @@ func TestNewHandlerCSRFAllowsHeaderlessClients(t *testing.T) {
 	assert.NotEqual(t, http.StatusForbidden, w.Code, "non-browser clients (no Sec-Fetch-Site/Origin) pass CSRF")
 }
 
+// TestAdminScriptsPutStopNamesInAsText: Leaflet writes a tooltip given as a
+// string with innerHTML, so a stop name from the GTFS feed must reach
+// bindTooltip as an element that holds it as text, never as a string.
+func TestAdminScriptsPutStopNamesInAsText(t *testing.T) {
+	h := newTestHandler(t, true)
+	// A first argument that is a string literal, or a bare name or property
+	// ending at the comma or the closing parenthesis.
+	stringArg := regexp.MustCompile(`bindTooltip\(\s*(?:["'\x60]|[\w$.]+\s*[,)])`)
+	for _, path := range []string{"/static/js/map.js", "/static/js/trip_detail.js"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code, path)
+		script := w.Body.String()
+		require.Contains(t, script, "bindTooltip(", path)
+		assert.Empty(t, stringArg.FindAllString(script, -1), "%s passes bindTooltip a string", path)
+	}
+}
+
 // TestAdminMapScriptFollowsOSMTilePolicy pins what the map script owes
 // OpenStreetMap's tile usage policy
 // (https://operations.osmfoundation.org/policies/tiles/), read through the
@@ -73,7 +93,7 @@ func TestNewHandlerCSRFAllowsHeaderlessClients(t *testing.T) {
 // every tile request.
 func TestAdminMapScriptFollowsOSMTilePolicy(t *testing.T) {
 	h := newTestHandler(t, true)
-	req := httptest.NewRequest(http.MethodGet, "/static/js/admin.js", nil)
+	req := httptest.NewRequest(http.MethodGet, "/static/js/map.js", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -85,6 +105,6 @@ func TestAdminMapScriptFollowsOSMTilePolicy(t *testing.T) {
 		`referrerPolicy: "strict-origin-when-cross-origin"`,
 	} {
 		// Not assert.Contains: on failure it prints the whole script.
-		assert.True(t, strings.Contains(script, want), "admin.js is missing %s", want)
+		assert.True(t, strings.Contains(script, want), "map.js is missing %s", want)
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -104,7 +105,34 @@ func TestShell_LeafletOnlyWhereThereIsAMap(t *testing.T) {
 	require.NotEqual(t, -1, admin)
 	assert.Less(t, leaflet, admin, "admin.css must load after leaflet.css")
 	assert.Contains(t, withMap, `<script src="/static/vendor/leaflet/leaflet.js" defer></script>`)
-	assert.Contains(t, withMap, `<script src="/static/js/admin.js" defer></script>`)
+	assert.Contains(t, withMap, `<script src="/static/js/map.js" defer></script>`)
+}
+
+// TestShell_GlideOnlyOnTheLiveMap: the live map glides each vehicle's marker
+// to its next place over the 10 s between polls. The trip page's replay marker
+// has the same veh-icon class and moves every frame, so a glide there leaves
+// it behind the slider. Every rule that glides a veh-icon is under .page-map,
+// which only the live map's page has.
+func TestShell_GlideOnlyOnTheLiveMap(t *testing.T) {
+	css, err := fs.ReadFile(files, "web/static/css/admin.css")
+	require.NoError(t, err)
+	rules := regexp.MustCompile(`([^{}]+)\{[^}]*transition:[^};]*\b10s\b`).FindAllStringSubmatch(string(css), -1)
+	glides := 0
+	for _, rule := range rules {
+		for _, selector := range strings.Split(rule[1], ",") {
+			if !strings.Contains(selector, "veh-icon") {
+				continue
+			}
+			glides++
+			assert.True(t, strings.HasPrefix(strings.TrimSpace(selector), ".page-map "), "%q glides outside the live map", selector)
+		}
+	}
+
+	assert.Equal(t, 1, glides, "the live map's glide")
+
+	_, mux := newShellMux(t)
+	assert.Contains(t, getAdminPage(t, mux, "/admin/map"), `<div class="page-map" id="map-root">`)
+	assert.NotContains(t, getAdminPage(t, mux, "/admin/vehicles"), "page-map")
 }
 
 // TestShell_Pulse: a vehicle that has gone quiet is still in the tracker
