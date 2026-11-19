@@ -282,9 +282,17 @@ WHERE t.id = $1;
 -- (maxTimestampSkew: a live report that late is refused, so only
 -- POST /api/v1/locations/history stores one), is placed only by when it was
 -- recorded, so a dead zone uploaded later, even during the next trip, lands in
--- the trail where it was driven and in no other. Both branches floor the start
+-- the trail where it was driven and in no other. The start is floored
 -- because timestamp is whole seconds and a fix from the trip's first second
--- must still count.
+-- must still count. The upper bound is five minutes past the second the trip
+-- ended in, or now for a trip still running: a report dated more than
+-- maxTimestampSkew ahead of the server's clock is refused, and received_at is
+-- stamped after that check, so a live point received by the end is dated no
+-- later unless the database's clock runs behind the server's, and a fix dated
+-- later was not driven on this trip either way. Both bounds stand outside the
+-- OR, and are bigint like timestamp, so that
+-- idx_location_points_vehicle_driver_timestamp reads only the trip's window
+-- and not every point the vehicle and driver ever stored.
 SELECT t.id, p.latitude, p.longitude, p.bearing, p.speed, p.accuracy,
        p.timestamp, p.trip_id, p.received_at
 FROM trips t
@@ -294,14 +302,14 @@ CROSS JOIN LATERAL (
     FROM location_points lp
     WHERE lp.vehicle_id = t.vehicle_id
       AND lp.driver_id = t.user_id::text
+      AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time))::bigint
+      AND lp.timestamp <= FLOOR(EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))::bigint + 300
       AND (
         (lp.received_at >= t.start_time
             AND (lp.received_at <= COALESCE(t.end_time, NOW())
                 OR lp.timestamp < FLOOR(EXTRACT(EPOCH FROM t.end_time)))
-            AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes'
-            AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time)))
+            AND lp.received_at <= to_timestamp(lp.timestamp) + interval '5 minutes')
         OR (lp.received_at > to_timestamp(lp.timestamp) + interval '5 minutes'
-            AND lp.timestamp >= FLOOR(EXTRACT(EPOCH FROM t.start_time))
             AND lp.timestamp <= EXTRACT(EPOCH FROM COALESCE(t.end_time, NOW())))
       )
     ORDER BY lp.timestamp ASC, lp.received_at ASC

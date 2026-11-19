@@ -337,6 +337,54 @@ func TestStore_ListTrails(t *testing.T) {
 	}
 }
 
+// TestStore_ListTrails_TimestampBounds pins the edges of the bounds on
+// timestamp that ListTrails reads the index with: the trip's first second, and
+// five minutes past the second it ended in.
+func TestStore_ListTrails_TimestampBounds(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	driver := setupTripUser(t, store, "Bounds Driver", "trail-bounds@test.com", "bus-bounds", "Bus Bounds")
+	point := func(lat float64, ts, receivedAt time.Time) {
+		t.Helper()
+		_, err := store.pool.Exec(ctx,
+			`INSERT INTO location_points (vehicle_id, driver_id, trip_id, latitude, longitude, timestamp, received_at)
+			 VALUES ('bus-bounds', $1, '', $2, $2, $3, $4)`,
+			strconv.FormatInt(driver, 10), lat, ts.Unix(), receivedAt)
+		require.NoError(t, err)
+	}
+
+	base := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	at := func(d time.Duration) time.Time { return base.Add(d) }
+	half := 500 * time.Millisecond
+	end := at(10*time.Minute + half)
+	trip := insertReportTrip(t, store, driver, "bus-bounds", "R1", "T1", at(half), &end)
+
+	// A fix from the second before the trip's first, received during it.
+	point(0.1, at(-time.Second), at(time.Second))
+	// A fix from the trip's first second.
+	point(1.1, at(0), at(time.Second))
+	// A backlog fix from the second the trip ended in.
+	point(1.2, at(10*time.Minute), at(time.Hour))
+	// A fix received just before the end from a phone whose clock runs five
+	// minutes fast, the latest a live report received by then can be dated.
+	point(1.3, at(15*time.Minute), at(10*time.Minute+200*time.Millisecond))
+	// A fix dated a second later, received just before the end too. The server
+	// refuses such a report unless the database's clock runs behind its own,
+	// and it was not driven on the trip.
+	point(0.2, at(15*time.Minute+time.Second), at(10*time.Minute+300*time.Millisecond))
+
+	pts, err := store.ListTripLocations(ctx, trip)
+	require.NoError(t, err)
+	latitudes := make([]float64, len(pts))
+	for i, p := range pts {
+		latitudes[i] = p.Latitude
+	}
+	assert.Equal(t, []float64{1.1, 1.2, 1.3}, latitudes)
+}
+
 func TestStore_StartTrip_Success(t *testing.T) {
 	store := newTestStore(t)
 	userID := setupTripTestData(t, store)
