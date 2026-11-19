@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -265,12 +266,15 @@ func reportFixtureTrips(t *testing.T, ix *rider.Index) ([]TripSummary, map[int64
 }
 
 // fakeReportStore serves the trips and trails a report reads from memory,
-// counting how often each is read.
+// counting how often each is read. The Analytics page reads several days at
+// once, so the counts are kept under mu.
 type fakeReportStore struct {
 	trips  []TripSummary
 	trails map[int64][]LocationPoint
 	err    error
-	reads  int
+
+	mu    sync.Mutex
+	reads int
 	// onRead runs once, in the middle of the next read of the trips.
 	onRead func()
 
@@ -281,9 +285,13 @@ type fakeReportStore struct {
 }
 
 func (f *fakeReportStore) ListTripsStartedBetween(_ context.Context, from, to time.Time) ([]TripSummary, error) {
+	f.mu.Lock()
 	f.reads++
-	if during := f.onRead; during != nil {
-		f.onRead = nil
+	during := f.onRead
+	f.onRead = nil
+	f.mu.Unlock()
+	// Outside the lock: it reads again itself.
+	if during != nil {
 		during()
 	}
 	if f.err != nil {
@@ -299,8 +307,10 @@ func (f *fakeReportStore) ListTripsStartedBetween(_ context.Context, from, to ti
 }
 
 func (f *fakeReportStore) ListTrails(_ context.Context, tripIDs []int64) (map[int64][]LocationPoint, error) {
+	f.mu.Lock()
 	f.trailReads++
 	f.trailIDs = append(f.trailIDs, tripIDs...)
+	f.mu.Unlock()
 	if f.trailErr != nil {
 		return nil, f.trailErr
 	}
