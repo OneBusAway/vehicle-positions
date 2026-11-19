@@ -121,11 +121,15 @@
   });
 
   /* Chips that show the alerts of one kind. The Alerts page reloads itself every 30 s, so the chip picked
-     is kept for the tab. */
-  var chips = $$("[data-filter]");
+     is kept for the tab. A kind with no open alert says so, and one kept from before the reload goes back
+     to All. */
+  var chips = $$("[data-filter]"), rows = $$("[data-kind]");
+  function hasKind(kind) { return kind === "all" || rows.some(function (row) { return row.dataset.kind === kind; }); }
   function showKind(kind) {
     chips.forEach(function (c) { c.setAttribute("aria-pressed", String(c.dataset.filter === kind)); });
-    $$("[data-kind]").forEach(function (row) { row.hidden = kind !== "all" && row.dataset.kind !== kind; });
+    rows.forEach(function (row) { row.hidden = kind !== "all" && row.dataset.kind !== kind; });
+    var none = $("#alert-none");
+    if (none) none.hidden = hasKind(kind);
   }
   chips.forEach(function (chip) {
     chip.addEventListener("click", function () {
@@ -134,7 +138,9 @@
     });
   });
   if (chips.length) {
-    try { showKind(sessionStorage.getItem("alert-kind") || "all"); } catch (e) {}
+    var kept = null;
+    try { kept = sessionStorage.getItem("alert-kind"); } catch (e) {}
+    showKind(kept && hasKind(kept) ? kept : "all");
   }
 
   /* A real dialog in place of confirm(). Without JS the form posts as it is. */

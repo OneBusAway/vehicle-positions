@@ -565,7 +565,8 @@ Each row names the vehicle, driver, route and GTFS trip, and says how long:
 **No report for 7 min**, **Under 50 m in 12 min**, **Over 60 m from its route
 for 6 min** or **Next on block 12, due 7 min ago**, and when the alert opened.
 The longest-running alert is at the top. The buttons above the list each name
-a kind and how many alerts of it are open; pick one to show only those.
+a kind and how many alerts of it are open; pick one to show only those. A kind
+with none open says so, and **All** shows every alert again.
 **Last position** opens the trip's page (see [A trip's page](#a-trips-page)),
 whose map starts where the vehicle last reported, even after it has dropped
 off the Live map. **Trip** opens **Trips** on that trip, where **End trip**
