@@ -25,6 +25,7 @@ type noopStore struct{}
 func (n *noopStore) GetUserByEmail(_ context.Context, _ string) (*User, error) {
 	return nil, ErrUserNotFound
 }
+func (n *noopStore) UpdateUserLastSeen(_ context.Context, _ int64) error { return nil }
 func (n *noopStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
 }

@@ -1932,6 +1932,18 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 	return i, err
 }
 
+const updateUserLastSeen = `-- name: UpdateUserLastSeen :exec
+UPDATE users SET last_seen_at = NOW() WHERE id = $1
+`
+
+// Stamped on every successful sign-in and token refresh. The
+// set_users_updated_at trigger skips a change to last_seen_at alone, so this
+// does not move updated_at.
+func (q *Queries) UpdateUserLastSeen(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, updateUserLastSeen, id)
+	return err
+}
+
 const updateUserPassword = `-- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2 WHERE id = $1
 `

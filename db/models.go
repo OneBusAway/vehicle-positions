@@ -142,6 +142,7 @@ type User struct {
 	UpdatedAt          pgtype.Timestamptz
 	Active             bool
 	SessionsValidAfter pgtype.Timestamptz
+	LastSeenAt         pgtype.Timestamptz
 }
 
 type UserVehicle struct {

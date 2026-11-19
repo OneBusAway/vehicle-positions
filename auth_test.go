@@ -19,10 +19,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// mockUserStore implements UserFetcher for tests.
+// mockUserStore implements UserFetcher for tests. seen records each
+// last_seen_at stamp; seenErr makes the stamp fail.
 type mockUserStore struct {
-	user *User
-	err  error
+	user    *User
+	err     error
+	seen    []int64
+	seenErr error
 }
 
 var testSecret = []byte("super-secret-test-key-32-bytes!!")
@@ -32,6 +35,11 @@ func (m *mockUserStore) GetUserByEmail(ctx context.Context, email string) (*User
 		return nil, m.err
 	}
 	return m.user, nil
+}
+
+func (m *mockUserStore) UpdateUserLastSeen(_ context.Context, id int64) error {
+	m.seen = append(m.seen, id)
+	return m.seenErr
 }
 
 func postLogin(handler http.HandlerFunc, email, password string) *httptest.ResponseRecorder {
