@@ -607,3 +607,28 @@ func TestAggregator_RunsAtOneStartTimeTieReadsClocksAheadAsReported(t *testing.T
 	assert.InDelta(t, 900, f.t1.Shape.Project(est[0].Pos, nil).AlongShape, 10)
 	assert.Equal(t, now, est[0].Timestamp)
 }
+
+// A kept run's newest point can be dated after its stamp when a rider's clock
+// runs fast, but its place is still true no later than the stamp. L's phone
+// is 20 s ahead: its point, 800 m on, is stamped at 08:10, when the run that
+// left at 08:02 is kept. L's ride then ends, and T, seen for the first time
+// at 300 m at 08:10:03, is a run that left at 08:07:03. Reached back from
+// L's point as dated, 17 s after T's, the 500 m between them would be within
+// reach and T would take the 08:02 start; reached from the stamp, 3 s
+// before T's point, T is 500 m behind with no time to have gone back.
+func TestAggregator_RunAheadOfAFastClockKeepsItsStart(t *testing.T) {
+	f := newAggFixture(t)
+	headwayT1(f)
+	at := f.base.Add(10 * time.Minute)
+	f.rideTo(t, "L", 800, 1.7, at.Add(20*time.Second))
+	lead := estimateStart(t, f, at)
+	assert.InDelta(t, 8*3600+2*60, lead, 1)
+
+	now := at.Add(18 * time.Second)
+	_, ok := f.agg.End("L", EndArrived, now)
+	require.True(t, ok)
+	f.rideTo(t, "T", 300, 1.7, at.Add(3*time.Second))
+	trail := estimateStart(t, f, now)
+	assert.NotEqual(t, lead, trail, "the trailing run takes the leading run's start")
+	assert.InDelta(t, 8*3600+7*60+3, trail, 1)
+}

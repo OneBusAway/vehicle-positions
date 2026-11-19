@@ -538,9 +538,15 @@ func (a *Aggregator) runStarts(key TripKey, trip *TripInfo, places []runPlace, n
 // stamp, though the vehicle may have left since. So r's place is taken to be
 // true at some time from its riders' newest point to its stamp, and p need
 // only be within reach from one of the two. A move ahead has the most time
-// from the newest point, and a move back from the stamp.
+// from the newest point, and a move back from the stamp. A newest point
+// dated after the stamp is from a clock running fast, and the place is
+// still true no later than the stamp, so it is reached from the stamp.
 func (a *Aggregator) couldBe(r riderRun, p runPlace) bool {
-	return a.reaches(r.along, r.at, p) || a.reaches(r.along, r.newest, p)
+	newest := r.newest
+	if newest.After(r.at) {
+		newest = r.at
+	}
+	return a.reaches(r.along, r.at, p) || a.reaches(r.along, newest, p)
 }
 
 // reaches reports whether a vehicle at along at at could be where p puts a
