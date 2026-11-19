@@ -867,7 +867,7 @@
   .veh-ring { position: absolute; inset: -2.5px; border-radius: 50%; border: 2px solid var(--primary); opacity: 0; pointer-events: none; }
   .veh-marker.heard .veh-ring { animation: ring-out 1500ms ease-out both; }
   /* The glide between polls. It stands aside while Leaflet zooms (its own 0.25 s transition) and on first paint. */
-  .leaflet-container:not(.is-zooming):not(.no-glide) .leaflet-marker-icon.veh-icon { transition: transform 10s linear; will-change: transform; }
+  .page-map .leaflet-container:not(.is-zooming):not(.no-glide) .leaflet-marker-icon.veh-icon { transition: transform 10s linear; will-change: transform; }
   .veh-tag { display: none; position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%); white-space: nowrap; background: var(--surface); color: var(--ink); border-radius: 8px; padding: 7px 10px; font: 500 13px/1 var(--font-sans); box-shadow: var(--shadow-2); }
   .veh-marker.selected { width: 38px; height: 38px; margin: -4px; outline: 6px solid color-mix(in srgb, var(--primary) 34%, transparent); }
   .veh-marker.selected svg { width: 20px; height: 20px; }
