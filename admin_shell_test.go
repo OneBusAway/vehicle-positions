@@ -104,7 +104,7 @@ func TestShell_LeafletOnlyWhereThereIsAMap(t *testing.T) {
 	require.NotEqual(t, -1, admin)
 	assert.Less(t, leaflet, admin, "admin.css must load after leaflet.css")
 	assert.Contains(t, withMap, `<script src="/static/vendor/leaflet/leaflet.js" defer></script>`)
-	assert.Contains(t, withMap, `<script src="/static/js/admin.js" defer></script>`)
+	assert.Contains(t, withMap, `<script src="/static/js/map.js" defer></script>`)
 }
 
 // TestShell_Pulse: a vehicle that has gone quiet is still in the tracker

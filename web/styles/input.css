@@ -1,6 +1,6 @@
 /* Tailwind is here for its reset and its build. It reads no file for utility classes: every page is
    written with the components below, so a word in a template or a script can never turn into a
-   stray utility. The few utilities the live map still names are written out at the end of this file. */
+   stray utility. */
 @import "tailwindcss" source(none);
 
 /* Vehicle Tracker admin: design tokens.
@@ -214,6 +214,7 @@
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes pop-in { from { opacity: 0; transform: scale(0.5); } }
 @keyframes ring-out { from { opacity: 0.55; transform: scale(0.55); } to { opacity: 0; transform: scale(2.7); } }
+@keyframes skeleton { 50% { opacity: 0.55; } }
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes grow-y { from { transform: scaleY(0); } }
 @keyframes grow-x { from { transform: scaleX(0); } }
@@ -809,7 +810,37 @@
   .the-line .veh.quiet::after { content: ""; position: absolute; right: -4px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 2px var(--ink); }
 
   /* Map */
+  .page-map { position: fixed; inset: 56px 0 0 var(--rail); }
+  .page-map:fullscreen { inset: 0; }
   .map { position: absolute; inset: 0; background: var(--surface-3); }
+  .map-chips { position: absolute; left: 16px; top: 16px; z-index: 500; display: flex; flex-wrap: wrap; gap: 8px; max-width: calc(100% - 420px); }
+  .chip-float { box-shadow: var(--shadow-2); }
+  .chip-warn { color: var(--warn-text); }
+  .map-list { position: absolute; left: 16px; top: 68px; max-height: calc(100% - 84px); z-index: 500; width: 320px; display: flex; flex-direction: column; overflow: hidden; }
+  .map-detail { position: absolute; right: 16px; top: 16px; z-index: 500; width: 344px; padding: 16px; }
+  .list-head { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 8px 0 16px; font: 500 16px/20px var(--font-sans); flex: none; }
+  .list-body { overflow-y: auto; overscroll-behavior: contain; padding-bottom: 8px; }
+  .list-group { display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 16px; font: 500 13px/20px var(--font-sans); color: var(--ink-2); border: 0; border-top: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); z-index: 1; text-align: left; }
+  button.list-group { cursor: pointer; }
+  button.list-group:hover { background: var(--surface-2); }
+  button.list-group .icon { transition: transform var(--t-switch) var(--ease-emph); }
+  button.list-group[aria-expanded="true"] .icon { transform: rotate(180deg); }
+  .list-row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 4px 16px 4px 46px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
+  .list-row:hover { background: var(--surface-2); }
+  .list-row[aria-current="true"] { background: var(--selected); color: var(--on-selected); }
+  .list-row .t { flex: 1; min-width: 0; }
+  .list-row :is(.a, .b) { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list-row .a { font: 500 14px/18px var(--font-sans); }
+  .list-row .b { font-size: 12px; line-height: 16px; color: var(--ink-3); }
+  .list-row .b.tone-warn { color: var(--warn-text); }
+  .list-row[aria-current="true"] .b { color: var(--on-selected); }
+  .skeletons { display: grid; gap: 10px; padding: 8px 16px; }
+  .skeleton { height: 36px; border-radius: 6px; background: var(--surface-3); animation: skeleton 1.4s ease-in-out infinite; }
+  .veh-head { display: flex; align-items: flex-start; gap: 12px; }
+  .veh-name { font: 500 18px/22px var(--font-sans); }
+  .veh-state { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 12px; border-radius: 10px; font-size: 13px; background: var(--surface-2); }
+  .veh-state.warn { background: var(--warn-soft); }
+  .veh-state b { font-weight: 500; }
   .map-ctl { position: absolute; right: 16px; bottom: 32px; z-index: 500; display: flex; flex-direction: column; gap: 8px; }
   .map-btn { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--surface); color: var(--ink-2); box-shadow: var(--shadow-2); cursor: pointer; }
   .map-btn:hover { color: var(--ink); background: var(--surface-2); }
@@ -826,10 +857,21 @@
   .veh-marker.no-bearing svg { display: none; }
   .veh-marker.no-bearing::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--veh-ink); }
   .veh-marker.quiet svg { fill: #fff; }
-  .veh-marker.quiet { background: var(--nodata-fill); border-color: var(--amber); box-shadow: 0 0 0 2px #1f1f1f, 0 2px 6px rgb(0 0 0 / 0.3); }
-  .veh-marker.quiet::after { content: ""; position: absolute; right: -4px; top: -4px; width: 11px; height: 11px; border-radius: 50%; background: var(--amber); border: 2px solid #1f1f1f; box-sizing: border-box; }
+  .veh-marker.quiet, .veh-marker.attn { border-color: var(--amber); box-shadow: 0 0 0 2px #1f1f1f, 0 2px 6px rgb(0 0 0 / 0.3); }
+  .veh-marker.quiet { background: var(--nodata-fill); }
+  .veh-marker.quiet::after, .veh-marker.attn::after { content: ""; position: absolute; right: -4px; top: -4px; width: 11px; height: 11px; border-radius: 50%; background: var(--amber); border: 2px solid #1f1f1f; box-sizing: border-box; }
+  .veh-route { position: absolute; left: 62%; top: 62%; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 5px; background: var(--c, var(--nodata-fill)); color: var(--ci, #fff); font: 600 10px/16px var(--font-sans); text-align: center; white-space: nowrap; box-shadow: 0 0 0 1.5px var(--map-vehicle-edge); }
+  .dense .veh-marker:not(.quiet, .attn, .selected) { transform: scale(0.4); border-width: 5px; box-shadow: none; }
+  .dense .veh-marker:not(.quiet, .attn, .selected) > :is(svg, .veh-route) { display: none; }
+  .stale .leaflet-marker-icon.veh-icon { opacity: 0.5; }
+  .veh-ring { position: absolute; inset: -2.5px; border-radius: 50%; border: 2px solid var(--primary); opacity: 0; pointer-events: none; }
+  .veh-marker.heard .veh-ring { animation: ring-out 1500ms ease-out both; }
+  /* The glide between polls. It stands aside while Leaflet zooms (its own 0.25 s transition) and on first paint. */
+  .leaflet-container:not(.is-zooming):not(.no-glide) .leaflet-marker-icon.veh-icon { transition: transform 10s linear; will-change: transform; }
+  .veh-tag { display: none; position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%); white-space: nowrap; background: var(--surface); color: var(--ink); border-radius: 8px; padding: 7px 10px; font: 500 13px/1 var(--font-sans); box-shadow: var(--shadow-2); }
   .veh-marker.selected { width: 38px; height: 38px; margin: -4px; outline: 6px solid color-mix(in srgb, var(--primary) 34%, transparent); }
   .veh-marker.selected svg { width: 20px; height: 20px; }
+  .veh-marker.selected .veh-tag { display: block; }
   .leaflet-tile-pane { filter: saturate(0.62) contrast(0.94) brightness(1.03); }
   .stop-marker { width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid #6b6b6b; box-sizing: border-box; }
 
@@ -866,7 +908,8 @@
     dialog[open]::backdrop { animation: fade-in var(--t-in) linear both; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .the-line .veh { transition: none !important; }
+    .leaflet-container .leaflet-marker-icon.veh-icon, .veh-marker svg, .the-line .veh { transition: none !important; }
+    .veh-marker.heard .veh-ring, .skeleton { animation: none; }
   }
 
   /* Narrow desktop (a small laptop, a tablet): the rail is icons, the least important columns go. */
@@ -899,6 +942,9 @@
     .tabbar a[aria-current="page"] .icon-wrap { background: var(--selected); }
     .tabbar .icon-wrap { display: grid; place-items: center; width: 56px; height: 28px; border-radius: 14px; position: relative; }
     .tabbar .count { position: absolute; right: 4px; top: -4px; }
+    .page-map { inset: 56px 0 64px 0; }
+    .map-chips { right: 16px; max-width: none; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+    .map-list, .map-detail { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 62%; border-radius: 24px; }
     .map-ctl { bottom: auto; top: 64px; right: 12px; }
     .line-row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 16px; }
     .tile { min-height: 112px; padding: 12px 14px; }
@@ -933,202 +979,9 @@
 /* Leaflet's own stylesheet is not in a layer, and unlayered rules beat layered ones whatever their
    specificity. So what restyles Leaflet sits outside the layers too, and admin.css loads after leaflet.css. */
 .leaflet-container { font-family: var(--font-sans); background: var(--surface-3); }
+/* Leaflet gives each tile filter: inherit, which would apply the dark tile pane's filter twice. */
+.leaflet-container .leaflet-tile { filter: none; }
 .leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 84%, transparent); color: var(--ink-3); font-size: 11px; }
 .leaflet-container .leaflet-control-attribution a { color: var(--ink-2); }
 .leaflet-container .leaflet-tooltip { background: var(--problem); color: var(--on-problem); border: 0; border-radius: 8px; padding: 5px 8px; font: 500 12px/16px var(--font-sans); box-shadow: var(--shadow-2); }
 .leaflet-container .leaflet-tooltip::before { display: none; }
-
-/* What the live map still uses until it is redone: its panels, its popup and its marker. Its markup
-   and its script are written with Tailwind's utility names and are left as they are for now, so the
-   utilities they name are written out here with Tailwind's own values, in the layer Tailwind puts
-   them in. That is smaller than having Tailwind generate them, which brings its variables and
-   property rules along for one page. All of it leaves with that page. */
-@layer utilities {
-  .pointer-events-auto { pointer-events: auto; }
-  .pointer-events-none { pointer-events: none; }
-  .absolute { position: absolute; }
-  .relative { position: relative; }
-  .inset-0 { inset: 0; }
-  .inset-x-0 { inset-inline: 0; }
-  .top-4 { top: 1rem; }
-  .bottom-4 { bottom: 1rem; }
-  .left-4 { left: 1rem; }
-  .z-\[500\] { z-index: 500; }
-  .mb-3 { margin-bottom: 0.75rem; }
-  .flex { display: flex; }
-  .grid { display: grid; }
-  .hidden { display: none; }
-  .inline-flex { display: inline-flex; }
-  .h-2 { height: 0.5rem; }
-  .h-2\.5 { height: 0.625rem; }
-  .h-7 { height: 1.75rem; }
-  .h-8 { height: 2rem; }
-  .w-2 { width: 0.5rem; }
-  .w-2\.5 { width: 0.625rem; }
-  .w-8 { width: 2rem; }
-  .w-px { width: 1px; }
-  .min-w-0 { min-width: 0; }
-  .flex-1 { flex: 1; }
-  .shrink-0 { flex-shrink: 0; }
-  .items-center { align-items: center; }
-  .justify-between { justify-content: space-between; }
-  .justify-center { justify-content: center; }
-  .gap-1\.5 { gap: 0.375rem; }
-  .gap-3 { gap: 0.75rem; }
-  .gap-4 { gap: 1rem; }
-  .gap-5 { gap: 1.25rem; }
-  :where(.space-y-2 > :not(:last-child)) { margin-block-end: 0.5rem; }
-  :where(.space-y-4 > :not(:last-child)) { margin-block-end: 1rem; }
-  .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .overflow-hidden { overflow: hidden; }
-  .rounded-lg { border-radius: 0.5rem; }
-  .rounded-xl { border-radius: 0.75rem; }
-  .rounded-2xl { border-radius: 1rem; }
-  .rounded-\[20px\] { border-radius: 20px; }
-  .rounded-\[24px\] { border-radius: 24px; }
-  .rounded-full { border-radius: 9999px; }
-  .border { border-style: solid; border-width: 1px; }
-  .border-white\/70 { border-color: rgb(255 255 255 / 0.7); }
-  .border-white\/80 { border-color: rgb(255 255 255 / 0.8); }
-  .bg-emerald-500 { background-color: oklch(69.6% 0.17 162.48); }
-  .bg-slate-50\/80 { background-color: oklch(98.4% 0.003 247.858 / 0.8); }
-  .bg-slate-200 { background-color: oklch(92.9% 0.013 255.508); }
-  .bg-teal-600 { background-color: oklch(60% 0.118 184.704); }
-  .p-2\.5 { padding: 0.625rem; }
-  .p-4 { padding: 1rem; }
-  .px-4 { padding-inline: 1rem; }
-  .px-5 { padding-inline: 1.25rem; }
-  .py-2\.5 { padding-block: 0.625rem; }
-  .py-3 { padding-block: 0.75rem; }
-  .text-center { text-align: center; }
-  .text-2xl { font-size: 1.5rem; line-height: calc(2 / 1.5); }
-  .text-sm { font-size: 0.875rem; line-height: calc(1.25 / 0.875); }
-  .text-xs { font-size: 0.75rem; line-height: calc(1 / 0.75); }
-  .text-\[10px\] { font-size: 10px; }
-  .font-medium { font-weight: 500; }
-  .font-semibold { font-weight: 600; }
-  .font-bold { font-weight: 700; }
-  .tracking-\[0\.18em\] { letter-spacing: 0.18em; }
-  .text-emerald-700 { color: oklch(50.8% 0.118 165.612); }
-  .text-slate-400 { color: oklch(70.4% 0.04 256.788); }
-  .text-slate-500 { color: oklch(55.4% 0.046 257.417); }
-  .text-slate-600 { color: oklch(44.6% 0.043 257.281); }
-  .text-slate-700 { color: oklch(37.2% 0.044 257.287); }
-  .text-slate-900 { color: oklch(20.8% 0.042 265.755); }
-  .text-white { color: #fff; }
-  .uppercase { text-transform: uppercase; }
-  .shadow-md { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
-  .shadow-lg { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
-  .shadow-xl { box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); }
-  @media (min-width: 64rem) {
-    .lg\:grid-cols-\[1fr_280px\] { grid-template-columns: 1fr 280px; }
-    .lg\:p-5 { padding: 1.25rem; }
-  }
-}
-
-.glass-panel {
-  background: rgba(255, 255, 255, 0.8);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-.table-card {
-  background: rgba(255, 255, 255, 0.94);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
-}
-
-.leaflet-popup-content-wrapper {
-  border-radius: 18px;
-  padding: 0;
-  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.2);
-}
-
-.leaflet-popup-content {
-  margin: 0 !important;
-  width: 260px !important;
-}
-
-.leaflet-popup-tip {
-  box-shadow: none;
-}
-
-.map-popup {
-  padding: 1rem;
-  background: linear-gradient(180deg, #ffffff, #f4f9ff);
-}
-
-.map-popup__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.85rem;
-}
-
-.map-popup__title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.map-popup__meta {
-  display: grid;
-  gap: 0.55rem;
-  font-size: 0.84rem;
-  color: #5b6473;
-}
-
-.map-popup__meta strong {
-  color: #0f172a;
-}
-
-.bus-marker {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.92);
-  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.24);
-  transform: translate(-50%, -50%);
-}
-
-.bus-marker--active {
-  background: linear-gradient(180deg, #14b8a6, #0f766e);
-}
-
-.bus-marker__pulse {
-  position: absolute;
-  inset: -8px;
-  border-radius: 20px;
-  border: 2px solid rgba(20, 184, 166, 0.28);
-  opacity: 0;
-}
-
-.bus-marker--active .bus-marker__pulse {
-  animation: pulse-ring 2.1s ease-out infinite;
-}
-
-.bus-marker__icon {
-  position: relative;
-  z-index: 1;
-  font-size: 1.15rem;
-  line-height: 1;
-  filter: saturate(1.05);
-}
-
-@keyframes pulse-ring {
-  0% {
-    transform: scale(0.86);
-    opacity: 0.88;
-  }
-
-  100% {
-    transform: scale(1.3);
-    opacity: 0;
-  }
-}

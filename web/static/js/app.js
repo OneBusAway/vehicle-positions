@@ -81,10 +81,12 @@
     heardAt = Date.now();
     var reporting = live.vehicles.filter(function (v) { return !quiet[v.vehicle_id]; }).length;
     pulse.dataset.state = reporting ? "live" : "idle";
+    delete pulse.dataset.known;
     say($("#pulse-reporting"), reporting);
     if (!reduce) { pulse.classList.remove("beat"); void pulse.offsetWidth; pulse.classList.add("beat"); }
   };
-  VT.lost = function () { pulse.dataset.state = "stale"; };
+  /* unknown: the page has had no live answer at all, so the counts it was drawn with are not shown as current. */
+  VT.lost = function (unknown) { pulse.dataset.state = "stale"; if (unknown) pulse.dataset.known = "0"; };
   VT.alerts = function (list) {
     quiet = {};
     list.alerts.forEach(function (a) { if (a.kind === "quiet") quiet[a.trip.vehicle_id] = true; });
@@ -94,17 +96,18 @@
     $$("[data-alert-count]").forEach(function (c) { c.textContent = list.count || ""; c.hidden = !list.count; });
     $$("[data-alert-link]").forEach(function (a) { a.setAttribute("aria-label", list.count ? "Alerts, " + list.count + " open" : "Alerts"); });
   };
+  /* The live map asks for the same answers itself and hands them over, so the shell does not ask twice. */
   function poll() {
-    if (document.hidden) return;
+    if (document.hidden || VT.ownsPulse) return;
     var alerts = polls++ % 3 ? Promise.resolve() : VT.getJSON("/api/v1/admin/alerts").then(VT.alerts).catch(function () {});
-    alerts.then(function () { return VT.getJSON("/api/v1/admin/vehicles/live"); }).then(VT.heard, VT.lost);
+    alerts.then(function () { return VT.getJSON("/api/v1/admin/vehicles/live"); }).then(VT.heard, function () { VT.lost(false); });
   }
   if (pulse) {
     setInterval(function () {
       var s = Math.round((Date.now() - heardAt) / 1000);
       if (s > 30 && !document.hidden) pulse.dataset.state = "stale";
       var stale = pulse.dataset.state === "stale";
-      age.textContent = stale ? "no answer for " + span(s) : s < 2 ? "updated just now" : "updated " + span(s) + " ago";
+      age.textContent = stale ? "no answer for " + (s < 90 ? s + " s" : span(s)) : s < 2 ? "updated just now" : "updated " + span(s) + " ago";
     }, 1000);
     setInterval(poll, 10000);
     document.addEventListener("visibilitychange", poll);

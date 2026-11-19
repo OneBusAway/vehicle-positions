@@ -492,15 +492,40 @@ run finishes.
 
 **Live map** shows every vehicle that has reported within the staleness
 threshold, refreshing about every 10 seconds on its own. It shows
-driver-reported vehicles only.
+driver-reported vehicles only. The map fills the page; everything else floats
+on it.
 
-- The overlay at the top left counts **Active** vehicles and how many distinct
-  **Routes** they are on.
-- Clicking a bus marker opens a card with **Route**, **Driver**, **Speed** and
-  **Updated** ("how long ago").
-- **Fleet Status** on the right lists the same vehicles as rows.
-- If nothing is reporting you get the banner **No vehicles to show right now.**
-  and **No vehicles reporting.** in the list beside the map.
+- Each vehicle is a dark marker with an arrow for the way it is heading (a dot
+  when the phone does not say) and a small tag with its route's short name. A
+  vehicle that needs a look has an amber edge and is drawn on top: one that
+  has gone quiet is grey, and one with an open alert (**Not moving**, **Off
+  route**, **Not started**) keeps its colour. Vehicles glide between updates,
+  and a ring leaves a vehicle when its new report arrives (only while 80 or
+  fewer are on the map). With more than 60 vehicles, zoomed out, each vehicle
+  that needs no look is a small dot; zoom in and they are markers again.
+- The buttons along the top show **All**, then **Needs attention** when
+  anything does, then each route, each with how many vehicles it has. Pick one
+  to show only those.
+- **Vehicles** lists them by route, what needs attention first, each with
+  where it is heading, its speed in km/h and how old its last report is (or
+  why it needs a look: **Quiet 4 min**, **Off route 7 min**). With more than 40
+  vehicles each route is folded; open it to see its vehicles. A folded route
+  says how many of its vehicles need attention.
+- Picking a vehicle, on the map or in the list, opens its card: its route and
+  where it is heading, whether it is reporting, its driver, GTFS trip, speed
+  and heading, with **Follow** (keep it in view), **Open trip** and
+  **Vehicle**. It also draws its trip's route and stops. **Esc** closes it.
+- The buttons on the right open the list, make the map full screen, fit every
+  vehicle in view, and zoom in and out.
+- If nothing is reporting the map says **No vehicles are reporting**, with
+  **Set up a driver**. If the server stops answering, the vehicles stay where
+  they last were, dimmed, and the map says what time they are from; until it
+  has answered once, the list says **Waiting for the server**.
+- With the keyboard, the buttons along the top, the list and the card are the
+  way in: the vehicles on the map itself cannot be reached with Tab. A screen
+  reader hears which vehicle was picked.
+- `/admin/map?trip_id=N`, which an older version used for a trip's trail,
+  now opens that trip's page.
 
 ### Alerts
 

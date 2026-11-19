@@ -333,8 +333,9 @@ func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ui.renderAdmin(w, r, http.StatusOK, "map.html", map[string]interface{}{
-		"Title": "Live map",
-		"Page":  "map",
+		"Title":      "Live map",
+		"Page":       "map",
+		"QuietAfter": int(ui.alerts.settings.quietAfter / time.Second),
 	})
 }
 

@@ -304,21 +304,34 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 	}
 }
 
-// TestMapPageLiveMode verifies the live-map view (no trip_id) tags the map
-// container with the live-feed data attribute and omits the trail attribute.
+// TestMapPageLiveMode verifies the map container carries what the map script
+// asks for: the live answer, the open alerts, the schedule, and when a
+// vehicle counts as quiet (ALERT_QUIET_AFTER, in seconds).
 func TestMapPageLiveMode(t *testing.T) {
-	ui := newTestAdminUI(t)
-	mux := http.NewServeMux()
-	registerAdminUI(mux, ui)
-	req := httptest.NewRequest(http.MethodGet, "/admin/map", nil)
-	req.AddCookie(cookieFor(t, "admin"))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	body := w.Body.String()
-	assert.Contains(t, body, `id="main-map"`)
-	assert.Contains(t, body, `data-live-url="/api/v1/admin/vehicles/live"`)
-	assert.NotContains(t, body, "data-trip-url")
+	for _, tc := range []struct {
+		name       string
+		quietAfter time.Duration
+		want       string
+	}{
+		{"default", defaultAlertQuietAfter, `data-quiet-after="180"`},
+		{"set", 4 * time.Minute, `data-quiet-after="240"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ui := newTestAdminUI(t)
+			ui.alerts.settings.quietAfter = tc.quietAfter
+			mux := http.NewServeMux()
+			registerAdminUI(mux, ui)
+			req := httptest.NewRequest(http.MethodGet, "/admin/map", nil)
+			req.AddCookie(cookieFor(t, "admin"))
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+			body := w.Body.String()
+			assert.Contains(t, body, `<div id="main-map" class="map" data-live-url="/api/v1/admin/vehicles/live" data-alerts-url="/api/v1/admin/alerts" data-gtfs-url="/api/v1/gtfs" `+tc.want+`></div>`)
+			assert.Contains(t, body, "The live map needs JavaScript.")
+			assert.NotContains(t, body, "data-trip-url")
+		})
+	}
 }
 
 // TestMapPageTripIDRedirectsToTripPage: a trip's trail was once drawn on the
