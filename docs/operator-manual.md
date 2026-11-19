@@ -87,6 +87,8 @@ The bar across the top is on every page:
   those on a trip that have gone quiet. The last part says how long ago the
   page heard from the server, such as **updated 4 s ago**. It keeps itself
   current, and reads **no answer for 40 s** when the server stops answering.
+  With several admin tabs open, one of them asks the server and shares the
+  answer with the others.
 - The bell shows how many alerts are open and opens **Alerts**.
 - The circle with your initials opens a small menu with **Light or dark**,
   which switches the pages' colours, and **Sign out**. On a phone both are on

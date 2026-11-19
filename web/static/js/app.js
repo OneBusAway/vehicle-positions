@@ -72,34 +72,50 @@
   }
 
   /* The pulse: how many vehicles are reporting, and how old that answer is. The page arrives with the
-     server's counts; after that the live answer is asked for every 10 s and the alerts on every third. */
-  var pulse = $("#pulse"), age = $("#pulse-age"), heardAt = Date.now(), quiet = {}, polls = 0;
+     server's counts; after that the live answer is asked for every 10 s and the alerts every 30 s. */
+  var pulse = $("#pulse"), age = $("#pulse-age"), heardAt = Date.now(), sharedAt = 0, alertsAt = 0, quiet = {};
   function span(s) { return s < 2 ? "just now" : s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
   /* The counts are a live region: written only when they change, so nothing is read out again. */
   function say(el, n) { if (el.textContent !== String(n)) el.textContent = n; }
-  VT.heard = function (live) {
+  function showHeard(ids) {
     heardAt = Date.now();
-    var reporting = live.vehicles.filter(function (v) { return !quiet[v.vehicle_id]; }).length;
+    var reporting = ids.filter(function (id) { return !quiet[id]; }).length;
     pulse.dataset.state = reporting ? "live" : "idle";
     delete pulse.dataset.known;
     say($("#pulse-reporting"), reporting);
     if (!reduce) { pulse.classList.remove("beat"); void pulse.offsetWidth; pulse.classList.add("beat"); }
+  }
+  function showAlerts(quietIds, count) {
+    alertsAt = Date.now();
+    quiet = {};
+    quietIds.forEach(function (id) { quiet[id] = true; });
+    say($("#pulse-quiet"), quietIds.length);
+    $("#pulse-q").hidden = !quietIds.length;
+    $$("[data-alert-count]").forEach(function (c) { c.textContent = count || ""; c.hidden = !count; });
+    $$("[data-alert-link]").forEach(function (a) { a.setAttribute("aria-label", count ? "Alerts, " + count + " open" : "Alerts"); });
+  }
+  /* Open admin tabs share what they hear, so one asks and the others listen: a tab does not ask while
+     another has shared an answer in the last 9 s, and takes over by itself when that one is closed or hidden. */
+  var tabs = pulse && window.BroadcastChannel ? new BroadcastChannel("vt-pulse") : null;
+  if (tabs) tabs.onmessage = function (ev) {
+    if (ev.data.live) { sharedAt = Date.now(); showHeard(ev.data.live); } else showAlerts(ev.data.quiet, ev.data.count);
+  };
+  VT.heard = function (live) {
+    var ids = live.vehicles.map(function (v) { return v.vehicle_id; });
+    showHeard(ids);
+    if (tabs) tabs.postMessage({ live: ids });
   };
   /* unknown: the page has had no live answer at all, so the counts it was drawn with are not shown as current. */
   VT.lost = function (unknown) { pulse.dataset.state = "stale"; if (unknown) pulse.dataset.known = "0"; };
   VT.alerts = function (list) {
-    quiet = {};
-    list.alerts.forEach(function (a) { if (a.kind === "quiet") quiet[a.trip.vehicle_id] = true; });
-    var n = Object.keys(quiet).length;
-    say($("#pulse-quiet"), n);
-    $("#pulse-q").hidden = !n;
-    $$("[data-alert-count]").forEach(function (c) { c.textContent = list.count || ""; c.hidden = !list.count; });
-    $$("[data-alert-link]").forEach(function (a) { a.setAttribute("aria-label", list.count ? "Alerts, " + list.count + " open" : "Alerts"); });
+    var ids = list.alerts.filter(function (a) { return a.kind === "quiet"; }).map(function (a) { return a.trip.vehicle_id; });
+    showAlerts(ids, list.count);
+    if (tabs) tabs.postMessage({ quiet: ids, count: list.count });
   };
   /* The live map asks for the same answers itself and hands them over, so the shell does not ask twice. */
   function poll() {
-    if (document.hidden || VT.ownsPulse) return;
-    var alerts = polls++ % 3 ? Promise.resolve() : VT.getJSON("/api/v1/admin/alerts").then(VT.alerts).catch(function () {});
+    if (document.hidden || VT.ownsPulse || Date.now() - sharedAt < 9000) return;
+    var alerts = Date.now() - alertsAt < 29000 ? Promise.resolve() : VT.getJSON("/api/v1/admin/alerts").then(VT.alerts).catch(function () {});
     alerts.then(function () { return VT.getJSON("/api/v1/admin/vehicles/live"); }).then(VT.heard, function () { VT.lost(false); });
   }
   if (pulse) {
