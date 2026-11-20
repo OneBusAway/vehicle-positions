@@ -534,6 +534,90 @@ func TestBoardedRunStart_NoStopIsNotAStopWithoutAnID(t *testing.T) {
 	assert.Equal(t, boarded, boardedRunStart(trip, "", boarded))
 }
 
+// midnightTimetableEnv is a rider env with two trips timetabled just after
+// midnight on their own service day, on T1's street: T9 runs daily and T10 on
+// weekdays, each leaving ST1 at 00:05, ST2 at 00:15 and ST3 at 00:25.
+func midnightTimetableEnv(t *testing.T) *riderTestEnv {
+	t.Helper()
+	add := func(body []byte, lines ...string) []byte {
+		s := string(body)
+		if !strings.HasSuffix(s, "\n") {
+			s += "\n"
+		}
+		return []byte(s + strings.Join(lines, "\n") + "\n")
+	}
+	edit := func(name string, body []byte) []byte {
+		switch name {
+		case "calendar.txt":
+			return add(body, "DAILY,1,1,1,1,1,1,1,20260101,20351231")
+		case "trips.txt":
+			return add(body, "R1,DAILY,T9,S1,North,0", "R1,WEEKDAY,T10,S1,North,0")
+		case "stop_times.txt":
+			var lines []string
+			for _, trip := range []string{"T9", "T10"} {
+				lines = append(lines,
+					trip+",00:05:00,00:05:00,ST1,1,0.000000",
+					trip+",00:15:00,00:15:00,ST2,2,500.000000",
+					trip+",00:25:00,00:25:00,ST3,3,1001.000000")
+			}
+			return add(body, lines...)
+		}
+		return body
+	}
+	env := newRiderTestEnv(t)
+	ix := fixtureIndexEdited(t, edit)
+	env.index = ix
+	env.svc.index = func() *rider.Index { return ix }
+	return env
+}
+
+// A timetabled trip's stop times already place its run, so its ride is dated
+// by the boarding time, not shifted back to its run's start: a rider who
+// starts at 00:15, ten minutes before the trip's 00:25 stop, is on that
+// night's run, and the shift would put them at 23:55 the day before. A trip
+// that runs only on weekdays, started early on a Monday, would then be dated
+// the Sunday it does not run on and refused.
+func TestStartRide_TimetabledRideJustAfterMidnightIsDatedByItsOwnDay(t *testing.T) {
+	tests := []struct {
+		name, trip    string
+		day           int
+		wantStartDate string
+	}{
+		{"a daily trip, on a Thursday", "T9", 3, "20260903"},
+		// Not the 7th: the fixture takes its weekday service off that Monday.
+		{"a weekday trip, on a Monday", "T10", 14, "20260914"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := midnightTimetableEnv(t)
+			_, tok := env.register(t)
+			env.now = time.Date(2026, 9, tc.day, 0, 15, 0, 0, env.index.Timezone())
+
+			w := env.do(t, "POST", "/api/v1/rider/rides", tok, map[string]any{"trip_id": tc.trip, "boarding_stop_id": "ST3"})
+			require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+			var ride startRideResponse
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&ride))
+			assert.Equal(t, tc.wantStartDate, env.store.rides[ride.RideID].StartDate)
+		})
+	}
+}
+
+// boardedRunStart counts back from the boarding stop's own scheduled time. A
+// stop the feed gives no coordinates shares its predecessor's place on the
+// shape, so counting from its place would take the predecessor's time.
+func TestBoardedRunStart_CountsFromTheStopsOwnTime(t *testing.T) {
+	trip := &rider.TripInfo{StopTimes: []rider.StopTimeInfo{
+		{StopID: "A", Arrival: 8*time.Hour - 2*time.Minute, Departure: 8 * time.Hour},
+		{StopID: "B", AlongShape: 500, Arrival: 8*time.Hour + 25*time.Minute, Departure: 8*time.Hour + 25*time.Minute},
+		{StopID: "C", AlongShape: 500, Arrival: 8*time.Hour + 40*time.Minute, Departure: 8*time.Hour + 42*time.Minute},
+		{StopID: "D", AlongShape: 1000, Arrival: 8*time.Hour + 55*time.Minute, Departure: 8*time.Hour + 55*time.Minute},
+	}}
+	boarded := time.Date(2026, 9, 3, 0, 50, 0, 0, time.UTC)
+	assert.Equal(t, boarded.Add(-40*time.Minute), boardedRunStart(trip, "C", boarded))
+	assert.Equal(t, boarded.Add(-25*time.Minute), boardedRunStart(trip, "B", boarded))
+	assert.Equal(t, boarded, boardedRunStart(trip, "A", boarded), "the first stop is the run's start, its dwell included")
+}
+
 // T3, by timetable from 25:00, is dated by its stop times whichever of them a
 // rider boards at.
 func TestStartRide_TimetabledRideWithABoardingStopIsDatedAsBefore(t *testing.T) {
