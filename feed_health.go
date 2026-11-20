@@ -240,8 +240,8 @@ type healthMinute struct {
 	Reports reportOutcomes `json:"reports"`
 	Feed    feedOutcomes   `json:"feed"`
 	// Vehicles is how many vehicles had a live report accepted in the
-	// minute. It is drawn on the Health page only, not yet part of the API.
-	Vehicles int `json:"-"`
+	// minute, each counted once.
+	Vehicles int `json:"vehicles"`
 }
 
 // feedHealthResponse is the body of GET /api/v1/admin/health, and what the

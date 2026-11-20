@@ -1003,19 +1003,20 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, role, active, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at, last_seen_at
 FROM users
 WHERE id = $1
 `
 
 type GetUserByIDRow struct {
-	ID        int64
-	Name      string
-	Email     string
-	Role      string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID         int64
+	Name       string
+	Email      string
+	Role       string
+	Active     bool
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
@@ -1029,6 +1030,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
@@ -1701,20 +1703,21 @@ func (q *Queries) ListTrails(ctx context.Context, tripIds []int64) ([]ListTrails
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, email, role, active, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at, last_seen_at
 FROM users
 ORDER BY created_at DESC, id DESC
 LIMIT 1000
 `
 
 type ListUsersRow struct {
-	ID        int64
-	Name      string
-	Email     string
-	Role      string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID         int64
+	Name       string
+	Email      string
+	Role       string
+	Active     bool
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
 }
 
 // safety bound; not pagination. Callers that need one page at a time use
@@ -1737,6 +1740,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.Active,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastSeenAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2166,7 +2170,7 @@ UPDATE users
 SET name = $1, email = lower($2), role = $3,
     sessions_valid_after = CASE WHEN role <> $3 THEN NOW() ELSE sessions_valid_after END
 WHERE id = $4
-RETURNING id, name, email, role, active, created_at, updated_at
+RETURNING id, name, email, role, active, created_at, updated_at, last_seen_at
 `
 
 type UpdateUserParams struct {
@@ -2177,13 +2181,14 @@ type UpdateUserParams struct {
 }
 
 type UpdateUserRow struct {
-	ID        int64
-	Name      string
-	Email     string
-	Role      string
-	Active    bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID         int64
+	Name       string
+	Email      string
+	Role       string
+	Active     bool
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
 }
 
 // updated_at is maintained by the set_users_updated_at trigger. A role change
@@ -2207,17 +2212,20 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
 
 const updateUserLastSeen = `-- name: UpdateUserLastSeen :exec
-UPDATE users SET last_seen_at = NOW() WHERE id = $1
+UPDATE users SET last_seen_at = NOW() WHERE id = $1 AND last_seen_at IS DISTINCT FROM NOW()
 `
 
 // Stamped on every successful sign-in and token refresh. The
 // set_users_updated_at trigger skips a change to last_seen_at alone, so this
-// does not move updated_at.
+// does not move updated_at. NOW() is the same all through a transaction, so a
+// second stamp in one would change nothing, and the trigger would then fire
+// and move updated_at: the guard leaves that row out instead.
 func (q *Queries) UpdateUserLastSeen(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, updateUserLastSeen, id)
 	return err

@@ -2568,7 +2568,7 @@ components:
 
     User:
       type: object
-      required: [id, name, email, role, active, created_at, updated_at]
+      required: [id, name, email, role, active, created_at, updated_at, last_seen_at]
       properties:
         id:
           type: integer
@@ -2593,6 +2593,15 @@ components:
         updated_at:
           type: string
           format: date-time
+        last_seen_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the user last signed in with their password or renewed their
+            session with a refresh token, in UTC. Null until they next do
+            either, which includes a user created since and one who has not
+            signed in since the server began recording it. Signing in does not
+            move `updated_at`.
 
     LiveVehicles:
       type: object
@@ -3714,7 +3723,7 @@ components:
 
     FeedHealthMinute:
       type: object
-      required: [minute, reports, feed]
+      required: [minute, reports, feed, vehicles]
       properties:
         minute:
           type: string
@@ -3724,6 +3733,14 @@ components:
           $ref: '#/components/schemas/ReportOutcomes'
         feed:
           $ref: '#/components/schemas/FeedOutcomes'
+        vehicles:
+          type: integer
+          minimum: 0
+          description: |
+            How many vehicles had a live report accepted in the minute, each
+            counted once however many it sent. A batch of offline history does
+            not count. There is no hourly or total figure: vehicles counted in
+            different minutes may be the same ones.
 
     ReportOutcomes:
       type: object
