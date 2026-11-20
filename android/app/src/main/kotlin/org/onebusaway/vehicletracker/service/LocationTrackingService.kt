@@ -28,7 +28,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -268,13 +267,16 @@ class LocationTrackingService : Service() {
     }
 
     private fun observeTrackingState() {
-        // Posted when what it says changes, at most once a fix or a new waiting count: not for each report sent.
-        combine(trackingRepository.state, waitingReports.waiting.onEach { waiting = it }) { state, waitingNow ->
-            notificationText(state, activeTrip, waitingNow)
+        // Posted when what it says changes, at most once a fix or a new waiting count: not for each report sent. On the
+        // main thread, like every other post: one built off it just before a change of language could otherwise be
+        // posted after onConfigurationChanged's, and stay in the old language until the text next changes.
+        scope.launch(Dispatchers.Main) {
+            combine(trackingRepository.state, waitingReports.waiting.onEach { waiting = it }) { state, waitingNow ->
+                notificationText(state, activeTrip, waitingNow)
+            }
+                .distinctUntilChanged()
+                .collect { postNotification() }
         }
-            .distinctUntilChanged()
-            .onEach { postNotification() }
-            .launchIn(scope)
         // On the main thread, like every other call to startLocationUpdates.
         scope.launch(Dispatchers.Main) {
             trackingRepository.liveView.collect { if (locationUpdatesActive) startLocationUpdates() }
