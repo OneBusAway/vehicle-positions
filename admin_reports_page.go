@@ -292,22 +292,17 @@ func newOnTimeSplit(onTime, early, late int) onTimeSplit {
 
 func (c reportCounts) split() onTimeSplit { return newOnTimeSplit(c.OnTime, c.Early, c.Late) }
 
-// analyticsDaysAtOnce is how many of a period's days are worked out at the
-// same time. Each holds a database connection while it reads its trips and
-// trails. pgxpool allows at most max(4, NumCPU) connections by default, so 4
-// on the 1 vCPU host docs/deployment.md recommends, and two at once leaves at
-// least two free for location reports and every other query.
-const analyticsDaysAtOnce = 2
-
 // analyticsDays works out the service report of each of the days that end on
-// last, oldest first. Days are worked out analyticsDaysAtOnce at a time, so a
-// cold cache costs a few days' reads rather than all of them in a row. The
-// first day that fails, or the request ending, stops the days not started
-// yet and cancels the reads under way.
+// last, oldest first. Days are asked for reportReadsAtOnce at a time, so a
+// cold cache costs a few days' reads rather than all of them in a row, the
+// oldest days are read first, and two requests' days take turns at the
+// reporter's slots. The first day that fails, or the request ending, stops
+// the days not started yet and gives up those under way, whose reads stop
+// unless another request waits for them.
 func analyticsDays(ctx context.Context, reports *serviceReporter, recent *overviewReports, ix *rider.Index, today, last time.Time, days int) ([]*serviceReport, error) {
 	out := make([]*serviceReport, days)
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(analyticsDaysAtOnce)
+	g.SetLimit(reportReadsAtOnce)
 	for i := range out {
 		day := last.AddDate(0, 0, i-(days-1))
 		g.Go(func() error {

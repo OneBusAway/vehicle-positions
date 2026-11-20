@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
+
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
@@ -35,6 +37,14 @@ const (
 	// trip run every day on the nearest day's run, wherever its driver
 	// started it, and a day the trip does not run off the day after.
 	maxRunGap = 12 * time.Hour
+
+	// reportReadsAtOnce is how many days' reports are worked out at the same
+	// time, however many requests ask for them. Each holds a database
+	// connection while it reads its trips and trails. pgxpool allows at most
+	// max(4, NumCPU) connections by default, so 4 on the 1 vCPU host
+	// docs/deployment.md recommends, and two at once leaves at least two free
+	// for location reports and every other query.
+	reportReadsAtOnce = 2
 )
 
 var (
@@ -136,6 +146,9 @@ type serviceReporter struct {
 	index    func() *rider.Index
 	settings reportSettings
 	now      func() time.Time
+	// slots lets reportReadsAtOnce days be worked out at a time across every
+	// request: the Analytics page, the Overview and the API.
+	slots *semaphore.Weighted
 
 	mu sync.Mutex
 	// schedule is the load of the schedule the kept reports were worked out
@@ -148,6 +161,23 @@ type serviceReporter struct {
 	schedule scheduleLoad
 	cache    map[string]*serviceReport // by service date
 	order    []string                  // oldest first
+	// reading is the days being worked out now, by service date. A request
+	// for one of them waits for that read rather than starting another.
+	reading map[string]*dayRead
+}
+
+// dayRead is one day's report being worked out, shared by the requests that
+// wait for it.
+type dayRead struct {
+	load scheduleLoad
+	done chan struct{}
+	// rep and err are set before done is closed.
+	rep *serviceReport
+	err error
+	// waiting is how many requests wait for it, under serviceReporter.mu.
+	// The last to stop waiting before it is done cancels it.
+	waiting int
+	cancel  context.CancelFunc
 }
 
 // scheduleLoad names one load of the schedule: the feed it was loaded from
@@ -173,7 +203,9 @@ func newServiceReporter(store serviceReportStore, index func() *rider.Index, set
 		index:    index,
 		settings: settings,
 		now:      time.Now,
+		slots:    semaphore.NewWeighted(reportReadsAtOnce),
 		cache:    make(map[string]*serviceReport),
+		reading:  make(map[string]*dayRead),
 	}
 }
 
@@ -189,19 +221,81 @@ func (r *serviceReporter) report(ctx context.Context, date string) (*serviceRepo
 		return nil, err
 	}
 	serviceDate := day.Format(gtfsDateLayout)
-	load := loadOf(ix)
-	if cached, ok := r.cached(load, serviceDate); ok {
+	cached, read := r.join(ix, serviceDate, day)
+	if cached != nil {
 		return cached, nil
 	}
+	defer r.leave(serviceDate, read)
+	select {
+	case <-read.done:
+		return read.rep, read.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
-	rep, err := r.compute(ctx, ix, day)
-	if err != nil {
-		return nil, err
+// join returns the report kept for date, or else the read of it under way
+// against ix's load of the schedule, which it starts when there is none. The
+// caller waits for the read and then leaves it.
+func (r *serviceReporter) join(ix *rider.Index, date string, day time.Time) (*serviceReport, *dayRead) {
+	load := loadOf(ix)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if rep, ok := r.cachedLocked(load, date); ok {
+		return rep, nil
 	}
-	if r.settled(ix, serviceDate, rep) {
-		r.keep(load, serviceDate, rep)
+	read, ok := r.reading[date]
+	if !ok || !read.load.same(load) {
+		// The read runs on a context of its own rather than the request's
+		// that started it, so that request ending does not fail the others
+		// waiting for the same day.
+		ctx, cancel := context.WithCancel(context.Background())
+		read = &dayRead{load: load, done: make(chan struct{}), cancel: cancel}
+		r.reading[date] = read
+		go r.read(ctx, read, ix, date, day)
 	}
-	return rep, nil
+	read.waiting++
+	return nil, read
+}
+
+// leave is a request done waiting for read. When no request waits for it any
+// more it is cancelled: a day nobody waits for stops waiting for a slot, or
+// gives its slot and connection back, and the next request for it starts
+// again.
+func (r *serviceReporter) leave(date string, read *dayRead) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	read.waiting--
+	if read.waiting > 0 {
+		return
+	}
+	read.cancel()
+	if r.reading[date] == read {
+		delete(r.reading, date)
+	}
+}
+
+// read works out the report for day once a slot is free, keeps it if the day
+// is settled, and then lets the requests waiting for it have it.
+func (r *serviceReporter) read(ctx context.Context, read *dayRead, ix *rider.Index, date string, day time.Time) {
+	var rep *serviceReport
+	err := r.slots.Acquire(ctx, 1)
+	if err == nil {
+		rep, err = r.compute(ctx, ix, day)
+		r.slots.Release(1)
+	}
+
+	r.mu.Lock()
+	if r.reading[date] == read {
+		delete(r.reading, date)
+	}
+	if err == nil && r.settled(ix, date, rep) {
+		r.keepLocked(read.load, date, rep)
+	}
+	r.mu.Unlock()
+
+	read.rep, read.err = rep, err
+	close(read.done)
 }
 
 // reportDay parses date, or picks yesterday in the agency's timezone when it
@@ -233,12 +327,10 @@ func (r *serviceReporter) settled(ix *rider.Index, date string, rep *serviceRepo
 	return date < ix.ServiceDate(now) && !now.Before(rep.serviceEnds.Add(reportSettleAfter))
 }
 
-// cached returns the report kept for date. Asking with a load of the schedule
-// other than the one the kept reports were worked out against empties the
-// cache first.
-func (r *serviceReporter) cached(load scheduleLoad, date string) (*serviceReport, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// cachedLocked returns the report kept for date. Asking with a load of the
+// schedule other than the one the kept reports were worked out against
+// empties the cache first. The caller holds r.mu.
+func (r *serviceReporter) cachedLocked(load scheduleLoad, date string) (*serviceReport, bool) {
 	if !r.schedule.same(load) {
 		r.schedule = load
 		clear(r.cache)
@@ -248,12 +340,10 @@ func (r *serviceReporter) cached(load scheduleLoad, date string) (*serviceReport
 	return rep, ok
 }
 
-// keep caches rep, dropping the oldest report kept once there are
+// keepLocked caches rep, dropping the oldest report kept once there are
 // reportCacheSize. A report worked out against load while a request with
-// another load took the cache over is not kept.
-func (r *serviceReporter) keep(load scheduleLoad, date string, rep *serviceReport) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// another load took the cache over is not kept. The caller holds r.mu.
+func (r *serviceReporter) keepLocked(load scheduleLoad, date string, rep *serviceReport) {
 	if !r.schedule.same(load) {
 		return
 	}
