@@ -351,6 +351,7 @@ Authentication is per endpoint, not global:
 |---------|-------------|
 | `/health`, `/ready`, `GET /gtfs-rt/vehicle-positions` | None. The feed is public by design. |
 | `POST /api/v1/auth/login` | None, but rate limited per client. |
+| `GET /metrics` | The `METRICS_TOKEN` bearer token. Registered only when `METRICS_ENABLED` is `true`. |
 | `POST /api/v1/locations`, `/api/v1/trips/*`, `GET /api/v1/vehicles` | A driver's JWT (`authMiddleware`). |
 | `/api/v1/admin/*` — including `/api/v1/admin/rider/status` | A JWT whose user is an admin (`authMiddleware` + `adminMiddleware`). |
 | `/api/v1/rider/*` | A rider JWT, issued by `POST /api/v1/rider/register`; see §8. |

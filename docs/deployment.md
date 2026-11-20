@@ -740,6 +740,7 @@ curl 'https://tracker.example.org/gtfs-rt/vehicle-positions?format=json'
 | `GET /ready` | The database answered a ping within 2 seconds. `200 {"status":"ok"}` or `503 {"status":"degraded"}`. Use it as the readiness probe and alert on it. |
 | `GET /api/v1/admin/status` | Requires an admin bearer token. Returns `status`, `uptime_seconds`, `active_vehicles`, `total_vehicles_tracked` and `last_update`. This is the one that tells you whether data is actually flowing. |
 | `/admin/dashboard` and `/admin/map` | The human version of the same picture: active vehicles, recent trips, live positions. |
+| `GET /metrics` | Off by default. The Health page's counts, the schedule and the open alerts for Prometheus; see [Prometheus metrics](#prometheus-metrics) below. |
 
 Fetching the status endpoint from a script:
 
@@ -752,6 +753,43 @@ curl -s https://tracker.example.org/api/v1/admin/status \
   -H "Authorization: Bearer $TOKEN" | jq .
 # {"status":"ok","uptime_seconds":3600,"active_vehicles":12,...}
 ```
+
+### Prometheus metrics
+
+`GET /metrics` serves the same counts as the admin **Health** page in the
+Prometheus text format, for Prometheus, Grafana Agent or anything else that
+scrapes it. It is off until you set `METRICS_ENABLED=true` and a
+`METRICS_TOKEN` of at least 32 characters (`openssl rand -hex 32`); see the
+[configuration reference](configuration.md#prometheus-metrics). The token is
+required rather than a loopback-only mode because the server cannot tell a
+local scraper from the internet: under Docker the scraper is on the bridge
+network, not loopback, and behind nginx every request comes from loopback.
+
+```yaml
+scrape_configs:
+  - job_name: vehicle-positions
+    scheme: https
+    authorization:
+      credentials_file: /etc/prometheus/vehicle-positions-token
+    static_configs:
+      - targets: ["tracker.example.org"]
+```
+
+| Series | What it is |
+|---|---|
+| `vehicle_positions_reports_total{outcome}` | Counter of position reports since the server started: `accepted`, `invalid`, `unauthorized`, `rate_limited`, `server_error`. |
+| `vehicle_positions_feed_fetches_total{outcome}` | Counter of GTFS-RT feed fetches: `served`, `refused`, `invalid`, `server_error`. |
+| `..._reports_last_hour`, `..._feed_fetches_last_hour` | The same over the last hour, the Health page's numbers. |
+| `vehicle_positions_vehicles_reporting` | Vehicles with a report accepted in the last full minute. |
+| `vehicle_positions_gtfs_loaded_timestamp_seconds`, `_gtfs_routes`, `_gtfs_trips` | When the schedule was downloaded, and its size. |
+| `vehicle_positions_alerts{kind}` | Open alerts by kind, as the Alerts page lists them. `vehicle_positions_alerts_listed` is 0 when the database could not be read and the alerts are missing. |
+| `vehicle_positions_build_info{goversion,revision}` | Always 1. The published image is built without git, so its `revision` is `unknown`. |
+
+The counts are kept in memory, so a restart starts them again from zero;
+Prometheus's `rate()` and `increase()` handle that. For example, alert on
+`increase(vehicle_positions_reports_total{outcome="server_error"}[10m]) > 0`, or
+on `time() - vehicle_positions_gtfs_loaded_timestamp_seconds > 2 * 86400` when
+the daily schedule refresh has stopped working.
 
 ### Logs
 

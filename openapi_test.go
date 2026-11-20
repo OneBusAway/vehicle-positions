@@ -87,6 +87,15 @@ var htmlUIRoutes = map[string]struct{}{
 	"POST /admin/import/{kind}/confirm":                  {},
 }
 
+// scrapeRoutes are routes for a monitoring system rather than an API client:
+// GET /metrics answers in the Prometheus text format, which Prometheus
+// defines, behind a token that is none of the spec's security schemes. They
+// are withheld from openapi.yaml by name, like htmlUIRoutes, and documented in
+// docs/deployment.md instead.
+var scrapeRoutes = map[string]struct{}{
+	"GET /metrics": {},
+}
+
 // schemaStructs pairs a response schema with the Go struct whose JSON encoding
 // it describes. TestOpenAPI_SchemaPropertiesMatchStructs holds each pair to its
 // struct's tags — the check that would have caught `User.active` when #92 added
@@ -387,6 +396,9 @@ func apiRoutes(t *testing.T) []registeredRoute {
 	order := make([]string, 0, len(all))
 	for _, route := range all {
 		if _, isUI := htmlUIRoutes[route.String()]; isUI {
+			continue
+		}
+		if _, isScrape := scrapeRoutes[route.String()]; isScrape {
 			continue
 		}
 		key := route.String()
@@ -849,9 +861,9 @@ func TestOpenAPI_AllRefsResolve(t *testing.T) {
 	require.NotZero(t, references, "expected the spec to use $ref")
 }
 
-// TestOpenAPI_HTMLUIExclusionsAreCurrent keeps the exclusion list honest in the
-// direction the other tests cannot see. A newly added server-rendered route
-// that is missing from the list already fails TestOpenAPI_AllRoutesDocumented;
+// TestOpenAPI_HTMLUIExclusionsAreCurrent keeps the exclusion lists, htmlUIRoutes
+// and scrapeRoutes, honest in the direction the other tests cannot see. A newly
+// added route that is missing from them already fails TestOpenAPI_AllRoutesDocumented;
 // an entry left behind by a deleted route would silently widen the blind spot,
 // so it fails here instead.
 func TestOpenAPI_HTMLUIExclusionsAreCurrent(t *testing.T) {
@@ -865,6 +877,10 @@ func TestOpenAPI_HTMLUIExclusionsAreCurrent(t *testing.T) {
 	for route := range htmlUIRoutes {
 		assert.Containsf(t, registered, route,
 			"htmlUIRoutes withholds %q from the spec, but no Go source registers it any more", route)
+	}
+	for route := range scrapeRoutes {
+		assert.Containsf(t, registered, route,
+			"scrapeRoutes withholds %q from the spec, but no Go source registers it any more", route)
 	}
 }
 
