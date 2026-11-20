@@ -242,6 +242,59 @@ func (q *Queries) CountRidersByTier(ctx context.Context) ([]CountRidersByTierRow
 	return items, nil
 }
 
+const countRidesByServiceDay = `-- name: CountRidesByServiceDay :many
+SELECT start_date,
+       COUNT(*)::int AS rides,
+       COUNT(DISTINCT trip_id)::int AS trips,
+       SUM(points_matched)::bigint AS points_matched,
+       SUM(points_total)::bigint AS points_total
+FROM rides
+WHERE start_date BETWEEN $1 AND $2
+GROUP BY start_date
+ORDER BY start_date
+`
+
+type CountRidesByServiceDayParams struct {
+	FirstDate string
+	LastDate  string
+}
+
+type CountRidesByServiceDayRow struct {
+	StartDate     string
+	Rides         int32
+	Trips         int32
+	PointsMatched int64
+	PointsTotal   int64
+}
+
+// A day's trips are its distinct trip_ids: two riders on one trip cover it
+// once. Ranged on start_date, so idx_rides_start_date reads only the period.
+func (q *Queries) CountRidesByServiceDay(ctx context.Context, arg CountRidesByServiceDayParams) ([]CountRidesByServiceDayRow, error) {
+	rows, err := q.db.Query(ctx, countRidesByServiceDay, arg.FirstDate, arg.LastDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountRidesByServiceDayRow
+	for rows.Next() {
+		var i CountRidesByServiceDayRow
+		if err := rows.Scan(
+			&i.StartDate,
+			&i.Rides,
+			&i.Trips,
+			&i.PointsMatched,
+			&i.PointsTotal,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countUsersByRole = `-- name: CountUsersByRole :one
 SELECT COUNT(*) FROM users WHERE role = $1
 `

@@ -53,6 +53,19 @@ func TestNewBarChart(t *testing.T) {
 	assert.Equal(t, []string{"20:00", "20:01", "20:02", "20:03", "20:04"}, c.Ticks)
 }
 
+func TestNewBarChart_OwnTip(t *testing.T) {
+	bars := []chartBar{
+		{Label: "1 Sep", Value: 3, Warn: 1, Tip: "3 rides on 2 trips"},
+		{Label: "2 Sep", Value: 2},
+	}
+	c := newBarChart(bars, barChartOptions{Name: "Rides a day", Height: 84, Unit: "rides", WarnUnit: "rejected"})
+
+	require.Len(t, c.Bars, 2)
+	assert.Equal(t, "1 Sep|3 rides on 2 trips", c.Bars[0].Tip, "a bar's own tip replaces its counts, the stacked one's too")
+	assert.NotEmpty(t, c.Bars[0].WarnH, "and the bar is drawn as before")
+	assert.Equal(t, "2 Sep|2 rides", c.Bars[1].Tip, "a bar with none reads its counts")
+}
+
 func TestNewBarChart_Ticks(t *testing.T) {
 	bars := make([]chartBar, 60)
 	for i := range bars {

@@ -100,6 +100,7 @@ type adminUI struct {
 	apiKeys        apiKeyPageStore
 	rider          riderPageSource
 	rides          RideLister
+	rideDays       RideDayCounter
 	tokenChecker   TokenChecker
 	tokenRevoker   TokenRevoker
 	jwtSecret      []byte
@@ -141,6 +142,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 		apiKeys:        store,
 		rider:          riderOff{},
 		rides:          store,
+		rideDays:       store,
 		tokenChecker:   store,
 		tokenRevoker:   store,
 		jwtSecret:      jwtSecret,

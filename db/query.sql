@@ -412,6 +412,19 @@ SELECT * FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2
 -- name: ListRidesOfAnyStatus :many
 SELECT * FROM rides ORDER BY started_at DESC, id DESC LIMIT $1 OFFSET $2;
 
+-- A day's trips are its distinct trip_ids: two riders on one trip cover it
+-- once. Ranged on start_date, so idx_rides_start_date reads only the period.
+-- name: CountRidesByServiceDay :many
+SELECT start_date,
+       COUNT(*)::int AS rides,
+       COUNT(DISTINCT trip_id)::int AS trips,
+       SUM(points_matched)::bigint AS points_matched,
+       SUM(points_total)::bigint AS points_total
+FROM rides
+WHERE start_date BETWEEN sqlc.arg('first_date') AND sqlc.arg('last_date')
+GROUP BY start_date
+ORDER BY start_date;
+
 -- Points are appended in one pgx batch per request. The EXISTS guard keeps a
 -- late batch from appending points to a ride that has already ended, matching
 -- the "status = 'active'" guard on UpdateRideProgress.

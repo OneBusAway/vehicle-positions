@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -140,11 +142,19 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
+	use, err := ui.riderUse(ctx, ix)
+	if err != nil {
+		slog.Error("rider page: count rides by day", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	// GTFS is nil until the rider engine's first schedule load has landed.
 	if status.GTFS != nil {
 		data["Schedule"] = status.GTFS
 		data["ScheduleLoaded"] = riderPageTime(status.GTFS.LoadedAt, loc)
 	}
+	data["Use"] = use
 	data["Feeds"] = riderPageFeeds(status.TrustedFeeds, loc)
 	data["Riders"] = status.Riders
 	data["Rides"] = status.Rides
@@ -162,6 +172,78 @@ func (ui *adminUI) riderPage(w http.ResponseWriter, r *http.Request) {
 	data["PrevURL"] = riderPageURL(rideStatus, page-1)
 	data["NextURL"] = riderPageURL(rideStatus, page+1)
 	ui.renderAdmin(w, r, http.StatusOK, "rider.html", data)
+}
+
+// riderUseDays is how many service days, today's the last, the page adds up
+// rides over.
+const riderUseDays = 28
+
+// riderUseChartHeight is the height of the rides-per-day chart.
+const riderUseChartHeight = 130
+
+// riderUseView is how much rider mode has been used: rides per service day
+// as a chart, and a line adding the days up.
+type riderUseView struct {
+	Chart   barChartView
+	Summary string
+}
+
+// riderUse adds up the rides of the last riderUseDays service days. Today is
+// the schedule's service day, or with no schedule the UTC calendar day.
+func (ui *adminUI) riderUse(ctx context.Context, ix *rider.Index) (riderUseView, error) {
+	now := ui.reports.now()
+	today := now.UTC().Format(gtfsDateLayout)
+	if ix != nil {
+		today = ix.ServiceDate(now)
+	}
+	// Both write the date in the layout it is parsed with here.
+	last, _ := time.Parse(gtfsDateLayout, today)
+	first := last.AddDate(0, 0, 1-riderUseDays)
+	days, err := ui.rideDays.CountRidesByDay(ctx, first.Format(gtfsDateLayout), today)
+	if err != nil {
+		return riderUseView{}, err
+	}
+	return newRiderUse(days, first), nil
+}
+
+// newRiderUse draws days, which may leave out a day with no ride, as a bar
+// for each of the riderUseDays service days from first.
+func newRiderUse(days []RideDay, first time.Time) riderUseView {
+	byDate := make(map[string]RideDay, len(days))
+	for _, d := range days {
+		byDate[d.StartDate] = d
+	}
+	var total RideDay
+	bars := make([]chartBar, 0, riderUseDays)
+	for i := range riderUseDays {
+		day := first.AddDate(0, 0, i)
+		d := byDate[day.Format(gtfsDateLayout)]
+		bar := chartBar{Label: day.Format("2 Jan"), Value: uint64(d.Rides), Tip: "No rides"}
+		if d.Rides > 0 {
+			bar.Tip = fmt.Sprintf("%s on %s, %d of %d points matched",
+				countOf(d.Rides, "ride", "rides"), countOf(d.Trips, "trip", "trips"), d.PointsMatched, d.PointsTotal)
+		}
+		bars = append(bars, bar)
+		total.Rides += d.Rides
+		total.Trips += d.Trips
+		total.PointsMatched += d.PointsMatched
+		total.PointsTotal += d.PointsTotal
+	}
+
+	summary := fmt.Sprintf("No rides in the last %d days.", riderUseDays)
+	if total.Rides > 0 {
+		// A trip ridden on two days is two runs, so the days' trips add up.
+		summary = fmt.Sprintf("%s on %s in the last %d days, %d of %d points matched.",
+			countOf(total.Rides, "ride", "rides"), countOf(total.Trips, "trip", "trips"), riderUseDays, total.PointsMatched, total.PointsTotal)
+	}
+	return riderUseView{
+		Chart: newBarChart(bars, barChartOptions{
+			Name:   fmt.Sprintf("Rides per service day over the last %d days", riderUseDays),
+			Height: riderUseChartHeight,
+			Peak:   "Most in a day",
+		}),
+		Summary: summary,
+	}
 }
 
 // newRiderRideRow is ride as the page lists it, its route named and coloured
