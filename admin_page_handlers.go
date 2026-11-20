@@ -366,6 +366,12 @@ func (ui *adminUI) mapPage(w http.ResponseWriter, r *http.Request) {
 		"Title":      "Live map",
 		"Page":       "map",
 		"QuietAfter": int(ui.alerts.settings.quietAfter / time.Second),
+		// The on-time window, so the card calls a vehicle early, late or on
+		// time as the trip page and the Trips list do (reportSettings.verdict).
+		// The page names them data-window-*: html/template reads a data-on*
+		// attribute as an event handler and writes its value as script.
+		"OnTimeEarly": int(ui.reports.settings.onTimeEarly / time.Second),
+		"OnTimeLate":  int(ui.reports.settings.onTimeLate / time.Second),
 	})
 }
 

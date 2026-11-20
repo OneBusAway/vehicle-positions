@@ -41,6 +41,15 @@ type VehicleState struct {
 	// when the report gave none, the date the schedule runs the trip on
 	// nearest its start. "" when StartTime is.
 	StartTimeDate string
+	// ScheduleDeviation is how far from its trip's timetable the vehicle's
+	// latest report put it, positive late (scheduleDeviation), worked out as
+	// the report was accepted so that nothing reads the trail to answer it.
+	// nil when that report did not say: no trip, a trip in frequencies.txt or
+	// whose shape was drawn through its stops, off route, not yet left its
+	// first stop or past its last, no run of the trip to judge against, and a
+	// vehicle seeded at startup until it next reports. Only driver reports
+	// reach the tracker, so a rider-derived vehicle never has one.
+	ScheduleDeviation *time.Duration
 	// alongShape is how far along its trip's shape the vehicle was last
 	// placed, in metres: the projection hint for its next report on that trip.
 	// It is nil until the vehicle has been placed on its current trip.
@@ -241,10 +250,11 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 		// Looked up here rather than carried in place: a vehicle seeded at
 		// startup is not placed, but the feed still has to name its trip
 		// right.
-		StartTime:      startTime,
-		FrequencyBased: frequencyBased,
-		StartTimeDate:  startTimeDate,
-		alongShape:     place.alongShape,
+		StartTime:         startTime,
+		FrequencyBased:    frequencyBased,
+		StartTimeDate:     startTimeDate,
+		ScheduleDeviation: place.deviation,
+		alongShape:        place.alongShape,
 		// Not carried over from the vehicle's previous report: a driver app
 		// is to send it with every report while the driver has one set, so a
 		// report without it means the driver has cleared it.
@@ -282,6 +292,10 @@ func (t *Tracker) ActiveVehicles() []*VehicleState {
 			if v.Accuracy != nil {
 				a := *v.Accuracy
 				copy.Accuracy = &a
+			}
+			if v.ScheduleDeviation != nil {
+				d := *v.ScheduleDeviation
+				copy.ScheduleDeviation = &d
 			}
 			active = append(active, &copy)
 		}

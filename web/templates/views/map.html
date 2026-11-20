@@ -5,7 +5,7 @@
 {{end}}
 {{define "content"}}
 <div class="page-map" id="map-root">
-  <div id="main-map" class="map" data-live-url="/api/v1/admin/vehicles/live" data-alerts-url="/api/v1/admin/alerts" data-gtfs-url="/api/v1/gtfs" data-quiet-after="{{.QuietAfter}}"></div>
+  <div id="main-map" class="map" data-live-url="/api/v1/admin/vehicles/live" data-alerts-url="/api/v1/admin/alerts" data-gtfs-url="/api/v1/gtfs" data-quiet-after="{{.QuietAfter}}" data-window-early="{{.OnTimeEarly}}" data-window-late="{{.OnTimeLate}}"></div>
   <noscript><div class="float" style="position:absolute;left:16px;top:16px;z-index:600;padding:16px;max-width:360px">The live map needs JavaScript. <a href="/admin/trips">Trips</a> and <a href="/admin/alerts">Alerts</a> work without it.</div></noscript>
   <div class="map-chips js-only" id="map-chips" role="group" aria-label="Show vehicles by route"></div>
   <aside class="map-list float float-in js-only" id="map-list" aria-label="Vehicles">

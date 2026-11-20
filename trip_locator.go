@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"time"
 
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
@@ -42,6 +43,9 @@ type tripPlace struct {
 	stopID       string // "" when the report names no stop
 	stopSequence int
 	stoppedAt    bool
+	// deviation is how far from its timetable the report put the vehicle
+	// (scheduleDeviation), positive late; nil when that is not known.
+	deviation *time.Duration
 }
 
 // locate places a report on its trip, projecting it from hint, where the
@@ -57,6 +61,10 @@ type tripPlace struct {
 // is further from the shape than the off-route distance, or the vehicle is
 // past the last stop. In all but the last the report is not placed at all and
 // the hint carries forward, so a detour does not cost the vehicle its pass.
+//
+// A placed report also says how far from its timetable it put the vehicle
+// (scheduleDeviation), against the run runDayStart finds. An unplaced one says
+// nothing: a vehicle off its route is not early or late on it.
 func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 	unplaced := tripPlace{alongShape: hint}
 	ix := l.index()
@@ -87,6 +95,11 @@ func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 	if stop, ok := rider.NextStop(trip, along-stoppedAtDistance); ok {
 		place.stopID, place.stopSequence = stop.StopID, stop.Sequence
 		place.stoppedAt = stop.AlongShape-along <= stoppedAtDistance
+	}
+	if dayStart, ok := runDayStart(ix, trip, loc); ok {
+		if d, ok := scheduleDeviation(trip, dayStart, along, time.Unix(loc.Timestamp, 0)); ok {
+			place.deviation = &d
+		}
 	}
 	return place
 }

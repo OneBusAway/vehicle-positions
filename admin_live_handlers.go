@@ -36,8 +36,12 @@ type liveVehicleEntry struct {
 	StopID        *string `json:"stop_id"`
 	StopSequence  *int    `json:"stop_sequence"`
 	CurrentStatus *string `json:"current_status"`
-	ReportedAt    int64   `json:"reported_at"`
-	UpdatedAt     string  `json:"updated_at"` // RFC3339 UTC
+	// ScheduleDeviationS is how far from its timetable the vehicle's latest
+	// report put it, in whole seconds, positive late; null when that report
+	// did not say (VehicleState.ScheduleDeviation).
+	ScheduleDeviationS *int64 `json:"schedule_deviation_s"`
+	ReportedAt         int64  `json:"reported_at"`
+	UpdatedAt          string `json:"updated_at"` // RFC3339 UTC
 }
 
 type liveVehiclesResponse struct {
@@ -91,6 +95,10 @@ func handleLiveVehicles(tracker *Tracker, vehicles VehicleManager, trips ActiveT
 			if status, ok := stopStatus(state); ok {
 				stopID, sequence, name := state.StopID, state.StopSequence, status.String()
 				entry.StopID, entry.StopSequence, entry.CurrentStatus = &stopID, &sequence, &name
+			}
+			if d := state.ScheduleDeviation; d != nil {
+				seconds := int64(d.Round(time.Second) / time.Second)
+				entry.ScheduleDeviationS = &seconds
 			}
 
 			if trip, ok := activeTrips[state.VehicleID]; ok {

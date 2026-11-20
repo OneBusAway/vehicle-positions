@@ -519,8 +519,15 @@ on it.
   where it is heading, whether it is reporting, the stop it is heading to
   (**Next stop**) or standing at (**At stop**) with that stop's scheduled time
   (just the name on a trip run from the GTFS frequencies, which has no
-  timetable), its driver, GTFS trip, speed and heading, with **Follow** (keep
-  it in view), **Open trip** and **Vehicle**. It also draws its trip's route
+  timetable), how far it is from its timetable where it is now
+  (**Schedule**: **6:10 late**, **1:05 early**, or **On time** with the
+  difference beside it, by the same on-time window as **Analytics**), its
+  driver, GTFS trip, speed and heading, with **Follow** (keep it in view),
+  **Open trip** and **Vehicle**. **Schedule** is left out until the vehicle
+  has left its first stop, while it is off its route, past its last stop, or
+  quiet, and on a trip run from the GTFS frequencies. It can differ from
+  **Trips** and the trip's page, which say how it stood at the last stop it
+  passed. It also draws its trip's route
   and stops, with a larger, bolder ring on the stop the card names. **Esc**
   closes it.
 - The buttons on the right open the list, make the map full screen, fit every
