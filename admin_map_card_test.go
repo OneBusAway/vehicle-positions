@@ -14,10 +14,11 @@ import (
 
 // TestAdminMapCardReadsTheStopItIsGiven pins how the live map's card finds a
 // vehicle's stop to the names the server writes: the stop fields and status of
-// GET /api/v1/admin/vehicles/live, and the stop fields and timezone of the trip
-// answer it names the stop from. Each expected expression is built from the
-// structs' JSON tags, so renaming a field on the server fails here rather than
-// leaving the card's stop row saying "Not known" for every vehicle.
+// GET /api/v1/admin/vehicles/live, and the stop fields, timezone and
+// from_frequencies of the trip answer it names the stop from. Each expected
+// expression is built from the structs' JSON tags, so renaming a field on the
+// server fails here rather than leaving the card's stop row saying "Not known"
+// for every vehicle, or showing a frequency trip's pattern times as its run's.
 func TestAdminMapCardReadsTheStopItIsGiven(t *testing.T) {
 	h := newTestHandler(t, true)
 	req := httptest.NewRequest(http.MethodGet, "/static/js/map.js", nil)
@@ -39,6 +40,7 @@ func TestAdminMapCardReadsTheStopItIsGiven(t *testing.T) {
 		"v." + tag(live, "CurrentStatus") + ` === "` + gtfsrt.VehiclePosition_STOPPED_AT.String() + `"`,
 		"s." + tag(stop, "ArrivalAt") + " : s." + tag(stop, "DepartureAt"),
 		"t." + tag(trip, "Timezone"),
+		"if (t." + tag(trip, "FromFrequencies") + `) return "";`,
 	} {
 		// Not assert.Contains: on failure it prints the whole script.
 		assert.True(t, strings.Contains(script, want), "map.js is missing %s", want)

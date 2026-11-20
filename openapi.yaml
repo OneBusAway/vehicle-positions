@@ -2850,6 +2850,7 @@ components:
         - route
         - shape
         - stops
+        - from_frequencies
         - thresholds
       properties:
         id:
@@ -2873,6 +2874,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CatalogStop'
+        from_frequencies:
+          type: boolean
+          description: |
+            True when frequencies.txt runs the trip, by headway or at exact
+            times. The stops' arrival_at and departure_at are then the pattern
+            each run follows, placed on service_date, not the times of the run
+            a vehicle is on.
         thresholds:
           $ref: '#/components/schemas/CatalogThresholds'
 

@@ -369,9 +369,11 @@
     return same.filter(function (s) { return s.sequence === v.stop_sequence; })[0] || (same.length === 1 ? same[0] : undefined);
   }
   // Its scheduled time in the agency's clock, as the trip page's Stops table gives it: leaving the stop, or reaching
-  // it when it is the last. A zone this browser does not know gives the name alone.
+  // it when it is the last. A trip run from frequencies.txt, whose stop times are only the pattern of its runs, and a
+  // zone this browser does not know both give the name alone.
   var clocks = {};
   function due(t, s) {
+    if (t.from_frequencies) return "";
     if (!(t.timezone in clocks)) {
       try { clocks[t.timezone] = new Intl.DateTimeFormat("en-GB", { timeZone: t.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }); } catch (e) { clocks[t.timezone] = null; }
     }

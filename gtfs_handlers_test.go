@@ -237,6 +237,24 @@ func TestCatalogTrip_DefaultsToTheTripsServiceDate(t *testing.T) {
 	assert.Equal(t, "2026-09-02T08:00:00-07:00", stops[0].(map[string]any)["departure_at"])
 }
 
+// TestCatalogTrip_SaysWhenTheTripRunsFromFrequencies: the stop times of a trip
+// in frequencies.txt, run by headway (T1) or at exact times (T4), are only the
+// pattern its runs follow, so the answer says so and a client does not show
+// them as the times of the run a vehicle is on. A trip run by timetable (T3)
+// says false, never leaves the field out.
+func TestCatalogTrip_SaysWhenTheTripRunsFromFrequencies(t *testing.T) {
+	keep := func(_ string, body []byte) []byte { return body }
+	ix := fixtureIndexEdited(t, keep, fixtureMember{"frequencies.txt",
+		"trip_id,start_time,end_time,headway_secs,exact_times\nT1,06:00:00,22:00:00,600,0\nT4,06:00:00,22:00:00,1200,1\n"})
+	c := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
+	c.now = func() time.Time { return catalogNow }
+	for trip, want := range map[string]bool{"T1": true, "T4": true, "T3": false} {
+		code, body := catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/"+trip+"?date=20260902", map[string]string{"trip_id": trip})
+		require.Equal(t, http.StatusOK, code, trip)
+		assert.Equal(t, want, body["from_frequencies"], trip)
+	}
+}
+
 func TestCatalogTrip_Errors(t *testing.T) {
 	c := testCatalog(t)
 	code, body := catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T9", map[string]string{"trip_id": "T9"})

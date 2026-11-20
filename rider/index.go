@@ -427,6 +427,11 @@ func ServiceDayStart(serviceDate string, loc *time.Location) (time.Time, error) 
 	return noon.Add(-12 * time.Hour), nil
 }
 
+// InFrequencies reports whether frequencies.txt runs the trip, by headway or
+// at exact times. Either way its stop times are the pattern each run follows,
+// not the timetable of any one run.
+func (t *TripInfo) InFrequencies() bool { return len(t.frequencies) > 0 }
+
 // Run describes the run of a trip in frequencies.txt that started at
 // startedAt on serviceDate, as a GTFS-RT TripDescriptor names it: its
 // start_time, and whether it is run by headway (UNSCHEDULED). The run
