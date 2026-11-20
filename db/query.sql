@@ -570,3 +570,20 @@ LIMIT $2 OFFSET $3;
 -- name: DeleteClearedAlertsBefore :execrows
 -- An open alert is kept, however old: the server is still watching it.
 DELETE FROM alert_history WHERE cleared_at < sqlc.arg(cutoff);
+
+-- name: ListServiceDayTotals :many
+SELECT service_date, on_time_early_s, on_time_late_s, totals
+FROM service_day_totals
+WHERE service_date BETWEEN sqlc.arg(first_date) AND sqlc.arg(last_date)
+ORDER BY service_date;
+
+-- name: SaveServiceDayTotals :exec
+-- A day worked out again, under another on-time window, replaces its row.
+INSERT INTO service_day_totals (service_date, on_time_early_s, on_time_late_s, totals)
+VALUES (sqlc.arg(service_date), sqlc.arg(on_time_early_s), sqlc.arg(on_time_late_s), sqlc.arg(totals))
+ON CONFLICT (service_date) DO UPDATE
+SET on_time_early_s = EXCLUDED.on_time_early_s, on_time_late_s = EXCLUDED.on_time_late_s,
+    totals = EXCLUDED.totals, written_at = now();
+
+-- name: DeleteServiceDayTotalsBefore :execrows
+DELETE FROM service_day_totals WHERE service_date < sqlc.arg(cutoff);

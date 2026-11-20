@@ -13,6 +13,7 @@ import (
 type LocationPruneStore interface {
 	PruneLocationPoints(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error)
 	PruneClearedAlerts(ctx context.Context, cutoff time.Time) (int64, error)
+	PruneServiceDays(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 var _ LocationPruneStore = (*Store)(nil)

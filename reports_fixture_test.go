@@ -282,6 +282,41 @@ type fakeReportStore struct {
 	trailReads int
 	// trailIDs are the trips whose trails were asked for, in every read.
 	trailIDs []int64
+
+	// days are the service days kept, by date YYYY-MM-DD, as service_day_totals
+	// would keep them; saves counts every save, a day saved again included.
+	days     map[string]storedServiceDay
+	saves    int
+	daysErr  error
+	dayReads int
+}
+
+func (f *fakeReportStore) ListServiceDays(_ context.Context, first, last time.Time) ([]storedServiceDay, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dayReads++
+	if f.daysErr != nil {
+		return nil, f.daysErr
+	}
+	out := make([]storedServiceDay, 0)
+	for day := first; !day.After(last); day = day.AddDate(0, 0, 1) {
+		if d, ok := f.days[day.Format(reportDateLayout)]; ok {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeReportStore) SaveServiceDay(_ context.Context, day storedServiceDay) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.saves++
+	if f.days == nil {
+		f.days = make(map[string]storedServiceDay)
+	}
+	day.Totals.Date = day.Date.Format(reportDateLayout)
+	f.days[day.Totals.Date] = day
+	return nil
 }
 
 func (f *fakeReportStore) ListTripsStartedBetween(_ context.Context, from, to time.Time) ([]TripSummary, error) {

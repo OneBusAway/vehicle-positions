@@ -31,8 +31,6 @@ const (
 	// late to finish and for its phone to send what it has.
 	reportSettleAfter = time.Hour
 	// reportCacheSize bounds the reports kept in memory, a month of days.
-	// The Analytics page offers Compare only over a period that fits in it
-	// twice, with the period before (see canCompare).
 	reportCacheSize = 31
 	// maxRunGap is the furthest from a scheduled run of its GTFS trip that a
 	// driver may start a trip for it to count as that run. Half a day keeps a
@@ -76,10 +74,12 @@ func envNonNegativeDurationOrDefault(key string, fallback time.Duration) time.Du
 }
 
 // serviceReportStore is what a service report reads: the trips started around
-// the day and the trails of those that ran its scheduled trips.
+// the day and the trails of those that ran its scheduled trips. It also keeps
+// the totals of days old enough not to change.
 type serviceReportStore interface {
 	TripsStartedBetweenLister
 	TrailLister
+	serviceDayStore
 }
 
 // serviceReport is one service day's report: for each route with service
@@ -287,6 +287,16 @@ func (r *serviceReporter) read(ctx context.Context, read *dayRead, ix *rider.Ind
 		r.slots.Release(1)
 	}
 
+	// A day that fails to save is still served, and saved by the next read.
+	if err == nil && r.storable(ix, date, rep) {
+		if serr := r.store.SaveServiceDay(ctx, storedServiceDay{
+			Date: day, OnTimeEarly: r.settings.onTimeEarly, OnTimeLate: r.settings.onTimeLate,
+			Totals: newDayTotals(rep, r.settings),
+		}); serr != nil {
+			slog.Error("analytics: keep a service day's totals", "date", rep.Date, "error", serr)
+		}
+	}
+
 	r.mu.Lock()
 	if r.reading[date] == read {
 		delete(r.reading, date)
@@ -327,6 +337,37 @@ func (r *serviceReporter) reportDay(ix *rider.Index, date string) (time.Time, er
 func (r *serviceReporter) settled(ix *rider.Index, date string, rep *serviceReport) bool {
 	now := r.now()
 	return date < ix.ServiceDate(now) && !now.Before(rep.serviceEnds.Add(reportSettleAfter))
+}
+
+// storable reports whether the report for date has its totals kept in the
+// database: it is settled and older than yesterday. A phone that lost signal
+// uploads its points when it gets it back, so yesterday is left a day to
+// change; points that come in later still are on the trip's page but not in
+// the kept totals. A schedule reload does not change a kept day either: it
+// stays judged against the timetable it ran to.
+func (r *serviceReporter) storable(ix *rider.Index, date string, rep *serviceReport) bool {
+	today, err := time.Parse(gtfsDateLayout, ix.ServiceDate(r.now()))
+	if err != nil {
+		return false
+	}
+	return date < today.AddDate(0, 0, -1).Format(gtfsDateLayout) && r.settled(ix, date, rep)
+}
+
+// storedDays returns the totals kept for the days from first to last, by date
+// YYYY-MM-DD. A day judged by another on-time window than the reporter's is
+// left out, to be worked out again and replaced.
+func (r *serviceReporter) storedDays(ctx context.Context, first, last time.Time) (map[string]dayTotals, error) {
+	days, err := r.store.ListServiceDays(ctx, first, last)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]dayTotals, len(days))
+	for _, d := range days {
+		if d.OnTimeEarly == r.settings.onTimeEarly && d.OnTimeLate == r.settings.onTimeLate {
+			out[d.Totals.Date] = d.Totals
+		}
+	}
+	return out, nil
 }
 
 // cachedLocked returns the report kept for date. Asking with a load of the

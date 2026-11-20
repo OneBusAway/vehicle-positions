@@ -94,18 +94,10 @@ var analyticsMetrics = []struct{ Key, Label, Tone string }{
 }
 
 // analyticsPeriods are the periods, in days, the page covers besides a
-// single day; it opens on the first. Each day is a service report of its own,
-// worked out again after every schedule reload, so a longer period waits for
-// daily totals kept in the database.
+// single day; it opens on the first. Days older than yesterday are read from
+// the totals the reporter keeps, so a period and the one before it cost two
+// reads of the database and the work of at most yesterday and today.
 var analyticsPeriods = []int{7, 28}
-
-// canCompare reports whether the page offers Compare over a period of days:
-// only when the period and the one before it both fit in the reporter's
-// cache. Otherwise each load would push out days the next one needs, and every
-// load would work them all out again.
-func canCompare(days int) bool {
-	return days > 1 && 2*days <= reportCacheSize
-}
 
 // analyticsQuery is what the Analytics page was asked for. All of it is in
 // the address, so a bookmark is a saved report.
@@ -116,8 +108,7 @@ type analyticsQuery struct {
 	// Days is 1 or one of analyticsPeriods.
 	Days   int
 	Metric string
-	// Compare draws the period before behind a trend, over a period
-	// canCompare allows.
+	// Compare draws the period before behind a trend.
 	Compare bool
 }
 
@@ -321,19 +312,49 @@ func newOnTimeSplit(onTime, early, late int) onTimeSplit {
 
 func (c reportCounts) split() onTimeSplit { return newOnTimeSplit(c.OnTime, c.Early, c.Late) }
 
-// analyticsDays works out the service report of each of the days that end on
-// last, oldest first. Days are asked for reportReadsAtOnce at a time, so a
-// cold cache costs a few days' reads rather than all of them in a row, the
-// oldest days are read first, and two requests' days take turns at the
-// reporter's slots. The first day that fails, or the request ending, stops
-// the days not started yet and gives up those under way, whose reads stop
-// unless another request waits for them.
-func analyticsDays(ctx context.Context, reports *serviceReporter, recent *overviewReports, ix *rider.Index, today, last time.Time, days int) ([]*serviceReport, error) {
-	out := make([]*serviceReport, days)
+// analyticsTotals adds up each of the days that end on last, oldest first.
+// The days the reporter keeps totals for are read in one go; the others,
+// yesterday and today and any day not kept yet, are worked out.
+func analyticsTotals(ctx context.Context, reports *serviceReporter, recent *overviewReports, ix *rider.Index, today, last time.Time, days int) ([]dayTotals, error) {
+	first := last.AddDate(0, 0, 1-days)
+	stored, err := reports.storedDays(ctx, first, last)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dayTotals, days)
+	var missing []time.Time
+	var at []int
+	for i := range out {
+		day := first.AddDate(0, 0, i)
+		if totals, ok := stored[day.Format(reportDateLayout)]; ok {
+			out[i] = totals
+			continue
+		}
+		missing = append(missing, day)
+		at = append(at, i)
+	}
+	reps, err := analyticsDays(ctx, reports, recent, ix, today, missing)
+	if err != nil {
+		return nil, err
+	}
+	for j, rep := range reps {
+		out[at[j]] = newDayTotals(rep, reports.settings)
+	}
+	return out, nil
+}
+
+// analyticsDays works out the service report of each of days, in their
+// order. Days are asked for reportReadsAtOnce at a time, so a cold cache costs
+// a few days' reads rather than all of them in a row, the first days are read
+// first, and two requests' days take turns at the reporter's slots. The first
+// day that fails, or the request ending, stops the days not started yet and
+// gives up those under way, whose reads stop unless another request waits for
+// them.
+func analyticsDays(ctx context.Context, reports *serviceReporter, recent *overviewReports, ix *rider.Index, today time.Time, days []time.Time) ([]*serviceReport, error) {
+	out := make([]*serviceReport, len(days))
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(reportReadsAtOnce)
-	for i := range out {
-		day := last.AddDate(0, 0, i-(days-1))
+	for i, day := range days {
 		g.Go(func() error {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -388,10 +409,17 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 	// ServiceDate writes the date in the layout it is parsed with here.
 	today, _ := time.Parse(gtfsDateLayout, ix.ServiceDate(reports.now()))
 
-	days, err := analyticsDays(ctx, reports, recent, ix, today, day, query.Days)
-	var before []*serviceReport
-	if err == nil && canCompare(query.Days) && query.Compare {
-		before, err = analyticsDays(ctx, reports, recent, ix, today, day.AddDate(0, 0, -query.Days), query.Days)
+	// A route's trips are listed from the day's report; everything else adds
+	// up the days' totals.
+	var rep *serviceReport
+	var days, before []dayTotals
+	if query.RouteID != "" {
+		rep, err = recent.report(ctx, reports, ix, today, day)
+	} else {
+		days, err = analyticsTotals(ctx, reports, recent, ix, today, day, query.Days)
+		if err == nil && query.Days > 1 && query.Compare {
+			before, err = analyticsTotals(ctx, reports, recent, ix, today, day.AddDate(0, 0, -query.Days), query.Days)
+		}
 	}
 	switch {
 	case errors.Is(err, errNoSchedule):
@@ -400,13 +428,10 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 		return nil, 0, err
 	}
 
-	rep := days[len(days)-1]
-	query.Date = rep.Date
-	settings := reportSettings{
-		onTimeEarly: time.Duration(rep.OnTimeEarlyS) * time.Second,
-		onTimeLate:  time.Duration(rep.OnTimeLateS) * time.Second,
-	}
-	data["Date"] = rep.Date
+	date := day.Format(reportDateLayout)
+	query.Date = date
+	settings := reports.settings
+	data["Date"] = date
 	data["OnTimeEarly"] = humanizeDuration(settings.onTimeEarly)
 	data["OnTimeLate"] = humanizeDuration(settings.onTimeLate)
 	data["FixWindow"] = humanizeDuration(reportFixWindow)
@@ -432,13 +457,13 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 	}
 	switch {
 	case query.Days == 1:
-		data["CSVURL"] = "/api/v1/admin/reports/service?" + url.Values{"date": {rep.Date}, "format": {"csv"}}.Encode()
-	case canCompare(query.Days):
+		data["CSVURL"] = "/api/v1/admin/reports/service?" + url.Values{"date": {date}, "format": {"csv"}}.Encode()
+	default:
 		toggled := query
 		toggled.Compare = !query.Compare
 		data["Compare"] = analyticsLink{Label: fmt.Sprintf("Compare with the %d days before", query.Days), URL: toggled.URL(), Current: query.Compare}
 	}
-	tz := "Times are " + rep.Timezone + " time."
+	tz := "Times are " + ix.Timezone().String() + " time."
 	when := periodPhrase(day, today, query.Days)
 	isToday := query.Days == 1 && day.Equal(today)
 	data["IsToday"] = isToday
@@ -469,7 +494,7 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 	routes, total := routeTotals(days)
 	rows := make([]reportRouteRow, 0, len(routes))
 	for _, r := range routes {
-		rows = append(rows, newReportRouteRow(ix, rep.Date, r.ID, r.ShortName, r.LongName, r.reportCounts))
+		rows = append(rows, newReportRouteRow(ix, date, r.ID, r.ShortName, r.LongName, r.reportCounts))
 	}
 	data["Routes"] = rows
 	data["Headline"] = analyticsHeadline(total, when, isToday)
@@ -608,7 +633,7 @@ type routeTotal struct {
 
 // routeTotals adds each route up over days, and all of them together. The
 // routes are in the newest day's order, then those only older days have.
-func routeTotals(days []*serviceReport) ([]routeTotal, reportCounts) {
+func routeTotals(days []dayTotals) ([]routeTotal, reportCounts) {
 	var total reportCounts
 	at := make(map[string]int)
 	routes := make([]routeTotal, 0)
@@ -620,8 +645,9 @@ func routeTotals(days []*serviceReport) ([]routeTotal, reportCounts) {
 				at[route.RouteID] = n
 				routes = append(routes, routeTotal{ID: route.RouteID, ShortName: route.ShortName, LongName: route.LongName})
 			}
-			routes[n].add(routeCounts(route))
-			total.add(routeCounts(route))
+			c := route.counts()
+			routes[n].add(c)
+			total.add(c)
 		}
 	}
 	return routes, total
@@ -640,7 +666,7 @@ func routeTitle(id, shortName, longName string) string {
 // most of its misses were and, when over half of them were on trips that
 // left within two hours of each other, when. It is "" unless two routes
 // have a share and they differ.
-func worstRouteSentence(days []*serviceReport, routes []routeTotal, total reportCounts) string {
+func worstRouteSentence(days []dayTotals, routes []routeTotal, total reportCounts) string {
 	var worst *routeTotal
 	judged := 0
 	for i := range routes {
@@ -665,17 +691,17 @@ func worstRouteSentence(days []*serviceReport, routes []routeTotal, total report
 		routeTitle(worst.ID, worst.ShortName, worst.LongName), int(math.Round(float64(missed)*100/float64(worst.judged()))), kind)
 
 	byHour := make(map[int]int)
-	for _, rep := range days {
-		for _, route := range rep.Routes {
+	for _, d := range days {
+		for _, route := range d.Routes {
 			if route.RouteID != worst.ID {
 				continue
 			}
-			for _, trip := range route.Trips {
-				n := trip.StopsLate
+			for _, h := range route.Hours {
+				n := h.Late
 				if kind == "early" {
-					n = trip.StopsEarly
+					n = h.Early
 				}
-				byHour[serviceHour(rep, trip)] += n
+				byHour[h.Hour] += n
 			}
 		}
 	}
@@ -705,24 +731,23 @@ func serviceHour(rep *serviceReport, trip tripReport) int {
 
 // hoursOfDay groups the trips of days by the hour they were scheduled to
 // leave in, from the first hour with a trip to the last with none left out.
-func hoursOfDay(days []*serviceReport) []hourShares {
+func hoursOfDay(days []dayTotals) []hourShares {
 	byHour := make(map[int]*hourShares)
 	first, last := 0, -1
-	for _, rep := range days {
-		for _, route := range rep.Routes {
-			for _, trip := range route.Trips {
-				hour := serviceHour(rep, trip)
-				h, ok := byHour[hour]
+	for _, d := range days {
+		for _, route := range d.Routes {
+			for _, t := range route.Hours {
+				h, ok := byHour[t.Hour]
 				if !ok {
-					h = &hourShares{Hour: hour}
-					byHour[hour] = h
-					if last < first || hour < first {
-						first = hour
+					h = &hourShares{Hour: t.Hour}
+					byHour[t.Hour] = h
+					if last < first || t.Hour < first {
+						first = t.Hour
 					}
-					last = max(last, hour)
+					last = max(last, t.Hour)
 				}
-				h.Trips++
-				h.add(reportCounts{OnTime: trip.StopsOnTime, Early: trip.StopsEarly, Late: trip.StopsLate})
+				h.Trips += t.Scheduled
+				h.add(reportCounts{OnTime: t.OnTime, Early: t.Early, Late: t.Late})
 			}
 		}
 	}
@@ -742,7 +767,7 @@ func hoursOfDay(days []*serviceReport) []hourShares {
 // on-time window to eight after it. It also returns how many trips that ran
 // had no report at the last stop and are in no bucket. The buckets are nil
 // when no trip is in one.
-func deviationBuckets(days []*serviceReport, s reportSettings) ([]deviationBucket, int) {
+func deviationBuckets(days []dayTotals, s reportSettings) ([]deviationBucket, int) {
 	first := -int(math.Ceil(s.onTimeEarly.Minutes())) - 3
 	last := int(math.Ceil(s.onTimeLate.Minutes())) + 7
 	buckets := make([]deviationBucket, last-first+1)
@@ -750,28 +775,14 @@ func deviationBuckets(days []*serviceReport, s reportSettings) ([]deviationBucke
 		buckets[i].Minute = first + i
 	}
 	counted, leftOut := 0, 0
-	for _, rep := range days {
-		for _, route := range rep.Routes {
-			for _, trip := range route.Trips {
-				if len(trip.Runs) == 0 {
-					continue
-				}
-				if trip.ArrivalDeviationS == nil {
-					leftOut++
-					continue
-				}
-				counted++
-				d := time.Duration(*trip.ArrivalDeviationS) * time.Second
-				b := &buckets[min(last, max(first, int(math.Floor(d.Minutes()))))-first]
-				switch s.verdict(d) {
-				case stopEarly:
-					b.Early++
-				case stopLate:
-					b.Late++
-				default:
-					b.OnTime++
-				}
-			}
+	for _, d := range days {
+		leftOut += d.ArrivalsLeftOut
+		for _, a := range d.Arrivals {
+			counted += a.OnTime + a.Early + a.Late
+			b := &buckets[min(last, max(first, a.Minute))-first]
+			b.OnTime += a.OnTime
+			b.Early += a.Early
+			b.Late += a.Late
 		}
 	}
 	if counted == 0 {
@@ -834,21 +845,21 @@ func newAnalyticsMetrics(query analyticsQuery, total reportCounts, before *repor
 
 // newAnalyticsTrend is the chosen measure day by day, over the same days of
 // the period before when there is one.
-func newAnalyticsTrend(query analyticsQuery, days, before []*serviceReport) analyticsTrend {
+func newAnalyticsTrend(query analyticsQuery, days, before []dayTotals) analyticsTrend {
 	trend := analyticsTrend{Rows: make([]analyticsTrendRow, 0, len(days))}
 	for _, m := range analyticsMetrics {
 		if m.Key == query.Metric {
 			trend.Label, trend.Tone = m.Label, m.Tone
 		}
 	}
-	date := func(rep *serviceReport, layout string) string {
-		day, _ := time.Parse(reportDateLayout, rep.Date)
+	date := func(d dayTotals, layout string) string {
+		day, _ := time.Parse(reportDateLayout, d.Date)
 		return day.Format(layout)
 	}
-	measures := func(reps []*serviceReport) []*float64 {
-		out := make([]*float64, 0, len(reps))
-		for _, rep := range reps {
-			out = append(out, dayCounts(rep).measure(query.Metric))
+	measures := func(days []dayTotals) []*float64 {
+		out := make([]*float64, 0, len(days))
+		for _, d := range days {
+			out = append(out, d.counts().measure(query.Metric))
 		}
 		return out
 	}

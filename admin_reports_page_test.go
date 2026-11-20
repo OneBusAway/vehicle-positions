@@ -23,6 +23,15 @@ import (
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
+// totalsOf adds up each of reps as the Analytics page does.
+func totalsOf(reps ...*serviceReport) []dayTotals {
+	out := make([]dayTotals, 0, len(reps))
+	for _, rep := range reps {
+		out = append(out, newDayTotals(rep, testReportSettings))
+	}
+	return out
+}
+
 func reportsView(t *testing.T, r *serviceReporter, query string) (map[string]interface{}, int) {
 	t.Helper()
 	q, err := url.ParseQuery(query)
@@ -201,9 +210,8 @@ func TestReportsPage_Period(t *testing.T) {
 }
 
 // TestReportsPage_28Days: days=28 covers the 28 days ending on the date, a
-// report each. Compare is not offered, since 56 days would not fit in the
-// reporter's cache and every load would work them all out again, so the 28
-// days are read once and then kept.
+// report each, and Compare with the 28 before them. The 56 days are worked
+// out once and kept in the store, so a restarted server reads none again.
 func TestReportsPage_28Days(t *testing.T) {
 	r, store, _ := newFixtureReporter(t, reportFixtureNow)
 
@@ -217,16 +225,16 @@ func TestReportsPage_28Days(t *testing.T) {
 	}, data["Range"])
 	assert.Equal(t, "/admin/reports?date=2026-08-05&days=28", data["PrevURL"], "a period at a time")
 	assert.Equal(t, "/admin/reports?date=2026-09-04&days=28", data["NextURL"], "and no further than today")
-	assert.Nil(t, data["Compare"], "no Compare over 28 days")
-	assert.Equal(t, 28, store.reads, "the 28 days and not the 28 before them")
+	assert.Equal(t, analyticsLink{Label: "Compare with the 28 days before", URL: "/admin/reports?compare=off&date=2026-09-02&days=28", Current: true}, data["Compare"])
+	assert.Equal(t, 56, store.reads, "the 28 days and the 28 before them")
+	assert.Equal(t, 56, store.saves, "every one of them older than yesterday, so kept")
 
 	trend := data["Trend"].(analyticsTrend)
 	require.Len(t, trend.Rows, 28)
 	assert.Equal(t, "Thu 6 Aug", trend.Rows[0].Day)
-	assert.Equal(t, analyticsTrendRow{Day: "Wed 2 Sep", Value: "78%"}, trend.Rows[27])
+	assert.Equal(t, analyticsTrendRow{Day: "Wed 2 Sep", Value: "78%", Before: "no figure"}, trend.Rows[27])
 	assert.Equal(t, "6 Aug to 2 Sep", trend.Period)
-	assert.Empty(t, trend.Before)
-	assert.Empty(t, trend.Chart.PrevPath)
+	assert.Equal(t, "The 28 days before", trend.Before)
 
 	metrics := data["Metrics"].([]analyticsMetric)
 	require.Len(t, metrics, 5)
@@ -240,11 +248,13 @@ func TestReportsPage_28Days(t *testing.T) {
 	assert.Contains(t, html, `<a href="/admin/reports?date=2026-09-02&amp;days=28" aria-current="true">28 days</a>`)
 	assert.Contains(t, html, `<input type="hidden" name="days" value="28">`, "Show keeps the period")
 	assert.Contains(t, html, `role="img" aria-label="On time by day, 6 Aug to 2 Sep"`)
-	assert.NotContains(t, html, "Compare with")
-	assert.NotContains(t, html, "days before")
+	assert.Contains(t, html, `<a class="chip" href="/admin/reports?compare=off&amp;date=2026-09-02&amp;days=28" aria-current="true">`)
 
-	reportsView(t, r, "date=2026-09-02&days=28")
-	assert.Equal(t, 28, store.reads, "28 settled days, kept and none read again")
+	restarted := newServiceReporter(store, r.index, testReportSettings)
+	restarted.now = r.now
+	again, _ := reportsView(t, restarted, "date=2026-09-02&days=28")
+	assert.Equal(t, 56, store.reads, "a restarted server reads the kept days, not the trips again")
+	assert.Equal(t, data["Headline"], again["Headline"])
 
 	// Compare turned off over 7 days stays off there after a look at 28.
 	data, _ = reportsView(t, r, "date=2026-09-02&days=28&compare=off")
@@ -534,8 +544,8 @@ func sentenceDay(date string, trips map[string]map[int]reportCounts) *serviceRep
 
 func TestWorstRouteSentence(t *testing.T) {
 	sentence := func(days ...*serviceReport) string {
-		routes, total := routeTotals(days)
-		return worstRouteSentence(days, routes, total)
+		routes, total := routeTotals(totalsOf(days...))
+		return worstRouteSentence(totalsOf(days...), routes, total)
 	}
 	good := map[int]reportCounts{7: {OnTime: 10}}
 
@@ -567,16 +577,16 @@ func TestWorstRouteSentence(t *testing.T) {
 }
 
 func TestRouteTotals(t *testing.T) {
-	older := &serviceReport{Routes: []routeReport{
-		{RouteID: "B", ShortName: "old", TripsScheduled: 3, TripsRun: 2, StopsOnTime: 4, StopsUnknown: 1},
-		{RouteID: "GONE", TripsScheduled: 1},
+	older := dayTotals{Routes: []routeDayTotals{
+		{RouteID: "B", ShortName: "old", Hours: []hourTotals{{Hour: 7, Scheduled: 2, Run: 2, OnTime: 4}, {Hour: 9, Scheduled: 1, Unknown: 1}}},
+		{RouteID: "GONE", Hours: []hourTotals{{Hour: 7, Scheduled: 1}}},
 	}}
-	newer := &serviceReport{Routes: []routeReport{
-		{RouteID: "A", TripsScheduled: 5, TripsRun: 5, StopsOnTime: 9, StopsEarly: 1},
-		{RouteID: "B", ShortName: "new", TripsScheduled: 3, TripsRun: 3, StopsOnTime: 5, StopsLate: 1},
+	newer := dayTotals{Routes: []routeDayTotals{
+		{RouteID: "A", Hours: []hourTotals{{Hour: 6, Scheduled: 5, Run: 5, OnTime: 9, Early: 1}}},
+		{RouteID: "B", ShortName: "new", Hours: []hourTotals{{Hour: 7, Scheduled: 3, Run: 3, OnTime: 5, Late: 1}}},
 	}}
 
-	routes, total := routeTotals([]*serviceReport{older, newer})
+	routes, total := routeTotals([]dayTotals{older, newer})
 
 	require.Len(t, routes, 3)
 	assert.Equal(t, routeTotal{ID: "A", reportCounts: reportCounts{Scheduled: 5, Run: 5, OnTime: 9, Early: 1}}, routes[0], "the newest day's order")
@@ -615,27 +625,27 @@ func TestHoursOfDay(t *testing.T) {
 		}},
 	}}
 
-	hours := hoursOfDay([]*serviceReport{rep, rep})
+	hours := hoursOfDay(totalsOf(rep, rep))
 
 	require.Len(t, hours, 19, "06:00 to the hour after midnight, with none left out")
 	assert.Equal(t, hourShares{Hour: 6, Trips: 4, reportCounts: reportCounts{OnTime: 4, Early: 2, Late: 2}}, hours[0], "both days' trips, and no stop without a verdict")
 	assert.Equal(t, hourShares{Hour: 7}, hours[1])
 	assert.Equal(t, hourShares{Hour: 9, Trips: 2}, hours[3])
 	assert.Equal(t, hourShares{Hour: 24, Trips: 2, reportCounts: reportCounts{OnTime: 6}}, hours[18], "after midnight sorts after the evening")
-	assert.Empty(t, hoursOfDay([]*serviceReport{{Date: "2026-09-02", location: la}}))
+	assert.Empty(t, hoursOfDay(totalsOf(&serviceReport{Date: "2026-09-02", location: la})))
 }
 
 func TestDeviationBuckets(t *testing.T) {
 	dev := func(seconds int) tripReport {
 		return tripReport{Runs: []tripRun{{ID: 1}}, ArrivalDeviationS: &seconds}
 	}
-	rep := &serviceReport{Routes: []routeReport{{Trips: []tripReport{
+	rep := &serviceReport{Date: "2026-09-02", location: time.UTC, Routes: []routeReport{{Trips: []tripReport{
 		dev(0), dev(59), dev(-1), dev(-60), dev(-61), dev(300), dev(301), dev(-3600), dev(3600),
 		{Runs: []tripRun{{ID: 2}}},
 		{},
 	}}}}
 
-	buckets, leftOut := deviationBuckets([]*serviceReport{rep}, testReportSettings)
+	buckets, leftOut := deviationBuckets(totalsOf(rep), testReportSettings)
 
 	assert.Equal(t, 1, leftOut, "ran, with no report at the last stop; a trip not run is neither")
 	require.Len(t, buckets, 17)
@@ -656,7 +666,7 @@ func TestDeviationBuckets(t *testing.T) {
 		12: {Minute: 12, Late: 1},
 	}, byMinute, "a minute the window ends inside has both verdicts; the ends hold everything past them")
 
-	buckets, leftOut = deviationBuckets([]*serviceReport{{Routes: []routeReport{{Trips: []tripReport{{Runs: []tripRun{{ID: 2}}}}}}}}, testReportSettings)
+	buckets, leftOut = deviationBuckets(totalsOf(&serviceReport{Date: "2026-09-02", location: time.UTC, Routes: []routeReport{{Trips: []tripReport{{Runs: []tripRun{{ID: 2}}}}}}}), testReportSettings)
 	assert.Nil(t, buckets)
 	assert.Equal(t, 1, leftOut)
 }
@@ -693,18 +703,18 @@ func TestNewAnalyticsMetrics(t *testing.T) {
 }
 
 func TestNewAnalyticsTrend_Bounds(t *testing.T) {
-	day := func(date string, c reportCounts) *serviceReport {
-		return &serviceReport{Date: date, Routes: []routeReport{{TripsScheduled: c.Scheduled, TripsRun: c.Run, StopsOnTime: c.OnTime, StopsEarly: c.Early, StopsLate: c.Late}}}
+	day := func(date string, c reportCounts) dayTotals {
+		return dayTotals{Date: date, Routes: []routeDayTotals{{Hours: []hourTotals{{Scheduled: c.Scheduled, Run: c.Run, OnTime: c.OnTime, Early: c.Early, Late: c.Late}}}}}
 	}
-	days := []*serviceReport{
+	days := []dayTotals{
 		day("2026-11-16", reportCounts{OnTime: 64, Late: 36}),
 		day("2026-11-17", reportCounts{OnTime: 90, Late: 10}),
 	}
-	before := []*serviceReport{
+	before := []dayTotals{
 		day("2026-11-14", reportCounts{OnTime: 95, Late: 5}),
 		day("2026-11-15", reportCounts{}),
 	}
-	grid := func(metric string, before []*serviceReport) []string {
+	grid := func(metric string, before []dayTotals) []string {
 		trend := newAnalyticsTrend(analyticsQuery{Days: 2, Metric: metric}, days, before)
 		labels := make([]string, 0, 3)
 		for _, g := range trend.Chart.Grid {
@@ -722,7 +732,7 @@ func TestNewAnalyticsTrend_Bounds(t *testing.T) {
 	assert.Equal(t, "The 2 days before", trend.Before)
 	assert.Equal(t, []analyticsTrendRow{{Day: "Mon 16 Nov", Value: "64%", Before: "95%"}, {Day: "Tue 17 Nov", Value: "90%", Before: "no figure"}}, trend.Rows)
 
-	high := []*serviceReport{day("2026-11-17", reportCounts{OnTime: 99, Late: 1})}
+	high := []dayTotals{day("2026-11-17", reportCounts{OnTime: 99, Late: 1})}
 	trend = newAnalyticsTrend(analyticsQuery{Days: 1, Metric: metricOnTime}, high, nil)
 	assert.Equal(t, "60%", trend.Chart.Grid[0].Label, "the floor is never over 60")
 }
@@ -931,6 +941,13 @@ func (s *heldReportStore) ListTrails(context.Context, []int64) (map[int64][]Loca
 	return make(map[int64][]LocationPoint), nil
 }
 
+// The held store keeps no days, so every day is worked out.
+func (s *heldReportStore) ListServiceDays(context.Context, time.Time, time.Time) ([]storedServiceDay, error) {
+	return nil, nil
+}
+
+func (s *heldReportStore) SaveServiceDay(context.Context, storedServiceDay) error { return nil }
+
 // holding is how many reads are waiting now. The caller holds s.mu.
 func (s *heldReportStore) holding() int {
 	n := 0
@@ -992,7 +1009,11 @@ func startAnalyticsWeek(ctx context.Context, r *serviceReporter, ix *rider.Index
 	today := reportDay.AddDate(0, 0, 30)
 	done := make(chan analyticsDaysResult, 1)
 	go func() {
-		reps, err := analyticsDays(ctx, r, &overviewReports{}, ix, today, last, len(heldWeek))
+		days := make([]time.Time, len(heldWeek))
+		for i := range days {
+			days[i] = last.AddDate(0, 0, i+1-len(heldWeek))
+		}
+		reps, err := analyticsDays(ctx, r, &overviewReports{}, ix, today, days)
 		done <- analyticsDaysResult{reps, err}
 	}()
 	return done

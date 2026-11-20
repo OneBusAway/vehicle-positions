@@ -31,6 +31,17 @@ type fakeLocationPruneStore struct {
 	// fails with alertErr when it is set.
 	alertCutoffs []time.Time
 	alertErr     error
+	// dayCutoffs holds the cutoff of each PruneServiceDays call, which fails
+	// with dayErr when it is set.
+	dayCutoffs []time.Time
+	dayErr     error
+}
+
+func (f *fakeLocationPruneStore) PruneServiceDays(_ context.Context, cutoff time.Time) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dayCutoffs = append(f.dayCutoffs, cutoff)
+	return 0, f.dayErr
 }
 
 func (f *fakeLocationPruneStore) PruneClearedAlerts(_ context.Context, cutoff time.Time) (int64, error) {
@@ -156,6 +167,26 @@ func TestLocationPruner_AlertPruneErrorStillPrunesPoints(t *testing.T) {
 	assert.Equal(t, 1, fake.callCount())
 }
 
+func TestLocationPruner_PrunesServiceDaysAtTheSameCutoff(t *testing.T) {
+	fake := &fakeLocationPruneStore{}
+	pruner := newUnstartedPruner(fake, 24*time.Hour, 100)
+
+	pruner.pruneAll(pruner.ctx)
+
+	require.Len(t, fake.dayCutoffs, 1)
+	assert.Equal(t, fake.firstCall(t).cutoff, fake.dayCutoffs[0],
+		"a day's totals are kept as long as the points they were worked out from")
+}
+
+func TestLocationPruner_ServiceDayPruneErrorStillPrunesPoints(t *testing.T) {
+	fake := &fakeLocationPruneStore{dayErr: errors.New("connection refused")}
+	pruner := newUnstartedPruner(fake, time.Hour, 5)
+
+	pruner.pruneAll(pruner.ctx)
+
+	assert.Equal(t, 1, fake.callCount())
+}
+
 func TestLocationPruner_Stop_Idempotent(t *testing.T) {
 	pruner, err := NewLocationPruner(&fakeLocationPruneStore{}, time.Hour, time.Minute, 100)
 	require.NoError(t, err)
@@ -253,6 +284,10 @@ func (b *blockingPruneStore) PruneLocationPoints(ctx context.Context, _ time.Tim
 }
 
 func (b *blockingPruneStore) PruneClearedAlerts(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (b *blockingPruneStore) PruneServiceDays(context.Context, time.Time) (int64, error) {
 	return 0, nil
 }
 
