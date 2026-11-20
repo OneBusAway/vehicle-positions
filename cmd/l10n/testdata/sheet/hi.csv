@@ -1,0 +1,13 @@
+android,ios,form,screen,english,note,placeholders,glossary,onebusaway,current,translation
+login_title,Sign in,,login,Sign in,The sign-in screen's title.,,,साइन इन | लॉग इन,साइन इन करें,
+login_error_unreachable,Can't reach %@. Check your connection.,,login,Can't reach %1$s. Check your connection.,"The server's address, e.g. ""tracker.example.org"".",#1 (text),,,%1$s तक नहीं पहुँच सके। अपना कनेक्शन जाँचें।,
+help_link,,,help,Read more at https://onebusaway.org within 24 hours.,Where to read more.,,,,24 घंटे में https://onebusaway.org पर और पढ़ें।,
+tracking_gps,,,tracking,GPS is off,,,GPS: keep as it is,,GPS बंद है,
+vehicle_route_stop,,,vehicle,"Vehicle on route %1$s, heading to %2$s","A vehicle's route, then the stop it is heading to.","#1 (text), #2 (text)","vehicle: गाड़ी, not बस; route",,"गाड़ी रूट %1$s पर, %2$s की ओर",
+reports_sent,%lld reports sent|==|plural.one,one,reports,%1$d report sent,How many reports the trip sent.,#1 (whole number),,,%1$d रिपोर्ट भेजी गई,
+reports_sent,%lld reports sent|==|plural.other,other,reports,%1$d reports sent,How many reports the trip sent.,#1 (whole number),,,%1$d रिपोर्ट भेजी गईं,
+started_ago,Started %lld min ago,,started,Started %1$d min ago,,#1 (whole number),,,,
+,CFBundleDisplayName,,,OBA Vehicle Tracker,Bundle display name,,"vehicle: गाड़ी, not बस",,,
+,"Route %@, %lld reports sent",,,"Route %1$@, %2$#@reports@","VoiceOver: the route's short name, then how many reports the trip sent.","#1 (text), %#@reports@",route,,"रूट %1$@, %2$#@reports@",
+,"Route %@, %lld reports sent|==|substitutions.reports.plural.one",reports: one,,%2$lld report sent,"VoiceOver: the route's short name, then how many reports the trip sent.",#2 (whole number),,,%2$lld रिपोर्ट भेजी गई,
+,"Route %@, %lld reports sent|==|substitutions.reports.plural.other",reports: other,,%2$lld reports sent,"VoiceOver: the route's short name, then how many reports the trip sent.",#2 (whole number),,,%2$lld रिपोर्ट भेजी गईं,

@@ -62,11 +62,67 @@ says, so a language should translate them the same way in both. The check warns 
   leave Xcode's `machine_translated` state until someone fluent has read them. The language stays `draft` until a
   fluent reviewer has read every string in context and approved the pull request.
 
+## Translating in a spreadsheet
+
+Translators and reviewers work in one sheet per language, a CSV file with both apps' strings, which any spreadsheet
+opens. The tool writes it from the apps and writes it back into them.
+
+1. On a Mac with Xcode, export the iOS strings. Xcode writes them to an `.xcloc` folder:
+
+   ```
+   cd ios/VehicleTracker && xcodegen generate
+   xcodebuild -exportLocalizations -project VehicleTracker.xcodeproj -localizationPath /tmp/l10n -exportLanguage hi
+   ```
+
+2. From the repository's root, write the sheet, `hi.csv`:
+
+   ```
+   go run ./cmd/l10n export -xliff /tmp/l10n/hi.xcloc hi
+   ```
+
+   Without `-xliff`, the sheet has the Android strings alone. With `-matches <folder>`, a folder holding checkouts
+   of other OneBusAway apps, the sheet also shows how those apps translate the same English. The tool reads only
+   that folder and downloads nothing.
+
+3. Fill in the `translation` column. A cell left empty keeps the `current` translation. Don't change the
+   `android`, `ios` or `form` columns: they say where each translation goes.
+
+4. Write the sheet back, let Xcode bring the iOS strings into the String Catalog, then run the check:
+
+   ```
+   go run ./cmd/l10n import -xliff /tmp/l10n/hi.xcloc hi hi.csv
+   xcodebuild -importLocalizations -project ios/VehicleTracker/VehicleTracker.xcodeproj -localizationPath /tmp/l10n/hi.xcloc
+   go run ./cmd/l10n check
+   ```
+
+   The import writes `values-hi/strings.xml` and fills in the XLIFF in the `.xcloc` folder. It never writes a
+   String Catalog itself, because Apple keeps the right to change that format. Xcode may also bring the catalog up
+   to date with the code as it exports and imports, which then shows as extra changes in `Localizable.xcstrings`.
+
+What the import does:
+- It refuses a sheet whose placeholders or plural forms break the check. It names each row that does, and writes
+  nothing.
+- A sheet read back with no edits changes nothing.
+- It writes `strings.xml` in one layout, without comments, so a file written by hand is laid out again the first
+  time.
+
+The sheet's columns:
+- **`android`**, **`ios`** and **`form`**: the string's Android name, its iOS id, and the plural form a row is
+  for. A plural has a row for each form the language needs.
+- **`screen`**: where the string shows, from the first word of its Android name.
+- **`english`**: the English. A string both apps say alike and translate alike has one row. That row is in
+  Android's placeholders (`%1$s`), and the import writes iOS's (`%@`) for the iOS app.
+- **`note`**: the developer's note.
+- **`placeholders`**: what each value is, such as `#1 (text)`.
+- **`glossary`**: the glossary's word for each term the English uses, and the words to avoid.
+- **`onebusaway`**: suggestions from other OneBusAway apps.
+- **`current`** and **`translation`**: the translation now, and the new one.
+
+The sheet doesn't have screenshots or a length hint for tight places yet. A string's note says where it shows.
+
 ## Adding a language
 
-Until the export and import tool lands, add the files by hand:
-- `values-<language>/strings.xml` for Android.
-- The language in the String Catalog for iOS, through Xcode.
+- Its translations, through a sheet as above.
 - A row in `status.csv`.
 - If its plural rules aren't in `cmd/l10n/plurals.go` yet, a row there, from CLDR's `plurals.xml`.
 
