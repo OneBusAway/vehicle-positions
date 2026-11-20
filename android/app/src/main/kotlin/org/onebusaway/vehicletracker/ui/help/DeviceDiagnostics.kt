@@ -13,8 +13,9 @@ import org.onebusaway.vehicletracker.ui.account.appVersion
 import org.onebusaway.vehicletracker.ui.permissions.Grants
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-private val MADE_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm xxx")
+private val MADE_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm xxx", Locale.ROOT)
 
 /** What [diagnosticsText] says about this build and this phone right now. Asks the package manager: not on the main thread. */
 internal fun deviceFacts(context: Context): DeviceFacts = DeviceFacts(

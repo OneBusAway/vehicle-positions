@@ -91,6 +91,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -1528,6 +1529,18 @@ class ViewModelsTest {
             assertNull(runs.getValue("T4").highlight)
             // The zone is the agency's, read off the response rather than off the device.
             assertEquals("America/Los_Angeles", state.page.timezone.id)
+        }
+    }
+
+    @Test fun `the board writes run times in the language the screen sets`() = runTest(dispatcher) {
+        withRunsViewModel { vm, _, _, _ ->
+            fun t4() = loadedRuns(vm).boards.flatMap { it.runs }.single { it.id == "T4" }.time
+
+            // A change of language rebuilds the screen but keeps this ViewModel and the runs it loaded.
+            vm.showIn(Locale.GERMAN)
+            assertEquals("10:00", t4())
+            vm.showIn(Locale.US)
+            assertTrue(t4(), t4().startsWith("10:00") && t4().endsWith("AM"))
         }
     }
 

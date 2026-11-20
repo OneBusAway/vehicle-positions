@@ -56,7 +56,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -359,7 +359,7 @@ internal fun FirstTripDoneSheet(sent: Int, onClose: () -> Unit) {
 @Composable
 internal fun FirstTripDoneContent(sent: Int, checkScale: () -> Float, checkAlpha: () -> Float, onOk: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val locale = LocalConfiguration.current.locales[0]
+    val locale = LocalLocale.current.platformLocale
     Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(

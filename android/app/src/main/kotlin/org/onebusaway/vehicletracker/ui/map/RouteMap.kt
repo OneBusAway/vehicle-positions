@@ -99,6 +99,7 @@ import org.onebusaway.vehicletracker.engine.Adherence
 import org.onebusaway.vehicletracker.engine.ShapeGeometry
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import java.io.File
+import java.util.Locale
 import kotlin.math.roundToInt
 
 // The line's widths are iOS's, from RouteMapViewController and MapGlyphs (spec §6.3); the stops
@@ -816,6 +817,6 @@ private const val LOCATION_PROVIDER = "tracker"
 
 /** A style with nothing in it but a background, for the route to be drawn on. */
 private fun plainStyle(dark: Boolean): String {
-    val background = "#%06X".format(0xFFFFFF and if (dark) PLAIN_BACKGROUND_DARK else PLAIN_BACKGROUND_LIGHT)
+    val background = "#%06X".format(Locale.ROOT, 0xFFFFFF and if (dark) PLAIN_BACKGROUND_DARK else PLAIN_BACKGROUND_LIGHT)
     return """{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"$background"}}]}"""
 }

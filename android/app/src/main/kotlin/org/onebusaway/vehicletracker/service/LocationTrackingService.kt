@@ -5,10 +5,12 @@ import android.app.Notification
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Build
 import android.os.IBinder
+import android.os.LocaleList
 import android.os.Process
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -108,6 +110,9 @@ class LocationTrackingService : Service() {
     private lateinit var notification: TrackingNotification
     private lateinit var connectivityManager: ConnectivityManager
 
+    /** The app's languages when the notification was last worded. */
+    private var locales: LocaleList? = null
+
     private var activeTrip: ActiveTrip? = null
     private var adherenceTracker: AdherenceTracker? = null
     private var initialized = false
@@ -155,6 +160,7 @@ class LocationTrackingService : Service() {
         super.onCreate()
         fusedClient = LocationServices.getFusedLocationProviderClient(this)
         notification = TrackingNotification(this)
+        locales = resources.configuration.locales
         connectivityManager = getSystemService(ConnectivityManager::class.java)
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
     }
@@ -273,6 +279,15 @@ class LocationTrackingService : Service() {
         scope.launch(Dispatchers.Main) {
             trackingRepository.liveView.collect { if (locationUpdatesActive) startLocationUpdates() }
         }
+    }
+
+    // A new language for the app, from the phone's settings or the app's own: the ongoing notification says it again
+    // in that language now, rather than at its next change of status or stop.
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.locales == locales) return
+        locales = newConfig.locales
+        postNotification()
     }
 
     private fun postNotification() {

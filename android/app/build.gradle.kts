@@ -45,7 +45,22 @@ android {
         }
     }
 
+    androidResources {
+        // Lists the app's languages for Settings > Apps > Language on Android 13 and up, from the values-<language>
+        // folders and res/resources.properties, which says values/ is English.
+        generateLocaleConfig = true
+        // The languages the app has its own strings in. A library's strings in any other language are left out, so a
+        // phone set to one shows the app in English throughout, not English mixed with the library's words. A
+        // language is added here in the same pull request as its values-<language>/strings.xml (#495).
+        localeFilters += listOf("en")
+    }
+
     buildTypes {
+        debug {
+            // en-XA (accented and longer) and ar-XB (right to left), for finding text strings.xml misses and layouts
+            // that break in another language. A debug build offers them in Settings > Apps > Language.
+            isPseudoLocalesEnabled = true
+        }
         release {
             signingConfig = signingConfigs.findByName("release")
             // MapLibre's native library is about 10 MB for each ABI. Phones are ARM; the x86 ones are
@@ -65,10 +80,22 @@ android {
         resValues = true
     }
     testOptions.unitTests.isReturnDefaultValues = true
-    // MapAssetsTest and WindowColorsTest read committed files from disk, so a change to them has to rerun the tests.
+    // MapAssetsTest, WindowColorsTest and StringsXmlTest read committed files from disk, so a change to them has to
+    // rerun the tests.
     testOptions.unitTests.all {
         it.inputs.dir("src/main/assets/map")
-        it.inputs.files("src/main/res/values/colors.xml", "src/main/res/values-night/colors.xml")
+        it.inputs.files(
+            "src/main/res/values/colors.xml",
+            "src/main/res/values-night/colors.xml",
+            "src/main/res/values/strings.xml",
+        )
+    }
+    // The translation checks (#495). New strings land in English first, so one not translated yet is a warning; a
+    // translation that breaks a placeholder or a plural, or translates what must stay as it is, is an error. Compose's
+    // NonObservableLocale, an error already, keeps a composable from formatting in a language it can't see change.
+    lint {
+        error += listOf("MissingQuantity", "UnusedQuantity", "StringFormatCount", "Untranslatable", "UnusedTranslation")
+        warning += "MissingTranslation"
     }
 }
 

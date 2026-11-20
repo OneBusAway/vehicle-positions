@@ -9,9 +9,11 @@ import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 // What "Share diagnostics" sends: the app, the phone, the server, what the app may do and its recent problems, for
-// whoever looks after the app. It stays in English whatever the phone's language, so that person can read it.
+// whoever looks after the app. It stays in English whatever the phone's language, so that person can read it, and its
+// dates and numbers are written the same way in every language (Locale.ROOT), so it can be searched and compared.
 
 /** What the phone says about itself and this build. Nothing in it names the driver, the vehicle or where it is. */
 internal data class DeviceFacts(
@@ -52,7 +54,7 @@ internal fun diagnosticsText(device: DeviceFacts, session: Session, problems: Li
     append(if (problems.isEmpty()) "None since the app started" else problems.joinToString("\n") { problemLine(it, zone) })
 }
 
-private val PROBLEM_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xxx")
+private val PROBLEM_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xxx", Locale.ROOT)
 
 /** "2026-11-20 10:00:05 +05:30 HistoryUploader: Keeping queued fixes after network failure (IOException: timeout)" */
 private fun problemLine(problem: RecentProblem, zone: ZoneId): String =

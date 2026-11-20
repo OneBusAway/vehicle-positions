@@ -37,6 +37,7 @@
     <string name="login_error_server">Couldn\'t sign in. Try again.</string>
     <!-- Signing in again after the session ended during a trip. The email the driver signed in with last. -->
     <string name="login_again_title">Sign in again</string>
+    <!-- Under it: the email the driver signed in with last, e.g. "As driver@example.org". -->
     <string name="login_again_subtitle">As %1$s</string>
     <string name="login_again_button">Sign in and keep reporting</string>
     <string name="login_trip_open_title">Your trip is still open</string>
@@ -100,9 +101,10 @@
     <!-- Over a picture of the Reports paused notification. -->
     <string name="welcome_habits_if_stops">If reporting stops</string>
 
-    <!-- A tip shown once to each driver, on the run board, pointing at the run under way. A tap on a run asks first, and the text names that dialog's button, runs_start_confirm. -->
+    <!-- A tip shown once to each driver, on the run board, pointing at the run under way. A tap on a run asks first. -->
     <string name="tip_run_board_title">Tap your run</string>
-    <string name="tip_run_board_text">Then tap Start trip. Riders see your vehicle from then on.</string>
+    <!-- Under it: the start button's own words in the dialog a run tap opens (runs_start_confirm), e.g. "Then tap Start trip. Riders see your vehicle from then on." -->
+    <string name="tip_run_board_text">Then tap %1$s. Riders see your vehicle from then on.</string>
     <!-- A tip shown once, on the driver's first trip and before the vehicle moves, pointing at the "N sent" count. -->
     <string name="tip_sent_count_title">Reports sent</string>
     <string name="tip_sent_count_text">This number grows while riders can see you. No signal? Keep driving. Reports are saved and sent later.</string>
@@ -110,6 +112,7 @@
     <string name="tip_got_it">Got it</string>
     <!-- A sheet after the driver's first trip ends: a title, the trip's report count as a large number with its words beside it, a line and a button. -->
     <string name="first_trip_done_title">First trip done</string>
+    <!-- The words beside the count, which is shown on its own in large digits, e.g. "142" then "reports sent". -->
     <plurals name="first_trip_done_reports">
         <item quantity="one">report sent</item>
         <item quantity="other">reports sent</item>
@@ -192,7 +195,9 @@
     <string name="vehicles_section_matches">Matches</string>
     <!-- How TalkBack describes a starred vehicle's tile, e.g. "4317, Bus 4317, Favorite". -->
     <string name="vehicles_tile_favorite">Favorite</string>
+    <!-- What TalkBack reads for the star on a vehicle's tile: the vehicle's label, e.g. "Add 4317 to favorites". -->
     <string name="vehicles_favorite_description">Add %1$s to favorites</string>
+    <!-- The same star on a vehicle already starred: the vehicle's label. -->
     <string name="vehicles_unfavorite_description">Remove %1$s from favorites</string>
 
     <!-- Route picker -->
@@ -217,8 +222,8 @@
     <string name="routes_no_schedule">No schedule on this server yet</string>
     <string name="routes_no_schedule_detail">An operator has to load one before trips can start. Tell your agency\'s admin.</string>
     <string name="routes_retry_button">Try again</string>
-    <!-- Stands in for a route whose feed gave no short name. -->
-    <string name="routes_badge_placeholder">\u2014</string>
+    <!-- Stands in for a route whose feed gave no short name: a dash, the same in every language. -->
+    <string name="routes_badge_placeholder" translatable="false">\u2014</string>
 
     <!-- Run picker -->
     <string name="runs_title">Choose a run</string>
@@ -237,6 +242,7 @@
     <string name="runs_row_stops">%1$s \u2192 %2$s</string>
     <!-- Under a run's destination, the agency's run or train number and its block, joined as "Run 1503 · Block 599-20"; either alone when the feed gives only that one. -->
     <string name="runs_row_run">Run %1$s</string>
+    <!-- The run's block, as the agency names it, e.g. "Block 599-20". -->
     <string name="runs_row_block">Block %1$s</string>
     <!-- The run number and the block above, when the feed gives both. -->
     <string name="runs_row_run_block">%1$s · %2$s</string>
@@ -263,7 +269,9 @@
     <string name="runs_error_not_assigned">You\'re not assigned to vehicle %1$s.</string>
     <string name="runs_change_bus">Change vehicle</string>
     <string name="runs_error_trip_active">You already have a trip running. End it before starting another.</string>
+    <!-- The vehicle the driver chose, e.g. "4317". -->
     <string name="runs_error_vehicle_busy">Another driver has a trip running on vehicle %1$s. Pick another vehicle or ask your dispatcher.</string>
+    <!-- The vehicle the driver chose, e.g. "Vehicle 4317 is out of service." -->
     <string name="runs_error_vehicle_inactive">Vehicle %1$s is out of service. Pick another vehicle.</string>
     <string name="runs_error_previous_trip_not_ended">Your previous trip could not be ended yet. Check your connection and try again.</string>
     <string name="runs_error_network">Can\'t reach the server. Check your connection.</string>
@@ -301,6 +309,7 @@
     <string name="tracking_reports_stopped">Reports stopped</string>
     <string name="tracking_fact_street_map">Street map</string>
     <string name="tracking_street_map_ready">Ready</string>
+    <!-- How much of the street map has downloaded, as a percentage, e.g. "Downloading · 40%". -->
     <string name="tracking_street_map_downloading">Downloading · %1$d%%</string>
     <string name="tracking_street_map_not_downloaded">Not downloaded yet</string>
     <string name="tracking_street_map_no_space">Not enough space</string>
@@ -359,10 +368,12 @@
 
     <!-- Status card: how the driver is keeping to the route and the schedule -->
     <string name="tracking_adherence_on_time">On time</string>
+    <!-- Whole minutes behind the timetable, e.g. "3 min late". -->
     <plurals name="tracking_adherence_minutes_late">
         <item quantity="one">%1$d min late</item>
         <item quantity="other">%1$d min late</item>
     </plurals>
+    <!-- Whole minutes ahead of the timetable, e.g. "2 min early". -->
     <plurals name="tracking_adherence_minutes_early">
         <item quantity="one">%1$d min early</item>
         <item quantity="other">%1$d min early</item>
@@ -380,13 +391,16 @@
     <string name="tracking_adherence_next_stop">Next</string>
     <!-- The next stop's scheduled time in the agency's zone, then the distance to it. -->
     <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <!-- The distance to the next stop in metres, under a kilometre, e.g. "350 m". -->
     <string name="tracking_adherence_distance_m">%1$d m</string>
+    <!-- The same in kilometres, to one decimal place, e.g. "1.2 km". -->
     <string name="tracking_adherence_distance_km">%1$.1f km</string>
     <string name="tracking_adherence_waiting_for_gps">Waiting for GPS</string>
     <!-- Beside the trip's first stop while waiting for the first fix. -->
     <string name="tracking_adherence_from">From</string>
     <!-- The run's start time in the agency's zone, then the vehicle, e.g. "6:58 AM run · 4317". -->
     <string name="tracking_adherence_run">%1$s run</string>
+    <!-- The same, then the vehicle, e.g. "6:58 AM run · 4317". -->
     <string name="tracking_adherence_run_vehicle">%1$s run · %2$s</string>
     <!-- Tracking with no copy of the trip's shape and stops to judge against. -->
     <string name="tracking_adherence_no_schedule">No schedule</string>
@@ -394,6 +408,7 @@
     <string name="tracking_adherence_no_schedule_detail">This run has no times</string>
     <!-- On the tracking screen's map, once the driver has dragged it away from the vehicle. -->
     <string name="tracking_map_recenter">Re-center</string>
+    <!-- How much of the street map has downloaded, as a percentage, e.g. "Downloading map, 40%". -->
     <string name="tracking_map_downloading">Downloading map, %1$d%%</string>
     <string name="tracking_map_no_space">Not enough space for the map</string>
     <string name="tracking_map_retrying">Map not downloaded yet, will retry</string>
@@ -411,6 +426,7 @@
     <string name="resume_route">Route %1$s</string>
     <!-- The run's first departure in the agency's zone, e.g. "6:58 AM run". -->
     <string name="resume_run">%1$s run</string>
+    <!-- The vehicle the trip is on, e.g. "Vehicle 4317". -->
     <string name="resume_bus">Vehicle %1$s</string>
     <!-- Whole minutes since the trip began, then the time it began, e.g. "Started 23 min ago, at 6:58 AM". -->
     <plurals name="resume_started_minutes_ago">
@@ -428,8 +444,9 @@
     <!-- Goes back from a failed end to Resume and End trip, for a driver who tapped End trip by mistake. -->
     <string name="resume_end_failed_back">Don\'t end the trip</string>
 
-    <!-- Tracking notification: the status card's words, with the route's short name, e.g. "Route 7 · On time". -->
+    <!-- The tracking notification's channel: Android lists it in the app's notification settings. -->
     <string name="tracking_notification_channel_name">Trip reporting</string>
+    <!-- The tracking notification's title: the route's short name, then the status card's words, e.g. "Route 7 · On time". -->
     <string name="tracking_notification_title">Route %1$s · %2$s</string>
     <!-- The next stop, its time in the agency's zone, then the Reports row's word, e.g. "Next 3rd Ave & Seneca St · 7:18 AM · Reporting". -->
     <string name="tracking_notification_next">Next %1$s · %2$s · %3$s</string>
@@ -441,8 +458,9 @@
     <!-- The channel of the notification above, which makes a sound: Android lists it in the app's notification settings. -->
     <string name="tracking_notification_attention_channel_name">Trip needs you</string>
 
-    <!-- The checklist before a trip, shown when the app is missing something it needs. The vehicle's fleet number. -->
+    <!-- The checklist before a trip, shown when the app is missing something it needs. -->
     <string name="preflight_title">Before you start</string>
+    <!-- Under the title: the vehicle's fleet number, e.g. "The app needs these to report vehicle 4317." -->
     <string name="preflight_message">The app needs these to report vehicle %1$s. Android asks about each one next.</string>
     <string name="preflight_location">Location</string>
     <string name="preflight_location_why">So the app knows where the vehicle is</string>

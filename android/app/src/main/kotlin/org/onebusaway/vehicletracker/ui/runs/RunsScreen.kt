@@ -46,7 +46,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -106,6 +106,8 @@ fun RunsScreen(
     tipViewModel: RunBoardTipViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val locale = LocalLocale.current.platformLocale
+    LaunchedEffect(locale) { viewModel.showIn(locale) }
     LifecycleStartEffect(viewModel) {
         viewModel.onScreenVisible(true)
         onStopOrDispose { viewModel.onScreenVisible(false) }
@@ -186,7 +188,7 @@ fun RunsScreen(
         TipHost(
             tip = runTip,
             title = stringResource(R.string.tip_run_board_title),
-            text = stringResource(R.string.tip_run_board_text),
+            text = runBoardTipText(),
             show = tipViewModel.show,
             onShown = tipViewModel::onShown,
             onLeft = tipViewModel::onLeft,
@@ -369,10 +371,14 @@ private fun BoardHeader(serviceDate: String, direction: RunDirection?) {
     }
 }
 
+/** The run board tip's words, which name the start button as the dialog that a run tap opens says it. */
+@Composable
+internal fun runBoardTipText(): String = stringResource(R.string.tip_run_board_text, stringResource(R.string.runs_start_confirm))
+
 /** `"20261008"` as the driver's language writes a day, "Thursday, October 8"; as it came if it is not a date. */
 @Composable
 private fun serviceDay(serviceDate: String): String {
-    val locale = LocalConfiguration.current.locales[0]
+    val locale = LocalLocale.current.platformLocale
     return remember(serviceDate, locale) {
         runCatching {
             val day = LocalDate.parse(serviceDate, DateTimeFormatter.BASIC_ISO_DATE)

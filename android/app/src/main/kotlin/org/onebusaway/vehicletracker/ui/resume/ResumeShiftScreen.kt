@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -224,7 +225,7 @@ private fun TripCard(card: ResumeCard, now: () -> Long) {
                 )
                 card.runStartsAt?.let { startsAt ->
                     Text(
-                        text = stringResource(R.string.resume_run, formatClock(startsAt, card.zone)),
+                        text = stringResource(R.string.resume_run, formatClock(startsAt, card.zone, LocalLocale.current.platformLocale)),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -258,7 +259,7 @@ private fun StartedAgo(startedAt: Instant, zone: ZoneId, now: () -> Long) {
             value = (now() - start).coerceAtLeast(0)
         }
     }
-    val at = formatClock(startedAt, zone)
+    val at = formatClock(startedAt, zone, LocalLocale.current.platformLocale)
     val minutes = (elapsed / SECONDS_PER_MINUTE).toInt()
     Text(
         text = if (minutes < 60) {

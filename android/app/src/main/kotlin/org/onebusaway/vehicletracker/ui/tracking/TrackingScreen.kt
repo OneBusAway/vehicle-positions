@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -281,7 +282,7 @@ internal fun TripDuration(startedAtEpochSec: Long?, style: TextStyle, color: Col
             }
         }
     }
-    Text(text = formatDuration(elapsedSeconds), style = style, color = color)
+    Text(text = formatDuration(elapsedSeconds, LocalLocale.current.platformLocale), style = style, color = color)
 }
 
 /** What ending the trip will do, with the run's name when the phone has it, and how many reports went out. */
@@ -291,7 +292,7 @@ private fun endTripMessage(tracking: TrackingState): String {
     val firstStop = geometry?.stops?.firstOrNull()
     val sent = tracking.fixesSent
     return if (geometry != null && firstStop != null && geometry.routeShortName.isNotEmpty()) {
-        val startsAt = formatClock(firstStop.departureAt, geometry.timezone)
+        val startsAt = formatClock(firstStop.departureAt, geometry.timezone, LocalLocale.current.platformLocale)
         pluralStringResource(R.plurals.tracking_end_trip_dialog_message, sent, geometry.routeShortName, startsAt, sent)
     } else {
         pluralStringResource(R.plurals.tracking_end_trip_dialog_message_no_run, sent, sent)
