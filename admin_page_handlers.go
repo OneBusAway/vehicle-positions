@@ -80,6 +80,7 @@ type adminUI struct {
 	users          UserFetcher
 	tracker        *Tracker
 	alerts         *alertWatcher
+	clearedAlerts  ClearedAlertLister
 	reports        *serviceReporter
 	health         *feedHealth
 	overview       overviewReports
@@ -121,6 +122,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 		users:          store,
 		tracker:        tracker,
 		alerts:         alerts,
+		clearedAlerts:  store,
 		reports:        reports,
 		health:         health,
 		stats:          store,

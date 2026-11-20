@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -49,6 +51,27 @@ type alertKindCount struct {
 	Kind  string
 	Label string
 	Count int
+}
+
+// clearedAlertRow is one cleared alert on the Alerts page.
+type clearedAlertRow struct {
+	// Title is the kind in words.
+	Title        string
+	VehicleID    string
+	VehicleLabel string
+	// Route is the trip not started for a not-started alert, the trip
+	// running for the others, and GtfsTripID that trip.
+	Route      tripRoute
+	GtfsTripID string
+	// TripID opens the trip running, or for a not-started alert the
+	// vehicle's last.
+	TripID int64
+	// Raised and Cleared are on the page's clock, RaisedDay the day it was
+	// raised on, and Lasted is from one to the other.
+	Raised    string
+	RaisedDay string
+	Cleared   string
+	Lasted    string
 }
 
 // alertKinds are the kinds in the order the chips show them, with each kind
@@ -110,6 +133,50 @@ func newAlertRow(a alertEntry, settings alertSettings, ix *rider.Index, loc *tim
 	return row
 }
 
+// newClearedAlertRow is a's row, with the route's badge from the schedule ix
+// (nil when none is loaded) and its times on the clock loc, as of now.
+func newClearedAlertRow(a clearedAlert, ix *rider.Index, loc *time.Location, now time.Time) clearedAlertRow {
+	row := clearedAlertRow{
+		VehicleID:    a.VehicleID,
+		VehicleLabel: cmp.Or(a.VehicleLabel, a.VehicleID),
+		Route:        routeBadge(ix, a.RouteID),
+		GtfsTripID:   a.GtfsTripID,
+		TripID:       a.TripID,
+		Raised:       a.RaisedAt.In(loc).Format("15:04"),
+		RaisedDay:    formatDay(a.RaisedAt, loc, now),
+		Cleared:      a.ClearedAt.In(loc).Format("15:04"),
+		Lasted:       formatMinutes(a.ClearedAt.Sub(a.RaisedAt)),
+	}
+	row.Title, _ = alertKindTitle(a.Kind)
+	return row
+}
+
+// alertKindTitle is kind in words, and false when there is no such kind.
+func alertKindTitle(kind string) (string, bool) {
+	for _, k := range alertKinds {
+		if k.kind == kind {
+			return k.title, true
+		}
+	}
+	return "", false
+}
+
+// clearedAlertsURL is an /admin/alerts link that shows the cleared alerts of
+// kind, "" for every kind, from page, at the list.
+func clearedAlertsURL(kind string, page int) string {
+	v := url.Values{}
+	if kind != "" {
+		v.Set("kind", kind)
+	}
+	if page > 1 {
+		v.Set("page", strconv.Itoa(page))
+	}
+	if len(v) == 0 {
+		return "/admin/alerts#cleared"
+	}
+	return "/admin/alerts?" + v.Encode() + "#cleared"
+}
+
 // alertsHeadline is the Alerts page's headline, from the count of open alerts.
 func alertsHeadline(open int) string {
 	switch open {
@@ -122,16 +189,39 @@ func alertsHeadline(open int) string {
 	}
 }
 
-// alertsPage renders the current alerts, longest-running first.
+// alertsPage renders the current alerts, longest-running first, and below
+// them a page of the cleared ones, newest first, of every kind or of the one
+// ?kind= names.
 func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	kind := query.Get("kind")
+	if _, ok := alertKindTitle(kind); kind != "" && !ok {
+		http.Error(w, "kind must be quiet, not_moving, off_route or not_started", http.StatusBadRequest)
+		return
+	}
+	page := adminPageNumber(query)
+
 	// Set before the list, so a page left open keeps reloading through a
 	// database outage and recovers when it ends.
 	w.Header().Set("Refresh", alertsPageRefresh)
-	alerts, err := ui.alerts.list(r.Context(), time.Now())
+	now := time.Now()
+	alerts, err := ui.alerts.list(r.Context(), now)
 	if err != nil {
 		slog.Error("alerts: list alerts", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
+	}
+	// A page of rows at a time, read newest first through an index on when
+	// each cleared, so the page costs the same however long the history.
+	cleared, err := ui.clearedAlerts.ListClearedAlerts(r.Context(), kind, adminPageSize+1, adminPageOffset(page))
+	if err != nil {
+		slog.Error("alerts: list cleared alerts", "kind", kind, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	hasMore := len(cleared) > adminPageSize
+	if hasMore {
+		cleared = cleared[:adminPageSize]
 	}
 
 	ix := ui.reports.index()
@@ -148,12 +238,31 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		kinds = append(kinds, alertKindCount{Kind: k.kind, Label: k.title, Count: byKind[k.kind]})
 	}
 
+	clearedRows := make([]clearedAlertRow, 0, len(cleared))
+	for _, a := range cleared {
+		clearedRows = append(clearedRows, newClearedAlertRow(a, ix, loc, now))
+	}
+	clearedKinds := make([]statusLink, 0, len(alertKinds)+1)
+	clearedKinds = append(clearedKinds, statusLink{Label: "All", URL: clearedAlertsURL("", 1), Current: kind == ""})
+	for _, k := range alertKinds {
+		clearedKinds = append(clearedKinds, statusLink{Label: k.title, URL: clearedAlertsURL(k.kind, 1), Current: kind == k.kind})
+	}
+
 	ui.renderAdminWithAlerts(w, r, http.StatusOK, "alerts.html", map[string]interface{}{
 		"Title":            "Alerts",
 		"Page":             "alerts",
 		"Headline":         alertsHeadline(len(rows)),
 		"Alerts":           rows,
 		"Kinds":            kinds,
+		"Cleared":          clearedRows,
+		"ClearedKind":      kind,
+		"ClearedKinds":     clearedKinds,
+		"Timezone":         loc.String(),
+		"Shown":            newPagerCount(len(clearedRows), "cleared alert", "cleared alerts"),
+		"PageNum":          page,
+		"HasMore":          hasMore,
+		"PrevURL":          clearedAlertsURL(kind, page-1),
+		"NextURL":          clearedAlertsURL(kind, page+1),
 		"QuietAfter":       humanizeDuration(ui.alerts.settings.quietAfter),
 		"StoppedAfter":     humanizeDuration(ui.alerts.settings.stoppedAfter),
 		"StoppedRadius":    fmt.Sprintf("%.0f m", stoppedRadius),

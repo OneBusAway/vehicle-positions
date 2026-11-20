@@ -27,6 +27,17 @@ type fakeLocationPruneStore struct {
 	err     error
 	onCall  func()
 	calls   []pruneCall
+	// alertCutoffs holds the cutoff of each PruneClearedAlerts call, which
+	// fails with alertErr when it is set.
+	alertCutoffs []time.Time
+	alertErr     error
+}
+
+func (f *fakeLocationPruneStore) PruneClearedAlerts(_ context.Context, cutoff time.Time) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.alertCutoffs = append(f.alertCutoffs, cutoff)
+	return 0, f.alertErr
 }
 
 func (f *fakeLocationPruneStore) PruneLocationPoints(_ context.Context, cutoff time.Time, batchSize int32) (int64, error) {
@@ -125,6 +136,26 @@ func TestLocationPruner_CutoffUsesRetention(t *testing.T) {
 		"cutoff should be one retention period in the past")
 }
 
+func TestLocationPruner_PrunesClearedAlertsAtTheSameCutoff(t *testing.T) {
+	fake := &fakeLocationPruneStore{}
+	pruner := newUnstartedPruner(fake, 24*time.Hour, 100)
+
+	pruner.pruneAll(pruner.ctx)
+
+	require.Len(t, fake.alertCutoffs, 1)
+	assert.Equal(t, fake.firstCall(t).cutoff, fake.alertCutoffs[0],
+		"an alert is kept as long as the points it was worked out from")
+}
+
+func TestLocationPruner_AlertPruneErrorStillPrunesPoints(t *testing.T) {
+	fake := &fakeLocationPruneStore{alertErr: errors.New("connection refused")}
+	pruner := newUnstartedPruner(fake, time.Hour, 5)
+
+	pruner.pruneAll(pruner.ctx)
+
+	assert.Equal(t, 1, fake.callCount())
+}
+
 func TestLocationPruner_Stop_Idempotent(t *testing.T) {
 	pruner, err := NewLocationPruner(&fakeLocationPruneStore{}, time.Hour, time.Minute, 100)
 	require.NoError(t, err)
@@ -219,6 +250,10 @@ func (b *blockingPruneStore) PruneLocationPoints(ctx context.Context, _ time.Tim
 	b.err = ctx.Err()
 	b.mu.Unlock()
 	return 0, ctx.Err()
+}
+
+func (b *blockingPruneStore) PruneClearedAlerts(context.Context, time.Time) (int64, error) {
+	return 0, nil
 }
 
 func (b *blockingPruneStore) observedErr() error {

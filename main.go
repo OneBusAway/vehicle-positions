@@ -76,6 +76,8 @@ type appStore interface {
 	RefreshTokenGetter
 	RefreshTokenRotator
 	RefreshTokenDeleter
+	AlertHistoryStore
+	ClearedAlertLister
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
@@ -393,9 +395,9 @@ func main() {
 	alerts := newAlertWatcher(store, alertSettingsFromEnv(riderCfg.Thresholds.MaxShapeDistance))
 	alerts.watchRoutes(schedule.Index)
 	alerts.watchBlocks(store)
+	stopAlerts := startAlertJobs(store, alerts, schedule.Index, webhookCfg, defaultAlertWebhookTiming())
+	defer stopAlerts()
 	if webhookCfg != nil {
-		webhook := newAlertWebhook(*webhookCfg, alerts, alerts.settings, schedule.Index, defaultAlertWebhookTiming())
-		defer webhook.Stop()
 		// The host only: a chat service's webhook URL carries its credential.
 		slog.Info("alert webhook enabled", "host", webhookCfg.host, "signed", webhookCfg.secret != nil,
 			"links", webhookCfg.publicURL != "", "text_only", webhookCfg.textOnly)

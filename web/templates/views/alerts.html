@@ -31,6 +31,30 @@
 {{else}}
 <div class="card empty-ok"><div class="empty"><span class="step-icon">{{template "icon-lg" "check_circle"}}</span><div class="empty-title">All clear</div><p>No vehicle on a running trip has gone quiet, left its route or stopped moving, and no block's next trip is late to start.</p></div></div>
 {{end}}
+<section class="card" id="cleared" aria-labelledby="cleared-title" style="margin-top:16px">
+  <div class="card-head filters"><h3 id="cleared-title" style="flex:1 1 220px">Cleared<span class="sub" style="margin-left:10px">Newest first. Times are {{.Timezone}} time.</span></h3><div role="group" aria-label="Cleared alerts shown" style="display:flex;flex-wrap:wrap;gap:8px">{{range .ClearedKinds}}<a class="chip" href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div></div>
+  {{if .Cleared}}
+  <div class="table-wrap"><table class="table cards">
+    <thead><tr><th>Vehicle</th><th>Alert</th><th>Route</th><th>Raised</th><th>Cleared</th><th>Lasted</th><th><span class="sr-only">Trip</span></th></tr></thead>
+    <tbody>
+      {{range .Cleared}}
+      <tr>
+        <td class="c-main strong nowrap" title="{{.VehicleID}}">{{.VehicleLabel}}</td>
+        <td class="c-side"><span class="pill plain">{{.Title}}</span></td>
+        <td class="nowrap" data-label="Route"><span class="route-to">{{template "route-badge" .Route}}{{with .GtfsTripID}}<span class="muted">trip {{.}}</span>{{end}}</span></td>
+        <td class="nowrap" data-label="Raised">{{.Raised}}<span class="sub">{{.RaisedDay}}</span></td>
+        <td class="nowrap" data-label="Cleared">{{.Cleared}}</td>
+        <td class="num nowrap" data-label="Lasted">{{.Lasted}}</td>
+        <td class="c-actions"><a class="icon-btn" href="/admin/trips/{{.TripID}}" aria-label="Open trip {{.TripID}}">{{template "icon" "chevron_right"}}</a></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+  <div class="empty"><div class="empty-title">{{if or .ClearedKind (gt .PageNum 1)}}No cleared alerts here{{else}}No alert has cleared yet{{end}}</div><p>An alert shows here once it clears, with when it was raised and how long it lasted.</p></div>
+  {{end}}
+  {{template "pagination" .}}
+</section>
 <details class="rules">
   <summary>What raises an alert</summary>
   <p class="muted" style="margin:8px 0 0;max-width:78ch">Vehicles on a running trip that have sent no report for over {{.QuietAfter}}, or have moved under {{.StoppedRadius}} in {{.StoppedAfter}}, or have been more than {{.OffRouteDistance}} from their route for over {{.OffRouteAfter}}, and vehicles whose block's next trip has not started over {{.NotStartedAfter}} after it was due. This page reloads every 30 seconds.</p>

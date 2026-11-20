@@ -124,6 +124,14 @@ server restarted shows as off route again only after it has come back near its
 route and left it. The not-started alert reads the trips started in the last
 day from the database instead, so a restart does not reset it.
 
+Each alert is also kept in the database, from when it was raised to when it
+cleared, whether or not the webhook below is on, and the **Alerts** page lists
+the cleared ones. An alert open when the server restarted keeps its record if
+it shows again within a minute of the longest of `ALERT_QUIET_AFTER`,
+`ALERT_STOPPED_AFTER` and `ALERT_OFF_ROUTE_AFTER`, and is otherwise recorded as
+cleared at the restart. `LOCATION_RETENTION_PERIOD` deletes the cleared ones
+with the points they were worked out from.
+
 ### Alert webhook
 
 Posts each alert when it is raised and again when it clears, to a chat service
@@ -206,7 +214,7 @@ are under *Data Retention & Privacy* in the [README](../README.md).
 
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
-| `LOCATION_RETENTION_PERIOD` | `0` | Optional | How long to keep rows in `location_points`. **`0` means keep forever**, not "keep nothing" — it disables pruning. Any other value enables it. A negative duration logs an `ERROR` and leaves retention **off**; the server still starts. |
+| `LOCATION_RETENTION_PERIOD` | `0` | Optional | How long to keep rows in `location_points`, and the alerts in `alert_history` that cleared before then. **`0` means keep forever**, not "keep nothing" — it disables pruning. Any other value enables it. A negative duration logs an `ERROR` and leaves retention **off**; the server still starts. |
 | `LOCATION_PRUNE_INTERVAL` | `1h` | Optional | How often the pruner sweeps. Read **only when `LOCATION_RETENTION_PERIOD` is non-zero.** A value that parses to zero or a negative duration disables retention entirely rather than falling back to `1h`. |
 | `LOCATION_PRUNE_BATCH_SIZE` | `10000` | Optional | Maximum rows deleted per statement, each batch in its own transaction. Read **only when `LOCATION_RETENTION_PERIOD` is non-zero.** Must be a positive 32-bit integer; anything else warns and defaults. |
 
