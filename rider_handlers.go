@@ -393,7 +393,14 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 		if startDate == "" {
 			startedAt := s.now()
 			if trip.InFrequencies() {
-				startedAt = boardedRunStart(trip, req.BoardingStopID, startedAt)
+				// A run start in no window while the boarding time is in one
+				// is a rider who tapped before that window's first run reached
+				// their stop, as at a window that opens at midnight, so the
+				// boarding time dates the ride.
+				runStart := boardedRunStart(trip, req.BoardingStopID, startedAt)
+				if index.InWindow(trip, runStart) || !index.InWindow(trip, startedAt) {
+					startedAt = runStart
+				}
 			}
 			startDate = index.RunServiceDate(trip, startedAt)
 		}
