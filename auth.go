@@ -77,8 +77,6 @@ type LoginRequest struct {
 // stays in the response permanently, with no planned removal, so that clients
 // written against older releases, including tools an agency built itself,
 // keep working; TestLoginResponse_BackwardCompatibleJSON holds it there.
-// Unlike the mobile apps, the simulator does not refresh expired access
-// tokens.
 type LoginResponse struct {
 	Token        string `json:"token"`
 	AccessToken  string `json:"access_token"`
