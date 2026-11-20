@@ -25,7 +25,15 @@ type noopStore struct{}
 func (n *noopStore) GetUserByEmail(_ context.Context, _ string) (*User, error) {
 	return nil, ErrUserNotFound
 }
-func (n *noopStore) UpdateUserLastSeen(_ context.Context, _ int64) error { return nil }
+func (n *noopStore) UpdateUserLastSeen(_ context.Context, _ int64) error       { return nil }
+func (n *noopStore) RaiseAlert(_ context.Context, _ alertEntry) (int64, error) { return 0, nil }
+func (n *noopStore) ClearAlert(_ context.Context, _ int64, _ time.Time) error  { return nil }
+func (n *noopStore) ClearAlertsLeftOpen(_ context.Context, _ []int64, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (n *noopStore) ListClearedAlerts(_ context.Context, _ string, _, _ int) ([]clearedAlert, error) {
+	return make([]clearedAlert, 0), nil
+}
 func (n *noopStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
 }

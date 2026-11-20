@@ -528,3 +528,45 @@ ON CONFLICT (signature) DO NOTHING;
 
 -- name: DeleteImportConfirmationsBefore :exec
 DELETE FROM import_confirmations WHERE expires_at < sqlc.arg(cutoff);
+
+-- name: RaiseAlert :one
+-- An alert already open, one the server was watching when it restarted,
+-- keeps its row and the time it was raised. The update changes nothing: it is
+-- there so RETURNING gives that row's id.
+INSERT INTO alert_history (kind, vehicle_id, trip_id, gtfs_trip_id, route_id, raised_at)
+VALUES (sqlc.arg(kind), sqlc.arg(vehicle_id), sqlc.arg(trip_id), sqlc.arg(gtfs_trip_id), sqlc.arg(route_id), sqlc.arg(raised_at))
+ON CONFLICT (trip_id, kind, gtfs_trip_id) WHERE cleared_at IS NULL
+DO UPDATE SET raised_at = alert_history.raised_at
+RETURNING id;
+
+-- name: ClearAlert :exec
+UPDATE alert_history SET cleared_at = sqlc.arg(cleared_at)
+WHERE id = sqlc.arg(id) AND cleared_at IS NULL;
+
+-- name: ClearAlertsLeftOpen :execrows
+-- Clears every open alert but the ones in keep: after a restart, the alerts
+-- the server was watching that have not come back.
+UPDATE alert_history SET cleared_at = sqlc.arg(cleared_at)
+WHERE cleared_at IS NULL AND NOT (id = ANY(sqlc.arg(keep)::BIGINT[]));
+
+-- name: ListClearedAlerts :many
+SELECT a.id, a.kind, a.vehicle_id, COALESCE(v.label, '')::TEXT AS vehicle_label, a.trip_id,
+       a.gtfs_trip_id, a.route_id, a.raised_at, a.cleared_at
+FROM alert_history a
+LEFT JOIN vehicles v ON v.id = a.vehicle_id
+WHERE a.cleared_at IS NOT NULL
+ORDER BY a.cleared_at DESC, a.id DESC
+LIMIT $1 OFFSET $2;
+
+-- name: ListClearedAlertsOfKind :many
+SELECT a.id, a.kind, a.vehicle_id, COALESCE(v.label, '')::TEXT AS vehicle_label, a.trip_id,
+       a.gtfs_trip_id, a.route_id, a.raised_at, a.cleared_at
+FROM alert_history a
+LEFT JOIN vehicles v ON v.id = a.vehicle_id
+WHERE a.cleared_at IS NOT NULL AND a.kind = $1
+ORDER BY a.cleared_at DESC, a.id DESC
+LIMIT $2 OFFSET $3;
+
+-- name: DeleteClearedAlertsBefore :execrows
+-- An open alert is kept, however old: the server is still watching it.
+DELETE FROM alert_history WHERE cleared_at < sqlc.arg(cutoff);

@@ -130,7 +130,7 @@ walkthrough.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LOCATION_RETENTION_PERIOD` | `0` | How long to keep rows in `location_points`, measured from server receipt time. `0` (the default) keeps them forever. |
+| `LOCATION_RETENTION_PERIOD` | `0` | How long to keep rows in `location_points`, measured from server receipt time, and the alerts in `alert_history` that cleared before then. `0` (the default) keeps them forever. |
 | `LOCATION_PRUNE_INTERVAL` | `1h` | How often the pruner sweeps. The first sweep runs one full interval after startup, not at boot. |
 | `LOCATION_PRUNE_BATCH_SIZE` | `10000` | Rows deleted per statement, each batch in its own transaction, so a large backlog does not stall location ingest. |
 

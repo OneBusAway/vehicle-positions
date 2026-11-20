@@ -8,6 +8,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlertHistory struct {
+	ID         int64
+	Kind       string
+	VehicleID  string
+	TripID     int64
+	GtfsTripID string
+	RouteID    string
+	RaisedAt   pgtype.Timestamptz
+	ClearedAt  pgtype.Timestamptz
+}
+
 type ApiKey struct {
 	ID         int64
 	Name       string

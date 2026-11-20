@@ -12,6 +12,7 @@ import (
 // LocationPruneStore is the store behavior needed by the retention pruner.
 type LocationPruneStore interface {
 	PruneLocationPoints(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error)
+	PruneClearedAlerts(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 var _ LocationPruneStore = (*Store)(nil)

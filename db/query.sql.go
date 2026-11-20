@@ -123,6 +123,41 @@ func (q *Queries) CheckUserVehicleAssignmentForShare(ctx context.Context, arg Ch
 	return i, err
 }
 
+const clearAlert = `-- name: ClearAlert :exec
+UPDATE alert_history SET cleared_at = $1
+WHERE id = $2 AND cleared_at IS NULL
+`
+
+type ClearAlertParams struct {
+	ClearedAt pgtype.Timestamptz
+	ID        int64
+}
+
+func (q *Queries) ClearAlert(ctx context.Context, arg ClearAlertParams) error {
+	_, err := q.db.Exec(ctx, clearAlert, arg.ClearedAt, arg.ID)
+	return err
+}
+
+const clearAlertsLeftOpen = `-- name: ClearAlertsLeftOpen :execrows
+UPDATE alert_history SET cleared_at = $1
+WHERE cleared_at IS NULL AND NOT (id = ANY($2::BIGINT[]))
+`
+
+type ClearAlertsLeftOpenParams struct {
+	ClearedAt pgtype.Timestamptz
+	Keep      []int64
+}
+
+// Clears every open alert but the ones in keep: after a restart, the alerts
+// the server was watching that have not come back.
+func (q *Queries) ClearAlertsLeftOpen(ctx context.Context, arg ClearAlertsLeftOpenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearAlertsLeftOpen, arg.ClearedAt, arg.Keep)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveAPIKeys = `-- name: CountActiveAPIKeys :one
 SELECT COUNT(*) FROM api_keys WHERE active = true
 `
@@ -332,6 +367,19 @@ WHERE id = $1
 
 func (q *Queries) DeactivateAPIKey(ctx context.Context, id int64) (int64, error) {
 	result, err := q.db.Exec(ctx, deactivateAPIKey, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClearedAlertsBefore = `-- name: DeleteClearedAlertsBefore :execrows
+DELETE FROM alert_history WHERE cleared_at < $1
+`
+
+// An open alert is kept, however old: the server is still watching it.
+func (q *Queries) DeleteClearedAlertsBefore(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClearedAlertsBefore, cutoff)
 	if err != nil {
 		return 0, err
 	}
@@ -1285,6 +1333,121 @@ func (q *Queries) ListActiveVehiclesByUser(ctx context.Context, userID int64) ([
 	return items, nil
 }
 
+const listClearedAlerts = `-- name: ListClearedAlerts :many
+SELECT a.id, a.kind, a.vehicle_id, COALESCE(v.label, '')::TEXT AS vehicle_label, a.trip_id,
+       a.gtfs_trip_id, a.route_id, a.raised_at, a.cleared_at
+FROM alert_history a
+LEFT JOIN vehicles v ON v.id = a.vehicle_id
+WHERE a.cleared_at IS NOT NULL
+ORDER BY a.cleared_at DESC, a.id DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListClearedAlertsParams struct {
+	Limit  int32
+	Offset int32
+}
+
+type ListClearedAlertsRow struct {
+	ID           int64
+	Kind         string
+	VehicleID    string
+	VehicleLabel string
+	TripID       int64
+	GtfsTripID   string
+	RouteID      string
+	RaisedAt     pgtype.Timestamptz
+	ClearedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListClearedAlerts(ctx context.Context, arg ListClearedAlertsParams) ([]ListClearedAlertsRow, error) {
+	rows, err := q.db.Query(ctx, listClearedAlerts, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClearedAlertsRow
+	for rows.Next() {
+		var i ListClearedAlertsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.VehicleID,
+			&i.VehicleLabel,
+			&i.TripID,
+			&i.GtfsTripID,
+			&i.RouteID,
+			&i.RaisedAt,
+			&i.ClearedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClearedAlertsOfKind = `-- name: ListClearedAlertsOfKind :many
+SELECT a.id, a.kind, a.vehicle_id, COALESCE(v.label, '')::TEXT AS vehicle_label, a.trip_id,
+       a.gtfs_trip_id, a.route_id, a.raised_at, a.cleared_at
+FROM alert_history a
+LEFT JOIN vehicles v ON v.id = a.vehicle_id
+WHERE a.cleared_at IS NOT NULL AND a.kind = $1
+ORDER BY a.cleared_at DESC, a.id DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListClearedAlertsOfKindParams struct {
+	Kind   string
+	Limit  int32
+	Offset int32
+}
+
+type ListClearedAlertsOfKindRow struct {
+	ID           int64
+	Kind         string
+	VehicleID    string
+	VehicleLabel string
+	TripID       int64
+	GtfsTripID   string
+	RouteID      string
+	RaisedAt     pgtype.Timestamptz
+	ClearedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListClearedAlertsOfKind(ctx context.Context, arg ListClearedAlertsOfKindParams) ([]ListClearedAlertsOfKindRow, error) {
+	rows, err := q.db.Query(ctx, listClearedAlertsOfKind, arg.Kind, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClearedAlertsOfKindRow
+	for rows.Next() {
+		var i ListClearedAlertsOfKindRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.VehicleID,
+			&i.VehicleLabel,
+			&i.TripID,
+			&i.GtfsTripID,
+			&i.RouteID,
+			&i.RaisedAt,
+			&i.ClearedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRides = `-- name: ListRides :many
 SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3
 `
@@ -1679,6 +1842,40 @@ func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, id int64) (int64, er
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const raiseAlert = `-- name: RaiseAlert :one
+INSERT INTO alert_history (kind, vehicle_id, trip_id, gtfs_trip_id, route_id, raised_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (trip_id, kind, gtfs_trip_id) WHERE cleared_at IS NULL
+DO UPDATE SET raised_at = alert_history.raised_at
+RETURNING id
+`
+
+type RaiseAlertParams struct {
+	Kind       string
+	VehicleID  string
+	TripID     int64
+	GtfsTripID string
+	RouteID    string
+	RaisedAt   pgtype.Timestamptz
+}
+
+// An alert already open, one the server was watching when it restarted,
+// keeps its row and the time it was raised. The update changes nothing: it is
+// there so RETURNING gives that row's id.
+func (q *Queries) RaiseAlert(ctx context.Context, arg RaiseAlertParams) (int64, error) {
+	row := q.db.QueryRow(ctx, raiseAlert,
+		arg.Kind,
+		arg.VehicleID,
+		arg.TripID,
+		arg.GtfsTripID,
+		arg.RouteID,
+		arg.RaisedAt,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const recordImportConfirmation = `-- name: RecordImportConfirmation :execrows
