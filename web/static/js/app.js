@@ -12,10 +12,14 @@
   };
   VT.getJSON = function (url) {
     return fetch(url, { headers: { Accept: "application/json" } }).then(function (r) {
-      if (!r.ok) throw new Error("HTTP " + r.status);
+      if (!r.ok) { var e = new Error("HTTP " + r.status); e.status = r.status; throw e; }
       return r.json();
     });
   };
+  /* A 401 is the server saying the session has ended (it lasts 24 h, and Sign out in another tab ends it too),
+     not a server that does not answer. Signing in again comes back to this page. */
+  VT.signedOut = function (e) { return !!e && e.status === 401; };
+  VT.signIn = function () { return "/admin/login?next=" + encodeURIComponent(location.pathname + location.search); };
 
   /* Menu rail: fold and open, remembered. */
   var shell = $(".shell");
@@ -79,12 +83,13 @@
 
   /* The pulse: how many vehicles are reporting, and how old that answer is. The page arrives with the
      server's counts; after that the live answer is asked for every 10 s and the alerts every 30 s. */
-  var pulse = $("#pulse"), age = $("#pulse-age"), heardAt = Date.now(), sharedAt = 0, alertsAt = 0, quiet = {};
+  var pulse = $("#pulse"), age = $("#pulse-age"), heardAt = Date.now(), sharedAt = 0, alertsAt = 0, quiet = {}, out = false;
   function span(s) { return s < 2 ? "just now" : s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
   /* The counts are a live region: written only when they change, so nothing is read out again. */
   function say(el, n) { if (el.textContent !== String(n)) el.textContent = n; }
   function showHeard(ids) {
     heardAt = Date.now();
+    out = false;
     var reporting = ids.filter(function (id) { return !quiet[id]; }).length;
     pulse.dataset.state = reporting ? "live" : "idle";
     delete pulse.dataset.known;
@@ -112,7 +117,7 @@
     if (tabs) tabs.postMessage({ live: ids });
   };
   /* unknown: the page has had no live answer at all, so the counts it was drawn with are not shown as current. */
-  VT.lost = function (unknown) { pulse.dataset.state = "stale"; if (unknown) pulse.dataset.known = "0"; };
+  VT.lost = function (unknown, signedOut) { pulse.dataset.state = "stale"; if (unknown) pulse.dataset.known = "0"; out = !!signedOut; };
   VT.alerts = function (list) {
     var ids = list.alerts.filter(function (a) { return a.kind === "quiet"; }).map(function (a) { return a.trip.vehicle_id; });
     showAlerts(ids, list.count);
@@ -122,14 +127,14 @@
   function poll() {
     if (document.hidden || VT.ownsPulse || Date.now() - sharedAt < 9000) return;
     var alerts = Date.now() - alertsAt < 29000 ? Promise.resolve() : VT.getJSON("/api/v1/admin/alerts").then(VT.alerts).catch(function () {});
-    alerts.then(function () { return VT.getJSON("/api/v1/admin/vehicles/live"); }).then(VT.heard, function () { VT.lost(false); });
+    alerts.then(function () { return VT.getJSON("/api/v1/admin/vehicles/live"); }).then(VT.heard, function (e) { VT.lost(false, VT.signedOut(e)); });
   }
   if (pulse) {
     setInterval(function () {
       var s = Math.round((Date.now() - heardAt) / 1000);
       if (s > 30 && !document.hidden) pulse.dataset.state = "stale";
       var stale = pulse.dataset.state === "stale";
-      age.textContent = stale ? "no answer for " + (s < 90 ? s + " s" : span(s)) : s < 2 ? "updated just now" : "updated " + span(s) + " ago";
+      age.textContent = out ? "signed out" : stale ? "no answer for " + (s < 90 ? s + " s" : span(s)) : s < 2 ? "updated just now" : "updated " + span(s) + " ago";
     }, 1000);
     setInterval(poll, 10000);
     document.addEventListener("visibilitychange", poll);
