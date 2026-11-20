@@ -1,0 +1,136 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%lld reports sent" : {
+      "comment" : "How many reports the trip sent.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld report sent"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reports sent"
+                }
+              }
+            }
+          }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld रिपोर्ट भेजी गई"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld रिपोर्ट भेजी गईं"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Can't reach %@. Check your connection." : {
+      "comment" : "The server's address, e.g. tracker.example.org.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ तक नहीं पहुँच सके। अपना कनेक्शन जाँचें।"
+          }
+        }
+      }
+    },
+    "OBA Vehicle Tracker" : {
+      "shouldTranslate" : false
+    },
+    "Route %@, %lld reports sent" : {
+      "comment" : "VoiceOver: the route's short name, then how many reports the trip sent.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route %1$@, %2$#@reports@"
+          },
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg report sent"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg reports sent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट %1$@, %2$#@reports@"
+          },
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गई"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गईं"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Sign in" : {
+      "comment" : "The sign-in screen's title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन इन करें"
+          }
+        }
+      }
+    },
+    "Started %lld min ago" : {
+
+    }
+  },
+  "version" : "1.0"
+}
