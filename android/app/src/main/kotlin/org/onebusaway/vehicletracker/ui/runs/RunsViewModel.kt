@@ -31,6 +31,7 @@ import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 import javax.inject.Inject
 
 private const val TAG = "RunsViewModel"
@@ -110,8 +111,11 @@ class RunsViewModel @Inject constructor(
         textColor = savedStateHandle[ARG_ROUTE_TEXT_COLOR] ?: "",
     )
 
-    // The driver's own way of writing a time, read once: the board formats every run's start when it is built.
-    private val timeFormat = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+    /**
+     * The app's language, which the board writes each run's start time in. The screen sets it, as the ViewModel
+     * outlives the screen a change of language rebuilds.
+     */
+    private val locale = MutableStateFlow(Locale.getDefault())
 
     /** null while a load is in flight; otherwise the outcome of the last one. */
     private val loadResult = MutableStateFlow<Result<RunPage>?>(null)
@@ -128,8 +132,14 @@ class RunsViewModel @Inject constructor(
     /** The server has started the trip but Android would not start its reports, which start once this step is back. */
     private var reportsWaiting = false
 
-    private val boards = combine(loadResult, now) { result, now ->
+    private val boards = combine(loadResult, now, locale) { result, now, locale ->
+        val timeFormat = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale)
         result?.mapCatching { page -> page to departureBoardsOf(page, now, timeFormat) }
+    }
+
+    /** Writes the run times in [locale], the app's language. */
+    fun showIn(locale: Locale) {
+        this.locale.value = locale
     }
 
     val uiState: StateFlow<RunsUiState> = combine(

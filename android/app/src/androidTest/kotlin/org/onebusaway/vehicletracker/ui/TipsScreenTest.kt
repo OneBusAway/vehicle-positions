@@ -179,6 +179,7 @@ private class TipsOnScreen(private val compose: ComposeContentTestRule) {
     val tips = DriverTips(SignedIn(MARIA), flags, scope)
 
     fun string(id: Int): String = context.getString(id)
+    val runBoardTipText get() = context.getString(R.string.tip_run_board_text, string(R.string.runs_start_confirm))
     fun close() = scope.cancel()
 
     // --- The run board ---
@@ -227,7 +228,7 @@ private class TipsOnScreen(private val compose: ComposeContentTestRule) {
                             account = {},
                             tip = screenTip,
                         )
-                        TipHost(screenTip, runTitle, string(R.string.tip_run_board_text), tip.show, tip::onShown, tip::onLeft, tip::onSeen)
+                        TipHost(screenTip, runTitle, runBoardTipText, tip.show, tip::onShown, tip::onLeft, tip::onSeen)
                     }
                 }
             }
@@ -382,7 +383,7 @@ class TipsScreenTest {
         screen.tipPane(screen.runTitle)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
         val title = compose.onNode(hasText(screen.runTitle) and isHeading())
-        val words = compose.onNode(hasText(screen.string(R.string.tip_run_board_text)))
+        val words = compose.onNode(hasText(screen.runBoardTipText))
         val gotIt = compose.onNode(
             hasText(screen.string(R.string.tip_got_it)) and hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button),
         )

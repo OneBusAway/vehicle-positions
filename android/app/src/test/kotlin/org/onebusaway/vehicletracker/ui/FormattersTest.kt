@@ -47,10 +47,21 @@ class FormattersTest {
     }
 
     @Test fun `trip duration counts minutes, then hours`() {
-        assertEquals("00:00", formatDuration(0))
-        assertEquals("01:05", formatDuration(65))
-        assertEquals("1:02:05", formatDuration(3725))
-        assertEquals("a clock behind the trip's start shows no time, not a negative one", "00:00", formatDuration(-5))
+        assertEquals("00:00", formatDuration(0, Locale.US))
+        assertEquals("01:05", formatDuration(65, Locale.US))
+        assertEquals("1:02:05", formatDuration(3725, Locale.US))
+        assertEquals("a clock behind the trip's start shows no time, not a negative one", "00:00", formatDuration(-5, Locale.US))
+    }
+
+    @Test fun `times are written in the language given, whatever the phone's default`() {
+        val default = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.US)
+            assertEquals("German writes a 24-hour clock", "08:05", formatClock(at(8, 5), TripFixtures.pacific, Locale.GERMAN))
+            assertEquals("Hindi in Devanagari digits", "१:०२:०५", formatDuration(3725, Locale.forLanguageTag("hi-IN-u-nu-deva")))
+        } finally {
+            Locale.setDefault(default)
+        }
     }
 
     @Test fun `tones follow OneBusAway's convention`() {

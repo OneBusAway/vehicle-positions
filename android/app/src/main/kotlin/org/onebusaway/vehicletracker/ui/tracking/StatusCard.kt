@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -224,7 +225,7 @@ private fun StatusLines(model: StatusCardModel, waiting: ReportsWaiting?) {
             line2 = stringResource(
                 R.string.tracking_adherence_off_schedule_next,
                 model.nextStop.name,
-                formatClock(model.nextStop.arrivalAt, model.zone),
+                formatClock(model.nextStop.arrivalAt, model.zone, LocalLocale.current.platformLocale),
             )
         }
         is StatusCardModel.OffRoute -> {
@@ -238,7 +239,7 @@ private fun StatusLines(model: StatusCardModel, waiting: ReportsWaiting?) {
             if (firstStop != null && zone != null) {
                 line1 = stringResource(R.string.tracking_adherence_from)
                 line1Emphasis = firstStop.name
-                val startsAt = formatClock(firstStop.departureAt, zone)
+                val startsAt = formatClock(firstStop.departureAt, zone, LocalLocale.current.platformLocale)
                 line2 = model.vehicleId?.let { stringResource(R.string.tracking_adherence_run_vehicle, startsAt, it) }
                     ?: stringResource(R.string.tracking_adherence_run, startsAt)
             } else {
@@ -297,7 +298,7 @@ private fun WaitingLine(waiting: ReportsWaiting) {
 /** The stop's scheduled time on the agency's clock, then how far along the route it is. */
 @Composable
 private fun nextStopDetail(stop: TripStop, distanceM: Double, zone: ZoneId): String =
-    stringResource(R.string.tracking_adherence_next_stop_detail, formatClock(stop.arrivalAt, zone), distanceText(distanceM))
+    stringResource(R.string.tracking_adherence_next_stop_detail, formatClock(stop.arrivalAt, zone, LocalLocale.current.platformLocale), distanceText(distanceM))
 
 /** What the problem line says: what is wrong, then what it means for the driver. */
 private data class ProblemLineText(val icon: Int, val title: Int, val detail: Int)

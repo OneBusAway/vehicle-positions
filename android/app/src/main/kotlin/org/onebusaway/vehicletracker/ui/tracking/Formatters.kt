@@ -55,20 +55,22 @@ internal fun vehicleTone(adherence: Adherence?, problem: TrackingProblem): Statu
 /**
  * A schedule time as the agency's clock shows it, in the same short style as the run list. The
  * zone is the trip's, never the device's: a phone set to the wrong zone still has to read the
- * agency's 07:12.
+ * agency's 07:12. The [locale] is the app's language, which a composable reads from LocalLocale so
+ * the time is written again when the language changes.
  */
-internal fun formatClock(instant: Instant, zone: ZoneId, locale: Locale = Locale.getDefault()): String =
+internal fun formatClock(instant: Instant, zone: ZoneId, locale: Locale): String =
     DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(clockTime(instant, zone))
 
-internal fun formatDuration(totalSeconds: Long): String {
+/** The trip's running time, "05:12" or "1:02:05", in the digits of [locale], the app's language. */
+internal fun formatDuration(totalSeconds: Long, locale: Locale): String {
     val s = totalSeconds.coerceAtLeast(0)
     val hours = s / 3600
     val minutes = (s % 3600) / 60
     val seconds = s % 60
     return if (hours > 0) {
-        String.format(Locale.getDefault(), "%d:%02d:%02d", hours, minutes, seconds)
+        String.format(locale, "%d:%02d:%02d", hours, minutes, seconds)
     } else {
-        String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+        String.format(locale, "%02d:%02d", minutes, seconds)
     }
 }
 

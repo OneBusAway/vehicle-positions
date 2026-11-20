@@ -50,6 +50,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -136,7 +137,7 @@ internal fun TripPanel(
             OccupancyRow(selected = state.activeTrip?.occupancy, onClick = onOccupancyClick)
             val firstStop = geometry?.stops?.firstOrNull()
             if (geometry != null && firstStop != null) {
-                val startsAt = formatClock(firstStop.departureAt, geometry.timezone)
+                val startsAt = formatClock(firstStop.departureAt, geometry.timezone, LocalLocale.current.platformLocale)
                 FactRow(
                     icon = R.drawable.ic_directions_bus,
                     label = stringResource(R.string.tracking_fact_run),
@@ -416,7 +417,7 @@ private fun StopList(
             when (row) {
                 is StopRow.Stop -> StopListRow(
                     name = row.stop.name,
-                    time = formatClock(row.stop.arrivalAt, geometry.timezone),
+                    time = formatClock(row.stop.arrivalAt, geometry.timezone, LocalLocale.current.platformLocale),
                     kind = row.kind,
                     strip = strip,
                 )

@@ -16,6 +16,10 @@ import org.onebusaway.vehicletracker.R
  * fonttools varLib.instancer "GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf" wght=400:600 wdth=100 slnt=0 ROND=0 opsz=drop -o gsf-wght.ttf
  * pyftsubset gsf-wght.ttf --output-file=google_sans_flex.ttf --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD" --layout-features+=tnum,lnum,pnum,zero --name-IDs='*' --name-languages='*' --notdef-outline
  * ```
+ * A letter outside these ranges, as in the en-XA pseudolocale of a debug build, falls back to the system font.
+ * Before a translation needs one, the font is cut again with upstream's latin-ext and vietnamese subsets, and a
+ * language in another script uses the system font for all its text, and a font check added to the translation
+ * checks of #502 holds each language to one or the other (#495).
  */
 internal val AppFontFamily = FontFamily(
     Font(R.font.google_sans_flex, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),

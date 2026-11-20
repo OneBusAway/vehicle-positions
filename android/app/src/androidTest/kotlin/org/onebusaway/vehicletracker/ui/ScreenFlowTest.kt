@@ -556,7 +556,7 @@ class ScreenFlowTest {
     @Test
     fun resumeScreen_showsTheTripAsTheDriverKnowsItAndOffersBothActions() {
         val calls = showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard))
-        val at = formatClock(runAt, resumeCard.zone)
+        val at = formatClock(runAt, resumeCard.zone, resources.configuration.locales[0])
 
         compose.onNode(hasText(getString(R.string.resume_title)) and isHeading()).assertIsDisplayed()
         compose.onNodeWithText("7").assertIsDisplayed()
@@ -575,7 +575,7 @@ class ScreenFlowTest {
         showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard.copy(route = RouteBadgeModel("100263", null, null), headsign = null, runStartsAt = null)))
 
         compose.onNodeWithText(resources.getString(R.string.resume_route, "100263")).assertIsDisplayed()
-        compose.onNodeWithText(resources.getString(R.string.resume_run, formatClock(runAt, resumeCard.zone))).assertDoesNotExist()
+        compose.onNodeWithText(resources.getString(R.string.resume_run, formatClock(runAt, resumeCard.zone, resources.configuration.locales[0]))).assertDoesNotExist()
     }
 
     @Test
@@ -583,7 +583,7 @@ class ScreenFlowTest {
         var now = runAt.epochSecond + 23 * 60 + 30
         compose.mainClock.autoAdvance = false
         showResume(ResumeShiftUiState(trip = resumeTrip, card = resumeCard), now = { now })
-        val at = formatClock(runAt, resumeCard.zone)
+        val at = formatClock(runAt, resumeCard.zone, resources.configuration.locales[0])
         compose.onNodeWithText(resources.getQuantityString(R.plurals.resume_started_minutes_ago, 23, 23, at)).assertIsDisplayed()
 
         now += 30

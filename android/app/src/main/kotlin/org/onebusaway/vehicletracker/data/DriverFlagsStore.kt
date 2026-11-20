@@ -45,7 +45,7 @@ value class DriverKey private constructor(val hash: String) {
             val host = serverUrl.toHttpUrlOrNull()?.host ?: serverUrl.trim()
             val driver = "$host|${email.trim()}".lowercase(Locale.ROOT)
             val digest = MessageDigest.getInstance("SHA-256").digest(driver.toByteArray())
-            return DriverKey(digest.joinToString("") { "%02x".format(it) })
+            return DriverKey(digest.joinToString("") { "%02x".format(Locale.ROOT, it) })
         }
 
         /** Null for a session that names no driver: nobody signed in, or one an older build stored without the email. */

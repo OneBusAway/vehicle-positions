@@ -53,6 +53,14 @@
             android:name=".service.BacklogUploadJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- Names the trip's notification channels again in the phone's new language. -->
+        <receiver
+            android:name=".service.LanguageChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".service.RestartTrackingReceiver"
             android:exported="false">

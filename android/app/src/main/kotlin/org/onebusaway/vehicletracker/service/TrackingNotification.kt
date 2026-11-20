@@ -18,6 +18,7 @@ import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.ui.tracking.formatClock
 import org.onebusaway.vehicletracker.ui.tracking.waitingWords
+import java.util.Locale
 
 const val NOTIFICATION_ID = 1001
 
@@ -31,36 +32,48 @@ private const val CHANNEL_ID = "tracking"
 private const val ATTENTION_CHANNEL_ID = "tracking_attention"
 
 /**
+ * The trip's two channels, named in the language [context] shows: the ongoing notification's at importance LOW, the
+ * resume one's at DEFAULT.
+ */
+private fun tripChannels(context: Context): List<NotificationChannel> = listOf(
+    NotificationChannel(
+        CHANNEL_ID,
+        context.getString(R.string.tracking_notification_channel_name),
+        NotificationManager.IMPORTANCE_LOW,
+    ),
+    // A channel of its own, because Android never changes a channel's importance once it exists: the resume
+    // notification asks the driver to act, so it makes a sound, and the ongoing one stays quiet.
+    NotificationChannel(
+        ATTENTION_CHANNEL_ID,
+        context.getString(R.string.tracking_notification_attention_channel_name),
+        NotificationManager.IMPORTANCE_DEFAULT,
+    ),
+)
+
+/**
+ * Names the trip's channels again in the language [context] shows now, for the app's notification settings, which
+ * list them in the language they were last named in. Only the channels the phone already has: a driver who has not
+ * started a trip has none, and gets them in the right language when the first trip starts.
+ */
+fun renameTripChannels(context: Context) {
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    // Creating a channel again under its id renames it, and keeps the importance and whatever the driver changed.
+    manager.createNotificationChannels(tripChannels(context).filter { manager.getNotificationChannel(it.id) != null })
+}
+
+/**
  * Builds the ongoing tracking notification and its "tap to resume" degraded-path variant, and posts them.
- * Creates their channels (a minSdk 26 requirement) on first use: the ongoing one's at importance LOW, the resume
- * one's at DEFAULT.
+ * Creates their channels (a minSdk 26 requirement) on first use.
  */
 class TrackingNotification(private val context: Context) {
 
     init {
-        ensureChannels()
+        // Creating them again under the same ids renames them for drivers who already have them.
+        context.getSystemService(NotificationManager::class.java)?.createNotificationChannels(tripChannels(context))
     }
 
-    // Creating them again under the same ids renames them for drivers who already have them.
-    private fun ensureChannels() {
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager?.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
-                context.getString(R.string.tracking_notification_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ),
-        )
-        // A channel of its own, because Android never changes a channel's importance once it exists: the resume
-        // notification asks the driver to act, so it makes a sound, and the ongoing one stays quiet.
-        manager?.createNotificationChannel(
-            NotificationChannel(
-                ATTENTION_CHANNEL_ID,
-                context.getString(R.string.tracking_notification_attention_channel_name),
-                NotificationManager.IMPORTANCE_DEFAULT,
-            ),
-        )
-    }
+    /** The language the app shows, which the notification's times are written in. */
+    private fun appLocale(): Locale = context.resources.configuration.locales[0]
 
     private fun contentIntent(): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -174,7 +187,7 @@ class TrackingNotification(private val context: Context) {
             val stop = text.nextStop
             val zone = text.zone
             if (stop != null && zone != null) {
-                context.getString(R.string.tracking_notification_next, stop.name, formatClock(stop.arrivalAt, zone), reporting)
+                context.getString(R.string.tracking_notification_next, stop.name, formatClock(stop.arrivalAt, zone, appLocale()), reporting)
             } else {
                 reporting
             }
