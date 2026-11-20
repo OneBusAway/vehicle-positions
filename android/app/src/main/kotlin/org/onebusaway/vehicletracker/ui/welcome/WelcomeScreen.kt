@@ -73,6 +73,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.language.LanguageRow
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.SharedAxisSlide
 import org.onebusaway.vehicletracker.ui.theme.sharedAxisFadeInSpec
@@ -199,8 +200,8 @@ internal fun rememberWelcomeState(): WelcomeState {
 
 /**
  * The three screens in one frame. The top row (Back, the step line, Skip) and the button stay where they are; only
- * the title, the sentence and the picture move between screens. Nothing but Back, Skip and the button can be tapped,
- * and no screen moves on by itself.
+ * the title, the sentence and the picture move between screens. Nothing but Back, Skip, the button and the first
+ * screen's Language row can be tapped, and no screen moves on by itself.
  */
 @Composable
 internal fun WelcomeContent(onLeave: () -> Unit, modifier: Modifier = Modifier, state: WelcomeState = rememberWelcomeState()) {
@@ -385,7 +386,11 @@ private fun Screen(index: Int, clock: PictureClock, steps: Transition<Int>, slid
     ) {
         when (index) {
             0 -> FillingScreen(
-                words = { ScreenWords(R.string.welcome_riders_title, R.string.welcome_riders_body, compact, title, shown) },
+                words = {
+                    ScreenWords(R.string.welcome_riders_title, R.string.welcome_riders_body, compact, title, shown)
+                    // Its globe marks it for a driver who can't read the words around it.
+                    LanguageRow(Modifier.padding(bottom = if (compact) 12.dp else 24.dp), enabled = shown)
+                },
                 picture = { RidersPicture(clock, compact) },
             )
             1 -> ScrollingScreen {

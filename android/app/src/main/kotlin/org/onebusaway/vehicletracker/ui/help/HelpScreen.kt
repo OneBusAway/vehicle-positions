@@ -52,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.language.LanguageRow
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.tracking.minutesText
 import org.onebusaway.vehicletracker.ui.tracking.waitingWords
@@ -73,8 +74,9 @@ private val GroupPlace.shape: RoundedCornerShape
     }
 
 /**
- * Help, opened from the account menu: what each line on Tracking means, the welcome again, the build and the server,
- * and Share diagnostics. Nothing on it moves by itself. [onWelcomeAgain] opens the welcome, which comes back here.
+ * Help, opened from the account menu: the welcome again, the app's language, what each line on Tracking means, the
+ * build and the server, and Share diagnostics. Nothing on it moves by itself. [onWelcomeAgain] opens the welcome,
+ * which comes back here.
  */
 @Composable
 fun HelpScreen(onBack: () -> Unit, onWelcomeAgain: () -> Unit, viewModel: HelpViewModel = hiltViewModel()) {
@@ -131,6 +133,7 @@ internal fun HelpContent(about: HelpAbout, onBack: () -> Unit, onWelcomeAgain: (
             items(helpPage, key = { it.key }, contentType = { it.contentType }) { item ->
                 when (item) {
                     HelpItem.WelcomeAgain -> WelcomeAgainRow(onWelcomeAgain)
+                    HelpItem.Language -> LanguageRow(Modifier.padding(top = 8.dp))
                     is HelpItem.Section -> SectionTitle(item.section)
                     is HelpItem.Status -> StatusRow(item.help, item.place)
                     is HelpItem.Problem -> ProblemRow(item.help, item.place)

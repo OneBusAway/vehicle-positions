@@ -103,6 +103,7 @@ class HelpRowsTest {
         assertEquals(
             listOf(
                 "welcome",
+                "language",
                 "section-STATUS",
                 "status-ON_TIME", "status-LATE", "status-EARLY", "status-OFF_SCHEDULE", "status-OFF_ROUTE",
                 "status-WAITING_FOR_GPS", "status-NO_SCHEDULE", "status-REPORTS_WAITING", "status-REPORTS_WONT_SEND",

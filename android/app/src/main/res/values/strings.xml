@@ -120,6 +120,15 @@
     <string name="first_trip_done_text">Riders could see your vehicle.</string>
     <string name="first_trip_done_ok">OK</string>
 
+    <!-- The Language row, on the first welcome screen and at the top of Help. The language the app is shown in, named in that language, e.g. "Language: English". A tap opens the list below, or before Android 13 the phone's language settings. -->
+    <string name="language_row">Language: %1$s</string>
+    <!-- Under the Language row before Android 13, where the app can only follow the phone: the tap opens the phone's settings, and a language chosen there is the whole phone's. -->
+    <string name="language_row_phone_note">Set for the whole phone, in its settings</string>
+    <!-- Over the list of the app's languages, each named in its own language with its English name under it. A tap on one shows the app in it. -->
+    <string name="language_list_title">Language</string>
+    <!-- Closes the list without changing the language. -->
+    <string name="language_list_cancel">Cancel</string>
+
     <!-- Help: a page opened from the account menu, its item named the same. Each row below is the app's own words, then one plain line. -->
     <string name="help_title">Help</string>
     <!-- Opens the three welcome screens again. -->

@@ -147,8 +147,12 @@ class WelcomeScreenTest {
         assertTrue(picture.fetchSemanticsNode().children.isEmpty())
         assertFalse("the picture's sent count is not read", reads(" sent"))
         welcome.button(R.string.welcome_next).assertIsDisplayed()
-        // Only Skip and Next can be tapped: the first screen has no Back.
-        tappables().assertCountEquals(2)
+        // The app's language, a button named for the language shown.
+        val language = welcome.string(R.string.language_row, "English")
+        compose.onNode(hasText(language) and hasClickAction()).assertIsDisplayed()
+            .assert(expectValue(SemanticsProperties.Role, Role.Button))
+        // Only Skip, Next and the Language row can be tapped: the first screen has no Back.
+        tappables().assertCountEquals(3)
         welcome.backArrow.assertDoesNotExist()
         assertNothingIsASwitch()
     }
