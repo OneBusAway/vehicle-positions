@@ -155,6 +155,9 @@ type serviceReporter struct {
 	slots *semaphore.Weighted
 	// saving counts the days' totals being saved, so a test can wait for them.
 	saving sync.WaitGroup
+	// retention is LOCATION_RETENTION_PERIOD while the location pruner runs,
+	// zero when it does not. The warmer works out no day the pruner deletes.
+	retention time.Duration
 
 	mu sync.Mutex
 	// schedule is the load of the schedule the kept reports were worked out
@@ -180,6 +183,10 @@ type dayRead struct {
 	// rep and err are set before done is closed.
 	rep *serviceReport
 	err error
+	// saved is closed once the day's totals are kept, or the day is not one
+	// to keep; saveErr, set before it is closed, is why keeping them failed.
+	saved   chan struct{}
+	saveErr error
 	// waiting is how many requests wait for it, under serviceReporter.mu.
 	// The last to stop waiting before it is done cancels it.
 	waiting int
@@ -218,25 +225,32 @@ func newServiceReporter(store serviceReportStore, index func() *rider.Index, set
 // report returns the report for date, YYYY-MM-DD, or for yesterday in the
 // agency's timezone when date is empty.
 func (r *serviceReporter) report(ctx context.Context, date string) (*serviceReport, error) {
+	rep, _, err := r.reportRead(ctx, date)
+	return rep, err
+}
+
+// reportRead is report, and the read that worked the report out: nil when
+// the report came from memory.
+func (r *serviceReporter) reportRead(ctx context.Context, date string) (*serviceReport, *dayRead, error) {
 	ix := r.index()
 	if ix == nil {
-		return nil, errNoSchedule
+		return nil, nil, errNoSchedule
 	}
 	day, err := r.reportDay(ix, date)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	serviceDate := day.Format(gtfsDateLayout)
 	cached, read := r.join(ix, serviceDate, day)
 	if cached != nil {
-		return cached, nil
+		return cached, nil, nil
 	}
 	defer r.leave(serviceDate, read)
 	select {
 	case <-read.done:
-		return read.rep, read.err
+		return read.rep, read, read.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 }
 
@@ -256,7 +270,7 @@ func (r *serviceReporter) join(ix *rider.Index, date string, day time.Time) (*se
 		// that started it, so that request ending does not fail the others
 		// waiting for the same day.
 		ctx, cancel := context.WithCancel(context.Background())
-		read = &dayRead{load: load, done: make(chan struct{}), cancel: cancel}
+		read = &dayRead{load: load, done: make(chan struct{}), saved: make(chan struct{}), cancel: cancel}
 		r.reading[date] = read
 		go r.read(ctx, read, ix, date, day)
 	}
@@ -313,23 +327,27 @@ func (r *serviceReporter) read(ctx context.Context, read *dayRead, ix *rider.Ind
 	// none of them up.
 	if store {
 		defer r.saving.Done()
-		r.saveDay(day, rep)
+		read.saveErr = r.saveDay(day, rep)
 	}
+	close(read.saved)
 }
 
 // saveDay keeps rep's totals for day. It saves on a context of its own rather
 // than the read's, which the last request to leave cancels: the day is worked
 // out by then, and keeping it is what spares the next request the work. A day
-// that fails to save is still served from memory, and saved by the next read.
-func (r *serviceReporter) saveDay(day time.Time, rep *serviceReport) {
+// that fails to save is still served from memory, and the warmer saves it at
+// its next pass.
+func (r *serviceReporter) saveDay(day time.Time, rep *serviceReport) error {
 	ctx, cancel := context.WithTimeout(context.Background(), reportSaveTimeout)
 	defer cancel()
-	if err := r.store.SaveServiceDay(ctx, storedServiceDay{
+	err := r.store.SaveServiceDay(ctx, storedServiceDay{
 		Date: day, OnTimeEarly: r.settings.onTimeEarly, OnTimeLate: r.settings.onTimeLate,
 		Totals: newDayTotals(rep, r.settings),
-	}); err != nil {
+	})
+	if err != nil {
 		slog.Error("analytics: keep a service day's totals", "date", rep.Date, "error", err)
 	}
+	return err
 }
 
 // reportDay parses date, or picks yesterday in the agency's timezone when it

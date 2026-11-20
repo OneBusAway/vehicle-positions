@@ -783,8 +783,10 @@ starts, and after each schedule reload or new day, it works out in the
 background any of the last 56 days it has not kept yet, one at a time. Just
 after an upgrade that takes a few minutes, during which a long period can be
 slow to open; a period further back is worked out the first time it is
-opened, which can take several seconds. Kept days are deleted with the location history
-they came from, when `LOCATION_RETENTION_PERIOD` is set. Your server
+opened, which can take several seconds. Kept days are deleted with the
+location history they came from, when `LOCATION_RETENTION_PERIOD` is set, and
+the background work then stops at the first day the history is still whole
+for. Your server
 administrator can change the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and
 `REPORT_ON_TIME_LATE`, see [`configuration.md`](configuration.md)); the days
 kept are worked out again under the new window.

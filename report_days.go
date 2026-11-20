@@ -4,11 +4,14 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // dayTotals is one service day as the Analytics page adds it up over a
@@ -225,7 +228,12 @@ func (r *serviceReporter) warmMark() (warmMark, bool) {
 }
 
 // warm works out, newest first and one at a time, the days the Analytics page
-// opens on that the store does not keep yet. Each is kept as it is worked out.
+// opens on that the store does not keep yet, and keeps each. With retention
+// on it starts at the first day the location pruner has deleted none of:
+// an older day would be worked out from what is left of its reports, and its
+// row deleted again at the next prune. A day that fails, to work out or to
+// keep, does not stop the older ones; the pass returns the failures, so the
+// warmer tries again at its next check.
 func (r *serviceReporter) warm(ctx context.Context) error {
 	ix := r.index()
 	if ix == nil {
@@ -237,17 +245,61 @@ func (r *serviceReporter) warm(ctx context.Context) error {
 	}
 	last := today.AddDate(0, 0, -2)
 	first := today.AddDate(0, 0, -2*slices.Max(analyticsPeriods))
+	if r.retention > 0 {
+		if kept := r.firstRetainedDay(ix); kept.After(first) {
+			first = kept
+		}
+	}
+	if first.After(last) {
+		return nil
+	}
 	stored, err := r.storedDays(ctx, first, last)
 	if err != nil {
 		return err
 	}
+	var failed []error
 	for day := last; !day.Before(first); day = day.AddDate(0, 0, -1) {
 		if _, ok := stored[day.Format(reportDateLayout)]; ok {
 			continue
 		}
-		if _, err := r.report(ctx, day.Format(reportDateLayout)); err != nil {
-			return err
+		if err := r.warmDay(ctx, day); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			failed = append(failed, fmt.Errorf("%s: %w", day.Format(reportDateLayout), err))
 		}
 	}
-	return nil
+	return errors.Join(failed...)
+}
+
+// warmDay works out day and keeps its totals, waiting until they are kept.
+func (r *serviceReporter) warmDay(ctx context.Context, day time.Time) error {
+	rep, read, err := r.reportRead(ctx, day.Format(reportDateLayout))
+	if err != nil {
+		return err
+	}
+	if read == nil {
+		// From memory: worked out before it was old enough to keep, or its
+		// save failed, so no read is keeping it.
+		return r.saveDay(day, rep)
+	}
+	select {
+	case <-read.saved:
+		return read.saveErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// firstRetainedDay is the first service date that starts after the cutoff
+// the location pruner deletes reports before, as of now: the first day all
+// of whose reports are still kept.
+func (r *serviceReporter) firstRetainedDay(ix *rider.Index) time.Time {
+	cutoff := r.now().Add(-r.retention)
+	y, m, d := cutoff.In(ix.Timezone()).Date()
+	day := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	if start, err := rider.ServiceDayStart(day.Format(gtfsDateLayout), ix.Timezone()); err != nil || start.Before(cutoff) {
+		day = day.AddDate(0, 0, 1)
+	}
+	return day
 }

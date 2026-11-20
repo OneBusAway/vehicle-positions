@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"net/url"
 	"slices"
 	"sync"
@@ -357,4 +359,94 @@ func TestReportWarmer_WarmsAgainAfterAReload(t *testing.T) {
 	mu.Unlock()
 	require.Eventually(t, func() bool { return len(keptDates(store)) == 55 }, 5*time.Second, time.Millisecond,
 		"a reloaded schedule is warmed again")
+}
+
+// daysFrom are the dates from first to last, YYYY-MM-DD.
+func daysFrom(first, last string) []string {
+	from, _ := time.Parse(reportDateLayout, first)
+	to, _ := time.Parse(reportDateLayout, last)
+	days := make([]string, 0)
+	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		days = append(days, d.Format(reportDateLayout))
+	}
+	return days
+}
+
+// With LOCATION_RETENTION_PERIOD shorter than the 56 days, the warmer stops
+// at the pruner's cutoff: it neither works out nor keeps a day whose reports
+// the pruner has been deleting, and whose row it would delete again.
+func TestServiceReporter_WarmStopsAtTheRetentionCutoff(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	// 12:00 PDT on 4 September less 20 days is 12:00 on 15 August, so 16
+	// August is the first day the pruner has deleted none of.
+	r.retention = 20 * 24 * time.Hour
+
+	require.NoError(t, r.warm(context.Background()))
+	waitForSaves(r)
+	assert.Equal(t, daysFrom("2026-08-16", "2026-09-02"), keptDates(store))
+	assert.Equal(t, 18, store.reads, "no day before the cutoff is asked for")
+}
+
+// A day whose totals fail to save leaves the pass incomplete, and the next
+// pass keeps it. 15 July is among the last days a pass works out, so it is
+// still in memory then, and kept without being worked out again.
+func TestServiceReporter_WarmKeepsADayItFailedToSave(t *testing.T) {
+	captureReportLogs(t)
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	store.saveFails = map[string]error{"2026-07-15": errors.New("database down")}
+
+	err := r.warm(context.Background())
+	require.ErrorContains(t, err, "2026-07-15: database down")
+	assert.NotContains(t, keptDates(store), "2026-07-15")
+	assert.Len(t, keptDates(store), 54, "the other days are kept")
+	reads := store.reads
+
+	store.mu.Lock()
+	store.saveFails = nil
+	store.mu.Unlock()
+	require.NoError(t, r.warm(context.Background()))
+	assert.Equal(t, warmedDays(), keptDates(store))
+	assert.Equal(t, reads, store.reads, "kept from memory, not worked out again")
+}
+
+// A day that fails to work out does not stop the older days behind it.
+func TestServiceReporter_WarmGoesOnPastADayThatFails(t *testing.T) {
+	captureReportLogs(t)
+	r, store, ix := newFixtureReporter(t, reportFixtureNow)
+	// The trips read for 21 August start from the day before's start.
+	from, err := rider.ServiceDayStart("20260820", ix.Timezone())
+	require.NoError(t, err)
+	store.readFails = map[time.Time]error{from: errors.New("statement timeout")}
+
+	err = r.warm(context.Background())
+	require.ErrorContains(t, err, "2026-08-21: statement timeout")
+	waitForSaves(r)
+	kept := keptDates(store)
+	assert.NotContains(t, kept, "2026-08-21")
+	assert.Subset(t, kept, daysFrom("2026-07-10", "2026-08-20"), "every older day is warmed")
+	assert.Len(t, kept, 54)
+}
+
+// An incomplete pass is tried again at the warmer's next check, though the
+// schedule and the day are the same.
+func TestReportWarmer_TriesAnIncompletePassAgain(t *testing.T) {
+	captureReportLogs(t)
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	store.saveFails = map[string]error{"2026-07-15": errors.New("database down")}
+	w := startReportWarmer(r, 5*time.Millisecond)
+	t.Cleanup(w.Stop)
+	require.Eventually(t, func() bool { return len(keptDates(store)) == 54 }, 5*time.Second, time.Millisecond)
+
+	store.mu.Lock()
+	store.saveFails = nil
+	store.mu.Unlock()
+	require.Eventually(t, func() bool { return slices.Contains(keptDates(store), "2026-07-15") }, 5*time.Second, time.Millisecond)
+}
+
+// captureReportLogs keeps the reporter's log lines out of the test output.
+func captureReportLogs(t *testing.T) {
+	t.Helper()
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Cleanup(func() { slog.SetDefault(original) })
 }

@@ -340,6 +340,9 @@ func main() {
 	// which is the behavior every existing deployment has today. Any other value
 	// is a deliberate request to delete data, so a bad one is reported rather
 	// than quietly ignored.
+	// retention is the period the pruner deletes reports after, zero while
+	// it is off; the Analytics warmer stops at the same cutoff.
+	var retention time.Duration
 	if retentionPeriod := envDurationOrDefault("LOCATION_RETENTION_PERIOD", 0); retentionPeriod != 0 {
 		pruneInterval := envDurationOrDefault("LOCATION_PRUNE_INTERVAL", time.Hour)
 		batchSize := envInt32OrDefault("LOCATION_PRUNE_BATCH_SIZE", 10_000)
@@ -352,6 +355,7 @@ func main() {
 			slog.Error("location retention disabled: invalid configuration", "error", err)
 		} else {
 			defer pruner.Stop()
+			retention = retentionPeriod
 
 			if pruneInterval > retentionPeriod {
 				slog.Warn("prune interval is longer than the retention period, so points outlive it by up to one interval",
@@ -392,6 +396,7 @@ func main() {
 		maxShapeDistance: riderCfg.Thresholds.MaxShapeDistance,
 	})
 	// Past days of Analytics are worked out ahead of the first look at them.
+	reports.retention = retention
 	warmer := startReportWarmer(reports, reportWarmInterval)
 	defer warmer.Stop()
 	// The alerts judge off route against the same schedule.
