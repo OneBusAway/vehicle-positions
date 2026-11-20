@@ -104,6 +104,11 @@ type catalogTripResponse struct {
 	Shape       catalogShape      `json:"shape"`
 	Stops       []catalogStop     `json:"stops"`
 	Thresholds  catalogThresholds `json:"thresholds"`
+
+	// FromFrequencies is set when frequencies.txt runs the trip, by headway or
+	// at exact times: its stops' arrival_at and departure_at are then the
+	// pattern each run follows, not the times of the run a vehicle is on.
+	FromFrequencies bool `json:"from_frequencies"`
 }
 
 func (c *gtfsCatalog) handleRoutes() http.HandlerFunc {
@@ -214,6 +219,7 @@ func (c *gtfsCatalog) handleTrip() http.HandlerFunc {
 				ScheduleEarlyS:    int(c.thresholds.ScheduleEarly.Seconds()),
 				ScheduleLateS:     int(c.thresholds.ScheduleLate.Seconds()),
 			},
+			FromFrequencies: trip.InFrequencies(),
 		})
 	}
 }

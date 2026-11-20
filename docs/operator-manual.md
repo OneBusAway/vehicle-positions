@@ -516,9 +516,13 @@ on it.
   vehicles each route is folded; open it to see its vehicles. A folded route
   says how many of its vehicles need attention.
 - Picking a vehicle, on the map or in the list, opens its card: its route and
-  where it is heading, whether it is reporting, its driver, GTFS trip, speed
-  and heading, with **Follow** (keep it in view), **Open trip** and
-  **Vehicle**. It also draws its trip's route and stops. **Esc** closes it.
+  where it is heading, whether it is reporting, the stop it is heading to
+  (**Next stop**) or standing at (**At stop**) with that stop's scheduled time
+  (just the name on a trip run from the GTFS frequencies, which has no
+  timetable), its driver, GTFS trip, speed and heading, with **Follow** (keep
+  it in view), **Open trip** and **Vehicle**. It also draws its trip's route
+  and stops, with a larger, bolder ring on the stop the card names. **Esc**
+  closes it.
 - The buttons on the right open the list, make the map full screen, fit every
   vehicle in view, and zoom in and out.
 - If nothing is reporting the map says **No vehicles are reporting**, with

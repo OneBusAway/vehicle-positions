@@ -342,20 +342,49 @@
     });
     showTrip(v, ask);
   }
-  // The trip's line and stops, once the schedule answers, unless another pick or a new trip has come first.
+  // The trip's line and stops, once the schedule answers, unless another pick or a new trip has come first. The card
+  // keeps the answer to name the vehicle's stop from it.
   function showTrip(v, ask) {
     if (!v.gtfs_trip_id) return;
     trip(v.gtfs_trip_id).then(function (t) {
-      if (!t || ask !== tripAsks || !t.shape.points.length) return;
-      var r = routes[v.route_id], dark = getComputedStyle(document.documentElement).colorScheme === "dark";
-      L.polyline(t.shape.points, { color: dark ? "#0B0B0C" : "#FFFFFF", weight: 10, interactive: false }).addTo(routeLayer);
-      L.polyline(t.shape.points, { color: (r && r.hex) || "#3B6939", weight: 5.5, interactive: false }).addTo(routeLayer);
-      t.stops.forEach(function (s) {
-        L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "", html: '<div class="stop-marker"></div>', iconSize: [12, 12], iconAnchor: [6, 6] }), keyboard: false })
-          .bindTooltip(h("span", "", s.name), { direction: "top", offset: [0, -6] }).addTo(routeLayer);
-      });
-      if (t.headsign && !heads[t.id]) { heads[t.id] = t.headsign; cardUpdate(markers[v.vehicle_id].v); }
+      if (ask !== tripAsks || !card || card.id !== v.vehicle_id) return;
+      card.trip = t; card.marks = [];
+      if (t && t.shape.points.length) {
+        var r = routes[v.route_id], dark = getComputedStyle(document.documentElement).colorScheme === "dark";
+        L.polyline(t.shape.points, { color: dark ? "#0B0B0C" : "#FFFFFF", weight: 10, interactive: false }).addTo(routeLayer);
+        L.polyline(t.shape.points, { color: (r && r.hex) || "#3B6939", weight: 5.5, interactive: false }).addTo(routeLayer);
+        t.stops.forEach(function (s) {
+          card.marks.push(L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "", html: '<div class="stop-marker"></div>', iconSize: [12, 12], iconAnchor: [6, 6] }), keyboard: false })
+            .bindTooltip(h("span", "", s.name), { direction: "top", offset: [0, -6] }).addTo(routeLayer));
+        });
+      }
+      if (t && t.headsign && !heads[t.id]) heads[t.id] = t.headsign;
+      cardUpdate(markers[v.vehicle_id].v);
     });
+  }
+  // The stop the live answer names, found in the card's trip by stop_id, and by stop_sequence when a loop passes the
+  // same stop twice; a loop whose sequence matches neither visit is not guessed at.
+  function stopIn(t, v) {
+    var same = t.stops.filter(function (s) { return s.id === v.stop_id; });
+    return same.filter(function (s) { return s.sequence === v.stop_sequence; })[0] || (same.length === 1 ? same[0] : undefined);
+  }
+  // Its scheduled time in the agency's clock, as the trip page's Stops table gives it: leaving the stop, or reaching
+  // it when it is the last. A trip run from frequencies.txt, whose stop times are only the pattern of its runs, and a
+  // zone this browser does not know both give the name alone.
+  var clocks = {};
+  function due(t, s) {
+    if (t.from_frequencies) return "";
+    if (!(t.timezone in clocks)) {
+      try { clocks[t.timezone] = new Intl.DateTimeFormat("en-GB", { timeZone: t.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }); } catch (e) { clocks[t.timezone] = null; }
+    }
+    var c = clocks[t.timezone];
+    return c ? " · " + c.format(new Date(s === t.stops[t.stops.length - 1] ? s.arrival_at : s.departure_at)) : "";
+  }
+  // The stop the card names gets the stronger marker on the trip's line.
+  function markStop(i) {
+    if (!card.marks || card.here === i) return;
+    [card.here, i].forEach(function (j, on) { var el = card.marks[j] && card.marks[j].getElement(); if (el) el.firstChild.classList.toggle("here", !!on); });
+    card.here = i;
   }
 
   // The card is built once for each pick and then only its words change, so the keyboard keeps its place on it.
@@ -365,6 +394,7 @@
     var host = $("map-detail");
     host.textContent = "";
     card = { id: v.vehicle_id, key: cardKey(v) };
+    if (!v.gtfs_trip_id) card.trip = null;
     var head = h("div", "veh-head");
     head.appendChild(badge(v.route_id, true));
     var t = h("div"); t.style.cssText = "flex:1;min-width:0";
@@ -383,8 +413,9 @@
 
     var dl = h("dl", "kv"); dl.style.margin = "14px 0 16px";
     card.kv = {};
-    ["Driver", "Trip", "Speed", "Heading"].forEach(function (k) {
-      var w = h("div"); w.appendChild(h("dt", "", k)); card.kv[k] = w.appendChild(h("dd")); dl.appendChild(w);
+    ["Stop", "Driver", "Trip", "Speed", "Heading"].forEach(function (k) {
+      var w = h("div"), dt = w.appendChild(h("dt", "", k)); card.kv[k] = w.appendChild(h("dd")); dl.appendChild(w);
+      if (k === "Stop") { card.stopRow = w; card.stopWord = dt; w.style.gridColumn = "1 / -1"; card.kv.Stop.style.minHeight = "1lh"; }
     });
     host.appendChild(dl);
 
@@ -426,6 +457,13 @@
     card.kv.Trip.textContent = v.gtfs_trip_id || "Route only";
     card.kv.Speed.textContent = v.speed == null ? "Not known" : speed(v);
     card.kv.Heading.textContent = v.bearing == null ? "Not known" : compass(v.bearing);
+    // The row is there whenever the live answer names a stop, and empty until the trip answers, so the card does not
+    // jump when it does.
+    var s = card.trip && stopIn(card.trip, v);
+    card.stopRow.hidden = v.stop_id == null;
+    card.stopWord.textContent = v.current_status === "STOPPED_AT" ? "At stop" : "Next stop";
+    card.kv.Stop.textContent = card.trip === undefined ? "" : s ? s.name + due(card.trip, s) : "Not known";
+    markStop(s ? card.trip.stops.indexOf(s) : -1);
     followShown();
   }
 
