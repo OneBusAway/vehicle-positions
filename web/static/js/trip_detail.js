@@ -341,13 +341,33 @@
     const doc = new DOMParser().parseFromString(await res.text(), "text/html");
     // An expired session is sent to the sign-in page, which has no header.
     if (!doc.getElementById("trip-header")) return false;
+    // End trip's dialog submits the form it was opened from, and a form taken
+    // out of the page submits nothing, so the sections wait for it to close.
+    if (document.querySelector("dialog[open]")) return false;
+    const focused = document.activeElement;
+    let refocus = null;
     ["trip-header", "trip-facts", "trip-stops", "trip-gaps"].forEach(id => {
       const fresh = doc.getElementById(id);
       const old = document.getElementById(id);
-      if (fresh && old) old.replaceWith(fresh);
+      if (!fresh || !old) return;
+      if (old !== focused && old.contains(focused)) refocus = twin(focused, old, fresh);
+      old.replaceWith(fresh);
     });
+    // The keyboard stays on the control it was on, not dropped to the page.
+    if (refocus) refocus.focus({ preventScroll: true });
     if (points.length) drawTimeline();
     return true;
+  }
+
+  // twin is el's counterpart in a fresh copy of its section: the control of
+  // the same kind, words, gap and form, in the same place among those. A
+  // link's address is left out because it moves on: the CSV's time range
+  // grows while the trip runs.
+  function twin(el, old, fresh) {
+    const key = e => [e.tagName, e.dataset.gap, e.form && e.form.getAttribute("action"), e.textContent.trim()].join("\n");
+    const want = key(el);
+    const alike = root => [...root.querySelectorAll("a[href], button, input, select, textarea")].filter(e => key(e) === want);
+    return alike(fresh)[alike(old).indexOf(el)] || null;
   }
 
   let timer = null;
