@@ -825,12 +825,15 @@ it a new key.
 
 **Feed health** shows what became of every position report the driver phones
 sent and every fetch of the feed, minute by minute for the last hour, plus
-totals. Its headline says in a sentence whether anything is wrong, four tiles
-give the last hour's counts, and two charts draw the reports and the fetches
-a minute. The counts are kept in memory:
+totals. Its headline says in a sentence whether anything is wrong. Five tiles
+give how many vehicles reported in the last full minute and the last hour's
+counts, and three charts draw the vehicles reporting, the reports and the
+fetches a minute. A vehicle counts once in each minute the server accepted a
+live report from it; a phone uploading positions it saved offline does not
+count. The counts are kept in memory:
 a server restart starts them again, and the page says when counting began. It
-reloads every minute. Your IT contact can read the same numbers from
-`GET /api/v1/admin/health`.
+reloads every minute. Your IT contact can read the report and fetch counts
+from `GET /api/v1/admin/health`.
 
 The **Outcomes** table:
 

@@ -16,6 +16,12 @@ const healthChartHeight = 130
 
 // healthSummary is the last hour as the Feed health page's tiles show it.
 type healthSummary struct {
+	// Vehicles is how many vehicles reported in the last full minute, the
+	// one before the minute in progress, which is still filling up.
+	Vehicles int
+	// VehiclesNote says which minute that was; "None in the last hour" when
+	// no vehicle reported in any of them.
+	VehiclesNote    string
 	ReportsAccepted uint64
 	// PerMinute is the accepted reports as a rate over the hour.
 	PerMinute       string
@@ -54,6 +60,16 @@ func newHealthSummary(snap feedHealthResponse) healthSummary {
 		if m.Feed.Served > 0 {
 			s.LastFetch = m.Minute.UTC().Format("15:04")
 		}
+		if m.Vehicles > 0 {
+			s.VehiclesNote = "Last full minute, at "
+		}
+	}
+	if n := len(snap.Minutes); s.VehiclesNote == "" || n < 2 {
+		s.VehiclesNote = "None in the last hour"
+	} else {
+		last := snap.Minutes[n-2]
+		s.Vehicles = last.Vehicles
+		s.VehiclesNote += last.Minute.UTC().Format("15:04") + " UTC"
 	}
 	return s
 }
@@ -125,8 +141,10 @@ func healthPageData(snap feedHealthResponse) map[string]interface{} {
 		})
 	}
 	fetches := make([]chartBar, 0, len(snap.Minutes))
+	vehicles := make([]chartBar, 0, len(snap.Minutes))
 	for _, m := range snap.Minutes {
 		fetches = append(fetches, chartBar{Label: m.Minute.UTC().Format("15:04"), Value: m.Feed.Served})
+		vehicles = append(vehicles, chartBar{Label: m.Minute.UTC().Format("15:04"), Value: uint64(m.Vehicles)})
 	}
 	return map[string]interface{}{
 		"Title":    "Feed health",
@@ -138,6 +156,12 @@ func healthPageData(snap feedHealthResponse) map[string]interface{} {
 		"Total":    snap.Total,
 		"Minutes":  rows,
 		"Reports":  reportsPerMinuteChart(snap, time.UTC, healthChartHeight),
+		"Vehicles": newBarChart(vehicles, barChartOptions{
+			Name:   "Vehicles reporting a minute over the last hour",
+			Height: healthChartHeight,
+			Unit:   "reporting",
+			Peak:   "Most in a minute",
+		}),
 		"Fetches": newBarChart(fetches, barChartOptions{
 			Name:   "Feed fetches served a minute over the last hour",
 			Height: healthChartHeight,
