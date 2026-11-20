@@ -55,6 +55,20 @@
   {{end}}
   {{template "pagination" .}}
 </section>
+<section class="card" aria-labelledby="webhook-title" style="margin-top:16px">
+  <div class="card-head"><h3 id="webhook-title" style="flex:1">Webhook</h3>{{with .Webhook.Host}}<span class="sub">Posting to {{.}}</span>{{end}}</div>
+  {{with .Webhook}}{{if .Host}}
+  <div class="table-wrap"><table class="table table-dense" id="webhook-status">
+    <tbody>
+      <tr><td>Last post</td><td>{{with .Last}}{{if .Sent}}<span class="pill pill-ok">Sent</span>{{else}}<span class="pill pill-warn">Failed</span>{{end}} {{.When}}, {{.What}}{{with .Problem}}<span class="sub">{{.}}</span>{{end}}{{else}}<span class="muted">None since the server started</span>{{end}}</td></tr>
+      <tr><td>Waiting to post</td><td>{{.Waiting}}</td></tr>
+    </tbody>
+  </table></div>
+  <p class="card-note" style="padding-top:12px">Kept in memory since the server started at {{.Started}}. A restart starts it again.</p>
+  {{else}}
+  <p class="card-note">Alerts are only on this page. To post them to a chat or another service as well, set ALERT_WEBHOOK_URL.</p>
+  {{end}}{{end}}
+</section>
 <details class="rules">
   <summary>What raises an alert</summary>
   <p class="muted" style="margin:8px 0 0;max-width:78ch">Vehicles on a running trip that have sent no report for over {{.QuietAfter}}, or have moved under {{.StoppedRadius}} in {{.StoppedAfter}}, or have been more than {{.OffRouteDistance}} from their route for over {{.OffRouteAfter}}, and vehicles whose block's next trip has not started over {{.NotStartedAfter}} after it was due. This page reloads every 30 seconds.</p>
