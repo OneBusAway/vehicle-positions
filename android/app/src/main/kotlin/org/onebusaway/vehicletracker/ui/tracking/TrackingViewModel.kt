@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.ui.tracking
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -12,6 +11,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingRepository
@@ -96,7 +96,7 @@ class TrackingViewModel @Inject constructor(
                 tripStateStore.setOccupancy(trip.tripDbId, occupancy)
             } catch (e: IOException) {
                 // A full disk, say. The row shows what is stored, so the driver sees that the tap did not take.
-                Log.w(TAG, "Could not store the occupancy", e)
+                AppLog.w(TAG, "Could not store the occupancy", e)
             }
         }
     }

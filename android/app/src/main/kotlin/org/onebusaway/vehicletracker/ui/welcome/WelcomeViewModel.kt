@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.ui.welcome
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -9,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.DriverFlag
 import org.onebusaway.vehicletracker.data.DriverFlagsStore
 import org.onebusaway.vehicletracker.data.DriverKey
@@ -53,7 +53,7 @@ class WelcomeViewModel @Inject constructor(
             driverFlags.set(driver, DriverFlag.WelcomeSeen)
         } catch (e: IOException) {
             // As on a full disk. The driver goes on to their trip, and sees the welcome once more.
-            Log.w(TAG, "Could not record that the welcome was seen; it will show again", e)
+            AppLog.w(TAG, "Could not record that the welcome was seen; it will show again", e)
         }
     }
 }

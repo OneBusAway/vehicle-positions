@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.ui.vehicles
 
-import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +11,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.VehiclePrefsStore
 import org.onebusaway.vehicletracker.data.VehicleRepository
@@ -108,7 +108,7 @@ class VehicleViewModel @Inject constructor(
                 vehiclePrefsStore.toggleFavorite(vehicleId)
             } catch (e: IOException) {
                 // A full disk, say. The star shows what is stored, so the driver sees that the tap did not take.
-                Log.w(TAG, "Could not store the favorite", e)
+                AppLog.w(TAG, "Could not store the favorite", e)
             }
         }
     }

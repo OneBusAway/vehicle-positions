@@ -215,9 +215,9 @@ class EncryptedSessionStore(
                 prefs.remove(Keys.LEGACY_TOKEN)
             }
         } catch (e: GeneralSecurityException) {
-            Log.w(LOG_TAG, "Could not encrypt the stored token; leaving it for the next launch.", e)
+            AppLog.w(LOG_TAG, "Could not encrypt the stored token; leaving it for the next launch.", e)
         } catch (e: IOException) {
-            Log.w(LOG_TAG, "Could not read session storage to encrypt the stored token.", e)
+            AppLog.w(LOG_TAG, "Could not read session storage to encrypt the stored token.", e)
         }
     }
 
@@ -236,7 +236,7 @@ class EncryptedSessionStore(
         return try {
             cryptor.decrypt(stored)
         } catch (e: GeneralSecurityException) {
-            Log.w(LOG_TAG, "Stored token could not be decrypted; treating the driver as logged out.", e)
+            AppLog.w(LOG_TAG, "Stored token could not be decrypted; treating the driver as logged out.", e)
             null
         }
     }
@@ -250,7 +250,7 @@ class EncryptedSessionStore(
         return try {
             cryptor.decrypt(stored)
         } catch (e: GeneralSecurityException) {
-            Log.w(LOG_TAG, "Stored refresh token could not be decrypted; treating it as absent.", e)
+            AppLog.w(LOG_TAG, "Stored refresh token could not be decrypted; treating it as absent.", e)
             null
         }
     }

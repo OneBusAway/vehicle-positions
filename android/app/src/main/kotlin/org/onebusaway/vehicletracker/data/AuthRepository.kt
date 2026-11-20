@@ -48,7 +48,7 @@ class AuthRepository @Inject constructor(
             if (offlineQueue.oldest(1).isNotEmpty()) backlogScheduler.schedule()
         } catch (e: IOException) {
             // The sign-in has worked. The next live report still uploads a batch.
-            Log.w(TAG, "Could not read the offline queue", e)
+            AppLog.w(TAG, "Could not read the offline queue", e)
         }
     }
 

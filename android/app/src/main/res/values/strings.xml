@@ -148,7 +148,7 @@
     <string name="help_server">Server</string>
     <!-- Opens the phone's share sheet with a short text about the app, the phone and its permissions, for whoever looks after the app. -->
     <string name="help_share">Share diagnostics</string>
-    <string name="help_share_detail">Sends the app version, the phone model and what the app is allowed to do. No positions, no sign-in details, no email.</string>
+    <string name="help_share_detail">Sends the app version, the phone model, the server, what the app is allowed to do and its recent problems, which it keeps only while it runs. No positions, no sign-in details, no email.</string>
 
     <!-- The top of the route and run steps: Back, then the trip so far as chips, each going back to its step. -->
     <string name="setup_navigate_up">Navigate up</string>

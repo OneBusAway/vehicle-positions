@@ -2,6 +2,7 @@ package org.onebusaway.vehicletracker.service
 
 import android.util.Log
 import kotlinx.coroutines.flow.first
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.TripStateStore
 import java.time.Duration
 
@@ -58,10 +59,10 @@ class RestartTracking(
             serviceController.startTracking()
         } catch (e: IllegalStateException) {
             // ForegroundServiceStartNotAllowedException, from Android 12, is one.
-            Log.w(TAG, "Android refused to start the tracking service from the background", e)
+            AppLog.w(TAG, "Android refused to start the tracking service from the background", e)
             return askDriver()
         } catch (e: SecurityException) {
-            Log.w(TAG, "Android refused the tracking service a permission it needs", e)
+            AppLog.w(TAG, "Android refused the tracking service a permission it needs", e)
             return askDriver()
         }
         return RestartOutcome.Started

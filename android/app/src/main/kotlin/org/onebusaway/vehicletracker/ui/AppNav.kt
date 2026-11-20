@@ -1,7 +1,6 @@
 package org.onebusaway.vehicletracker.ui
 
 import android.net.Uri
-import android.util.Log
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.EnterTransition
@@ -42,6 +41,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.DriverFlag
 import org.onebusaway.vehicletracker.data.DriverFlagsStore
 import org.onebusaway.vehicletracker.data.DriverKey
@@ -245,7 +245,7 @@ class AppNavViewModel @Inject constructor(
         return try {
             !driverFlags.isSet(driver, DriverFlag.WelcomeSeen)
         } catch (e: IOException) {
-            Log.w(TAG, "Could not read whether the welcome was seen; going on without it", e)
+            AppLog.w(TAG, "Could not read whether the welcome was seen; going on without it", e)
             false
         }
     }

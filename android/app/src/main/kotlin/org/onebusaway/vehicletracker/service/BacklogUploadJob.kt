@@ -6,7 +6,6 @@ import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
-import android.util.Log
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +15,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import java.io.IOException
 import javax.inject.Inject
@@ -58,11 +58,11 @@ class JobBacklogUploadScheduler @Inject constructor(
             .setPersisted(true)
             .build()
         try {
-            if (jobs.schedule(job) != JobScheduler.RESULT_SUCCESS) Log.w(TAG, "Could not schedule the backlog upload")
+            if (jobs.schedule(job) != JobScheduler.RESULT_SUCCESS) AppLog.w(TAG, "Could not schedule the backlog upload")
         } catch (e: IllegalStateException) {
             // Past the limits on how many jobs an app may schedule, and how often. The next live report
             // still uploads a batch.
-            Log.w(TAG, "Could not schedule the backlog upload", e)
+            AppLog.w(TAG, "Could not schedule the backlog upload", e)
         }
     }
 }
@@ -88,7 +88,7 @@ class BacklogDrain @Inject constructor(
                 uploader.upload(nowEpochSec = clock())
             } catch (e: IOException) {
                 // The upload's own network failures are handled inside; this is the queue's file failing.
-                Log.w(TAG, "Could not read or update the offline queue", e)
+                AppLog.w(TAG, "Could not read or update the offline queue", e)
                 return false
             }
             when (outcome) {

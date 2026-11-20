@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.data
 
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -114,7 +113,7 @@ class FileOfflineFixQueue(
                 locked { }
             } catch (e: IOException) {
                 // Then nothing shows as waiting. The uploads read the same file, and fail the same way.
-                Log.w(TAG, "Could not read the queued fixes", e)
+                AppLog.w(TAG, "Could not read the queued fixes", e)
             }
         }
         .filterNotNull()
@@ -144,7 +143,7 @@ class FileOfflineFixQueue(
     override suspend fun claimFor(account: String) = locked { q ->
         if (ownerFile.takeIf { it.exists() }?.readText() == account) return@locked
         if (q.isNotEmpty()) {
-            Log.w(TAG, "Dropping ${q.size} fixes queued under another account")
+            AppLog.w(TAG, "Dropping ${q.size} fixes queued under another account")
             q.clear()
             rewrite(q)
         }
@@ -165,7 +164,7 @@ class FileOfflineFixQueue(
                 }
             } catch (e: IOException) {
                 // The next sign-in then drops the fixes, as it would have without this claim.
-                Log.w(TAG, "Could not record who owns the queued fixes", e)
+                AppLog.w(TAG, "Could not record who owns the queued fixes", e)
             }
         }
     }
@@ -194,7 +193,7 @@ class FileOfflineFixQueue(
         val lines = text.lines().filter { it.isNotBlank() }
         val loaded = lines.mapNotNullTo(ArrayDeque()) { line ->
             runCatching { json.decodeFromString(LocationReportDto.serializer(), line) }
-                .onFailure { Log.w(TAG, "Skipping an unreadable queued fix", it) }
+                .onFailure { AppLog.w(TAG, "Skipping an unreadable queued fix", it) }
                 .getOrNull()
         }
         // Left in place, the cut-short line would join the next append and cost that fix too.

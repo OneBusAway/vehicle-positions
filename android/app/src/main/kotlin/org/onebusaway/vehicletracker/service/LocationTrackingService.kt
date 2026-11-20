@@ -10,7 +10,6 @@ import android.net.Network
 import android.os.Build
 import android.os.IBinder
 import android.os.Process
-import android.util.Log
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationAvailability
@@ -32,6 +31,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.data.TrackingRepository
@@ -63,11 +63,11 @@ internal fun startForegroundOrAskDriver(startForeground: () -> Unit, resumeNotif
         startForeground()
     } catch (e: IllegalStateException) {
         // ForegroundServiceStartNotAllowedException, from Android 12, is one.
-        Log.w(TAG, "Android refused the tracking service foreground status", e)
+        AppLog.w(TAG, "Android refused the tracking service foreground status", e)
         resumeNotifier.askToResume()
         return false
     } catch (e: SecurityException) {
-        Log.w(TAG, "Android refused the tracking service a permission it needs", e)
+        AppLog.w(TAG, "Android refused the tracking service a permission it needs", e)
         resumeNotifier.askToResume()
         return false
     }
@@ -197,7 +197,7 @@ class LocationTrackingService : Service() {
             val startedAgainByAndroid = intent == null
             if (restartWithoutLocation(Build.VERSION.SDK_INT, startedAgainByAndroid, locationAllowed())) {
                 // As when startForeground is refused: the trip stays stored, so the app opens on Resume.
-                Log.w(TAG, "Not reporting from a restart without location")
+                AppLog.w(TAG, "Not reporting from a restart without location")
                 askToResume()
                 stopSelf()
                 return START_NOT_STICKY
@@ -235,7 +235,7 @@ class LocationTrackingService : Service() {
             // Background restart without ACCESS_BACKGROUND_LOCATION granted — the spec's degraded
             // path. Drop out of foreground state but keep the service alive; MainActivity calls
             // ServiceController.startTracking() again while it is in the foreground.
-            Log.w(TAG, "Missing location permission for background restart; entering degraded mode", e)
+            AppLog.w(TAG, "Missing location permission for background restart; entering degraded mode", e)
             locationUpdatesActive = false
             askToResume()
         }

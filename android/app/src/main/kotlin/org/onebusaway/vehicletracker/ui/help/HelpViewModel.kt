@@ -13,9 +13,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.ui.account.appVersion
 import org.onebusaway.vehicletracker.ui.login.serverLabel
+import java.time.ZoneId
 import javax.inject.Inject
 
 /** The About rows' values; empty until read, which is off the main thread and takes a moment. */
@@ -33,6 +35,6 @@ class HelpViewModel @Inject constructor(
 
     /** The text for the share sheet, read and built off the main thread. */
     internal suspend fun diagnostics(): String = withContext(Dispatchers.IO) {
-        diagnosticsText(deviceFacts(context), sessionStore.session.first())
+        diagnosticsText(deviceFacts(context), sessionStore.session.first(), AppLog.recent.snapshot(), ZoneId.systemDefault())
     }
 }

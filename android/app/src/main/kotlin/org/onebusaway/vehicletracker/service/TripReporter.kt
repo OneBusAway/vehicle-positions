@@ -1,8 +1,8 @@
 package org.onebusaway.vehicletracker.service
 
-import android.util.Log
 import kotlinx.coroutines.flow.first
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.TrackingProblem
@@ -83,7 +83,7 @@ class TripReporter @Inject constructor(
             tripStateStore.sentCount(trip.tripDbId)
         } catch (e: IOException) {
             // Nothing above this catches it, so it would crash the app as the trip starts: the count starts from 0.
-            Log.w(TAG, "Could not read the sent count of trip ${trip.tripDbId}", e)
+            AppLog.w(TAG, "Could not read the sent count of trip ${trip.tripDbId}", e)
             0
         }
         fixesSent.set(kept)
@@ -127,7 +127,7 @@ class TripReporter @Inject constructor(
             }
         } catch (e: IOException) {
             // The upload's own network failures are handled inside; this is the queue's file failing.
-            Log.w(TAG, "Could not read or update the offline queue", e)
+            AppLog.w(TAG, "Could not read or update the offline queue", e)
         }
     }
 
@@ -165,7 +165,7 @@ class TripReporter @Inject constructor(
                 // Not assigned, vehicle deactivated (403), or no active trip / a trip mismatch (409):
                 // every report until dispatch fixes it is refused, so say so rather than look healthy.
                 e.code() == 403 || e.code() == 409 -> {
-                    Log.w(TAG, "Location report refused with HTTP ${e.code()}", e)
+                    AppLog.w(TAG, "Location report refused with HTTP ${e.code()}", e)
                     refreshProblem(sendProblem = TrackingProblem.REPORTS_REFUSED)
                 }
                 is400WithTimestamp -> {
@@ -174,20 +174,20 @@ class TripReporter @Inject constructor(
                         refreshProblem(sendProblem = TrackingProblem.CLOCK_SKEW)
                     }
                 }
-                else -> Log.w(TAG, "Dropping location report after HTTP ${e.code()}", e) // other 4xx/5xx: log-and-drop per spec, keep current status
+                else -> AppLog.w(TAG, "Dropping location report after HTTP ${e.code()}", e) // other 4xx/5xx: log-and-drop per spec, keep current status
             }
             return false
         } catch (e: IOException) {
             // Too late for the realtime feed by the time it could go, but it is still where the bus
             // was: kept for location history.
-            Log.w(TAG, "Queueing location report for history after network failure", e)
+            AppLog.w(TAG, "Queueing location report for history after network failure", e)
             try {
                 offlineQueue.add(dto)
                 backlogScheduler.schedule()
             } catch (queueError: IOException) {
                 // A full disk, say. Nothing above this catches it, so it would end tracking mid-trip:
                 // losing one queued fix is the lesser loss.
-                Log.w(TAG, "Could not queue location report for history", queueError)
+                AppLog.w(TAG, "Could not queue location report for history", queueError)
             }
             refreshProblem(sendProblem = TrackingProblem.NO_NETWORK)
             return false
@@ -208,7 +208,7 @@ class TripReporter @Inject constructor(
         } catch (e: IOException) {
             // A full disk, say. Nothing above this catches it, so it would crash the app mid-trip: the count is the
             // lesser loss.
-            Log.w(TAG, "Could not keep the sent count of trip ${trip.tripDbId}", e)
+            AppLog.w(TAG, "Could not keep the sent count of trip ${trip.tripDbId}", e)
         }
     }
 
@@ -220,7 +220,7 @@ class TripReporter @Inject constructor(
         tripStateStore.activeTrip.first()?.takeIf { it.tripDbId == trip.tripDbId }?.occupancy
     } catch (e: IOException) {
         // Nothing above this catches it, so it would end tracking mid-trip: the report goes without it instead.
-        Log.w(TAG, "Could not read the trip's occupancy", e)
+        AppLog.w(TAG, "Could not read the trip's occupancy", e)
         null
     }
 

@@ -3,7 +3,6 @@ package org.onebusaway.vehicletracker.data
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import android.util.Log
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
@@ -116,10 +115,10 @@ class KeystoreCryptor : Cryptor {
     private fun loadOrCreate(): SecretKey = try {
         existingKey() ?: generateKey()
     } catch (e: GeneralSecurityException) {
-        Log.w(LOG_TAG, "Session key unreadable; regenerating it. Any stored token is now unreadable.", e)
+        AppLog.w(LOG_TAG, "Session key unreadable; regenerating it. Any stored token is now unreadable.", e)
         regenerate()
     } catch (e: IOException) {
-        Log.w(LOG_TAG, "Keystore unreadable; regenerating the session key.", e)
+        AppLog.w(LOG_TAG, "Keystore unreadable; regenerating the session key.", e)
         regenerate()
     }
 

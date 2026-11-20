@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
+import org.onebusaway.vehicletracker.data.AppLog
 
 private const val TAG = "RestartTracking"
 
@@ -37,7 +38,7 @@ class RestartTrackingReceiver : BroadcastReceiver() {
             try {
                 val outcome = withTimeoutOrNull(RESTART_TIMEOUT) { restartTracking.restart() }
                 if (outcome == null) {
-                    Log.w(TAG, "${intent.action}: gave up after $RESTART_TIMEOUT")
+                    AppLog.w(TAG, "${intent.action}: gave up after $RESTART_TIMEOUT")
                 } else {
                     Log.i(TAG, "${intent.action}: $outcome")
                 }

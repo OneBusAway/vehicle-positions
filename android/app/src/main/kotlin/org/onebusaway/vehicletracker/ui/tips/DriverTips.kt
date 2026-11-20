@@ -1,12 +1,12 @@
 package org.onebusaway.vehicletracker.ui.tips
 
-import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.DriverFlag
 import org.onebusaway.vehicletracker.data.DriverFlagsStore
 import org.onebusaway.vehicletracker.data.DriverKey
@@ -63,7 +63,7 @@ class DriverTips @Inject constructor(
     suspend fun isDue(driver: DriverKey, tip: Tip): Boolean = try {
         !flags.isSet(driver, tip.seen)
     } catch (e: IOException) {
-        Log.w(TAG, "Could not read whether $tip was seen; leaving it out", e)
+        AppLog.w(TAG, "Could not read whether $tip was seen; leaving it out", e)
         false
     }
 
@@ -74,7 +74,7 @@ class DriverTips @Inject constructor(
                 flags.set(driver, tip.seen)
             } catch (e: IOException) {
                 // As on a full disk. The driver is shown it once more.
-                Log.w(TAG, "Could not record that $tip was seen; it will show again", e)
+                AppLog.w(TAG, "Could not record that $tip was seen; it will show again", e)
             }
         }
     }
