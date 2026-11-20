@@ -31,6 +31,8 @@ const (
 	// late to finish and for its phone to send what it has.
 	reportSettleAfter = time.Hour
 	// reportCacheSize bounds the reports kept in memory, a month of days.
+	// The Analytics page offers Compare only over a period that fits in it
+	// twice, with the period before (see canCompare).
 	reportCacheSize = 31
 	// maxRunGap is the furthest from a scheduled run of its GTFS trip that a
 	// driver may start a trip for it to count as that run. Half a day keeps a

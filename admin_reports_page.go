@@ -93,10 +93,19 @@ var analyticsMetrics = []struct{ Key, Label, Tone string }{
 	{metricNoReport, "Stops with no report", ""},
 }
 
-// analyticsRangeDays is the longest period the page covers. Each day is a
-// service report of its own, and the reporter keeps only so many, so a longer
-// period waits until its cost has been measured.
-const analyticsRangeDays = 7
+// analyticsPeriods are the periods, in days, the page covers besides a
+// single day; it opens on the first. Each day is a service report of its own,
+// worked out again after every schedule reload, so a longer period waits for
+// daily totals kept in the database.
+var analyticsPeriods = []int{7, 28}
+
+// canCompare reports whether the page offers Compare over a period of days:
+// only when the period and the one before it both fit in the reporter's
+// cache. Otherwise each load would push out days the next one needs, and every
+// load would work them all out again.
+func canCompare(days int) bool {
+	return days > 1 && 2*days <= reportCacheSize
+}
 
 // analyticsQuery is what the Analytics page was asked for. All of it is in
 // the address, so a bookmark is a saved report.
@@ -104,10 +113,11 @@ type analyticsQuery struct {
 	// Date is the last day shown, YYYY-MM-DD; "" is yesterday.
 	Date    string
 	RouteID string
-	// Days is 1 or analyticsRangeDays.
+	// Days is 1 or one of analyticsPeriods.
 	Days   int
 	Metric string
-	// Compare draws the period before behind a trend.
+	// Compare draws the period before behind a trend, over a period
+	// canCompare allows.
 	Compare bool
 }
 
@@ -115,9 +125,16 @@ func parseAnalyticsQuery(q url.Values) analyticsQuery {
 	a := analyticsQuery{
 		Date:    q.Get("date"),
 		RouteID: q.Get("route_id"),
-		Days:    analyticsRangeDays,
+		Days:    analyticsPeriods[0],
 		Metric:  metricOnTime,
 		Compare: q.Get("compare") != "off",
+	}
+	// Any other days is the period the page opens on, as an unknown metric
+	// is on time.
+	for _, days := range analyticsPeriods {
+		if q.Get("days") == strconv.Itoa(days) {
+			a.Days = days
+		}
 	}
 	// A route is shown a day at a time.
 	if q.Get("range") == "day" || a.RouteID != "" {
@@ -143,6 +160,9 @@ func (q analyticsQuery) URL() string {
 	case q.Days == 1:
 		v.Set("range", "day")
 	default:
+		if d := q.daysParam(); d != "" {
+			v.Set("days", d)
+		}
 		if q.Metric != metricOnTime {
 			v.Set("metric", q.Metric)
 		}
@@ -154,6 +174,15 @@ func (q analyticsQuery) URL() string {
 		return "/admin/reports"
 	}
 	return "/admin/reports?" + v.Encode()
+}
+
+// daysParam is the days the address names for q: none for a day, which range
+// names, or for the period the page opens on.
+func (q analyticsQuery) daysParam() string {
+	if q.RouteID != "" || q.Days == 1 || q.Days == analyticsPeriods[0] {
+		return ""
+	}
+	return strconv.Itoa(q.Days)
 }
 
 // reportsPageURL is the address of a day's report: every route's row, or with
@@ -334,8 +363,10 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 		"RouteID": query.RouteID,
 		"OneDay":  query.Days == 1,
 		"Metric":  query.Metric,
-		// CompareOff is carried by the date form, which has no chip to read.
+		// CompareOff and DaysParam are carried by the date form, which has
+		// no chip to read.
 		"CompareOff": query.Days > 1 && !query.Compare,
+		"DaysParam":  query.daysParam(),
 	}
 	noSchedule := func() (map[string]interface{}, int, error) {
 		data["NoSchedule"] = true
@@ -359,7 +390,7 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 
 	days, err := analyticsDays(ctx, reports, recent, ix, today, day, query.Days)
 	var before []*serviceReport
-	if err == nil && query.Days > 1 && query.Compare {
+	if err == nil && canCompare(query.Days) && query.Compare {
 		before, err = analyticsDays(ctx, reports, recent, ix, today, day.AddDate(0, 0, -query.Days), query.Days)
 	}
 	switch {
@@ -380,13 +411,15 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 	data["OnTimeLate"] = humanizeDuration(settings.onTimeLate)
 	data["FixWindow"] = humanizeDuration(reportFixWindow)
 
-	oneDay, period := query, query
+	oneDay := query
 	oneDay.RouteID, oneDay.Days = "", 1
-	period.RouteID, period.Days = "", analyticsRangeDays
-	data["Range"] = []analyticsLink{
-		{Label: "Day", URL: oneDay.URL(), Current: query.Days == 1},
-		{Label: strconv.Itoa(analyticsRangeDays) + " days", URL: period.URL(), Current: query.Days > 1},
+	periods := []analyticsLink{{Label: "Day", URL: oneDay.URL(), Current: query.Days == 1}}
+	for _, days := range analyticsPeriods {
+		period := query
+		period.RouteID, period.Days = "", days
+		periods = append(periods, analyticsLink{Label: strconv.Itoa(days) + " days", URL: period.URL(), Current: query.Days == days})
 	}
+	data["Range"] = periods
 	data["AllRoutesURL"] = oneDay.URL()
 	earlier := query
 	earlier.Date = day.AddDate(0, 0, -query.Days).Format(reportDateLayout)
@@ -397,9 +430,10 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 		later.Date = minTime(day.AddDate(0, 0, query.Days), today).Format(reportDateLayout)
 		data["NextURL"] = later.URL()
 	}
-	if query.Days == 1 {
+	switch {
+	case query.Days == 1:
 		data["CSVURL"] = "/api/v1/admin/reports/service?" + url.Values{"date": {rep.Date}, "format": {"csv"}}.Encode()
-	} else {
+	case canCompare(query.Days):
 		toggled := query
 		toggled.Compare = !query.Compare
 		data["Compare"] = analyticsLink{Label: fmt.Sprintf("Compare with the %d days before", query.Days), URL: toggled.URL(), Current: query.Compare}
