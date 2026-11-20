@@ -55,6 +55,18 @@ func TestParseAnalyticsQuery(t *testing.T) {
 		{"range=7&metric=late&compare=off", analyticsQuery{Days: 7, Metric: metricLate, Compare: false}, "/admin/reports?compare=off&metric=late"},
 		{"range=28&metric=speed&compare=no", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
 		{"date=2026-09-02&route_id=R1&range=7&metric=late", analyticsQuery{Date: "2026-09-02", RouteID: "R1", Days: 1, Metric: metricLate, Compare: true}, "/admin/reports?date=2026-09-02&route_id=R1"},
+		{"days=28", analyticsQuery{Days: 28, Metric: metricOnTime, Compare: true}, "/admin/reports?days=28"},
+		{"date=2026-09-02&days=28&metric=late&compare=off", analyticsQuery{Date: "2026-09-02", Days: 28, Metric: metricLate, Compare: false}, "/admin/reports?compare=off&date=2026-09-02&days=28&metric=late"},
+		{"days=7", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
+		{"days=28&range=day", analyticsQuery{Days: 1, Metric: metricOnTime, Compare: true}, "/admin/reports?range=day"},
+		{"days=28&route_id=R1", analyticsQuery{RouteID: "R1", Days: 1, Metric: metricOnTime, Compare: true}, "/admin/reports?route_id=R1"},
+		// Any other days is the period the page opens on, as an unknown
+		// metric is on time.
+		{"days=14", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
+		{"days=1", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
+		{"days=-28", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
+		{"days=028", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
+		{"days=month", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
 	} {
 		q, err := url.ParseQuery(tc.query)
 		require.NoError(t, err)
@@ -78,6 +90,7 @@ func TestReportsPage_Day(t *testing.T) {
 	assert.Equal(t, []analyticsLink{
 		{Label: "Day", URL: "/admin/reports?date=2026-09-02&range=day", Current: true},
 		{Label: "7 days", URL: "/admin/reports?date=2026-09-02"},
+		{Label: "28 days", URL: "/admin/reports?date=2026-09-02&days=28"},
 	}, data["Range"])
 	assert.Equal(t, "On time was 78% on Wednesday 2 September", data["Headline"])
 	assert.Equal(t, "Straight is the route pulling it down: 21% of its stops were early, most of them on trips leaving between 08:00 and 10:00. Times are America/Los_Angeles time.", data["Lede"])
@@ -99,7 +112,7 @@ func TestReportsPage_Day(t *testing.T) {
 	html := renderReportsContent(t, data)
 	assert.Contains(t, html, `<h2 class="h1">On time was 78% on Wednesday 2 September</h2>`)
 	assert.Contains(t, html, `href="/api/v1/admin/reports/service?date=2026-09-02&amp;format=csv"`)
-	assert.Contains(t, html, `<a href="/admin/reports?date=2026-09-02&amp;range=day" aria-current="true">Day</a><a href="/admin/reports?date=2026-09-02">7 days</a>`)
+	assert.Contains(t, html, `<a href="/admin/reports?date=2026-09-02&amp;range=day" aria-current="true">Day</a><a href="/admin/reports?date=2026-09-02">7 days</a><a href="/admin/reports?date=2026-09-02&amp;days=28">28 days</a>`)
 	assert.Contains(t, html, `<input type="hidden" name="range" value="day">`)
 	assert.Contains(t, html, `name="date" value="2026-09-02" aria-label="Service day"`)
 	assert.Contains(t, html, `<a class="row-link an-route" href="/admin/reports?date=2026-09-02&amp;route_id=R1">`)
@@ -185,6 +198,72 @@ func TestReportsPage_Period(t *testing.T) {
 	assert.Contains(t, html, `<input type="hidden" name="metric" value="late"><input type="hidden" name="compare" value="off">`)
 	assert.Contains(t, html, `data-tip="2 Sep|9%"`)
 	assert.NotContains(t, html, "The 7 days before")
+}
+
+// TestReportsPage_28Days: days=28 covers the 28 days ending on the date, a
+// report each. Compare is not offered, since 56 days would not fit in the
+// reporter's cache and every load would work them all out again, so the 28
+// days are read once and then kept.
+func TestReportsPage_28Days(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+
+	data, status := reportsView(t, r, "date=2026-09-02&days=28")
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, "On time was 78% over the 28 days to Wednesday 2 September", data["Headline"])
+	assert.Equal(t, []analyticsLink{
+		{Label: "Day", URL: "/admin/reports?date=2026-09-02&range=day"},
+		{Label: "7 days", URL: "/admin/reports?date=2026-09-02"},
+		{Label: "28 days", URL: "/admin/reports?date=2026-09-02&days=28", Current: true},
+	}, data["Range"])
+	assert.Equal(t, "/admin/reports?date=2026-08-05&days=28", data["PrevURL"], "a period at a time")
+	assert.Equal(t, "/admin/reports?date=2026-09-04&days=28", data["NextURL"], "and no further than today")
+	assert.Nil(t, data["Compare"], "no Compare over 28 days")
+	assert.Equal(t, 28, store.reads, "the 28 days and not the 28 before them")
+
+	trend := data["Trend"].(analyticsTrend)
+	require.Len(t, trend.Rows, 28)
+	assert.Equal(t, "Thu 6 Aug", trend.Rows[0].Day)
+	assert.Equal(t, analyticsTrendRow{Day: "Wed 2 Sep", Value: "78%"}, trend.Rows[27])
+	assert.Equal(t, "6 Aug to 2 Sep", trend.Period)
+	assert.Empty(t, trend.Before)
+	assert.Empty(t, trend.Chart.PrevPath)
+
+	metrics := data["Metrics"].([]analyticsMetric)
+	require.Len(t, metrics, 5)
+	assert.Equal(t, "/admin/reports?date=2026-09-02&days=28&metric=late", metrics[3].URL, "a measure keeps the period")
+	rows := data["Routes"].([]reportRouteRow)
+	require.Len(t, rows, 3)
+	assert.Equal(t, 144, rows[1].Scheduled, "the 36 trips of each of four weeks")
+	assert.Equal(t, "/admin/reports?date=2026-09-02&route_id=R1", rows[1].TripsURL)
+
+	html := renderReportsContent(t, data)
+	assert.Contains(t, html, `<a href="/admin/reports?date=2026-09-02&amp;days=28" aria-current="true">28 days</a>`)
+	assert.Contains(t, html, `<input type="hidden" name="days" value="28">`, "Show keeps the period")
+	assert.Contains(t, html, `role="img" aria-label="On time by day, 6 Aug to 2 Sep"`)
+	assert.NotContains(t, html, "Compare with")
+	assert.NotContains(t, html, "days before")
+
+	reportsView(t, r, "date=2026-09-02&days=28")
+	assert.Equal(t, 28, store.reads, "28 settled days, kept and none read again")
+
+	// Compare turned off over 7 days stays off there after a look at 28.
+	data, _ = reportsView(t, r, "date=2026-09-02&days=28&compare=off")
+	assert.Equal(t, "/admin/reports?compare=off&date=2026-09-02", data["Range"].([]analyticsLink)[1].URL)
+	assert.Contains(t, renderReportsContent(t, data), `<input type="hidden" name="days" value="28"><input type="hidden" name="compare" value="off">`)
+}
+
+// TestReportsPage_BadDays: a days the page has no period for is the 7 days it
+// opens on, as an unknown metric or range is.
+func TestReportsPage_BadDays(t *testing.T) {
+	r, _, _ := newFixtureReporter(t, reportFixtureNow)
+
+	for _, bad := range []string{"14", "1", "0", "-28", "month", "28days"} {
+		data, status := reportsView(t, r, "date=2026-09-02&days="+bad)
+		require.Equal(t, http.StatusOK, status, bad)
+		assert.Equal(t, "On time was 78% over the 7 days to Wednesday 2 September", data["Headline"], bad)
+		assert.True(t, data["Range"].([]analyticsLink)[1].Current, bad)
+		assert.NotContains(t, renderReportsContent(t, data), `name="days"`, bad)
+	}
 }
 
 // TestReportsPage_Default: with no date the page ends on yesterday, as the

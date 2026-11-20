@@ -709,17 +709,19 @@ trips run, and did they run on time. Its headline is the answer in a sentence,
 such as **On time was 86% over the last 7 days**, and the line under it names
 the route pulling the share down, when one is.
 
-It opens on the seven days that end yesterday. **Day** shows one day and
-**7 days** a week. The date box picks the last day shown: choose a date and
-click **Show**, or step back and forward with the arrows beside it. Every
-choice is in the page's address, so a bookmark is a saved report.
+It opens on the seven days that end yesterday. **Day** shows one day,
+**7 days** a week and **28 days** four weeks. The date box picks the last day
+shown: choose a date and click **Show**, or step back and forward with the
+arrows beside it. Every choice is in the page's address, so a bookmark is a
+saved report.
 
-Over seven days:
+Over 7 or 28 days:
 
 - Five figures cross the top: **On time**, **Trips run**, **Early**, **Late**
   and **Stops with no report**. Click one to draw it day by day in the chart
-  under them. With **Compare with the 7 days before** on, the week before is
-  drawn behind as a dashed line and each figure says how many points it moved.
+  under them. Over 7 days, with **Compare with the 7 days before** on, the
+  week before is drawn behind as a dashed line and each figure says how many
+  points it moved. Over 28 days there is no Compare.
 - **By route** has a row for each route with service, added up over the days.
 - **Early and late by hour of day** shows, for the trips leaving in each hour,
   the share of their stops that were late, with the share that were early
@@ -761,9 +763,11 @@ with its time at every stop. **All routes** goes back.
 spreadsheet. Today's figures are worked out afresh at most once a minute, so
 they fill in as the day goes on. A past day is kept once its service has
 ended, so points a phone uploads later from its offline queue show in it only
-after the server next reloads the schedule, daily by default. Your server
-administrator can change the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and
-`REPORT_ON_TIME_LATE`, see [`configuration.md`](configuration.md)).
+after the server next reloads the schedule, daily by default. The first look
+at 28 days after a reload works out every day again, so it can take several
+seconds. Your server administrator can change the 1 and 5 minutes
+(`REPORT_ON_TIME_EARLY` and `REPORT_ON_TIME_LATE`, see
+[`configuration.md`](configuration.md)).
 
 ### The feed itself
 

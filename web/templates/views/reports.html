@@ -12,7 +12,7 @@
 {{else}}
 <form class="range-bar" method="get" action="/admin/reports">
   {{with .Range}}<div class="seg" role="group" aria-label="Period">{{range .}}<a href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div>{{end}}
-  {{if .RouteID}}<input type="hidden" name="route_id" value="{{.RouteID}}">{{else if .OneDay}}<input type="hidden" name="range" value="day">{{else}}{{if ne .Metric "on_time"}}<input type="hidden" name="metric" value="{{.Metric}}">{{end}}{{if .CompareOff}}<input type="hidden" name="compare" value="off">{{end}}{{end}}
+  {{if .RouteID}}<input type="hidden" name="route_id" value="{{.RouteID}}">{{else if .OneDay}}<input type="hidden" name="range" value="day">{{else}}{{with .DaysParam}}<input type="hidden" name="days" value="{{.}}">{{end}}{{if ne .Metric "on_time"}}<input type="hidden" name="metric" value="{{.Metric}}">{{end}}{{if .CompareOff}}<input type="hidden" name="compare" value="off">{{end}}{{end}}
   <span class="range-date">
     {{with .PrevURL}}<a class="icon-btn" href="{{.}}" aria-label="Earlier">{{template "icon" "chevron_left"}}</a>{{end}}
     <input class="input input-sm" type="date" name="date" value="{{.Date}}" aria-label="{{if .OneDay}}Service day{{else}}Last day shown{{end}}"{{if .Error}} aria-invalid="true" aria-describedby="date-error"{{end}}>
