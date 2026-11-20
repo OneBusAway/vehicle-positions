@@ -597,8 +597,11 @@ should be on, with the vehicle and driver of the block's last trip. Call the
 driver. **Trip** opens all of that vehicle's trips, since none is running.
 
 An alert clears by itself when the vehicle reports again, moves on or comes
-back to its route, and when its trip ends. A position the phone is unsure of
-(a poor GPS fix) neither raises nor clears **Off route**. The page reloads
+back to its route, and when its trip ends. Once an alert clears it moves to
+**Cleared**, below the open ones, newest first, with when it was raised, when
+it cleared and how long it lasted. Pick a kind above that list to see only
+those, and **Next** for older ones. A position the phone is unsure of (a poor
+GPS fix) neither raises nor clears **Off route**. The page reloads
 every 30 seconds. The count beside **Alerts** in the menu, and on the bell at
 the top, is on every page and keeps itself current.
 Unless your server posts them to a chat channel (see
