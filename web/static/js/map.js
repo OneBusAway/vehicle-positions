@@ -6,6 +6,8 @@
   if (!el || typeof L === "undefined" || !VT.getJSON) return;
   var root = document.getElementById("map-root");
   var QUIET = Number(el.dataset.quietAfter), POLL = 10000, GTFS = el.dataset.gtfsUrl;
+  // The on-time window in seconds, early and late, both ends on time: the one the trip page and the Trips list judge by.
+  var EARLY = Number(el.dataset.windowEarly), LATE = Number(el.dataset.windowLate);
   var ARROW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 19.5 21 12 17.2 4.5 21Z"/></svg>';
   var $ = function (id) { return document.getElementById(id); };
   var phone = window.matchMedia("(max-width: 767px)");
@@ -380,6 +382,15 @@
     var c = clocks[t.timezone];
     return c ? " · " + c.format(new Date(s === t.stops[t.stops.length - 1] ? s.arrival_at : s.departure_at)) : "";
   }
+  // How far from the timetable the latest report put the vehicle, in seconds with late positive, in the Trips list's
+  // words: "6:10 late", "1:05 early", or inside the on-time window "On time" with the signed figure. Null says nothing.
+  function schedule(s) {
+    if (s == null) return null;
+    var a = Math.abs(s), m = Math.floor(a / 60) + ":" + String(a % 60).padStart(2, "0");
+    if (s < -EARLY) return { text: m + " early", tone: "tone-early" };
+    if (s > LATE) return { text: m + " late", tone: "tone-late" };
+    return { text: "On time " + (s > 0 ? "+" : s < 0 ? "-" : "") + m, tone: "" };
+  }
   // The stop the card names gets the stronger marker on the trip's line.
   function markStop(i) {
     if (!card.marks || card.here === i) return;
@@ -413,9 +424,10 @@
 
     var dl = h("dl", "kv"); dl.style.margin = "14px 0 16px";
     card.kv = {};
-    ["Stop", "Driver", "Trip", "Speed", "Heading"].forEach(function (k) {
+    ["Stop", "Schedule", "Driver", "Trip", "Speed", "Heading"].forEach(function (k) {
       var w = h("div"), dt = w.appendChild(h("dt", "", k)); card.kv[k] = w.appendChild(h("dd")); dl.appendChild(w);
       if (k === "Stop") { card.stopRow = w; card.stopWord = dt; w.style.gridColumn = "1 / -1"; card.kv.Stop.style.minHeight = "1lh"; }
+      if (k === "Schedule") { card.schedRow = w; w.style.gridColumn = "1 / -1"; }
     });
     host.appendChild(dl);
 
@@ -464,6 +476,11 @@
     card.stopWord.textContent = v.current_status === "STOPPED_AT" ? "At stop" : "Next stop";
     card.kv.Stop.textContent = card.trip === undefined ? "" : s ? s.name + due(card.trip, s) : "Not known";
     markStop(s ? card.trip.stops.indexOf(s) : -1);
+    // A quiet vehicle's figure is as old as its last report and grows less true by the minute, so the card leaves it out.
+    var sched = q ? null : schedule(v.schedule_deviation_s);
+    card.schedRow.hidden = !sched;
+    card.kv.Schedule.textContent = sched ? sched.text : "";
+    card.kv.Schedule.className = sched ? sched.tone : "";
     followShown();
   }
 

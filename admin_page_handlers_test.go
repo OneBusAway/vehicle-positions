@@ -313,20 +313,25 @@ func TestAdminPagesRenderWithSession(t *testing.T) {
 }
 
 // TestMapPageLiveMode verifies the map container carries what the map script
-// asks for: the live answer, the open alerts, the schedule, and when a
-// vehicle counts as quiet (ALERT_QUIET_AFTER, in seconds).
+// asks for: the live answer, the open alerts, the schedule, when a vehicle
+// counts as quiet (ALERT_QUIET_AFTER, in seconds), and the on-time window the
+// card judges a vehicle's schedule deviation by (REPORT_ON_TIME_EARLY and
+// REPORT_ON_TIME_LATE, in seconds).
 func TestMapPageLiveMode(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		quietAfter time.Duration
-		want       string
+		name                        string
+		quietAfter, onEarly, onLate time.Duration
+		want                        string
 	}{
-		{"default", defaultAlertQuietAfter, `data-quiet-after="180"`},
-		{"set", 4 * time.Minute, `data-quiet-after="240"`},
+		{"default", defaultAlertQuietAfter, defaultReportOnTimeEarly, defaultReportOnTimeLate,
+			`data-quiet-after="180" data-window-early="60" data-window-late="300"`},
+		{"set", 4 * time.Minute, 0, 150 * time.Second,
+			`data-quiet-after="240" data-window-early="0" data-window-late="150"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ui := newTestAdminUI(t)
 			ui.alerts.settings.quietAfter = tc.quietAfter
+			ui.reports.settings.onTimeEarly, ui.reports.settings.onTimeLate = tc.onEarly, tc.onLate
 			mux := http.NewServeMux()
 			registerAdminUI(mux, ui)
 			req := httptest.NewRequest(http.MethodGet, "/admin/map", nil)

@@ -2631,6 +2631,7 @@ components:
         - stop_id
         - stop_sequence
         - current_status
+        - schedule_deviation_s
         - reported_at
         - updated_at
       properties:
@@ -2681,6 +2682,22 @@ components:
           description: |
             Whether the vehicle is at that stop or heading to it, in the
             feed's `current_status` words. Null when `stop_id` is.
+        schedule_deviation_s:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            How far from its trip's timetable the vehicle's latest report put
+            it, in seconds: positive late, negative early. Worked out when the
+            report was accepted, from the vehicle's place on the trip's shape
+            against the timetable's time for that place, interpolated between
+            the stops either side; at a stop it is 0 from the stop's arrival
+            to its departure. The run judged is the report's `start_date`'s,
+            or when it gave none, the run the trip's start is matched to, as
+            on the trip page. Null when the report did not say: no GTFS trip,
+            a trip in frequencies.txt or whose shape was drawn through its
+            stops, off route, before the vehicle has left its first stop or
+            past its last, no run of the trip to judge against, and a vehicle
+            restored at startup until it next reports.
         reported_at:
           type: integer
           format: int64

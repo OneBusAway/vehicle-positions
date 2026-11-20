@@ -19,6 +19,8 @@ import (
 // expression is built from the structs' JSON tags, so renaming a field on the
 // server fails here rather than leaving the card's stop row saying "Not known"
 // for every vehicle, or showing a frequency trip's pattern times as its run's.
+// The card's Schedule row reads schedule_deviation_s the same way, and the
+// on-time window from the attributes the map page writes (TestMapPageLiveMode).
 func TestAdminMapCardReadsTheStopItIsGiven(t *testing.T) {
 	h := newTestHandler(t, true)
 	req := httptest.NewRequest(http.MethodGet, "/static/js/map.js", nil)
@@ -41,6 +43,9 @@ func TestAdminMapCardReadsTheStopItIsGiven(t *testing.T) {
 		"s." + tag(stop, "ArrivalAt") + " : s." + tag(stop, "DepartureAt"),
 		"t." + tag(trip, "Timezone"),
 		"if (t." + tag(trip, "FromFrequencies") + `) return "";`,
+		"schedule(v." + tag(live, "ScheduleDeviationS") + ")",
+		"el.dataset.windowEarly",
+		"el.dataset.windowLate",
 	} {
 		// Not assert.Contains: on failure it prints the whole script.
 		assert.True(t, strings.Contains(script, want), "map.js is missing %s", want)
