@@ -39,13 +39,13 @@ ORDER BY lp.vehicle_id, lp.timestamp DESC, lp.received_at DESC;
 -- safety bound; not pagination. Callers that need one page at a time use
 -- ListUsersPage. The id tiebreaker makes the order total, so the bound
 -- always truncates the same 1000 rows.
-SELECT id, name, email, role, active, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at, last_seen_at
 FROM users
 ORDER BY created_at DESC, id DESC
 LIMIT 1000;
 
 -- name: GetUserByID :one
-SELECT id, name, email, role, active, created_at, updated_at
+SELECT id, name, email, role, active, created_at, updated_at, last_seen_at
 FROM users
 WHERE id = $1;
 
@@ -72,7 +72,7 @@ UPDATE users
 SET name = sqlc.arg(name), email = lower(sqlc.arg(email)), role = sqlc.arg(role),
     sessions_valid_after = CASE WHEN role <> sqlc.arg(role) THEN NOW() ELSE sessions_valid_after END
 WHERE id = sqlc.arg(id)
-RETURNING id, name, email, role, active, created_at, updated_at;
+RETURNING id, name, email, role, active, created_at, updated_at, last_seen_at;
 
 -- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1;
@@ -91,8 +91,10 @@ UPDATE users SET password_hash = $2 WHERE id = $1;
 -- name: UpdateUserLastSeen :exec
 -- Stamped on every successful sign-in and token refresh. The
 -- set_users_updated_at trigger skips a change to last_seen_at alone, so this
--- does not move updated_at.
-UPDATE users SET last_seen_at = NOW() WHERE id = $1;
+-- does not move updated_at. NOW() is the same all through a transaction, so a
+-- second stamp in one would change nothing, and the trigger would then fire
+-- and move updated_at: the guard leaves that row out instead.
+UPDATE users SET last_seen_at = NOW() WHERE id = $1 AND last_seen_at IS DISTINCT FROM NOW();
 
 -- name: LockUser :one
 -- Serializes rotation and revocation of one user's refresh tokens. Both take

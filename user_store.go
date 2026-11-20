@@ -23,10 +23,18 @@ type UserResponse struct {
 	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-	// LastSeenAt is when the user last signed in or renewed a session, nil
-	// if never. Only ListUsersPage fills it, for the admin Users page; the
-	// users API does not carry it yet.
-	LastSeenAt *time.Time `json:"-"`
+	// LastSeenAt is when the user last signed in or renewed a session, in
+	// UTC, nil if never.
+	LastSeenAt *time.Time `json:"last_seen_at"`
+}
+
+// lastSeen is a last_seen_at column as UserResponse holds it.
+func lastSeen(at pgtype.Timestamptz) *time.Time {
+	if !at.Valid {
+		return nil
+	}
+	utc := at.Time.UTC()
+	return &utc
 }
 
 var ErrUserNotFound = errors.New("user not found")
@@ -109,13 +117,14 @@ func (s *Store) ListUsers(ctx context.Context) ([]UserResponse, error) {
 	users := make([]UserResponse, 0, len(rows))
 	for _, row := range rows {
 		users = append(users, UserResponse{
-			ID:        row.ID,
-			Name:      row.Name,
-			Email:     row.Email,
-			Role:      row.Role,
-			Active:    row.Active,
-			CreatedAt: row.CreatedAt.Time,
-			UpdatedAt: row.UpdatedAt.Time,
+			ID:         row.ID,
+			Name:       row.Name,
+			Email:      row.Email,
+			Role:       row.Role,
+			Active:     row.Active,
+			CreatedAt:  row.CreatedAt.Time,
+			UpdatedAt:  row.UpdatedAt.Time,
+			LastSeenAt: lastSeen(row.LastSeenAt),
 		})
 	}
 	return users, nil
@@ -165,9 +174,7 @@ func (s *Store) ListUsersPage(ctx context.Context, f UserFilter) ([]UserResponse
 		}
 		u.CreatedAt = createdAt.Time
 		u.UpdatedAt = updatedAt.Time
-		if lastSeenAt.Valid {
-			u.LastSeenAt = &lastSeenAt.Time
-		}
+		u.LastSeenAt = lastSeen(lastSeenAt)
 		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil {
@@ -188,13 +195,14 @@ func (s *Store) GetUser(ctx context.Context, id int64) (*UserResponse, error) {
 	}
 
 	return &UserResponse{
-		ID:        row.ID,
-		Name:      row.Name,
-		Email:     row.Email,
-		Role:      row.Role,
-		Active:    row.Active,
-		CreatedAt: row.CreatedAt.Time,
-		UpdatedAt: row.UpdatedAt.Time,
+		ID:         row.ID,
+		Name:       row.Name,
+		Email:      row.Email,
+		Role:       row.Role,
+		Active:     row.Active,
+		CreatedAt:  row.CreatedAt.Time,
+		UpdatedAt:  row.UpdatedAt.Time,
+		LastSeenAt: lastSeen(row.LastSeenAt),
 	}, nil
 }
 
@@ -249,13 +257,14 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 	}
 
 	return &UserResponse{
-		ID:        row.ID,
-		Name:      row.Name,
-		Email:     row.Email,
-		Role:      row.Role,
-		Active:    row.Active,
-		CreatedAt: row.CreatedAt.Time,
-		UpdatedAt: row.UpdatedAt.Time,
+		ID:         row.ID,
+		Name:       row.Name,
+		Email:      row.Email,
+		Role:       row.Role,
+		Active:     row.Active,
+		CreatedAt:  row.CreatedAt.Time,
+		UpdatedAt:  row.UpdatedAt.Time,
+		LastSeenAt: lastSeen(row.LastSeenAt),
 	}, nil
 }
 

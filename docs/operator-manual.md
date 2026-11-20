@@ -855,8 +855,8 @@ fetches a minute. A vehicle counts once in each minute the server accepted a
 live report from it; a phone uploading positions it saved offline does not
 count. The counts are kept in memory:
 a server restart starts them again, and the page says when counting began. It
-reloads every minute. Your IT contact can read the report and fetch counts
-from `GET /api/v1/admin/health`.
+reloads every minute. Your IT contact can read the report and fetch counts,
+and the vehicles reporting each minute, from `GET /api/v1/admin/health`.
 
 The **Outcomes** table:
 
