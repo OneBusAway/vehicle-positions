@@ -205,6 +205,18 @@ its own accuracy is left out of reports too.
 | `TRUST_PROXY_HEADERS` | `false` | Required behind a reverse proxy | Trust `X-Forwarded-For` and `X-Forwarded-Proto`. Controls which address the per-IP rate limiters bucket on, whether the admin session cookie is marked `Secure`, and the client IP recorded for rider requests. Unparseable: warn and default. |
 | `FEED_AUTH_ENABLED` | `false` | Optional | Require an `X-API-Key` header on `GET /gtfs-rt/vehicle-positions`. Unlike every other boolean here, an unparseable value **refuses to start** rather than warning and defaulting: `strconv.ParseBool` rejects `yes` and `on`, and falling back to `false` would leave the feed public while the operator believes it is locked. Checked before the database is opened, so a typo fails immediately. |
 
+## Prometheus metrics
+
+Off by default. When on, `GET /metrics` serves the Health page's counts, the
+schedule's load time and size, the open alerts and the build in the Prometheus
+text format; [deployment section 9](deployment.md#prometheus-metrics) lists
+the series and has a scrape config.
+
+| Variable | Default | Status | Purpose |
+|---|---|---|---|
+| `METRICS_ENABLED` | `false` | Optional | Serve `GET /metrics`. Off, the route is not registered and answers 404. A value that is not a boolean, or `true` without a usable `METRICS_TOKEN`, logs an `ERROR` and leaves it **off**; the server still starts, and the scraper shows the target down at once. |
+| `METRICS_TOKEN` | unset | Required when `METRICS_ENABLED` is `true` | The bearer token a scraper must send, as `Authorization: Bearer <token>`. At least 32 characters; generate it with `openssl rand -hex 32`. Anything else gets `401`, logged as a `WARN` with the client address and never the token. Read only when `METRICS_ENABLED` is `true`. |
+
 ## Location retention
 
 Off by default: location history is kept forever until an agency opts in. The

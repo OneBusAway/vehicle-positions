@@ -123,6 +123,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /ready", handleReadiness(store))
+	registerMetrics(mux, trustProxy, catalog, alerts, health)
 
 	mux.Handle("POST /api/v1/locations", countReports(authMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter))))
 	// Built here rather than passed in like the others: it lives as long as the mux, and nothing
