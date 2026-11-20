@@ -134,4 +134,11 @@ func TestServiceReporter_ReadsTheFixtureDayFromTheStore(t *testing.T) {
 		}
 		assert.Equal(t, wantRoute, gotRoute, "route %s", wantRoute.RouteID)
 	}
+
+	// The day is long settled, so its totals were kept, and read back the
+	// same through service_day_totals.
+	kept, err := store.ListServiceDays(ctx, reportDay, reportDay)
+	require.NoError(t, err)
+	require.Len(t, kept, 1)
+	assert.Equal(t, newDayTotals(want, testReportSettings), kept[0].Totals)
 }

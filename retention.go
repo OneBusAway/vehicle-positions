@@ -82,13 +82,15 @@ func (p *LocationPruner) run() {
 	}
 }
 
-// pruneAll deletes the cleared alerts from before the cutoff, then expired
-// location points in batches until a pass removes fewer rows than the batch
-// size, the store returns an error, or the pruner is stopped.
+// pruneAll deletes the cleared alerts and the kept service days from before
+// the cutoff, then expired location points in batches until a pass removes
+// fewer rows than the batch size, the store returns an error, or the pruner
+// is stopped.
 func (p *LocationPruner) pruneAll(ctx context.Context) {
 	start := time.Now()
 	cutoff := start.Add(-p.retention)
 	p.pruneAlerts(ctx, cutoff)
+	p.pruneServiceDays(ctx, cutoff)
 
 	var total int64
 	for {
@@ -138,5 +140,22 @@ func (p *LocationPruner) pruneAlerts(ctx context.Context, cutoff time.Time) {
 	}
 	if deleted > 0 {
 		slog.Info("pruned expired alert history", "deleted", deleted, "cutoff", cutoff, "retention", p.retention.String())
+	}
+}
+
+// pruneServiceDays deletes the Analytics totals of the service days before
+// cutoff's. A day is worked out from its vehicles' reports, so it is kept no
+// longer than they are; a day is one row.
+func (p *LocationPruner) pruneServiceDays(ctx context.Context, cutoff time.Time) {
+	deleted, err := p.store.PruneServiceDays(ctx, cutoff)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			return
+		}
+		slog.Error("service day totals retention prune failed", "error", err, "cutoff", cutoff)
+		return
+	}
+	if deleted > 0 {
+		slog.Info("pruned expired service day totals", "deleted", deleted, "cutoff", cutoff, "retention", p.retention.String())
 	}
 }

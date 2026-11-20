@@ -130,6 +130,14 @@ type Rider struct {
 	LastSeenAt        pgtype.Timestamptz
 }
 
+type ServiceDayTotal struct {
+	ServiceDate  pgtype.Date
+	OnTimeEarlyS int32
+	OnTimeLateS  int32
+	Totals       []byte
+	WrittenAt    pgtype.Timestamptz
+}
+
 type Trip struct {
 	ID         int64
 	UserID     int64

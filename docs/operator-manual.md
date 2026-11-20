@@ -719,9 +719,9 @@ Over 7 or 28 days:
 
 - Five figures cross the top: **On time**, **Trips run**, **Early**, **Late**
   and **Stops with no report**. Click one to draw it day by day in the chart
-  under them. Over 7 days, with **Compare with the 7 days before** on, the
-  week before is drawn behind as a dashed line and each figure says how many
-  points it moved. Over 28 days there is no Compare.
+  under them. With **Compare with the 7 days before** (or the 28 days
+  before) on, the period before is drawn behind as a dashed line and each
+  figure says how many points it moved.
 - **By route** has a row for each route with service, added up over the days.
 - **Early and late by hour of day** shows, for the trips leaving in each hour,
   the share of their stops that were late, with the share that were early
@@ -761,13 +761,18 @@ with its time at every stop. **All routes** goes back.
 
 **Download CSV**, on a single day, saves that day's route rows as a
 spreadsheet. Today's figures are worked out afresh at most once a minute, so
-they fill in as the day goes on. A past day is kept once its service has
-ended, so points a phone uploads later from its offline queue show in it only
-after the server next reloads the schedule, daily by default. The first look
-at 28 days after a reload works out every day again, so it can take several
-seconds. Your server administrator can change the 1 and 5 minutes
-(`REPORT_ON_TIME_EARLY` and `REPORT_ON_TIME_LATE`, see
-[`configuration.md`](configuration.md)).
+they fill in as the day goes on. Yesterday is worked out from the reports
+too, so points a phone uploads late from its offline queue still count. Each
+day before yesterday is kept in the database once it has been worked out, and
+read from there after that, so a period opens quickly however long it is. A
+kept day does not change: points uploaded later still show on the trip's page
+but not here, and a schedule reload leaves it judged against the timetable it
+ran to. The first look at a period after upgrading works out its days once, so
+it can take several seconds. Kept days are deleted with the location history
+they came from, when `LOCATION_RETENTION_PERIOD` is set. Your server
+administrator can change the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and
+`REPORT_ON_TIME_LATE`, see [`configuration.md`](configuration.md)); the days
+kept are worked out again under the new window.
 
 ### The feed itself
 

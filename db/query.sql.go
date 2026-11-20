@@ -458,6 +458,18 @@ func (q *Queries) DeleteRidePointsBefore(ctx context.Context, receivedAt pgtype.
 	return result.RowsAffected(), nil
 }
 
+const deleteServiceDayTotalsBefore = `-- name: DeleteServiceDayTotalsBefore :execrows
+DELETE FROM service_day_totals WHERE service_date < $1
+`
+
+func (q *Queries) DeleteServiceDayTotalsBefore(ctx context.Context, cutoff pgtype.Date) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteServiceDayTotalsBefore, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users WHERE id = $1
 `
@@ -1549,6 +1561,50 @@ func (q *Queries) ListRidesOfAnyStatus(ctx context.Context, arg ListRidesOfAnySt
 	return items, nil
 }
 
+const listServiceDayTotals = `-- name: ListServiceDayTotals :many
+SELECT service_date, on_time_early_s, on_time_late_s, totals
+FROM service_day_totals
+WHERE service_date BETWEEN $1 AND $2
+ORDER BY service_date
+`
+
+type ListServiceDayTotalsParams struct {
+	FirstDate pgtype.Date
+	LastDate  pgtype.Date
+}
+
+type ListServiceDayTotalsRow struct {
+	ServiceDate  pgtype.Date
+	OnTimeEarlyS int32
+	OnTimeLateS  int32
+	Totals       []byte
+}
+
+func (q *Queries) ListServiceDayTotals(ctx context.Context, arg ListServiceDayTotalsParams) ([]ListServiceDayTotalsRow, error) {
+	rows, err := q.db.Query(ctx, listServiceDayTotals, arg.FirstDate, arg.LastDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServiceDayTotalsRow
+	for rows.Next() {
+		var i ListServiceDayTotalsRow
+		if err := rows.Scan(
+			&i.ServiceDate,
+			&i.OnTimeEarlyS,
+			&i.OnTimeLateS,
+			&i.Totals,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTrails = `-- name: ListTrails :many
 SELECT t.id, p.latitude, p.longitude, p.bearing, p.speed, p.accuracy,
        p.timestamp, p.trip_id, p.received_at
@@ -1914,6 +1970,32 @@ type RevokeTokenParams struct {
 // Idempotent: logging out twice must not error.
 func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
 	_, err := q.db.Exec(ctx, revokeToken, arg.Jti, arg.UserID, arg.ExpiresAt)
+	return err
+}
+
+const saveServiceDayTotals = `-- name: SaveServiceDayTotals :exec
+INSERT INTO service_day_totals (service_date, on_time_early_s, on_time_late_s, totals)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (service_date) DO UPDATE
+SET on_time_early_s = EXCLUDED.on_time_early_s, on_time_late_s = EXCLUDED.on_time_late_s,
+    totals = EXCLUDED.totals, written_at = now()
+`
+
+type SaveServiceDayTotalsParams struct {
+	ServiceDate  pgtype.Date
+	OnTimeEarlyS int32
+	OnTimeLateS  int32
+	Totals       []byte
+}
+
+// A day worked out again, under another on-time window, replaces its row.
+func (q *Queries) SaveServiceDayTotals(ctx context.Context, arg SaveServiceDayTotalsParams) error {
+	_, err := q.db.Exec(ctx, saveServiceDayTotals,
+		arg.ServiceDate,
+		arg.OnTimeEarlyS,
+		arg.OnTimeLateS,
+		arg.Totals,
+	)
 	return err
 }
 

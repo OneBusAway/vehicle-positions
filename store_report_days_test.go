@@ -1,0 +1,66 @@
+package main
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestStore_ServiceDays: a day saved is read back as it was, a range is read
+// with both ends and oldest first, a save replaces a day's row, and pruning
+// removes only the days before the cutoff's date.
+func TestStore_ServiceDays(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	// Days of their own, cleared after, since the test database is shared.
+	day := func(d int) time.Time { return time.Date(2031, 3, d, 0, 0, 0, 0, time.UTC) }
+	clear := func() {
+		_, err := store.pool.Exec(ctx, `DELETE FROM service_day_totals WHERE service_date BETWEEN $1 AND $2`, day(1), day(31))
+		require.NoError(t, err)
+	}
+	clear()
+	t.Cleanup(clear)
+
+	busy := dayTotals{
+		Routes: []routeDayTotals{{RouteID: "R1", ShortName: "1", LongName: "Straight", Hours: []hourTotals{
+			{Hour: 8, Scheduled: 2, Run: 1, OnTime: 5, Early: 1, Late: 2, Unknown: 1},
+			{Hour: 25, Scheduled: 1},
+		}}},
+		Arrivals:        []arrivalMinute{{Minute: -3, Early: 1}, {Minute: 4, OnTime: 1, Late: 1}},
+		ArrivalsLeftOut: 1,
+	}
+	quiet := dayTotals{Routes: make([]routeDayTotals, 0), Arrivals: make([]arrivalMinute, 0)}
+	window := func(d time.Time, totals dayTotals, late time.Duration) storedServiceDay {
+		return storedServiceDay{Date: d, OnTimeEarly: time.Minute, OnTimeLate: late, Totals: totals}
+	}
+	require.NoError(t, store.SaveServiceDay(ctx, window(day(3), busy, 5*time.Minute)))
+	require.NoError(t, store.SaveServiceDay(ctx, window(day(5), quiet, 5*time.Minute)))
+	require.NoError(t, store.SaveServiceDay(ctx, window(day(7), busy, 5*time.Minute)))
+
+	got, err := store.ListServiceDays(ctx, day(3), day(5))
+	require.NoError(t, err)
+	busy.Date, quiet.Date = "2031-03-03", "2031-03-05"
+	assert.Equal(t, []storedServiceDay{window(day(3), busy, 5*time.Minute), window(day(5), quiet, 5*time.Minute)}, got,
+		"both ends, oldest first; a day with no service is kept too")
+
+	busy.Date = ""
+	require.NoError(t, store.SaveServiceDay(ctx, window(day(5), busy, 3*time.Minute)))
+	got, err = store.ListServiceDays(ctx, day(5), day(5))
+	require.NoError(t, err)
+	busy.Date = "2031-03-05"
+	assert.Equal(t, []storedServiceDay{window(day(5), busy, 3*time.Minute)}, got, "saved again, the row is replaced")
+
+	n, err := store.PruneServiceDays(ctx, day(5).Add(15*time.Hour))
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, n, int64(1))
+	got, err = store.ListServiceDays(ctx, day(1), day(31))
+	require.NoError(t, err)
+	kept := make([]time.Time, 0, len(got))
+	for _, d := range got {
+		kept = append(kept, d.Date)
+	}
+	assert.Equal(t, []time.Time{day(5), day(7)}, kept, "the cutoff's own day stays")
+}
