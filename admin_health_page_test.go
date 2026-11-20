@@ -63,12 +63,14 @@ func TestNewHealthSummary(t *testing.T) {
 			Feed:    feedOutcomes{Served: 40, Refused: 7, Invalid: 2, ServerError: 1},
 		},
 		Minutes: []healthMinute{
-			{Minute: at(0), Feed: feedOutcomes{Served: 3}},
-			{Minute: at(1), Feed: feedOutcomes{Served: 1, Refused: 2}},
-			{Minute: at(2), Feed: feedOutcomes{Refused: 5}},
+			{Minute: at(0), Feed: feedOutcomes{Served: 3}, Vehicles: 9},
+			{Minute: at(1), Feed: feedOutcomes{Served: 1, Refused: 2}, Vehicles: 8},
+			{Minute: at(2), Feed: feedOutcomes{Refused: 5}, Vehicles: 2},
 		},
 	})
 	assert.Equal(t, healthSummary{
+		Vehicles:        8,
+		VehiclesNote:    "Last full minute, at 09:16 UTC",
 		ReportsAccepted: 1490,
 		PerMinute:       "About 25 a minute",
 		ReportsRejected: 10,
@@ -77,7 +79,7 @@ func TestNewHealthSummary(t *testing.T) {
 		FeedServed:      40,
 		LastFetch:       "09:16",
 		FeedRefused:     7,
-	}, summary, "the last fetch is the newest minute one was served in, not refused in")
+	}, summary, "the last fetch is the newest minute one was served in, not refused in; the vehicles are the last full minute's, not the one in progress")
 
 	rate := func(accepted uint64) string {
 		return newHealthSummary(feedHealthResponse{LastHour: healthPeriod{Reports: reportOutcomes{Accepted: accepted}}}).PerMinute
@@ -261,9 +263,39 @@ func healthCountText(n uint64) string { return strconv.FormatUint(n, 10) }
 func TestHealthPage_NoReports(t *testing.T) {
 	page := renderHealthContent(t, newFeedHealth(newHealthTestClock(healthTestStart).now).snapshot())
 	assert.Contains(t, page, `<h2 class="h1">Nothing has come in during the last hour</h2>`)
+	assert.Contains(t, page, `<span class="tile-label">Vehicles reporting</span><span class="tile-value"><span class="count-up" data-count="0">0</span></span><span class="tile-note">None in the last hour</span>`)
+	assert.Contains(t, page, `aria-label="Vehicles reporting a minute over the last hour: 60 bars, the highest 0"`, "an empty hour still draws the chart")
 	assert.Contains(t, page, `<span class="tile-value"><span class="count-up" data-count="0">0</span></span><span class="tile-note">No reports in the last hour</span>`, "nothing rejected is not amber")
 	assert.Contains(t, page, `<span class="tile-note">None in the last hour</span>`)
 	assert.Len(t, healthTableRows(t, page, "health-minutes"), healthWindowMinutes)
+}
+
+// TestHealthPage_VehiclesReporting: the tile is the last full minute's count
+// and the chart the hour's, both from the vehicles whose reports were
+// accepted. A restarted server starts them again, as the page says.
+func TestHealthPage_VehiclesReporting(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	health := newFeedHealth(clock.now)
+	for _, vehicle := range []string{"bus-1", "bus-2", "bus-3", "bus-1"} {
+		sendReport(t, health, liveReportPath, vehicle, http.StatusCreated)
+	}
+	clock.advance(time.Minute)
+	sendReport(t, health, liveReportPath, "bus-1", http.StatusCreated)
+
+	page := renderHealthContent(t, health.snapshot())
+	assert.Contains(t, page, `<span class="tile-label">Vehicles reporting</span><span class="tile-value"><span class="count-up" data-count="3">3</span></span><span class="tile-note">Last full minute, at 09:15 UTC</span>`)
+	assert.Contains(t, page, `<h3 id="health-vehicles" style="flex:1">Vehicles reporting per minute</h3>`)
+	assert.Contains(t, page, `aria-label="Vehicles reporting a minute over the last hour: 60 bars, the highest 3"`)
+	assert.Contains(t, page, `data-tip="09:15|3 reporting"`)
+	assert.Contains(t, page, `data-tip="09:16|1 reporting"`)
+	assert.Contains(t, page, `data-tip="09:14|0 reporting"`)
+	assert.Contains(t, page, "Most in a minute: 3")
+	assert.Contains(t, page, "the vehicles sending them and fetches of the GTFS-RT feed, counted in memory since the server started at")
+	assert.Contains(t, page, "A restart starts the counts again.")
+
+	restarted := renderHealthContent(t, newFeedHealth(clock.now).snapshot())
+	assert.Contains(t, restarted, `<span class="tile-label">Vehicles reporting</span><span class="tile-value"><span class="count-up" data-count="0">0</span></span><span class="tile-note">None in the last hour</span>`)
+	assert.NotContains(t, restarted, `|1 reporting"`)
 }
 
 // newHealthTestHandler builds the full handler, admin UI included, around a

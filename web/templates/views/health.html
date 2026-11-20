@@ -2,12 +2,13 @@
 <div class="page-head">
   <div class="page-head-main">
     <h2 class="h1">{{.Headline}}</h2>
-    <p class="lede">Reports from drivers' phones and fetches of the GTFS-RT feed, counted in memory since the server started at {{.Since}}. A restart starts the counts again.</p>
+    <p class="lede">Reports from drivers' phones, the vehicles sending them and fetches of the GTFS-RT feed, counted in memory since the server started at {{.Since}}. A restart starts the counts again.</p>
   </div>
   <div class="page-actions"><span class="age"><span class="dot"></span>Updates every minute</span></div>
 </div>
 
 <div class="rise tile-row">
+  <div class="card tile"><span class="tile-label">Vehicles reporting</span><span class="tile-value"><span class="count-up" data-count="{{.Summary.Vehicles}}">{{.Summary.Vehicles}}</span></span><span class="tile-note">{{.Summary.VehiclesNote}}</span></div>
   <div class="card tile"><span class="tile-label">Reports accepted, last hour</span><span class="tile-value"><span class="count-up" data-count="{{.Summary.ReportsAccepted}}">{{.Summary.ReportsAccepted}}</span></span><span class="tile-note">{{.Summary.PerMinute}}</span></div>
   <div class="card tile"><span class="tile-label">Reports rejected</span><span class="tile-value{{if .Summary.ReportsRejected}} tone-warn{{end}}"><span class="count-up" data-count="{{.Summary.ReportsRejected}}">{{.Summary.ReportsRejected}}</span></span><span class="tile-note">{{if .Summary.ErrorRate}}{{.Summary.ErrorRate}} of reports{{with .Summary.TopReason}}, mostly {{.}}{{end}}{{else}}No reports in the last hour{{end}}</span></div>
   <div class="card tile"><span class="tile-label">Feed fetches served</span><span class="tile-value"><span class="count-up" data-count="{{.Summary.FeedServed}}">{{.Summary.FeedServed}}</span></span><span class="tile-note">{{if .Summary.LastFetch}}Last one at {{.Summary.LastFetch}} UTC{{else}}None in the last hour{{end}}</span></div>
@@ -15,6 +16,10 @@
 </div>
 
 <div class="an-grid">
+  <section class="card an-wide" aria-labelledby="health-vehicles">
+    <div class="card-head"><h3 id="health-vehicles" style="flex:1">Vehicles reporting per minute</h3><span class="sub hide-phone">Each vehicle with a live report accepted, counted once a minute</span></div>
+    <div class="an-plot">{{template "bar-chart" .Vehicles}}</div>
+  </section>
   <section class="card" aria-labelledby="health-reports">
     <div class="card-head"><h3 id="health-reports" style="flex:1">Reports per minute</h3><span class="legend"><span><i style="background:var(--chart-1)"></i>Accepted</span><span><i style="background:var(--warn)"></i>Rejected</span></span></div>
     <div class="an-plot">{{template "bar-chart" .Reports}}</div>

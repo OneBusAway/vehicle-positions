@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -361,4 +363,102 @@ func TestHandleFeedHealth(t *testing.T) {
 	require.Len(t, body.Minutes, healthWindowMinutes)
 	assert.Equal(t, "2026-11-14T09:15:00Z", body.Minutes[healthWindowMinutes-1].Minute)
 	assert.Equal(t, wantReports, body.Minutes[healthWindowMinutes-1].Reports)
+}
+
+// sendReport sends a report for vehicleID to path through count, to a handler
+// that reads the whole body, as the location handlers do, and answers status.
+// vehicle_id comes last in the body, so nothing relies on where it is.
+func sendReport(t *testing.T, h *feedHealth, path, vehicleID string, status int) {
+	t.Helper()
+	handler := h.count(healthReports)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// assert, not require: the concurrent test sends from other goroutines.
+		var report LocationReport
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&report))
+		assert.Equal(t, vehicleID, report.VehicleID, "the handler still reads the whole body")
+		writeJSON(w, status, nil)
+	}))
+	body := fmt.Sprintf(`{"latitude":-1.28,"longitude":36.82,"timestamp":1763630000,"vehicle_id":%q}`, vehicleID)
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, path, strings.NewReader(body)))
+}
+
+// vehiclesByMinute is how many vehicles each minute of the hour counts,
+// oldest first.
+func vehiclesByMinute(h *feedHealth) []int {
+	minutes := h.snapshot().Minutes
+	out := make([]int, 0, len(minutes))
+	for _, m := range minutes {
+		out = append(out, m.Vehicles)
+	}
+	return out
+}
+
+func TestFeedHealth_AVehicleCountsOnceAMinute(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	h := newFeedHealth(clock.now)
+
+	sendReport(t, h, liveReportPath, "bus-1", http.StatusCreated)
+	clock.advance(10 * time.Second)
+	sendReport(t, h, liveReportPath, "bus-1", http.StatusCreated)
+	vehicles := vehiclesByMinute(h)
+	assert.Equal(t, 1, vehicles[healthWindowMinutes-1], "two reports from one vehicle in a minute count once")
+
+	sendReport(t, h, liveReportPath, "bus-2", http.StatusCreated)
+	vehicles = vehiclesByMinute(h)
+	assert.Equal(t, 2, vehicles[healthWindowMinutes-1], "two vehicles count twice")
+
+	clock.advance(20 * time.Second)
+	sendReport(t, h, liveReportPath, "bus-1", http.StatusCreated)
+	vehicles = vehiclesByMinute(h)
+	assert.Equal(t, []int{2, 1}, vehicles[healthWindowMinutes-2:], "the next minute counts it again")
+	assert.Equal(t, uint64(4), h.snapshot().LastHour.Reports.Accepted, "every report still counts as accepted")
+}
+
+// A report the server turned away does not make its vehicle one reporting,
+// nor does a history upload: its points are the phone's offline backlog.
+func TestFeedHealth_OnlyAcceptedLiveReportsCountAVehicle(t *testing.T) {
+	h := newFeedHealth(newHealthTestClock(healthTestStart).now)
+
+	for _, status := range []int{http.StatusBadRequest, http.StatusForbidden, http.StatusConflict, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		sendReport(t, h, liveReportPath, "bus-1", status)
+	}
+	sendReport(t, h, "/api/v1/locations/history", "bus-2", http.StatusCreated)
+
+	assert.Equal(t, make([]int, healthWindowMinutes), vehiclesByMinute(h))
+	assert.Equal(t, uint64(1), h.snapshot().LastHour.Reports.Accepted)
+}
+
+func TestFeedHealth_VehiclesLeaveTheHourAfterSixtyMinutes(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	h := newFeedHealth(clock.now)
+	sendReport(t, h, liveReportPath, "bus-1", http.StatusCreated)
+	sendReport(t, h, liveReportPath, "bus-2", http.StatusCreated)
+
+	clock.advance(59 * time.Minute)
+	assert.Equal(t, 2, vehiclesByMinute(h)[0], "still the oldest minute of the hour")
+
+	clock.advance(time.Minute)
+	assert.Equal(t, make([]int, healthWindowMinutes), vehiclesByMinute(h), "an hour on, the minute has left")
+
+	// The minute an hour on reuses the bucket, and starts it from nothing.
+	sendReport(t, h, liveReportPath, "bus-1", http.StatusCreated)
+	assert.Equal(t, 1, vehiclesByMinute(h)[healthWindowMinutes-1])
+}
+
+func TestFeedHealth_ConcurrentVehicles(t *testing.T) {
+	h := newFeedHealth(newHealthTestClock(healthTestStart).now)
+
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range 50 {
+				sendReport(t, h, liveReportPath, fmt.Sprintf("bus-%d", (g+i)%10), http.StatusCreated)
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, 10, vehiclesByMinute(h)[healthWindowMinutes-1])
+	assert.Equal(t, uint64(400), h.snapshot().LastHour.Reports.Accepted)
 }
