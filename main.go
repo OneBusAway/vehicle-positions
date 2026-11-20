@@ -78,6 +78,7 @@ type appStore interface {
 	RefreshTokenDeleter
 	AlertHistoryStore
 	ClearedAlertLister
+	AlertsRaisedLister
 }
 
 // newMux wires all application routes and returns the configured ServeMux.

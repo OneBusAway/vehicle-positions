@@ -94,6 +94,32 @@
     <p class="card-note">No trip had a report at its last stop, so there is nothing to draw.</p>
     {{end}}
   </section>
+  {{with .AlertsRaised}}
+  <section class="card an-wide" aria-labelledby="an-alerts">
+    <div class="card-head"><h3 id="an-alerts" style="flex:1">Alerts</h3><span class="sub hide-phone">Raised {{if $.OneDay}}on this day{{else}}on these days{{end}}</span><a class="btn btn-sm btn-plain" href="/admin/alerts#cleared">Alerts page{{template "icon-sm" "chevron_right"}}</a></div>
+    {{if .Raised}}
+    <dl class="kv strip" style="margin-bottom:0">
+      <div><dt>Raised</dt><dd class="num">{{.Raised}}</dd></div>
+      <div><dt>Median time to clear</dt><dd>{{or .MedianClear "None cleared"}}</dd></div>
+      <div><dt>Longest to clear</dt><dd>{{or .LongestClear "None cleared"}}</dd></div>
+      <div><dt>Not cleared</dt><dd>{{if .Open}}{{.Open}} still open{{else}}None{{end}}</dd></div>
+    </dl>
+    <div class="an-grid" style="padding:0 18px;margin-bottom:8px">
+      {{range .Kinds}}<div><div class="tile-label" style="margin-bottom:4px"><a href="{{.URL}}">{{.Title}}</a><span class="num" style="margin-left:auto">{{.Raised}}</span></div>{{with .Chart}}{{template "bar-chart" .}}{{end}}</div>{{end}}
+    </div>
+    <div class="table-wrap"><table class="table cards">
+      <thead><tr><th>Routes with the most alerts</th><th class="right">Alerts</th><th>Of each kind</th></tr></thead>
+      <tbody>
+        {{range .Routes}}<tr><td><span style="display:inline-flex;align-items:center;gap:10px;font-weight:500">{{template "route-badge" .Badge}}{{.Name}}</span></td><td class="num right c-side">{{.Raised}}</td><td class="muted">{{.Kinds}}</td></tr>{{end}}
+      </tbody>
+    </table></div>
+    <div class="card-foot">An alert counts on the day it was raised. Its time to clear runs to when it cleared, after these days if need be; one still open is left out.</div>
+    {{with .Days}}<details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Day</th>{{range $.AlertsRaised.Kinds}}<th class="right">{{.Title}}</th>{{end}}<th class="right">All</th></tr></thead><tbody>{{range .}}<tr><td>{{.Day}}</td>{{range .Counts}}<td class="num right">{{.}}</td>{{end}}<td class="num right">{{.Raised}}</td></tr>{{end}}</tbody></table></div></details>{{end}}
+    {{else}}
+    <p class="card-note">No alert was raised {{if $.OneDay}}on this day{{else}}on these days{{end}}.</p>
+    {{end}}
+  </section>
+  {{end}}
 </div>
 {{end}}
 <div class="tip" id="tip" aria-hidden="true"></div>

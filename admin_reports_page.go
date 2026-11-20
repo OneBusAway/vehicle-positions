@@ -903,6 +903,16 @@ func (ui *adminUI) reportsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	if status == http.StatusOK {
+		// The view settles on the day shown, which the query may leave out.
+		query := parseAnalyticsQuery(r.URL.Query())
+		query.Date, _ = data["Date"].(string)
+		if err := addAnalyticsAlerts(r.Context(), ui.alertsRaised, ui.reports.index(), query, data); err != nil {
+			slog.Error("analytics: list the alerts raised", "date", query.Date, "days", query.Days, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
 	ui.renderAdmin(w, r, status, "reports.html", data)
 }
 

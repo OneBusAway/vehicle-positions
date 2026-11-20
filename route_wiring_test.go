@@ -34,6 +34,9 @@ func (n *noopStore) ClearAlertsLeftOpen(_ context.Context, _ []int64, _ time.Tim
 func (n *noopStore) ListClearedAlerts(_ context.Context, _ string, _, _ int) ([]clearedAlert, error) {
 	return make([]clearedAlert, 0), nil
 }
+func (n *noopStore) ListAlertsRaisedBetween(_ context.Context, _, _ time.Time) ([]raisedAlert, error) {
+	return make([]raisedAlert, 0), nil
+}
 func (n *noopStore) ListUsers(_ context.Context) ([]UserResponse, error) {
 	return make([]UserResponse, 0), nil
 }
