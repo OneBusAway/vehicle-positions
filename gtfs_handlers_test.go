@@ -255,6 +255,31 @@ func TestCatalogTrip_SaysWhenTheTripRunsFromFrequencies(t *testing.T) {
 	}
 }
 
+// TestCatalogTrip_HeadwayRunAfterMidnight: with no date, a trip in
+// frequencies.txt whose window runs past midnight is the day before's while
+// that window runs, though its one-run pattern ended that morning. The map
+// card asks with no date for the trip of a vehicle on it.
+func TestCatalogTrip_HeadwayRunAfterMidnight(t *testing.T) {
+	keep := func(_ string, body []byte) []byte { return body }
+	ix := fixtureIndexEdited(t, keep, fixtureMember{"frequencies.txt",
+		"trip_id,start_time,end_time,headway_secs,exact_times\nT1,06:00:00,26:00:00,600,0\n"})
+	c := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
+
+	// 00:30 on Saturday: Friday's window, to 02:00, still runs. T1 runs on
+	// weekdays only, so Saturday's own date is refused.
+	c.now = func() time.Time { return time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC) }
+	code, body := catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T1", map[string]string{"trip_id": "T1"})
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Equal(t, "20260904", body["service_date"])
+	assert.Equal(t, true, body["from_frequencies"])
+
+	// 10:00 on Saturday, the window over: still not Saturday's trip.
+	c.now = func() time.Time { return time.Date(2026, 9, 5, 17, 0, 0, 0, time.UTC) }
+	code, body = catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T1", map[string]string{"trip_id": "T1"})
+	assert.Equal(t, http.StatusUnprocessableEntity, code)
+	assert.Equal(t, "trip not active on date", body["error"])
+}
+
 func TestCatalogTrip_Errors(t *testing.T) {
 	c := testCatalog(t)
 	code, body := catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T9", map[string]string{"trip_id": "T9"})
