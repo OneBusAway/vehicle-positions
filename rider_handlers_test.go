@@ -466,7 +466,8 @@ func headwayStartEnv(t *testing.T, window string) *riderTestEnv {
 // A rider boarding at ST2 at 00:20 is on a run that left ST1 at 23:55, so the
 // window that holds the run is the day before's, though it ended before they
 // boarded. The ride is dated by the run's start, and a point at ST2 then is on
-// schedule.
+// schedule. A run that left late, after its window had ended, is still the
+// window's.
 func TestStartRide_HeadwayRideIsDatedByItsRunsStart(t *testing.T) {
 	at := func(env *riderTestEnv, day, h, m int) time.Time {
 		return time.Date(2026, 9, day, h, m, 0, 0, env.index.Timezone())
@@ -481,6 +482,7 @@ func TestStartRide_HeadwayRideIsDatedByItsRunsStart(t *testing.T) {
 		{"a window to 23:50, boarding just after midnight", "T1,06:00:00,23:50:00,600,0", 3, 0, 10, "20260902"},
 		{"boarding well inside a window", "T1,06:00:00,24:00:00,600,0", 2, 14, 25, "20260902"},
 		{"boarding after midnight inside the day's window", "T1,00:00:00,24:00:00,600,0", 3, 0, 40, "20260903"},
+		{"the 24:25 run six minutes late, after its window to 24:30 ended", "T1,06:00:00,24:30:00,600,0", 3, 0, 56, "20260902"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

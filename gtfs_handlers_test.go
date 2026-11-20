@@ -280,6 +280,23 @@ func TestCatalogTrip_HeadwayRunAfterMidnight(t *testing.T) {
 	assert.Equal(t, "trip not active on date", body["error"])
 }
 
+// TestCatalogTrip_HeadwayRunJustAfterWindowEnds: with no date, a trip in
+// frequencies.txt is still the day before's just after its window ends,
+// while that day's last run is on the road (#511).
+func TestCatalogTrip_HeadwayRunJustAfterWindowEnds(t *testing.T) {
+	keep := func(_ string, body []byte) []byte { return body }
+	ix := fixtureIndexEdited(t, keep, fixtureMember{"frequencies.txt",
+		"trip_id,start_time,end_time,headway_secs,exact_times\nT1,06:00:00,24:00:00,600,0\n"})
+	c := newGTFSCatalog(func() *rider.Index { return ix }, rider.DefaultThresholds())
+
+	// 00:10 on Saturday: Friday's 23:55 run is still out. T1 runs on
+	// weekdays only, so Saturday's own date would be refused.
+	c.now = func() time.Time { return time.Date(2026, 9, 5, 7, 10, 0, 0, time.UTC) }
+	code, body := catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T1", map[string]string{"trip_id": "T1"})
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Equal(t, "20260904", body["service_date"])
+}
+
 func TestCatalogTrip_Errors(t *testing.T) {
 	c := testCatalog(t)
 	code, body := catalogGet(t, c.handleTrip(), "/api/v1/gtfs/trips/T9", map[string]string{"trip_id": "T9"})

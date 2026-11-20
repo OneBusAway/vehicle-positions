@@ -383,11 +383,12 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 		// runs on, which for an after-midnight departure is not always the one
 		// the 03:00 cutoff derives; a client that names one is held to it. A
 		// trip in frequencies.txt is dated by the window that holds its run's
-		// start, which can run past midnight while its pattern of stop times
-		// does not, and a rider boards partway along the run. A timetabled
-		// trip's stop times already place its run, so RunServiceDate gives it
-		// ServiceDateFor's date from the boarding time itself: shifting it
-		// back could cross midnight into a day its run is not on.
+		// start, or that ended just before a late run left, which can run
+		// past midnight while its pattern of stop times does not, and a rider
+		// boards partway along the run. A timetabled trip's stop times
+		// already place its run, so RunServiceDate gives it ServiceDateFor's
+		// date from the boarding time itself: shifting it back could cross
+		// midnight into a day its run is not on.
 		startDate := req.StartDate
 		if startDate == "" {
 			startedAt := s.now()
