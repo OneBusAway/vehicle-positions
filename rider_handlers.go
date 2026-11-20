@@ -381,10 +381,13 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 		}
 		// A client that names no service date gets the one this trip actually
 		// runs on, which for an after-midnight departure is not always the one
-		// the 03:00 cutoff derives; a client that names one is held to it.
+		// the 03:00 cutoff derives; a client that names one is held to it. A
+		// trip in frequencies.txt is dated by the window its run is in, which
+		// can run past midnight while its pattern of stop times does not;
+		// RunServiceDate gives any other trip ServiceDateFor's date.
 		startDate := req.StartDate
 		if startDate == "" {
-			startDate = index.ServiceDateFor(trip, s.now())
+			startDate = index.RunServiceDate(trip, s.now())
 		}
 		if !index.ActiveOn(trip, startDate) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "trip not active on start_date"})

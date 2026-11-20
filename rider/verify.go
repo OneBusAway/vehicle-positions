@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	gtfs "github.com/OneBusAway/go-gtfs"
 )
 
 // Thresholds are the tuning knobs of the verification engine. The engine never
@@ -206,9 +208,17 @@ func Verify(in VerifyInput) Verdict {
 		v.Reason = "bad start_date"
 		return v
 	}
-	scheduled := dayStart.Add(ScheduledOffsetAt(in.Trip, proj.AlongShape))
-	v.ScheduleDeviation = in.Point.Timestamp.Sub(scheduled)
-	if v.ScheduleDeviation < -in.Thresholds.ScheduleEarly || v.ScheduleDeviation > in.Thresholds.ScheduleLate {
+	offset := ScheduledOffsetAt(in.Trip, proj.AlongShape)
+	if len(in.Trip.frequencies) == 0 || len(in.Trip.StopTimes) == 0 {
+		v.ScheduleDeviation = in.Point.Timestamp.Sub(dayStart.Add(offset))
+	} else {
+		// A trip in frequencies.txt runs its stop times as a pattern from
+		// each run's start, so the point is judged against a run it could be
+		// on, not against the pattern's own times.
+		runStart := in.Point.Timestamp.Sub(dayStart) - max(0, offset-in.Trip.StopTimes[0].Departure)
+		v.ScheduleDeviation = runDeviation(in.Trip.frequencies, runStart, in.Thresholds)
+	}
+	if !onSchedule(v.ScheduleDeviation, in.Thresholds) {
 		v.Outcome = OffSchedule
 		v.Reason = fmt.Sprintf("%s from the scheduled position", v.ScheduleDeviation.Round(time.Second))
 		return v
@@ -217,6 +227,46 @@ func Verify(in VerifyInput) Verdict {
 	v.Outcome = Matched
 	v.Corroboration = corroborate(in, proj.AlongShape)
 	return v
+}
+
+// onSchedule reports whether a deviation from schedule is within the slack.
+func onSchedule(deviation time.Duration, th Thresholds) bool {
+	return deviation >= -th.ScheduleEarly && deviation <= th.ScheduleLate
+}
+
+// runDeviation is how far a run started runStart after the start of its
+// service day is from a run the rows schedule: the nearest such run that is
+// on schedule, or else the nearest. An exact_times=0 row keeps no timetable,
+// so any start in its window is one of its runs. An exact_times=1 row departs
+// at its start_time and every headway after, before its end_time; both
+// departures either side count, so a run up to ScheduleLate behind one fits
+// even when the next is nearer, as on a timetabled trip.
+func runDeviation(rows []gtfs.Frequency, runStart time.Duration, th Thresholds) time.Duration {
+	var best time.Duration
+	found, bestFits := false, false
+	consider := func(run time.Duration) {
+		d := runStart - run
+		fits := onSchedule(d, th)
+		if !found || fits && !bestFits || fits == bestFits && d.Abs() < best.Abs() {
+			best, bestFits, found = d, fits, true
+		}
+	}
+	for _, row := range rows {
+		switch {
+		case row.ExactTimes != gtfs.ScheduleBased:
+			consider(min(max(runStart, row.StartTime), row.EndTime))
+		case row.Headway <= 0:
+			consider(row.StartTime)
+		default:
+			last := (row.EndTime - row.StartTime - 1) / row.Headway
+			k := min(max((runStart-row.StartTime)/row.Headway, 0), last)
+			consider(row.StartTime + k*row.Headway)
+			if k < last {
+				consider(row.StartTime + (k+1)*row.Headway)
+			}
+		}
+	}
+	return best
 }
 
 // ignoreReason reports whether a point is unusable, and why.
