@@ -47,16 +47,15 @@ func pluralGroup(path string) (prefix, category string, ok bool) {
 
 // counterpart is the English form a translated form at path is checked
 // against: the same form, or for a plural form the English has no such
-// category of, the English "other" of that group; failing both, the plain
-// string.
+// category of, the English "other" of that group, as it is too for a single
+// string where the English varies by plural; failing both, the plain string.
 func (u *unit) counterpart(path string) (form, bool) {
 	if f, ok := u.source.forms[path]; ok {
 		return f, true
 	}
-	if prefix, _, ok := pluralGroup(path); ok {
-		if f, ok := u.source.forms[prefix+"plural.other"]; ok {
-			return f, true
-		}
+	prefix, _, _ := pluralGroup(path)
+	if f, ok := u.source.forms[prefix+"plural.other"]; ok {
+		return f, true
 	}
 	f, ok := u.source.forms[""]
 	return f, ok

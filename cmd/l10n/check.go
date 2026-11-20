@@ -177,12 +177,31 @@ func checkTranslation(r *report, u *unit, lang string, glossary []term, status s
 }
 
 // checkPlurals checks that each of v's plural groups has every category the
-// language needs.
+// language needs, and that a translation has every plural group its English
+// has. A single string in place of one reads the same for every count, which
+// only an iOS translation into a language whose one category is "other" can
+// do: Android never reads a <string> in place of <plurals>.
 func checkPlurals(r *report, u *unit, lang string, v *version) {
 	groups := map[string][]string{}
 	for path := range v.forms {
 		if prefix, category, ok := pluralGroup(path); ok {
 			groups[prefix] = append(groups[prefix], category)
+		}
+	}
+	if v != u.source {
+		single := u.app == ios && slices.Equal(pluralCategories(lang), []string{"other"})
+		for path := range u.source.forms {
+			prefix, _, ok := pluralGroup(path)
+			if !ok {
+				continue
+			}
+			if _, has := groups[prefix]; has {
+				continue
+			}
+			if _, plain := v.forms[strings.TrimSuffix(prefix, "/")]; single && plain {
+				continue
+			}
+			groups[prefix] = nil
 		}
 	}
 	prefixes := make([]string, 0, len(groups))

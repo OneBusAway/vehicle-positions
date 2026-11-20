@@ -59,3 +59,23 @@ func TestPluralCategories(t *testing.T) {
 	assert.Equal(t, []string{"other"}, pluralCategories("vi"))
 	assert.Equal(t, []string{"other"}, pluralCategories("ht"), "a language CLDR has no rules for uses the root's")
 }
+
+// TestUnescapeAndroid: a string's text as aapt builds it, \u escapes
+// included.
+func TestUnescapeAndroid(t *testing.T) {
+	for in, want := range map[string]string{
+		`Starting\u2026`:      "Starting\u2026",
+		`%1$s \u2192 %2$s`:    "%1$s \u2192 %2$s",
+		`\u2014`:              "\u2014",
+		`Caf\u00E9`:           "Caf\u00e9",
+		`Can\'t reach %1$s`:   "Can't reach %1$s",
+		`"  two  spaces "`:    "  two  spaces ",
+		`one\ntwo`:            "one\ntwo",
+		`\uZZ12 is not hex`:   `\uZZ12 is not hex`,
+		`too short \u20`:      `too short \u20`,
+		`ends with \u`:        `ends with \u`,
+		`a backslash \\u2026`: `a backslash \u2026`,
+	} {
+		assert.Equal(t, want, unescapeAndroid(in), in)
+	}
+}

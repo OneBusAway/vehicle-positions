@@ -41,7 +41,14 @@ func (f finding) String() string {
 	if f.key != "" {
 		what = f.key + " " + what
 	}
-	return fmt.Sprintf("%s:%d: %s [%s] %s: %s", f.file, f.line, f.severity, f.rule, what, f.message)
+	return oneLine(fmt.Sprintf("%s:%d: %s [%s] %s: %s", f.file, f.line, f.severity, f.rule, what, f.message))
+}
+
+// oneLine writes the line breaks in s as \r and \n, so text from the strings
+// files, such as an iOS key, cannot start a line of its own, which GitHub
+// Actions would read as a workflow command.
+func oneLine(s string) string {
+	return strings.NewReplacer("\r", `\r`, "\n", `\n`).Replace(s)
 }
 
 // count is how many of an app's strings a language has, of all it could.
@@ -92,11 +99,11 @@ func (r *report) write(w io.Writer, actions bool) {
 	for _, f := range r.findings {
 		fmt.Fprintln(w, f)
 		if actions {
-			fmt.Fprintf(w, "::%s file=%s,line=%d,title=l10n %s::%s\n", f.severity, f.file, f.line, f.rule, annotationEscape(f.message))
+			fmt.Fprintf(w, "::%s file=%s,line=%d,title=%s::%s\n", f.severity, propertyEscape(f.file), f.line, propertyEscape("l10n "+f.rule), annotationEscape(f.message))
 		}
 	}
 	for _, c := range r.coverage {
-		fmt.Fprintf(w, "%s (%s) %s: Android %s, iOS %s\n", c.name, c.lang, c.status, c.android, c.ios)
+		fmt.Fprintln(w, oneLine(fmt.Sprintf("%s (%s) %s: Android %s, iOS %s", c.name, c.lang, c.status, c.android, c.ios)))
 	}
 	fmt.Fprintf(w, "%d errors, %d warnings\n", r.errors(), len(r.findings)-r.errors())
 }
@@ -104,6 +111,13 @@ func (r *report) write(w io.Writer, actions bool) {
 // annotationEscape escapes what a workflow command's message cannot hold.
 func annotationEscape(s string) string {
 	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(s)
+}
+
+// propertyEscape escapes what a workflow command's property value cannot
+// hold: what its message cannot, and the colon and comma that would end the
+// value.
+func propertyEscape(s string) string {
+	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(s)
 }
 
 // appendSummary adds the coverage table to the job summary at path.

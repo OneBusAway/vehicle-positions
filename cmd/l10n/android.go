@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -201,8 +202,8 @@ func attr(t xml.StartElement, name string) string {
 }
 
 // unescapeAndroid is a string resource's text as the app shows it: its
-// backslash escapes undone, a double-quoted string unquoted, and otherwise
-// runs of space collapsed, as aapt does.
+// backslash escapes undone, \uXXXX included, a double-quoted string unquoted,
+// and otherwise runs of space collapsed, as aapt does.
 func unescapeAndroid(s string) string {
 	s = strings.TrimSpace(s)
 	quoted := len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"'
@@ -223,6 +224,14 @@ func unescapeAndroid(s string) string {
 			b.WriteByte('\n')
 		case 't':
 			b.WriteByte('\t')
+		case 'u':
+			code, err := strconv.ParseUint(s[i+1:min(i+5, len(s))], 16, 16)
+			if err != nil || i+5 > len(s) {
+				b.WriteString(`\u`) // not four hex digits, so kept as written
+				break
+			}
+			b.WriteRune(rune(code))
+			i += 4
 		default: // \' \" \\ \@ \?
 			b.WriteByte(s[i])
 		}

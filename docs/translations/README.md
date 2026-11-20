@@ -53,6 +53,8 @@ says, so a language should translate them the same way in both. The check warns 
 - Give a plural every form your language needs, by the Unicode CLDR rules in `cmd/l10n/plurals.go`. Hindi and
   Swahili need `one` and `other`. Arabic needs six forms, and Polish, Russian and Ukrainian need `few` and `many` as
   well. In Spanish, French, Italian and Portuguese, `many` is used only for exact millions, so it can repeat `other`.
+  Where the English is a plural, the translation is one too, even if its forms read the same. Only an iOS
+  translation into a language with `other` alone, such as Chinese or Vietnamese, may be a single string.
 - Write numbers in digits, in your language's own digits if you like (`२४` for 24), never as words.
 - Keep web addresses and the glossary's `do_not_translate` terms exactly as they are.
 - Use the glossary's word for each term, and none of its forbidden ones.
@@ -82,7 +84,8 @@ coverage table.
 Errors:
 
 - **`placeholders`**: a translation takes values its English doesn't, or leaves one out.
-- **`plurals`**: a plural is missing a form its language needs (English included).
+- **`plurals`**: a plural is missing a form its language needs (English included), or a translation is a single
+  string where the English is a plural.
 - **`numbers`**: a number in the English isn't in the translation in digits.
 - **`urls`**: a web address in the English isn't in the translation unchanged.
 - **`do-not-translate`**: a `do_not_translate` term in the English isn't in the translation unchanged.

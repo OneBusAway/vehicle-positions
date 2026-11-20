@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -70,6 +72,10 @@ func setState(key, state string) edit {
 		object(t, entries, key, "localizations", "hi", "stringUnit")["state"] = state
 	})
 }
+
+// vietnamese adds Vietnamese, whose only plural form is "other", to the
+// status table.
+var vietnamese = replace(statusFile, "hi,Hindi,draft,,,\n", "hi,Hindi,draft,,,\nvi,Vietnamese,draft,,,\n")
 
 // fixture copies testdata/good to a temporary directory, applies edits and
 // returns its root.
@@ -162,6 +168,37 @@ func TestCheck_Rules(t *testing.T) {
 				delete(object(t, entries, "%lld reports sent", "localizations", "hi", "variations", "plural"), "one")
 			})}, options{},
 			errorLevel, "plurals", "%lld reports sent", "hi", iosCatalog},
+		{"an iOS translation written as a single string where the English varies by plural",
+			[]edit{editCatalog(func(t *testing.T, entries map[string]any) {
+				object(t, entries, "%lld reports sent", "localizations")["hi"] = map[string]any{
+					"stringUnit": map[string]any{"state": "translated", "value": "%lld रिपोर्ट भेजी गईं"},
+				}
+			})}, options{},
+			errorLevel, "plurals", "%lld reports sent", "hi", iosCatalog},
+		{"an Android translation written as a <string> where the English is <plurals>",
+			[]edit{replace(androidHindi, `<plurals name="reports_sent">
+        <item quantity="one">%1$d रिपोर्ट भेजी गई</item>
+        <item quantity="other">%1$d रिपोर्ट भेजी गईं</item>
+    </plurals>`, `<string name="reports_sent">%1$d रिपोर्ट भेजी गईं</string>`)}, options{},
+			errorLevel, "plurals", "reports_sent", "hi", androidHindi},
+		{"an Android <string> in place of <plurals>, even in a language with no plural forms but other",
+			[]edit{vietnamese, func(t *testing.T, root string) {
+				dir := filepath.Join(root, androidRes, "values-vi")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "strings.xml"), []byte(`<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reports_sent">Đã gửi %1$d báo cáo</string>
+</resources>
+`), 0o644))
+			}}, options{},
+			errorLevel, "plurals", "reports_sent", "vi", "android/app/src/main/res/values-vi/strings.xml"},
+		{"a single string without the count, in a language with no plural forms but other",
+			[]edit{vietnamese, editCatalog(func(t *testing.T, entries map[string]any) {
+				object(t, entries, "%lld reports sent", "localizations")["vi"] = map[string]any{
+					"stringUnit": map[string]any{"state": "translated", "value": "Đã gửi báo cáo"},
+				}
+			})}, options{},
+			errorLevel, "placeholders", "%lld reports sent", "vi", iosCatalog},
 		{"a plural form missing in a substitution",
 			[]edit{editCatalog(func(t *testing.T, entries map[string]any) {
 				delete(object(t, entries, "Route %@, %lld reports sent", "localizations", "hi", "substitutions", "reports", "variations", "plural"), "other")
@@ -213,6 +250,16 @@ func TestCheck_Rules(t *testing.T) {
 		{"the two apps translating the same English differently",
 			[]edit{replace(iosCatalog, `"value" : "साइन इन करें"`, `"value" : "लॉग इन करें"`)}, options{},
 			warning, "consistency", "Sign in", "hi", iosCatalog},
+		{"the same English across a \\u escape, translated differently",
+			[]edit{
+				replace(androidSource, ">Sign in<", `>Sign in\u2026<`),
+				replace(iosCatalog, `"value" : "साइन इन करें"`, `"value" : "लॉग इन करें"`),
+				editCatalog(func(t *testing.T, entries map[string]any) {
+					entries["Sign in…"] = object(t, entries, "Sign in")
+					delete(entries, "Sign in")
+				}),
+			}, options{},
+			warning, "consistency", "Sign in…", "hi", iosCatalog},
 		{"the same English across an escaped apostrophe and a placeholder, translated differently",
 			[]edit{replace(iosCatalog, "%@ तक नहीं पहुँच सके", "%@ तक नहीं पहुंच पाए")}, options{},
 			warning, "consistency", "Can't reach %@. Check your connection.", "hi", iosCatalog},
@@ -261,6 +308,16 @@ func TestCheck_RulesDoNotOverreach(t *testing.T) {
 		{"a machine translation in a draft language", []edit{setState("Sign in", "machine_translated")}},
 		{"placeholders reordered by position",
 			[]edit{replace(androidHindi, "गाड़ी रूट %1$s पर, %2$s की ओर", "%2$s की ओर, गाड़ी रूट %1$s पर")}},
+		{"a real character where the English writes it as a \\u escape", []edit{
+			replace(androidSource, ">Sign in<", `>Starting\u2026 \u2014 %1$s \u2192 %2$s<`),
+			replace(androidHindi, ">साइन इन करें<", ">शुरू हो रहा है… — %1$s → %2$s<"),
+		}},
+		{"a single string in a language with no plural forms but other (iOS)",
+			[]edit{vietnamese, editCatalog(func(t *testing.T, entries map[string]any) {
+				object(t, entries, "%lld reports sent", "localizations")["vi"] = map[string]any{
+					"stringUnit": map[string]any{"state": "translated", "value": "Đã gửi %lld báo cáo"},
+				}
+			})}},
 		{"a plural form without its count", []edit{replace(androidHindi, ">%1$d रिपोर्ट भेजी गई<", ">एक रिपोर्ट भेजी गई<")}},
 		{"a word with a forbidden word inside it", []edit{replace(androidSource, ">Sign in<", ">The server is busy<")}},
 		{"a catalog in a build folder", []edit{func(t *testing.T, root string) {
@@ -310,6 +367,27 @@ func TestAnnotationEscape(t *testing.T) {
 	assert.Equal(t, "says %251$d%0Anext", annotationEscape("says %1$d\nnext"))
 }
 
+// TestReportWrite_OneCommandPerFinding: a key, file or message holding a
+// newline, a colon or a comma cannot start a workflow command of its own or
+// end the annotation's properties early.
+func TestReportWrite_OneCommandPerFinding(t *testing.T) {
+	r := &report{
+		findings: []finding{{
+			severity: errorLevel, rule: rulePlurals, file: "ios/a,b:c.xcstrings", line: 3,
+			key: "Line one\r\n::error::from the key", lang: "hi", message: "50% done\n::warning::from the message",
+		}},
+		coverage: []coverage{{lang: "hi", name: "Hindi\n::error::from the status table", status: "draft", android: count{1, 2}}},
+	}
+	var out bytes.Buffer
+	r.write(&out, true)
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	require.Len(t, lines, 4, out.String())
+	assert.Equal(t, `ios/a,b:c.xcstrings:3: error [plurals] Line one\r\n::error::from the key (hi): 50% done\n::warning::from the message`, lines[0])
+	assert.Equal(t, "::error file=ios/a%2Cb%3Ac.xcstrings,line=3,title=l10n plurals::50%25 done%0A::warning::from the message", lines[1])
+	assert.Equal(t, `Hindi\n::error::from the status table (hi) draft: Android 1 of 2, iOS 0 of 0`, lines[2])
+	assert.Equal(t, "1 errors, 0 warnings", lines[3])
+}
+
 // TestRun: the command's exit code, its lines, and what it writes for GitHub
 // Actions.
 func TestRun(t *testing.T) {
@@ -334,6 +412,39 @@ func TestRun(t *testing.T) {
 	assert.Equal(t, 1, run([]string{"check", "-root", fixture(t), "-release"}, &out, &errOut), "Hindi is under 95%")
 	assert.NotContains(t, out.String(), "::", "annotations only with -annotate")
 	assert.Equal(t, 2, run([]string{"lint"}, &out, &errOut), "an unknown command")
+}
+
+// TestReadAndroid_RepoEscapesUndone: each of the app's own strings.xml files
+// reads the same as it would with every \\u escape written as its character,
+// and no \\u is left in any string.
+func TestReadAndroid_RepoEscapesUndone(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("../..", androidRes, "values*", "strings.xml"))
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	escape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
+	for _, file := range files {
+		body, err := os.ReadFile(file)
+		require.NoError(t, err)
+		written := escape.ReplaceAllStringFunc(string(body), func(m string) string {
+			code, err := strconv.ParseUint(m[2:], 16, 16)
+			require.NoError(t, err)
+			return string(rune(code))
+		})
+		plain := filepath.Join(t.TempDir(), "strings.xml")
+		require.NoError(t, os.WriteFile(plain, []byte(written), 0o644))
+
+		got, err := readStringsXML("../..", file)
+		require.NoError(t, err)
+		want, err := readStringsXML("../..", plain)
+		require.NoError(t, err)
+		require.Len(t, got, len(want), file)
+		for i := range got {
+			for path, f := range got[i].version.forms {
+				assert.NotContains(t, f.value, `\u`, "%s %s %s", file, got[i].key, path)
+				assert.Equal(t, want[i].version.forms[path].value, f.value, "%s %s %s", file, got[i].key, path)
+			}
+		}
+	}
 }
 
 // TestCheck_Repo: the repo's own strings pass, so the check can run on every
