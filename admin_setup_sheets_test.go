@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"regexp"
@@ -79,6 +80,7 @@ func TestDriverSetupPage_PickerListsActiveDrivers(t *testing.T) {
 		{"7", "Asha Rao (asha.rao@agency.example)"},
 	}, options, "only active drivers, by name whatever its case")
 	assert.Equal(t, "", selected)
+	assert.NotContains(t, body, "newest drivers", "every driver is listed, so the help names no cap")
 	assert.Contains(t, body, `<label class="label" for="user">Driver</label>`)
 	assert.Contains(t, body, `<form class="card setup-card" method="get" action="/admin/driver-setup">`,
 		"the picker sends ?user=, the link a driver's row has")
@@ -105,6 +107,45 @@ func TestDriverSetupPage_PickerKeepsTheDriver(t *testing.T) {
 	options, selected := pickerOptions(t, admin.Body.String())
 	assert.Equal(t, "9", selected)
 	assert.Contains(t, options, [2]string{"9", "Ada Admin (ada@agency.example)"})
+}
+
+// With more active drivers than the picker holds, its help says how many it
+// lists: the cap, not the cap plus a user the picker adds because ?user= named
+// them.
+func TestDriverSetupPage_PickerCapCount(t *testing.T) {
+	users := make([]UserResponse, 0, maxSheetDrivers+2)
+	for i := 1; i <= maxSheetDrivers+1; i++ {
+		users = append(users, UserResponse{ID: int64(i), Name: fmt.Sprintf("Driver %04d", i), Email: fmt.Sprintf("d%d@agency.example", i), Role: roleDriver, Active: true})
+	}
+	adminID := int64(maxSheetDrivers + 2)
+	users = append(users, UserResponse{ID: adminID, Name: "Ada Admin", Email: "ada@agency.example", Role: "admin", Active: true})
+	store := newFakeUserStore(users...)
+	ui := newTestAdminUI(t)
+	wireFakeUserStore(ui, store, newFakeAssignmentStore())
+	ui.userPager = filteringUserStore{store}
+	help := fmt.Sprintf("This lists the %d newest drivers; for another, use Setup sheet on their row in Drivers and users.", maxSheetDrivers)
+
+	for _, tc := range []struct {
+		name     string
+		query    string
+		options  int
+		selected string
+	}{
+		{"no user", "", maxSheetDrivers + 1, ""},
+		{"a user the picker does not list", "?user=" + strconv.FormatInt(adminID, 10), maxSheetDrivers + 2, strconv.FormatInt(adminID, 10)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := requestDriverSetup(t, ui, "https://tracker.example.org/admin/driver-setup"+tc.query, nil)
+			require.Equal(t, http.StatusOK, w.Code)
+			body := w.Body.String()
+			options, selected := pickerOptions(t, body)
+			assert.Len(t, options, tc.options, "Anyone, the newest drivers, and the user named")
+			assert.Equal(t, tc.selected, selected)
+			m := regexp.MustCompile(`<div class="help" id="user-help">([^<]*)</div>`).FindStringSubmatch(body)
+			require.NotNil(t, m, "the picker has its help")
+			assert.Contains(t, m[1], help)
+		})
+	}
 }
 
 // sheetOf is the page's one printed sheet.

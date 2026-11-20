@@ -17,7 +17,7 @@
           {{range .Drivers}}<option value="{{.ID}}"{{if and $.User (eq .ID $.User.ID)}} selected{{end}}>{{.Name}} ({{.Email}})</option>
           {{end}}
         </select>
-        <div class="help" id="user-help">The sheet names the driver and the email address they sign in with.{{if .MoreDrivers}} This lists the {{len .Drivers}} newest drivers; for another, use Setup sheet on their row in Drivers and users.{{end}}</div>
+        <div class="help" id="user-help">The sheet names the driver and the email address they sign in with.{{if .MoreDrivers}} This lists the {{.MoreDrivers}} newest drivers; for another, use Setup sheet on their row in Drivers and users.{{end}}</div>
       </div>
       <div class="field">
         <label class="label" for="server">Server address</label>
