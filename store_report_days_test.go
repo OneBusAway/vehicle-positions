@@ -64,3 +64,44 @@ func TestStore_ServiceDays(t *testing.T) {
 	}
 	assert.Equal(t, []time.Time{day(5), day(7)}, kept, "the cutoff's own day stays")
 }
+
+// A row whose totals do not decode, as one written before their shape changed
+// would not, is left out of the range rather than failing it, and saving the
+// day again replaces it.
+func TestStore_ServiceDaysSkipsARowThatDoesNotDecode(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	day := func(d int) time.Time { return time.Date(2031, 4, d, 0, 0, 0, 0, time.UTC) }
+	clear := func() {
+		_, err := store.pool.Exec(ctx, `DELETE FROM service_day_totals WHERE service_date BETWEEN $1 AND $2`, day(1), day(30))
+		require.NoError(t, err)
+	}
+	clear()
+	t.Cleanup(clear)
+
+	kept := func(d time.Time) storedServiceDay {
+		return storedServiceDay{Date: d, OnTimeEarly: time.Minute, OnTimeLate: 5 * time.Minute,
+			Totals: dayTotals{Routes: []routeDayTotals{{RouteID: "R1", Hours: []hourTotals{{Hour: 8, Scheduled: 1}}}}, Arrivals: make([]arrivalMinute, 0)}}
+	}
+	require.NoError(t, store.SaveServiceDay(ctx, kept(day(3))))
+	require.NoError(t, store.SaveServiceDay(ctx, kept(day(5))))
+	_, err := store.pool.Exec(ctx, `INSERT INTO service_day_totals (service_date, on_time_early_s, on_time_late_s, totals)
+		VALUES ($1, 60, 300, '{"routes": 5}')`, day(4))
+	require.NoError(t, err)
+
+	got, err := store.ListServiceDays(ctx, day(3), day(5))
+	require.NoError(t, err, "one bad row does not fail the range")
+	dates := func(days []storedServiceDay) []time.Time {
+		out := make([]time.Time, 0, len(days))
+		for _, d := range days {
+			out = append(out, d.Date)
+		}
+		return out
+	}
+	assert.Equal(t, []time.Time{day(3), day(5)}, dates(got), "the bad row is left out")
+
+	require.NoError(t, store.SaveServiceDay(ctx, kept(day(4))))
+	got, err = store.ListServiceDays(ctx, day(3), day(5))
+	require.NoError(t, err)
+	assert.Equal(t, []time.Time{day(3), day(4), day(5)}, dates(got), "worked out again, it is replaced")
+}

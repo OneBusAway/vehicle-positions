@@ -2,9 +2,16 @@ package main
 
 import (
 	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"math"
 	"slices"
+	"sync"
 	"time"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 // dayTotals is one service day as the Analytics page adds it up over a
@@ -133,5 +140,166 @@ func newDayTotals(rep *serviceReport, s reportSettings) dayTotals {
 		day.Arrivals = append(day.Arrivals, *a)
 	}
 	slices.SortFunc(day.Arrivals, func(a, b arrivalMinute) int { return cmp.Compare(a.Minute, b.Minute) })
+	return day
+}
+
+// reportWarmInterval is how often the warmer looks for a schedule reload or a
+// new day old enough to keep.
+const reportWarmInterval = 5 * time.Minute
+
+// reportWarmer works out in the background the past days the Analytics page
+// opens on that the store does not keep yet: those of its longest period and
+// the period before it, up to the day before yesterday. It does so at start,
+// and again when the schedule is reloaded or the service date moves on, so the
+// first look at a long period after an upgrade does not work dozens of days
+// out on one request and run past WRITE_TIMEOUT. It asks for one day at a
+// time through the reporter, so it holds at most one of the reporter's slots
+// and a page always has the other.
+type reportWarmer struct {
+	reports *serviceReporter
+	every   time.Duration
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
+	once   sync.Once
+	wg     sync.WaitGroup
+}
+
+// startReportWarmer starts warming reports' days, checking every interval.
+func startReportWarmer(reports *serviceReporter, every time.Duration) *reportWarmer {
+	// A background job outlives any request, so it owns its context.
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &reportWarmer{reports: reports, every: every, ctx: ctx, cancel: cancel, done: make(chan struct{})}
+	w.wg.Go(w.run)
+	return w
+}
+
+// Stop cancels a day being worked out and waits for the warmer to exit. Safe
+// to call more than once.
+func (w *reportWarmer) Stop() {
+	w.once.Do(func() {
+		close(w.done)
+		w.cancel()
+	})
+	w.wg.Wait()
+}
+
+func (w *reportWarmer) run() {
+	ticker := time.NewTicker(w.every)
+	defer ticker.Stop()
+	var warmed warmMark
+	for {
+		if mark, ok := w.reports.warmMark(); ok && mark != warmed {
+			err := w.reports.warm(w.ctx)
+			switch {
+			case err == nil:
+				warmed = mark
+			case errors.Is(err, context.Canceled):
+				return
+			default:
+				// Tried again at the next check.
+				slog.Warn("analytics: warm the past days", "error", err)
+			}
+		}
+		select {
+		case <-ticker.C:
+		case <-w.done:
+			return
+		}
+	}
+}
+
+// warmMark is what the days to warm depend on: the schedule loaded and today's
+// service date. A new one of either is a reason to warm again.
+type warmMark struct {
+	source   string
+	loadedAt int64
+	today    string
+}
+
+func (r *serviceReporter) warmMark() (warmMark, bool) {
+	ix := r.index()
+	if ix == nil {
+		return warmMark{}, false
+	}
+	load := loadOf(ix)
+	return warmMark{source: load.source, loadedAt: load.loadedAt.UnixNano(), today: ix.ServiceDate(r.now())}, true
+}
+
+// warm works out, newest first and one at a time, the days the Analytics page
+// opens on that the store does not keep yet, and keeps each. With retention
+// on it starts at the first day the location pruner has deleted none of:
+// an older day would be worked out from what is left of its reports, and its
+// row deleted again at the next prune. A day that fails, to work out or to
+// keep, does not stop the older ones; the pass returns the failures, so the
+// warmer tries again at its next check.
+func (r *serviceReporter) warm(ctx context.Context) error {
+	ix := r.index()
+	if ix == nil {
+		return errNoSchedule
+	}
+	today, err := time.Parse(gtfsDateLayout, ix.ServiceDate(r.now()))
+	if err != nil {
+		return err
+	}
+	last := today.AddDate(0, 0, -2)
+	first := today.AddDate(0, 0, -2*slices.Max(analyticsPeriods))
+	if r.retention > 0 {
+		if kept := r.firstRetainedDay(ix); kept.After(first) {
+			first = kept
+		}
+	}
+	if first.After(last) {
+		return nil
+	}
+	stored, err := r.storedDays(ctx, first, last)
+	if err != nil {
+		return err
+	}
+	var failed []error
+	for day := last; !day.Before(first); day = day.AddDate(0, 0, -1) {
+		if _, ok := stored[day.Format(reportDateLayout)]; ok {
+			continue
+		}
+		if err := r.warmDay(ctx, day); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			failed = append(failed, fmt.Errorf("%s: %w", day.Format(reportDateLayout), err))
+		}
+	}
+	return errors.Join(failed...)
+}
+
+// warmDay works out day and keeps its totals, waiting until they are kept.
+func (r *serviceReporter) warmDay(ctx context.Context, day time.Time) error {
+	rep, read, err := r.reportRead(ctx, day.Format(reportDateLayout))
+	if err != nil {
+		return err
+	}
+	if read == nil {
+		// From memory: worked out before it was old enough to keep, or its
+		// save failed, so no read is keeping it.
+		return r.saveDay(day, rep)
+	}
+	select {
+	case <-read.saved:
+		return read.saveErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// firstRetainedDay is the first service date that starts after the cutoff
+// the location pruner deletes reports before, as of now: the first day all
+// of whose reports are still kept.
+func (r *serviceReporter) firstRetainedDay(ix *rider.Index) time.Time {
+	cutoff := r.now().Add(-r.retention)
+	y, m, d := cutoff.In(ix.Timezone()).Date()
+	day := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	if start, err := rider.ServiceDayStart(day.Format(gtfsDateLayout), ix.Timezone()); err != nil || start.Before(cutoff) {
+		day = day.AddDate(0, 0, 1)
+	}
 	return day
 }

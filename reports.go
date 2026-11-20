@@ -32,6 +32,8 @@ const (
 	reportSettleAfter = time.Hour
 	// reportCacheSize bounds the reports kept in memory, a month of days.
 	reportCacheSize = 31
+	// reportSaveTimeout bounds the write that keeps a day's totals.
+	reportSaveTimeout = 30 * time.Second
 	// maxRunGap is the furthest from a scheduled run of its GTFS trip that a
 	// driver may start a trip for it to count as that run. Half a day keeps a
 	// trip run every day on the nearest day's run, wherever its driver
@@ -151,6 +153,11 @@ type serviceReporter struct {
 	// slots lets reportReadsAtOnce days be worked out at a time across every
 	// request: the Analytics page, the Overview and the API.
 	slots *semaphore.Weighted
+	// saving counts the days' totals being saved, so a test can wait for them.
+	saving sync.WaitGroup
+	// retention is LOCATION_RETENTION_PERIOD while the location pruner runs,
+	// zero when it does not. The warmer works out no day the pruner deletes.
+	retention time.Duration
 
 	mu sync.Mutex
 	// schedule is the load of the schedule the kept reports were worked out
@@ -176,6 +183,10 @@ type dayRead struct {
 	// rep and err are set before done is closed.
 	rep *serviceReport
 	err error
+	// saved is closed once the day's totals are kept, or the day is not one
+	// to keep; saveErr, set before it is closed, is why keeping them failed.
+	saved   chan struct{}
+	saveErr error
 	// waiting is how many requests wait for it, under serviceReporter.mu.
 	// The last to stop waiting before it is done cancels it.
 	waiting int
@@ -214,25 +225,32 @@ func newServiceReporter(store serviceReportStore, index func() *rider.Index, set
 // report returns the report for date, YYYY-MM-DD, or for yesterday in the
 // agency's timezone when date is empty.
 func (r *serviceReporter) report(ctx context.Context, date string) (*serviceReport, error) {
+	rep, _, err := r.reportRead(ctx, date)
+	return rep, err
+}
+
+// reportRead is report, and the read that worked the report out: nil when
+// the report came from memory.
+func (r *serviceReporter) reportRead(ctx context.Context, date string) (*serviceReport, *dayRead, error) {
 	ix := r.index()
 	if ix == nil {
-		return nil, errNoSchedule
+		return nil, nil, errNoSchedule
 	}
 	day, err := r.reportDay(ix, date)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	serviceDate := day.Format(gtfsDateLayout)
 	cached, read := r.join(ix, serviceDate, day)
 	if cached != nil {
-		return cached, nil
+		return cached, nil, nil
 	}
 	defer r.leave(serviceDate, read)
 	select {
 	case <-read.done:
-		return read.rep, read.err
+		return read.rep, read, read.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 }
 
@@ -252,7 +270,7 @@ func (r *serviceReporter) join(ix *rider.Index, date string, day time.Time) (*se
 		// that started it, so that request ending does not fail the others
 		// waiting for the same day.
 		ctx, cancel := context.WithCancel(context.Background())
-		read = &dayRead{load: load, done: make(chan struct{}), cancel: cancel}
+		read = &dayRead{load: load, done: make(chan struct{}), saved: make(chan struct{}), cancel: cancel}
 		r.reading[date] = read
 		go r.read(ctx, read, ix, date, day)
 	}
@@ -287,16 +305,12 @@ func (r *serviceReporter) read(ctx context.Context, read *dayRead, ix *rider.Ind
 		r.slots.Release(1)
 	}
 
-	// A day that fails to save is still served, and saved by the next read.
-	if err == nil && r.storable(ix, date, rep) {
-		if serr := r.store.SaveServiceDay(ctx, storedServiceDay{
-			Date: day, OnTimeEarly: r.settings.onTimeEarly, OnTimeLate: r.settings.onTimeLate,
-			Totals: newDayTotals(rep, r.settings),
-		}); serr != nil {
-			slog.Error("analytics: keep a service day's totals", "date", rep.Date, "error", serr)
-		}
+	store := err == nil && r.storable(ix, date, rep)
+	if store {
+		// Counted before the waiters are let go, so whoever waits for the
+		// saves after them finds this one.
+		r.saving.Add(1)
 	}
-
 	r.mu.Lock()
 	if r.reading[date] == read {
 		delete(r.reading, date)
@@ -308,6 +322,32 @@ func (r *serviceReporter) read(ctx context.Context, read *dayRead, ix *rider.Ind
 
 	read.rep, read.err = rep, err
 	close(read.done)
+
+	// Saved once the requests waiting have their day, so a slow write holds
+	// none of them up.
+	if store {
+		defer r.saving.Done()
+		read.saveErr = r.saveDay(day, rep)
+	}
+	close(read.saved)
+}
+
+// saveDay keeps rep's totals for day. It saves on a context of its own rather
+// than the read's, which the last request to leave cancels: the day is worked
+// out by then, and keeping it is what spares the next request the work. A day
+// that fails to save is still served from memory, and the warmer saves it at
+// its next pass.
+func (r *serviceReporter) saveDay(day time.Time, rep *serviceReport) error {
+	ctx, cancel := context.WithTimeout(context.Background(), reportSaveTimeout)
+	defer cancel()
+	err := r.store.SaveServiceDay(ctx, storedServiceDay{
+		Date: day, OnTimeEarly: r.settings.onTimeEarly, OnTimeLate: r.settings.onTimeLate,
+		Totals: newDayTotals(rep, r.settings),
+	})
+	if err != nil {
+		slog.Error("analytics: keep a service day's totals", "date", rep.Date, "error", err)
+	}
+	return err
 }
 
 // reportDay parses date, or picks yesterday in the agency's timezone when it
@@ -340,11 +380,13 @@ func (r *serviceReporter) settled(ix *rider.Index, date string, rep *serviceRepo
 }
 
 // storable reports whether the report for date has its totals kept in the
-// database: it is settled and older than yesterday. A phone that lost signal
-// uploads its points when it gets it back, so yesterday is left a day to
-// change; points that come in later still are on the trip's page but not in
-// the kept totals. A schedule reload does not change a kept day either: it
-// stays judged against the timetable it ran to.
+// database: it is settled and older than yesterday. A settled day is kept in
+// memory too, from when it is first worked out until the next schedule reload,
+// so points a phone uploads late count only once the day is worked out again
+// after a reload. The row is written the first time the day is worked out
+// once it is older than yesterday, and does not change after that: points
+// that come in later are on the trip's page but not in the kept totals, and a
+// schedule reload leaves the day judged against the timetable it ran to.
 func (r *serviceReporter) storable(ix *rider.Index, date string, rep *serviceReport) bool {
 	today, err := time.Parse(gtfsDateLayout, ix.ServiceDate(r.now()))
 	if err != nil {

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"net/url"
 	"slices"
 	"sync"
@@ -73,6 +75,7 @@ func TestServiceReporter_KeepsDaysOlderThanYesterday(t *testing.T) {
 	require.NoError(t, err)
 	_, err = r.report(context.Background(), "2026-09-04")
 	require.NoError(t, err)
+	r.saving.Wait()
 
 	assert.Equal(t, []string{"2026-09-02"}, keptDates(store))
 	kept := store.days["2026-09-02"]
@@ -82,6 +85,7 @@ func TestServiceReporter_KeepsDaysOlderThanYesterday(t *testing.T) {
 
 	_, err = r.report(context.Background(), "2026-09-02")
 	require.NoError(t, err)
+	r.saving.Wait()
 	assert.Equal(t, 1, store.saves, "saved once, then served from memory")
 }
 
@@ -190,6 +194,7 @@ func TestReportsPage_FillsMissingDaysOnce(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	r.saving.Wait()
 	assert.Len(t, keptDates(store), 14, "the 7 days and the 7 before them")
 	assert.Equal(t, 14, store.saves, "each kept once")
 	reads := store.reads
@@ -205,4 +210,243 @@ func TestReportsPage_AKeptDaysReadThatFails(t *testing.T) {
 	q, _ := url.ParseQuery("date=2026-09-02")
 	_, _, err := reportsPageView(context.Background(), r, &overviewReports{}, q)
 	assert.ErrorIs(t, err, store.daysErr)
+}
+
+// waitForSaves waits for the days r is saving.
+func waitForSaves(r *serviceReporter) { r.saving.Wait() }
+
+// The requests waiting for a day get it as soon as it is worked out, while
+// its totals are still being saved; and the save goes on after they leave.
+func TestServiceReporter_SavesAfterTheWaitersHaveTheDay(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	gate := make(chan struct{})
+	store.saveGate = gate
+
+	ctx, cancel := context.WithCancel(context.Background())
+	got := make(chan error, 1)
+	go func() {
+		_, err := r.report(ctx, "2026-09-02")
+		got <- err
+	}()
+	select {
+	case err := <-got:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		close(gate)
+		require.FailNow(t, "the request waited for the save")
+	}
+	// The request is over; the save it set off is not.
+	cancel()
+	close(gate)
+	waitForSaves(r)
+	assert.Equal(t, []string{"2026-09-02"}, keptDates(store))
+	assert.Equal(t, []error{nil}, store.saveCtxErr, "saved on a context the request does not end")
+}
+
+// warmedDays are the dates the Analytics page opens on that warm keeps, with
+// the fixture clock on 4 September: the 56 days to yesterday, less yesterday.
+func warmedDays() []string {
+	days := make([]string, 0, 55)
+	for d := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC); !d.After(time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)); d = d.AddDate(0, 0, 1) {
+		days = append(days, d.Format(reportDateLayout))
+	}
+	return days
+}
+
+func TestServiceReporter_WarmKeepsTheDaysThePageOpensOn(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	before := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, store.SaveServiceDay(context.Background(), storedServiceDay{
+		Date: before, OnTimeEarly: testReportSettings.onTimeEarly, OnTimeLate: testReportSettings.onTimeLate,
+		Totals: dayTotals{Routes: make([]routeDayTotals, 0), Arrivals: make([]arrivalMinute, 0)},
+	}))
+
+	require.NoError(t, r.warm(context.Background()))
+	waitForSaves(r)
+	assert.Equal(t, warmedDays(), keptDates(store), "the longest period and the one before, to the day before yesterday")
+	assert.Equal(t, 54, store.reads, "every one of them but the day already kept")
+
+	require.NoError(t, r.warm(context.Background()))
+	assert.Equal(t, 54, store.reads, "warmed again, nothing is missing")
+
+	// The page now opens on kept days and works out only yesterday and today.
+	reads := store.reads
+	reportsView(t, r, "date=2026-09-03&days=28")
+	assert.Equal(t, reads+1, store.reads, "yesterday only")
+}
+
+// Warming takes one of the reporter's two slots at a time, newest day first,
+// so a page always has the other.
+func TestServiceReporter_WarmTakesOneSlot(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	r := newHeldReporter(store, ix)
+	done := make(chan error, 1)
+	go func() { done <- r.warm(context.Background()) }()
+
+	for _, day := range []string{"2026-09-29", "2026-09-28", "2026-09-27"} {
+		require.Eventually(t, func() bool { return slices.Equal([]string{day}, store.heldDays()) }, 5*time.Second, time.Millisecond)
+		assert.Never(t, func() bool { return len(store.heldDays()) > 1 }, 50*time.Millisecond, time.Millisecond)
+		store.release(day)
+	}
+	for _, d := range warmedHeldDays() {
+		store.release(d)
+	}
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "warm did not finish")
+	}
+	assert.Equal(t, 1, store.mostHeld)
+}
+
+// warmedHeldDays are the days the held reporter, whose service date is 1
+// October, warms: 6 August to 29 September.
+func warmedHeldDays() []string {
+	days := make([]string, 0, 55)
+	for d := time.Date(2026, 8, 6, 0, 0, 0, 0, time.UTC); !d.After(time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)); d = d.AddDate(0, 0, 1) {
+		days = append(days, d.Format(reportDateLayout))
+	}
+	return days
+}
+
+func TestReportWarmer_StopCancelsTheDayUnderWay(t *testing.T) {
+	ix := reportFixtureIndex(t)
+	store := newHeldReportStore(ix)
+	w := startReportWarmer(newHeldReporter(store, ix), time.Hour)
+	require.Eventually(t, func() bool { return len(store.heldDays()) == 1 }, 5*time.Second, time.Millisecond)
+
+	stopped := make(chan struct{})
+	go func() {
+		w.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "Stop waited for the day under way")
+	}
+	assert.Eventually(t, func() bool { return len(store.heldDays()) == 0 }, 5*time.Second, time.Millisecond, "its read was cancelled")
+	assert.Len(t, store.readDays(), 1, "and no day was started after")
+	w.Stop()
+}
+
+// The warmer warms at start, and again only once the schedule is reloaded or
+// the service date moves on.
+func TestReportWarmer_WarmsAgainAfterAReload(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	var mu sync.Mutex
+	index := r.index()
+	r.index = func() *rider.Index {
+		mu.Lock()
+		defer mu.Unlock()
+		return index
+	}
+	w := startReportWarmer(r, 5*time.Millisecond)
+	t.Cleanup(w.Stop)
+	require.Eventually(t, func() bool { return len(keptDates(store)) == 55 }, 5*time.Second, time.Millisecond)
+
+	store.mu.Lock()
+	delete(store.days, "2026-08-20")
+	store.mu.Unlock()
+	assert.Never(t, func() bool { return len(keptDates(store)) == 55 }, 100*time.Millisecond, time.Millisecond,
+		"the same schedule and day: nothing to warm")
+
+	refreshed := refreshedReportFixtureIndex(t)
+	mu.Lock()
+	index = refreshed
+	mu.Unlock()
+	require.Eventually(t, func() bool { return len(keptDates(store)) == 55 }, 5*time.Second, time.Millisecond,
+		"a reloaded schedule is warmed again")
+}
+
+// daysFrom are the dates from first to last, YYYY-MM-DD.
+func daysFrom(first, last string) []string {
+	from, _ := time.Parse(reportDateLayout, first)
+	to, _ := time.Parse(reportDateLayout, last)
+	days := make([]string, 0)
+	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		days = append(days, d.Format(reportDateLayout))
+	}
+	return days
+}
+
+// With LOCATION_RETENTION_PERIOD shorter than the 56 days, the warmer stops
+// at the pruner's cutoff: it neither works out nor keeps a day whose reports
+// the pruner has been deleting, and whose row it would delete again.
+func TestServiceReporter_WarmStopsAtTheRetentionCutoff(t *testing.T) {
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	// 12:00 PDT on 4 September less 20 days is 12:00 on 15 August, so 16
+	// August is the first day the pruner has deleted none of.
+	r.retention = 20 * 24 * time.Hour
+
+	require.NoError(t, r.warm(context.Background()))
+	waitForSaves(r)
+	assert.Equal(t, daysFrom("2026-08-16", "2026-09-02"), keptDates(store))
+	assert.Equal(t, 18, store.reads, "no day before the cutoff is asked for")
+}
+
+// A day whose totals fail to save leaves the pass incomplete, and the next
+// pass keeps it. 15 July is among the last days a pass works out, so it is
+// still in memory then, and kept without being worked out again.
+func TestServiceReporter_WarmKeepsADayItFailedToSave(t *testing.T) {
+	captureReportLogs(t)
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	store.saveFails = map[string]error{"2026-07-15": errors.New("database down")}
+
+	err := r.warm(context.Background())
+	require.ErrorContains(t, err, "2026-07-15: database down")
+	assert.NotContains(t, keptDates(store), "2026-07-15")
+	assert.Len(t, keptDates(store), 54, "the other days are kept")
+	reads := store.reads
+
+	store.mu.Lock()
+	store.saveFails = nil
+	store.mu.Unlock()
+	require.NoError(t, r.warm(context.Background()))
+	assert.Equal(t, warmedDays(), keptDates(store))
+	assert.Equal(t, reads, store.reads, "kept from memory, not worked out again")
+}
+
+// A day that fails to work out does not stop the older days behind it.
+func TestServiceReporter_WarmGoesOnPastADayThatFails(t *testing.T) {
+	captureReportLogs(t)
+	r, store, ix := newFixtureReporter(t, reportFixtureNow)
+	// The trips read for 21 August start from the day before's start.
+	from, err := rider.ServiceDayStart("20260820", ix.Timezone())
+	require.NoError(t, err)
+	store.readFails = map[time.Time]error{from: errors.New("statement timeout")}
+
+	err = r.warm(context.Background())
+	require.ErrorContains(t, err, "2026-08-21: statement timeout")
+	waitForSaves(r)
+	kept := keptDates(store)
+	assert.NotContains(t, kept, "2026-08-21")
+	assert.Subset(t, kept, daysFrom("2026-07-10", "2026-08-20"), "every older day is warmed")
+	assert.Len(t, kept, 54)
+}
+
+// An incomplete pass is tried again at the warmer's next check, though the
+// schedule and the day are the same.
+func TestReportWarmer_TriesAnIncompletePassAgain(t *testing.T) {
+	captureReportLogs(t)
+	r, store, _ := newFixtureReporter(t, reportFixtureNow)
+	store.saveFails = map[string]error{"2026-07-15": errors.New("database down")}
+	w := startReportWarmer(r, 5*time.Millisecond)
+	t.Cleanup(w.Stop)
+	require.Eventually(t, func() bool { return len(keptDates(store)) == 54 }, 5*time.Second, time.Millisecond)
+
+	store.mu.Lock()
+	store.saveFails = nil
+	store.mu.Unlock()
+	require.Eventually(t, func() bool { return slices.Contains(keptDates(store), "2026-07-15") }, 5*time.Second, time.Millisecond)
+}
+
+// captureReportLogs keeps the reporter's log lines out of the test output.
+func captureReportLogs(t *testing.T) {
+	t.Helper()
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Cleanup(func() { slog.SetDefault(original) })
 }
