@@ -333,6 +333,16 @@ func (ix *Index) ServiceDate(now time.Time) string {
 	return local.Format(serviceDateLayout)
 }
 
+// ServiceDateBegins returns the instant from which ServiceDate names the
+// "YYYYMMDD" serviceDate: 03:00 that day in the agency timezone.
+func (ix *Index) ServiceDateBegins(serviceDate string) (time.Time, error) {
+	day, _, ok := ix.serviceDay(serviceDate)
+	if !ok {
+		return time.Time{}, fmt.Errorf("rider: invalid service date %q", serviceDate)
+	}
+	return time.Date(day.Year(), day.Month(), day.Day(), serviceDayCutoffHour, 0, 0, 0, ix.tz), nil
+}
+
 // ServiceDateFor is ServiceDate narrowed to one trip: of the calendar day and
 // the day before, the one the trip runs on whose run, from first departure to
 // last arrival, is nearest now, with ties going to the day before. The 03:00

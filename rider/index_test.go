@@ -222,6 +222,27 @@ func TestServiceDayStart(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestServiceDateBegins: ServiceDate names the date from the instant it
+// begins, and the day before up to it, on DST days too.
+func TestServiceDateBegins(t *testing.T) {
+	ix := fixtureIndex(t)
+	for _, tc := range []struct{ date, dayBefore string }{
+		{"20260902", "20260901"},
+		{"20260308", "20260307"}, // clocks go forward at 02:00
+		{"20261101", "20261031"}, // and back
+	} {
+		begins, err := ix.ServiceDateBegins(tc.date)
+		require.NoError(t, err)
+		assert.Equal(t, tc.date, ix.ServiceDate(begins), tc.date)
+		assert.Equal(t, tc.dayBefore, ix.ServiceDate(begins.Add(-time.Nanosecond)), tc.date)
+	}
+	begins, err := ix.ServiceDateBegins("20260902")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 9, 2, 3, 0, 0, 0, ix.Timezone()), begins)
+	_, err = ix.ServiceDateBegins("2026-09-02")
+	assert.Error(t, err)
+}
+
 func TestScheduledOffsetAt(t *testing.T) {
 	ix := fixtureIndex(t)
 	trip, _ := ix.Trip("T1") // ST1 08:00 @0, ST2 08:05 @500, ST3 08:10 @1001
