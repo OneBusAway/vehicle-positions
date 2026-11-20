@@ -197,7 +197,9 @@ func TestAggregator_RunStartAtTheFirstStopIsNow(t *testing.T) {
 
 // A run counts its start_time from the service date whose frequencies.txt
 // window holds its start, which can be the day before when the window runs
-// past midnight, whatever the trip's one-run pattern of stop times says.
+// past midnight, whatever the trip's one-run pattern of stop times says. A
+// run that starts in no window but less than runningLateGrace after the day
+// before's ended is a late run from it.
 func TestIndex_RunServiceDate(t *testing.T) {
 	ix := fixtureIndex(t)
 	t1, ok := ix.Trip("T1") // weekdays, its pattern 08:00 to 08:10
@@ -215,6 +217,13 @@ func TestIndex_RunServiceDate(t *testing.T) {
 		{"in both days' windows", []gtfs.Frequency{{StartTime: clock(0, 0, 0), EndTime: clock(30, 0, 0)}}, at(3, 5, 0), "20260902"},
 		{"in the window of a day the trip does not run", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(26, 0, 0)}}, at(7, 0, 30), "20260907"},
 		{"in no window", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(22, 0, 0)}}, at(3, 0, 30), ix.ServiceDateFor(t1, at(3, 0, 30))},
+		{"late, just after the day before's window ended", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(24, 30, 0)}}, at(3, 0, 31), "20260902"},
+		{"late, a minute inside the grace", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(24, 30, 0)}}, at(3, 1, 59), "20260902"},
+		{"late, at the end of the grace", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(24, 30, 0)}}, at(3, 2, 0), ix.ServiceDateFor(t1, at(3, 2, 0))},
+		{"well past the grace", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(24, 30, 0)}}, at(3, 2, 30), ix.ServiceDateFor(t1, at(3, 2, 30))},
+		{"in the day's window soon after the day before's ended", []gtfs.Frequency{{StartTime: clock(0, 45, 0), EndTime: clock(24, 30, 0)}}, at(3, 0, 50), "20260903"},
+		{"just after the window of a day before the trip does not run", []gtfs.Frequency{{StartTime: clock(6, 0, 0), EndTime: clock(24, 30, 0)}}, at(6, 0, 31), ix.ServiceDateFor(t1, at(6, 0, 31))},
+		{"a timetabled trip", nil, at(3, 0, 31), ix.ServiceDateFor(t1, at(3, 0, 31))},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

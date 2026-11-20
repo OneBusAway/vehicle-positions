@@ -20,9 +20,10 @@ const (
 	// service date.
 	serviceDayCutoffHour = 3
 	// runningLateGrace is how long after its last scheduled arrival the day
-	// before's run still counts as one a vehicle can be on. It matches the
-	// default ScheduleLate: a ride on a run later than that ends off_schedule
-	// anyway.
+	// before's run still counts as one a vehicle can be on, and how long after
+	// the day before's frequencies.txt window ends a run may still leave as
+	// one of its runs. It matches the default ScheduleLate: a ride on a run
+	// later than that ends off_schedule anyway.
 	runningLateGrace = 90 * time.Minute
 	// shapeDistMaxFraction is the furthest along its shape a trip's last stop
 	// may sit for a unit to be believable. Slightly over 1 because rounding in
@@ -380,9 +381,26 @@ func (ix *Index) ServiceDateFor(trip *TripInfo, now time.Time) string {
 // stop times, which on a trip in frequencies.txt are only the pattern of one
 // run: a window from 06:00 to 26:00 runs past midnight while the pattern
 // ends at 07:00, so a run started at 00:30 belongs to the day before.
+//
+// A start in no window is a late run of the day before's when a window there
+// ended less than runningLateGrace before it: the 24:25 run of a window to
+// 24:30 that leaves at 00:31 is still that day's, as Verify judges it.
 func (ix *Index) RunServiceDate(trip *TripInfo, startedAt time.Time) string {
 	calendarDay := startedAt.In(ix.tz)
-	for _, day := range []time.Time{calendarDay.AddDate(0, 0, -1), calendarDay} {
+	days := []time.Time{calendarDay.AddDate(0, 0, -1), calendarDay}
+	if date, ok := ix.windowDate(trip, startedAt, days, 0); ok {
+		return date
+	}
+	if date, ok := ix.windowDate(trip, startedAt, days[:1], runningLateGrace); ok {
+		return date
+	}
+	return ix.ServiceDateFor(trip, startedAt)
+}
+
+// windowDate is the first of days the trip runs on with a frequencies.txt
+// window that holds startedAt, or that ended less than late before it.
+func (ix *Index) windowDate(trip *TripInfo, startedAt time.Time, days []time.Time, late time.Duration) (string, bool) {
+	for _, day := range days {
 		date := day.Format(serviceDateLayout)
 		dayStart, err := ServiceDayStart(date, ix.tz)
 		if err != nil || !ix.ActiveOn(trip, date) {
@@ -390,12 +408,12 @@ func (ix *Index) RunServiceDate(trip *TripInfo, startedAt time.Time) string {
 		}
 		since := startedAt.Sub(dayStart)
 		if slices.ContainsFunc(trip.frequencies, func(f gtfs.Frequency) bool {
-			return f.StartTime <= since && since < f.EndTime
+			return f.StartTime <= since && since < f.EndTime+late
 		}) {
-			return date
+			return date, true
 		}
 	}
-	return ix.ServiceDateFor(trip, startedAt)
+	return "", false
 }
 
 // runSpan is the trip's run on the service day starting at dayStart, from its

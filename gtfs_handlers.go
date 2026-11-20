@@ -180,8 +180,10 @@ func (c *gtfsCatalog) handleTrip() http.HandlerFunc {
 		// an after-midnight departure is not always the one the 03:00 cutoff
 		// derives (the same rule rider start applies). A trip in
 		// frequencies.txt is dated by the window running now, which can pass
-		// midnight while its one-run pattern ended that morning: the map card
-		// asks for the trip of a vehicle on it with no date.
+		// midnight while its one-run pattern ended that morning, or by the
+		// day before's window if that ended under 90 minutes ago and its
+		// last run may still be out: the map card asks for the trip of a
+		// vehicle on it with no date.
 		date := r.URL.Query().Get("date")
 		if date == "" {
 			date = ix.RunServiceDate(trip, c.now())
