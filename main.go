@@ -424,6 +424,10 @@ func main() {
 	startTime := time.Now()
 	// Counted from here, so the counts and the uptime start together.
 	health := newFeedHealth(time.Now)
+	// Deferred after the store's Close, so it runs first: the hour in
+	// progress is saved once the server below has stopped taking requests.
+	healthHours := startHealthHours(ctx, health, store, time.Minute)
+	defer healthHours.Stop()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
 		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)

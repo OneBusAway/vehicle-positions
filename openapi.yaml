@@ -1603,15 +1603,18 @@ paths:
   /api/v1/admin/health:
     get:
       tags: [admin]
-      summary: Report and feed outcomes, per minute for the last hour and since start
+      summary: Report and feed outcomes, per minute for the last hour, per hour and since start
       description: |
         The same counts the admin UI's Feed health page shows. Every response to
         a driver's position report (`POST /api/v1/locations` and
         `POST /api/v1/locations/history`) and to a feed fetch
         (`GET /gtfs-rt/vehicle-positions`, in either format) is counted by its
         status, including requests refused before they reach the handler. The
-        counts are kept in memory: a restart starts them again from `since`.
-        Requires the `admin` role.
+        minutes and the total are kept in memory: a restart starts them again
+        from `since`. Each hour is saved to the database when it closes, and
+        the hour in progress when the server stops, so `hours` is kept
+        through a restart; `LOCATION_RETENTION_PERIOD` deletes the hours older
+        than it. Requires the `admin` role.
 
         A report is `accepted` (2xx), `invalid` (400, 409 for a report that
         does not match the driver's running trip, 415 and any other 4xx),
@@ -1619,6 +1622,15 @@ paths:
         (5xx). A feed fetch is `served` (2xx), `refused` (401: a missing,
         unknown or inactive API key), `invalid` (any other 4xx, such as an
         unknown `source`) or a `server_error` (5xx).
+      parameters:
+        - in: query
+          name: days
+          required: false
+          schema:
+            type: integer
+            enum: [1, 7]
+            default: 1
+          description: How many days of hours `hours` lists.
       responses:
         '200':
           description: The counts.
@@ -1626,6 +1638,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FeedHealth'
+        '400':
+          description: '`days` is not 1 or 7.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3693,7 +3711,7 @@ components:
 
     FeedHealth:
       type: object
-      required: [since, last_hour, total, minutes]
+      required: [since, last_hour, total, minutes, hours]
       properties:
         since:
           type: string
@@ -3711,6 +3729,43 @@ components:
             in. `last_hour` is their sum.
           items:
             $ref: '#/components/schemas/FeedHealthMinute'
+        hours:
+          type: array
+          description: |
+            The last 24 hours, or with `days=7` the last 168, oldest first,
+            ending with the hour in progress. Every hour is listed, with zeros
+            where nothing came in or the server was not running. Hours start
+            on the hour, in UTC. Empty when the saved hours could not be read,
+            and `hours_error` says so; the minutes and the total are still
+            given.
+          items:
+            $ref: '#/components/schemas/FeedHealthHour'
+        hours_error:
+          type: string
+          description: |
+            Present only when the saved hours could not be read from the
+            database.
+
+    FeedHealthHour:
+      type: object
+      required: [hour, reports, feed, vehicles]
+      properties:
+        hour:
+          type: string
+          format: date-time
+          description: The start of the hour, in UTC.
+        reports:
+          $ref: '#/components/schemas/ReportOutcomes'
+        feed:
+          $ref: '#/components/schemas/FeedOutcomes'
+        vehicles:
+          type: integer
+          minimum: 0
+          description: |
+            How many vehicles had a live report accepted in the hour, each
+            counted once. Across a restart within the hour, a vehicle seen by
+            both servers may be counted once by each; the larger count is
+            given, so the figure can be low but is never doubled.
 
     FeedHealthPeriod:
       type: object
@@ -3739,8 +3794,8 @@ components:
           description: |
             How many vehicles had a live report accepted in the minute, each
             counted once however many it sent. A batch of offline history does
-            not count. There is no hourly or total figure: vehicles counted in
-            different minutes may be the same ones.
+            not count. Minutes do not add up to an hour's `vehicles`: vehicles
+            counted in different minutes may be the same ones.
 
     ReportOutcomes:
       type: object

@@ -2,7 +2,7 @@
 <div class="page-head">
   <div class="page-head-main">
     <h2 class="h1">{{.Headline}}</h2>
-    <p class="lede">Reports from drivers' phones, the vehicles sending them and fetches of the GTFS-RT feed, counted in memory since the server started at {{.Since}}. A restart starts the counts again.</p>
+    <p class="lede">Reports from drivers' phones, the vehicles sending them and fetches of the GTFS-RT feed, counted a minute at a time for the last hour. Each hour is saved when it closes, so the last day is kept through a restart; the totals count from the server's start at {{.Since}}.</p>
   </div>
   <div class="page-actions"><span class="age"><span class="dot"></span>Updates every minute</span></div>
 </div>
@@ -30,21 +30,62 @@
   </section>
 </div>
 
+{{with .Hours}}
+<div class="range-bar"><h3 id="health-hours" class="h2" style="flex:1;margin:0">Last {{.Period}}</h3><div class="seg" role="group" aria-label="Period">{{range .Range}}<a href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div></div>
+{{if .Error}}
+<div class="banner banner-warn" role="status" style="margin-bottom:16px">{{template "icon" "warning"}}<div>The hourly counts could not be read from the database. The last hour above is counted in memory and is still current.</div></div>
+{{else}}
+<div class="an-grid">
+  <section class="card an-wide" aria-labelledby="health-hours-vehicles">
+    <div class="card-head"><h4 id="health-hours-vehicles" style="flex:1">Vehicles reporting per hour</h4><span class="sub hide-phone">Each vehicle with a live report accepted, counted once an hour</span></div>
+    <div class="an-plot">{{template "bar-chart" .Vehicles}}</div>
+  </section>
+  <section class="card" aria-labelledby="health-hours-reports">
+    <div class="card-head"><h4 id="health-hours-reports" style="flex:1">Reports per hour</h4><span class="legend"><span><i style="background:var(--chart-1)"></i>Accepted</span><span><i style="background:var(--warn)"></i>Rejected</span></span></div>
+    <div class="an-plot">{{template "bar-chart" .Reports}}</div>
+  </section>
+  <section class="card" aria-labelledby="health-hours-fetches">
+    <div class="card-head"><h4 id="health-hours-fetches" style="flex:1">Feed fetches per hour</h4></div>
+    <div class="an-plot">{{template "bar-chart" .Fetches}}</div>
+  </section>
+</div>
+<section class="card" aria-label="The last {{.Period}} hour by hour" style="margin-bottom:16px">
+  <details class="an-table">
+    <summary class="card-foot">Show the last {{.Period}} hour by hour</summary>
+    <p class="card-note" style="padding-top:4px">Newest first. Times are UTC; the top row is the hour in progress. An hour the server was not running in shows zeros.</p>
+    <div class="table-wrap">
+      <table id="health-hours-table" class="table table-dense">
+        <thead>
+          <tr><td></td><td></td><th colspan="5" scope="colgroup">Reports</th><th colspan="4" scope="colgroup">Feed fetches</th></tr>
+          <tr><th>Hour</th><th class="right">Vehicles</th><th class="right">Accepted</th><th class="right">Invalid</th><th class="right">Auth</th><th class="right">Rate limited</th><th class="right">Server error</th><th class="right">Served</th><th class="right">Refused</th><th class="right">Bad request</th><th class="right">Server error</th></tr>
+        </thead>
+        <tbody>
+          {{range .Rows}}
+          <tr><td class="num">{{.Hour}}</td><td class="num right">{{.Vehicles}}</td><td class="num right">{{.Reports.Accepted}}</td><td class="num right {{if .Reports.Invalid}}tone-warn strong{{else}}muted{{end}}">{{.Reports.Invalid}}</td><td class="num right {{if .Reports.Unauthorized}}tone-warn strong{{else}}muted{{end}}">{{.Reports.Unauthorized}}</td><td class="num right {{if .Reports.RateLimited}}tone-warn strong{{else}}muted{{end}}">{{.Reports.RateLimited}}</td><td class="num right {{if .Reports.ServerError}}tone-warn strong{{else}}muted{{end}}">{{.Reports.ServerError}}</td><td class="num right">{{.Feed.Served}}</td><td class="num right {{if .Feed.Refused}}tone-warn strong{{else}}muted{{end}}">{{.Feed.Refused}}</td><td class="num right {{if .Feed.Invalid}}tone-warn strong{{else}}muted{{end}}">{{.Feed.Invalid}}</td><td class="num right {{if .Feed.ServerError}}tone-warn strong{{else}}muted{{end}}">{{.Feed.ServerError}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+{{end}}
+{{end}}
+
 <section class="card" aria-labelledby="health-outcomes" style="margin-bottom:16px">
   <div class="card-head"><h3 id="health-outcomes">Outcomes</h3></div>
   <div class="table-wrap" style="max-width:640px">
     <table id="health-summary" class="table table-dense">
-      <thead><tr><th>Outcome</th><th class="right">Last hour</th><th class="right">Since the server started</th></tr></thead>
+      <thead><tr><th>Outcome</th><th class="right">Last hour</th>{{if not .Hours.Error}}<th class="right">Last {{.Hours.Period}}</th>{{end}}<th class="right hide-phone">Since the server started</th></tr></thead>
       <tbody>
-        <tr><td>Reports accepted</td><td class="num right">{{.LastHour.Reports.Accepted}}</td><td class="num right muted">{{.Total.Reports.Accepted}}</td></tr>
-        <tr><td>Rejected as invalid (400, 409, 415)</td><td class="num right">{{.LastHour.Reports.Invalid}}</td><td class="num right muted">{{.Total.Reports.Invalid}}</td></tr>
-        <tr><td>Rejected, signed out or not allowed (401, 403)</td><td class="num right">{{.LastHour.Reports.Unauthorized}}</td><td class="num right muted">{{.Total.Reports.Unauthorized}}</td></tr>
-        <tr><td>Rejected, rate limited (429)</td><td class="num right">{{.LastHour.Reports.RateLimited}}</td><td class="num right muted">{{.Total.Reports.RateLimited}}</td></tr>
-        <tr><td>Rejected, server error (5xx)</td><td class="num right">{{.LastHour.Reports.ServerError}}</td><td class="num right muted">{{.Total.Reports.ServerError}}</td></tr>
-        <tr><td>Feed fetches served</td><td class="num right">{{.LastHour.Feed.Served}}</td><td class="num right muted">{{.Total.Feed.Served}}</td></tr>
-        <tr><td>Refused, missing or bad API key (401)</td><td class="num right">{{.LastHour.Feed.Refused}}</td><td class="num right muted">{{.Total.Feed.Refused}}</td></tr>
-        <tr><td>Bad request (400)</td><td class="num right">{{.LastHour.Feed.Invalid}}</td><td class="num right muted">{{.Total.Feed.Invalid}}</td></tr>
-        <tr><td>Server error (5xx)</td><td class="num right">{{.LastHour.Feed.ServerError}}</td><td class="num right muted">{{.Total.Feed.ServerError}}</td></tr>
+        <tr><td>Reports accepted</td><td class="num right">{{.LastHour.Reports.Accepted}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Reports.Accepted}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Reports.Accepted}}</td></tr>
+        <tr><td>Rejected as invalid (400, 409, 415)</td><td class="num right">{{.LastHour.Reports.Invalid}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Reports.Invalid}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Reports.Invalid}}</td></tr>
+        <tr><td>Rejected, signed out or not allowed (401, 403)</td><td class="num right">{{.LastHour.Reports.Unauthorized}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Reports.Unauthorized}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Reports.Unauthorized}}</td></tr>
+        <tr><td>Rejected, rate limited (429)</td><td class="num right">{{.LastHour.Reports.RateLimited}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Reports.RateLimited}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Reports.RateLimited}}</td></tr>
+        <tr><td>Rejected, server error (5xx)</td><td class="num right">{{.LastHour.Reports.ServerError}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Reports.ServerError}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Reports.ServerError}}</td></tr>
+        <tr><td>Feed fetches served</td><td class="num right">{{.LastHour.Feed.Served}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Feed.Served}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Feed.Served}}</td></tr>
+        <tr><td>Refused, missing or bad API key (401)</td><td class="num right">{{.LastHour.Feed.Refused}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Feed.Refused}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Feed.Refused}}</td></tr>
+        <tr><td>Bad request (400)</td><td class="num right">{{.LastHour.Feed.Invalid}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Feed.Invalid}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Feed.Invalid}}</td></tr>
+        <tr><td>Server error (5xx)</td><td class="num right">{{.LastHour.Feed.ServerError}}</td>{{if not .Hours.Error}}<td class="num right">{{.Hours.Total.Feed.ServerError}}</td>{{end}}<td class="num right muted hide-phone">{{.Total.Feed.ServerError}}</td></tr>
       </tbody>
     </table>
   </div>

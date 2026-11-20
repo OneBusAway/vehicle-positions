@@ -128,9 +128,90 @@ type healthMinuteRow struct {
 	Feed    feedOutcomes
 }
 
+// healthHourRow is one row of the Feed health page's per-hour table.
+type healthHourRow struct {
+	Hour     string
+	Vehicles int
+	Reports  reportOutcomes
+	Feed     feedOutcomes
+}
+
+// healthRangeLink is one of the hours section's two periods.
+type healthRangeLink struct {
+	Label   string
+	URL     string
+	Current bool
+}
+
+// healthHoursSection is the hours section of the Feed health page: the last
+// day or week, from the hours saved and the one in progress.
+type healthHoursSection struct {
+	// Period is "24 hours" or "7 days", as the headings and charts name it.
+	Period string
+	Range  []healthRangeLink
+	// Error is set, and the rest empty, when the saved hours could not be
+	// read.
+	Error    string
+	Total    healthPeriod
+	Reports  barChartView
+	Vehicles barChartView
+	Fetches  barChartView
+	// Rows are newest first, as the minutes are.
+	Rows []healthHourRow
+}
+
+func newHealthHoursSection(snap feedHealthResponse, days int) healthHoursSection {
+	section := healthHoursSection{
+		Period: "24 hours",
+		Range: []healthRangeLink{
+			{Label: "24 hours", URL: "/admin/health", Current: days == 1},
+			{Label: "7 days", URL: "/admin/health?days=7", Current: days == 7},
+		},
+		Error: snap.HoursError,
+	}
+	// An hour of the week is named with its day, since 24 of them share each
+	// time of day.
+	layout := "15:04"
+	if days == 7 {
+		section.Period, layout = "7 days", "Jan 2 15:04"
+	}
+	if section.Error != "" {
+		return section
+	}
+	reports := make([]chartBar, 0, len(snap.Hours))
+	vehicles := make([]chartBar, 0, len(snap.Hours))
+	fetches := make([]chartBar, 0, len(snap.Hours))
+	var total healthCounts
+	for _, h := range snap.Hours {
+		label := h.Hour.UTC().Format(layout)
+		reports = append(reports, chartBar{Label: label, Value: h.Reports.Accepted, Warn: h.Reports.Rejected()})
+		vehicles = append(vehicles, chartBar{Label: label, Value: uint64(h.Vehicles)})
+		fetches = append(fetches, chartBar{Label: label, Value: h.Feed.Served})
+		total.add(countsOf(h))
+	}
+	section.Total = newHealthPeriod(total)
+	section.Rows = make([]healthHourRow, 0, len(snap.Hours))
+	for i := len(snap.Hours) - 1; i >= 0; i-- {
+		h := snap.Hours[i]
+		section.Rows = append(section.Rows, healthHourRow{Hour: h.Hour.UTC().Format(layout), Vehicles: h.Vehicles, Reports: h.Reports, Feed: h.Feed})
+	}
+	over := " an hour over the last " + section.Period
+	section.Reports = newBarChart(reports, barChartOptions{
+		Name: "Location reports" + over, Height: healthChartHeight, Unit: "accepted", WarnUnit: "rejected", Peak: "Most in an hour",
+	})
+	section.Vehicles = newBarChart(vehicles, barChartOptions{
+		Name: "Vehicles reporting" + over, Height: healthChartHeight, Unit: "reporting", Peak: "Most in an hour",
+	})
+	section.Fetches = newBarChart(fetches, barChartOptions{
+		Name: "Feed fetches served" + over, Height: healthChartHeight, Unit: "served", Peak: "Most in an hour",
+	})
+	return section
+}
+
 // healthPageData is what the Feed health page renders: the hour newest first,
-// since that is the minute an operator is looking for.
-func healthPageData(snap feedHealthResponse) map[string]interface{} {
+// since that is the minute an operator is looking for, and the last days'
+// hours.
+func healthPageData(snap feedHealthResponse, days int) map[string]interface{} {
 	rows := make([]healthMinuteRow, 0, len(snap.Minutes))
 	for i := len(snap.Minutes) - 1; i >= 0; i-- {
 		m := snap.Minutes[i]
@@ -155,6 +236,7 @@ func healthPageData(snap feedHealthResponse) map[string]interface{} {
 		"LastHour": snap.LastHour,
 		"Total":    snap.Total,
 		"Minutes":  rows,
+		"Hours":    newHealthHoursSection(snap, days),
 		"Reports":  reportsPerMinuteChart(snap, time.UTC, healthChartHeight),
 		"Vehicles": newBarChart(vehicles, barChartOptions{
 			Name:   "Vehicles reporting a minute over the last hour",
@@ -171,9 +253,15 @@ func healthPageData(snap feedHealthResponse) map[string]interface{} {
 	}
 }
 
-// healthPage renders the last hour of report and feed counts, per minute, and
-// the totals since the server started.
+// healthPage renders the last hour of report and feed counts, per minute, the
+// last day's or week's per hour, and the totals since the server started. Any
+// ?days but 7 is the day, as the Analytics page opens on its default for a
+// period it does not know.
 func (ui *adminUI) healthPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Refresh", healthPageRefresh)
-	ui.renderAdmin(w, r, http.StatusOK, "health.html", healthPageData(ui.health.snapshot()))
+	days, ok := parseHealthDays(r)
+	if !ok {
+		days = 1
+	}
+	ui.renderAdmin(w, r, http.StatusOK, "health.html", healthPageData(ui.health.report(r.Context(), days), days))
 }

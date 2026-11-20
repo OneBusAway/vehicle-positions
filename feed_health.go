@@ -86,8 +86,9 @@ type healthBucket struct {
 }
 
 // feedHealth counts report and feed responses in memory, per minute for the
-// last hour and in total since the server started. Nothing is persisted, so a
-// restart starts the counts again from since.
+// last hour, per hour, and in total since the server started. The minutes and
+// the total start again at a restart; each hour is saved when it closes (see
+// feed_health_hours.go).
 type feedHealth struct {
 	now   func() time.Time
 	since time.Time
@@ -100,10 +101,22 @@ type feedHealth struct {
 	// entry per vehicle that has reported since the server started, which only
 	// the fleet's own vehicles can, so it is bounded by the fleet.
 	lastMinute map[string]int64
+	// hour is the hour in progress, and closed the hours since that are not
+	// saved yet, oldest first.
+	hour   hourTally
+	closed []hourTally
+	// store keeps the closed hours; nil keeps them in memory only.
+	store healthHourStore
 }
 
 func newFeedHealth(now func() time.Time) *feedHealth {
-	return &feedHealth{now: now, since: now(), lastMinute: make(map[string]int64)}
+	start := now()
+	return &feedHealth{
+		now:        now,
+		since:      start,
+		lastMinute: make(map[string]int64),
+		hour:       hourTally{hour: unixHour(start)},
+	}
 }
 
 func unixMinute(t time.Time) int64 { return t.Unix() / 60 }
@@ -115,6 +128,7 @@ func (h *feedHealth) record(endpoint healthEndpoint, status int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.bucket(minute).counts[endpoint][outcome]++
+	h.tally(minute / 60).counts[endpoint][outcome]++
 	h.totals[endpoint][outcome]++
 }
 
@@ -126,11 +140,15 @@ func (h *feedHealth) recordVehicle(vehicleID string) {
 	// The minute is read under the lock, so two reports cannot reach the map
 	// out of order and count a vehicle twice in a minute.
 	minute := unixMinute(h.now())
-	if last, ok := h.lastMinute[vehicleID]; ok && last >= minute {
+	last, seen := h.lastMinute[vehicleID]
+	if seen && last >= minute {
 		return
 	}
 	h.lastMinute[vehicleID] = minute
 	h.bucket(minute).vehicles++
+	if !seen || last/60 < minute/60 {
+		h.tally(minute/60).vehicles++
+	}
 }
 
 // bucket is minute's bucket, emptied first when it still holds an older
@@ -255,6 +273,12 @@ type feedHealthResponse struct {
 	// Minutes is the last hour, oldest first, ending with the minute in
 	// progress. Every minute is listed, with zeros where nothing came in.
 	Minutes []healthMinute `json:"minutes"`
+	// Hours is the last 24 hours, or 7 days, oldest first, ending with the
+	// hour in progress. Every hour is listed, with zeros where nothing came in
+	// or nothing was saved. It is empty when the saved hours could not be
+	// read, and HoursError says so.
+	Hours      []healthHour `json:"hours"`
+	HoursError string       `json:"hours_error,omitempty"`
 }
 
 func (h *feedHealth) snapshot() feedHealthResponse {
@@ -269,6 +293,7 @@ func (h *feedHealth) snapshot() feedHealthResponse {
 		Since:   h.since.UTC(),
 		Total:   newHealthPeriod(totals),
 		Minutes: make([]healthMinute, 0, healthWindowMinutes),
+		Hours:   make([]healthHour, 0),
 	}
 	var hour healthCounts
 	for minute := current - healthWindowMinutes + 1; minute <= current; minute++ {
@@ -289,9 +314,15 @@ func (h *feedHealth) snapshot() feedHealthResponse {
 	return resp
 }
 
-// handleFeedHealth serves the report and feed counts as JSON.
+// handleFeedHealth serves the report and feed counts as JSON, with the hours
+// of the day, or of the week when ?days=7.
 func handleFeedHealth(health *feedHealth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, health.snapshot())
+		days, ok := parseHealthDays(r)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "days must be 1 or 7"})
+			return
+		}
+		writeJSON(w, http.StatusOK, health.report(r.Context(), days))
 	}
 }

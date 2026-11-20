@@ -214,7 +214,7 @@ are under *Data Retention & Privacy* in the [README](../README.md).
 
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
-| `LOCATION_RETENTION_PERIOD` | `0` | Optional | How long to keep rows in `location_points`, and the alerts in `alert_history` that cleared before then. **`0` means keep forever**, not "keep nothing" — it disables pruning. Any other value enables it. A negative duration logs an `ERROR` and leaves retention **off**; the server still starts. |
+| `LOCATION_RETENTION_PERIOD` | `0` | Optional | How long to keep rows in `location_points`, the alerts in `alert_history` that cleared before then, the Analytics days in `service_day_totals` and the Feed health hours in `feed_health_hours`. **`0` means keep forever**, not "keep nothing" — it disables pruning. Any other value enables it. A negative duration logs an `ERROR` and leaves retention **off**; the server still starts. |
 | `LOCATION_PRUNE_INTERVAL` | `1h` | Optional | How often the pruner sweeps. Read **only when `LOCATION_RETENTION_PERIOD` is non-zero.** A value that parses to zero or a negative duration disables retention entirely rather than falling back to `1h`. |
 | `LOCATION_PRUNE_BATCH_SIZE` | `10000` | Optional | Maximum rows deleted per statement, each batch in its own transaction. Read **only when `LOCATION_RETENTION_PERIOD` is non-zero.** Must be a positive 32-bit integer; anything else warns and defaults. |
 

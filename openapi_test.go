@@ -118,6 +118,7 @@ var schemaStructs = map[string]string{
 	"FeedHealth":           "feedHealthResponse",
 	"FeedHealthPeriod":     "healthPeriod",
 	"FeedHealthMinute":     "healthMinute",
+	"FeedHealthHour":       "healthHour",
 	"ReportOutcomes":       "reportOutcomes",
 	"FeedOutcomes":         "feedOutcomes",
 

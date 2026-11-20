@@ -589,3 +589,29 @@ SET on_time_early_s = EXCLUDED.on_time_early_s, on_time_late_s = EXCLUDED.on_tim
 
 -- name: DeleteServiceDayTotalsBefore :execrows
 DELETE FROM service_day_totals WHERE service_date < sqlc.arg(cutoff);
+
+-- name: ListFeedHealthHours :many
+SELECT hour, reports_accepted, reports_invalid, reports_unauthorized, reports_rate_limited,
+       reports_server_error, feed_served, feed_refused, feed_invalid, feed_server_error, vehicles
+FROM feed_health_hours
+WHERE hour BETWEEN sqlc.arg(first_hour) AND sqlc.arg(last_hour)
+ORDER BY hour;
+
+-- name: SaveFeedHealthHour :exec
+-- An hour saved again replaces its row: a server started in an hour already
+-- saved carries on from the row's counts, so its own include them.
+INSERT INTO feed_health_hours (hour, reports_accepted, reports_invalid, reports_unauthorized,
+    reports_rate_limited, reports_server_error, feed_served, feed_refused, feed_invalid,
+    feed_server_error, vehicles)
+VALUES (sqlc.arg(hour), sqlc.arg(reports_accepted), sqlc.arg(reports_invalid), sqlc.arg(reports_unauthorized),
+    sqlc.arg(reports_rate_limited), sqlc.arg(reports_server_error), sqlc.arg(feed_served), sqlc.arg(feed_refused),
+    sqlc.arg(feed_invalid), sqlc.arg(feed_server_error), sqlc.arg(vehicles))
+ON CONFLICT (hour) DO UPDATE
+SET reports_accepted = EXCLUDED.reports_accepted, reports_invalid = EXCLUDED.reports_invalid,
+    reports_unauthorized = EXCLUDED.reports_unauthorized, reports_rate_limited = EXCLUDED.reports_rate_limited,
+    reports_server_error = EXCLUDED.reports_server_error, feed_served = EXCLUDED.feed_served,
+    feed_refused = EXCLUDED.feed_refused, feed_invalid = EXCLUDED.feed_invalid,
+    feed_server_error = EXCLUDED.feed_server_error, vehicles = EXCLUDED.vehicles;
+
+-- name: DeleteFeedHealthHoursBefore :execrows
+DELETE FROM feed_health_hours WHERE hour < sqlc.arg(cutoff);
