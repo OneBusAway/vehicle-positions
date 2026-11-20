@@ -391,6 +391,9 @@ func main() {
 		onTimeLate:       envNonNegativeDurationOrDefault("REPORT_ON_TIME_LATE", defaultReportOnTimeLate),
 		maxShapeDistance: riderCfg.Thresholds.MaxShapeDistance,
 	})
+	// Past days of Analytics are worked out ahead of the first look at them.
+	warmer := startReportWarmer(reports, reportWarmInterval)
+	defer warmer.Stop()
 	// The alerts judge off route against the same schedule.
 	alerts := newAlertWatcher(store, alertSettingsFromEnv(riderCfg.Thresholds.MaxShapeDistance))
 	alerts.watchRoutes(schedule.Index)

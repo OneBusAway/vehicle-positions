@@ -137,6 +137,7 @@ func TestServiceReporter_ReadsTheFixtureDayFromTheStore(t *testing.T) {
 
 	// The day is long settled, so its totals were kept, and read back the
 	// same through service_day_totals.
+	fromStore.saving.Wait()
 	kept, err := store.ListServiceDays(ctx, reportDay, reportDay)
 	require.NoError(t, err)
 	require.Len(t, kept, 1)

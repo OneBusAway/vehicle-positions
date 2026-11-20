@@ -771,14 +771,19 @@ with its time at every stop. **All routes** goes back.
 
 **Download CSV**, on a single day, saves that day's route rows as a
 spreadsheet. Today's figures are worked out afresh at most once a minute, so
-they fill in as the day goes on. Yesterday is worked out from the reports
-too, so points a phone uploads late from its offline queue still count. Each
-day before yesterday is kept in the database once it has been worked out, and
-read from there after that, so a period opens quickly however long it is. A
-kept day does not change: points uploaded later still show on the trip's page
-but not here, and a schedule reload leaves it judged against the timetable it
-ran to. The first look at a period after upgrading works out its days once, so
-it can take several seconds. Kept days are deleted with the location history
+they fill in as the day goes on. A past day is worked out once its service has
+ended and then kept in memory until the server next reloads the schedule,
+daily by default, so points a phone uploads late from its offline queue count
+only from that reload on. A day older than yesterday is also kept in the
+database the first time it is worked out after that, and read from there, so a
+period opens quickly however long it is. A kept day does not change: points
+uploaded later still show on the trip's page but not here, and a schedule
+reload leaves it judged against the timetable it ran to. After the server
+starts, and after each schedule reload or new day, it works out in the
+background any of the last 56 days it has not kept yet, one at a time. Just
+after an upgrade that takes a few minutes, during which a long period can be
+slow to open; a period further back is worked out the first time it is
+opened, which can take several seconds. Kept days are deleted with the location history
 they came from, when `LOCATION_RETENTION_PERIOD` is set. Your server
 administrator can change the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and
 `REPORT_ON_TIME_LATE`, see [`configuration.md`](configuration.md)); the days

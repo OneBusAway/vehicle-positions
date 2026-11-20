@@ -289,6 +289,10 @@ type fakeReportStore struct {
 	saves    int
 	daysErr  error
 	dayReads int
+	// saveGate, when set, holds every save until it is closed, and
+	// saveCtxErr is the context's error each held save then saw.
+	saveGate   chan struct{}
+	saveCtxErr []error
 }
 
 func (f *fakeReportStore) ListServiceDays(_ context.Context, first, last time.Time) ([]storedServiceDay, error) {
@@ -307,9 +311,18 @@ func (f *fakeReportStore) ListServiceDays(_ context.Context, first, last time.Ti
 	return out, nil
 }
 
-func (f *fakeReportStore) SaveServiceDay(_ context.Context, day storedServiceDay) error {
+func (f *fakeReportStore) SaveServiceDay(ctx context.Context, day storedServiceDay) error {
+	f.mu.Lock()
+	gate := f.saveGate
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if gate != nil {
+		f.saveCtxErr = append(f.saveCtxErr, ctx.Err())
+	}
 	f.saves++
 	if f.days == nil {
 		f.days = make(map[string]storedServiceDay)

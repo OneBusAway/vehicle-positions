@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
@@ -46,8 +47,13 @@ func (s *Store) ListServiceDays(ctx context.Context, first, last time.Time) ([]s
 			OnTimeEarly: time.Duration(row.OnTimeEarlyS) * time.Second,
 			OnTimeLate:  time.Duration(row.OnTimeLateS) * time.Second,
 		}
+		// A row that does not decode, say one written before the totals
+		// changed shape, is left out rather than failing every period that
+		// covers it: the day is worked out again and its row replaced.
 		if err := json.Unmarshal(row.Totals, &day.Totals); err != nil {
-			return nil, fmt.Errorf("read service day totals for %s: %w", day.Date.Format(reportDateLayout), err)
+			slog.Warn("analytics: a kept service day does not decode, working it out again",
+				"date", day.Date.Format(reportDateLayout), "error", err)
+			continue
 		}
 		day.Totals.Date = day.Date.Format(reportDateLayout)
 		days = append(days, day)

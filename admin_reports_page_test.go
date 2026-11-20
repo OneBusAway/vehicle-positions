@@ -38,6 +38,9 @@ func reportsView(t *testing.T, r *serviceReporter, query string) (map[string]int
 	require.NoError(t, err)
 	data, status, err := reportsPageView(context.Background(), r, &overviewReports{}, q)
 	require.NoError(t, err)
+	// The days are saved after the page has them; wait, so a test reads
+	// the store as the page left it.
+	r.saving.Wait()
 	return data, status
 }
 
