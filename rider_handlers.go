@@ -382,12 +382,19 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 		// A client that names no service date gets the one this trip actually
 		// runs on, which for an after-midnight departure is not always the one
 		// the 03:00 cutoff derives; a client that names one is held to it. A
-		// trip in frequencies.txt is dated by the window its run is in, which
-		// can run past midnight while its pattern of stop times does not;
-		// RunServiceDate gives any other trip ServiceDateFor's date.
+		// trip in frequencies.txt is dated by the window that holds its run's
+		// start, which can run past midnight while its pattern of stop times
+		// does not, and a rider boards partway along the run. A timetabled
+		// trip's stop times already place its run, so RunServiceDate gives it
+		// ServiceDateFor's date from the boarding time itself: shifting it
+		// back could cross midnight into a day its run is not on.
 		startDate := req.StartDate
 		if startDate == "" {
-			startDate = index.RunServiceDate(trip, s.now())
+			startedAt := s.now()
+			if trip.InFrequencies() {
+				startedAt = boardedRunStart(trip, req.BoardingStopID, startedAt)
+			}
+			startDate = index.RunServiceDate(trip, startedAt)
 		}
 		if !index.ActiveOn(trip, startDate) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "trip not active on start_date"})
@@ -950,6 +957,23 @@ func destinationOf(trip *rider.TripInfo, stopID string) *rideDestination {
 		}
 	}
 	return nil
+}
+
+// boardedRunStart is when the run a rider boarded at stopID at boardedAt left
+// its first stop: the boarding time, less the schedule's time from the first
+// departure to that stop. A rider boards partway along a run, so the window
+// that holds its start can have ended before they board. It counts from the
+// stop's own time rather than its place on the shape, as Verify counts from a
+// point's: a stop the feed gives no coordinates shares its predecessor's
+// place. A stop the trip does not call at, or none, says nothing of how far
+// along the run they are, and leaves the boarding time.
+func boardedRunStart(trip *rider.TripInfo, stopID string, boardedAt time.Time) time.Time {
+	for _, st := range trip.StopTimes {
+		if stopID != "" && st.StopID == stopID {
+			return boardedAt.Add(-max(0, st.Arrival-trip.StopTimes[0].Departure))
+		}
+	}
+	return boardedAt
 }
 
 // tooLong reports whether a client-supplied identifier exceeds what is worth
