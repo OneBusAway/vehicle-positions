@@ -16,6 +16,8 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.language.AndroidLanguageSettings
+import org.onebusaway.vehicletracker.ui.language.LanguageRowController
 
 /**
  * The trip's notification channels are listed by name in the app's notification settings, so they are named again
@@ -96,6 +98,25 @@ class TripChannelLanguageTest {
         } finally {
             // Back to the phone's language, and the channels with it, before any other test reads a string.
             locales.applicationLocales = LocaleList.getEmptyLocaleList()
+            assertEquals(english, namesOnceThey(english))
+        }
+    }
+
+    @Test
+    fun aLanguageChosenOnTheLanguageRowRenamesTheChannels() {
+        assumeTrue("the app's own list comes with Android 13", Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        TrackingNotification(context)
+        val english = namesIn(context)
+        val accented = namesIn(inLanguage("en-XA"))
+        assertNotEquals("this debug build has en-XA strings", english, accented)
+        val row = LanguageRowController(Build.VERSION.SDK_INT, AndroidLanguageSettings(context))
+
+        try {
+            row.choose("en-XA", shown = "en")
+
+            assertEquals(accented, namesOnceThey(accented))
+        } finally {
+            context.getSystemService(LocaleManager::class.java).applicationLocales = LocaleList.getEmptyLocaleList()
             assertEquals(english, namesOnceThey(english))
         }
     }

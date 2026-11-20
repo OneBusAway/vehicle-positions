@@ -148,6 +148,12 @@ internal sealed interface HelpItem {
         override val contentType = "welcome"
     }
 
+    /** The app's language, under the welcome row, where a driver who cannot read the page's language finds it. */
+    data object Language : HelpItem {
+        override val key = "language"
+        override val contentType = "language"
+    }
+
     data class Section(val section: HelpSection) : HelpItem {
         override val key = "section-${section.name}"
         override val contentType = "section"
@@ -177,6 +183,7 @@ internal sealed interface HelpItem {
 /** The whole page, top to bottom, built once. */
 internal val helpPage: List<HelpItem> = buildList {
     add(HelpItem.WelcomeAgain)
+    add(HelpItem.Language)
     add(HelpItem.Section(HelpSection.STATUS))
     CardStatusHelp.entries.forEachIndexed { i, help -> add(HelpItem.Status(help, groupPlace(i, CardStatusHelp.entries.size))) }
     add(HelpItem.Section(HelpSection.PROBLEMS))
