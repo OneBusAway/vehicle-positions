@@ -1,6 +1,6 @@
 {{define "sidebar"}}
 <nav class="rail" aria-label="Main">
-  <a class="rail-brand" href="/admin">{{template "brand-mark"}}<span class="rail-label">Vehicle Tracker</span></a>
+  <a class="rail-brand" href="/admin" title="Vehicle Tracker">{{template "brand-mark"}}<span class="rail-label">Vehicle Tracker</span></a>
   {{range .Shell.Nav}}
   <div class="rail-group">{{.Title}}</div>
   {{range .Items}}
