@@ -90,6 +90,7 @@ func startAlertJobs(store AlertHistoryStore, alerts *alertWatcher, index func() 
 		return recorder.Stop
 	}
 	webhook := newAlertWebhook(*cfg, alerts, alerts.settings, index, timing)
+	alerts.webhook = webhook
 	return func() {
 		webhook.Stop()
 		recorder.Stop()

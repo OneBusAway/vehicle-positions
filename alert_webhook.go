@@ -234,9 +234,18 @@ type alertWebhook struct {
 	// the checking goroutine uses it.
 	open map[alertKey]alertEntry
 
+	// started is when the webhook started, the start of what last covers.
+	started time.Time
+
 	mu sync.Mutex
 	// queue is the posts waiting, oldest first.
 	queue []alertWebhookEvent
+	// sending is set while a post taken off the queue is being sent, its
+	// retries included.
+	sending bool
+	// last is the most recent post sent or given up on, nil until one is.
+	// A delivery is never changed once made, so a status may keep it.
+	last *alertWebhookDelivery
 	// failed is the alerts whose failed post has been logged, so a second
 	// failure for the same alert is not.
 	failed map[alertKey]struct{}
@@ -268,11 +277,12 @@ func newAlertWebhook(cfg alertWebhookConfig, source alertSource, settings alertS
 			// sent.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		open:   make(map[alertKey]alertEntry),
-		failed: make(map[alertKey]struct{}),
-		wake:   make(chan struct{}, 1),
-		ctx:    ctx,
-		cancel: cancel,
+		started: time.Now(),
+		open:    make(map[alertKey]alertEntry),
+		failed:  make(map[alertKey]struct{}),
+		wake:    make(chan struct{}, 1),
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 	h.wg.Go(h.checkEvery)
 	h.wg.Go(h.sendQueued)
@@ -470,6 +480,7 @@ func (h *alertWebhook) next() (alertWebhookEvent, bool) {
 	}
 	ev := h.queue[0]
 	h.queue = h.queue[1:]
+	h.sending = true
 	return ev, true
 }
 
@@ -477,6 +488,8 @@ func (h *alertWebhook) next() (alertWebhookEvent, bool) {
 // clear has been tried.
 func (h *alertWebhook) settle(ev alertWebhookEvent, err error) {
 	h.mu.Lock()
+	h.sending = false
+	h.last = newAlertWebhookDelivery(ev, err, time.Now())
 	_, logged := h.failed[ev.key]
 	switch {
 	case ev.payload.Event == alertCleared:
@@ -507,7 +520,7 @@ func (h *alertWebhook) deliver(p alertWebhookPayload) error {
 		body, err = json.Marshal(p)
 	}
 	if err != nil {
-		return fmt.Errorf("encode the post: %w", err)
+		return &webhookFailure{plain: "The post could not be encoded", err: fmt.Errorf("encode the post: %w", err)}
 	}
 
 	for attempt := 0; ; attempt++ {
@@ -529,7 +542,7 @@ func (h *alertWebhook) post(body []byte) (retry bool, err error) {
 	req, err := http.NewRequestWithContext(h.ctx, http.MethodPost, h.cfg.url, bytes.NewReader(body))
 	if err != nil {
 		// Not wrapped: the error repeats the URL.
-		return false, errors.New("could not build the request")
+		return false, &webhookFailure{plain: "The URL could not be used", err: errors.New("could not build the request")}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if h.cfg.secret != nil {
@@ -547,14 +560,19 @@ func (h *alertWebhook) post(body []byte) (retry bool, err error) {
 	// can quote the path back, credential and all.
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 
+	code := resp.StatusCode
 	switch {
-	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+	case code >= 200 && code < 300:
 		return false, nil
-	case resp.StatusCode >= 300 && resp.StatusCode < 400:
-		return false, fmt.Errorf("answered %d, a redirect, which is not followed: set ALERT_WEBHOOK_URL to where it leads", resp.StatusCode)
+	case code >= 300 && code < 400:
+		return false, &webhookFailure{
+			status: code,
+			plain:  fmt.Sprintf("Answered %d, a redirect, which is not followed. Set ALERT_WEBHOOK_URL to where it leads.", code),
+			err:    fmt.Errorf("answered %d, a redirect, which is not followed: set ALERT_WEBHOOK_URL to where it leads", code),
+		}
 	}
-	err = fmt.Errorf("answered %d", resp.StatusCode)
-	return resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests, err
+	err = &webhookFailure{status: code, plain: fmt.Sprintf("Answered %d %s", code, http.StatusText(code)), err: fmt.Errorf("answered %d", code)}
+	return code >= 500 || code == http.StatusTooManyRequests, err
 }
 
 // noAnswer says, for the log, why a post got no answer, in words that carry
@@ -565,17 +583,78 @@ func (h *alertWebhook) post(body []byte) (retry bool, err error) {
 func (h *alertWebhook) noAnswer(err error) error {
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return fmt.Errorf("no answer within %s", h.timing.timeout)
+		return &webhookFailure{plain: "No answer within " + h.timing.timeout.String(), err: fmt.Errorf("no answer within %s", h.timing.timeout)}
 	}
 	var dialErr *net.OpError
 	if errors.As(err, &dialErr) && dialErr.Op == "dial" {
-		return dialErr
+		return &webhookFailure{plain: "Could not connect to " + h.cfg.host, err: dialErr}
 	}
 	var certErr *tls.CertificateVerificationError
 	if errors.As(err, &certErr) {
-		return certErr
+		return &webhookFailure{plain: "The certificate of " + h.cfg.host + " is not trusted", err: certErr}
 	}
-	return errors.New("no valid HTTP answer")
+	return &webhookFailure{plain: "No valid HTTP answer", err: errors.New("no valid HTTP answer")}
+}
+
+// webhookFailure is why a post failed: err in the words the log has always
+// used, and plain in the words the Alerts page shows. Neither carries any of
+// the URL past its host. status is the HTTP status the receiver answered, 0
+// when it gave none.
+type webhookFailure struct {
+	status int
+	plain  string
+	err    error
+}
+
+func (f *webhookFailure) Error() string { return f.err.Error() }
+func (f *webhookFailure) Unwrap() error { return f.err }
+
+// alertWebhookDelivery is the outcome of one post, sent or given up on after
+// its retries.
+type alertWebhookDelivery struct {
+	At        time.Time
+	Event     string
+	Kind      string
+	VehicleID string
+	Sent      bool
+	// Status is the HTTP status the receiver answered, 0 when it gave none.
+	Status int
+	// Problem says in plain words why a post failed; "" when it was sent.
+	Problem string
+}
+
+func newAlertWebhookDelivery(ev alertWebhookEvent, err error, at time.Time) *alertWebhookDelivery {
+	d := &alertWebhookDelivery{At: at, Event: ev.payload.Event, Kind: ev.payload.Kind, VehicleID: ev.payload.VehicleID, Sent: err == nil}
+	if err == nil {
+		return d
+	}
+	d.Problem = "The post failed"
+	var f *webhookFailure
+	if errors.As(err, &f) {
+		d.Status, d.Problem = f.status, f.plain
+	}
+	return d
+}
+
+// alertWebhookStatus is the webhook as the Alerts page shows it, read in one
+// go so the page never sees the sender half way through a change.
+type alertWebhookStatus struct {
+	// Host is the host of ALERT_WEBHOOK_URL, the only part of it shown: a
+	// chat service's URL carries its credential in the path.
+	Host    string
+	Started time.Time
+	// Waiting is the posts queued, Sending whether one is being sent.
+	Waiting int
+	Sending bool
+	// Last is the most recent post sent or given up on, nil when none has
+	// been since the server started.
+	Last *alertWebhookDelivery
+}
+
+func (h *alertWebhook) status() alertWebhookStatus {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return alertWebhookStatus{Host: h.cfg.host, Started: h.started, Waiting: len(h.queue), Sending: h.sending, Last: h.last}
 }
 
 // signAlertWebhook is the hex HMAC-SHA256, keyed with secret, of the

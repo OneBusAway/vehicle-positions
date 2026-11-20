@@ -151,6 +151,60 @@ func newClearedAlertRow(a clearedAlert, ix *rider.Index, loc *time.Location, now
 	return row
 }
 
+// webhookView is the Alerts page's webhook card: where alerts are posted and
+// how the posts have gone since the server started.
+type webhookView struct {
+	// Host is the host of ALERT_WEBHOOK_URL; "" when the setting is unset.
+	Host string
+	// Started is when the webhook started, on the page's clock.
+	Started string
+	// Waiting is how many posts are queued, in words.
+	Waiting string
+	// Last is the most recent post, nil when none has been made.
+	Last *webhookPostView
+}
+
+// webhookPostView is one post as the card shows it.
+type webhookPostView struct {
+	Sent bool
+	// When is on the page's clock; What says which alert it was about.
+	When string
+	What string
+	// Problem says why it failed, in plain words.
+	Problem string
+}
+
+// newWebhookView is the card for s, the webhook's state; nil s is the
+// webhook unset. Times are on the clock loc, as of now.
+func newWebhookView(s *alertWebhookStatus, loc *time.Location, now time.Time) webhookView {
+	if s == nil {
+		return webhookView{}
+	}
+	at := func(t time.Time) string { return t.In(loc).Format("15:04") + ", " + formatDay(t, loc, now) }
+	v := webhookView{Host: s.Host, Started: at(s.Started), Waiting: "None"}
+	switch {
+	case s.Sending && s.Waiting > 0:
+		v.Waiting = fmt.Sprintf("1 being sent, %d waiting", s.Waiting)
+	case s.Sending:
+		v.Waiting = "1 being sent"
+	case s.Waiting > 0:
+		v.Waiting = countOf(s.Waiting, "post", "posts") + " waiting"
+	}
+	if last := s.Last; last != nil {
+		title, ok := alertKindTitle(last.Kind)
+		if !ok {
+			title = last.Kind
+		}
+		v.Last = &webhookPostView{
+			Sent:    last.Sent,
+			When:    at(last.At),
+			What:    fmt.Sprintf("%s for %s, %s", title, last.VehicleID, last.Event),
+			Problem: last.Problem,
+		}
+	}
+	return v
+}
+
 // alertKindTitle is kind in words, and false when there is no such kind.
 func alertKindTitle(kind string) (string, bool) {
 	for _, k := range alertKinds {
@@ -248,6 +302,14 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		clearedKinds = append(clearedKinds, statusLink{Label: k.title, URL: clearedAlertsURL(k.kind, 1), Current: kind == k.kind})
 	}
 
+	// Read in one go under the webhook's lock, so the card never shows a
+	// post half way through being settled.
+	var webhook *alertWebhookStatus
+	if ui.alerts.webhook != nil {
+		status := ui.alerts.webhook.status()
+		webhook = &status
+	}
+
 	ui.renderAdminWithAlerts(w, r, http.StatusOK, "alerts.html", map[string]interface{}{
 		"Title":            "Alerts",
 		"Page":             "alerts",
@@ -269,5 +331,6 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		"OffRouteDistance": fmt.Sprintf("%.0f m", ui.alerts.settings.offRouteDistance),
 		"OffRouteAfter":    humanizeDuration(ui.alerts.settings.offRouteAfter),
 		"NotStartedAfter":  humanizeDuration(ui.alerts.settings.notStartedAfter),
+		"Webhook":          newWebhookView(webhook, loc, now),
 	}, alerts)
 }

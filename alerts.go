@@ -181,6 +181,10 @@ type alertWatcher struct {
 	schedule func() *rider.Index
 	// started lists the trips started lately, nil until watchBlocks.
 	started TripsStartedBetweenLister
+	// webhook posts the alerts to ALERT_WEBHOOK_URL, for the Alerts page to
+	// show how its posts went. It is nil when the setting is unset, and set
+	// once by startAlertJobs before any request comes.
+	webhook *alertWebhook
 }
 
 // newAlertWatcher makes a watcher that reads the active trips from trips.

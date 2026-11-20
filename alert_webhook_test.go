@@ -876,3 +876,144 @@ func TestDefaultAlertWebhookTiming(t *testing.T) {
 	assert.Equal(t, []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}, timing.backoff)
 	assert.Equal(t, 100, timing.queueSize)
 }
+
+// lastPost waits for h to settle a post and returns it.
+func lastPost(t *testing.T, h *alertWebhook) alertWebhookDelivery {
+	t.Helper()
+	require.Eventually(t, func() bool { return h.status().Last != nil }, 5*time.Second, time.Millisecond)
+	return *h.status().Last
+}
+
+func TestAlertWebhook_StatusBeforeAnyPost(t *testing.T) {
+	receiver := newWebhookReceiver(t, http.StatusOK)
+	before := time.Now()
+	h := startWebhook(t, configFor(receiver), &scriptedAlerts{}, nil, idleWebhookTiming())
+
+	s := h.status()
+	assert.Equal(t, configFor(receiver).host, s.Host)
+	assert.Nil(t, s.Last)
+	assert.Zero(t, s.Waiting)
+	assert.False(t, s.Sending)
+	assert.WithinDuration(t, before, s.Started, time.Second)
+}
+
+func TestAlertWebhook_StatusAfterASend(t *testing.T) {
+	receiver := newWebhookReceiver(t, http.StatusOK)
+	source := &scriptedAlerts{}
+	h := startWebhook(t, configFor(receiver), source, nil, idleWebhookTiming())
+	source.set(nil, webhookAlert(alertQuiet))
+	before := time.Now()
+	h.check(alertT0)
+
+	last := lastPost(t, h)
+	assert.True(t, last.Sent)
+	assert.Zero(t, last.Status)
+	assert.Empty(t, last.Problem)
+	assert.Equal(t, []string{alertRaised, alertQuiet, "bus-7"}, []string{last.Event, last.Kind, last.VehicleID})
+	assert.WithinDuration(t, before, last.At, time.Second)
+}
+
+// A post that fails says why in plain words, and the status the receiver
+// answered: a 4xx at once, a 5xx after its retries.
+func TestAlertWebhook_StatusAfterAFailure(t *testing.T) {
+	for _, tc := range []struct {
+		status  int
+		problem string
+	}{
+		{http.StatusNotFound, "Answered 404 Not Found"},
+		{http.StatusInternalServerError, "Answered 500 Internal Server Error"},
+		{http.StatusMovedPermanently, "Answered 301, a redirect, which is not followed. Set ALERT_WEBHOOK_URL to where it leads."},
+	} {
+		t.Run(tc.problem, func(t *testing.T) {
+			captureWebhookLogs(t)
+			receiver := newWebhookReceiver(t, tc.status)
+			source := &scriptedAlerts{}
+			h := startWebhook(t, configFor(receiver), source, nil, idleWebhookTiming())
+			source.set(nil, webhookAlert(alertQuiet))
+			h.check(alertT0)
+
+			last := lastPost(t, h)
+			assert.False(t, last.Sent)
+			assert.Equal(t, tc.status, last.Status)
+			assert.Equal(t, tc.problem, last.Problem)
+		})
+	}
+}
+
+func TestAlertWebhook_StatusAfterNoAnswer(t *testing.T) {
+	captureWebhookLogs(t)
+	t.Run("nothing listening", func(t *testing.T) {
+		gone := httptest.NewServer(http.NotFoundHandler())
+		cfg := alertWebhookConfig{url: gone.URL + "/hook", host: strings.TrimPrefix(gone.URL, "http://")}
+		gone.Close()
+		source := &scriptedAlerts{}
+		h := startWebhook(t, cfg, source, nil, idleWebhookTiming())
+		source.set(nil, webhookAlert(alertQuiet))
+		h.check(alertT0)
+
+		last := lastPost(t, h)
+		assert.False(t, last.Sent)
+		assert.Zero(t, last.Status, "no answer, so no status")
+		assert.Equal(t, "Could not connect to "+cfg.host, last.Problem)
+	})
+	t.Run("too slow", func(t *testing.T) {
+		receiver := newWebhookReceiver(t, http.StatusOK)
+		receiver.holdPosts()
+		timing := idleWebhookTiming()
+		timing.timeout = 20 * time.Millisecond
+		source := &scriptedAlerts{}
+		h := startWebhook(t, configFor(receiver), source, nil, timing)
+		source.set(nil, webhookAlert(alertQuiet))
+		h.check(alertT0)
+
+		last := lastPost(t, h)
+		assert.Zero(t, last.Status)
+		assert.Equal(t, "No answer within 20ms", last.Problem)
+	})
+}
+
+// The posts waiting are counted, and the one being sent is told apart.
+func TestAlertWebhook_StatusCountsThePostsWaiting(t *testing.T) {
+	receiver := newWebhookReceiver(t, http.StatusOK)
+	release := receiver.holdPosts()
+	source := &scriptedAlerts{}
+	h := startWebhook(t, configFor(receiver), source, nil, idleWebhookTiming())
+	source.set(nil, alertOn("bus-1", 1), alertOn("bus-2", 2), alertOn("bus-3", 3))
+	h.check(alertT0)
+
+	require.Eventually(t, func() bool { s := h.status(); return s.Sending && s.Waiting == 2 }, 5*time.Second, time.Millisecond,
+		"one held at the receiver, two behind it")
+	close(release)
+	require.Eventually(t, func() bool { s := h.status(); return !s.Sending && s.Waiting == 0 }, 5*time.Second, time.Millisecond)
+	assert.True(t, h.status().Last.Sent)
+}
+
+// Read while the sender works, under -race: the page takes its snapshot
+// under the webhook's own lock.
+func TestAlertWebhook_StatusWhileSending(t *testing.T) {
+	captureWebhookLogs(t)
+	receiver := newWebhookReceiver(t, http.StatusOK, http.StatusInternalServerError, http.StatusOK, http.StatusNotFound)
+	source := &scriptedAlerts{}
+	h := startWebhook(t, configFor(receiver), source, nil, testWebhookTiming())
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 20 {
+			source.set(nil, alertOn(fmt.Sprintf("bus-%d", i%4), int64(i%4)))
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	for {
+		s := h.status()
+		if s.Last != nil {
+			_ = s.Last.Problem
+		}
+		select {
+		case <-done:
+			require.Eventually(t, func() bool { return h.status().Last != nil }, 5*time.Second, time.Millisecond)
+			return
+		default:
+		}
+	}
+}
