@@ -432,6 +432,21 @@ func ServiceDayStart(serviceDate string, loc *time.Location) (time.Time, error) 
 // not the timetable of any one run.
 func (t *TripInfo) InFrequencies() bool { return len(t.frequencies) > 0 }
 
+// InWindow reports whether one of the trip's frequencies.txt windows holds at
+// on a day the trip runs, the day before at's or its own: the windows
+// RunServiceDate dates a run's start by. It is false for a timetabled trip.
+func (ix *Index) InWindow(trip *TripInfo, at time.Time) bool {
+	date := ix.RunServiceDate(trip, at)
+	dayStart, err := ServiceDayStart(date, ix.tz)
+	if err != nil || !ix.ActiveOn(trip, date) {
+		return false
+	}
+	since := at.Sub(dayStart)
+	return slices.ContainsFunc(trip.frequencies, func(f gtfs.Frequency) bool {
+		return f.StartTime <= since && since < f.EndTime
+	})
+}
+
 // Run describes the run of a trip in frequencies.txt that started at
 // startedAt on serviceDate, as a GTFS-RT TripDescriptor names it: its
 // start_time, and whether it is run by headway (UNSCHEDULED). The run
