@@ -508,7 +508,9 @@
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape" && picked && !document.querySelector("dialog[open]")) closeCard(false);
   });
-  $("map-retry").addEventListener("click", function (ev) { ev.preventDefault(); poll(); });
+  // Signed out, the link goes to sign in; otherwise it asks again at once.
+  var signedOut = false;
+  $("map-retry").addEventListener("click", function (ev) { if (signedOut) return; ev.preventDefault(); poll(); });
 
   /* Polling. This page asks for the live answer itself, so the shell's pulse takes its news from here. */
   VT.ownsPulse = true;
@@ -542,11 +544,15 @@
       lastOk = Date.now(); draw(live, first); first = false;
       learnHeadsigns(live);
       if (VT.heard) VT.heard(live);
-    }, function () {
+    }, function (e) {
       if (mine < answered) return;
       answered = mine;
-      if (VT.lost) VT.lost(!lastOk);
-      $("map-stale-text").textContent = lastOk ? "No answer from the server. Showing positions from " + new Date(lastOk).toLocaleTimeString("en-GB") + "." : "No answer from the server yet.";
+      signedOut = VT.signedOut(e);
+      if (VT.lost) VT.lost(!lastOk, signedOut);
+      var from = lastOk ? " Showing positions from " + new Date(lastOk).toLocaleTimeString("en-GB") + "." : "";
+      $("map-stale-text").textContent = signedOut ? "You are signed out." + from : lastOk ? "No answer from the server." + from : "No answer from the server yet.";
+      $("map-retry").textContent = signedOut ? "Sign in" : "Try again";
+      $("map-retry").href = signedOut ? VT.signIn() : "/admin/map";
       $("map-stale").hidden = false; $("map-empty").hidden = true; box.classList.add("stale");
       if (last) list(last);
       if (!lastOk) {
