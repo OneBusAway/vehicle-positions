@@ -456,6 +456,18 @@ func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, cutoff pgtype.
 	return result.RowsAffected(), nil
 }
 
+const deleteFeedHealthHoursBefore = `-- name: DeleteFeedHealthHoursBefore :execrows
+DELETE FROM feed_health_hours WHERE hour < $1
+`
+
+func (q *Queries) DeleteFeedHealthHoursBefore(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFeedHealthHoursBefore, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteImportConfirmationsBefore = `-- name: DeleteImportConfirmationsBefore :exec
 DELETE FROM import_confirmations WHERE expires_at < $1
 `
@@ -1515,6 +1527,51 @@ func (q *Queries) ListClearedAlertsOfKind(ctx context.Context, arg ListClearedAl
 	return items, nil
 }
 
+const listFeedHealthHours = `-- name: ListFeedHealthHours :many
+SELECT hour, reports_accepted, reports_invalid, reports_unauthorized, reports_rate_limited,
+       reports_server_error, feed_served, feed_refused, feed_invalid, feed_server_error, vehicles
+FROM feed_health_hours
+WHERE hour BETWEEN $1 AND $2
+ORDER BY hour
+`
+
+type ListFeedHealthHoursParams struct {
+	FirstHour pgtype.Timestamptz
+	LastHour  pgtype.Timestamptz
+}
+
+func (q *Queries) ListFeedHealthHours(ctx context.Context, arg ListFeedHealthHoursParams) ([]FeedHealthHour, error) {
+	rows, err := q.db.Query(ctx, listFeedHealthHours, arg.FirstHour, arg.LastHour)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FeedHealthHour
+	for rows.Next() {
+		var i FeedHealthHour
+		if err := rows.Scan(
+			&i.Hour,
+			&i.ReportsAccepted,
+			&i.ReportsInvalid,
+			&i.ReportsUnauthorized,
+			&i.ReportsRateLimited,
+			&i.ReportsServerError,
+			&i.FeedServed,
+			&i.FeedRefused,
+			&i.FeedInvalid,
+			&i.FeedServerError,
+			&i.Vehicles,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRides = `-- name: ListRides :many
 SELECT id, rider_id, trip_id, start_date, route_id, vehicle_id, boarding_stop_id, destination_stop_id, status, state, corroborated, end_reason, points_total, points_matched, points_corroborated, points_contradicted, started_at, ended_at, updated_at FROM rides WHERE status = $1 ORDER BY started_at DESC, id DESC LIMIT $2 OFFSET $3
 `
@@ -2027,6 +2084,54 @@ type RevokeTokenParams struct {
 // Idempotent: logging out twice must not error.
 func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
 	_, err := q.db.Exec(ctx, revokeToken, arg.Jti, arg.UserID, arg.ExpiresAt)
+	return err
+}
+
+const saveFeedHealthHour = `-- name: SaveFeedHealthHour :exec
+INSERT INTO feed_health_hours (hour, reports_accepted, reports_invalid, reports_unauthorized,
+    reports_rate_limited, reports_server_error, feed_served, feed_refused, feed_invalid,
+    feed_server_error, vehicles)
+VALUES ($1, $2, $3, $4,
+    $5, $6, $7, $8,
+    $9, $10, $11)
+ON CONFLICT (hour) DO UPDATE
+SET reports_accepted = EXCLUDED.reports_accepted, reports_invalid = EXCLUDED.reports_invalid,
+    reports_unauthorized = EXCLUDED.reports_unauthorized, reports_rate_limited = EXCLUDED.reports_rate_limited,
+    reports_server_error = EXCLUDED.reports_server_error, feed_served = EXCLUDED.feed_served,
+    feed_refused = EXCLUDED.feed_refused, feed_invalid = EXCLUDED.feed_invalid,
+    feed_server_error = EXCLUDED.feed_server_error, vehicles = EXCLUDED.vehicles
+`
+
+type SaveFeedHealthHourParams struct {
+	Hour                pgtype.Timestamptz
+	ReportsAccepted     int64
+	ReportsInvalid      int64
+	ReportsUnauthorized int64
+	ReportsRateLimited  int64
+	ReportsServerError  int64
+	FeedServed          int64
+	FeedRefused         int64
+	FeedInvalid         int64
+	FeedServerError     int64
+	Vehicles            int32
+}
+
+// An hour saved again replaces its row: a server started in an hour already
+// saved carries on from the row's counts, so its own include them.
+func (q *Queries) SaveFeedHealthHour(ctx context.Context, arg SaveFeedHealthHourParams) error {
+	_, err := q.db.Exec(ctx, saveFeedHealthHour,
+		arg.Hour,
+		arg.ReportsAccepted,
+		arg.ReportsInvalid,
+		arg.ReportsUnauthorized,
+		arg.ReportsRateLimited,
+		arg.ReportsServerError,
+		arg.FeedServed,
+		arg.FeedRefused,
+		arg.FeedInvalid,
+		arg.FeedServerError,
+		arg.Vehicles,
+	)
 	return err
 }
 

@@ -35,6 +35,17 @@ type fakeLocationPruneStore struct {
 	// with dayErr when it is set.
 	dayCutoffs []time.Time
 	dayErr     error
+	// hourCutoffs holds the cutoff of each PruneFeedHealthHours call, which
+	// fails with hourErr when it is set.
+	hourCutoffs []time.Time
+	hourErr     error
+}
+
+func (f *fakeLocationPruneStore) PruneFeedHealthHours(_ context.Context, cutoff time.Time) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hourCutoffs = append(f.hourCutoffs, cutoff)
+	return 0, f.hourErr
 }
 
 func (f *fakeLocationPruneStore) PruneServiceDays(_ context.Context, cutoff time.Time) (int64, error) {
@@ -187,6 +198,26 @@ func TestLocationPruner_ServiceDayPruneErrorStillPrunesPoints(t *testing.T) {
 	assert.Equal(t, 1, fake.callCount())
 }
 
+func TestLocationPruner_PrunesFeedHealthHoursAtTheSameCutoff(t *testing.T) {
+	fake := &fakeLocationPruneStore{}
+	pruner := newUnstartedPruner(fake, 24*time.Hour, 100)
+
+	pruner.pruneAll(pruner.ctx)
+
+	require.Len(t, fake.hourCutoffs, 1)
+	assert.Equal(t, fake.firstCall(t).cutoff, fake.hourCutoffs[0],
+		"an hour's counts are kept as long as the points reported in it")
+}
+
+func TestLocationPruner_FeedHealthHourPruneErrorStillPrunesPoints(t *testing.T) {
+	fake := &fakeLocationPruneStore{hourErr: errors.New("connection refused")}
+	pruner := newUnstartedPruner(fake, time.Hour, 5)
+
+	pruner.pruneAll(pruner.ctx)
+
+	assert.Equal(t, 1, fake.callCount())
+}
+
 func TestLocationPruner_Stop_Idempotent(t *testing.T) {
 	pruner, err := NewLocationPruner(&fakeLocationPruneStore{}, time.Hour, time.Minute, 100)
 	require.NoError(t, err)
@@ -288,6 +319,10 @@ func (b *blockingPruneStore) PruneClearedAlerts(context.Context, time.Time) (int
 }
 
 func (b *blockingPruneStore) PruneServiceDays(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (b *blockingPruneStore) PruneFeedHealthHours(context.Context, time.Time) (int64, error) {
 	return 0, nil
 }
 

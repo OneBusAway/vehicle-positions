@@ -82,8 +82,8 @@ func (p *LocationPruner) run() {
 	}
 }
 
-// pruneAll deletes the cleared alerts and the kept service days from before
-// the cutoff, then expired location points in batches until a pass removes
+// pruneAll deletes the cleared alerts, the kept service days and the feed
+// health hours from before the cutoff, then expired location points in batches until a pass removes
 // fewer rows than the batch size, the store returns an error, or the pruner
 // is stopped.
 func (p *LocationPruner) pruneAll(ctx context.Context) {
@@ -91,6 +91,7 @@ func (p *LocationPruner) pruneAll(ctx context.Context) {
 	cutoff := start.Add(-p.retention)
 	p.pruneAlerts(ctx, cutoff)
 	p.pruneServiceDays(ctx, cutoff)
+	p.pruneHealthHours(ctx, cutoff)
 
 	var total int64
 	for {
@@ -157,5 +158,22 @@ func (p *LocationPruner) pruneServiceDays(ctx context.Context, cutoff time.Time)
 	}
 	if deleted > 0 {
 		slog.Info("pruned expired service day totals", "deleted", deleted, "cutoff", cutoff, "retention", p.retention.String())
+	}
+}
+
+// pruneHealthHours deletes the Feed health hours that started before cutoff.
+// An hour counts the reports whose points are kept for the retention period,
+// so it is kept no longer than they are; an hour is one row.
+func (p *LocationPruner) pruneHealthHours(ctx context.Context, cutoff time.Time) {
+	deleted, err := p.store.PruneFeedHealthHours(ctx, cutoff)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			return
+		}
+		slog.Error("feed health hours retention prune failed", "error", err, "cutoff", cutoff)
+		return
+	}
+	if deleted > 0 {
+		slog.Info("pruned expired feed health hours", "deleted", deleted, "cutoff", cutoff, "retention", p.retention.String())
 	}
 }

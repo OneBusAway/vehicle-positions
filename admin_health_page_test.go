@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"net/http"
 	"net/http/httptest"
@@ -119,7 +121,7 @@ func TestHealthPageData_NewestMinuteFirst(t *testing.T) {
 	clock.advance(2 * time.Minute)
 	h.record(healthReports, http.StatusBadRequest)
 
-	data := healthPageData(h.snapshot())
+	data := healthPageData(h.snapshot(), 1)
 	rows, ok := data["Minutes"].([]healthMinuteRow)
 	require.True(t, ok)
 	require.Len(t, rows, healthWindowMinutes)
@@ -133,13 +135,14 @@ func TestHealthPageData_NewestMinuteFirst(t *testing.T) {
 }
 
 // renderHealthContent renders the Feed health view's content block, without
-// the layout, from the same snapshot the JSON endpoint serves.
+// the layout, from the same snapshot the JSON endpoint serves, with the last
+// 24 hours.
 func renderHealthContent(t *testing.T, snap feedHealthResponse) string {
 	t.Helper()
 	tmpl, err := template.ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/health.html")
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, tmpl.ExecuteTemplate(&buf, "content", healthPageData(snap)))
+	require.NoError(t, tmpl.ExecuteTemplate(&buf, "content", healthPageData(snap, 1)))
 	return buf.String()
 }
 
@@ -220,7 +223,7 @@ func TestHealthPage_AgreesWithTheJSON(t *testing.T) {
 	clock.advance(time.Minute)
 	h.record(healthReports, http.StatusCreated)
 
-	snap := h.snapshot()
+	snap := h.report(context.Background(), 1)
 	page := renderHealthContent(t, snap)
 
 	summary := healthTableRows(t, page, "health-summary")
@@ -233,7 +236,8 @@ func TestHealthPage_AgreesWithTheJSON(t *testing.T) {
 	assert.Equal(t, []string{"10", "1", "2", "3", "4", "8", "5", "6", "7"}, want)
 	// The outcome's name has no class, so the two counts are the cells read.
 	assert.Equal(t, want, healthColumn(summary, 0))
-	assert.Equal(t, want, healthColumn(summary, 1), "the server started within the hour, so the total is the hour")
+	assert.Equal(t, want, healthColumn(summary, 1), "the hour is the only one of the day with counts")
+	assert.Equal(t, want, healthColumn(summary, 2), "the server started within the hour, so the total is the hour")
 
 	rows := healthTableRows(t, page, "health-minutes")
 	require.Len(t, rows, healthWindowMinutes)
@@ -272,7 +276,7 @@ func TestHealthPage_NoReports(t *testing.T) {
 
 // TestHealthPage_VehiclesReporting: the tile is the last full minute's count
 // and the chart the hour's, both from the vehicles whose reports were
-// accepted. A restarted server starts them again, as the page says.
+// accepted. A restarted server starts the minutes again.
 func TestHealthPage_VehiclesReporting(t *testing.T) {
 	clock := newHealthTestClock(healthTestStart)
 	health := newFeedHealth(clock.now)
@@ -290,8 +294,8 @@ func TestHealthPage_VehiclesReporting(t *testing.T) {
 	assert.Contains(t, page, `data-tip="09:16|1 reporting"`)
 	assert.Contains(t, page, `data-tip="09:14|0 reporting"`)
 	assert.Contains(t, page, "Most in a minute: 3")
-	assert.Contains(t, page, "the vehicles sending them and fetches of the GTFS-RT feed, counted in memory since the server started at")
-	assert.Contains(t, page, "A restart starts the counts again.")
+	assert.Contains(t, page, "Each hour is saved when it closes, so the last day is kept through a restart; the totals count from the server's start at")
+	assert.NotContains(t, page, "A restart starts the counts again.")
 
 	restarted := renderHealthContent(t, newFeedHealth(clock.now).snapshot())
 	assert.Contains(t, restarted, `<span class="tile-label">Vehicles reporting</span><span class="tile-value"><span class="count-up" data-count="0">0</span></span><span class="tile-note">None in the last hour</span>`)
@@ -459,4 +463,101 @@ func TestDashboard_FeedHealthIsTheLastHour(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, `</i>1 accepted</span>`)
 	assert.Contains(t, body, `</i>1 rejected</span>`)
+}
+
+// TestHealthPage_LastDay: the hours section draws the last 24 hours from the
+// saved rows and the hour in progress from memory, every hour with a bar and
+// a row, an hour with nothing saved at zero.
+func TestHealthPage_LastDay(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	store := newFakeHourStore()
+	earlier := healthTestHour.Add(-2 * time.Hour)
+	store.rows[earlier] = healthHour{
+		Hour:     earlier,
+		Reports:  reportOutcomes{Accepted: 300, Invalid: 4, Unauthorized: 1},
+		Feed:     feedOutcomes{Served: 120, Refused: 2},
+		Vehicles: 6,
+	}
+	h := newStoredFeedHealth(t, clock, store)
+	sendReport(t, h, liveReportPath, "bus-1", http.StatusCreated)
+	h.record(healthFeed, http.StatusOK)
+
+	page := renderHealthContent(t, h.report(context.Background(), 1))
+
+	assert.Contains(t, page, `<h3 id="health-hours" class="h2" style="flex:1;margin:0">Last 24 hours</h3>`)
+	assert.Contains(t, page, `<a href="/admin/health" aria-current="true">24 hours</a><a href="/admin/health?days=7">7 days</a>`)
+	assert.Contains(t, page, `aria-label="Location reports an hour over the last 24 hours: 24 bars, the highest 305"`)
+	assert.Contains(t, page, `data-tip="07:00|300 accepted, 5 rejected"`)
+	assert.Contains(t, page, `data-tip="08:00|0 accepted"`, "an hour with no row is a zero bar")
+	assert.Contains(t, page, `data-tip="09:00|1 accepted"`, "the hour in progress, from memory")
+	assert.Contains(t, page, `aria-label="Vehicles reporting an hour over the last 24 hours: 24 bars, the highest 6"`)
+	assert.Contains(t, page, `data-tip="07:00|6 reporting"`)
+	assert.Contains(t, page, `aria-label="Feed fetches served an hour over the last 24 hours: 24 bars, the highest 120"`)
+	assert.Contains(t, page, `data-tip="09:00|1 served"`)
+	assert.Contains(t, page, "Show the last 24 hours hour by hour")
+
+	rows := healthTableRows(t, page, "health-hours-table")
+	require.Len(t, rows, healthDayHours)
+	assert.Equal(t, []string{"09:00", "1", "1", "0", "0", "0", "0", "1", "0", "0", "0"}, healthCellTexts(rows[0]), "newest first")
+	assert.Equal(t, []string{"08:00", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"}, healthCellTexts(rows[1]))
+	assert.Equal(t, []string{"07:00", "6", "300", "4", "1", "0", "0", "120", "2", "0", "0"}, healthCellTexts(rows[2]))
+	assert.Equal(t, "num right tone-warn strong", rows[2][3].class, "a rejection stands out in its hour")
+	assert.Equal(t, "10:00", healthCellTexts(rows[healthDayHours-1])[0])
+
+	summary := healthTableRows(t, page, "health-summary")
+	assert.Equal(t, []string{"301", "4", "1", "0", "0", "121", "2", "0", "0"}, healthColumn(summary, 1), "the day's outcomes")
+	assert.Contains(t, page, `<th class="right">Last 24 hours</th>`)
+}
+
+func TestHealthPage_LastWeek(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	store := newFakeHourStore()
+	daysAgo := healthTestHour.Add(-3 * 24 * time.Hour)
+	store.rows[daysAgo] = healthHour{Hour: daysAgo, Reports: reportOutcomes{Accepted: 50}}
+	h := newStoredFeedHealth(t, clock, store)
+
+	tmpl, err := template.ParseFS(files, "web/templates/layout/parts.html", "web/templates/views/health.html")
+	require.NoError(t, err)
+	var buf bytes.Buffer
+	require.NoError(t, tmpl.ExecuteTemplate(&buf, "content", healthPageData(h.report(context.Background(), 7), 7)))
+	page := buf.String()
+
+	assert.Contains(t, page, `<h3 id="health-hours" class="h2" style="flex:1;margin:0">Last 7 days</h3>`)
+	assert.Contains(t, page, `<a href="/admin/health">24 hours</a><a href="/admin/health?days=7" aria-current="true">7 days</a>`)
+	assert.Contains(t, page, `aria-label="Location reports an hour over the last 7 days: 168 bars, the highest 50"`)
+	assert.Contains(t, page, `data-tip="Nov 11 09:00|50 accepted"`, "a week's hours name their day")
+	assert.Len(t, healthTableRows(t, page, "health-hours-table"), healthWeekHours)
+	assert.Contains(t, page, `<th class="right">Last 7 days</th>`)
+}
+
+func TestHealthPage_HoursUnreadable(t *testing.T) {
+	store := newFakeHourStore()
+	h := newStoredFeedHealth(t, newHealthTestClock(healthTestStart), store)
+	h.record(healthReports, http.StatusCreated)
+	store.listErr = errors.New("connection refused")
+
+	page := renderHealthContent(t, h.report(context.Background(), 1))
+
+	assert.Contains(t, page, "The hourly counts could not be read from the database.")
+	assert.NotContains(t, page, `id="health-hours-table"`)
+	assert.Contains(t, page, `<h2 class="h1">Reports and the feed are healthy</h2>`, "the last hour still shows")
+	assert.Equal(t, []string{"1", "0", "0", "0", "0", "0", "0", "0", "0"}, healthColumn(healthTableRows(t, page, "health-summary"), 0))
+}
+
+func TestHealthPage_DaysFromTheQuery(t *testing.T) {
+	health := newFeedHealth(newHealthTestClock(healthTestStart).now)
+	h := newHealthTestHandler(t, health)
+
+	for query, want := range map[string]string{
+		"?days=7":  "Last 7 days",
+		"?days=30": "Last 24 hours",
+		"":         "Last 24 hours",
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/admin/health"+query, nil)
+		req.AddCookie(cookieFor(t, "admin"))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code, query)
+		assert.Contains(t, w.Body.String(), `<h3 id="health-hours" class="h2" style="flex:1;margin:0">`+want+`</h3>`, query)
+	}
 }

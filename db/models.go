@@ -29,6 +29,20 @@ type ApiKey struct {
 	UpdatedAt  pgtype.Timestamptz
 }
 
+type FeedHealthHour struct {
+	Hour                pgtype.Timestamptz
+	ReportsAccepted     int64
+	ReportsInvalid      int64
+	ReportsUnauthorized int64
+	ReportsRateLimited  int64
+	ReportsServerError  int64
+	FeedServed          int64
+	FeedRefused         int64
+	FeedInvalid         int64
+	FeedServerError     int64
+	Vehicles            int32
+}
+
 type GtfsFeedCache struct {
 	ID        int16
 	Source    string
