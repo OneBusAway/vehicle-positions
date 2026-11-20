@@ -486,7 +486,7 @@ func (a *Aggregator) runStarts(key TripKey, trip *TripInfo, places []runPlace, n
 
 	starts := make([]time.Time, len(places))
 	for i, p := range places {
-		starts[i] = p.at.Add(-max(0, ScheduledOffsetAt(trip, p.along)-trip.StopTimes[0].Departure))
+		starts[i] = RunStart(trip, p.along, p.at)
 	}
 	type match struct {
 		place, run int

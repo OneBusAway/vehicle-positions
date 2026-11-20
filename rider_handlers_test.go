@@ -441,6 +441,115 @@ func TestStartRide_HeadwayRunAfterMidnightIsDatedByItsWindow(t *testing.T) {
 	assert.Equal(t, ix.ServiceDateFor(t3, env.now), env.store.rides[timetabled.RideID].StartDate)
 }
 
+// headwayStartEnv is a rider env whose T1 runs by headway in window, a
+// frequencies.txt row, with its pattern stretched so ST2 is 25 minutes in:
+// ST1 08:00, ST2 08:25, ST3 08:40.
+func headwayStartEnv(t *testing.T, window string) *riderTestEnv {
+	t.Helper()
+	stretch := func(name string, body []byte) []byte {
+		if name != "stop_times.txt" {
+			return body
+		}
+		return []byte(strings.NewReplacer(
+			"T1,08:05:00,08:05:00,ST2", "T1,08:25:00,08:25:00,ST2",
+			"T1,08:10:00,08:10:00,ST3", "T1,08:40:00,08:40:00,ST3",
+		).Replace(string(body)))
+	}
+	env := newRiderTestEnv(t)
+	ix := fixtureIndexEdited(t, stretch, fixtureMember{"frequencies.txt",
+		"trip_id,start_time,end_time,headway_secs,exact_times\n" + window + "\n"})
+	env.index = ix
+	env.svc.index = func() *rider.Index { return ix }
+	return env
+}
+
+// A rider boarding at ST2 at 00:20 is on a run that left ST1 at 23:55, so the
+// window that holds the run is the day before's, though it ended before they
+// boarded. The ride is dated by the run's start, and a point at ST2 then is on
+// schedule.
+func TestStartRide_HeadwayRideIsDatedByItsRunsStart(t *testing.T) {
+	at := func(env *riderTestEnv, day, h, m int) time.Time {
+		return time.Date(2026, 9, day, h, m, 0, 0, env.index.Timezone())
+	}
+	tests := []struct {
+		name          string
+		window        string
+		day, h, m     int // when the rider boards at ST2
+		wantStartDate string
+	}{
+		{"a window to 24:00:00, boarding just after midnight", "T1,06:00:00,24:00:00,600,0", 3, 0, 20, "20260902"},
+		{"a window to 23:50, boarding just after midnight", "T1,06:00:00,23:50:00,600,0", 3, 0, 10, "20260902"},
+		{"boarding well inside a window", "T1,06:00:00,24:00:00,600,0", 2, 14, 25, "20260902"},
+		{"boarding after midnight inside the day's window", "T1,00:00:00,24:00:00,600,0", 3, 0, 40, "20260903"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := headwayStartEnv(t, tc.window)
+			_, tok := env.register(t)
+			t1, ok := env.index.Trip("T1")
+			require.True(t, ok)
+			boarded := at(env, tc.day, tc.h, tc.m)
+
+			env.now = boarded
+			ride := env.startRide(t, tok, map[string]any{"trip_id": "T1", "boarding_stop_id": "ST2"})
+			require.Equal(t, tc.wantStartDate, env.store.rides[ride.RideID].StartDate)
+
+			st2 := t1.StopTimes[1].Pos
+			env.now = boarded.Add(10 * time.Second)
+			_, code := env.upload(t, tok, ride.RideID, []map[string]any{{
+				"latitude": st2.Lat, "longitude": st2.Lon, "accuracy": 5, "speed": 1.7, "bearing": 0,
+				"timestamp": boarded.Add(5 * time.Second).Unix(),
+			}})
+			require.Equal(t, http.StatusOK, code)
+			require.Len(t, env.store.points[ride.RideID], 1)
+			assert.Equal(t, "matched", env.store.points[ride.RideID][0].Outcome)
+		})
+	}
+}
+
+// A boarding stop the trip does not call at says nothing of how far into its
+// run the rider is, so the ride is dated by the boarding time, as one that
+// names no stop is.
+func TestStartRide_UnknownBoardingStopIsDatedByTheBoardingTime(t *testing.T) {
+	env := headwayStartEnv(t, "T1,06:00:00,24:00:00,600,0")
+	_, tok := env.register(t)
+	t1, ok := env.index.Trip("T1")
+	require.True(t, ok)
+	env.now = time.Date(2026, 9, 3, 0, 20, 0, 0, env.index.Timezone())
+
+	for _, stop := range []string{"LP2", ""} {
+		ride := env.startRide(t, tok, map[string]any{"trip_id": "T1", "boarding_stop_id": stop})
+		assert.Equal(t, env.index.RunServiceDate(t1, env.now), env.store.rides[ride.RideID].StartDate, "stop %q", stop)
+	}
+}
+
+// A stop time whose stop the feed left out has no id, and a start that names
+// no boarding stop is not taken to have boarded there.
+func TestBoardedRunStart_NoStopIsNotAStopWithoutAnID(t *testing.T) {
+	trip := &rider.TripInfo{StopTimes: []rider.StopTimeInfo{
+		{StopID: "A", Arrival: 8 * time.Hour, Departure: 8 * time.Hour},
+		{StopID: "", AlongShape: 500, Arrival: 8*time.Hour + 25*time.Minute, Departure: 8*time.Hour + 25*time.Minute},
+	}}
+	boarded := time.Date(2026, 9, 3, 0, 20, 0, 0, time.UTC)
+	assert.Equal(t, boarded, boardedRunStart(trip, "", boarded))
+}
+
+// T3, by timetable from 25:00, is dated by its stop times whichever of them a
+// rider boards at.
+func TestStartRide_TimetabledRideWithABoardingStopIsDatedAsBefore(t *testing.T) {
+	env := newRiderTestEnv(t)
+	_, tok := env.register(t)
+	t3, ok := env.index.Trip("T3")
+	require.True(t, ok)
+	env.now = time.Date(2026, 9, 3, 1, 10, 0, 0, env.index.Timezone())
+
+	for _, stop := range []string{"LP1", "LP2", "LP3"} {
+		ride := env.startRide(t, tok, map[string]any{"trip_id": "T3", "boarding_stop_id": stop})
+		assert.Equal(t, "20260902", env.store.rides[ride.RideID].StartDate, stop)
+		assert.Equal(t, env.index.ServiceDateFor(t3, env.now), env.store.rides[ride.RideID].StartDate, stop)
+	}
+}
+
 func TestEndRide(t *testing.T) {
 	env := newRiderTestEnv(t)
 	riderID, tok := env.register(t)

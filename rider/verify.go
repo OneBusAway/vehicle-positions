@@ -208,14 +208,13 @@ func Verify(in VerifyInput) Verdict {
 		v.Reason = "bad start_date"
 		return v
 	}
-	offset := ScheduledOffsetAt(in.Trip, proj.AlongShape)
 	if len(in.Trip.frequencies) == 0 || len(in.Trip.StopTimes) == 0 {
-		v.ScheduleDeviation = in.Point.Timestamp.Sub(dayStart.Add(offset))
+		v.ScheduleDeviation = in.Point.Timestamp.Sub(dayStart.Add(ScheduledOffsetAt(in.Trip, proj.AlongShape)))
 	} else {
 		// A trip in frequencies.txt runs its stop times as a pattern from
 		// each run's start, so the point is judged against a run it could be
 		// on, not against the pattern's own times.
-		runStart := in.Point.Timestamp.Sub(dayStart) - max(0, offset-in.Trip.StopTimes[0].Departure)
+		runStart := RunStart(in.Trip, proj.AlongShape, in.Point.Timestamp).Sub(dayStart)
 		v.ScheduleDeviation = runDeviation(in.Trip.frequencies, runStart, in.Thresholds)
 	}
 	if !onSchedule(v.ScheduleDeviation, in.Thresholds) {
@@ -227,6 +226,15 @@ func Verify(in VerifyInput) Verdict {
 	v.Outcome = Matched
 	v.Corroboration = corroborate(in, proj.AlongShape)
 	return v
+}
+
+// RunStart is when a run of trip that was along metres into its shape at at
+// left its first stop: at, less the schedule's time from the first departure
+// to there. A place before the first departure, at the first stop during its
+// dwell, is taken to be leaving it then. The trip must have stop times, as an
+// indexed trip always does.
+func RunStart(trip *TripInfo, along float64, at time.Time) time.Time {
+	return at.Add(-max(0, ScheduledOffsetAt(trip, along)-trip.StopTimes[0].Departure))
 }
 
 // onSchedule reports whether a deviation from schedule is within the slack.
