@@ -415,6 +415,32 @@ func TestStartRide_NoStartDateRefusesFridaysRunOnSaturday(t *testing.T) {
 	assert.Empty(t, env.store.rides)
 }
 
+// TestStartRide_HeadwayRunAfterMidnightIsDatedByItsWindow: T1 run by headway
+// from 06:00 to 26:00 has a run at 00:30 on Thursday that is Wednesday's,
+// though its pattern of stop times ends at 08:10, so a start that names no
+// start_date is dated by the window. T3, by timetable at 25:00, is dated by
+// its stop times as before.
+func TestStartRide_HeadwayRunAfterMidnightIsDatedByItsWindow(t *testing.T) {
+	env := newRiderTestEnv(t)
+	keep := func(_ string, body []byte) []byte { return body }
+	ix := fixtureIndexEdited(t, keep, fixtureMember{"frequencies.txt",
+		"trip_id,start_time,end_time,headway_secs,exact_times\nT1,06:00:00,26:00:00,600,0\n"})
+	env.index = ix
+	env.svc.index = func() *rider.Index { return ix }
+	_, tok := env.register(t)
+
+	env.now = time.Date(2026, 9, 3, 0, 30, 0, 0, ix.Timezone())
+	headway := env.startRide(t, tok, map[string]any{"trip_id": "T1"})
+	assert.Equal(t, "20260902", env.store.rides[headway.RideID].StartDate)
+
+	env.now = time.Date(2026, 9, 3, 1, 0, 0, 0, ix.Timezone())
+	timetabled := env.startRide(t, tok, map[string]any{"trip_id": "T3"})
+	t3, ok := ix.Trip("T3")
+	require.True(t, ok)
+	assert.Equal(t, "20260902", env.store.rides[timetabled.RideID].StartDate)
+	assert.Equal(t, ix.ServiceDateFor(t3, env.now), env.store.rides[timetabled.RideID].StartDate)
+}
+
 func TestEndRide(t *testing.T) {
 	env := newRiderTestEnv(t)
 	riderID, tok := env.register(t)
