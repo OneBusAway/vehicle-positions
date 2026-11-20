@@ -1,0 +1,38 @@
+name: Translations
+
+# Checks the driver apps' strings and translations (cmd/l10n,
+# docs/translations/README.md). The tool's own tests run with the rest in
+# ci.yml.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/app/src/main/res/**'
+      - 'ios/**/*.xcstrings'
+      - 'docs/translations/**'
+      - 'cmd/l10n/**'
+      - '.github/workflows/l10n.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/app/src/main/res/**'
+      - 'ios/**/*.xcstrings'
+      - 'docs/translations/**'
+      - 'cmd/l10n/**'
+      - '.github/workflows/l10n.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check translations
+        run: go run ./cmd/l10n check -annotate -summary "$GITHUB_STEP_SUMMARY"

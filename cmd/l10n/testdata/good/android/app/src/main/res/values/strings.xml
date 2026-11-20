@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">OBA Vehicle Tracker</string>
+
+    <!-- The sign-in screen's title. -->
+    <string name="login_title">Sign in</string>
+    <!-- The server's address, e.g. "tracker.example.org". -->
+    <string name="login_error_unreachable">Can\'t reach %1$s. Check your connection.</string>
+    <!-- Where to read more. -->
+    <string name="help_link">Read more at https://onebusaway.org within 24 hours.</string>
+    <string name="tracking_gps">GPS is off</string>
+    <!-- A vehicle's route, then the stop it is heading to. -->
+    <string name="vehicle_route_stop">Vehicle on route %1$s, heading to %2$s</string>
+    <!-- How many reports the trip sent. -->
+    <plurals name="reports_sent">
+        <item quantity="one">%1$d report sent</item>
+        <item quantity="other">%1$d reports sent</item>
+    </plurals>
+    <string name="started_ago">Started %1$d min ago</string>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_title">साइन इन करें</string>
+    <string name="login_error_unreachable">%1$s तक नहीं पहुँच सके। अपना कनेक्शन जाँचें।</string>
+    <string name="help_link">24 घंटे में https://onebusaway.org पर और पढ़ें।</string>
+    <string name="tracking_gps">GPS बंद है</string>
+    <string name="vehicle_route_stop">गाड़ी रूट %1$s पर, %2$s की ओर</string>
+    <plurals name="reports_sent">
+        <item quantity="one">%1$d रिपोर्ट भेजी गई</item>
+        <item quantity="other">%1$d रिपोर्ट भेजी गईं</item>
+    </plurals>
+</resources>
