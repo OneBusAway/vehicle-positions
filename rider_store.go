@@ -135,6 +135,21 @@ type RideLister interface {
 	ListRides(ctx context.Context, status string, limit, offset int) ([]Ride, error)
 }
 
+// RideDay is what riders did on one service day: the rides they took, the
+// trips those rides were on, and their points, all and those that matched.
+type RideDay struct {
+	StartDate     string
+	Rides         int
+	Trips         int
+	PointsMatched int64
+	PointsTotal   int64
+}
+
+// RideDayCounter adds up rides by service day for the Rider mode page.
+type RideDayCounter interface {
+	CountRidesByDay(ctx context.Context, first, last string) ([]RideDay, error)
+}
+
 // RiderStatsReader reports rider counts per tier for the admin status endpoint.
 type RiderStatsReader interface {
 	CountRidersByTier(ctx context.Context) (map[string]int, error)
@@ -366,6 +381,26 @@ func (s *Store) ListRides(ctx context.Context, status string, limit, offset int)
 		rides = append(rides, *rideFromRow(row))
 	}
 	return rides, nil
+}
+
+// CountRidesByDay adds up the rides of each service day from first to last,
+// both YYYYMMDD and included, oldest first. A day with no ride has no entry.
+func (s *Store) CountRidesByDay(ctx context.Context, first, last string) ([]RideDay, error) {
+	rows, err := s.queries.CountRidesByServiceDay(ctx, db.CountRidesByServiceDayParams{FirstDate: first, LastDate: last})
+	if err != nil {
+		return nil, fmt.Errorf("count rides by day: %w", err)
+	}
+	days := make([]RideDay, 0, len(rows))
+	for _, row := range rows {
+		days = append(days, RideDay{
+			StartDate:     row.StartDate,
+			Rides:         int(row.Rides),
+			Trips:         int(row.Trips),
+			PointsMatched: row.PointsMatched,
+			PointsTotal:   row.PointsTotal,
+		})
+	}
+	return days, nil
 }
 
 // CountRidersByTier returns the number of riders in each tier. Tiers with no

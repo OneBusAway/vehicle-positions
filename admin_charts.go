@@ -9,11 +9,13 @@ import (
 )
 
 // chartBar is one bar of a bar chart: a count, a second count stacked on it
-// in amber, and the label its value is read out under.
+// in amber, and the label its value is read out under. Tip, when set, is what
+// its tip reads after the label in place of the counts and their units.
 type chartBar struct {
 	Label string
 	Value uint64
 	Warn  uint64
+	Tip   string
 }
 
 // barChartOptions says what a bar chart shows. Unit and WarnUnit follow a
@@ -112,6 +114,9 @@ func newBarChart(bars []chartBar, o barChartOptions) barChartView {
 			bar.WarnH = px(y(b.Warn) + 2)
 			bar.WarnY = px(bottom - y(b.Value) - y(b.Warn) - 4)
 			bar.Tip += fmt.Sprintf(", %d %s", b.Warn, o.WarnUnit)
+		}
+		if b.Tip != "" {
+			bar.Tip = b.Label + "|" + b.Tip
 		}
 		view.Bars = append(view.Bars, bar)
 	}

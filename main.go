@@ -65,6 +65,7 @@ type appStore interface {
 	RidePointRecorder
 	RideFinisher
 	RideLister
+	RideDayCounter
 	RiderStatsReader
 	RidePointPruner
 	APIKeyStore

@@ -286,3 +286,63 @@ func TestRiderStore_ListRidesOfAnyStatus(t *testing.T) {
 	require.Len(t, page, 1)
 	assert.Equal(t, ended.ID, page[0].ID, "the offset counts rides of every status")
 }
+
+// TestRiderStore_CountRidesByDay adds up a seeded week. The rides table
+// outlives the test run, so the week is one no other test rides on, and its
+// rides are cleared before and after.
+func TestRiderStore_CountRidesByDay(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	clear := func() {
+		_, err := store.pool.Exec(ctx, `DELETE FROM rides WHERE start_date BETWEEN '20310301' AND '20310311'`)
+		require.NoError(t, err)
+	}
+	clear()
+	t.Cleanup(clear)
+
+	r := registerTestRider(t, store)
+	seed := func(tripID, startDate, status string, matched, total int) {
+		t.Helper()
+		_, err := store.pool.Exec(ctx,
+			`INSERT INTO rides (id, rider_id, trip_id, start_date, status, points_matched, points_total) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			uuid.NewString(), r.ID, tripID, startDate, status, matched, total)
+		require.NoError(t, err)
+	}
+	seed("T1", "20310302", "ended", 50, 50) // the day before the week
+	seed("T1", "20310303", "ended", 5, 6)
+	seed("T1", "20310303", "ended", 3, 4) // a second rider on the same trip
+	seed("T2", "20310303", "ended", 0, 2)
+	seed("T9", "20310305", "ended", 7, 9)
+	seed("T1", "20310309", "ended", 1, 1)
+	seed("T3", "20310309", "active", 0, 0)  // a ride in progress counts too
+	seed("T1", "20310310", "ended", 50, 50) // the day after
+
+	days, err := store.CountRidesByDay(ctx, "20310303", "20310309")
+	require.NoError(t, err)
+	assert.Equal(t, []RideDay{
+		{StartDate: "20310303", Rides: 3, Trips: 2, PointsMatched: 8, PointsTotal: 12},
+		{StartDate: "20310305", Rides: 1, Trips: 1, PointsMatched: 7, PointsTotal: 9},
+		{StartDate: "20310309", Rides: 2, Trips: 2, PointsMatched: 1, PointsTotal: 1},
+	}, days, "oldest first, the days either side left out, a day with no ride absent")
+
+	days, err = store.CountRidesByDay(ctx, "20310304", "20310304")
+	require.NoError(t, err)
+	assert.NotNil(t, days)
+	assert.Empty(t, days, "a day with no ride")
+}
+
+// TestStore_RidesStartDateIndexExists guards the index CountRidesByDay reads
+// its days through. Its test passes without it, since a sequential scan
+// finds the same rides, so only this test notices the migration going
+// missing.
+func TestStore_RidesStartDateIndexExists(t *testing.T) {
+	store := newTestStore(t)
+
+	var indexDef string
+	err := store.pool.QueryRow(context.Background(),
+		`SELECT indexdef FROM pg_indexes
+		 WHERE schemaname = current_schema() AND tablename = 'rides' AND indexname = 'idx_rides_start_date'`,
+	).Scan(&indexDef)
+	require.NoError(t, err, "migrations must create idx_rides_start_date on rides")
+	assert.Contains(t, indexDef, "USING btree (start_date)")
+}

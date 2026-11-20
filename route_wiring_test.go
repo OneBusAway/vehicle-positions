@@ -222,6 +222,9 @@ func (n *noopStore) EndAllActiveRides(_ context.Context, _ string) (int64, error
 func (n *noopStore) ListRides(_ context.Context, _ string, _, _ int) ([]Ride, error) {
 	return nil, nil
 }
+func (n *noopStore) CountRidesByDay(_ context.Context, _, _ string) ([]RideDay, error) {
+	return nil, nil
+}
 func (n *noopStore) CountRidersByTier(_ context.Context) (map[string]int, error) {
 	return nil, nil
 }

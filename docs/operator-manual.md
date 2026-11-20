@@ -960,6 +960,10 @@ the page says so and names the setting that turns it on. When it is on:
   phones have registered (and how many are trusted or blocked), how many rides
   are in progress, how many vehicles riders are placing in the feed right now,
   and how many trusted feeds are set.
+- **Rides per service day**: a bar for each of the last 28 service days,
+  today's last, counting the rides on that day's trips. Point at a bar for how
+  many trips those rides covered and how many of their positions matched; the
+  line above the chart adds the 28 days up.
 - **Schedule riders are checked against**: the GTFS schedule the server loaded,
   and when.
 - **Trusted feeds**: each GTFS-realtime feed of vehicle positions your IT
