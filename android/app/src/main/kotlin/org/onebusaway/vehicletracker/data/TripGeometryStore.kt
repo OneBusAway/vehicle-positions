@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.data
 
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -62,7 +61,7 @@ class FileTripGeometryStore(private val file: File) : TripGeometryStore {
             // However it fails, unreadable is as good as absent: the trip still reports and the
             // screen says the schedule is unavailable, where throwing would take the tracking
             // service down on every restart.
-            Log.w(TAG, "Could not read the stored trip geometry", e)
+            AppLog.w(TAG, "Could not read the stored trip geometry", e)
             null
         }
     }

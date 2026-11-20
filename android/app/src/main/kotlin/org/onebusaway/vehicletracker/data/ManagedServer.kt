@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.RestrictionsManager
-import android.util.Log
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -61,5 +60,5 @@ class RestrictionsManagedServerSource(private val context: Context) : ManagedSer
         awaitClose { context.unregisterReceiver(receiver) }
     }
         .distinctUntilChanged()
-        .onEach { if (it.invalid) Log.w(LOG_TAG, "Ignoring the managed server_url: not an address the app may use.") }
+        .onEach { if (it.invalid) AppLog.w(LOG_TAG, "Ignoring the managed server_url: not an address the app may use.") }
 }

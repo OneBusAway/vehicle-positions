@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.ui.tracking
 
-import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -8,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import org.onebusaway.vehicletracker.data.ActiveTrip
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripGeometryStore
 import org.onebusaway.vehicletracker.data.TripRepository
@@ -88,7 +88,7 @@ class TripEnder @Inject constructor(
         } catch (e: Exception) {
             // Nothing above this catches it, so thrown on it would crash the app. The buttons come back, with the
             // failed end shown.
-            Log.w(TAG, "Could not end the trip on this phone", e)
+            AppLog.w(TAG, "Could not end the trip on this phone", e)
             _state.value = EndTripState(failed = true)
             return
         }

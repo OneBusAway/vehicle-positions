@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.data.api
 
-import android.util.Log
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerializationException
@@ -8,6 +7,7 @@ import okhttp3.Authenticator
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.Route
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.IssuedTokens
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.SessionStore
@@ -78,11 +78,11 @@ class TokenRefresher(
             val serverUrl = stored.serverUrl ?: return current
             return try {
                 trade(serverUrl, refreshToken) ?: current.also {
-                    Log.w(TAG, "The server refused an early refresh; sending the request with the current token.")
+                    AppLog.w(TAG, "The server refused an early refresh; sending the request with the current token.")
                     holdEarlyTrades(refreshToken)
                 }
             } catch (e: IOException) {
-                Log.w(TAG, "Early refresh failed; sending the request with the current token.", e)
+                AppLog.w(TAG, "Early refresh failed; sending the request with the current token.", e)
                 holdEarlyTrades(refreshToken)
                 current
             }
@@ -119,7 +119,7 @@ class TokenRefresher(
             val serverUrl = stored.serverUrl ?: return null
             val refreshed = trade(serverUrl, refreshToken)
             if (refreshed == null) {
-                Log.w(TAG, "The server refused the refresh token; the driver signs in again at the next 401.")
+                AppLog.w(TAG, "The server refused the refresh token; the driver signs in again at the next 401.")
                 dropRefreshToken()
             }
             return refreshed
@@ -162,10 +162,10 @@ class TokenRefresher(
         try {
             runBlocking { sessionStore.saveRefreshed(tokens, spentRefreshToken) }
         } catch (e: GeneralSecurityException) {
-            Log.w(TAG, "Could not encrypt the refreshed tokens; dropping the spent refresh token.", e)
+            AppLog.w(TAG, "Could not encrypt the refreshed tokens; dropping the spent refresh token.", e)
             dropRefreshToken()
         } catch (e: IOException) {
-            Log.w(TAG, "Could not save the refreshed tokens; dropping the spent refresh token.", e)
+            AppLog.w(TAG, "Could not save the refreshed tokens; dropping the spent refresh token.", e)
             dropRefreshToken()
         }
     }
@@ -174,7 +174,7 @@ class TokenRefresher(
         try {
             runBlocking { sessionStore.dropRefreshToken() }
         } catch (e: IOException) {
-            Log.w(TAG, "Could not drop the refresh token.", e)
+            AppLog.w(TAG, "Could not drop the refresh token.", e)
         }
     }
 }

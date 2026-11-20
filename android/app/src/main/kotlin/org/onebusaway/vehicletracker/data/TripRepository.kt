@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.data
 
-import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import org.onebusaway.vehicletracker.data.api.EndTripRequest
@@ -108,7 +107,7 @@ class TripRepository @Inject constructor(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "Could not end a trip ended on this phone only", e)
+        AppLog.w(TAG, "Could not end a trip ended on this phone only", e)
         Result.failure(if (mapHttpError(e) is ApiError.Unauthorized) ApiError.Unauthorized else ApiError.PreviousTripNotEnded)
     }
 
@@ -137,6 +136,6 @@ internal suspend fun recordLocally(what: String, write: suspend () -> Unit) {
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "Could not record $what", e)
+        AppLog.w(TAG, "Could not record $what", e)
     }
 }

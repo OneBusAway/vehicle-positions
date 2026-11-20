@@ -1,9 +1,9 @@
 package org.onebusaway.vehicletracker.service
 
-import android.util.Log
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
@@ -103,12 +103,12 @@ class HistoryUploader @Inject constructor(
             apiProvider.get().postLocationHistory(LocationHistoryDto(vehicleId, points.map { it.toHistoryPoint() }))
         } catch (e: HttpException) {
             if (e.code() !in PERMANENT_HISTORY_REFUSALS) {
-                Log.w(TAG, "Keeping queued fixes after HTTP ${e.code()}", e)
+                AppLog.w(TAG, "Keeping queued fixes after HTTP ${e.code()}", e)
                 return HistoryUpload.KEPT
             }
-            Log.w(TAG, "Dropping ${points.size} queued fixes after HTTP ${e.code()}", e)
+            AppLog.w(TAG, "Dropping ${points.size} queued fixes after HTTP ${e.code()}", e)
         } catch (e: IOException) {
-            Log.w(TAG, "Keeping queued fixes after network failure", e)
+            AppLog.w(TAG, "Keeping queued fixes after network failure", e)
             return HistoryUpload.KEPT
         }
         offlineQueue.remove(points)

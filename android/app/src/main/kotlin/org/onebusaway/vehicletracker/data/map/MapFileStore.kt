@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.data.map
 
-import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,6 +10,7 @@ import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import org.onebusaway.vehicletracker.data.AppLog
 
 private const val TAG = "MapFileStore"
 private const val METADATA = "map.json"
@@ -71,7 +71,7 @@ class MapFileStore(
         } catch (e: Exception) {
             // Unreadable is as good as empty: the map is downloaded again, and the files the
             // record named go at the next start.
-            Log.w(TAG, "Could not read the map record", e)
+            AppLog.w(TAG, "Could not read the map record", e)
             MapRecord()
         }
     }
@@ -107,7 +107,7 @@ class MapFileStore(
             record.pending?.fileName?.let { it + PART_SUFFIX },
         )
         directory.listFiles()?.filter { it.name !in keep }?.forEach { stray ->
-            if (!stray.deleteRecursively()) Log.w(TAG, "Could not delete ${stray.name}")
+            if (!stray.deleteRecursively()) AppLog.w(TAG, "Could not delete ${stray.name}")
         }
         Unit
     }

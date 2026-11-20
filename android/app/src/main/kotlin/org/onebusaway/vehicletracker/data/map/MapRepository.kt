@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.normalizedServerUrl
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
@@ -213,7 +214,7 @@ class MapRepository @Inject constructor(
                     Outcome.DONE
                 }
                 is FetchResult.Failed -> {
-                    Log.w(TAG, "Map file not downloaded: ${result.reason}")
+                    AppLog.w(TAG, "Map file not downloaded: ${result.reason}")
                     when (result.reason) {
                         MapFailure.INVALID_FILE -> {
                             store.save(store.load().copy(pending = null, rejected = RejectedMap(url, result.version ?: FileVersion(), now())))
@@ -254,7 +255,7 @@ class MapRepository @Inject constructor(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "$what failed", e)
+        AppLog.w(TAG, "$what failed", e)
         otherwise()
     }
 }

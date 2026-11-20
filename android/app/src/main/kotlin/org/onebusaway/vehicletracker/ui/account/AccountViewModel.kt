@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.ui.account
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -13,6 +12,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.TripRepository
@@ -63,14 +63,14 @@ class AccountViewModel @Inject constructor(
             try {
                 val answered = withTimeoutOrNull(SIGN_OUT_WAIT_MS) {
                     tripRepository.sendUnconfirmedEnds().onFailure {
-                        Log.w(TAG, "Could not send the trips ended on this phone; they wait for this driver's next start", it)
+                        AppLog.w(TAG, "Could not send the trips ended on this phone; they wait for this driver's next start", it)
                     }
                     authRepository.logout().onFailure {
-                        Log.w(TAG, "Could not log out on the server; the session there ends when its tokens expire", it)
+                        AppLog.w(TAG, "Could not log out on the server; the session there ends when its tokens expire", it)
                     }
                 }
                 if (answered == null) {
-                    Log.w(TAG, "The server took longer than $SIGN_OUT_WAIT_MS ms; signing out on this phone only")
+                    AppLog.w(TAG, "The server took longer than $SIGN_OUT_WAIT_MS ms; signing out on this phone only")
                 }
             } finally {
                 // The driver asked to be signed out, so the phone forgets them even if this screen goes first.

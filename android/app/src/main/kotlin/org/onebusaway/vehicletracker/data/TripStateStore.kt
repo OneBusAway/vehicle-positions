@@ -1,7 +1,6 @@
 package org.onebusaway.vehicletracker.data
 
 import android.content.Context
-import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -267,7 +266,7 @@ class DataStoreTripStateStore(
     } catch (e: IllegalArgumentException) {
         // Not JSON, or not a list of ends. Only a bug could write such a value, and reading it as
         // no ends beats failing every read of the trip state from app start on.
-        Log.w(TAG, "Could not read the trips ended on this phone only", e)
+        AppLog.w(TAG, "Could not read the trips ended on this phone only", e)
         emptyList()
     }
 

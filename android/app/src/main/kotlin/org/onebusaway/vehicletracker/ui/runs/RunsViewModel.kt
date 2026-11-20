@@ -1,6 +1,5 @@
 package org.onebusaway.vehicletracker.ui.runs
 
-import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.ApiError
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.AuthRepository
 import org.onebusaway.vehicletracker.data.CatalogRepository
 import org.onebusaway.vehicletracker.data.TripGeometryStore
@@ -248,7 +248,7 @@ class RunsViewModel @Inject constructor(
             serviceController.startTracking()
         } catch (e: IllegalStateException) {
             // ForegroundServiceStartNotAllowedException, from Android 12, is one.
-            Log.w(TAG, "Android refused to start the tracking service from the background", e)
+            AppLog.w(TAG, "Android refused to start the tracking service from the background", e)
             reportsWaiting = true
             serviceController.askToResume()
             return

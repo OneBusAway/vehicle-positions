@@ -2,7 +2,6 @@ package org.onebusaway.vehicletracker.di
 
 import android.content.Context
 import android.os.SystemClock
-import android.util.Log
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -15,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
+import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.DataStoreDriverFlagsStore
 import org.onebusaway.vehicletracker.data.DataStoreTripStateStore
 import org.onebusaway.vehicletracker.data.DataStoreVehiclePrefsStore
@@ -236,7 +236,7 @@ object AppModule {
         val built = context.getString(R.string.default_server_url)
         if (built.isEmpty()) return null
         val server = presetServerOf(built, context.isDebuggable)
-        if (server == null) Log.w("DefaultServerUrl", "Ignoring the built-in defaultServerUrl: not an address the app may use.")
+        if (server == null) AppLog.w("DefaultServerUrl", "Ignoring the built-in defaultServerUrl: not an address the app may use.")
         return server?.toString()
     }
 
