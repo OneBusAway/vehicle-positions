@@ -68,16 +68,25 @@ type alertRecorder struct {
 	started  time.Time
 	settle   time.Duration
 
-	// open is the row of each alert raised and not cleared. settled is set
-	// once the rows the last run left open are dealt with. Only the checking
-	// goroutine uses either.
-	open    map[alertKey]int64
+	// open is each alert raised and not cleared. settled is set once the rows
+	// the last run left open are dealt with. Only the checking goroutine uses
+	// either.
+	open    map[alertKey]openAlert
 	settled bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	once   sync.Once
+}
+
+// openAlert is the row of an alert raised and not cleared.
+type openAlert struct {
+	id int64
+	// clearFailed is set when a clear of the row failed. It may have
+	// committed all the same, so the alert listed again is raised again: that
+	// gives back the row if it is still open, and opens a new one if not.
+	clearFailed bool
 }
 
 // startAlertJobs starts what follows the alerts the watcher works out: the
@@ -116,7 +125,7 @@ func newAlertRecorder(store AlertHistoryStore, source alertSource, started time.
 		interval: interval,
 		started:  started,
 		settle:   settle,
-		open:     make(map[alertKey]int64),
+		open:     make(map[alertKey]openAlert),
 		ctx:      ctx,
 		cancel:   cancel,
 	}
@@ -163,12 +172,14 @@ func (r *alertRecorder) check(now time.Time) {
 	for _, a := range alerts {
 		current[keyOf(a)] = struct{}{}
 	}
-	for key, id := range r.open {
+	for key, open := range r.open {
 		if _, ok := current[key]; ok {
 			continue
 		}
-		if err := r.store.ClearAlert(ctx, id, now); err != nil {
+		if err := r.store.ClearAlert(ctx, open.id, now); err != nil {
 			slog.Error("alert history: clear alert", "kind", key.kind, "trip_id", key.tripID, "error", err)
+			open.clearFailed = true
+			r.open[key] = open
 			continue
 		}
 		delete(r.open, key)
@@ -176,7 +187,7 @@ func (r *alertRecorder) check(now time.Time) {
 	raiseFailed := false
 	for _, a := range alerts {
 		key := keyOf(a)
-		if _, ok := r.open[key]; ok {
+		if open, ok := r.open[key]; ok && !open.clearFailed {
 			continue
 		}
 		id, err := r.store.RaiseAlert(ctx, a)
@@ -185,7 +196,7 @@ func (r *alertRecorder) check(now time.Time) {
 			raiseFailed = true
 			continue
 		}
-		r.open[key] = id
+		r.open[key] = openAlert{id: id}
 	}
 
 	// A raise that failed may have opened its row all the same, so the rows
@@ -195,8 +206,8 @@ func (r *alertRecorder) check(now time.Time) {
 	}
 	// Not nil: an empty keep has to clear every row left open.
 	keep := make([]int64, 0, len(r.open))
-	for _, id := range r.open {
-		keep = append(keep, id)
+	for _, open := range r.open {
+		keep = append(keep, open.id)
 	}
 	cleared, err := r.store.ClearAlertsLeftOpen(ctx, keep, r.started)
 	if err != nil {

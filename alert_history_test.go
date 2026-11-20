@@ -26,15 +26,18 @@ type historyLeftOpen struct {
 }
 
 // fakeAlertHistory is an AlertHistoryStore that records each call. Each raise
-// gets the next id, and raiseErr and clearErr fail the calls while set.
+// gets the next id, and raiseErr and clearErr fail the calls while set. With
+// clearCommits, a clear that fails is recorded all the same, as one whose
+// reply was lost after it committed.
 type fakeAlertHistory struct {
-	mu       sync.Mutex
-	nextID   int64
-	raised   []alertEntry
-	cleared  []historyClear
-	leftOpen []historyLeftOpen
-	raiseErr error
-	clearErr error
+	mu           sync.Mutex
+	nextID       int64
+	raised       []alertEntry
+	cleared      []historyClear
+	leftOpen     []historyLeftOpen
+	raiseErr     error
+	clearErr     error
+	clearCommits bool
 }
 
 func (f *fakeAlertHistory) RaiseAlert(_ context.Context, a alertEntry) (int64, error) {
@@ -51,11 +54,11 @@ func (f *fakeAlertHistory) RaiseAlert(_ context.Context, a alertEntry) (int64, e
 func (f *fakeAlertHistory) ClearAlert(_ context.Context, id int64, at time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.clearErr != nil {
+	if f.clearErr != nil && !f.clearCommits {
 		return f.clearErr
 	}
 	f.cleared = append(f.cleared, historyClear{id, at})
-	return nil
+	return f.clearErr
 }
 
 func (f *fakeAlertHistory) ClearAlertsLeftOpen(_ context.Context, keep []int64, at time.Time) (int64, error) {
@@ -75,6 +78,14 @@ func (f *fakeAlertHistory) failClears(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.clearErr = err
+	f.clearCommits = false
+}
+
+func (f *fakeAlertHistory) failClearsAfterCommit(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clearErr = err
+	f.clearCommits = true
 }
 
 func (f *fakeAlertHistory) raisedCount() int {
@@ -189,6 +200,29 @@ func TestAlertRecorder_FailedWritesAreTriedAgain(t *testing.T) {
 	store.failClears(nil)
 	r.check(alertT0.Add(9 * time.Minute))
 	assert.Equal(t, []historyClear{{1, alertT0.Add(9 * time.Minute)}}, store.cleared, "a clear that failed is made at the next check")
+}
+
+func TestAlertRecorder_RaisedAgainAfterAClearThatFailed(t *testing.T) {
+	captureWebhookLogs(t)
+	store := &fakeAlertHistory{}
+	source := &scriptedAlerts{}
+	r := startRecorder(t, store, source)
+
+	source.set(nil, webhookAlert(alertQuiet))
+	r.check(alertT0.Add(6 * time.Minute))
+	store.failClearsAfterCommit(errors.New("connection reset"))
+	source.set(nil)
+	r.check(alertT0.Add(7 * time.Minute))
+	store.failClears(nil)
+	source.set(nil, webhookAlert(alertQuiet))
+	r.check(alertT0.Add(8 * time.Minute))
+	r.check(alertT0.Add(9 * time.Minute))
+	source.set(nil)
+	r.check(alertT0.Add(10 * time.Minute))
+
+	assert.Len(t, store.raised, 2, "the clear may have gone through, so the alert that comes back is raised again, once")
+	assert.Equal(t, []historyClear{{1, alertT0.Add(7 * time.Minute)}, {2, alertT0.Add(10 * time.Minute)}}, store.cleared,
+		"and it clears by the row that raise gave")
 }
 
 func TestAlertRecorder_LeftOpenClearedOnceSettled(t *testing.T) {

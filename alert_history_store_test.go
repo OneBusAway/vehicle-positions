@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -238,4 +239,78 @@ func TestAlertRecorder_RestartKeepsTheRows(t *testing.T) {
 	rows = alertHistoryRows(t, store)
 	require.NotNil(t, rows[0].ClearedAt)
 	assert.Equal(t, start.Add(12*time.Minute), rows[0].ClearedAt.UTC(), "and the kept row clears as any other")
+}
+
+// clearReplyLost is a Store whose ClearAlert fails while fail is set: after
+// the clear commits with commit set, before it otherwise.
+type clearReplyLost struct {
+	*Store
+	fail, commit bool
+}
+
+func (s *clearReplyLost) ClearAlert(ctx context.Context, id int64, at time.Time) error {
+	if !s.fail {
+		return s.Store.ClearAlert(ctx, id, at)
+	}
+	if s.commit {
+		if err := s.Store.ClearAlert(ctx, id, at); err != nil {
+			return err
+		}
+	}
+	return errors.New("connection reset")
+}
+
+func TestAlertRecorder_ClearThatFailed(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		commit bool
+		back   bool
+		want   []string
+	}{
+		{
+			name:   "after it committed, the alert that comes back is a new row",
+			commit: true,
+			back:   true,
+			want:   []string{"09:00-09:06", "09:07-09:08"},
+		},
+		{
+			name: "before it committed, the alert that comes back keeps its open row",
+			back: true,
+			want: []string{"09:00-09:08"},
+		},
+		{
+			name: "before it committed, the alert that stays gone clears at the next check",
+			want: []string{"09:00-09:07"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			captureWebhookLogs(t)
+			store := newTestStore(t)
+			trip := startAlertTrip(t, store)
+			lost := &clearReplyLost{Store: store, commit: tc.commit}
+			source := &scriptedAlerts{}
+			r := newAlertRecorder(lost, source, historyTime, 11*time.Minute, time.Hour)
+			t.Cleanup(r.Stop)
+
+			source.set(nil, newAlert(alertQuiet, historyTime, trip, historyTime))
+			r.check(historyTime.Add(5 * time.Minute))
+			lost.fail = true
+			source.set(nil)
+			r.check(historyTime.Add(6 * time.Minute))
+			lost.fail = false
+			if tc.back {
+				source.set(nil, newAlert(alertQuiet, historyTime.Add(7*time.Minute), trip, historyTime.Add(7*time.Minute)))
+			}
+			r.check(historyTime.Add(7 * time.Minute))
+			source.set(nil)
+			r.check(historyTime.Add(8 * time.Minute))
+
+			var got []string
+			for _, row := range alertHistoryRows(t, store) {
+				require.NotNil(t, row.ClearedAt, "row %d left open", row.ID)
+				got = append(got, row.RaisedAt.UTC().Format("15:04")+"-"+row.ClearedAt.UTC().Format("15:04"))
+			}
+			assert.Equal(t, tc.want, got, "each row raised-cleared")
+		})
+	}
 }
