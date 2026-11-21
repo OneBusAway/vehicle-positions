@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -284,17 +285,58 @@ func percentTip(v *float64) string {
 	return strconv.Itoa(int(math.Round(*v))) + "%"
 }
 
-// hourShares is an hour of the day on the agency's clock, with the stops of
-// the trips scheduled to leave in it.
-type hourShares struct {
+// hourSplit is an hour of the day on the agency's clock as an hour chart
+// draws it: Count is what the hour holds, and Lower, Upper and Rest what was
+// judged in it, by the verdicts its hourSeries names.
+type hourSplit struct {
 	Hour  int
-	Trips int
-	reportCounts
+	Count int
+	Lower int
+	Upper int
+	Rest  int
 }
 
-// hourChartView is "Early and late by hour of day": for each hour the share
-// of its stops that were late, and stacked on it the share that were early.
-// On time is the gap above, which a wall of green bars would only hide.
+func (h hourSplit) judged() int { return h.Lower + h.Upper + h.Rest }
+
+// hourSeries names what an hour chart counts and the verdicts it splits
+// them by, for its tips. Lower is drawn in late's blue at the bottom of each
+// bar and Upper in early's red stacked on it; Rest is the space above, which
+// a wall of green bars would only hide.
+type hourSeries struct {
+	// Name is the chart's name for a screen reader.
+	Name string
+	// Unit and Units are what an hour's Count counts, one and more than one.
+	Unit, Units        string
+	Lower, Upper, Rest string
+	// Empty is the tip of an hour whose Count is zero, and NoneJudged the
+	// tip of one with nothing judged; a series that counts only what was
+	// judged needs none.
+	Empty, NoneJudged string
+}
+
+// tripHours is "Early and late by hour of day": for the trips scheduled to
+// leave in each hour, the share of their stops that were late, with the
+// share that were early stacked on it.
+var tripHours = hourSeries{
+	Name: "Share of stops early or late, by hour of day",
+	Unit: "trip", Units: "trips",
+	Lower: "late", Upper: "early", Rest: "on time",
+	Empty: "no trip scheduled", NoneJudged: "no stop judged",
+}
+
+// gapHours is "Bunched and long gaps by hour of day": of the gaps judged
+// whose later vehicle left in each hour, the share that were long, with the
+// share that were bunched stacked on it, in late's place and early's.
+var gapHours = hourSeries{
+	Name: "Share of gaps bunched or long, by hour of day",
+	Unit: "gap", Units: "gaps",
+	Lower: "long", Upper: "bunched", Rest: "neither",
+	Empty: "no gap judged",
+}
+
+// hourChartView is an hour chart, "Early and late by hour of day" or
+// "Bunched and long gaps by hour of day", as the "hour-chart" template draws
+// it.
 type hourChartView struct {
 	Name   string
 	Width  int
@@ -308,33 +350,33 @@ type hourChartView struct {
 	Rows   []hourChartRow
 }
 
-// hourChartBar is one hour: its two rectangles (a height is empty when the
-// share is zero), the strip that shows its tip, and its label when it has
-// one, which every third hour does.
+// hourChartBar is one hour: its two rectangles, Lower's and Upper's stacked
+// on it (a height is empty when the share is zero), the strip that shows its
+// tip, and its label when it has one, which every third hour does.
 type hourChartBar struct {
 	X, W           string
-	LateY, LateH   string
-	EarlyY, EarlyH string
+	LowerY, LowerH string
+	UpperY, UpperH string
 	HitX, HitW     string
 	Tip            string
 	Label, LabelX  string
 }
 
 // hourChartRow is an hour in the table behind the chart. The shares are ""
-// when no stop of the hour was judged.
+// when nothing in the hour was judged.
 type hourChartRow struct {
-	Hour                string
-	Trips               int
-	OnTime, Early, Late string
+	Hour               string
+	Count              int
+	Lower, Upper, Rest string
 }
 
 // hourChartScales are the heights an hour chart is drawn to, each with the
 // values its lines mark; the first that holds the tallest bar is used.
 var hourChartScales = [][]int{{5, 10, 15}, {10, 20, 30}, {20, 40, 60}, {25, 50, 75, 100}}
 
-// newHourChart draws hours, which run from the first hour with a trip to the
-// last with none left out.
-func newHourChart(hours []hourShares) hourChartView {
+// newHourChart draws hours, which run from the first hour with something to
+// count to the last with none left out, as s names them.
+func newHourChart(hours []hourSplit, s hourSeries) hourChartView {
 	const width, height, padLeft, padBottom, padTop = 560.0, 190.0, 34.0, 22.0, 10.0
 	px := func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
 	share := func(n, of int) float64 {
@@ -346,12 +388,12 @@ func newHourChart(hours []hourShares) hourChartView {
 
 	peak := 0.0
 	for _, h := range hours {
-		peak = max(peak, share(h.Early+h.Late, h.judged()))
+		peak = max(peak, share(h.Lower+h.Upper, h.judged()))
 	}
 	scale := hourChartScales[len(hourChartScales)-1]
-	for _, s := range hourChartScales {
-		if float64(s[len(s)-1]) >= peak {
-			scale = s
+	for _, sc := range hourChartScales {
+		if float64(sc[len(sc)-1]) >= peak {
+			scale = sc
 			break
 		}
 	}
@@ -359,7 +401,7 @@ func newHourChart(hours []hourShares) hourChartView {
 	y := func(p float64) float64 { return p / float64(scale[len(scale)-1]) * (bottom - padTop) }
 
 	view := hourChartView{
-		Name:   "Share of stops early or late, by hour of day",
+		Name:   s.Name,
 		Width:  int(width),
 		Height: int(height),
 		Left:   px(padLeft),
@@ -379,7 +421,10 @@ func newHourChart(hours []hourShares) hourChartView {
 	slot := (width - padLeft) / float64(len(hours))
 	for i, h := range hours {
 		left := padLeft + float64(i)*slot
-		late, early := share(h.Late, h.judged()), share(h.Early, h.judged())
+		lower, upper := share(h.Lower, h.judged()), share(h.Upper, h.judged())
+		// Each share is rounded on its own, so each is the number the table
+		// shows for it; the three can add up to 99 or 101.
+		whole := func(n int) string { return strconv.Itoa(int(math.Round(share(n, h.judged())))) + "%" }
 		from := fmt.Sprintf("%02d:00", h.Hour%24)
 		bar := hourChartBar{
 			X:    px(left + slot*0.29),
@@ -388,23 +433,22 @@ func newHourChart(hours []hourShares) hourChartView {
 			HitW: px(slot),
 			Tip:  fmt.Sprintf("%s to %02d:00|", from, (h.Hour+1)%24),
 		}
-		row := hourChartRow{Hour: from, Trips: h.Trips}
+		row := hourChartRow{Hour: from, Count: h.Count}
 		switch {
-		case h.Trips == 0:
-			bar.Tip += "no trip scheduled"
+		case h.Count == 0:
+			bar.Tip += s.Empty
 		case h.judged() == 0:
-			bar.Tip += fmt.Sprintf("no stop judged (%s)", countOf(h.Trips, "trip", "trips"))
+			bar.Tip += fmt.Sprintf("%s (%s)", s.NoneJudged, countOf(h.Count, s.Unit, s.Units))
 		default:
-			split := newOnTimeSplit(h.OnTime, h.Early, h.Late)
-			bar.Tip += fmt.Sprintf("%d%% late, %d%% early, %d%% on time (%s)", split.Late, split.Early, split.Percent, countOf(h.Trips, "trip", "trips"))
-			row.OnTime, row.Early, row.Late = strconv.Itoa(split.Percent)+"%", strconv.Itoa(split.Early)+"%", strconv.Itoa(split.Late)+"%"
+			row.Lower, row.Upper, row.Rest = whole(h.Lower), whole(h.Upper), whole(h.Rest)
+			bar.Tip += fmt.Sprintf("%s %s, %s %s, %s %s (%s)", row.Lower, s.Lower, row.Upper, s.Upper, row.Rest, s.Rest, countOf(h.Count, s.Unit, s.Units))
 		}
-		if late > 0 {
-			bar.LateY, bar.LateH = px(bottom-y(late)), px(y(late))
+		if lower > 0 {
+			bar.LowerY, bar.LowerH = px(bottom-y(lower)), px(y(lower))
 		}
-		if early > 0 {
-			// Two units of gap between the late share and the early one on it.
-			bar.EarlyY, bar.EarlyH = px(bottom-y(late)-2-y(early)), px(y(early))
+		if upper > 0 {
+			// Two units of gap between the lower share and the upper one on it.
+			bar.UpperY, bar.UpperH = px(bottom-y(lower)-2-y(upper)), px(y(upper))
 		}
 		if i%3 == 0 {
 			bar.Label, bar.LabelX = from, px(left+slot/2)
@@ -539,6 +583,93 @@ func newHistChart(buckets []deviationBucket, onTimeEarly, onTimeLate time.Durati
 		}
 		view.Bars = append(view.Bars, bar)
 		view.Rows = append(view.Rows, histChartRow{Minutes: minutes, Trips: b.trips()})
+	}
+	return view
+}
+
+// ratioChartView is "How even the gaps were": a bar for each tenth of the
+// scheduled gap, with the bunched and long bands shaded behind them as the
+// on-time window is on "How early and how late". A bar is not split by
+// verdict, since the tenths where a band ends hold gaps of both.
+type ratioChartView struct {
+	Name   string
+	Width  int
+	Height int
+	AxisY  string
+	BaseY  string
+	// The bunched band runs from the left edge to BunchedW, and the long
+	// band from LongX to the right edge, LongW wide.
+	BunchedW, BunchedLabelX  string
+	LongX, LongW, LongLabelX string
+	BandH                    string
+	Bars                     []ratioChartBar
+	Rows                     []ratioChartRow
+}
+
+// ratioChartBar is one tenth: its rectangle (H is empty when it has no
+// gap), the strip that shows its tip, and the label at its left edge when it
+// has one, which every fifth does.
+type ratioChartBar struct {
+	X, Y, W, H    string
+	HitX, HitW    string
+	Tip           string
+	Label, LabelX string
+}
+
+// ratioChartRow is a tenth in the table behind the chart.
+type ratioChartRow struct {
+	Share string
+	Gaps  int
+}
+
+// newRatioChart draws tenths, the gaps judged in each tenth of their
+// scheduled gap from the first, under 10%, to gapRatioTop, which holds 300%
+// and over.
+func newRatioChart(tenths []int) ratioChartView {
+	const width, height, padBottom, padTop = 560.0, 190.0, 22.0, 8.0
+	px := func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
+	bottom := height - padBottom
+
+	view := ratioChartView{
+		Name:   "Gaps judged by their share of the scheduled gap",
+		Width:  int(width),
+		Height: int(height),
+		AxisY:  px(bottom),
+		BaseY:  px(height - 6),
+		BandH:  px(bottom - 4),
+		Bars:   make([]ratioChartBar, 0, len(tenths)),
+		Rows:   make([]ratioChartRow, 0, len(tenths)),
+	}
+	if len(tenths) == 0 {
+		return view
+	}
+	// Only a tenth with a gap is drawn, so the tallest has one.
+	peak := slices.Max(tenths)
+	y := func(n int) float64 { return float64(n) / (float64(peak) * 1.1) * (bottom - padTop) }
+	slot := width / float64(len(tenths))
+	// Where a share of the scheduled gap sits along the bottom.
+	at := func(ratio float64) float64 { return ratio * 10 * slot }
+	view.BunchedW, view.BunchedLabelX = px(at(bunchedBelow)), px(at(bunchedBelow)/2)
+	view.LongX, view.LongW, view.LongLabelX = px(at(longGapAbove)), px(width-at(longGapAbove)), px((at(longGapAbove)+width)/2)
+
+	for i, n := range tenths {
+		left := float64(i) * slot
+		share := fmt.Sprintf("%d%% to %d%%", 10*i, 10*(i+1))
+		if i == len(tenths)-1 {
+			share = fmt.Sprintf("%d%% or more", 10*i)
+		}
+		bar := ratioChartBar{
+			X: px(left + 2), W: px(slot - 4), HitX: px(left), HitW: px(slot),
+			Tip: share + " of the scheduled gap|" + countOf(n, "gap", "gaps"),
+		}
+		if n > 0 {
+			bar.Y, bar.H = px(bottom-y(n)), px(y(n))
+		}
+		if i%5 == 0 && i > 0 {
+			bar.Label, bar.LabelX = strconv.Itoa(10*i)+"%", px(left)
+		}
+		view.Bars = append(view.Bars, bar)
+		view.Rows = append(view.Rows, ratioChartRow{Share: share, Gaps: n})
 	}
 	return view
 }

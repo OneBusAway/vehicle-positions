@@ -717,7 +717,12 @@ first.
 **Analytics** answers two questions about your service: did the scheduled
 trips run, and did they run on time. Its headline is the answer in a sentence,
 such as **On time was 86% over the last 7 days**, and the line under it names
-the route pulling the share down, when one is.
+the route pulling the share down, when one is. When no stop was judged against
+a timetable but there were gaps between vehicles, as on a schedule run wholly
+from GTFS frequencies, the headline is about the gaps instead, such as **6% of
+gaps were bunched and 18% were long over the last 7 days**, and the line under
+it names the route bunched most often, when one is above the rest (see
+[Gaps between vehicles](#gaps-between-vehicles)).
 
 It opens on the seven days that end yesterday. **Day** shows one day,
 **7 days** a week and **28 days** four weeks. The date box picks the last day
@@ -728,18 +733,23 @@ saved report.
 Over 7 or 28 days:
 
 - Five figures cross the top: **On time**, **Trips run**, **Early**, **Late**
-  and **Stops with no report**. Click one to draw it day by day in the chart
-  under them. With **Compare with the 7 days before** (or the 28 days
-  before) on, the period before is drawn behind as a dashed line and each
-  figure says how many points it moved.
+  and **Stops with no report**, and **Bunched** and **Long gaps** after them
+  when your schedule runs a route from its GTFS frequencies. Click one to draw
+  it day by day in the chart under them. With **Compare with the 7 days
+  before** (or the 28 days before) on, the period before is drawn behind as a
+  dashed line and each figure says how many points it moved.
 - **By route** has a row for each route with service, added up over the days.
 - **Early and late by hour of day** shows, for the trips leaving in each hour,
   the share of their stops that were late, with the share that were early
   stacked on it. On time is the space above.
 - **How early and how late** counts trips by the minute they reached their
   last stop against the timetable, with the on-time window shaded.
+- **Gaps between vehicles** and its two charts follow, when your schedule
+  runs a route from its GTFS frequencies.
 
-A single day has four tiles in place of the five figures and their chart.
+A single day has tiles in place of the figures and their chart: four, and
+**Bunched** and **Long gaps** too on a day with a route run from its GTFS
+frequencies.
 **Show these numbers as a table** under each chart opens the same numbers as a
 table.
 
@@ -762,7 +772,8 @@ The columns of **By route**:
   agency's schedule marks timepoints, only those stops are counted. A trip
   run from the GTFS frequencies has no timetable to be early or late against
   (its headway is the minutes between vehicles), so its stops are not
-  counted here.
+  counted here; [Gaps between vehicles](#gaps-between-vehicles) measures it
+  instead.
 - **Early** and **Late**: the shares of the stops judged that were outside
   that window. Early is red and late is blue, as in the OneBusAway apps.
 - **No report**: the share of stops the report cannot judge, because the
@@ -804,6 +815,49 @@ administrator can change the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and
 `REPORT_ON_TIME_LATE`, see [`configuration.md`](configuration.md)); the days
 kept are worked out again under the new window. A kept day is also worked
 out again once after an upgrade that changes what Analytics counts.
+
+#### Gaps between vehicles
+
+A rider on a route run from GTFS frequencies doesn't time their trip by a
+timetable, so what they notice is how long they wait for the next vehicle.
+Analytics measures that as the gaps between vehicles, for each route and
+direction run that way.
+
+- A **gap** is the time between two vehicles leaving a stop, whichever
+  vehicles they were, so a vehicle that overtakes another counts where it
+  passed. Gaps are measured at the stops **On time** would judge, except a
+  trip's last stop, and count in the hour the later vehicle left.
+- The **scheduled gap** is what the frequencies promise at that stop then.
+  Trips of the route and direction that share a stop add up there: two
+  patterns every 10 minutes through one stop make every 5 minutes at it.
+- A gap is **bunched** under 25% of the scheduled gap and a **long gap** over
+  150%: on a route every 10 minutes, under 2.5 minutes and over 15.
+- **Extra wait** is how much longer than the schedule promises a rider who
+  turned up at random waited, on average, in minutes. It is below zero when
+  the vehicles came more often than scheduled.
+- A gap is **unknown**, and not judged, when a vehicle whose phone sent
+  nothing within 2 minutes either side of the stop could have left between
+  the two. The first vehicle after a break in service has no gap, so the
+  evening's first vehicle is not a long gap after the morning's last.
+
+Only drivers' trips count, not Rider mode, and only vehicles running the app
+are seen. Two of them close together are bunched whatever else ran, but a
+vehicle without the app looks like a long gap. So each row shows the route's
+**Trips run** beside its gaps: when many runs are missing, many long gaps and
+a high extra wait may be vehicles the page could not see.
+
+The section has a row for each route and direction, with **Gaps judged** (and
+how many were unknown), **Bunched**, **Long gaps**, **Extra wait (min)** and
+the whole route's **Trips run**. Under it:
+
+- **Bunched and long gaps by hour of day** shows, by the hour the later
+  vehicle left, the share of gaps that were long, with the share bunched
+  stacked on it.
+- **How even the gaps were** counts gaps by each tenth of their scheduled gap,
+  from under 10% to 300% and over, with the bunched and long bands shaded.
+
+A timetabled trip is not measured here, even on a route that also has trips
+run from GTFS frequencies.
 
 ### The feed itself
 

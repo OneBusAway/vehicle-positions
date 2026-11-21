@@ -80,7 +80,7 @@
     <div class="card-head"><h3 id="an-hours" style="flex:1">Early and late by hour of day</h3><span class="legend"><span><i class="seg-early"></i>Early</span><span><i class="seg-late"></i>Late</span></span></div>
     {{with .Hours}}
     <div class="an-plot">{{template "hour-chart" .}}</div>
-    <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Trips leaving from</th><th class="right">Trips</th><th class="right">On time</th><th class="right">Early</th><th class="right">Late</th></tr></thead><tbody>{{range .Rows}}<tr><td class="num">{{.Hour}}</td><td class="num right">{{.Trips}}</td><td class="num right">{{.OnTime}}</td><td class="num right">{{.Early}}</td><td class="num right">{{.Late}}</td></tr>{{end}}</tbody></table></div></details>
+    <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Trips leaving from</th><th class="right">Trips</th><th class="right">On time</th><th class="right">Early</th><th class="right">Late</th></tr></thead><tbody>{{range .Rows}}<tr><td class="num">{{.Hour}}</td><td class="num right">{{.Count}}</td><td class="num right">{{.Rest}}</td><td class="num right">{{.Upper}}</td><td class="num right">{{.Lower}}</td></tr>{{end}}</tbody></table></div></details>
     {{else}}
     <p class="card-note">No stop was judged, so there is nothing to draw.</p>
     {{end}}
@@ -95,6 +95,38 @@
     <p class="card-note">No trip had a report at its last stop, so there is nothing to draw.</p>
     {{end}}
   </section>
+  {{with .Gaps}}
+  <section class="card an-wide" aria-labelledby="an-gaps">
+    <div class="card-head"><h3 id="an-gaps" style="flex:1">Gaps between vehicles</h3><span class="sub hide-phone">Routes run every few minutes, by direction</span></div>
+    <div class="table-wrap"><table class="table cards">
+      <thead><tr><th>Route</th><th class="right">Gaps judged</th><th class="right">Bunched</th><th class="right">Long gaps</th><th class="right">Extra wait (min)</th><th class="right">Trips run</th></tr></thead>
+      <tbody>
+        {{range .Rows}}
+        <tr><td><a class="row-link an-route" href="{{.Route.TripsURL}}">{{template "route-badge" .Route.Badge}}<span>{{.Route.Name}}{{with .Direction}}<span class="sub">{{.}}</span>{{end}}</span></a></td><td class="num right nowrap" data-label="Gaps judged">{{.Judged}}{{with .Unknown}}<span class="sub">{{.}} unknown</span>{{end}}</td><td class="num right tone-early" data-label="Bunched">{{.Bunched}}</td><td class="num right tone-late" data-label="Long gaps">{{.LongGaps}}</td><td class="num right" data-label="Extra wait (min)">{{.ExtraWait}}</td><td class="num right nowrap" data-label="Trips run">{{.Route.Ran}} <span class="muted">of {{.Route.Scheduled}}</span></td></tr>
+        {{end}}
+      </tbody>
+    </table></div>
+    <div class="card-foot">A gap is the time between two vehicles leaving a stop, at the stops On time would judge, and counts in the hour the later one left. It is bunched under {{.BunchedBelow}} of the scheduled gap and long over {{.LongAbove}}, and unknown when a vehicle with no report within {{$.FixWindow}} of the stop could have left between them. Extra wait is how much longer than scheduled a rider who turned up at random waited, on average. Trips run is the whole route's: a vehicle without the app reads as a long gap.</div>
+  </section>
+  <section class="card" aria-labelledby="an-gap-hours">
+    <div class="card-head"><h3 id="an-gap-hours" style="flex:1">Bunched and long gaps by hour of day</h3><span class="legend"><span><i class="seg-early"></i>Bunched</span><span><i class="seg-late"></i>Long</span></span></div>
+    {{with .Hours}}
+    <div class="an-plot">{{template "hour-chart" .}}</div>
+    <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Later vehicle leaving from</th><th class="right">Gaps judged</th><th class="right">Bunched</th><th class="right">Long gaps</th></tr></thead><tbody>{{range .Rows}}<tr><td class="num">{{.Hour}}</td><td class="num right">{{.Count}}</td><td class="num right">{{.Upper}}</td><td class="num right">{{.Lower}}</td></tr>{{end}}</tbody></table></div></details>
+    {{else}}
+    <p class="card-note">No gap was judged, so there is nothing to draw.</p>
+    {{end}}
+  </section>
+  <section class="card" aria-labelledby="an-gap-ratios">
+    <div class="card-head"><h3 id="an-gap-ratios" style="flex:1">How even the gaps were</h3><span class="sub">Share of the scheduled gap</span></div>
+    {{with .Ratios}}
+    <div class="an-plot">{{template "ratio-chart" .}}</div>
+    <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Of the scheduled gap</th><th class="right">Gaps</th></tr></thead><tbody>{{range .Rows}}<tr><td>{{.Share}}</td><td class="num right">{{.Gaps}}</td></tr>{{end}}</tbody></table></div></details>
+    {{else}}
+    <p class="card-note">No gap was judged, so there is nothing to draw.</p>
+    {{end}}
+  </section>
+  {{end}}
   {{with .AlertsRaised}}
   <section class="card an-wide" aria-labelledby="an-alerts">
     <div class="card-head"><h3 id="an-alerts" style="flex:1">Alerts</h3><span class="sub hide-phone">Raised {{if $.OneDay}}on this day{{else}}on these days{{end}}</span><a class="btn btn-sm btn-plain" href="/admin/alerts#cleared">Alerts page{{template "icon-sm" "chevron_right"}}</a></div>
@@ -128,11 +160,15 @@
 {{end}}
 
 {{define "analytics-tiles"}}
-<div class="rise tiles an-tiles">
+<div class="rise tiles an-tiles{{if .Tiles.Gaps}} an-tiles-6{{end}}">
   <div class="card tile"><span class="tile-label">On time</span>{{if .Tiles.Split.Known}}<span class="tile-value"><span class="count-up" data-count="{{.Tiles.Split.Percent}}">{{.Tiles.Split.Percent}}</span>%</span><span class="tile-foot">{{template "ot-stack" .Tiles.Split}}</span>{{else}}<span class="tile-value muted">None</span><span class="tile-note">No stop was judged</span>{{end}}</div>
   <div class="card tile"><span class="tile-label">Trips run</span><span class="tile-value"><span class="count-up" data-count="{{.Tiles.Ran}}">{{.Tiles.Ran}}</span><span class="tile-unit">of {{.Tiles.Scheduled}}</span></span><span class="tile-note">{{.Tiles.NotRun}} not run{{if .IsToday}} yet{{end}}</span></div>
   <div class="card tile"><span class="tile-label">Early</span>{{if .Tiles.Split.Known}}<span class="tile-value tone-early"><span class="count-up" data-count="{{.Tiles.Split.Early}}">{{.Tiles.Split.Early}}</span>%</span>{{else}}<span class="tile-value muted">None</span>{{end}}<span class="tile-note">{{if eq .Tiles.Early 1}}1 stop{{else}}{{.Tiles.Early}} stops{{end}} more than {{.OnTimeEarly}} ahead</span></div>
   <div class="card tile"><span class="tile-label">Late</span>{{if .Tiles.Split.Known}}<span class="tile-value tone-late"><span class="count-up" data-count="{{.Tiles.Split.Late}}">{{.Tiles.Split.Late}}</span>%</span>{{else}}<span class="tile-value muted">None</span>{{end}}<span class="tile-note">{{if eq .Tiles.Late 1}}1 stop{{else}}{{.Tiles.Late}} stops{{end}} more than {{.OnTimeLate}} behind</span></div>
+  {{with .Tiles.Gaps}}
+  <div class="card tile"><span class="tile-label">Bunched</span>{{if .Known}}<span class="tile-value tone-early"><span class="count-up" data-count="{{.Bunched}}">{{.Bunched}}</span>%</span>{{else}}<span class="tile-value muted">None</span>{{end}}<span class="tile-note">{{.BunchedNote}}</span></div>
+  <div class="card tile"><span class="tile-label">Long gaps</span>{{if .Known}}<span class="tile-value tone-late"><span class="count-up" data-count="{{.Long}}">{{.Long}}</span>%</span>{{else}}<span class="tile-value muted">None</span>{{end}}<span class="tile-note">{{.LongNote}}</span></div>
+  {{end}}
 </div>
 {{end}}
 
@@ -144,7 +180,7 @@
 <svg class="chart" viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-label="{{.Name}}">
   {{range .Grid}}<line class="grid" x1="{{$.Left}}" x2="{{$.Width}}" y1="{{.Y}}" y2="{{.Y}}"/><text x="{{$.LabelX}}" y="{{.LabelY}}" text-anchor="end">{{.Label}}</text>{{end}}
   <line class="axis" x1="{{.Left}}" x2="{{.Width}}" y1="{{.AxisY}}" y2="{{.AxisY}}"/>
-  <g class="grow-y">{{range .Bars}}{{if .LateH}}<rect x="{{.X}}" y="{{.LateY}}" width="{{.W}}" height="{{.LateH}}" rx="2" fill="url(#hatch-late)"/>{{end}}{{if .EarlyH}}<rect x="{{.X}}" y="{{.EarlyY}}" width="{{.W}}" height="{{.EarlyH}}" rx="2" fill="url(#hatch-early)"/>{{end}}{{end}}</g>
+  <g class="grow-y">{{range .Bars}}{{if .LowerH}}<rect x="{{.X}}" y="{{.LowerY}}" width="{{.W}}" height="{{.LowerH}}" rx="2" fill="url(#hatch-late)"/>{{end}}{{if .UpperH}}<rect x="{{.X}}" y="{{.UpperY}}" width="{{.W}}" height="{{.UpperH}}" rx="2" fill="url(#hatch-early)"/>{{end}}{{end}}</g>
   {{range .Bars}}<rect class="hit" x="{{.HitX}}" y="0" width="{{.HitW}}" height="{{$.AxisY}}" data-tip="{{.Tip}}"/>{{if .Label}}<text x="{{.LabelX}}" y="{{$.BaseY}}" text-anchor="middle">{{.Label}}</text>{{end}}{{end}}
 </svg>
 {{end}}
@@ -154,6 +190,16 @@
   <line class="axis" x1="0" x2="{{.Width}}" y1="{{.AxisY}}" y2="{{.AxisY}}"/>
   <rect class="ok-band" x="{{.BandX}}" y="4" width="{{.BandW}}" height="{{.BandH}}" rx="4"/><text x="{{.BandLabelX}}" y="16" text-anchor="middle">counted as on time</text>
   <g class="grow-y">{{range .Bars}}{{if .OnTimeH}}<rect class="bar-ok" x="{{.X}}" y="{{.OnTimeY}}" width="{{.W}}" height="{{.OnTimeH}}" rx="2"/>{{end}}{{if .EarlyH}}<rect x="{{.X}}" y="{{.EarlyY}}" width="{{.W}}" height="{{.EarlyH}}" rx="2" fill="url(#hatch-early)"/>{{end}}{{if .LateH}}<rect x="{{.X}}" y="{{.LateY}}" width="{{.W}}" height="{{.LateH}}" rx="2" fill="url(#hatch-late)"/>{{end}}{{end}}</g>
+  {{range .Bars}}<rect class="hit" x="{{.HitX}}" y="0" width="{{.HitW}}" height="{{$.AxisY}}" data-tip="{{.Tip}}"/>{{if .Label}}<text x="{{.LabelX}}" y="{{$.BaseY}}" text-anchor="middle">{{.Label}}</text>{{end}}{{end}}
+</svg>
+{{end}}
+
+{{define "ratio-chart"}}
+<svg class="chart" viewBox="0 0 {{.Width}} {{.Height}}" role="img" aria-label="{{.Name}}">
+  <line class="axis" x1="0" x2="{{.Width}}" y1="{{.AxisY}}" y2="{{.AxisY}}"/>
+  <rect class="early-band" x="0" y="4" width="{{.BunchedW}}" height="{{.BandH}}" rx="4"/><text x="{{.BunchedLabelX}}" y="16" text-anchor="middle">bunched</text>
+  <rect class="late-band" x="{{.LongX}}" y="4" width="{{.LongW}}" height="{{.BandH}}" rx="4"/><text x="{{.LongLabelX}}" y="16" text-anchor="middle">long</text>
+  <g class="grow-y">{{range .Bars}}{{if .H}}<rect class="bar" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="2"/>{{end}}{{end}}</g>
   {{range .Bars}}<rect class="hit" x="{{.HitX}}" y="0" width="{{.HitW}}" height="{{$.AxisY}}" data-tip="{{.Tip}}"/>{{if .Label}}<text x="{{.LabelX}}" y="{{$.BaseY}}" text-anchor="middle">{{.Label}}</text>{{end}}{{end}}
 </svg>
 {{end}}

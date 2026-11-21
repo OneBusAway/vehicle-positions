@@ -158,7 +158,7 @@ func TestNewLineChart_Edges(t *testing.T) {
 }
 
 func TestNewHourChart(t *testing.T) {
-	c := newHourChart([]hourShares{{Hour: 7, Trips: 2, reportCounts: reportCounts{OnTime: 8, Early: 1, Late: 1}}})
+	c := newHourChart([]hourSplit{{Hour: 7, Count: 2, Lower: 1, Upper: 1, Rest: 8}}, tripHours)
 
 	assert.Equal(t, "Share of stops early or late, by hour of day", c.Name)
 	assert.Equal(t, []chartGridLine{
@@ -168,36 +168,36 @@ func TestNewHourChart(t *testing.T) {
 	}, c.Grid, "a fifth of the stops off time is drawn under a line at 30")
 	assert.Equal(t, []hourChartBar{{
 		X: "186.5", W: "220.9",
-		LateY: "115.3", LateH: "52.7",
-		EarlyY: "60.7", EarlyH: "52.7",
+		LowerY: "115.3", LowerH: "52.7",
+		UpperY: "60.7", UpperH: "52.7",
 		HitX: "34.0", HitW: "526.0",
 		Tip:   "07:00 to 08:00|10% late, 10% early, 80% on time (2 trips)",
 		Label: "07:00", LabelX: "297.0",
 	}}, c.Bars)
-	assert.Equal(t, []hourChartRow{{Hour: "07:00", Trips: 2, OnTime: "80%", Early: "10%", Late: "10%"}}, c.Rows)
+	assert.Equal(t, []hourChartRow{{Hour: "07:00", Count: 2, Lower: "10%", Upper: "10%", Rest: "80%"}}, c.Rows)
 }
 
 func TestNewHourChart_ScalesAndTips(t *testing.T) {
-	top := func(hours ...hourShares) string {
-		grid := newHourChart(hours).Grid
+	top := func(hours ...hourSplit) string {
+		grid := newHourChart(hours, tripHours).Grid
 		return grid[len(grid)-1].Label
 	}
-	off := func(late int) hourShares {
-		return hourShares{Trips: 1, reportCounts: reportCounts{OnTime: 100 - late, Late: late}}
+	off := func(late int) hourSplit {
+		return hourSplit{Count: 1, Lower: late, Rest: 100 - late}
 	}
 	assert.Equal(t, "15%", top(off(0)))
 	assert.Equal(t, "15%", top(off(15)))
 	assert.Equal(t, "30%", top(off(16)))
 	assert.Equal(t, "60%", top(off(31)))
 	assert.Equal(t, "100%", top(off(61), off(100)))
-	assert.Len(t, newHourChart([]hourShares{off(100)}).Grid, 4)
+	assert.Len(t, newHourChart([]hourSplit{off(100)}, tripHours).Grid, 4)
 
-	c := newHourChart([]hourShares{
-		{Hour: 22, Trips: 3, reportCounts: reportCounts{Late: 1}},
+	c := newHourChart([]hourSplit{
+		{Hour: 22, Count: 3, Lower: 1},
 		{Hour: 23},
-		{Hour: 24, Trips: 1},
-		{Hour: 25, Trips: 1, reportCounts: reportCounts{OnTime: 1}},
-	})
+		{Hour: 24, Count: 1},
+		{Hour: 25, Count: 1, Rest: 1},
+	}, tripHours)
 	tips := make([]string, 0, 4)
 	labels := make([]string, 0, 4)
 	for _, b := range c.Bars {
@@ -211,11 +211,11 @@ func TestNewHourChart_ScalesAndTips(t *testing.T) {
 		"01:00 to 02:00|0% late, 0% early, 100% on time (1 trip)",
 	}, tips)
 	assert.Equal(t, []string{"22:00", "", "", "01:00"}, labels, "every third hour has its label")
-	assert.Empty(t, c.Bars[3].LateH)
-	assert.Empty(t, c.Bars[3].EarlyH)
-	assert.Equal(t, hourChartRow{Hour: "00:00", Trips: 1}, c.Rows[2])
+	assert.Empty(t, c.Bars[3].LowerH)
+	assert.Empty(t, c.Bars[3].UpperH)
+	assert.Equal(t, hourChartRow{Hour: "00:00", Count: 1}, c.Rows[2])
 
-	assert.Empty(t, newHourChart(nil).Bars)
+	assert.Empty(t, newHourChart(nil, tripHours).Bars)
 }
 
 func TestNewHistChart(t *testing.T) {
@@ -263,4 +263,62 @@ func TestNewHistChart(t *testing.T) {
 	assert.Equal(t, histChartRow{Minutes: "Up to 1 min early", Trips: 4}, c.Rows[3])
 
 	assert.Empty(t, newHistChart(nil, time.Minute, 5*time.Minute).Bars)
+}
+
+// TestNewHourChart_Gaps: the hour chart of gaps draws long in late's place
+// and bunched in early's, and names them so.
+func TestNewHourChart_Gaps(t *testing.T) {
+	c := newHourChart([]hourSplit{{Hour: 7, Count: 14, Lower: 2, Upper: 5, Rest: 7}, {Hour: 8}}, gapHours)
+
+	assert.Equal(t, "Share of gaps bunched or long, by hour of day", c.Name)
+	assert.Equal(t, "60%", c.Grid[2].Label, "half the gaps off is drawn under a line at 60")
+	require.Len(t, c.Bars, 2)
+	assert.Equal(t, hourChartBar{
+		X: "110.3", W: "110.5",
+		LowerY: "130.4", LowerH: "37.6",
+		UpperY: "34.3", UpperH: "94.0",
+		HitX: "34.0", HitW: "263.0",
+		Tip:   "07:00 to 08:00|14% long, 36% bunched, 50% neither (14 gaps)",
+		Label: "07:00", LabelX: "165.5",
+	}, c.Bars[0])
+	assert.Equal(t, "08:00 to 09:00|no gap judged", c.Bars[1].Tip)
+	assert.Empty(t, c.Bars[1].LowerH)
+	assert.Equal(t, []hourChartRow{{Hour: "07:00", Count: 14, Lower: "14%", Upper: "36%", Rest: "50%"}, {Hour: "08:00"}}, c.Rows)
+}
+
+func TestNewRatioChart(t *testing.T) {
+	tenths := make([]int, gapRatioTop+1)
+	tenths[2], tenths[15], tenths[30] = 5, 1, 2
+
+	c := newRatioChart(tenths)
+
+	assert.Equal(t, "Gaps judged by their share of the scheduled gap", c.Name)
+	assert.Equal(t, "168.0", c.AxisY)
+	assert.Equal(t, "45.2", c.BunchedW, "the bunched band ends at 25%, two and a half bars in")
+	assert.Equal(t, "22.6", c.BunchedLabelX)
+	assert.Equal(t, "271.0", c.LongX, "and the long band starts at 150%, fifteen bars in")
+	assert.Equal(t, "289.0", c.LongW, "and runs to the right edge")
+	assert.Equal(t, "415.5", c.LongLabelX)
+	assert.Equal(t, "164.0", c.BandH)
+	require.Len(t, c.Bars, 31)
+
+	assert.Equal(t, ratioChartBar{X: "38.1", Y: "22.5", W: "14.1", H: "145.5", HitX: "36.1", HitW: "18.1", Tip: "20% to 30% of the scheduled gap|5 gaps"}, c.Bars[2],
+		"the tallest bar stops short of the top")
+	assert.Equal(t, ratioChartBar{X: "2.0", W: "14.1", HitX: "0.0", HitW: "18.1", Tip: "0% to 10% of the scheduled gap|0 gaps"}, c.Bars[0], "no gap, no bar")
+	assert.Equal(t, "150% to 160% of the scheduled gap|1 gap", c.Bars[15].Tip)
+	assert.Equal(t, "109.8", c.Bars[30].Y)
+	assert.Equal(t, "58.2", c.Bars[30].H)
+	assert.Equal(t, "300% or more of the scheduled gap|2 gaps", c.Bars[30].Tip)
+
+	labels := make(map[string]string)
+	for _, b := range c.Bars {
+		if b.Label != "" {
+			labels[b.Label] = b.LabelX
+		}
+	}
+	assert.Equal(t, map[string]string{"50%": "90.3", "100%": "180.6", "150%": "271.0", "200%": "361.3", "250%": "451.6", "300%": "541.9"}, labels, "every fifth, at its left edge")
+	assert.Equal(t, ratioChartRow{Share: "20% to 30%", Gaps: 5}, c.Rows[2])
+	assert.Equal(t, ratioChartRow{Share: "300% or more", Gaps: 2}, c.Rows[30])
+
+	assert.Empty(t, newRatioChart(nil).Bars)
 }
