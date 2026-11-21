@@ -43,6 +43,8 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>OBADefaultServerURL</key>
 	<string>$(DEFAULT_SERVER_URL)</string>
 	<key>UIApplicationSceneManifest</key>
