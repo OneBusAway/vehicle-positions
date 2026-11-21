@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Amharic, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    The driver is addressed in the polite form (እርስዎ), which is also the same for men and women.
+    "Vehicle" is መኪና, the everyday word drivers use for any vehicle (ተሽከርካሪ is the formal one);
+    "run" is ዙር; "trip" is ጉዞ; "report" is ሪፖርት; "dispatcher" is ተቆጣጣሪ; "block" is ብሎክ;
+    "route" is መስመር; "stop" is ፌርማታ; "agency" is ድርጅት; "driver" is ሹፌር; "app" is መተግበሪያ;
+    "location" is አካባቢ, as Android's Amharic settings say; "diagnostics" is የመተግበሪያ መረጃ.
+    Spelling follows the simplified forms phones use (ስራ, ሶስት, መሰረት). Distances keep m and km.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">ይግቡ</string>
+    <string name="login_subtitle">ለዚህ ድርጅት ያለዎትን የሹፌር መለያ ይጠቀሙ።</string>
+    <string name="login_server_url_label">የሰርቨር አድራሻ</string>
+    <string name="login_email_label">ኢሜይል</string>
+    <string name="login_password_label">የይለፍ ቃል</string>
+    <string name="login_show_password">የይለፍ ቃሉን ያሳዩ</string>
+    <string name="login_hide_password">የይለፍ ቃሉን ይደብቁ</string>
+    <string name="login_server">ሰርቨር</string>
+    <string name="login_change_server">ይቀይሩ</string>
+    <string name="login_button">ይግቡ</string>
+    <string name="login_signing_in">በመግባት ላይ</string>
+    <string name="login_error_missing_server">የሰርቨሩን አድራሻ ያስገቡ</string>
+    <string name="login_error_missing_email">ኢሜይልዎን ያስገቡ</string>
+    <string name="login_error_missing_password">የይለፍ ቃልዎን ያስገቡ</string>
+    <string name="login_error_invalid_credentials">ኢሜይል ወይም የይለፍ ቃል ተሳስቷል። እንደገና ይሞክሩ።</string>
+    <string name="login_error_invalid_address">እንደ https://tracker.example.org ያለ አድራሻ ያስገቡ</string>
+    <string name="login_error_https_required">በhttps:// የሚጀምር አድራሻ ይጠቀሙ</string>
+    <string name="login_error_check_address">አድራሻውን ያረጋግጡ</string>
+    <string name="login_error_unreachable">ከ%1$s ጋር መገናኘት አልተቻለም። ግንኙነትዎን ወይም የሰርቨሩን አድራሻ ያረጋግጡ።</string>
+    <string name="login_error_not_tracker">%1$s የመከታተያ ሰርቨር አይመስልም።</string>
+    <string name="login_error_too_many_tries">በጣም ብዙ ሙከራ። አንድ ደቂቃ ቆይተው እንደገና ይሞክሩ።</string>
+    <string name="login_error_server">መግባት አልተቻለም። እንደገና ይሞክሩ።</string>
+    <string name="login_again_title">እንደገና ይግቡ</string>
+    <string name="login_again_subtitle">እንደ %1$s</string>
+    <string name="login_again_button">ገብተው ሪፖርት መላክዎን ይቀጥሉ</string>
+    <string name="login_trip_open_title">ጉዞዎ አሁንም ክፍት ነው</string>
+    <string name="login_trip_open_message">የመግቢያዎ ጊዜ ሲያበቃ ሪፖርት መላክ ቆሟል። በመስመር %1$s ላይ ሪፖርት መላክዎን ለመቀጠል ይግቡ።</string>
+    <string name="login_server_managed">በድርጅትዎ የተዘጋጀ።</string>
+    <string name="login_server_managed_invalid">የድርጅትዎ የሰርቨር ቅንብር ትክክለኛ አድራሻ ስላልሆነ እዚህ ይጻፉት።</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">%1$s ይጠቀማሉ?</string>
+    <string name="server_setup_confirm_message">ይህን ሊንክ የላከልዎ ድርጅትዎ ከሆነ ብቻ ይቀጥሉ።</string>
+    <string name="server_setup_use">ይህን ሰርቨር ይጠቀሙ</string>
+    <string name="server_setup_cancel">ይቅር</string>
+    <string name="server_setup_refused_signed_in">ይህ ስልክ %1$s ላይ ገብቷል። ሊንኩ ጥቅም ላይ አልዋለም።</string>
+    <string name="server_setup_refused_trip_open">በዚህ ስልክ ላይ ክፍት ጉዞ አለ። ሊንኩ ጥቅም ላይ አልዋለም።</string>
+    <string name="server_setup_refused_managed">በዚህ ስልክ ላይ ሰርቨሩን የሚያዘጋጀው ድርጅትዎ ነው።</string>
+    <string name="server_setup_invalid">ይህ ሊንክ መተግበሪያው ሊጠቀምበት የሚችል የሰርቨር አድራሻ የለውም።</string>
+    <string name="server_setup_ok">እሺ</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">የሰርቨር አድራሻ</string>
+    <string name="restriction_server_url_description">የድርጅቱ የመከታተያ ሰርቨር፣ በhttps:// የሚጀምር አድራሻ። ሹፌሮች ወደ እሱ ይገባሉ፣ ግን ሊቀይሩት አይችሉም።</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">ይዝለሉ</string>
+    <string name="welcome_next">ቀጣይ</string>
+    <string name="welcome_continue">ይቀጥሉ</string>
+    <string name="welcome_step">ደረጃ %1$d ከ%2$d</string>
+    <string name="welcome_riders_title">ተሳፋሪዎች መምጣትዎን ማየት ይችላሉ</string>
+    <string name="welcome_riders_body">ጉዞ ሲጀምሩ ተሳፋሪዎች መኪናዎን በካርታቸው ላይ ያያሉ። ስራዎ ሲያልቅ ጉዞውን ይጨርሱ።</string>
+    <string name="welcome_riders_picture">ፌርማታ ላይ ያሉ ሶስት ተሳፋሪዎች መኪናዎ ሲመጣ ማየት ይችላሉ።</string>
+    <string name="welcome_pieces_title">መኪና፣ መስመር፣ ዙር</string>
+    <string name="welcome_pieces_body">እነዚህን ይምረጡ፣ ከዚያ ለመጀመር ዙርዎን ይንኩ። ስራዎ ሲያልቅ ጉዞውን ይጨርሱ።</string>
+    <string name="welcome_pieces_vehicle_hint">መኪናው ላይ ያለው ቁጥር</string>
+    <string name="welcome_pieces_route_hint">ታፔላው ላይ ያለው ቁጥር</string>
+    <string name="welcome_pieces_run_hint">ሲነኩት ጉዞው ይጀምራል</string>
+    <string name="welcome_pieces_live">ተሳፋሪዎች ያዩዎታል</string>
+    <string name="welcome_pieces_finish">ስራዎ ሲያልቅ</string>
+    <string name="welcome_habits_title">ሪፖርት መላኩ እንዳይቋረጥ</string>
+    <string name="welcome_habits_body">በእያንዳንዱ ጉዞ እነዚህን 3 ነገሮች ያድርጉ።</string>
+    <string name="welcome_habits_location">አካባቢን ሁልጊዜ ይፍቀዱ</string>
+    <string name="welcome_habits_location_why">ሪፖርት መላክ በራሱ እንደገና እንዲጀምር</string>
+    <string name="welcome_habits_charge">ስልኩን ቻርጅ ላይ ያድርጉት</string>
+    <string name="welcome_habits_charge_why">ቻርጅ ላይ ሳለ ስክሪኑ አይጠፋም</string>
+    <string name="welcome_habits_open">መተግበሪያውን ክፍት ይተዉት</string>
+    <string name="welcome_habits_open_why">በጉዞ ላይ አንሸራትተው አይዝጉት</string>
+    <string name="welcome_habits_if_stops">ሪፖርት መላክ ከቆመ</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">ዙርዎን ይንኩ</string>
+    <string name="tip_run_board_text">ከዚያ «%1$s» የሚለውን ይንኩ። ከዚያ ጀምሮ ተሳፋሪዎች መኪናዎን ያያሉ።</string>
+    <string name="tip_sent_count_title">የተላኩ ሪፖርቶች</string>
+    <string name="tip_sent_count_text">ተሳፋሪዎች እርስዎን ማየት እስከቻሉ ድረስ ይህ ቁጥር ይጨምራል። ኔትወርክ የለም? መንዳትዎን ይቀጥሉ። ሪፖርቶቹ ተቀምጠው በኋላ ይላካሉ።</string>
+    <string name="tip_got_it">ገባኝ</string>
+    <string name="first_trip_done_title">የመጀመሪያው ጉዞ ተጠናቀቀ</string>
+    <!-- The count is shown beside these words in large digits, so they need none of their own; Amharic's "one" is 0 and 1, and both read right. -->
+    <plurals name="first_trip_done_reports" tools:ignore="ImpliedQuantity">
+        <item quantity="one">ሪፖርት ተልኳል</item>
+        <item quantity="other">ሪፖርቶች ተልከዋል</item>
+    </plurals>
+    <string name="first_trip_done_text">ተሳፋሪዎች መኪናዎን ማየት ችለው ነበር።</string>
+    <string name="first_trip_done_ok">እሺ</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">ቋንቋ፦ %1$s</string>
+    <string name="language_row_phone_note">ለመላው ስልኩ የሚቀየረው በስልኩ ቅንብሮች ውስጥ ነው</string>
+    <string name="language_list_title">ቋንቋ</string>
+    <string name="language_list_cancel">ይቅር</string>
+
+    <!-- Help -->
+    <string name="help_title">እገዛ</string>
+    <string name="help_welcome_again">የእንኳን ደህና መጡ ገጾቹን እንደገና ይመልከቱ</string>
+    <string name="help_welcome_again_detail">3 አጭር ገጾች</string>
+    <string name="help_section_status">በሁኔታ ካርዱ ላይ</string>
+    <string name="help_status_on_time">በጊዜ ሰሌዳው መሰረት እየሄዱ ነው።</string>
+    <string name="help_status_late">ከጊዜ ሰሌዳው ዘግይተዋል።</string>
+    <string name="help_status_early">ከጊዜ ሰሌዳው ቀድመዋል። ተሳፋሪዎች ላይደርሱብዎት ይችላሉ።</string>
+    <string name="help_status_off_schedule">ከጊዜ ሰሌዳው በጣም ርቀዋል። ትክክለኛውን ዙር መምረጥዎን ያረጋግጡ።</string>
+    <string name="help_status_off_route">በካርታው ላይ ካለው መስመር ወጥተዋል።</string>
+    <string name="help_status_waiting_for_gps">ስልኩ ያለበትን ቦታ እየፈለገ ነው።</string>
+    <string name="help_status_no_schedule">ይህ ዙር ሰዓት የለውም። ተሳፋሪዎች አሁንም ያዩዎታል።</string>
+    <string name="help_waiting">ግንኙነት በሌለበት ጊዜ ተቀምጠዋል። ግንኙነቱ ሲመለስ ይላካሉ።</string>
+    <string name="help_waiting_never">በሌላ መግቢያ ስለተቀመጡ ይህኛው ሊልካቸው አይችልም።</string>
+    <string name="help_section_problems">ከካርዱ በታች፣ እና በማሳወቂያዎች ውስጥ</string>
+    <string name="help_problem_no_network">መንዳትዎን ይቀጥሉ። ሪፖርቶቹ ተቀምጠው በኋላ ይላካሉ።</string>
+    <string name="help_problem_no_gps">እስኪመለስ ድረስ ተሳፋሪዎች የመጨረሻ ቦታዎን ያያሉ።</string>
+    <string name="help_problem_clock_skew">በስልኩ ቅንብሮች ውስጥ ራስ-ሰር ሰዓትን ያብሩ።</string>
+    <string name="help_problem_reports_refused">ሰርቨሩ የዚህን መኪና ሪፖርቶች እየተቀበለ አይደለም። ተቆጣጣሪዎን ይጠይቁ።</string>
+    <string name="help_problem_signed_out">ሪፖርት መላክ ቆሟል። ለመቀጠል ይግቡ። ጉዞዎ አሁንም ክፍት ነው።</string>
+    <string name="help_problem_reports_paused">ማሳወቂያ ነው። ሪፖርት መላክ ለመቀጠል መተግበሪያውን ይክፈቱ።</string>
+    <string name="help_section_about">ስለ መተግበሪያው</string>
+    <string name="help_version">ስሪት</string>
+    <string name="help_server">ሰርቨር</string>
+    <string name="help_share">የመተግበሪያ መረጃ ያጋሩ</string>
+    <string name="help_share_detail">የመተግበሪያውን ስሪት፣ የስልኩን ሞዴል፣ ሰርቨሩን፣ መተግበሪያው እንዲያደርግ የተፈቀደለትን እና የቅርብ ጊዜ ችግሮቹን ይልካል፤ ችግሮቹ የሚቀመጡት መተግበሪያው እየሰራ ሳለ ብቻ ነው። ቦታ፣ የመግቢያ ዝርዝሮች እና ኢሜይል አይላኩም።</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">ይመለሱ</string>
+    <string name="setup_trip_so_far">እስካሁን ያለው ጉዞ</string>
+    <string name="setup_bus">መኪና</string>
+    <string name="setup_route">መስመር %1$s</string>
+    <string name="setup_step_route">መስመር</string>
+    <string name="setup_step_run">ዙር</string>
+    <string name="setup_clear_search">ፍለጋውን ያጽዱ</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">መለያ</string>
+    <string name="account_version">ስሪት %1$s</string>
+    <string name="account_sign_out">ከመለያ ይውጡ</string>
+    <string name="account_sign_out_title">ከመለያ ይወጣሉ?</string>
+    <string name="account_sign_out_message">ቀጣዩ ሹፌር በዚህ ስልክ መግባት ይችላል።</string>
+    <string name="account_sign_out_cancel">ይቅር</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">መኪናዎን ይምረጡ</string>
+    <string name="vehicles_empty">ለእርስዎ የተመደበ መኪና የለም</string>
+    <string name="vehicles_empty_detail">ተቆጣጣሪዎ መኪና እንዲመድብልዎ ይጠይቁ፣ ከዚያ እንደገና ያረጋግጡ።</string>
+    <string name="vehicles_check_again">እንደገና ያረጋግጡ</string>
+    <string name="vehicles_error_message">መኪኖችዎን መጫን አልተቻለም</string>
+    <string name="vehicles_error_detail">ግንኙነትዎን አረጋግጠው እንደገና ይሞክሩ።</string>
+    <string name="vehicles_retry_button">እንደገና ይሞክሩ</string>
+    <string name="vehicles_search_label">የመኪና ቁጥር</string>
+    <string name="vehicles_search_no_matches">ከ%1$s ጋር የሚዛመድ መኪና የለም</string>
+    <string name="vehicles_search_no_matches_detail">መኪናው ላይ ያለውን ቁጥር ያረጋግጡ።</string>
+    <string name="vehicles_section_favorites">ተወዳጆች</string>
+    <string name="vehicles_section_recent">የቅርብ ጊዜ</string>
+    <string name="vehicles_section_all">ሁሉም መኪኖች</string>
+    <string name="vehicles_section_matches">የተገኙ</string>
+    <string name="vehicles_tile_favorite">ተወዳጅ</string>
+    <string name="vehicles_favorite_description">%1$s ወደ ተወዳጆች ያክሉ</string>
+    <string name="vehicles_unfavorite_description">%1$s ከተወዳጆች ያስወግዱ</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">መስመር ይምረጡ</string>
+    <string name="routes_search_label">የመስመር ቁጥር ወይም ስም</string>
+    <string name="routes_section_recent">የቅርብ ጊዜ</string>
+    <string name="routes_section_all">ሁሉም መስመሮች</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">ሁሉም መስመሮች · %1$d</item>
+        <item quantity="other">ሁሉም መስመሮች · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">የተገኙ</string>
+    <string name="routes_search_no_matches">ከ%1$s ጋር የሚዛመድ መስመር የለም</string>
+    <string name="routes_search_no_matches_detail">ታፔላው ላይ ባለው ቁጥር ወይም በስሙ የተወሰነ ክፍል ይፈልጉ።</string>
+    <string name="routes_empty">የጊዜ ሰሌዳው ምንም መስመር የለውም</string>
+    <string name="routes_empty_detail">የድርጅትዎን አስተዳዳሪ የጊዜ ሰሌዳውን እንዲያረጋግጥ ይጠይቁ።</string>
+    <string name="routes_check_again">እንደገና ያረጋግጡ</string>
+    <string name="routes_error_message">መስመሮቹን መጫን አልተቻለም</string>
+    <string name="routes_error_detail">ግንኙነትዎን አረጋግጠው እንደገና ይሞክሩ።</string>
+    <string name="routes_no_schedule">በዚህ ሰርቨር ላይ እስካሁን የጊዜ ሰሌዳ የለም</string>
+    <string name="routes_no_schedule_detail">ጉዞ ከመጀመሩ በፊት አንድ ኦፕሬተር የጊዜ ሰሌዳ መጫን አለበት። ለድርጅትዎ አስተዳዳሪ ይንገሩ።</string>
+    <string name="routes_retry_button">እንደገና ይሞክሩ</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">ዙር ይምረጡ</string>
+    <string name="runs_empty">ዛሬ በመስመር %1$s ላይ ዙር የለም</string>
+    <string name="runs_empty_unnamed">ዛሬ በዚህ መስመር ላይ ዙር የለም</string>
+    <string name="runs_empty_detail">ሌላ መስመር ይምረጡ፣ ወይም ነገ እንደገና ያረጋግጡ።</string>
+    <string name="runs_choose_another_route">ሌላ መስመር ይምረጡ</string>
+    <string name="runs_badge_now">አሁን</string>
+    <string name="runs_badge_next">ቀጣይ</string>
+    <string name="runs_direction">ወደ %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">ዙር %1$s</string>
+    <string name="runs_row_block">ብሎክ %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">በመጀመር ላይ…</string>
+    <string name="runs_start_title">የ%1$s ዙሩን ይጀምራሉ?</string>
+    <string name="runs_start_message">መስመር %1$s ወደ %2$s፣ በመኪና %3$s።</string>
+    <string name="runs_start_message_no_headsign">መስመር %1$s፣ በመኪና %2$s።</string>
+    <string name="runs_start_message_unnamed">ወደ %1$s፣ በመኪና %2$s።</string>
+    <string name="runs_start_message_vehicle">በመኪና %1$s።</string>
+    <string name="runs_start_confirm">ጉዞ ይጀምሩ</string>
+    <string name="runs_start_cancel">ይቅር</string>
+    <string name="runs_error_message">ዙሮቹን መጫን አልተቻለም</string>
+    <string name="runs_error_detail">ግንኙነትዎን አረጋግጠው እንደገና ይሞክሩ።</string>
+    <string name="runs_retry_button">እንደገና ይሞክሩ</string>
+    <string name="runs_error_not_assigned">መኪና %1$s ለእርስዎ አልተመደበም።</string>
+    <string name="runs_change_bus">መኪና ይቀይሩ</string>
+    <string name="runs_error_trip_active">አሁን እየሄደ ያለ ጉዞ አለዎት። ሌላ ከመጀመርዎ በፊት እሱን ይጨርሱ።</string>
+    <string name="runs_error_vehicle_busy">ሌላ ሹፌር በመኪና %1$s ላይ ጉዞ እያደረገ ነው። ሌላ መኪና ይምረጡ ወይም ተቆጣጣሪዎን ይጠይቁ።</string>
+    <string name="runs_error_vehicle_inactive">መኪና %1$s ከአገልግሎት ውጭ ነው። ሌላ መኪና ይምረጡ።</string>
+    <string name="runs_error_previous_trip_not_ended">ያለፈውን ጉዞዎን እስካሁን መጨረስ አልተቻለም። ግንኙነትዎን አረጋግጠው እንደገና ይሞክሩ።</string>
+    <string name="runs_error_network">ከሰርቨሩ ጋር መገናኘት አልተቻለም። ግንኙነትዎን ያረጋግጡ።</string>
+    <string name="runs_error_no_geometry">ይህ ዙር የሚከተለው መስመር ወይም ፌርማታ የለውም። ሌላ ዙር ይምረጡ።</string>
+    <string name="runs_error_trip_not_active">የጊዜ ሰሌዳው ወደ አዲስ ቀን ተሸጋግሯል።</string>
+    <string name="runs_reload_button">እንደገና ይጫኑ</string>
+    <string name="runs_error_other">ጉዞውን መጀመር አልተቻለም።</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d ተልኳል</item>
+        <item quantity="other">%1$d ተልከዋል</item>
+    </plurals>
+    <string name="tracking_bar_click_label">የጉዞውን ዝርዝር ያሳዩ</string>
+    <string name="tracking_end_trip_button">ጉዞ ይጨርሱ</string>
+    <string name="tracking_end_trip_ending">በመጨረስ ላይ…</string>
+    <string name="tracking_occupancy_question">መኪናው ምን ያህል ሞልቷል?</string>
+    <string name="tracking_occupancy_many_seats">ነፃ ወንበር አለ</string>
+    <string name="tracking_occupancy_few_seats">ጥቂት ወንበሮች</string>
+    <string name="tracking_occupancy_standing">መቆሚያ ብቻ</string>
+    <string name="tracking_occupancy_full">ሞልቷል</string>
+    <string name="tracking_occupancy_clear">ያጽዱ</string>
+    <string name="tracking_fact_run">ዙር</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">ሪፖርቶች</string>
+    <string name="tracking_reports_reporting">በመላክ ላይ</string>
+    <string name="tracking_reports_not_reporting">እየተላከ አይደለም</string>
+    <string name="tracking_reports_no_gps">GPS የለም</string>
+    <string name="tracking_reports_stopped">ሪፖርት መላክ ቆሟል</string>
+    <string name="tracking_fact_street_map">የመንገድ ካርታ</string>
+    <string name="tracking_street_map_ready">ዝግጁ</string>
+    <string name="tracking_street_map_downloading">በማውረድ ላይ · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">ገና አልወረደም</string>
+    <string name="tracking_street_map_no_space">በቂ ቦታ የለም</string>
+    <string name="tracking_street_map_unusable">መጠቀም አይቻልም</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d ፌርማታ ታልፏል</item>
+        <item quantity="other">%1$d ፌርማታዎች ታልፈዋል</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">ተዘርግቷል</string>
+    <string name="tracking_stops_passed_collapsed">ተሰብስቧል</string>
+    <string name="tracking_end_trip_dialog_title">ይህን ጉዞ ይጨርሳሉ?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">ሪፖርት መላክ ይቆማል፤ የመስመር %1$s የ%2$s ዙርም እንደተጠናቀቀ ይመዘገባል። %3$d ሪፖርት ተልኳል።</item>
+        <item quantity="other">ሪፖርት መላክ ይቆማል፤ የመስመር %1$s የ%2$s ዙርም እንደተጠናቀቀ ይመዘገባል። %3$d ሪፖርቶች ተልከዋል።</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">ሪፖርት መላክ ይቆማል፤ ይህ ዙርም እንደተጠናቀቀ ይመዘገባል። %1$d ሪፖርት ተልኳል።</item>
+        <item quantity="other">ሪፖርት መላክ ይቆማል፤ ይህ ዙርም እንደተጠናቀቀ ይመዘገባል። %1$d ሪፖርቶች ተልከዋል።</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">ጉዞ ይጨርሱ</string>
+    <string name="tracking_end_trip_dialog_cancel">ይቀጥሉ</string>
+    <string name="tracking_end_trip_error_title">ጉዞው ገና አልተጠናቀቀም</string>
+    <string name="tracking_end_trip_error_message">ሰርቨሩ ጉዞው መጠናቀቁን አላረጋገጠም። ኔትወርክዎን አረጋግጠው እንደገና ይሞክሩ፣ ወይም አሁን በዚህ ስልክ ሪፖርት መላክ ያቁሙ።</string>
+    <string name="tracking_end_trip_error_retry">እንደገና ይሞክሩ</string>
+    <string name="tracking_end_trip_error_end_locally">በዚህ ስልክ ይጨርሱ</string>
+    <string name="tracking_reauth_button">ይግቡ</string>
+    <string name="tracking_problem_no_network">ግንኙነት የለም</string>
+    <string name="tracking_problem_no_network_detail">ተሳፋሪዎች ሊያዩዎት አይችሉም</string>
+    <string name="tracking_problem_no_gps">የGPS ምልክት የለም</string>
+    <string name="tracking_problem_no_gps_detail">ቦታ መላክ ቆሟል</string>
+    <string name="tracking_problem_clock_skew">የስልኩ ሰዓት ትክክል አይደለም</string>
+    <string name="tracking_problem_clock_skew_detail">ራስ-ሰር ሰዓትን ያብሩ</string>
+    <string name="tracking_problem_reports_refused">ሪፖርቶች ውድቅ ሆነዋል</string>
+    <string name="tracking_problem_reports_refused_detail">ተቆጣጣሪዎን ይጠይቁ</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d ሪፖርት ግንኙነት ሲገኝ ይላካል</item>
+        <item quantity="other">%1$,d ሪፖርቶች ግንኙነት ሲገኝ ይላካሉ</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d ሪፖርት አይላክም</item>
+        <item quantity="other">%1$,d ሪፖርቶች አይላኩም</item>
+    </plurals>
+    <string name="tracking_signed_out_title">ከመለያ ወጥተዋል</string>
+    <string name="tracking_signed_out_message">ሪፖርት መላክ ቆሟል። ጉዞዎ አሁንም ክፍት ነው።</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">በሰዓቱ</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d ደቂቃ ዘግይተዋል</item>
+        <item quantity="other">%1$d ደቂቃ ዘግይተዋል</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d ደቂቃ ቀድመዋል</item>
+        <item quantity="other">%1$d ደቂቃ ቀድመዋል</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">ከጊዜ ሰሌዳ ውጭ</string>
+    <string name="tracking_adherence_right_run">ትክክለኛው ዙር ይህ ነው?</string>
+    <string name="tracking_adherence_off_schedule_next">ቀጣይ %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">ከመስመር ውጭ · %1$s</string>
+    <string name="tracking_adherence_off_route_short">ከመስመር ውጭ</string>
+    <string name="tracking_adherence_next_stop">ቀጣይ</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">GPS በመጠበቅ ላይ</string>
+    <string name="tracking_adherence_from">መነሻ</string>
+    <string name="tracking_adherence_run">የ%1$s ዙር</string>
+    <string name="tracking_adherence_run_vehicle">የ%1$s ዙር · %2$s</string>
+    <string name="tracking_adherence_no_schedule">የጊዜ ሰሌዳ የለም</string>
+    <string name="tracking_adherence_no_schedule_riders">ተሳፋሪዎች አሁንም ያዩዎታል</string>
+    <string name="tracking_adherence_no_schedule_detail">ይህ ዙር ሰዓት የለውም</string>
+    <string name="tracking_map_recenter">ወደ መኪናው ይመለሱ</string>
+    <string name="tracking_map_downloading">ካርታ በማውረድ ላይ፣ %1$d%%</string>
+    <string name="tracking_map_no_space">ለካርታው በቂ ቦታ የለም</string>
+    <string name="tracking_map_retrying">ካርታው ገና አልወረደም፣ እንደገና ይሞከራል</string>
+    <string name="tracking_map_retry_on_open">ካርታው አልወረደም፣ መተግበሪያው በሚቀጥለው ጊዜ ሲከፈት እንደገና ይሞከራል</string>
+    <string name="tracking_map_unusable">የካርታ ፋይሉን መጠቀም አይቻልም፣ ለድርጅትዎ ይንገሩ</string>
+    <string name="tracking_map_needs_https">የካርታ ሊንኩ https መጠቀም አለበት፣ ለድርጅትዎ ይንገሩ</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">ጉዞዎን ይቀጥላሉ?</string>
+    <string name="resume_message">ይህ ጉዞ እየሄደ ሳለ መተግበሪያው ተዘግቷል። እስኪመርጡ ድረስ ሪፖርት መላክ ቆሟል።</string>
+    <string name="resume_route">መስመር %1$s</string>
+    <string name="resume_run">የ%1$s ዙር</string>
+    <string name="resume_bus">መኪና %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">ከ%1$d ደቂቃ በፊት፣ %2$s ላይ ተጀምሯል</item>
+        <item quantity="other">ከ%1$d ደቂቃ በፊት፣ %2$s ላይ ተጀምሯል</item>
+    </plurals>
+    <string name="resume_started_hours_ago">ከ%1$d ሰዓት ከ%2$d ደቂቃ በፊት፣ %3$s ላይ ተጀምሯል</string>
+    <string name="resume_button">ጉዞውን ይቀጥሉ</string>
+    <string name="resume_end_trip_button">ጉዞ ይጨርሱ</string>
+    <string name="resume_ending">ጉዞውን በመጨረስ ላይ</string>
+    <string name="resume_loading">ጉዞዎን በመጫን ላይ</string>
+    <string name="resume_end_failed">ሰርቨሩ ጉዞው መጠናቀቁን አላረጋገጠም። እንደገና ይሞክሩ፣ ወይም በዚህ ስልክ ላይ ብቻ ይጨርሱት።</string>
+    <string name="resume_end_failed_back">ጉዞውን አይጨርሱ</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">የጉዞ ሪፖርት</string>
+    <string name="tracking_notification_title">መስመር %1$s · %2$s</string>
+    <string name="tracking_notification_next">ቀጣይ %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">ከመለያ ወጥተዋል። ለመግባት መተግበሪያውን ይክፈቱ።</string>
+    <string name="tracking_notification_reports_refused">ሪፖርቶች ውድቅ ሆነዋል። ተቆጣጣሪዎን ይጠይቁ።</string>
+    <string name="tracking_notification_resume_title">ሪፖርት መላክ ቆሟል</string>
+    <string name="tracking_notification_resume_text">ሪፖርት መላክ ለመቀጠል መተግበሪያውን ይክፈቱ።</string>
+    <string name="tracking_notification_attention_channel_name">ጉዞው እርስዎን ይፈልጋል</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">ከመጀመርዎ በፊት</string>
+    <string name="preflight_message">የመኪና %1$s ሪፖርት ለመላክ መተግበሪያው እነዚህን ይፈልጋል። ቀጥሎ Android ስለ እያንዳንዳቸው ይጠይቃል።</string>
+    <string name="preflight_location">አካባቢ</string>
+    <string name="preflight_location_why">መተግበሪያው መኪናው የት እንዳለ እንዲያውቅ</string>
+    <string name="preflight_precise">ትክክለኛ አካባቢ</string>
+    <string name="preflight_precise_why">ተሳፋሪዎች መኪናውን በትክክለኛው ፌርማታ ላይ እንዲያዩት</string>
+    <string name="preflight_background">ሁልጊዜ</string>
+    <string name="preflight_background_why">Android መተግበሪያውን ቢዘጋው ሪፖርት መላክ እንደገና እንዲጀምር</string>
+    <string name="preflight_notifications">ማሳወቂያዎች</string>
+    <string name="preflight_notifications_why">ሪፖርት እየተላከ መሆኑን ማየት እንዲችሉ</string>
+    <string name="preflight_battery">ባትሪ</string>
+    <string name="preflight_battery_why">Android በጉዞ መሃል ሪፖርት መላክን እንዳያቆም</string>
+    <string name="preflight_location_services">የአካባቢ አገልግሎቶች</string>
+    <string name="preflight_location_services_why">አካባቢ ለመላው ስልኩ መብራት አለበት</string>
+    <string name="preflight_allowed">ተፈቅዷል</string>
+    <string name="preflight_skipped">ተዘሏል</string>
+    <string name="preflight_next">ቀጣይ</string>
+    <string name="preflight_row_state">%1$s፣ %2$s</string>
+    <string name="preflight_skipped_why">አልተፈቀደም። ሪፖርት መላክ አሁንም ይሰራል።</string>
+    <string name="preflight_location_needed">ሪፖርት ለመላክ አካባቢ ያስፈልጋል</string>
+    <string name="preflight_approximate">የተፈቀደው ግምታዊ አካባቢ ብቻ ነው</string>
+    <string name="preflight_try_again">እንደገና ይሞክሩ</string>
+    <string name="preflight_open_settings">ቅንብሮችን ይክፈቱ</string>
+    <string name="preflight_continue">ይቀጥሉ</string>
+</resources>

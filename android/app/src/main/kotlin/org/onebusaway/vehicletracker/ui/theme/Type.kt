@@ -57,12 +57,15 @@ private fun typographyIn(family: FontFamily) = Typography(
 private val AppTypography = typographyIn(AppFontFamily)
 private val SystemTypography = typographyIn(FontFamily.Default)
 
-// The languages in a script the font above lacks, as Hindi's Devanagari is. Their text is set all in the system font
-// (for Hindi, the Noto Sans Devanagari Android ships), so a line never mixes this font's digits and Latin words with
-// the system's letters. Every other language keeps the font: English, the English a phone in a language the app lacks
-// is shown, and every Latin-script translation. FontCoverageTest fails a language missing from here whose letters the
-// font lacks.
-internal val systemFontLanguages = setOf("hi")
+// The languages in a script the font above lacks: Devanagari, Ethiopic, Japanese, Khmer, Hangul, Lao, Gurmukhi,
+// Cyrillic and Chinese. Their text is set all in the system font (for Hindi, the Noto Sans Devanagari Android ships),
+// so a line never mixes this font's digits and Latin words with the system's letters. Every other language keeps the
+// font: English, the English a phone in a language the app lacks is shown, and every Latin-script translation.
+// FontCoverageTest fails a language missing from here whose letters the font lacks.
+internal val systemFontLanguages = setOf(
+    "hi",
+    "am", "ja", "km", "ko", "lo", "pa", "ru", "ti", "uk", "zh",
+)
 
 /**
  * The typography for the language the app shows a phone or app set to [preferred], of the app's [available]

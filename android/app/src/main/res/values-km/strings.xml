@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Khmer, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    "Vehicle" is យានយន្ត, the general word for whatever the agency runs; "route" is ខ្សែ (a line, as in ខ្សែ 7);
+    "run" is ជើង (one timetabled departure, as in ជើងម៉ោង 6:43); "trip" is ដំណើរ; "stop" is ចំណត; "block" is ប្លុក;
+    "report" is ទីតាំង (one position sent, the word Android uses for location), so "reporting" is ការផ្ញើទីតាំង;
+    "dispatcher" is បន្ទប់បញ្ជា (control room); "agency" is ក្រុមហ៊ុន; "server" is ម៉ាស៊ីនមេ;
+    "sign in" is ចូលគណនី and "sign out" is ចេញពីគណនី; "diagnostics" is ព័ត៌មានកម្មវិធី.
+    "Next" beside a stop's name is ចំណតបន្ទាប់, since បន្ទាប់ alone before a name reads "after".
+    The driver is អ្នក; instructions in sentences start with សូម, buttons and labels do not.
+    Khmer has one plural form, so each plural has its "other" item only.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">ចូលគណនី</string>
+    <string name="login_subtitle">ប្រើគណនីអ្នកបើកបររបស់អ្នក សម្រាប់ក្រុមហ៊ុននេះ។</string>
+    <string name="login_server_url_label">អាសយដ្ឋានម៉ាស៊ីនមេ</string>
+    <string name="login_email_label">អ៊ីមែល</string>
+    <string name="login_password_label">ពាក្យសម្ងាត់</string>
+    <string name="login_show_password">បង្ហាញពាក្យសម្ងាត់</string>
+    <string name="login_hide_password">លាក់ពាក្យសម្ងាត់</string>
+    <string name="login_server">ម៉ាស៊ីនមេ</string>
+    <string name="login_change_server">ប្ដូរ</string>
+    <string name="login_button">ចូលគណនី</string>
+    <string name="login_signing_in">កំពុងចូលគណនី</string>
+    <string name="login_error_missing_server">សូមបញ្ចូលអាសយដ្ឋានម៉ាស៊ីនមេ</string>
+    <string name="login_error_missing_email">សូមបញ្ចូលអ៊ីមែលរបស់អ្នក</string>
+    <string name="login_error_missing_password">សូមបញ្ចូលពាក្យសម្ងាត់របស់អ្នក</string>
+    <string name="login_error_invalid_credentials">អ៊ីមែល ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ។ សូមព្យាយាមម្ដងទៀត។</string>
+    <string name="login_error_invalid_address">សូមបញ្ចូលអាសយដ្ឋានដូចជា https://tracker.example.org</string>
+    <string name="login_error_https_required">សូមប្រើអាសយដ្ឋាន https://</string>
+    <string name="login_error_check_address">សូមពិនិត្យអាសយដ្ឋាន</string>
+    <string name="login_error_unreachable">មិនអាចភ្ជាប់ទៅ %1$s បានទេ។ សូមពិនិត្យការតភ្ជាប់ ឬអាសយដ្ឋានម៉ាស៊ីនមេ។</string>
+    <string name="login_error_not_tracker">%1$s មើលទៅមិនមែនជាម៉ាស៊ីនមេតាមដានទេ។</string>
+    <string name="login_error_too_many_tries">ព្យាយាមច្រើនដងពេក។ សូមរង់ចាំមួយនាទី រួចព្យាយាមម្ដងទៀត។</string>
+    <string name="login_error_server">មិនអាចចូលគណនីបានទេ។ សូមព្យាយាមម្ដងទៀត។</string>
+    <string name="login_again_title">ចូលគណនីម្ដងទៀត</string>
+    <string name="login_again_subtitle">ក្នុងនាម %1$s</string>
+    <string name="login_again_button">ចូលគណនី ហើយបន្តផ្ញើទីតាំង</string>
+    <string name="login_trip_open_title">ដំណើររបស់អ្នកមិនទាន់បញ្ចប់ទេ</string>
+    <string name="login_trip_open_message">ការផ្ញើទីតាំងបានឈប់ ពេលការចូលគណនីរបស់អ្នកផុតកំណត់។ សូមចូលគណនី ដើម្បីបន្តផ្ញើទីតាំងលើខ្សែ %1$s។</string>
+    <string name="login_server_managed">កំណត់ដោយក្រុមហ៊ុនរបស់អ្នក។</string>
+    <string name="login_server_managed_invalid">ការកំណត់ម៉ាស៊ីនមេរបស់ក្រុមហ៊ុនអ្នក មិនមែនជាអាសយដ្ឋានត្រឹមត្រូវទេ ដូច្នេះសូមវាយបញ្ចូលនៅទីនេះ។</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">ប្រើ %1$s ទេ?</string>
+    <string name="server_setup_confirm_message">បន្តតែក្នុងករណីក្រុមហ៊ុនរបស់អ្នកបានផ្ញើតំណនេះមកអ្នកប៉ុណ្ណោះ។</string>
+    <string name="server_setup_use">ប្រើម៉ាស៊ីនមេនេះ</string>
+    <string name="server_setup_cancel">បោះបង់</string>
+    <string name="server_setup_refused_signed_in">ទូរសព្ទនេះបានចូលគណនីនៅ %1$s រួចហើយ។ មិនបានប្រើតំណនេះទេ។</string>
+    <string name="server_setup_refused_trip_open">ទូរសព្ទនេះមានដំណើរមួយមិនទាន់បញ្ចប់។ មិនបានប្រើតំណនេះទេ។</string>
+    <string name="server_setup_refused_managed">ក្រុមហ៊ុនរបស់អ្នកជាអ្នកកំណត់ម៉ាស៊ីនមេលើទូរសព្ទនេះ។</string>
+    <string name="server_setup_invalid">តំណនេះគ្មានអាសយដ្ឋានម៉ាស៊ីនមេដែលកម្មវិធីអាចប្រើបានទេ។</string>
+    <string name="server_setup_ok">យល់ព្រម</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">អាសយដ្ឋានម៉ាស៊ីនមេ</string>
+    <string name="restriction_server_url_description">អាសយដ្ឋាន https:// នៃម៉ាស៊ីនមេតាមដានរបស់ក្រុមហ៊ុន។ អ្នកបើកបរចូលគណនីនៅលើវា ហើយមិនអាចប្ដូរវាបានទេ។</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">រំលង</string>
+    <string name="welcome_next">បន្ទាប់</string>
+    <string name="welcome_continue">បន្ត</string>
+    <string name="welcome_step">ជំហានទី %1$d នៃ %2$d</string>
+    <string name="welcome_riders_title">អ្នកដំណើរអាចមើលឃើញអ្នកកំពុងមក</string>
+    <string name="welcome_riders_body">ពេលអ្នកចាប់ផ្ដើមដំណើរ អ្នកដំណើរនឹងឃើញយានយន្តរបស់អ្នកនៅលើផែនទីរបស់គេ។ ពេលរួចរាល់ សូមបញ្ចប់ដំណើរ។</string>
+    <string name="welcome_riders_picture">អ្នកដំណើរបីនាក់នៅចំណត អាចមើលឃើញយានយន្តរបស់អ្នកកំពុងមក។</string>
+    <string name="welcome_pieces_title">យានយន្ត ខ្សែ និងជើង</string>
+    <string name="welcome_pieces_body">ជ្រើសរើសទាំងបីនេះ រួចចុចជើងរបស់អ្នក ដើម្បីចាប់ផ្ដើម។ ពេលរួចរាល់ សូមបញ្ចប់ដំណើរ។</string>
+    <string name="welcome_pieces_vehicle_hint">លេខនៅលើយានយន្ត</string>
+    <string name="welcome_pieces_route_hint">លេខនៅលើស្លាកសញ្ញា</string>
+    <string name="welcome_pieces_run_hint">ចុចដើម្បីចាប់ផ្ដើមដំណើរ</string>
+    <string name="welcome_pieces_live">អ្នកដំណើរឃើញអ្នក</string>
+    <string name="welcome_pieces_finish">ពេលរួចរាល់</string>
+    <string name="welcome_habits_title">កុំឱ្យការផ្ញើទីតាំងដាច់</string>
+    <string name="welcome_habits_body">សូមធ្វើ 3 យ៉ាងនេះ រាល់ដំណើរ។</string>
+    <string name="welcome_habits_location">អនុញ្ញាតឱ្យប្រើទីតាំងគ្រប់ពេល</string>
+    <string name="welcome_habits_location_why">ដើម្បីឱ្យការផ្ញើទីតាំងអាចចាប់ផ្ដើមឡើងវិញដោយខ្លួនឯង</string>
+    <string name="welcome_habits_charge">ដោតសាកទូរសព្ទជាប់</string>
+    <string name="welcome_habits_charge_why">អេក្រង់នៅភ្លឺ ពេលកំពុងសាកថ្ម</string>
+    <string name="welcome_habits_open">ទុកកម្មវិធីឱ្យនៅបើក</string>
+    <string name="welcome_habits_open_why">កុំអូសបិទវា ពេលកំពុងធ្វើដំណើរ</string>
+    <string name="welcome_habits_if_stops">បើការផ្ញើទីតាំងឈប់</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">ចុចជើងរបស់អ្នក</string>
+    <string name="tip_run_board_text">បន្ទាប់មកចុច «%1$s»។ ចាប់ពីពេលនោះ អ្នកដំណើរនឹងឃើញយានយន្តរបស់អ្នក។</string>
+    <string name="tip_sent_count_title">ទីតាំងដែលបានផ្ញើ</string>
+    <string name="tip_sent_count_text">លេខនេះកើនឡើង ពេលអ្នកដំណើរអាចមើលឃើញអ្នក។ គ្មានសញ្ញា? បន្តបើកបរ។ ទីតាំងត្រូវបានរក្សាទុក ហើយផ្ញើពេលក្រោយ។</string>
+    <string name="tip_got_it">យល់ហើយ</string>
+    <string name="first_trip_done_title">ដំណើរដំបូងរួចរាល់</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">ទីតាំងបានផ្ញើ</item>
+    </plurals>
+    <string name="first_trip_done_text">អ្នកដំណើរអាចមើលឃើញយានយន្តរបស់អ្នក។</string>
+    <string name="first_trip_done_ok">យល់ព្រម</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">ភាសា៖ %1$s</string>
+    <string name="language_row_phone_note">កំណត់សម្រាប់ទូរសព្ទទាំងមូល នៅក្នុងការកំណត់ទូរសព្ទ</string>
+    <string name="language_list_title">ភាសា</string>
+    <string name="language_list_cancel">បោះបង់</string>
+
+    <!-- Help -->
+    <string name="help_title">ជំនួយ</string>
+    <string name="help_welcome_again">មើលផ្ទាំងស្វាគមន៍ម្ដងទៀត</string>
+    <string name="help_welcome_again_detail">ផ្ទាំងខ្លីៗ 3</string>
+    <string name="help_section_status">នៅលើកាតស្ថានភាព</string>
+    <string name="help_status_on_time">អ្នកទាន់ពេលតាមកាលវិភាគ។</string>
+    <string name="help_status_late">យឺតជាងកាលវិភាគ។</string>
+    <string name="help_status_early">លឿនជាងកាលវិភាគ។ អ្នកដំណើរអាចមកមិនទាន់។</string>
+    <string name="help_status_off_schedule">ខុសឆ្ងាយពីកាលវិភាគ។ សូមពិនិត្យថាអ្នកបានជ្រើសរើសជើងត្រឹមត្រូវ។</string>
+    <string name="help_status_off_route">ឆ្ងាយពីខ្សែ នៅលើផែនទី។</string>
+    <string name="help_status_waiting_for_gps">ទូរសព្ទកំពុងស្វែងរកទីតាំងរបស់វា។</string>
+    <string name="help_status_no_schedule">ជើងនេះគ្មានម៉ោងទេ។ អ្នកដំណើរនៅតែឃើញអ្នក។</string>
+    <string name="help_waiting">បានរក្សាទុក ពេលគ្មានការតភ្ជាប់។ នឹងផ្ញើ ពេលមានការតភ្ជាប់វិញ។</string>
+    <string name="help_waiting_never">បានរក្សាទុកក្រោមការចូលគណនីផ្សេង ដូច្នេះការចូលគណនីនេះមិនអាចផ្ញើវាបានទេ។</string>
+    <string name="help_section_problems">នៅក្រោមកាត និងក្នុងការជូនដំណឹង</string>
+    <string name="help_problem_no_network">បន្តបើកបរ។ ទីតាំងត្រូវបានរក្សាទុក ហើយផ្ញើពេលក្រោយ។</string>
+    <string name="help_problem_no_gps">អ្នកដំណើរឃើញទីតាំងចុងក្រោយរបស់អ្នក រហូតដល់មានសញ្ញា GPS វិញ។</string>
+    <string name="help_problem_clock_skew">សូមបើកម៉ោងស្វ័យប្រវត្តិ នៅក្នុងការកំណត់ទូរសព្ទ។</string>
+    <string name="help_problem_reports_refused">ម៉ាស៊ីនមេមិនទទួលទីតាំងរបស់យានយន្តនេះទេ។ សូមសួរបន្ទប់បញ្ជា។</string>
+    <string name="help_problem_signed_out">ការផ្ញើទីតាំងបានឈប់។ សូមចូលគណនី ដើម្បីបន្ត។ ដំណើររបស់អ្នកមិនទាន់បញ្ចប់ទេ។</string>
+    <string name="help_problem_reports_paused">ជាការជូនដំណឹង។ សូមបើកកម្មវិធី ដើម្បីបន្តផ្ញើទីតាំង។</string>
+    <string name="help_section_about">អំពី</string>
+    <string name="help_version">កំណែ</string>
+    <string name="help_server">ម៉ាស៊ីនមេ</string>
+    <string name="help_share">ចែករំលែកព័ត៌មានកម្មវិធី</string>
+    <string name="help_share_detail">ផ្ញើកំណែកម្មវិធី ម៉ូដែលទូរសព្ទ ម៉ាស៊ីនមេ អ្វីដែលកម្មវិធីត្រូវបានអនុញ្ញាតឱ្យធ្វើ និងបញ្ហាថ្មីៗរបស់វា ដែលវារក្សាទុកតែពេលកម្មវិធីកំពុងបើកប៉ុណ្ណោះ។ គ្មានទីតាំង គ្មានព័ត៌មានចូលគណនី គ្មានអ៊ីមែល។</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">ថយក្រោយ</string>
+    <string name="setup_trip_so_far">ដំណើររហូតមកដល់ពេលនេះ</string>
+    <string name="setup_bus">យានយន្ត</string>
+    <string name="setup_route">ខ្សែ %1$s</string>
+    <string name="setup_step_route">ខ្សែ</string>
+    <string name="setup_step_run">ជើង</string>
+    <string name="setup_clear_search">សម្អាតការស្វែងរក</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">គណនី</string>
+    <string name="account_version">កំណែ %1$s</string>
+    <string name="account_sign_out">ចេញពីគណនី</string>
+    <string name="account_sign_out_title">ចេញពីគណនីមែនទេ?</string>
+    <string name="account_sign_out_message">អ្នកបើកបរបន្ទាប់អាចចូលគណនីនៅលើទូរសព្ទនេះ។</string>
+    <string name="account_sign_out_cancel">បោះបង់</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">ជ្រើសរើសយានយន្តរបស់អ្នក</string>
+    <string name="vehicles_empty">មិនទាន់មានយានយន្តចាត់ឱ្យអ្នកទេ</string>
+    <string name="vehicles_empty_detail">សុំឱ្យបន្ទប់បញ្ជាចាត់យានយន្តមួយឱ្យអ្នក រួចពិនិត្យម្ដងទៀត។</string>
+    <string name="vehicles_check_again">ពិនិត្យម្ដងទៀត</string>
+    <string name="vehicles_error_message">មិនអាចផ្ទុកយានយន្តរបស់អ្នកបានទេ</string>
+    <string name="vehicles_error_detail">សូមពិនិត្យការតភ្ជាប់ ហើយព្យាយាមម្ដងទៀត។</string>
+    <string name="vehicles_retry_button">ព្យាយាមម្ដងទៀត</string>
+    <string name="vehicles_search_label">លេខយានយន្ត</string>
+    <string name="vehicles_search_no_matches">គ្មានយានយន្តត្រូវនឹង %1$s ទេ</string>
+    <string name="vehicles_search_no_matches_detail">សូមពិនិត្យលេខនៅលើយានយន្ត។</string>
+    <string name="vehicles_section_favorites">ចំណូលចិត្ត</string>
+    <string name="vehicles_section_recent">ថ្មីៗ</string>
+    <string name="vehicles_section_all">យានយន្តទាំងអស់</string>
+    <string name="vehicles_section_matches">លទ្ធផលស្វែងរក</string>
+    <string name="vehicles_tile_favorite">ចំណូលចិត្ត</string>
+    <string name="vehicles_favorite_description">បន្ថែម %1$s ទៅចំណូលចិត្ត</string>
+    <string name="vehicles_unfavorite_description">ដក %1$s ចេញពីចំណូលចិត្ត</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">ជ្រើសរើសខ្សែ</string>
+    <string name="routes_search_label">លេខ ឬឈ្មោះខ្សែ</string>
+    <string name="routes_section_recent">ថ្មីៗ</string>
+    <string name="routes_section_all">ខ្សែទាំងអស់</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">ខ្សែទាំងអស់ · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">លទ្ធផលស្វែងរក</string>
+    <string name="routes_search_no_matches">គ្មានខ្សែត្រូវនឹង %1$s ទេ</string>
+    <string name="routes_search_no_matches_detail">ស្វែងរកតាមលេខនៅលើស្លាកសញ្ញា ឬផ្នែកណាមួយនៃឈ្មោះ។</string>
+    <string name="routes_empty">កាលវិភាគគ្មានខ្សែទេ</string>
+    <string name="routes_empty_detail">សុំឱ្យអ្នកគ្រប់គ្រងប្រព័ន្ធនៃក្រុមហ៊ុនអ្នក ពិនិត្យកាលវិភាគ។</string>
+    <string name="routes_check_again">ពិនិត្យម្ដងទៀត</string>
+    <string name="routes_error_message">មិនអាចផ្ទុកខ្សែបានទេ</string>
+    <string name="routes_error_detail">សូមពិនិត្យការតភ្ជាប់ ហើយព្យាយាមម្ដងទៀត។</string>
+    <string name="routes_no_schedule">ម៉ាស៊ីនមេនេះមិនទាន់មានកាលវិភាគទេ</string>
+    <string name="routes_no_schedule_detail">ត្រូវមានអ្នកបញ្ចូលកាលវិភាគជាមុនសិន ទើបអាចចាប់ផ្ដើមដំណើរបាន។ សូមប្រាប់អ្នកគ្រប់គ្រងប្រព័ន្ធនៃក្រុមហ៊ុនអ្នក។</string>
+    <string name="routes_retry_button">ព្យាយាមម្ដងទៀត</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">ជ្រើសរើសជើង</string>
+    <string name="runs_empty">ថ្ងៃនេះគ្មានជើងនៅខ្សែ %1$s ទេ</string>
+    <string name="runs_empty_unnamed">ថ្ងៃនេះគ្មានជើងនៅខ្សែនេះទេ</string>
+    <string name="runs_empty_detail">សូមជ្រើសរើសខ្សែផ្សេង ឬពិនិត្យម្ដងទៀតនៅថ្ងៃស្អែក។</string>
+    <string name="runs_choose_another_route">ជ្រើសរើសខ្សែផ្សេង</string>
+    <string name="runs_badge_now">ឥឡូវ</string>
+    <string name="runs_badge_next">បន្ទាប់</string>
+    <string name="runs_direction">ទៅ %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">ជើង %1$s</string>
+    <string name="runs_row_block">ប្លុក %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">កំពុងចាប់ផ្ដើម…</string>
+    <string name="runs_start_title">ចាប់ផ្ដើមជើងម៉ោង %1$s ទេ?</string>
+    <string name="runs_start_message">ខ្សែ %1$s ទៅ %2$s ដោយយានយន្ត %3$s។</string>
+    <string name="runs_start_message_no_headsign">ខ្សែ %1$s ដោយយានយន្ត %2$s។</string>
+    <string name="runs_start_message_unnamed">ទៅ %1$s ដោយយានយន្ត %2$s។</string>
+    <string name="runs_start_message_vehicle">ដោយយានយន្ត %1$s។</string>
+    <string name="runs_start_confirm">ចាប់ផ្ដើមដំណើរ</string>
+    <string name="runs_start_cancel">បោះបង់</string>
+    <string name="runs_error_message">មិនអាចផ្ទុកជើងបានទេ</string>
+    <string name="runs_error_detail">សូមពិនិត្យការតភ្ជាប់ ហើយព្យាយាមម្ដងទៀត។</string>
+    <string name="runs_retry_button">ព្យាយាមម្ដងទៀត</string>
+    <string name="runs_error_not_assigned">យានយន្ត %1$s មិនបានចាត់ឱ្យអ្នកទេ។</string>
+    <string name="runs_change_bus">ប្ដូរយានយន្ត</string>
+    <string name="runs_error_trip_active">អ្នកមានដំណើរមួយមិនទាន់បញ្ចប់នៅឡើយ។ សូមបញ្ចប់វាសិន មុននឹងចាប់ផ្ដើមដំណើរថ្មី។</string>
+    <string name="runs_error_vehicle_busy">អ្នកបើកបរម្នាក់ទៀតកំពុងប្រើយានយន្ត %1$s ក្នុងដំណើរមួយ។ សូមជ្រើសរើសយានយន្តផ្សេង ឬសួរបន្ទប់បញ្ជា។</string>
+    <string name="runs_error_vehicle_inactive">យានយន្ត %1$s ត្រូវបានផ្អាកពីសេវា។ សូមជ្រើសរើសយានយន្តផ្សេង។</string>
+    <string name="runs_error_previous_trip_not_ended">មិនទាន់អាចបញ្ចប់ដំណើរមុនរបស់អ្នកបានទេ។ សូមពិនិត្យការតភ្ជាប់ ហើយព្យាយាមម្ដងទៀត។</string>
+    <string name="runs_error_network">មិនអាចភ្ជាប់ទៅម៉ាស៊ីនមេបានទេ។ សូមពិនិត្យការតភ្ជាប់។</string>
+    <string name="runs_error_no_geometry">ជើងនេះគ្មានខ្សែ ឬចំណតសម្រាប់បើកតាមទេ។ សូមជ្រើសរើសជើងផ្សេង។</string>
+    <string name="runs_error_trip_not_active">កាលវិភាគបានប្ដូរទៅថ្ងៃថ្មីហើយ។</string>
+    <string name="runs_reload_button">ផ្ទុកឡើងវិញ</string>
+    <string name="runs_error_other">មិនអាចចាប់ផ្ដើមដំណើរបានទេ។</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">បានផ្ញើ %1$d</item>
+    </plurals>
+    <string name="tracking_bar_click_label">បង្ហាញព័ត៌មានដំណើរ</string>
+    <string name="tracking_end_trip_button">បញ្ចប់ដំណើរ</string>
+    <string name="tracking_end_trip_ending">កំពុងបញ្ចប់…</string>
+    <string name="tracking_occupancy_question">យានយន្តពេញប៉ុណ្ណា?</string>
+    <string name="tracking_occupancy_many_seats">កៅអីទំនេរ</string>
+    <string name="tracking_occupancy_few_seats">កៅអីនៅតិច</string>
+    <string name="tracking_occupancy_standing">មានតែកន្លែងឈរ</string>
+    <string name="tracking_occupancy_full">ពេញ</string>
+    <string name="tracking_occupancy_clear">ដកជម្រើសចេញ</string>
+    <string name="tracking_fact_run">ជើង</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">ការផ្ញើទីតាំង</string>
+    <string name="tracking_reports_reporting">កំពុងផ្ញើទីតាំង</string>
+    <string name="tracking_reports_not_reporting">មិនបានផ្ញើទីតាំង</string>
+    <string name="tracking_reports_no_gps">គ្មាន GPS</string>
+    <string name="tracking_reports_stopped">បានឈប់ផ្ញើទីតាំង</string>
+    <string name="tracking_fact_street_map">ផែនទីផ្លូវ</string>
+    <string name="tracking_street_map_ready">រួចរាល់</string>
+    <string name="tracking_street_map_downloading">កំពុងទាញយក · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">មិនទាន់បានទាញយក</string>
+    <string name="tracking_street_map_no_space">ទំហំផ្ទុកមិនគ្រប់គ្រាន់</string>
+    <string name="tracking_street_map_unusable">មិនអាចប្រើបាន</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">បានហួស %1$d ចំណត</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">បានពង្រីក</string>
+    <string name="tracking_stops_passed_collapsed">បានបង្រួម</string>
+    <string name="tracking_end_trip_dialog_title">បញ្ចប់ដំណើរនេះមែនទេ?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">ការផ្ញើទីតាំងនឹងឈប់ ហើយជើងម៉ោង %2$s នៃខ្សែ %1$s នឹងត្រូវកត់ត្រាថាបានបញ្ចប់។ បានផ្ញើទីតាំងចំនួន %3$d។</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">ការផ្ញើទីតាំងនឹងឈប់ ហើយជើងនេះនឹងត្រូវកត់ត្រាថាបានបញ្ចប់។ បានផ្ញើទីតាំងចំនួន %1$d។</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">បញ្ចប់ដំណើរ</string>
+    <string name="tracking_end_trip_dialog_cancel">បន្តបើកបរ</string>
+    <string name="tracking_end_trip_error_title">ដំណើរមិនទាន់បញ្ចប់ទេ</string>
+    <string name="tracking_end_trip_error_message">ម៉ាស៊ីនមេមិនបានបញ្ជាក់ការបញ្ចប់ទេ។ សូមពិនិត្យសញ្ញា ហើយព្យាយាមម្ដងទៀត ឬឈប់ផ្ញើទីតាំងពីទូរសព្ទនេះឥឡូវ។</string>
+    <string name="tracking_end_trip_error_retry">ព្យាយាមម្ដងទៀត</string>
+    <string name="tracking_end_trip_error_end_locally">បញ្ចប់លើទូរសព្ទនេះ</string>
+    <string name="tracking_reauth_button">ចូលគណនី</string>
+    <string name="tracking_problem_no_network">គ្មានការតភ្ជាប់</string>
+    <string name="tracking_problem_no_network_detail">អ្នកដំណើរមើលមិនឃើញអ្នក</string>
+    <string name="tracking_problem_no_gps">គ្មានសញ្ញា GPS</string>
+    <string name="tracking_problem_no_gps_detail">ទីតាំងបានផ្អាក</string>
+    <string name="tracking_problem_clock_skew">ម៉ោងទូរសព្ទមិនត្រូវ</string>
+    <string name="tracking_problem_clock_skew_detail">កំណត់ម៉ោងស្វ័យប្រវត្តិ</string>
+    <string name="tracking_problem_reports_refused">ទីតាំងត្រូវបានបដិសេធ</string>
+    <string name="tracking_problem_reports_refused_detail">សូមសួរបន្ទប់បញ្ជា</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">ទីតាំង %1$,d នឹងផ្ញើពេលមានអ៊ីនធឺណិត</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">ទីតាំង %1$,d មិនអាចផ្ញើបាន</item>
+    </plurals>
+    <string name="tracking_signed_out_title">បានចេញពីគណនី</string>
+    <string name="tracking_signed_out_message">ការផ្ញើទីតាំងបានឈប់។ ដំណើររបស់អ្នកមិនទាន់បញ្ចប់ទេ។</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">ទាន់ពេល</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">យឺត %1$d នាទី</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">មុនម៉ោង %1$d នាទី</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">ខុសកាលវិភាគ</string>
+    <string name="tracking_adherence_right_run">ជើងនេះត្រឹមត្រូវទេ?</string>
+    <string name="tracking_adherence_off_schedule_next">ចំណតបន្ទាប់ %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">ចេញក្រៅខ្សែ · %1$s</string>
+    <string name="tracking_adherence_off_route_short">ចេញក្រៅខ្សែ</string>
+    <string name="tracking_adherence_next_stop">ចំណតបន្ទាប់</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d ម៉ែត្រ</string>
+    <string name="tracking_adherence_distance_km">%1$.1f គ.ម</string>
+    <string name="tracking_adherence_waiting_for_gps">កំពុងរង់ចាំ GPS</string>
+    <string name="tracking_adherence_from">ចេញពី</string>
+    <string name="tracking_adherence_run">ជើងម៉ោង %1$s</string>
+    <string name="tracking_adherence_run_vehicle">ជើងម៉ោង %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">គ្មានកាលវិភាគ</string>
+    <string name="tracking_adherence_no_schedule_riders">អ្នកដំណើរនៅតែឃើញអ្នក</string>
+    <string name="tracking_adherence_no_schedule_detail">ជើងនេះគ្មានម៉ោងទេ</string>
+    <string name="tracking_map_recenter">ត្រឡប់ទៅយានយន្ត</string>
+    <string name="tracking_map_downloading">កំពុងទាញយកផែនទី %1$d%%</string>
+    <string name="tracking_map_no_space">ទំហំផ្ទុកមិនគ្រប់គ្រាន់សម្រាប់ផែនទី</string>
+    <string name="tracking_map_retrying">ផែនទីមិនទាន់បានទាញយក នឹងព្យាយាមម្ដងទៀត</string>
+    <string name="tracking_map_retry_on_open">មិនបានទាញយកផែនទីទេ នឹងព្យាយាមម្ដងទៀត ពេលបើកកម្មវិធីលើកក្រោយ</string>
+    <string name="tracking_map_unusable">ឯកសារផែនទីមិនអាចប្រើបានទេ សូមប្រាប់ក្រុមហ៊ុនរបស់អ្នក</string>
+    <string name="tracking_map_needs_https">តំណផែនទីត្រូវតែប្រើ https សូមប្រាប់ក្រុមហ៊ុនរបស់អ្នក</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">បន្តដំណើររបស់អ្នកទេ?</string>
+    <string name="resume_message">កម្មវិធីបានបិទ ក្នុងពេលដំណើរនេះ។ ការផ្ញើទីតាំងត្រូវបានផ្អាក រហូតដល់អ្នកជ្រើសរើស។</string>
+    <string name="resume_route">ខ្សែ %1$s</string>
+    <string name="resume_run">ជើងម៉ោង %1$s</string>
+    <string name="resume_bus">យានយន្ត %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">បានចាប់ផ្ដើម %1$d នាទីមុន នៅម៉ោង %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">បានចាប់ផ្ដើម %1$d ម៉ោង %2$d នាទីមុន នៅម៉ោង %3$s</string>
+    <string name="resume_button">បន្តដំណើរ</string>
+    <string name="resume_end_trip_button">បញ្ចប់ដំណើរ</string>
+    <string name="resume_ending">កំពុងបញ្ចប់ដំណើរ</string>
+    <string name="resume_loading">កំពុងផ្ទុកដំណើររបស់អ្នក</string>
+    <string name="resume_end_failed">ម៉ាស៊ីនមេមិនបានបញ្ជាក់ថាដំណើរបានបញ្ចប់ទេ។ សូមព្យាយាមម្ដងទៀត ឬបញ្ចប់វាតែលើទូរសព្ទនេះ។</string>
+    <string name="resume_end_failed_back">កុំបញ្ចប់ដំណើរ</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">ការផ្ញើទីតាំងក្នុងដំណើរ</string>
+    <string name="tracking_notification_title">ខ្សែ %1$s · %2$s</string>
+    <string name="tracking_notification_next">ចំណតបន្ទាប់ %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">បានចេញពីគណនី។ សូមបើកកម្មវិធី ដើម្បីចូលគណនី។</string>
+    <string name="tracking_notification_reports_refused">ទីតាំងត្រូវបានបដិសេធ។ សូមសួរបន្ទប់បញ្ជា។</string>
+    <string name="tracking_notification_resume_title">ការផ្ញើទីតាំងបានផ្អាក</string>
+    <string name="tracking_notification_resume_text">សូមបើកកម្មវិធី ដើម្បីបន្តផ្ញើទីតាំង។</string>
+    <string name="tracking_notification_attention_channel_name">ដំណើរត្រូវការអ្នក</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">មុនពេលចាប់ផ្ដើម</string>
+    <string name="preflight_message">កម្មវិធីត្រូវការទាំងនេះ ដើម្បីផ្ញើទីតាំងយានយន្ត %1$s។ បន្ទាប់មក Android នឹងសួរម្ដងមួយៗ។</string>
+    <string name="preflight_location">ទីតាំង</string>
+    <string name="preflight_location_why">ដើម្បីឱ្យកម្មវិធីដឹងថាយានយន្តនៅទីណា</string>
+    <string name="preflight_precise">ទីតាំងជាក់លាក់</string>
+    <string name="preflight_precise_why">ដើម្បីឱ្យអ្នកដំណើរឃើញយានយន្តនៅចំណតត្រឹមត្រូវ</string>
+    <string name="preflight_background">គ្រប់ពេល</string>
+    <string name="preflight_background_why">ដើម្បីឱ្យការផ្ញើទីតាំងអាចចាប់ផ្ដើមឡើងវិញ ប្រសិនបើ Android បិទកម្មវិធី</string>
+    <string name="preflight_notifications">ការជូនដំណឹង</string>
+    <string name="preflight_notifications_why">ដើម្បីឱ្យអ្នកឃើញថាការផ្ញើទីតាំងកំពុងបើក</string>
+    <string name="preflight_battery">ថ្ម</string>
+    <string name="preflight_battery_why">ដើម្បីកុំឱ្យ Android បញ្ឈប់ការផ្ញើទីតាំងពាក់កណ្ដាលដំណើរ</string>
+    <string name="preflight_location_services">សេវាទីតាំង</string>
+    <string name="preflight_location_services_why">ត្រូវបើកទីតាំងសម្រាប់ទូរសព្ទទាំងមូល</string>
+    <string name="preflight_allowed">បានអនុញ្ញាត</string>
+    <string name="preflight_skipped">បានរំលង</string>
+    <string name="preflight_next">បន្ទាប់</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">មិនបានអនុញ្ញាត។ ការផ្ញើទីតាំងនៅតែដំណើរការ។</string>
+    <string name="preflight_location_needed">ត្រូវតែអនុញ្ញាតទីតាំង ទើបអាចផ្ញើបាន</string>
+    <string name="preflight_approximate">បានអនុញ្ញាតតែទីតាំងប្រហាក់ប្រហែលប៉ុណ្ណោះ</string>
+    <string name="preflight_try_again">ព្យាយាមម្ដងទៀត</string>
+    <string name="preflight_open_settings">បើកការកំណត់</string>
+    <string name="preflight_continue">បន្ត</string>
+</resources>

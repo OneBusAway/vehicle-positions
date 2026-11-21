@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Tigrinya, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Ethiopic script in Eritrean spelling (ጸ, not ፀ), with the polite plural address (ንስኹም) throughout.
+    "Vehicle" is መኪና (plural መካይን, agreeing as feminine), the everyday word for any motor vehicle; "route" is
+    መስመር; "run" is ዙር; "trip" is ጉዕዞ; "stop" is መዕረፊ; "report" is ጸብጻብ (plural ጸብጻባት); "block" is ብሎክ;
+    "agency" is ትካል; "dispatcher" is ተቖጻጻሪ; "sign in" is ምእታው and "sign out" is ምውጻእ; "timetable" and
+    "schedule" are both መደብ ግዜ; "location" is ቦታ; "diagnostics" is ሓበሬታ ኣፕ; minutes are ደቒቕ and hours ሰዓት.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">ምእታው</string>
+    <string name="login_subtitle">ኣብዚ ትካል ዘለኩም ናይ መራሒ መኪና ኣካውንት ተጠቐሙ።</string>
+    <string name="login_server_url_label">ኣድራሻ ሰርቨር</string>
+    <string name="login_email_label">ኢመይል</string>
+    <string name="login_password_label">መሕለፊ ቃል</string>
+    <string name="login_show_password">መሕለፊ ቃል ኣርእዩ</string>
+    <string name="login_hide_password">መሕለፊ ቃል ሕብኡ</string>
+    <string name="login_server">ሰርቨር</string>
+    <string name="login_change_server">ቀይሩ</string>
+    <string name="login_button">ምእታው</string>
+    <string name="login_signing_in">ትኣትዉ ኣለኹም</string>
+    <string name="login_error_missing_server">ኣድራሻ ሰርቨር ኣእትዉ</string>
+    <string name="login_error_missing_email">ኢመይልኩም ኣእትዉ</string>
+    <string name="login_error_missing_password">መሕለፊ ቃልኩም ኣእትዉ</string>
+    <string name="login_error_invalid_credentials">ኢመይል ወይ መሕለፊ ቃል ጌጋ እዩ። ደጊምኩም ፈትኑ።</string>
+    <string name="login_error_invalid_address">ከም https://tracker.example.org ዝበለ ኣድራሻ ኣእትዉ</string>
+    <string name="login_error_https_required">https:// ዘለዎ ኣድራሻ ተጠቐሙ</string>
+    <string name="login_error_check_address">ኣድራሻ ኣረጋግጹ</string>
+    <string name="login_error_unreachable">ናብ %1$s ምብጻሕ ኣይተኻእለን። ርክብኩም ወይ ኣድራሻ ሰርቨር ኣረጋግጹ።</string>
+    <string name="login_error_not_tracker">%1$s ናይ ምክትታል ሰርቨር ኣይመስልን።</string>
+    <string name="login_error_too_many_tries">ብዙሕ ግዜ ፈቲንኩም። ሓደ ደቒቕ ተጸበዩ፣ ድሕሪኡ ደጊምኩም ፈትኑ።</string>
+    <string name="login_error_server">ምእታው ኣይተኻእለን። ደጊምኩም ፈትኑ።</string>
+    <string name="login_again_title">ደጊምኩም እተዉ</string>
+    <string name="login_again_subtitle">ከም %1$s</string>
+    <string name="login_again_button">ኣቲኹም ጸብጻብ ምስዳድ ቀጽሉ</string>
+    <string name="login_trip_open_title">ጉዕዞኹም ገና ክፉት እዩ</string>
+    <string name="login_trip_open_message">ናይ ምእታው ግዜኹም ምስ ሓለፈ ጸብጻባት ደው ኢሎም። ኣብ መስመር %1$s ጸብጻብ ምስዳድ ንምቕጻል እተዉ።</string>
+    <string name="login_server_managed">ብትካልኩም ዝተቐመጠ።</string>
+    <string name="login_server_managed_invalid">ቅጥዒ ሰርቨር ትካልኩም ቅቡል ኣድራሻ ኣይኮነን፣ ስለዚ ኣብዚ ጽሓፍዎ።</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">%1$s ክትጥቀሙ ዲኹም?</string>
+    <string name="server_setup_confirm_message">ነዚ ሊንክ ትካልኩም እንተ ሰዲዱልኩም ጥራይ ቀጽሉ።</string>
+    <string name="server_setup_use">ነዚ ሰርቨር ተጠቐሙ</string>
+    <string name="server_setup_cancel">ሰርዙ</string>
+    <string name="server_setup_refused_signed_in">እዚ ተሌፎን ናብ %1$s ኣትዩ ኣሎ። እቲ ሊንክ ኣብ ጥቕሚ ኣይወዓለን።</string>
+    <string name="server_setup_refused_trip_open">ኣብዚ ተሌፎን ክፉት ጉዕዞ ኣሎ። እቲ ሊንክ ኣብ ጥቕሚ ኣይወዓለን።</string>
+    <string name="server_setup_refused_managed">ኣብዚ ተሌፎን ሰርቨር ዝቕምጦ ትካልኩም እዩ።</string>
+    <string name="server_setup_invalid">እዚ ሊንክ ኣፕ ክጥቀመሉ ዝኽእል ኣድራሻ ሰርቨር የብሉን።</string>
+    <string name="server_setup_ok">ሕራይ</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">ኣድራሻ ሰርቨር</string>
+    <string name="restriction_server_url_description">ናይ ምክትታል ሰርቨር ናይቲ ትካል፣ https:// ዘለዎ ኣድራሻ። መራሕቲ መኪና ናብኡ ይኣትዉ፣ ክቕይርዎ ግን ኣይክእሉን።</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">ሕለፉ</string>
+    <string name="welcome_next">ዝቕጽል</string>
+    <string name="welcome_continue">ቀጽሉ</string>
+    <string name="welcome_step">ስጉምቲ %1$d ካብ %2$d</string>
+    <string name="welcome_riders_title">ተጓዓዝቲ ምምጻእኩም ይርእዩ</string>
+    <string name="welcome_riders_body">ጉዕዞ ጀምሩ፣ ተጓዓዝቲ ድማ መኪናኹም ኣብ ካርታኦም ይርእዩ። ምስ ወዳእኩም ኣብቅዕዎ።</string>
+    <string name="welcome_riders_picture">ኣብ መዕረፊ ዘለዉ ሰለስተ ተጓዓዝቲ መኪናኹም ክትመጽእ ከላ ይርእይዋ።</string>
+    <string name="welcome_pieces_title">መኪና፣ መስመር፣ ዙር</string>
+    <string name="welcome_pieces_body">ምረጽዎም፣ ድሕሪኡ ንምጅማር ኣብ ዙርኩም ጠውቑ። ምስ ወዳእኩም ጉዕዞ ኣብቅዑ።</string>
+    <string name="welcome_pieces_vehicle_hint">ኣብ መኪና ዘሎ ቁጽሪ</string>
+    <string name="welcome_pieces_route_hint">ኣብ ምልክት ዘሎ ቁጽሪ</string>
+    <string name="welcome_pieces_run_hint">ምጥዋቕ ጉዕዞ ይጅምር</string>
+    <string name="welcome_pieces_live">ተጓዓዝቲ ይርእዩኹም ኣለዉ</string>
+    <string name="welcome_pieces_finish">ምስ ወዳእኩም</string>
+    <string name="welcome_habits_title">ጸብጻብ ከይቋረጽ ሓልዉ</string>
+    <string name="welcome_habits_body">ኣብ ነፍሲ ወከፍ ጉዕዞ እዞም 3 ነገራት ግበሩ።</string>
+    <string name="welcome_habits_location">ቦታ ኩሉ ግዜ ፍቐዱ</string>
+    <string name="welcome_habits_location_why">ምስዳድ ጸብጻብ ባዕሉ ደጊሙ ምእንቲ ክጅምር</string>
+    <string name="welcome_habits_charge">ተሌፎን ኣብ ቻርጅ ይጽናሕ</string>
+    <string name="welcome_habits_charge_why">ቻርጅ ክገብር ከሎ ስክሪን ወሊዑ ይጸንሕ</string>
+    <string name="welcome_habits_open">ኣፕ ክፉት ግደፍዎ</string>
+    <string name="welcome_habits_open_why">ኣብ ግዜ ጉዕዞ ስሒብኩም ኣይትዕጸውዎ</string>
+    <string name="welcome_habits_if_stops">ጸብጻብ እንተ ደው ኢሉ</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">ኣብ ዙርኩም ጠውቑ</string>
+    <string name="tip_run_board_text">ድሕሪኡ ኣብ «%1$s» ጠውቑ። ካብኡ ንደሓር ተጓዓዝቲ መኪናኹም ይርእዩ።</string>
+    <string name="tip_sent_count_title">ዝተሰደዱ ጸብጻባት</string>
+    <string name="tip_sent_count_text">ተጓዓዝቲ ክርእዩኹም ከለዉ እዚ ቁጽሪ ይውስኽ። ሲግናል የለን? ምዝዋር ቀጽሉ። ጸብጻባት ይዕቀቡ፣ ጸኒሖም ድማ ይስደዱ።</string>
+    <string name="tip_got_it">ተረዲኡኒ</string>
+    <string name="first_trip_done_title">ቀዳማይ ጉዕዞኹም ተወዲኡ</string>
+    <!-- The count is shown beside these words in large digits, so they need none of their own; Tigrinya's "one" is 0 and 1, and both read right. -->
+    <plurals name="first_trip_done_reports" tools:ignore="ImpliedQuantity">
+        <item quantity="one">ጸብጻብ ተሰዲዱ</item>
+        <item quantity="other">ጸብጻባት ተሰዲዶም</item>
+    </plurals>
+    <string name="first_trip_done_text">ተጓዓዝቲ መኪናኹም ይርእዩ ነይሮም።</string>
+    <string name="first_trip_done_ok">ሕራይ</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">ቋንቋ: %1$s</string>
+    <string name="language_row_phone_note">ኣብ ቅጥዕታት ተሌፎን ንምሉእ ተሌፎን ይቕመጥ</string>
+    <string name="language_list_title">ቋንቋ</string>
+    <string name="language_list_cancel">ሰርዙ</string>
+
+    <!-- Help -->
+    <string name="help_title">ሓገዝ</string>
+    <string name="help_welcome_again">መእተዊ ደጊምኩም ርኣዩ</string>
+    <string name="help_welcome_again_detail">3 ሓጸርቲ ገጻት</string>
+    <string name="help_section_status">ኣብ ካርድ ኩነታት</string>
+    <string name="help_status_on_time">ብመደብ ግዜ ትኸዱ ኣለኹም።</string>
+    <string name="help_status_late">ካብ መደብ ግዜ ደንጒኹም።</string>
+    <string name="help_status_early">ካብ መደብ ግዜ ቀዲምኩም። ተጓዓዝቲ ከይተሰቐሉ ክተርፉ ይኽእሉ።</string>
+    <string name="help_status_off_schedule">ካብ መደብ ግዜ ብዙሕ ርሒቕኩም። ቅኑዕ ዙር ከም ዝመረጽኩም ኣረጋግጹ።</string>
+    <string name="help_status_off_route">ኣብ ካርታ ካብ መስመር ወጺእኩም።</string>
+    <string name="help_status_waiting_for_gps">ተሌፎን ቦታኡ ይደሊ ኣሎ።</string>
+    <string name="help_status_no_schedule">እዚ ዙር ሰዓታት የብሉን። ተጓዓዝቲ ሕጂውን ይርእዩኹም።</string>
+    <string name="help_waiting">ርክብ ኣብ ዘይነበረሉ እዋን ተዓቂቦም። ርክብ ምስ ተመልሰ ይስደዱ።</string>
+    <string name="help_waiting_never">ብኻልእ ምእታው ተዓቂቦም፣ ስለዚ እዚ ምእታው ክሰዶም ኣይክእልን።</string>
+    <string name="help_section_problems">ኣብ ትሕቲ ካርድ፣ ከምኡውን ኣብ መፍለጢታት</string>
+    <string name="help_problem_no_network">ምዝዋር ቀጽሉ። ጸብጻባት ይዕቀቡ፣ ጸኒሖም ድማ ይስደዱ።</string>
+    <string name="help_problem_no_gps">ሲግናል ክሳዕ ዝምለስ ተጓዓዝቲ ናይ መወዳእታ ቦታኹም ይርእዩ።</string>
+    <string name="help_problem_clock_skew">ኣብ ቅጥዕታት ተሌፎን ኣውቶማቲክ ሰዓት ኣወልዑ።</string>
+    <string name="help_problem_reports_refused">ሰርቨር ጸብጻባት ናይዛ መኪና ይቕበል ኣይኮነን። ንተቖጻጻሪኹም ሕተቱ።</string>
+    <string name="help_problem_signed_out">ጸብጻባት ደው ኢሎም። ንምቕጻል እተዉ። ጉዕዞኹም ገና ክፉት እዩ።</string>
+    <string name="help_problem_reports_paused">መፍለጢ። ጸብጻብ ምስዳድ ንምቕጻል ኣፕ ክፈቱ።</string>
+    <string name="help_section_about">ብዛዕባ ኣፕ</string>
+    <string name="help_version">ቨርዥን</string>
+    <string name="help_server">ሰርቨር</string>
+    <string name="help_share">ሓበሬታ ኣፕ ኣካፍሉ</string>
+    <string name="help_share_detail">ቨርዥን ኣፕ፣ ሞዴል ተሌፎን፣ ሰርቨር፣ ኣፕ ክገብሮ ዝተፈቐደሉ ነገራትን ናይ ቀረባ ጸገማቱን ይሰድድ። ነቶም ጸገማት ኣፕ ክሰርሕ ከሎ ጥራይ እዩ ዝሕዞም። ቦታ፣ ሓበሬታ ምእታው ወይ ኢመይል ኣይሰድድን።</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">ንድሕሪት ተመለሱ</string>
+    <string name="setup_trip_so_far">ጉዕዞ ክሳዕ ሕጂ</string>
+    <string name="setup_bus">መኪና</string>
+    <string name="setup_route">መስመር %1$s</string>
+    <string name="setup_step_route">መስመር</string>
+    <string name="setup_step_run">ዙር</string>
+    <string name="setup_clear_search">ምድላይ ኣጽርዩ</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">ኣካውንት</string>
+    <string name="account_version">ቨርዥን %1$s</string>
+    <string name="account_sign_out">ምውጻእ</string>
+    <string name="account_sign_out_title">ካብ ኣካውንት ክትወጹ ዲኹም?</string>
+    <string name="account_sign_out_message">ዝቕጽል መራሒ መኪና ኣብዚ ተሌፎን ክኣቱ ይኽእል።</string>
+    <string name="account_sign_out_cancel">ሰርዙ</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">መኪናኹም ምረጹ</string>
+    <string name="vehicles_empty">ዝተመደበትልኩም መኪና የላን</string>
+    <string name="vehicles_empty_detail">ንተቖጻጻሪኹም መኪና ክምድበልኩም ሕተቱ፣ ድሕሪኡ ደጊምኩም ኣረጋግጹ።</string>
+    <string name="vehicles_check_again">ደጊምኩም ኣረጋግጹ</string>
+    <string name="vehicles_error_message">መካይንኩም ምጽዓን ኣይተኻእለን</string>
+    <string name="vehicles_error_detail">ርክብኩም ኣረጋጊጽኩም ደጊምኩም ፈትኑ።</string>
+    <string name="vehicles_retry_button">ደጊምኩም ፈትኑ</string>
+    <string name="vehicles_search_label">ቁጽሪ መኪና</string>
+    <string name="vehicles_search_no_matches">ምስ %1$s እትሰማማዕ መኪና የላን</string>
+    <string name="vehicles_search_no_matches_detail">ኣብ መኪና ዘሎ ቁጽሪ ኣረጋግጹ።</string>
+    <string name="vehicles_section_favorites">ፍቱዋት</string>
+    <string name="vehicles_section_recent">ናይ ቀረባ ግዜ</string>
+    <string name="vehicles_section_all">ኩለን መካይን</string>
+    <string name="vehicles_section_matches">ዝተረኽቡ</string>
+    <string name="vehicles_tile_favorite">ኣብ ፍቱዋት</string>
+    <string name="vehicles_favorite_description">%1$s ናብ ፍቱዋት ወስኹ</string>
+    <string name="vehicles_unfavorite_description">%1$s ካብ ፍቱዋት ኣልግሱ</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">መስመር ምረጹ</string>
+    <string name="routes_search_label">ቁጽሪ ወይ ስም መስመር</string>
+    <string name="routes_section_recent">ናይ ቀረባ ግዜ</string>
+    <string name="routes_section_all">ኩሎም መስመራት</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">ኩሎም መስመራት · %1$d</item>
+        <item quantity="other">ኩሎም መስመራት · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">ዝተረኽቡ</string>
+    <string name="routes_search_no_matches">ምስ %1$s ዝሰማማዕ መስመር የለን</string>
+    <string name="routes_search_no_matches_detail">ኣብ ምልክት ብዘሎ ቁጽሪ፣ ወይ ብገለ ክፋል ናይቲ ስም ድለዩ።</string>
+    <string name="routes_empty">መደብ ግዜ መስመራት የብሉን</string>
+    <string name="routes_empty_detail">ንኣመሓዳሪ ትካልኩም መደብ ግዜ ከረጋግጽ ሕተቱ።</string>
+    <string name="routes_check_again">ደጊምኩም ኣረጋግጹ</string>
+    <string name="routes_error_message">መስመራት ምጽዓን ኣይተኻእለን</string>
+    <string name="routes_error_detail">ርክብኩም ኣረጋጊጽኩም ደጊምኩም ፈትኑ።</string>
+    <string name="routes_no_schedule">ኣብዚ ሰርቨር ገና መደብ ግዜ የለን</string>
+    <string name="routes_no_schedule_detail">ጉዕዞታት ቅድሚ ምጅማሮም፣ ሓደ ሰራሕተኛ መደብ ግዜ ክጽዕን ኣለዎ። ንኣመሓዳሪ ትካልኩም ንገርዎ።</string>
+    <string name="routes_retry_button">ደጊምኩም ፈትኑ</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">ዙር ምረጹ</string>
+    <string name="runs_empty">ሎሚ ኣብ መስመር %1$s ዙር የለን</string>
+    <string name="runs_empty_unnamed">ሎሚ ኣብዚ መስመር ዙር የለን</string>
+    <string name="runs_empty_detail">ካልእ መስመር ምረጹ፣ ወይ ጽባሕ ደጊምኩም ኣረጋግጹ።</string>
+    <string name="runs_choose_another_route">ካልእ መስመር ምረጹ</string>
+    <string name="runs_badge_now">ሕጂ</string>
+    <string name="runs_badge_next">ዝቕጽል</string>
+    <string name="runs_direction">ናብ %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">ዙር %1$s</string>
+    <string name="runs_row_block">ብሎክ %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">ይጅመር ኣሎ…</string>
+    <string name="runs_start_title">ናይ %1$s ዙር ክትጅምሩ ዲኹም?</string>
+    <string name="runs_start_message">መስመር %1$s ናብ %2$s፣ ብመኪና %3$s።</string>
+    <string name="runs_start_message_no_headsign">መስመር %1$s፣ ብመኪና %2$s።</string>
+    <string name="runs_start_message_unnamed">ናብ %1$s፣ ብመኪና %2$s።</string>
+    <string name="runs_start_message_vehicle">ብመኪና %1$s።</string>
+    <string name="runs_start_confirm">ጉዕዞ ጀምሩ</string>
+    <string name="runs_start_cancel">ሰርዙ</string>
+    <string name="runs_error_message">ዝርዝር ዙር ምጽዓን ኣይተኻእለን</string>
+    <string name="runs_error_detail">ርክብኩም ኣረጋጊጽኩም ደጊምኩም ፈትኑ።</string>
+    <string name="runs_retry_button">ደጊምኩም ፈትኑ</string>
+    <string name="runs_error_not_assigned">መኪና %1$s ኣይተመደበትልኩምን።</string>
+    <string name="runs_change_bus">መኪና ቀይሩ</string>
+    <string name="runs_error_trip_active">ድሮ ዝካየድ ዘሎ ጉዕዞ ኣሎኩም። ካልእ ቅድሚ ምጅማርኩም ኣብቅዕዎ።</string>
+    <string name="runs_error_vehicle_busy">ኣብ መኪና %1$s ካልእ መራሒ መኪና ዝካየድ ዘሎ ጉዕዞ ኣለዎ። ካልእ መኪና ምረጹ ወይ ንተቖጻጻሪኹም ሕተቱ።</string>
+    <string name="runs_error_vehicle_inactive">መኪና %1$s ካብ ኣገልግሎት ወጻኢ እያ። ካልእ መኪና ምረጹ።</string>
+    <string name="runs_error_previous_trip_not_ended">ዝሓለፈ ጉዕዞኹም ገና ኣይበቕዐን። ርክብኩም ኣረጋጊጽኩም ደጊምኩም ፈትኑ።</string>
+    <string name="runs_error_network">ናብ ሰርቨር ምብጻሕ ኣይተኻእለን። ርክብኩም ኣረጋግጹ።</string>
+    <string name="runs_error_no_geometry">እዚ ዙር ዝኽተሎ መስመር ወይ መዕረፍታት የብሉን። ካልእ ዙር ምረጹ።</string>
+    <string name="runs_error_trip_not_active">መደብ ግዜ ናብ ሓድሽ መዓልቲ ተሰጋጊሩ።</string>
+    <string name="runs_reload_button">ደጊምኩም ጽዓኑ</string>
+    <string name="runs_error_other">ጉዕዞ ምጅማር ኣይተኻእለን።</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d ተሰዲዱ</item>
+        <item quantity="other">%1$d ተሰዲዶም</item>
+    </plurals>
+    <string name="tracking_bar_click_label">ዝርዝር ጉዕዞ ኣርእዩ</string>
+    <string name="tracking_end_trip_button">ጉዕዞ ኣብቅዑ</string>
+    <string name="tracking_end_trip_ending">ይበቅዕ ኣሎ…</string>
+    <string name="tracking_occupancy_question">መኪና ክንደይ መሊኣ ኣላ?</string>
+    <string name="tracking_occupancy_many_seats">ነጻ መንበራት</string>
+    <string name="tracking_occupancy_few_seats">ቁሩብ መንበራት</string>
+    <string name="tracking_occupancy_standing">ሰባት ደው ኢሎም</string>
+    <string name="tracking_occupancy_full">ምሉእ</string>
+    <string name="tracking_occupancy_clear">ኣልግሱ</string>
+    <string name="tracking_fact_run">ዙር</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">ጸብጻባት</string>
+    <string name="tracking_reports_reporting">ይሰድድ ኣሎ</string>
+    <string name="tracking_reports_not_reporting">ይሰድድ ኣይኮነን</string>
+    <string name="tracking_reports_no_gps">GPS የለን</string>
+    <string name="tracking_reports_stopped">ጸብጻባት ደው ኢሎም</string>
+    <string name="tracking_fact_street_map">ካርታ ጎደናታት</string>
+    <string name="tracking_street_map_ready">ድሉው</string>
+    <string name="tracking_street_map_downloading">ይወርድ ኣሎ · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">ገና ኣይወረደን</string>
+    <string name="tracking_street_map_no_space">እኹል መኽዘን የለን</string>
+    <string name="tracking_street_map_unusable">ዘይሰርሕ</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d መዕረፊ ተሓሊፉ</item>
+        <item quantity="other">%1$d መዕረፍታት ተሓሊፎም</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">ክፉት</string>
+    <string name="tracking_stops_passed_collapsed">ዕጹው</string>
+    <string name="tracking_end_trip_dialog_title">እዚ ጉዕዞ ከተብቅዑ ዲኹም?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">ጸብጻባት ደው ይብሉ፣ ናይ %2$s ዙር ኣብ መስመር %1$s ድማ ከም ዝተወድአ ይምዝገብ። %3$d ጸብጻብ ተሰዲዱ።</item>
+        <item quantity="other">ጸብጻባት ደው ይብሉ፣ ናይ %2$s ዙር ኣብ መስመር %1$s ድማ ከም ዝተወድአ ይምዝገብ። %3$d ጸብጻባት ተሰዲዶም።</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">ጸብጻባት ደው ይብሉ፣ እዚ ዙር ድማ ከም ዝተወድአ ይምዝገብ። %1$d ጸብጻብ ተሰዲዱ።</item>
+        <item quantity="other">ጸብጻባት ደው ይብሉ፣ እዚ ዙር ድማ ከም ዝተወድአ ይምዝገብ። %1$d ጸብጻባት ተሰዲዶም።</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">ጉዕዞ ኣብቅዑ</string>
+    <string name="tracking_end_trip_dialog_cancel">ቀጽሉ</string>
+    <string name="tracking_end_trip_error_title">ጉዕዞ ገና ኣይበቕዐን</string>
+    <string name="tracking_end_trip_error_message">ሰርቨር ምብቃዕ ጉዕዞ ኣየረጋገጸን። ሲግናልኩም ኣረጋጊጽኩም ደጊምኩም ፈትኑ፣ ወይ ሕጂ ኣብዚ ተሌፎን ጸብጻብ ምስዳድ ደው ኣብሉ።</string>
+    <string name="tracking_end_trip_error_retry">ደጊምኩም ፈትኑ</string>
+    <string name="tracking_end_trip_error_end_locally">ኣብዚ ተሌፎን ኣብቅዑ</string>
+    <string name="tracking_reauth_button">ምእታው</string>
+    <string name="tracking_problem_no_network">ርክብ የለን</string>
+    <string name="tracking_problem_no_network_detail">ተጓዓዝቲ ክርእዩኹም ኣይክእሉን</string>
+    <string name="tracking_problem_no_gps">GPS ሲግናል የለን</string>
+    <string name="tracking_problem_no_gps_detail">ቦታ ተቋሪጹ</string>
+    <string name="tracking_problem_clock_skew">ሰዓት ተሌፎን ጌጋ እዩ</string>
+    <string name="tracking_problem_clock_skew_detail">ኣውቶማቲክ ሰዓት ኣወልዑ</string>
+    <string name="tracking_problem_reports_refused">ጸብጻባት ተነጺጎም</string>
+    <string name="tracking_problem_reports_refused_detail">ንተቖጻጻሪኹም ሕተቱ</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d ጸብጻብ ርክብ ይጽበ</item>
+        <item quantity="other">%1$,d ጸብጻባት ርክብ ይጽበዩ</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d ጸብጻብ ኣይክስደድን</item>
+        <item quantity="other">%1$,d ጸብጻባት ኣይክስደዱን</item>
+    </plurals>
+    <string name="tracking_signed_out_title">ካብ ኣካውንት ወጺእኩም</string>
+    <string name="tracking_signed_out_message">ጸብጻባት ደው ኢሎም። ጉዕዞኹም ገና ክፉት እዩ።</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">ብግዜኡ</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d ደቒቕ ደንጒኹም</item>
+        <item quantity="other">%1$d ደቒቕ ደንጒኹም</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d ደቒቕ ቀዲምኩም</item>
+        <item quantity="other">%1$d ደቒቕ ቀዲምኩም</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">ካብ መደብ ግዜ ወጻኢ</string>
+    <string name="tracking_adherence_right_run">እዚ ቅኑዕ ዙር ድዩ?</string>
+    <string name="tracking_adherence_off_schedule_next">ዝቕጽል %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">ካብ መስመር ወጻኢ · %1$s</string>
+    <string name="tracking_adherence_off_route_short">ካብ መስመር ወጻኢ</string>
+    <string name="tracking_adherence_next_stop">ዝቕጽል</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">GPS ይጽበ ኣሎ</string>
+    <string name="tracking_adherence_from">ካብ</string>
+    <string name="tracking_adherence_run">ናይ %1$s ዙር</string>
+    <string name="tracking_adherence_run_vehicle">ናይ %1$s ዙር · %2$s</string>
+    <string name="tracking_adherence_no_schedule">መደብ ግዜ የለን</string>
+    <string name="tracking_adherence_no_schedule_riders">ተጓዓዝቲ ሕጂውን ይርእዩኹም</string>
+    <string name="tracking_adherence_no_schedule_detail">እዚ ዙር ሰዓታት የብሉን</string>
+    <string name="tracking_map_recenter">ናብ መኪና ተመለሱ</string>
+    <string name="tracking_map_downloading">ካርታ ይወርድ ኣሎ፣ %1$d%%</string>
+    <string name="tracking_map_no_space">ንካርታ እኹል መኽዘን የለን</string>
+    <string name="tracking_map_retrying">ካርታ ገና ኣይወረደን፣ ደጊሙ ክፍተን እዩ</string>
+    <string name="tracking_map_retry_on_open">ካርታ ኣይወረደን፣ ኣፕ ዳግማይ ምስ ተኸፍተ ደጊሙ ክፍተን እዩ</string>
+    <string name="tracking_map_unusable">ፋይል ካርታ ዘይሰርሕ እዩ፣ ንትካልኩም ንገሩ</string>
+    <string name="tracking_map_needs_https">ሊንክ ካርታ https ክጥቀም ኣለዎ፣ ንትካልኩም ንገሩ</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">ጉዕዞኹም ክትቕጽሉ ዲኹም?</string>
+    <string name="resume_message">እዚ ጉዕዞ እናተኻየደ ከሎ ኣፕ ተዓጽዩ። ክሳዕ እትመርጹ ጸብጻባት ተቋሪጾም ይጸንሑ።</string>
+    <string name="resume_route">መስመር %1$s</string>
+    <string name="resume_run">ናይ %1$s ዙር</string>
+    <string name="resume_bus">መኪና %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">ቅድሚ %1$d ደቒቕ፣ ኣብ %2$s ተጀሚሩ</item>
+        <item quantity="other">ቅድሚ %1$d ደቒቕ፣ ኣብ %2$s ተጀሚሩ</item>
+    </plurals>
+    <string name="resume_started_hours_ago">ቅድሚ %1$d ሰዓት %2$d ደቒቕ፣ ኣብ %3$s ተጀሚሩ</string>
+    <string name="resume_button">ጉዕዞ ቀጽሉ</string>
+    <string name="resume_end_trip_button">ጉዕዞ ኣብቅዑ</string>
+    <string name="resume_ending">ጉዕዞ ይበቅዕ ኣሎ</string>
+    <string name="resume_loading">ጉዕዞኹም ይጽዓን ኣሎ</string>
+    <string name="resume_end_failed">ሰርቨር ምብቃዕ ጉዕዞ ኣየረጋገጸን። ደጊምኩም ፈትኑ፣ ወይ ኣብዚ ተሌፎን ጥራይ ኣብቅዕዎ።</string>
+    <string name="resume_end_failed_back">ጉዕዞ ኣይተብቅዑ</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">ጸብጻብ ጉዕዞ</string>
+    <string name="tracking_notification_title">መስመር %1$s · %2$s</string>
+    <string name="tracking_notification_next">ዝቕጽል %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">ካብ ኣካውንት ወጺእኩም። ንምእታው ኣፕ ክፈቱ።</string>
+    <string name="tracking_notification_reports_refused">ጸብጻባት ተነጺጎም። ንተቖጻጻሪኹም ሕተቱ።</string>
+    <string name="tracking_notification_resume_title">ጸብጻባት ተቋሪጾም</string>
+    <string name="tracking_notification_resume_text">ጸብጻብ ምስዳድ ንምቕጻል ኣፕ ክፈቱ።</string>
+    <string name="tracking_notification_attention_channel_name">ጉዕዞ ኣቓልቦኹም ይደሊ</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">ቅድሚ ምጅማርኩም</string>
+    <string name="preflight_message">ጸብጻብ መኪና %1$s ንምስዳድ ኣፕ እዚኣቶም የድልይዎ። ቀጺሉ Android ብዛዕባ ነፍሲ ወከፎም ክሓትት እዩ።</string>
+    <string name="preflight_location">ቦታ</string>
+    <string name="preflight_location_why">ኣፕ መኪና ኣበይ ከም ዘላ ምእንቲ ክፈልጥ</string>
+    <string name="preflight_precise">ልክዕ ቦታ</string>
+    <string name="preflight_precise_why">ተጓዓዝቲ መኪና ኣብ ቅኑዕ መዕረፊ ምእንቲ ክርእይዋ</string>
+    <string name="preflight_background">ኩሉ ግዜ</string>
+    <string name="preflight_background_why">Android ኣፕ እንተ ዓጸዎ፣ ምስዳድ ጸብጻብ ደጊሙ ምእንቲ ክጅምር</string>
+    <string name="preflight_notifications">መፍለጢታት</string>
+    <string name="preflight_notifications_why">ጸብጻብ ይስደድ ከም ዘሎ ምእንቲ ክትርእዩ</string>
+    <string name="preflight_battery">ባትሪ</string>
+    <string name="preflight_battery_why">Android ኣብ ማእከል ጉዕዞ ጸብጻባት ደው ከየብሎም</string>
+    <string name="preflight_location_services">ኣገልግሎት ቦታ</string>
+    <string name="preflight_location_services_why">ቦታ ንምሉእ ተሌፎን ክውላዕ ኣለዎ</string>
+    <string name="preflight_allowed">ተፈቒዱ</string>
+    <string name="preflight_skipped">ተሓሊፉ</string>
+    <string name="preflight_next">ዝቕጽል</string>
+    <string name="preflight_row_state">%1$s፣ %2$s</string>
+    <string name="preflight_skipped_why">ኣይተፈቕደን። ጸብጻባት ሕጂውን ይሰርሑ።</string>
+    <string name="preflight_location_needed">ጸብጻብ ንምስዳድ ቦታ የድሊ</string>
+    <string name="preflight_approximate">ግምታዊ ቦታ ጥራይ ተፈቒዱ</string>
+    <string name="preflight_try_again">ደጊምኩም ፈትኑ</string>
+    <string name="preflight_open_settings">ቅጥዕታት ክፈቱ</string>
+    <string name="preflight_continue">ቀጽሉ</string>
+</resources>
