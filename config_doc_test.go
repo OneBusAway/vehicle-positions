@@ -335,3 +335,90 @@ func sortedNames[V any](set map[string]V) []string {
 	sort.Strings(names)
 	return names
 }
+
+// deploymentGuidePath is the production guide. Its section 3 is a second,
+// shorter configuration reference, and its section 4.3 a compose file that
+// lists the server's environment one variable at a time.
+const deploymentGuidePath = "docs/deployment.md"
+
+// TestDeploymentGuide_PassesMetricsSettings checks the Prometheus settings in
+// the canonical reference reach the deployment guide's reference and its
+// compose file. The compose file has no env_file, so a variable it does not
+// name never reaches the container, whatever .env says.
+func TestDeploymentGuide_PassesMetricsSettings(t *testing.T) {
+	reference, err := os.ReadFile(configReferencePath)
+	require.NoError(t, err)
+	settings := tableVariables(markdownSection(t, string(reference), "## Prometheus metrics"))
+	require.ElementsMatch(t, []string{"METRICS_ENABLED", "METRICS_TOKEN"}, settings,
+		"the Prometheus settings in %s changed; this test names them on purpose", configReferencePath)
+
+	guide, err := os.ReadFile(deploymentGuidePath)
+	require.NoError(t, err)
+	inGuideReference := tableVariables(markdownSection(t, string(guide), "## 3. Configuration reference"))
+	compose := composeServerBlock(t, string(guide))
+
+	for _, name := range settings {
+		assert.Contains(t, inGuideReference, name, "%s has no row in section 3 of %s", name, deploymentGuidePath)
+		passed := regexp.MustCompile(`(?m)^\s+` + name + `: "\$\{` + name + `[:}]`)
+		assert.Regexp(t, passed, compose, "the compose file in %s does not pass %s from .env to the server", deploymentGuidePath, name)
+	}
+}
+
+// markdownSection is the text under heading, up to the next heading of the
+// same or a higher level.
+func markdownSection(t *testing.T, doc, heading string) string {
+	t.Helper()
+	level := strings.Index(heading, " ")
+	lines := strings.Split(doc, "\n")
+	for i, line := range lines {
+		if line != heading {
+			continue
+		}
+		end := len(lines)
+		for j := i + 1; j < len(lines); j++ {
+			hashes := strings.Index(lines[j], " ")
+			if hashes > 0 && hashes <= level && strings.Trim(lines[j][:hashes], "#") == "" {
+				end = j
+				break
+			}
+		}
+		return strings.Join(lines[i+1:end], "\n")
+	}
+	require.Failf(t, "heading not found", "no %q heading", heading)
+	return ""
+}
+
+// tableVariables lists the variables with a reference-table row in text, in
+// the order they appear.
+func tableVariables(text string) []string {
+	var names []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cells := strings.Split(strings.Trim(line, "|"), "|")
+		if match := configDocVariablePattern.FindStringSubmatch(strings.TrimSpace(cells[0])); match != nil {
+			names = append(names, match[1])
+		}
+	}
+	return names
+}
+
+// composeServerBlock is the server service of the guide's section 4.3
+// compose file.
+func composeServerBlock(t *testing.T, guide string) string {
+	t.Helper()
+	section := markdownSection(t, guide, "### 4.3 `compose.yaml`")
+	_, yaml, found := strings.Cut(section, "```yaml\n")
+	require.True(t, found, "no yaml block in section 4.3")
+	yaml, _, found = strings.Cut(yaml, "\n```")
+	require.True(t, found, "the yaml block in section 4.3 is not closed")
+	_, server, found := strings.Cut(yaml, "\n  server:\n")
+	require.True(t, found, "no server service in the section 4.3 compose file")
+	if next := regexp.MustCompile(`\n\S`).FindStringIndex(server); next != nil {
+		server = server[:next[0]]
+	}
+	require.Contains(t, server, "    environment:\n", "the server service has no environment list")
+	return server
+}

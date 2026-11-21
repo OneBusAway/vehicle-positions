@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/rider"
@@ -50,28 +51,71 @@ func metricsTokenFromEnv() (string, error) {
 	return token, nil
 }
 
-// registerMetrics mounts GET /metrics when METRICS_ENABLED is true. Settings
-// it cannot use leave the route off with an ERROR rather than stopping the
-// server: off is the direction that exposes nothing, and the scraper reports
-// the target down at its first scrape, so the mistake is seen at once without
-// taking the feed down over a monitoring setting.
-func registerMetrics(mux *http.ServeMux, trustProxy bool, catalog *gtfsCatalog, alerts *alertWatcher, health *feedHealth) {
+// metricsSettingFromEnv is the /metrics setting main hands newMux: the token
+// when /metrics is on, "" when it is off. Settings it cannot use leave the
+// route off with an ERROR rather than stopping the server: off is the
+// direction that exposes nothing, and the scraper reports the target down at
+// its first scrape, so the mistake is seen at once without taking the feed
+// down over a monitoring setting.
+func metricsSettingFromEnv() string {
 	token, err := metricsTokenFromEnv()
 	if err != nil {
 		slog.Error("metrics disabled: invalid configuration", "error", err)
+		return ""
+	}
+	if token != "" {
+		slog.Info("metrics enabled at /metrics; scrapers must send the METRICS_TOKEN bearer token")
+	}
+	return token
+}
+
+// metricsRefusalLogInterval is the most often a refused /metrics request is
+// logged.
+const metricsRefusalLogInterval = time.Minute
+
+// metricsRefusalLog logs refused /metrics requests at most once an interval.
+// /metrics is a path internet scanners probe, so a WARN for each refusal would
+// bury the lines that matter. One line a minute still shows a scraper sent the
+// wrong token, and its suppressed count says how many refusals went unlogged
+// since the line before, so a flood of guesses still shows.
+type metricsRefusalLog struct {
+	interval time.Duration
+	now      func() time.Time
+
+	mu         sync.Mutex
+	next       time.Time // the zero time until the first refusal
+	suppressed int
+}
+
+func newMetricsRefusalLog(interval time.Duration, now func() time.Time) *metricsRefusalLog {
+	return &metricsRefusalLog{interval: interval, now: now}
+}
+
+// refused logs this refusal unless another was logged within the interval,
+// in which case it only counts it.
+func (l *metricsRefusalLog) refused(reason, ip string) {
+	l.mu.Lock()
+	now := l.now()
+	if now.Before(l.next) {
+		l.suppressed++
+		l.mu.Unlock()
 		return
 	}
-	if token == "" {
-		return
-	}
-	mux.Handle("GET /metrics", requireMetricsToken(token, trustProxy)(handleMetrics(catalog, alerts, health)))
-	slog.Info("metrics enabled at /metrics; scrapers must send the METRICS_TOKEN bearer token")
+	suppressed := l.suppressed
+	l.suppressed = 0
+	l.next = now.Add(l.interval)
+	l.mu.Unlock()
+	slog.Warn("metrics request refused", "reason", reason, "ip", ip, "suppressed", suppressed)
 }
 
 // requireMetricsToken admits a request carrying "Authorization: Bearer
 // <token>". Both sides are hashed before the constant-time compare, so the
 // comparison takes as long whatever the length of the guess.
 func requireMetricsToken(token string, trustProxy bool) func(http.Handler) http.Handler {
+	return requireMetricsTokenWith(token, trustProxy, newMetricsRefusalLog(metricsRefusalLogInterval, time.Now))
+}
+
+func requireMetricsTokenWith(token string, trustProxy bool, refusals *metricsRefusalLog) func(http.Handler) http.Handler {
 	want := sha256.Sum256([]byte(token))
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +129,7 @@ func requireMetricsToken(token string, trustProxy bool) func(http.Handler) http.
 				}
 				reason = "wrong token"
 			}
-			slog.Warn("metrics request refused", "reason", reason, "ip", clientIP(r, trustProxy))
+			refusals.refused(reason, clientIP(r, trustProxy))
 			w.Header().Set("WWW-Authenticate", `Bearer realm="metrics"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "a valid metrics token is required"})
 		})

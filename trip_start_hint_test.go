@@ -121,7 +121,7 @@ func TestTripRoutes_NewTripStartsAtItsFirstStop(t *testing.T) {
 	tracker := newPlacingTracker(t, ix)
 	limiter := NewVehicleRateLimiter()
 	t.Cleanup(limiter.Stop)
-	mux := newMux(&tripsOnBus1{}, tracker, limiter, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
+	mux := newMux(&tripsOnBus1{}, tracker, limiter, testSecret, testTTLs, time.Time{}, nil, nil, false, false, "", nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 	token, err := generateJWT(&User{ID: 42, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 	post := func(path string, body any) *httptest.ResponseRecorder {

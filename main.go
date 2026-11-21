@@ -86,7 +86,7 @@ type appStore interface {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, metricsToken string, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
@@ -123,7 +123,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /ready", handleReadiness(store))
-	registerMetrics(mux, trustProxy, catalog, alerts, health)
+	if metricsToken != "" {
+		mux.Handle("GET /metrics", requireMetricsToken(metricsToken, trustProxy)(handleMetrics(catalog, alerts, health)))
+	}
 
 	mux.Handle("POST /api/v1/locations", countReports(authMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter))))
 	// Built here rather than passed in like the others: it lives as long as the mux, and nothing
@@ -180,9 +182,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter, adminLoginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
-	cfg adminUIConfig, feedAuthEnabled bool, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, metricsToken string, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, metricsToken, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, alerts, reports, health, jwtSecret, adminLoginLimiter, cfg)
@@ -274,6 +276,10 @@ func main() {
 		slog.Error("refusing to start: invalid alert webhook setting", "error", err)
 		os.Exit(1)
 	}
+
+	// Read with the settings above, but unlike them a value it cannot use
+	// only leaves /metrics off: see metricsSettingFromEnv.
+	metricsToken := metricsSettingFromEnv()
 
 	ttls := tokenTTLs{
 		access:  envDurationOrDefault("ACCESS_TOKEN_TTL", defaultAccessTokenTTL),
@@ -441,7 +447,7 @@ func main() {
 	defer healthHours.Stop()
 
 	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, metricsToken, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)

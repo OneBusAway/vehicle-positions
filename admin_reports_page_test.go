@@ -796,7 +796,7 @@ func newReportsHandler(t *testing.T, r *serviceReporter) http.Handler {
 	ll := NewLoginRateLimiter()
 	t.Cleanup(ll.Stop)
 	h, err := newHandler(&noopStore{}, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(),
-		adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, nil, nil, nil,
+		adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, "", nil, nil, nil,
 		newAlertWatcher(&noopStore{}, testAlertSettings), r, newFeedHealth(time.Now))
 	require.NoError(t, err)
 	return h

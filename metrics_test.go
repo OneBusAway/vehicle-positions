@@ -3,12 +3,16 @@ package main
 import (
 	"bufio"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,18 +25,24 @@ import (
 // testMetricsToken is METRICS_TOKEN for the tests that switch /metrics on.
 const testMetricsToken = "metrics-token-0123456789abcdef0123456789"
 
-// enableMetrics turns /metrics on for the rest of the test.
-func enableMetrics(t *testing.T) {
-	t.Helper()
-	t.Setenv("METRICS_ENABLED", "true")
-	t.Setenv("METRICS_TOKEN", testMetricsToken)
-}
-
-// metricsMux is the real mux with what /metrics reads: the counts, the
-// schedule (nil for none) and the alerts.
+// metricsMux is the real mux with /metrics on and what it reads: the counts,
+// the schedule (nil for none) and the alerts.
 func metricsMux(t *testing.T, health *feedHealth, catalog *gtfsCatalog, alerts *alertWatcher) *http.ServeMux {
 	t.Helper()
-	return newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, catalog, nil, alerts, nil, health)
+	return metricsMuxWithToken(t, testMetricsToken, health, catalog, alerts)
+}
+
+// metricsMuxWithToken is metricsMux with the token main would pass, "" for
+// /metrics off.
+func metricsMuxWithToken(t *testing.T, token string, health *feedHealth, catalog *gtfsCatalog, alerts *alertWatcher) *http.ServeMux {
+	t.Helper()
+	return newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, token, nil, catalog, nil, alerts, nil, health)
+}
+
+// quietAlerts is an alert watcher with no trips, for tests that only need
+// /metrics mounted.
+func quietAlerts() *alertWatcher {
+	return newAlertWatcher(&fakeTripLister{}, testAlertSettings)
 }
 
 func getMetrics(h http.Handler, authorization string) *httptest.ResponseRecorder {
@@ -162,44 +172,124 @@ func TestMetricsTokenFromEnv(t *testing.T) {
 	}
 }
 
-func TestMetricsRoute_OffByDefault(t *testing.T) {
-	t.Setenv("METRICS_ENABLED", "")
-	t.Setenv("METRICS_TOKEN", testMetricsToken)
-	mux := metricsMux(t, newFeedHealth(time.Now), nil, newAlertWatcher(&fakeTripLister{}, testAlertSettings))
-
-	w := getMetrics(mux, "Bearer "+testMetricsToken)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
 // A setting that cannot be used leaves /metrics off, the direction that
 // exposes nothing, and says why in the log.
-func TestMetricsRoute_BadSettingsLeaveItOff(t *testing.T) {
-	for _, env := range []struct{ enabled, token string }{
-		{"yes", testMetricsToken},
-		{"true", ""},
-		{"true", "short"},
-	} {
-		t.Run(env.enabled+"/"+env.token, func(t *testing.T) {
+func TestMetricsSettingFromEnv(t *testing.T) {
+	tests := []struct {
+		name, enabled, token string
+		wantToken            string
+		wantLog              string
+	}{
+		{name: "unset is off and quiet"},
+		{name: "not a boolean", enabled: "yes", token: testMetricsToken, wantLog: "level=ERROR msg=\"metrics disabled: invalid configuration\""},
+		{name: "on without a token", enabled: "true", wantLog: "level=ERROR msg=\"metrics disabled: invalid configuration\""},
+		{name: "on with a short token", enabled: "true", token: "short", wantLog: "level=ERROR msg=\"metrics disabled: invalid configuration\""},
+		{name: "on", enabled: "true", token: testMetricsToken, wantToken: testMetricsToken, wantLog: "level=INFO msg=\"metrics enabled at /metrics; scrapers must send the METRICS_TOKEN bearer token\""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			logs := captureLogs(t)
-			t.Setenv("METRICS_ENABLED", env.enabled)
-			t.Setenv("METRICS_TOKEN", env.token)
-			mux := metricsMux(t, newFeedHealth(time.Now), nil, newAlertWatcher(&fakeTripLister{}, testAlertSettings))
+			t.Setenv("METRICS_ENABLED", tc.enabled)
+			t.Setenv("METRICS_TOKEN", tc.token)
 
-			w := getMetrics(mux, "Bearer "+env.token)
+			assert.Equal(t, tc.wantToken, metricsSettingFromEnv())
 
-			assert.Equal(t, http.StatusNotFound, w.Code)
-			assert.Contains(t, logs.String(), "level=ERROR msg=\"metrics disabled: invalid configuration\"")
-			if env.token != "" {
-				assert.NotContains(t, logs.String(), env.token, "the token must not be logged")
+			if tc.wantLog == "" {
+				assert.Empty(t, logs.String())
+			} else {
+				assert.Contains(t, logs.String(), tc.wantLog)
+			}
+			if tc.token != "" {
+				assert.NotContains(t, logs.String(), tc.token, "the token must not be logged")
 			}
 		})
 	}
 }
 
+// main parses the settings and hands newMux the result; newMux goes by what
+// it is given and never looks at the environment, so a test or a caller
+// cannot turn /metrics on or off behind main's back.
+func TestMetricsRoute_GoesByTheTokenPassedNotTheEnvironment(t *testing.T) {
+	t.Run("on in the environment, no token passed", func(t *testing.T) {
+		t.Setenv("METRICS_ENABLED", "true")
+		t.Setenv("METRICS_TOKEN", testMetricsToken)
+		mux := metricsMuxWithToken(t, "", newFeedHealth(time.Now), nil, quietAlerts())
+
+		w := getMetrics(mux, "Bearer "+testMetricsToken)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+	t.Run("off in the environment, a token passed", func(t *testing.T) {
+		t.Setenv("METRICS_ENABLED", "")
+		t.Setenv("METRICS_TOKEN", "")
+		mux := metricsMuxWithToken(t, testMetricsToken, newFeedHealth(time.Now), nil, quietAlerts())
+
+		m := scrape(t, mux)
+
+		assert.Equal(t, "1", m.value(t, "vehicle_positions_alerts_listed"))
+	})
+}
+
+// TestMain_PassesTheMetricsSetting pins the wiring main() cannot be run to
+// show: it reads the setting with metricsSettingFromEnv and hands that value
+// to newHandler as its metricsToken argument.
+func TestMain_PassesTheMetricsSetting(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
+	require.NoError(t, err)
+
+	funcs := map[string]*ast.FuncDecl{}
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil {
+			funcs[fn.Name.Name] = fn
+		}
+	}
+	require.Contains(t, funcs, "main")
+	require.Contains(t, funcs, "newHandler")
+
+	position, index := -1, 0
+	for _, field := range funcs["newHandler"].Type.Params.List {
+		for _, name := range field.Names {
+			if name.Name == "metricsToken" {
+				position = index
+			}
+			index++
+		}
+	}
+	require.GreaterOrEqual(t, position, 0, "newHandler has no metricsToken parameter")
+
+	parsedInto := map[string]bool{}
+	var passed []string
+	ast.Inspect(funcs["main"].Body, func(node ast.Node) bool {
+		switch n := node.(type) {
+		case *ast.AssignStmt:
+			if len(n.Rhs) == 1 {
+				if call, ok := n.Rhs[0].(*ast.CallExpr); ok {
+					if fn, ok := call.Fun.(*ast.Ident); ok && fn.Name == "metricsSettingFromEnv" {
+						for _, lhs := range n.Lhs {
+							if id, ok := lhs.(*ast.Ident); ok {
+								parsedInto[id.Name] = true
+							}
+						}
+					}
+				}
+			}
+		case *ast.CallExpr:
+			if fn, ok := n.Fun.(*ast.Ident); ok && fn.Name == "newHandler" {
+				require.Greater(t, len(n.Args), position)
+				if id, ok := n.Args[position].(*ast.Ident); ok {
+					passed = append(passed, id.Name)
+				} else {
+					passed = append(passed, "<not a variable>")
+				}
+			}
+		}
+		return true
+	})
+	require.Len(t, passed, 1, "main should call newHandler once")
+	assert.True(t, parsedInto[passed[0]], "main passes %s as newHandler's metricsToken, not the value metricsSettingFromEnv returned", passed[0])
+}
+
 func TestMetricsRoute_RequiresTheToken(t *testing.T) {
-	enableMetrics(t)
-	mux := metricsMux(t, newFeedHealth(time.Now), nil, newAlertWatcher(&fakeTripLister{}, testAlertSettings))
 	adminToken, err := generateJWT(&User{ID: 2, Email: "admin@test.com", Role: "admin"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 
@@ -218,6 +308,8 @@ func TestMetricsRoute_RequiresTheToken(t *testing.T) {
 	for _, tc := range refused {
 		t.Run(tc.name, func(t *testing.T) {
 			logs := captureLogs(t)
+			// A mux of its own, so this refusal is the first one and logged.
+			mux := metricsMux(t, newFeedHealth(time.Now), nil, quietAlerts())
 
 			w := getMetrics(mux, tc.authorization)
 
@@ -225,19 +317,18 @@ func TestMetricsRoute_RequiresTheToken(t *testing.T) {
 			assert.Equal(t, `Bearer realm="metrics"`, w.Header().Get("WWW-Authenticate"))
 			assert.Equal(t, "a valid metrics token is required", decodeError(t, w))
 			assert.NotContains(t, w.Body.String(), "vehicle_positions_")
-			assert.Contains(t, logs.String(), "level=WARN msg=\"metrics request refused\" reason=\""+tc.logged+"\"")
+			assert.Contains(t, logs.String(), "level=WARN msg=\"metrics request refused\" reason=\""+tc.logged+"\" ip=192.0.2.1 suppressed=0")
 			assert.NotContains(t, logs.String(), testMetricsToken)
 		})
 	}
 
 	t.Run("the token", func(t *testing.T) {
-		m := scrape(t, mux)
+		m := scrape(t, metricsMux(t, newFeedHealth(time.Now), nil, quietAlerts()))
 		assert.Equal(t, "1", m.value(t, "vehicle_positions_alerts_listed"))
 	})
 }
 
 func TestMetrics_Output(t *testing.T) {
-	enableMetrics(t)
 	clock := newHealthTestClock(healthTestStart)
 	health := newFeedHealth(clock.now)
 	statuses := []struct {
@@ -356,13 +447,12 @@ func TestMetrics_Output(t *testing.T) {
 // TestMetrics_NoSchedule leaves the schedule's series out, rather than
 // reporting a load at the Unix epoch.
 func TestMetrics_NoSchedule(t *testing.T) {
-	enableMetrics(t)
 	for name, catalog := range map[string]*gtfsCatalog{
 		"no catalog":      nil,
 		"no index loaded": newGTFSCatalog(func() *rider.Index { return nil }, rider.DefaultThresholds()),
 	} {
 		t.Run(name, func(t *testing.T) {
-			m := scrape(t, metricsMux(t, newFeedHealth(time.Now), catalog, newAlertWatcher(&fakeTripLister{}, testAlertSettings)))
+			m := scrape(t, metricsMux(t, newFeedHealth(time.Now), catalog, quietAlerts()))
 
 			for family := range m.types {
 				assert.False(t, strings.HasPrefix(family, "vehicle_positions_gtfs_"), "%s with no schedule", family)
@@ -376,7 +466,6 @@ func TestMetrics_NoSchedule(t *testing.T) {
 // cannot be worked out, and says so in a series of its own: a failed scrape
 // would read as the whole server down.
 func TestMetrics_AlertsUnreadable(t *testing.T) {
-	enableMetrics(t)
 	logs := captureLogs(t)
 	health := newFeedHealth(time.Now)
 	health.record(healthReports, http.StatusCreated)
@@ -394,7 +483,6 @@ func TestMetrics_AlertsUnreadable(t *testing.T) {
 // TestMetrics_AgreeWithTheHealthPage reads the same counts through the Health
 // page and /metrics on one server, so the two cannot drift apart.
 func TestMetrics_AgreeWithTheHealthPage(t *testing.T) {
-	enableMetrics(t)
 	clock := newHealthTestClock(healthTestStart)
 	health := newFeedHealth(clock.now)
 	// Distinct counts per outcome, so a label swapped in /metrics shows.
@@ -469,7 +557,6 @@ func TestMetrics_AgreeWithTheHealthPage(t *testing.T) {
 // TestMetrics_NoSecrets fills the server with everything private it holds and
 // checks none of it reaches the scrape: the counts are all /metrics carries.
 func TestMetrics_NoSecrets(t *testing.T) {
-	enableMetrics(t)
 	const gtfsKey = "gtfs-agency-key-5ecret"
 	source := "https://gtfs.example.org/feed.zip?api_key=" + gtfsKey
 	catalog, _ := fixtureCatalog(t, source, time.Now())
@@ -513,4 +600,81 @@ func TestMetricsTokenCheck_DoesNotReachTheHandlerWhenRefused(t *testing.T) {
 
 	getMetrics(h, "Bearer "+testMetricsToken)
 	assert.True(t, reached)
+}
+
+// TestMetricsRoute_RefusalsAreNotLoggedEachTime sends a scanner's burst at
+// /metrics through the real mux: one WARN line, not one per request.
+func TestMetricsRoute_RefusalsAreNotLoggedEachTime(t *testing.T) {
+	logs := captureLogs(t)
+	mux := metricsMux(t, newFeedHealth(time.Now), nil, quietAlerts())
+
+	for range 50 {
+		require.Equal(t, http.StatusUnauthorized, getMetrics(mux, "Bearer wrong").Code)
+	}
+
+	assert.Equal(t, 1, strings.Count(logs.String(), "metrics request refused"), logs.String())
+}
+
+func TestMetricsRefusalLog(t *testing.T) {
+	logs := captureLogs(t)
+	clock := newHealthTestClock(healthTestStart)
+	log := newMetricsRefusalLog(time.Minute, clock.now)
+	lines := func() []string {
+		var out []string
+		for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+			if strings.Contains(line, "metrics request refused") {
+				out = append(out, line)
+			}
+		}
+		return out
+	}
+
+	log.refused("no bearer token", "198.51.100.1")
+	require.Len(t, lines(), 1, "the first refusal is logged at once")
+	assert.Contains(t, lines()[0], `level=WARN msg="metrics request refused" reason="no bearer token" ip=198.51.100.1 suppressed=0`)
+
+	for range 3 {
+		clock.advance(10 * time.Second)
+		log.refused("wrong token", "198.51.100.2")
+	}
+	clock.advance(29 * time.Second)
+	log.refused("wrong token", "198.51.100.3")
+	assert.Len(t, lines(), 1, "nothing more within the minute")
+
+	clock.advance(time.Second)
+	log.refused("wrong token", "198.51.100.4")
+	require.Len(t, lines(), 2, "a minute after the last line, the next refusal is logged")
+	assert.Contains(t, lines()[1], `reason="wrong token" ip=198.51.100.4 suppressed=4`, "with the count of those left out")
+
+	clock.advance(59 * time.Second)
+	log.refused("wrong token", "198.51.100.5")
+	clock.advance(time.Second)
+	log.refused("wrong token", "198.51.100.6")
+	require.Len(t, lines(), 3)
+	assert.Contains(t, lines()[2], `ip=198.51.100.6 suppressed=1`, "the count starts again after each line")
+}
+
+// TestMetricsRefusalLog_Concurrent counts every refusal exactly once, logged
+// or left out, when scrapes arrive together. Run with -race.
+func TestMetricsRefusalLog_Concurrent(t *testing.T) {
+	logs := captureLogs(t)
+	clock := newHealthTestClock(healthTestStart)
+	log := newMetricsRefusalLog(time.Minute, clock.now)
+	h := requireMetricsTokenWith(testMetricsToken, false, log)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	var wg sync.WaitGroup
+	for range 40 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			getMetrics(h, "Bearer wrong")
+		}()
+	}
+	wg.Wait()
+	clock.advance(time.Minute)
+	log.refused("wrong token", "198.51.100.9")
+
+	out := logs.String()
+	assert.Equal(t, 2, strings.Count(out, "metrics request refused"), out)
+	assert.Contains(t, out, "ip=198.51.100.9 suppressed=39")
 }

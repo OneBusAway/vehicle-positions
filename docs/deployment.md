@@ -126,6 +126,13 @@ that response and nowhere else), hand the keys out, and only then set the flag.
 The README's **Feed API Keys** section has the full create, list and revoke
 walkthrough.
 
+### Metrics endpoint
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `METRICS_ENABLED` | `false` | Serve `GET /metrics` for Prometheus (section [9](#prometheus-metrics)). Off, the route is not registered and answers 404. A value that is not a boolean, or `true` without a usable `METRICS_TOKEN`, logs an `ERROR` and leaves it **off**; the server still starts, and the scraper shows the target down at once. |
+| `METRICS_TOKEN` | unset | The bearer token a scraper must send, as `Authorization: Bearer <token>`. Required when `METRICS_ENABLED` is `true`, and read only then. At least 32 characters; generate it with `openssl rand -hex 32`. Anything else gets `401`, logged as a `WARN` with the client address and never the token, at most once a minute with a count of the refusals left out since the last line. |
+
 ### Location retention (driver data)
 
 | Variable | Default | Purpose |
@@ -293,6 +300,9 @@ services:
       ADMIN_UI_ENABLED: "true"
       LOCATION_RETENTION_PERIOD: "2160h"
       LOCATION_PRUNE_INTERVAL: "1h"
+      # Prometheus scraping (section 9) stays off until both are set in .env.
+      METRICS_ENABLED: "${METRICS_ENABLED:-false}"
+      METRICS_TOKEN: "${METRICS_TOKEN:-}"
       # First boot only. Delete these two lines and re-run `docker compose up -d`
       # once you have signed in and confirmed the account works.
       ADMIN_BOOTSTRAP_EMAIL: "${ADMIN_BOOTSTRAP_EMAIL}"
@@ -760,7 +770,9 @@ curl -s https://tracker.example.org/api/v1/admin/status \
 Prometheus text format, for Prometheus, Grafana Agent or anything else that
 scrapes it. It is off until you set `METRICS_ENABLED=true` and a
 `METRICS_TOKEN` of at least 32 characters (`openssl rand -hex 32`); see the
-[configuration reference](configuration.md#prometheus-metrics). The token is
+[configuration reference](configuration.md#prometheus-metrics). Under Docker
+Compose, put both in `.env`: the section 4.3 compose file passes them to the
+server. The token is
 required rather than a loopback-only mode because the server cannot tell a
 local scraper from the internet: under Docker the scraper is on the bridge
 network, not loopback, and behind nginx every request comes from loopback.
