@@ -215,7 +215,7 @@ the series and has a scrape config.
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
 | `METRICS_ENABLED` | `false` | Optional | Serve `GET /metrics`. Off, the route is not registered and answers 404. A value that is not a boolean, or `true` without a usable `METRICS_TOKEN`, logs an `ERROR` and leaves it **off**; the server still starts, and the scraper shows the target down at once. |
-| `METRICS_TOKEN` | unset | Required when `METRICS_ENABLED` is `true` | The bearer token a scraper must send, as `Authorization: Bearer <token>`. At least 32 characters; generate it with `openssl rand -hex 32`. Anything else gets `401`, logged as a `WARN` with the client address and never the token. Read only when `METRICS_ENABLED` is `true`. |
+| `METRICS_TOKEN` | unset | Required when `METRICS_ENABLED` is `true` | The bearer token a scraper must send, as `Authorization: Bearer <token>`. At least 32 characters; generate it with `openssl rand -hex 32`. Anything else gets `401`, logged as a `WARN` with the client address and never the token, at most once a minute with a count of the refusals left out since the last line. Read only when `METRICS_ENABLED` is `true`. |
 
 ## Location retention
 

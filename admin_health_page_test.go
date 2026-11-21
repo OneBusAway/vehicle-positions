@@ -302,8 +302,8 @@ func TestHealthPage_VehiclesReporting(t *testing.T) {
 	assert.NotContains(t, restarted, `|1 reporting"`)
 }
 
-// newHealthTestHandler builds the full handler, admin UI included, around a
-// feedHealth the test fills in.
+// newHealthTestHandler builds the full handler, admin UI and /metrics
+// included, around a feedHealth the test fills in.
 func newHealthTestHandler(t *testing.T, health *feedHealth) http.Handler {
 	t.Helper()
 	tracker := NewTracker(5 * time.Minute)
@@ -311,7 +311,7 @@ func newHealthTestHandler(t *testing.T, health *feedHealth) http.Handler {
 	ll := NewLoginRateLimiter()
 	t.Cleanup(ll.Stop)
 	h, err := newHandler(&noopStore{}, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(),
-		adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, nil, nil, nil,
+		adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, testMetricsToken, nil, nil, nil,
 		newAlertWatcher(&noopStore{}, testAlertSettings), nil, health)
 	require.NoError(t, err)
 	return h

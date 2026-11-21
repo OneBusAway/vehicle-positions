@@ -516,7 +516,7 @@ func TestLocationRoute_FeedsOffRoute(t *testing.T) {
 	limiter := NewKeyedRateLimiter(time.Millisecond, 3, false)
 	defer limiter.Stop()
 	alerts := newRouteWatcher(plainFixtureIndex(t))
-	mux := newMux(&startedAtT0Store{}, tracker, limiter, testSecret, testTTLs, time.Time{}, nil, nil, false, false, nil, nil, nil, alerts, nil, newFeedHealth(time.Now))
+	mux := newMux(&startedAtT0Store{}, tracker, limiter, testSecret, testTTLs, time.Time{}, nil, nil, false, false, "", nil, nil, nil, alerts, nil, newFeedHealth(time.Now))
 	driverToken, err := generateJWT(&User{ID: 1, Email: "driver@test.com", Role: "driver"}, testSecret, defaultAccessTokenTTL)
 	require.NoError(t, err)
 

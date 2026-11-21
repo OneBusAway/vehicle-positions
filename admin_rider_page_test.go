@@ -454,7 +454,7 @@ func TestRiderPage_ServedFromTheRiderService(t *testing.T) {
 	t.Cleanup(ll.Stop)
 	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return env.index }, testReportSettings)
 	build := func(svc *riderService) http.Handler {
-		h, err := newHandler(&noopStore{}, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, svc, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), reports, newFeedHealth(time.Now))
+		h, err := newHandler(&noopStore{}, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, "", svc, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), reports, newFeedHealth(time.Now))
 		require.NoError(t, err)
 		return h
 	}
