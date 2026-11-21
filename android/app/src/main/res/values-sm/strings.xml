@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Samoan, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Written with the ʻokina (U+02BB) and macrons; the driver is "ʻoe", everyday register.
+    "Vehicle" is taʻavale, never the word for bus; "route" is auala; "run" is taʻamilosaga; "trip" is malaga;
+    "stop" is taofiga; "block" is poloka; "agency" is kamupani; "dispatcher" is le ofisa (the office);
+    "report" is lipoti; "location" is nofoaga; "schedule" and "timetable" are faʻasologa o taimi;
+    sign in / sign out are saini i totonu / saini i fafo; "server", "app" and "GPS" stay as loanwords.
+    Samoan has no CLDR plural rules, so each plurals has only "other", worded to read right for any count.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Saini i totonu</string>
+    <string name="login_subtitle">Faʻaaogā lau akauni ʻavetaʻavale mo lenei kamupani.</string>
+    <string name="login_server_url_label">Tuatusi o le server</string>
+    <string name="login_email_label">Imeli</string>
+    <string name="login_password_label">ʻUpu faʻalilolilo</string>
+    <string name="login_show_password">Faʻaali le ʻupu faʻalilolilo</string>
+    <string name="login_hide_password">Nana le ʻupu faʻalilolilo</string>
+    <string name="login_server">Server</string>
+    <string name="login_change_server">Sui</string>
+    <string name="login_button">Saini i totonu</string>
+    <string name="login_signing_in">O loʻo saini i totonu</string>
+    <string name="login_error_missing_server">Tusi le tuatusi o le server</string>
+    <string name="login_error_missing_email">Tusi lau imeli</string>
+    <string name="login_error_missing_password">Tusi lau ʻupu faʻalilolilo</string>
+    <string name="login_error_invalid_credentials">E sese le imeli poʻo le ʻupu faʻalilolilo. Toe taumafai.</string>
+    <string name="login_error_invalid_address">Tusi se tuatusi e pei ʻo https://tracker.example.org</string>
+    <string name="login_error_https_required">Faʻaaogā se tuatusi https://</string>
+    <string name="login_error_check_address">Siaki le tuatusi</string>
+    <string name="login_error_unreachable">E lē mafai ona oʻo atu i %1$s. Siaki lau fesoʻotaʻiga, poʻo le tuatusi o le server.</string>
+    <string name="login_error_not_tracker">ʻO %1$s e foliga mai e lē o se server mo lenei app.</string>
+    <string name="login_error_too_many_tries">ʻUa tele naʻuā taumafaiga. Faʻatali se minute, ona toe taumafai lea.</string>
+    <string name="login_error_server">Na lē mafai ona saini i totonu. Toe taumafai.</string>
+    <string name="login_again_title">Toe saini i totonu</string>
+    <string name="login_again_subtitle">Mo %1$s</string>
+    <string name="login_again_button">Saini i totonu ma faʻaauau ona lafo lipoti</string>
+    <string name="login_trip_open_title">O loʻo tatala pea lau malaga</string>
+    <string name="login_trip_open_message">Na taofi lipoti ina ʻua muta lau saini. Saini i totonu e faʻaauau ai ona lafo lipoti i le auala %1$s.</string>
+    <string name="login_server_managed">Na faʻatulaga e lau kamupani.</string>
+    <string name="login_server_managed_invalid">E lē saʻo le tuatusi server na faʻatulaga e lau kamupani, ʻo lea tusi iinei.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Faʻaaogā %1$s?</string>
+    <string name="server_setup_confirm_message">ʻAua neʻi faʻaauau seʻi vagana na lafo mai e lau kamupani lenei soʻotaga.</string>
+    <string name="server_setup_use">Faʻaaogā lenei server</string>
+    <string name="server_setup_cancel">Faʻaleaogā</string>
+    <string name="server_setup_refused_signed_in">O loʻo saini i totonu lenei telefoni i %1$s. E leʻi faʻaaogāina le soʻotaga.</string>
+    <string name="server_setup_refused_trip_open">O loʻo tatala se malaga i lenei telefoni. E leʻi faʻaaogāina le soʻotaga.</string>
+    <string name="server_setup_refused_managed">E faʻatulaga e lau kamupani le server i lenei telefoni.</string>
+    <string name="server_setup_invalid">E leai i lenei soʻotaga se tuatusi server e mafai e le app ona faʻaaogā.</string>
+    <string name="server_setup_ok">ʻUa lelei</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Tuatusi o le server</string>
+    <string name="restriction_server_url_description">Le server a le kamupani mo lenei app, o se tuatusi https://. E saini i totonu i ai ʻavetaʻavale ma e lē mafai ona lātou suia.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Sopoʻia</string>
+    <string name="welcome_next">Sosoʻo ai</string>
+    <string name="welcome_continue">Faʻaauau</string>
+    <string name="welcome_step">Laʻasaga %1$d o le %2$d</string>
+    <string name="welcome_riders_title">E iloa atu e pasese o loʻo e sau</string>
+    <string name="welcome_riders_body">Amata se malaga ona iloa atu lea e pasese lau taʻavale i a lātou faʻafanua. Faʻaiʻu pe a uma.</string>
+    <string name="welcome_riders_picture">E iloa atu e pasese e toʻatolu i se taofiga lau taʻavale o loʻo sau.</string>
+    <string name="welcome_pieces_title">Taʻavale, auala, taʻamilosaga</string>
+    <string name="welcome_pieces_body">Filifili, ona paʻi lea i lau taʻamilosaga e amata ai. Faʻaiʻu le malaga pe a uma.</string>
+    <string name="welcome_pieces_vehicle_hint">Le numera i luga o le taʻavale</string>
+    <string name="welcome_pieces_route_hint">Le numera i luga o le faʻailoga</string>
+    <string name="welcome_pieces_run_hint">E amata loa le malaga pe a paʻi</string>
+    <string name="welcome_pieces_live">E iloa atu ʻoe e pasese</string>
+    <string name="welcome_pieces_finish">Pe a uma</string>
+    <string name="welcome_habits_title">ʻIa lafo pea lipoti</string>
+    <string name="welcome_habits_body">Fai nei mea e 3 i malaga taʻitasi.</string>
+    <string name="welcome_habits_location">Faʻataga le nofoaga i taimi uma</string>
+    <string name="welcome_habits_location_why">Ina ʻia toe amata ai lipoti naʻo ia</string>
+    <string name="welcome_habits_charge">Tuʻu pea le telefoni i le charger</string>
+    <string name="welcome_habits_charge_why">E lē pogisa le telefoni aʻo i le charger</string>
+    <string name="welcome_habits_open">Tuʻu le app ʻia tatala</string>
+    <string name="welcome_habits_open_why">ʻAua neʻi solo ʻese aʻo faia se malaga</string>
+    <string name="welcome_habits_if_stops">Afai e taofi lipoti</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Paʻi i lau taʻamilosaga</string>
+    <string name="tip_run_board_text">Ona paʻi lea i %1$s. Mai lea taimi e iloa atu ai e pasese lau taʻavale.</string>
+    <string name="tip_sent_count_title">Lipoti ʻua lafo</string>
+    <string name="tip_sent_count_text">E siʻi aʻe lenei numera aʻo iloa atu ʻoe e pasese. Leai se fesoʻotaʻiga? ʻAve pea le taʻavale. E teuina lipoti ma lafo mulimuli ane.</string>
+    <string name="tip_got_it">ʻUa malamalama</string>
+    <string name="first_trip_done_title">ʻUa uma le malaga muamua</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">lipoti ʻua lafo</item>
+    </plurals>
+    <string name="first_trip_done_text">Sa iloa atu e pasese lau taʻavale.</string>
+    <string name="first_trip_done_ok">ʻUa lelei</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Gagana: %1$s</string>
+    <string name="language_row_phone_note">E faʻatulaga mo le telefoni ʻatoa, i ona faʻatulagaga</string>
+    <string name="language_list_title">Gagana</string>
+    <string name="language_list_cancel">Faʻaleaogā</string>
+
+    <!-- Help -->
+    <string name="help_title">Fesoasoani</string>
+    <string name="help_welcome_again">Toe vaʻai i le faʻafeiloaʻiga</string>
+    <string name="help_welcome_again_detail">3 itulau pupuʻu</string>
+    <string name="help_section_status">I luga o le kata o le tulaga</string>
+    <string name="help_status_on_time">O loʻo e tusa ma le faʻasologa o taimi.</string>
+    <string name="help_status_late">E tuai i lō le faʻasologa o taimi.</string>
+    <string name="help_status_early">E vave i lō le faʻasologa o taimi. Atonu e lē maua ʻoe e pasese.</string>
+    <string name="help_status_off_schedule">E mamao ʻese mai le faʻasologa o taimi. Siaki pe saʻo le taʻamilosaga na e filifilia.</string>
+    <string name="help_status_off_route">ʻUa ʻese mai le auala i luga o le faʻafanua.</string>
+    <string name="help_status_waiting_for_gps">O loʻo suʻe e le telefoni lona nofoaga.</string>
+    <string name="help_status_no_schedule">E leai ni taimi o lenei taʻamilosaga. E iloa atu pea ʻoe e pasese.</string>
+    <string name="help_waiting">Na teuina aʻo leai se fesoʻotaʻiga. E lafo pe a toe maua.</string>
+    <string name="help_waiting_never">Na teuina i se isi akauni, ʻo lea e lē mafai e lenei akauni ona lafoina.</string>
+    <string name="help_section_problems">I lalo o le kata, ma i faʻasilasilaga</string>
+    <string name="help_problem_no_network">ʻAve pea le taʻavale. E teuina lipoti ma lafo mulimuli ane.</string>
+    <string name="help_problem_no_gps">E iloa atu e pasese lou nofoaga mulimuli seʻia toe maua.</string>
+    <string name="help_problem_clock_skew">Ki le taimi otometi i faʻatulagaga o le telefoni.</string>
+    <string name="help_problem_reports_refused">E lē o talia e le server lipoti a lenei taʻavale. Fesili i le ofisa.</string>
+    <string name="help_problem_signed_out">ʻUa taofi lipoti. Saini i totonu e faʻaauau ai. O loʻo tatala pea lau malaga.</string>
+    <string name="help_problem_reports_paused">O se faʻasilasilaga. Tatala le app e faʻaauau ai ona lafo lipoti.</string>
+    <string name="help_section_about">E uiga i le app</string>
+    <string name="help_version">Lomiga</string>
+    <string name="help_server">Server</string>
+    <string name="help_share">Faʻasoa faʻamatalaga o le app</string>
+    <string name="help_share_detail">E lafo ai le lomiga o le app, le ituaiga telefoni, le server, mea ʻua faʻatagaina le app e fai, ma ona faʻafitauli talu ai nei, e teu naʻo le taimi o galue ai le app. E leai ni nofoaga, e leai ni faʻamatalaga o le saini, e leai se imeli.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Toe foʻi</string>
+    <string name="setup_trip_so_far">Le malaga i le taimi nei</string>
+    <string name="setup_bus">Taʻavale</string>
+    <string name="setup_route">Auala %1$s</string>
+    <string name="setup_step_route">Auala</string>
+    <string name="setup_step_run">Taʻamilosaga</string>
+    <string name="setup_clear_search">Soloi le suʻesuʻega</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Akauni</string>
+    <string name="account_version">Lomiga %1$s</string>
+    <string name="account_sign_out">Saini i fafo</string>
+    <string name="account_sign_out_title">Saini i fafo?</string>
+    <string name="account_sign_out_message">E mafai e le isi ʻavetaʻavale ona saini i totonu i lenei telefoni.</string>
+    <string name="account_sign_out_cancel">Faʻaleaogā</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Filifili lau taʻavale</string>
+    <string name="vehicles_empty">E leai ni taʻavale ʻua tofia mo ʻoe</string>
+    <string name="vehicles_empty_detail">Fai i le ofisa e tofia sau taʻavale, ona toe siaki lea.</string>
+    <string name="vehicles_check_again">Toe siaki</string>
+    <string name="vehicles_error_message">Na lē mafai ona utaina taʻavale</string>
+    <string name="vehicles_error_detail">Siaki lau fesoʻotaʻiga ona toe taumafai lea.</string>
+    <string name="vehicles_retry_button">Toe taumafai</string>
+    <string name="vehicles_search_label">Numera o le taʻavale</string>
+    <string name="vehicles_search_no_matches">E leai se taʻavale e tutusa ma %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Siaki le numera i luga o le taʻavale.</string>
+    <string name="vehicles_section_favorites">Mea pele</string>
+    <string name="vehicles_section_recent">Talu ai nei</string>
+    <string name="vehicles_section_all">Taʻavale uma</string>
+    <string name="vehicles_section_matches">Mea na maua</string>
+    <string name="vehicles_tile_favorite">Pele</string>
+    <string name="vehicles_favorite_description">Faʻaopoopo %1$s i mea pele</string>
+    <string name="vehicles_unfavorite_description">ʻAveʻese %1$s mai mea pele</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Filifili se auala</string>
+    <string name="routes_search_label">Numera poʻo le igoa o le auala</string>
+    <string name="routes_section_recent">Talu ai nei</string>
+    <string name="routes_section_all">Auala uma</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">Auala uma · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Mea na maua</string>
+    <string name="routes_search_no_matches">E leai se auala e tutusa ma %1$s</string>
+    <string name="routes_search_no_matches_detail">Suʻe i le numera i luga o le faʻailoga, poʻo se vaega o le igoa.</string>
+    <string name="routes_empty">E leai ni auala i le faʻasologa o taimi</string>
+    <string name="routes_empty_detail">Fai i le pule o lau kamupani e siaki le faʻasologa o taimi.</string>
+    <string name="routes_check_again">Toe siaki</string>
+    <string name="routes_error_message">Na lē mafai ona utaina auala</string>
+    <string name="routes_error_detail">Siaki lau fesoʻotaʻiga ona toe taumafai lea.</string>
+    <string name="routes_no_schedule">E leʻi i ai se faʻasologa o taimi i lenei server</string>
+    <string name="routes_no_schedule_detail">E tatau ona utaina muamua se faʻasologa o taimi ona mafai lea ona amata ni malaga. Taʻu i le pule o lau kamupani.</string>
+    <string name="routes_retry_button">Toe taumafai</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Filifili se taʻamilosaga</string>
+    <string name="runs_empty">E leai ni taʻamilosaga i le auala %1$s i le aso nei</string>
+    <string name="runs_empty_unnamed">E leai ni taʻamilosaga i lenei auala i le aso nei</string>
+    <string name="runs_empty_detail">Filifili se isi auala, poʻo toe siaki taeao.</string>
+    <string name="runs_choose_another_route">Filifili se isi auala</string>
+    <string name="runs_badge_now">Taimi nei</string>
+    <string name="runs_badge_next">Sosoʻo</string>
+    <string name="runs_direction">Agaʻi i %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Taʻamilosaga %1$s</string>
+    <string name="runs_row_block">Poloka %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">O loʻo amata…</string>
+    <string name="runs_start_title">Amata le taʻamilosaga o le %1$s?</string>
+    <string name="runs_start_message">Auala %1$s agaʻi i %2$s, i le taʻavale %3$s.</string>
+    <string name="runs_start_message_no_headsign">Auala %1$s, i le taʻavale %2$s.</string>
+    <string name="runs_start_message_unnamed">Agaʻi i %1$s, i le taʻavale %2$s.</string>
+    <string name="runs_start_message_vehicle">I le taʻavale %1$s.</string>
+    <string name="runs_start_confirm">Amata le malaga</string>
+    <string name="runs_start_cancel">Faʻaleaogā</string>
+    <string name="runs_error_message">Na lē mafai ona utaina taʻamilosaga</string>
+    <string name="runs_error_detail">Siaki lau fesoʻotaʻiga ona toe taumafai lea.</string>
+    <string name="runs_retry_button">Toe taumafai</string>
+    <string name="runs_error_not_assigned">E leʻi tofia ʻoe i le taʻavale %1$s.</string>
+    <string name="runs_change_bus">Sui le taʻavale</string>
+    <string name="runs_error_trip_active">O loʻo faʻagasolo pea lau malaga. Faʻaiʻu aʻo leʻi amataina se isi.</string>
+    <string name="runs_error_vehicle_busy">O loʻo i ai se malaga a se isi ʻavetaʻavale i le taʻavale %1$s. Filifili se isi taʻavale poʻo fesili i le ofisa.</string>
+    <string name="runs_error_vehicle_inactive">E lē o galue le taʻavale %1$s. Filifili se isi taʻavale.</string>
+    <string name="runs_error_previous_trip_not_ended">E leʻi mafai ona faʻaiʻu lau malaga talu ai. Siaki lau fesoʻotaʻiga ona toe taumafai lea.</string>
+    <string name="runs_error_network">E lē mafai ona oʻo atu i le server. Siaki lau fesoʻotaʻiga.</string>
+    <string name="runs_error_no_geometry">E leai se auala poʻo ni taofiga e mulimuli ai lenei taʻamilosaga. Filifili se isi taʻamilosaga.</string>
+    <string name="runs_error_trip_not_active">ʻUa sui le faʻasologa o taimi i se aso fou.</string>
+    <string name="runs_reload_button">Toe uta</string>
+    <string name="runs_error_other">Na lē mafai ona amata le malaga.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">%1$d ʻua lafo</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Faʻaali faʻamatalaga o le malaga</string>
+    <string name="tracking_end_trip_button">Faʻaiʻu le malaga</string>
+    <string name="tracking_end_trip_ending">O loʻo faʻaiʻu…</string>
+    <string name="tracking_occupancy_question">E faʻapefea le tumu o le taʻavale?</string>
+    <string name="tracking_occupancy_many_seats">Nofoa avanoa</string>
+    <string name="tracking_occupancy_few_seats">Nai nofoa</string>
+    <string name="tracking_occupancy_standing">Tutū</string>
+    <string name="tracking_occupancy_full">Tumu</string>
+    <string name="tracking_occupancy_clear">Soloi</string>
+    <string name="tracking_fact_run">Taʻamilosaga</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Lipoti</string>
+    <string name="tracking_reports_reporting">O loʻo lafo</string>
+    <string name="tracking_reports_not_reporting">E lē o lafo</string>
+    <string name="tracking_reports_no_gps">Leai se GPS</string>
+    <string name="tracking_reports_stopped">ʻUa taofi lipoti</string>
+    <string name="tracking_fact_street_map">Faʻafanua</string>
+    <string name="tracking_street_map_ready">ʻUa sauni</string>
+    <string name="tracking_street_map_downloading">O loʻo ʻaumai · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">E leʻi ʻaumaia</string>
+    <string name="tracking_street_map_no_space">E lē lava le avanoa</string>
+    <string name="tracking_street_map_unusable">E lē aogā</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">%1$d taofiga ʻua teʻa</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">ʻua tatala</string>
+    <string name="tracking_stops_passed_collapsed">ʻua tāpuni</string>
+    <string name="tracking_end_trip_dialog_title">Faʻaiʻu lenei malaga?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">E taofi lipoti, ma e faʻamauina ʻua uma le taʻamilosaga o le %2$s i le auala %1$s. Na lafo lipoti e %3$d.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">E taofi lipoti, ma e faʻamauina ʻua uma lenei taʻamilosaga. Na lafo lipoti e %1$d.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Faʻaiʻu le malaga</string>
+    <string name="tracking_end_trip_dialog_cancel">Faʻaauau pea</string>
+    <string name="tracking_end_trip_error_title">E leʻi uma le malaga</string>
+    <string name="tracking_end_trip_error_message">E leʻi faʻamaonia e le server le faʻaiʻuga. Siaki lau fesoʻotaʻiga ona toe taumafai lea, poʻo taofi loa lipoti i lenei telefoni.</string>
+    <string name="tracking_end_trip_error_retry">Toe taumafai</string>
+    <string name="tracking_end_trip_error_end_locally">Faʻaiʻu i lenei telefoni</string>
+    <string name="tracking_reauth_button">Saini i totonu</string>
+    <string name="tracking_problem_no_network">Leai se fesoʻotaʻiga</string>
+    <string name="tracking_problem_no_network_detail">E lē iloa atu ʻoe e pasese</string>
+    <string name="tracking_problem_no_gps">E lē maua le GPS</string>
+    <string name="tracking_problem_no_gps_detail">ʻUa taofi le nofoaga</string>
+    <string name="tracking_problem_clock_skew">E sese le uati o le telefoni</string>
+    <string name="tracking_problem_clock_skew_detail">Ki le taimi otometi</string>
+    <string name="tracking_problem_reports_refused">ʻUa teʻena lipoti</string>
+    <string name="tracking_problem_reports_refused_detail">Fesili i le ofisa</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">%1$,d lipoti e lafo pe a maua le fesoʻotaʻiga</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">%1$,d lipoti e lē lafoina</item>
+    </plurals>
+    <string name="tracking_signed_out_title">ʻUa saini i fafo</string>
+    <string name="tracking_signed_out_message">ʻUa taofi lipoti. O loʻo tatala pea lau malaga.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">I le taimi</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">Tuai %1$d min</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">Vave %1$d min</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">ʻEse mai le faʻasologa</string>
+    <string name="tracking_adherence_right_run">Pe saʻo lenei taʻamilosaga?</string>
+    <string name="tracking_adherence_off_schedule_next">Sosoʻo %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">ʻEse mai le auala · %1$s</string>
+    <string name="tracking_adherence_off_route_short">ʻEse mai le auala</string>
+    <string name="tracking_adherence_next_stop">Sosoʻo</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">O loʻo faʻatali le GPS</string>
+    <string name="tracking_adherence_from">Mai</string>
+    <string name="tracking_adherence_run">Taʻamilosaga o le %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Taʻamilosaga o le %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Leai se faʻasologa</string>
+    <string name="tracking_adherence_no_schedule_riders">E iloa atu pea ʻoe e pasese</string>
+    <string name="tracking_adherence_no_schedule_detail">E leai ni taimi o lenei taʻamilosaga</string>
+    <string name="tracking_map_recenter">Toe faʻatotonu</string>
+    <string name="tracking_map_downloading">O loʻo ʻaumai le faʻafanua, %1$d%%</string>
+    <string name="tracking_map_no_space">E lē lava le avanoa mo le faʻafanua</string>
+    <string name="tracking_map_retrying">E leʻi ʻaumaia le faʻafanua, o le ʻā toe taumafai</string>
+    <string name="tracking_map_retry_on_open">E leʻi ʻaumaia le faʻafanua, o le ʻā toe taumafai pe a toe tatala le app</string>
+    <string name="tracking_map_unusable">E lē aogā le faila o le faʻafanua, taʻu i lau kamupani</string>
+    <string name="tracking_map_needs_https">E tatau ona amata le soʻotaga o le faʻafanua i le https, taʻu i lau kamupani</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Toe faʻaauau lau malaga?</string>
+    <string name="resume_message">Na tāpuni le app aʻo faʻagasolo lenei malaga. ʻUa taofi muamua lipoti seʻia e filifili.</string>
+    <string name="resume_route">Auala %1$s</string>
+    <string name="resume_run">Taʻamilosaga o le %1$s</string>
+    <string name="resume_bus">Taʻavale %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">Na amata %1$d min talu ai, i le %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Na amata %1$d itula %2$d min talu ai, i le %3$s</string>
+    <string name="resume_button">Toe faʻaauau le malaga</string>
+    <string name="resume_end_trip_button">Faʻaiʻu le malaga</string>
+    <string name="resume_ending">O loʻo faʻaiʻu le malaga</string>
+    <string name="resume_loading">O loʻo utaina lau malaga</string>
+    <string name="resume_end_failed">E leʻi faʻamaonia e le server ʻua uma le malaga. Toe taumafai, poʻo faʻaiʻu naʻo i lenei telefoni.</string>
+    <string name="resume_end_failed_back">ʻAua neʻi faʻaiʻu le malaga</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Lipoti o le malaga</string>
+    <string name="tracking_notification_title">Auala %1$s · %2$s</string>
+    <string name="tracking_notification_next">Sosoʻo %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">ʻUa saini i fafo. Tatala le app ma saini i totonu.</string>
+    <string name="tracking_notification_reports_refused">ʻUa teʻena lipoti. Fesili i le ofisa.</string>
+    <string name="tracking_notification_resume_title">ʻUa taofi muamua lipoti</string>
+    <string name="tracking_notification_resume_text">Tatala le app e faʻaauau ai ona lafo lipoti.</string>
+    <string name="tracking_notification_attention_channel_name">E manaʻomia ʻoe e le malaga</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Aʻo leʻi amata</string>
+    <string name="preflight_message">E manaʻomia e le app nei mea e lafo ai lipoti o le taʻavale %1$s. O le ʻā fesili mai Android e uiga i mea taʻitasi.</string>
+    <string name="preflight_location">Nofoaga</string>
+    <string name="preflight_location_why">Ina ʻia iloa e le app le mea o i ai le taʻavale</string>
+    <string name="preflight_precise">Nofoaga tonu</string>
+    <string name="preflight_precise_why">Ina ʻia iloa atu e pasese le taʻavale i le taofiga saʻo</string>
+    <string name="preflight_background">I taimi uma</string>
+    <string name="preflight_background_why">Ina ʻia mafai ona toe amata lipoti pe a tāpuni e Android le app</string>
+    <string name="preflight_notifications">Faʻasilasilaga</string>
+    <string name="preflight_notifications_why">Ina ʻia e iloa o loʻo lafo lipoti</string>
+    <string name="preflight_battery">Pateri</string>
+    <string name="preflight_battery_why">Ina ʻia lē taofia e Android lipoti i le ogatotonu o le malaga</string>
+    <string name="preflight_location_services">Auaunaga o le nofoaga</string>
+    <string name="preflight_location_services_why">E tatau ona ki le nofoaga mo le telefoni ʻatoa</string>
+    <string name="preflight_allowed">Faʻatagaina</string>
+    <string name="preflight_skipped">ʻUa sopoʻia</string>
+    <string name="preflight_next">Sosoʻo</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">E lē faʻatagaina. E galue pea lipoti.</string>
+    <string name="preflight_location_needed">E manaʻomia le nofoaga e lafo ai lipoti</string>
+    <string name="preflight_approximate">Naʻo le nofoaga latalata na faʻatagaina</string>
+    <string name="preflight_try_again">Toe taumafai</string>
+    <string name="preflight_open_settings">Tatala faʻatulagaga</string>
+    <string name="preflight_continue">Faʻaauau</string>
+</resources>

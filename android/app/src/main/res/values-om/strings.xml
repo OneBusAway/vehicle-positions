@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Oromo (Afaan Oromoo, in Qubee), a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    The app speaks to the driver as "ati" (Seeni, Filadhu, kee), as Oromo phone menus do.
+    "Vehicle" is konkolaataa, never the word for bus; "route" is daandii; "run" is marsaa (a round); "trip" is imala;
+    "stop" is buufata; "block" is bilookii; "report" is gabaasa (plural gabaasota); "dispatcher" is to'ataa;
+    "agency" is dhaabbata; "riders" are imaltoota; "server" is sarvarii; "connection" is interneetii;
+    "location" is bakka; "settings" is qindaa'ina; "diagnostics" is odeeffannoo appii.
+    Android has no Oromo screens, so the permission rows use plain Oromo words. "min" and "h" are written in full
+    (daqiiqaa, sa'aatii).
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Seeni</string>
+    <string name="login_subtitle">Herrega konkolaachisaa kee kan dhaabbata kanaa fayyadami.</string>
+    <string name="login_server_url_label">Teessoo sarvarii</string>
+    <string name="login_email_label">Imeelii</string>
+    <string name="login_password_label">Jecha icciitii</string>
+    <string name="login_show_password">Jecha icciitii agarsiisi</string>
+    <string name="login_hide_password">Jecha icciitii dhoksi</string>
+    <string name="login_server">Sarvarii</string>
+    <string name="login_change_server">Jijjiiri</string>
+    <string name="login_button">Seeni</string>
+    <string name="login_signing_in">Seenaa jirta</string>
+    <string name="login_error_missing_server">Teessoo sarvarii galchi</string>
+    <string name="login_error_missing_email">Imeelii kee galchi</string>
+    <string name="login_error_missing_password">Jecha icciitii kee galchi</string>
+    <string name="login_error_invalid_credentials">Imeeliin yookaan jechi icciitii sirrii miti. Irra deebi\'ii yaali.</string>
+    <string name="login_error_invalid_address">Teessoo akka https://tracker.example.org galchi</string>
+    <string name="login_error_https_required">Teessoo https:// fayyadami</string>
+    <string name="login_error_check_address">Teessoo ilaali</string>
+    <string name="login_error_unreachable">%1$s qunnamuu hin danda\'amu. Interneetii kee yookaan teessoo sarvarii ilaali.</string>
+    <string name="login_error_not_tracker">%1$s sarvarii hordoffii konkolaataa hin fakkaatu.</string>
+    <string name="login_error_too_many_tries">Yaaliin baay\'ee ta\'eera. Daqiiqaa tokko eegii irra deebi\'ii yaali.</string>
+    <string name="login_error_server">Seenuu hin dandeenye. Irra deebi\'ii yaali.</string>
+    <string name="login_again_title">Irra deebi\'ii seeni</string>
+    <string name="login_again_subtitle">%1$s ta\'uun</string>
+    <string name="login_again_button">Seenii gabaasuu itti fufi</string>
+    <string name="login_trip_open_title">Imalli kee ammallee banaadha</string>
+    <string name="login_trip_open_message">Yeroo seensi kee xumurame gabaasni dhaabbate. Daandii %1$s irratti gabaasuu itti fufuuf seeni.</string>
+    <string name="login_server_managed">Dhaabbata keetiin qindaa\'e.</string>
+    <string name="login_server_managed_invalid">Qindaa\'inni sarvarii dhaabbata keetii teessoo sirrii miti, kanaaf asitti barreessi.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">%1$s fayyadamtaa?</string>
+    <string name="server_setup_confirm_message">Yoo dhaabbatni kee liinkii kana siif erge qofa itti fufi.</string>
+    <string name="server_setup_use">Sarvarii kana fayyadami</string>
+    <string name="server_setup_cancel">Haqi</string>
+    <string name="server_setup_refused_signed_in">Bilbilli kun %1$s irratti seenee jira. Liinkiin kun hojii irra hin oolle.</string>
+    <string name="server_setup_refused_trip_open">Bilbila kana irratti imalli banaan jira. Liinkiin kun hojii irra hin oolle.</string>
+    <string name="server_setup_refused_managed">Sarvarii bilbila kanaa dhaabbatni kee qindeessa.</string>
+    <string name="server_setup_invalid">Liinkiin kun teessoo sarvarii appiin itti fayyadamuu danda\'u hin qabu.</string>
+    <string name="server_setup_ok">Tole</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Teessoo sarvarii</string>
+    <string name="restriction_server_url_description">Sarvarii hordoffii dhaabbataa, teessoo https:// ta\'e. Konkolaachiftoonni itti seenu, jijjiiruu garuu hin danda\'an.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Darbi</string>
+    <string name="welcome_next">Itti aanu</string>
+    <string name="welcome_continue">Itti fufi</string>
+    <string name="welcome_step">Tarkaanfii %1$d, %2$d keessaa</string>
+    <string name="welcome_riders_title">Imaltoonni akka ati dhufaa jirtu arguu danda\'u</string>
+    <string name="welcome_riders_body">Yeroo imala jalqabdu, imaltoonni konkolaataa kee kaartaa isaanii irratti argu. Yommuu xumurtu imala xumuri.</string>
+    <string name="welcome_riders_picture">Imaltoonni sadii buufata irra jiran akka konkolaataan kee dhufaa jiru arguu danda\'u.</string>
+    <string name="welcome_pieces_title">Konkolaataa, daandii, marsaa</string>
+    <string name="welcome_pieces_body">Isaan filadhu, achiis jalqabuuf marsaa kee tuqi. Yommuu xumurtu imala xumuri.</string>
+    <string name="welcome_pieces_vehicle_hint">Lakkoofsa konkolaataa irra jiru</string>
+    <string name="welcome_pieces_route_hint">Lakkoofsa gabatee irra jiru</string>
+    <string name="welcome_pieces_run_hint">Tuquun imala jalqaba</string>
+    <string name="welcome_pieces_live">Imaltoonni si argu</string>
+    <string name="welcome_pieces_finish">Yommuu xumurtu</string>
+    <string name="welcome_habits_title">Gabaasa itti fufsiisi</string>
+    <string name="welcome_habits_body">Imala hunda irratti waan 3 kana godhi.</string>
+    <string name="welcome_habits_location">Bakka yeroo hundaa hayyami</string>
+    <string name="welcome_habits_location_why">Akka gabaasni ofumaan irra deebi\'ee jalqabuu danda\'uuf</string>
+    <string name="welcome_habits_charge">Bilbila chaarjii irra kaa\'i</string>
+    <string name="welcome_habits_charge_why">Yeroo chaarjii fudhatu iskiriiniin ibsaa tura</string>
+    <string name="welcome_habits_open">Appii banaa dhiisi</string>
+    <string name="welcome_habits_open_why">Yeroo imalaa haxaawtee hin cufin</string>
+    <string name="welcome_habits_if_stops">Yoo gabaasni dhaabbate</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Marsaa kee tuqi</string>
+    <string name="tip_run_board_text">Achiis %1$s tuqi. Sana booda imaltoonni konkolaataa kee argu.</string>
+    <string name="tip_sent_count_title">Gabaasota ergaman</string>
+    <string name="tip_sent_count_text">Hamma imaltoonni si arguu danda\'anitti lakkoofsi kun ni dabala. Neetworkiin hin jiruu? Konkolaachisuu itti fufi. Gabaasonni kuufamanii booda ergamu.</string>
+    <string name="tip_got_it">Hubadheera</string>
+    <string name="first_trip_done_title">Imalli jalqabaa xumurame</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="one">gabaasa ergame</item>
+        <item quantity="other">gabaasota ergaman</item>
+    </plurals>
+    <string name="first_trip_done_text">Imaltoonni konkolaataa kee argaa turan.</string>
+    <string name="first_trip_done_ok">Tole</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Afaan: %1$s</string>
+    <string name="language_row_phone_note">Bilbila guutuuf, qindaa\'ina isaa keessatti murteeffama</string>
+    <string name="language_list_title">Afaan</string>
+    <string name="language_list_cancel">Haqi</string>
+
+    <!-- Help -->
+    <string name="help_title">Gargaarsa</string>
+    <string name="help_welcome_again">Simannaa irra deebi\'ii ilaali</string>
+    <string name="help_welcome_again_detail">Iskiriinii gabaabaa 3</string>
+    <string name="help_section_status">Kaardii haalaa irratti</string>
+    <string name="help_status_on_time">Sagantaa yeroo eegaa jirta.</string>
+    <string name="help_status_late">Sagantaa yeroo irraa duubatti hafte.</string>
+    <string name="help_status_early">Sagantaa yeroo irraa dursite. Imaltoonni si dhabuu danda\'u.</string>
+    <string name="help_status_off_schedule">Sagantaa yeroo irraa baay\'ee fagaatte. Marsaa sirrii filachuu kee mirkaneeffadhu.</string>
+    <string name="help_status_off_route">Kaartaa irratti daandii irraa fagaatte.</string>
+    <string name="help_status_waiting_for_gps">Bilbilli bakka isaa barbaadaa jira.</string>
+    <string name="help_status_no_schedule">Marsaan kun yeroo hin qabu. Imaltoonni ammallee si argu.</string>
+    <string name="help_waiting">Interneetii malee kuufaman. Yommuu interneetiin deebi\'u ergamu.</string>
+    <string name="help_waiting_never">Seensa biraatiin kuufaman, kanaaf seensi kun isaan erguu hin danda\'u.</string>
+    <string name="help_section_problems">Kaardii jalatti, fi beeksisoota keessatti</string>
+    <string name="help_problem_no_network">Konkolaachisuu itti fufi. Gabaasonni kuufamanii booda ergamu.</string>
+    <string name="help_problem_no_gps">Hamma GPS deebi\'utti imaltoonni bakka kee isa dhumaa argu.</string>
+    <string name="help_problem_clock_skew">Qindaa\'ina bilbilaa keessatti yeroo ofumaan qindaa\'u filadhu.</string>
+    <string name="help_problem_reports_refused">Sarvariin gabaasa konkolaataa kanaa fudhachaa hin jiru. To\'ataa kee gaafadhu.</string>
+    <string name="help_problem_signed_out">Gabaasni dhaabbateera. Itti fufuuf seeni. Imalli kee ammallee banaadha.</string>
+    <string name="help_problem_reports_paused">Beeksisa tokko. Gabaasuu itti fufuuf appii bani.</string>
+    <string name="help_section_about">Waa\'ee appii</string>
+    <string name="help_version">Veershinii</string>
+    <string name="help_server">Sarvarii</string>
+    <string name="help_share">Odeeffannoo appii qoodi</string>
+    <string name="help_share_detail">Veershinii appii, moodeela bilbilaa, sarvarii, wanta appiin akka godhu hayyamameef, fi rakkoolee dhiyoo kana kan yeroo hojjetu qofa qabatu erga. Bakki, odeeffannoon seensaa fi imeeliin hin ergaman.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Duubatti deebi\'i</string>
+    <string name="setup_trip_so_far">Imala hanga ammaatti</string>
+    <string name="setup_bus">Konkolaataa</string>
+    <string name="setup_route">Daandii %1$s</string>
+    <string name="setup_step_route">Daandii</string>
+    <string name="setup_step_run">Marsaa</string>
+    <string name="setup_clear_search">Barbaacha haqi</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Herrega</string>
+    <string name="account_version">Veershinii %1$s</string>
+    <string name="account_sign_out">Ba\'i</string>
+    <string name="account_sign_out_title">Ba\'uu barbaaddaa?</string>
+    <string name="account_sign_out_message">Konkolaachisaan itti aanu bilbila kana irratti seenuu danda\'a.</string>
+    <string name="account_sign_out_cancel">Haqi</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Konkolaataa kee filadhu</string>
+    <string name="vehicles_empty">Konkolaataan siif ramadame hin jiru</string>
+    <string name="vehicles_empty_detail">To\'ataa kee akka konkolaataa tokko siif ramadu gaafadhu, achiis irra deebi\'ii ilaali.</string>
+    <string name="vehicles_check_again">Irra deebi\'ii ilaali</string>
+    <string name="vehicles_error_message">Konkolaattota kee fe\'uu hin dandeenye</string>
+    <string name="vehicles_error_detail">Interneetii kee ilaalii irra deebi\'ii yaali.</string>
+    <string name="vehicles_retry_button">Irra deebi\'ii yaali</string>
+    <string name="vehicles_search_label">Lakkoofsa konkolaataa</string>
+    <string name="vehicles_search_no_matches">Konkolaataan %1$s hin argamne</string>
+    <string name="vehicles_search_no_matches_detail">Lakkoofsa konkolaataa irra jiru ilaali.</string>
+    <string name="vehicles_section_favorites">Filatamoo</string>
+    <string name="vehicles_section_recent">Dhiyoo kana</string>
+    <string name="vehicles_section_all">Konkolaattota hunda</string>
+    <string name="vehicles_section_matches">Kan argaman</string>
+    <string name="vehicles_tile_favorite">Filatamaa</string>
+    <string name="vehicles_favorite_description">%1$s filatamoo keessatti dabali</string>
+    <string name="vehicles_unfavorite_description">%1$s filatamoo keessaa baasi</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Daandii filadhu</string>
+    <string name="routes_search_label">Lakkoofsa yookaan maqaa daandii</string>
+    <string name="routes_section_recent">Dhiyoo kana</string>
+    <string name="routes_section_all">Daandiiwwan hunda</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Daandiiwwan hunda · %1$d</item>
+        <item quantity="other">Daandiiwwan hunda · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Kan argaman</string>
+    <string name="routes_search_no_matches">Daandiin %1$s hin argamne</string>
+    <string name="routes_search_no_matches_detail">Lakkoofsa gabatee irra jiruun yookaan kutaa maqaa isaatiin barbaadi.</string>
+    <string name="routes_empty">Sagantaan daandii tokkollee hin qabu</string>
+    <string name="routes_empty_detail">Bulchaa dhaabbata keetii akka sagantaa ilaalu gaafadhu.</string>
+    <string name="routes_check_again">Irra deebi\'ii ilaali</string>
+    <string name="routes_error_message">Daandiiwwan fe\'uu hin dandeenye</string>
+    <string name="routes_error_detail">Interneetii kee ilaalii irra deebi\'ii yaali.</string>
+    <string name="routes_no_schedule">Sarvarii kana irra ammallee sagantaan hin jiru</string>
+    <string name="routes_no_schedule_detail">Imaloonni jalqabuu akka danda\'aniif, hojjetaan tokko dura sagantaa fe\'uu qaba. Bulchaa dhaabbata keetii beeksisi.</string>
+    <string name="routes_retry_button">Irra deebi\'ii yaali</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Marsaa filadhu</string>
+    <string name="runs_empty">Har\'a daandii %1$s irra marsaan tokkollee hin jiru</string>
+    <string name="runs_empty_unnamed">Har\'a daandii kana irra marsaan tokkollee hin jiru</string>
+    <string name="runs_empty_detail">Daandii biraa filadhu, yookaan bori irra deebi\'ii ilaali.</string>
+    <string name="runs_choose_another_route">Daandii biraa filadhu</string>
+    <string name="runs_badge_now">Amma</string>
+    <string name="runs_badge_next">Itti aanu</string>
+    <string name="runs_direction">Gara %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Marsaa %1$s</string>
+    <string name="runs_row_block">Bilookii %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Jalqabamaa jira…</string>
+    <string name="runs_start_title">Marsaa %1$s irratti ka\'u jalqabdaa?</string>
+    <string name="runs_start_message">Daandii %1$s gara %2$s, konkolaataa %3$s irratti.</string>
+    <string name="runs_start_message_no_headsign">Daandii %1$s, konkolaataa %2$s irratti.</string>
+    <string name="runs_start_message_unnamed">Gara %1$s, konkolaataa %2$s irratti.</string>
+    <string name="runs_start_message_vehicle">Konkolaataa %1$s irratti.</string>
+    <string name="runs_start_confirm">Imala jalqabi</string>
+    <string name="runs_start_cancel">Haqi</string>
+    <string name="runs_error_message">Marsaawwan fe\'uu hin dandeenye</string>
+    <string name="runs_error_detail">Interneetii kee ilaalii irra deebi\'ii yaali.</string>
+    <string name="runs_retry_button">Irra deebi\'ii yaali</string>
+    <string name="runs_error_not_assigned">Konkolaataan %1$s siif hin ramadamne.</string>
+    <string name="runs_change_bus">Konkolaataa jijjiiri</string>
+    <string name="runs_error_trip_active">Imalli kee tokko duraanuu deemaa jira. Kan biraa jalqabuu dura isa xumuri.</string>
+    <string name="runs_error_vehicle_busy">Konkolaataa %1$s irratti konkolaachisaan biraa imala irra jira. Konkolaataa biraa filadhu yookaan to\'ataa kee gaafadhu.</string>
+    <string name="runs_error_vehicle_inactive">Konkolaataan %1$s tajaajila ala jira. Konkolaataa biraa filadhu.</string>
+    <string name="runs_error_previous_trip_not_ended">Imalli kee kan duraa ammallee xumuramuu hin dandeenye. Interneetii kee ilaalii irra deebi\'ii yaali.</string>
+    <string name="runs_error_network">Sarvarii qunnamuu hin danda\'amu. Interneetii kee ilaali.</string>
+    <string name="runs_error_no_geometry">Marsaan kun daandii yookaan buufata hordofamu hin qabu. Marsaa biraa filadhu.</string>
+    <string name="runs_error_trip_not_active">Sagantaan gara guyyaa haaraatti ce\'eera.</string>
+    <string name="runs_reload_button">Irra deebi\'ii fe\'i</string>
+    <string name="runs_error_other">Imala jalqabuu hin dandeenye.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d ergame</item>
+        <item quantity="other">%1$d ergaman</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Odeeffannoo imalaa agarsiisi</string>
+    <string name="tracking_end_trip_button">Imala xumuri</string>
+    <string name="tracking_end_trip_ending">Xumuramaa jira…</string>
+    <string name="tracking_occupancy_question">Konkolaataan hammam guuteera?</string>
+    <string name="tracking_occupancy_many_seats">Teessoo duwwaa</string>
+    <string name="tracking_occupancy_few_seats">Teessoo muraasa</string>
+    <string name="tracking_occupancy_standing">Dhaabbii qofa</string>
+    <string name="tracking_occupancy_full">Guuteera</string>
+    <string name="tracking_occupancy_clear">Haqi</string>
+    <string name="tracking_fact_run">Marsaa</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Gabaasota</string>
+    <string name="tracking_reports_reporting">Gabaasaa jira</string>
+    <string name="tracking_reports_not_reporting">Gabaasaa hin jiru</string>
+    <string name="tracking_reports_no_gps">GPS hin jiru</string>
+    <string name="tracking_reports_stopped">Gabaasni dhaabbate</string>
+    <string name="tracking_fact_street_map">Kaartaa</string>
+    <string name="tracking_street_map_ready">Qophaa\'eera</string>
+    <string name="tracking_street_map_downloading">Buufachaa jira · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Ammallee hin buufamne</string>
+    <string name="tracking_street_map_no_space">Kuusaan gahaan hin jiru</string>
+    <string name="tracking_street_map_unusable">Hin fayyadu</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">Buufata %1$d darbame</item>
+        <item quantity="other">Buufataalee %1$d darbaman</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">banaa</string>
+    <string name="tracking_stops_passed_collapsed">cufaa</string>
+    <string name="tracking_end_trip_dialog_title">Imala kana xumurtaa?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Gabaasni ni dhaabbata, marsaan %2$s kan daandii %1$s xumurame jedhamee galmeeffama. Gabaasa %3$d ergameera.</item>
+        <item quantity="other">Gabaasni ni dhaabbata, marsaan %2$s kan daandii %1$s xumurame jedhamee galmeeffama. Gabaasota %3$d ergamaniiru.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Gabaasni ni dhaabbata, marsaan kun xumurame jedhamee galmeeffama. Gabaasa %1$d ergameera.</item>
+        <item quantity="other">Gabaasni ni dhaabbata, marsaan kun xumurame jedhamee galmeeffama. Gabaasota %1$d ergamaniiru.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Imala xumuri</string>
+    <string name="tracking_end_trip_dialog_cancel">Itti fufi</string>
+    <string name="tracking_end_trip_error_title">Imalli ammallee hin xumuramne</string>
+    <string name="tracking_end_trip_error_message">Sarvariin xumura imalaa hin mirkaneessine. Neetworkii kee ilaalii irra deebi\'ii yaali, yookaan amma bilbila kana irratti gabaasuu dhaabi.</string>
+    <string name="tracking_end_trip_error_retry">Irra deebi\'ii yaali</string>
+    <string name="tracking_end_trip_error_end_locally">Bilbila kana irratti xumuri</string>
+    <string name="tracking_reauth_button">Seeni</string>
+    <string name="tracking_problem_no_network">Interneetii hin jiru</string>
+    <string name="tracking_problem_no_network_detail">Imaltoonni si arguu hin danda\'an</string>
+    <string name="tracking_problem_no_gps">Mallattoon GPS hin jiru</string>
+    <string name="tracking_problem_no_gps_detail">Bakki yeroof dhaabbate</string>
+    <string name="tracking_problem_clock_skew">Sa\'aatiin bilbilaa sirrii miti</string>
+    <string name="tracking_problem_clock_skew_detail">Yeroo ofumaan qindaa\'u filadhu</string>
+    <string name="tracking_problem_reports_refused">Gabaasni didame</string>
+    <string name="tracking_problem_reports_refused_detail">To\'ataa kee gaafadhu</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">Gabaasa %1$,d interneetii eeggata</item>
+        <item quantity="other">Gabaasota %1$,d interneetii eeggatu</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">Gabaasa %1$,d hin ergamu</item>
+        <item quantity="other">Gabaasota %1$,d hin ergaman</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Seensi kee xumurameera</string>
+    <string name="tracking_signed_out_message">Gabaasni dhaabbateera. Imalli kee ammallee banaadha.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Yeroo isaatti</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">Daqiiqaa %1$d harkifatte</item>
+        <item quantity="other">Daqiiqaa %1$d harkifatte</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">Daqiiqaa %1$d dursite</item>
+        <item quantity="other">Daqiiqaa %1$d dursite</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Sagantaa ala</string>
+    <string name="tracking_adherence_right_run">Marsaan kun sirriidhaa?</string>
+    <string name="tracking_adherence_off_schedule_next">Itti aanu %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Daandii ala · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Daandii ala</string>
+    <string name="tracking_adherence_next_stop">Itti aanu</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">GPS eeggachaa jira</string>
+    <string name="tracking_adherence_from">Ka\'umsa</string>
+    <string name="tracking_adherence_run">Marsaa %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Marsaa %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Sagantaan hin jiru</string>
+    <string name="tracking_adherence_no_schedule_riders">Imaltoonni ammallee si argu</string>
+    <string name="tracking_adherence_no_schedule_detail">Marsaan kun yeroo hin qabu</string>
+    <string name="tracking_map_recenter">Gara konkolaataatti deebi\'i</string>
+    <string name="tracking_map_downloading">Kaartaa buufachaa jira, %1$d%%</string>
+    <string name="tracking_map_no_space">Kaartaaf kuusaan gahaan hin jiru</string>
+    <string name="tracking_map_retrying">Kaartaan ammallee hin buufamne, irra deebi\'ee yaala</string>
+    <string name="tracking_map_retry_on_open">Kaartaan hin buufamne, yeroo appiin itti aansee banamu irra deebi\'ee yaala</string>
+    <string name="tracking_map_unusable">Faayiliin kaartaa hin fayyadu, dhaabbata kee beeksisi</string>
+    <string name="tracking_map_needs_https">Liinkiin kaartaa https fayyadamuu qaba, dhaabbata kee beeksisi</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Imala kee itti fuftaa?</string>
+    <string name="resume_message">Imalli kun osoo deemaa jiruu appiin cufame. Hamma ati filattutti gabaasni yeroof dhaabbata.</string>
+    <string name="resume_route">Daandii %1$s</string>
+    <string name="resume_run">Marsaa %1$s</string>
+    <string name="resume_bus">Konkolaataa %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Daqiiqaa %1$d dura, %2$s irratti jalqabame</item>
+        <item quantity="other">Daqiiqaa %1$d dura, %2$s irratti jalqabame</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Sa\'aatii %1$d fi daqiiqaa %2$d dura, %3$s irratti jalqabame</string>
+    <string name="resume_button">Imala itti fufi</string>
+    <string name="resume_end_trip_button">Imala xumuri</string>
+    <string name="resume_ending">Imalli xumuramaa jira</string>
+    <string name="resume_loading">Imalli kee fe\'amaa jira</string>
+    <string name="resume_end_failed">Sarvariin xumura imalaa hin mirkaneessine. Irra deebi\'ii yaali, yookaan bilbila kana qofa irratti xumuri.</string>
+    <string name="resume_end_failed_back">Imala hin xumurin</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Gabaasa imalaa</string>
+    <string name="tracking_notification_title">Daandii %1$s · %2$s</string>
+    <string name="tracking_notification_next">Itti aanu %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Seensi kee xumurameera. Seenuuf appii bani.</string>
+    <string name="tracking_notification_reports_refused">Gabaasni didame. To\'ataa kee gaafadhu.</string>
+    <string name="tracking_notification_resume_title">Gabaasni yeroof dhaabbate</string>
+    <string name="tracking_notification_resume_text">Gabaasuu itti fufuuf appii bani.</string>
+    <string name="tracking_notification_attention_channel_name">Imalli si barbaada</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Jalqabuu dura</string>
+    <string name="preflight_message">Konkolaataa %1$s gabaasuuf appiin wantoota kana barbaada. Itti aansee Android tokkoon tokkoon isaanii si gaafata.</string>
+    <string name="preflight_location">Bakka</string>
+    <string name="preflight_location_why">Akka appiin bakka konkolaataan jiru beekuuf</string>
+    <string name="preflight_precise">Bakka sirrii</string>
+    <string name="preflight_precise_why">Akka imaltoonni konkolaataa buufata sirrii irratti arganiif</string>
+    <string name="preflight_background">Yeroo hundaa</string>
+    <string name="preflight_background_why">Yoo Android appii cufe, akka gabaasni ofumaan irra deebi\'ee jalqabuuf</string>
+    <string name="preflight_notifications">Beeksisoota</string>
+    <string name="preflight_notifications_why">Gabaasni hojjechaa jiraachuu isaa akka argituuf</string>
+    <string name="preflight_battery">Baatirii</string>
+    <string name="preflight_battery_why">Akka Android imala gidduutti gabaasa hin dhaabneef</string>
+    <string name="preflight_location_services">Tajaajila bakkaa</string>
+    <string name="preflight_location_services_why">Tajaajilli bakkaa bilbila guutuuf banaa ta\'uu qaba</string>
+    <string name="preflight_allowed">Hayyamameera</string>
+    <string name="preflight_skipped">Darbameera</string>
+    <string name="preflight_next">Itti aanu</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Hin hayyamamne. Gabaasni ammallee ni hojjeta.</string>
+    <string name="preflight_location_needed">Gabaasuuf bakki barbaachisaadha</string>
+    <string name="preflight_approximate">Bakka tilmaamaa qofatu hayyamame</string>
+    <string name="preflight_try_again">Irra deebi\'ii yaali</string>
+    <string name="preflight_open_settings">Qindaa\'ina bani</string>
+    <string name="preflight_continue">Itti fufi</string>
+</resources>

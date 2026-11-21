@@ -1,0 +1,374 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Haitian Creole (Kreyòl ayisyen), a draft not yet read by a fluent reviewer (#495). The notes on each string are in
+    values/strings.xml. Standard IPN spelling, everyday spoken register, "ou" for you.
+    "Vehicle" is machin, the everyday word for any road vehicle (veyikil reads as officialese), never the word for bus;
+    "route" is wout; "run" is kous, a driver's word for one run of the route; "trip" is vwayaj; "stop" is arè;
+    "block" is blòk; "agency" is konpayi; "dispatcher" is sant kontwòl (the control room); "report" is rapò;
+    "riders" is pasaje; "sign in" and "sign out" are konekte and dekonekte, so a network connection is always entènèt
+    (or rezo for signal), never koneksyon; "timetable" and "schedule" are both orè; "location" is pozisyon, as French
+    Android says Position; "resume" is repran; "tap" is peze; "status card" is bwat estati, since kat is the map;
+    "diagnostics" is enfòmasyon teknik.
+    Plurals: CLDR has no Haitian Creole rules, so Android always picks "other"; each plural has that one form,
+    worded to read right for any count.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Konekte</string>
+    <string name="login_subtitle">Sèvi ak kont chofè ou nan konpayi sa a.</string>
+    <string name="login_server_url_label">Adrès sèvè a</string>
+    <string name="login_email_label">Imèl</string>
+    <string name="login_password_label">Modpas</string>
+    <string name="login_show_password">Montre modpas la</string>
+    <string name="login_hide_password">Kache modpas la</string>
+    <string name="login_server">Sèvè</string>
+    <string name="login_change_server">Chanje</string>
+    <string name="login_button">Konekte</string>
+    <string name="login_signing_in">Ap konekte</string>
+    <string name="login_error_missing_server">Antre adrès sèvè a</string>
+    <string name="login_error_missing_email">Antre imèl ou</string>
+    <string name="login_error_missing_password">Antre modpas ou</string>
+    <string name="login_error_invalid_credentials">Imèl la oswa modpas la pa bon. Eseye ankò.</string>
+    <string name="login_error_invalid_address">Antre yon adrès tankou https://tracker.example.org</string>
+    <string name="login_error_https_required">Sèvi ak yon adrès https://</string>
+    <string name="login_error_check_address">Tcheke adrès la</string>
+    <string name="login_error_unreachable">Nou pa ka jwenn %1$s. Tcheke entènèt ou, oswa adrès sèvè a.</string>
+    <string name="login_error_not_tracker">%1$s pa sanble yon sèvè swivi.</string>
+    <string name="login_error_too_many_tries">Twòp esè. Tann yon minit, epi eseye ankò.</string>
+    <string name="login_error_server">Nou pa t ka konekte ou. Eseye ankò.</string>
+    <string name="login_again_title">Konekte ankò</string>
+    <string name="login_again_subtitle">Kòm %1$s</string>
+    <string name="login_again_button">Konekte epi kontinye voye rapò</string>
+    <string name="login_trip_open_title">Vwayaj ou a toujou louvri</string>
+    <string name="login_trip_open_message">Rapò yo te kanpe lè sesyon ou an te fini. Konekte pou kontinye voye rapò sou wout %1$s.</string>
+    <string name="login_server_managed">Se konpayi ou ki mete l.</string>
+    <string name="login_server_managed_invalid">Paramèt sèvè konpayi ou a pa yon adrès ki valab, kidonk ekri l isit la.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Sèvi ak %1$s?</string>
+    <string name="server_setup_confirm_message">Kontinye sèlman si se konpayi ou ki voye lyen sa a ba ou.</string>
+    <string name="server_setup_use">Sèvi ak sèvè sa a</string>
+    <string name="server_setup_cancel">Anile</string>
+    <string name="server_setup_refused_signed_in">Telefòn sa a konekte sou %1$s. Nou pa t sèvi ak lyen an.</string>
+    <string name="server_setup_refused_trip_open">Telefòn sa a gen yon vwayaj ki louvri. Nou pa t sèvi ak lyen an.</string>
+    <string name="server_setup_refused_managed">Se konpayi ou ki mete sèvè a sou telefòn sa a.</string>
+    <string name="server_setup_invalid">Lyen sa a pa gen okenn adrès sèvè aplikasyon an ka sèvi avè l.</string>
+    <string name="server_setup_ok">Dakò</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Adrès sèvè a</string>
+    <string name="restriction_server_url_description">Sèvè swivi konpayi a, yon adrès https://. Chofè yo konekte sou li epi yo pa ka chanje l.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Sote</string>
+    <string name="welcome_next">Pwochen</string>
+    <string name="welcome_continue">Kontinye</string>
+    <string name="welcome_step">Etap %1$d sou %2$d</string>
+    <string name="welcome_riders_title">Pasaje yo ka wè w ap vini</string>
+    <string name="welcome_riders_body">Kòmanse yon vwayaj, epi pasaje yo wè machin ou sou kat yo. Fini vwayaj la lè ou fin travay.</string>
+    <string name="welcome_riders_picture">Twa pasaje nan yon arè ka wè machin ou k ap vini.</string>
+    <string name="welcome_pieces_title">Machin, wout, kous</string>
+    <string name="welcome_pieces_body">Chwazi yo, epi peze kous ou a pou kòmanse. Fini vwayaj la lè ou fin travay.</string>
+    <string name="welcome_pieces_vehicle_hint">Nimewo ki sou machin nan</string>
+    <string name="welcome_pieces_route_hint">Nimewo ki sou pano a</string>
+    <string name="welcome_pieces_run_hint">Peze l, vwayaj la kòmanse</string>
+    <string name="welcome_pieces_live">Pasaje yo wè w</string>
+    <string name="welcome_pieces_finish">Lè ou fin travay</string>
+    <string name="welcome_habits_title">Kenbe rapò yo ap mache</string>
+    <string name="welcome_habits_body">Fè 3 bagay sa yo nan chak vwayaj.</string>
+    <string name="welcome_habits_location">Pèmèt pozisyon tout tan</string>
+    <string name="welcome_habits_location_why">Pou rapò yo ka rekòmanse pou kont yo</string>
+    <string name="welcome_habits_charge">Kenbe telefòn nan sou chaj</string>
+    <string name="welcome_habits_charge_why">Ekran an rete limen pandan l ap chaje</string>
+    <string name="welcome_habits_open">Kite aplikasyon an louvri</string>
+    <string name="welcome_habits_open_why">Pa glise l pou fèmen l pandan yon vwayaj</string>
+    <string name="welcome_habits_if_stops">Si rapò yo kanpe</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Peze kous ou a</string>
+    <string name="tip_run_board_text">Apre sa, peze %1$s. Depi lè sa a, pasaje yo wè machin ou.</string>
+    <string name="tip_sent_count_title">Rapò voye</string>
+    <string name="tip_sent_count_text">Nimewo sa a ap monte toutotan pasaje yo ka wè w. Pa gen rezo? Kontinye kondi. Rapò yo rete anrejistre epi y ap voye yo pita.</string>
+    <string name="tip_got_it">M konprann</string>
+    <string name="first_trip_done_title">Premye vwayaj fini</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">rapò voye</item>
+    </plurals>
+    <string name="first_trip_done_text">Pasaje yo te ka wè machin ou.</string>
+    <string name="first_trip_done_ok">Dakò</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Lang: %1$s</string>
+    <string name="language_row_phone_note">Pou tout telefòn nan, nan paramèt li yo</string>
+    <string name="language_list_title">Lang</string>
+    <string name="language_list_cancel">Anile</string>
+
+    <!-- Help -->
+    <string name="help_title">Èd</string>
+    <string name="help_welcome_again">Wè akèy la ankò</string>
+    <string name="help_welcome_again_detail">3 ti ekran</string>
+    <string name="help_section_status">Nan bwat estati a</string>
+    <string name="help_status_on_time">Ou respekte orè a.</string>
+    <string name="help_status_late">An reta sou orè a.</string>
+    <string name="help_status_early">An avans sou orè a. Pasaje yo ka rate w.</string>
+    <string name="help_status_off_schedule">Byen lwen orè a. Tcheke si ou chwazi bon kous la.</string>
+    <string name="help_status_off_route">Kat la montre ou pa sou wout la.</string>
+    <string name="help_status_waiting_for_gps">Telefòn nan ap chèche pozisyon li.</string>
+    <string name="help_status_no_schedule">Kous sa a pa gen orè. Pasaje yo wè w kanmenm.</string>
+    <string name="help_waiting">Rapò sa yo anrejistre lè pa t gen entènèt. Y ap pati depi entènèt la tounen.</string>
+    <string name="help_waiting_never">Rapò sa yo anrejistre nan yon lòt sesyon, kidonk sesyon sa a pa ka voye yo.</string>
+    <string name="help_section_problems">Anba bwat la, ak nan notifikasyon yo</string>
+    <string name="help_problem_no_network">Kontinye kondi. Rapò yo rete anrejistre epi y ap voye yo pita.</string>
+    <string name="help_problem_no_gps">Pasaje yo wè dènye pozisyon ou jiskaske GPS la tounen.</string>
+    <string name="help_problem_clock_skew">Aktive lè otomatik nan paramèt telefòn nan.</string>
+    <string name="help_problem_reports_refused">Sèvè a pa pran rapò machin sa a. Mande sant kontwòl la.</string>
+    <string name="help_problem_signed_out">Rapò yo kanpe. Konekte pou kontinye. Vwayaj ou a toujou louvri.</string>
+    <string name="help_problem_reports_paused">Yon notifikasyon. Louvri aplikasyon an pou kontinye voye rapò.</string>
+    <string name="help_section_about">Konsènan</string>
+    <string name="help_version">Vèsyon</string>
+    <string name="help_server">Sèvè</string>
+    <string name="help_share">Pataje enfòmasyon teknik</string>
+    <string name="help_share_detail">Li voye vèsyon aplikasyon an, modèl telefòn nan, sèvè a, sa aplikasyon an gen dwa fè ak dènye pwoblèm li te genyen, li kenbe yo sèlman pandan l ap mache. Pa gen pozisyon, pa gen enfòmasyon pou konekte, pa gen imèl.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Tounen</string>
+    <string name="setup_trip_so_far">Vwayaj la jiskaprezan</string>
+    <string name="setup_bus">Machin</string>
+    <string name="setup_route">Wout %1$s</string>
+    <string name="setup_step_route">Wout</string>
+    <string name="setup_step_run">Kous</string>
+    <string name="setup_clear_search">Efase rechèch la</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Kont</string>
+    <string name="account_version">Vèsyon %1$s</string>
+    <string name="account_sign_out">Dekonekte</string>
+    <string name="account_sign_out_title">Dekonekte?</string>
+    <string name="account_sign_out_message">Pwochen chofè a ka konekte sou telefòn sa a.</string>
+    <string name="account_sign_out_cancel">Anile</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Chwazi machin ou</string>
+    <string name="vehicles_empty">Yo pa ba ou okenn machin</string>
+    <string name="vehicles_empty_detail">Mande sant kontwòl la ba ou youn, epi tcheke ankò.</string>
+    <string name="vehicles_check_again">Tcheke ankò</string>
+    <string name="vehicles_error_message">Nou pa t ka jwenn machin ou yo</string>
+    <string name="vehicles_error_detail">Tcheke entènèt ou epi eseye ankò.</string>
+    <string name="vehicles_retry_button">Eseye ankò</string>
+    <string name="vehicles_search_label">Nimewo machin</string>
+    <string name="vehicles_search_no_matches">Okenn machin pa koresponn ak %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Tcheke nimewo ki ekri sou machin nan.</string>
+    <string name="vehicles_section_favorites">Favori</string>
+    <string name="vehicles_section_recent">Resan</string>
+    <string name="vehicles_section_all">Tout machin yo</string>
+    <string name="vehicles_section_matches">Rezilta</string>
+    <string name="vehicles_tile_favorite">Favori</string>
+    <string name="vehicles_favorite_description">Ajoute %1$s nan favori</string>
+    <string name="vehicles_unfavorite_description">Retire %1$s nan favori</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Chwazi yon wout</string>
+    <string name="routes_search_label">Nimewo oswa non wout la</string>
+    <string name="routes_section_recent">Resan</string>
+    <string name="routes_section_all">Tout wout yo</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">Tout wout yo · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Rezilta</string>
+    <string name="routes_search_no_matches">Okenn wout pa koresponn ak %1$s</string>
+    <string name="routes_search_no_matches_detail">Chèche ak nimewo ki sou pano a, oswa yon moso nan non an.</string>
+    <string name="routes_empty">Orè a pa gen okenn wout</string>
+    <string name="routes_empty_detail">Mande administratè konpayi ou a tcheke orè a.</string>
+    <string name="routes_check_again">Tcheke ankò</string>
+    <string name="routes_error_message">Nou pa t ka jwenn wout yo</string>
+    <string name="routes_error_detail">Tcheke entènèt ou epi eseye ankò.</string>
+    <string name="routes_no_schedule">Sèvè sa a poko gen orè</string>
+    <string name="routes_no_schedule_detail">Yon operatè dwe mete youn anvan vwayaj yo ka kòmanse. Fè administratè konpayi ou a konnen.</string>
+    <string name="routes_retry_button">Eseye ankò</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Chwazi yon kous</string>
+    <string name="runs_empty">Pa gen kous sou wout %1$s jodi a</string>
+    <string name="runs_empty_unnamed">Pa gen kous sou wout sa a jodi a</string>
+    <string name="runs_empty_detail">Chwazi yon lòt wout, oswa tcheke ankò demen.</string>
+    <string name="runs_choose_another_route">Chwazi yon lòt wout</string>
+    <string name="runs_badge_now">Kounye a</string>
+    <string name="runs_badge_next">Pwochen</string>
+    <string name="runs_direction">Direksyon %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Kous %1$s</string>
+    <string name="runs_row_block">Blòk %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Ap kòmanse…</string>
+    <string name="runs_start_title">Kòmanse kous %1$s?</string>
+    <string name="runs_start_message">Wout %1$s, direksyon %2$s, ak machin %3$s.</string>
+    <string name="runs_start_message_no_headsign">Wout %1$s, ak machin %2$s.</string>
+    <string name="runs_start_message_unnamed">Direksyon %1$s, ak machin %2$s.</string>
+    <string name="runs_start_message_vehicle">Ak machin %1$s.</string>
+    <string name="runs_start_confirm">Kòmanse vwayaj</string>
+    <string name="runs_start_cancel">Anile</string>
+    <string name="runs_error_message">Nou pa t ka jwenn kous yo</string>
+    <string name="runs_error_detail">Tcheke entènèt ou epi eseye ankò.</string>
+    <string name="runs_retry_button">Eseye ankò</string>
+    <string name="runs_error_not_assigned">Yo pa ba ou machin %1$s.</string>
+    <string name="runs_change_bus">Chanje machin</string>
+    <string name="runs_error_trip_active">Ou gen yon vwayaj k ap fèt deja. Fini l anvan ou kòmanse yon lòt.</string>
+    <string name="runs_error_vehicle_busy">Yon lòt chofè gen yon vwayaj k ap fèt ak machin %1$s. Chwazi yon lòt machin oswa mande sant kontwòl la.</string>
+    <string name="runs_error_vehicle_inactive">Machin %1$s pa an sèvis. Chwazi yon lòt machin.</string>
+    <string name="runs_error_previous_trip_not_ended">Dènye vwayaj ou a poko ka fini. Tcheke entènèt ou epi eseye ankò.</string>
+    <string name="runs_error_network">Nou pa ka jwenn sèvè a. Tcheke entènèt ou.</string>
+    <string name="runs_error_no_geometry">Kous sa a pa gen wout ni arè pou swiv. Chwazi yon lòt kous.</string>
+    <string name="runs_error_trip_not_active">Orè a pase sou yon lòt jou.</string>
+    <string name="runs_reload_button">Rafrechi</string>
+    <string name="runs_error_other">Nou pa t ka kòmanse vwayaj la.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">%1$d voye</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Montre detay vwayaj la</string>
+    <string name="tracking_end_trip_button">Fini vwayaj</string>
+    <string name="tracking_end_trip_ending">Ap fini…</string>
+    <string name="tracking_occupancy_question">Konbyen moun ki nan machin nan?</string>
+    <string name="tracking_occupancy_many_seats">Gen plas</string>
+    <string name="tracking_occupancy_few_seats">Kèk plas</string>
+    <string name="tracking_occupancy_standing">Moun kanpe</string>
+    <string name="tracking_occupancy_full">Plen</string>
+    <string name="tracking_occupancy_clear">Efase</string>
+    <string name="tracking_fact_run">Kous</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Rapò</string>
+    <string name="tracking_reports_reporting">Ap voye</string>
+    <string name="tracking_reports_not_reporting">P ap voye</string>
+    <string name="tracking_reports_no_gps">Pa gen GPS</string>
+    <string name="tracking_reports_stopped">Rapò yo kanpe</string>
+    <string name="tracking_fact_street_map">Kat lari yo</string>
+    <string name="tracking_street_map_ready">Pare</string>
+    <string name="tracking_street_map_downloading">Ap telechaje · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Poko telechaje</string>
+    <string name="tracking_street_map_no_space">Pa gen ase espas</string>
+    <string name="tracking_street_map_unusable">Pa ka sèvi</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">%1$d arè pase</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">louvri</string>
+    <string name="tracking_stops_passed_collapsed">fèmen</string>
+    <string name="tracking_end_trip_dialog_title">Fini vwayaj sa a?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">Rapò yo ap kanpe, epi kous %2$s sou wout %1$s ap make kòm fini. Ou voye %3$d rapò.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">Rapò yo ap kanpe, epi kous sa a ap make kòm fini. Ou voye %1$d rapò.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Fini vwayaj</string>
+    <string name="tracking_end_trip_dialog_cancel">Kontinye vwayaj la</string>
+    <string name="tracking_end_trip_error_title">Vwayaj la poko fini</string>
+    <string name="tracking_end_trip_error_message">Sèvè a pa konfime vwayaj la fini. Tcheke rezo ou epi eseye ankò, oswa sispann voye rapò sou telefòn sa a kounye a.</string>
+    <string name="tracking_end_trip_error_retry">Eseye ankò</string>
+    <string name="tracking_end_trip_error_end_locally">Fini sou telefòn sa a</string>
+    <string name="tracking_reauth_button">Konekte</string>
+    <string name="tracking_problem_no_network">Pa gen entènèt</string>
+    <string name="tracking_problem_no_network_detail">Pasaje yo pa ka wè w</string>
+    <string name="tracking_problem_no_gps">Pa gen siyal GPS</string>
+    <string name="tracking_problem_no_gps_detail">Pozisyon an kanpe</string>
+    <string name="tracking_problem_clock_skew">Lè telefòn nan pa bon</string>
+    <string name="tracking_problem_clock_skew_detail">Aktive lè otomatik</string>
+    <string name="tracking_problem_reports_refused">Sèvè a refize rapò yo</string>
+    <string name="tracking_problem_reports_refused_detail">Mande sant kontwòl la</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">%1$,d rapò ap tann entènèt</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">%1$,d rapò p ap pati</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Ou dekonekte</string>
+    <string name="tracking_signed_out_message">Rapò yo kanpe. Vwayaj ou a toujou louvri.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">A lè</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">%1$d min an reta</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">%1$d min an avans</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Andeyò orè</string>
+    <string name="tracking_adherence_right_run">Se bon kous la?</string>
+    <string name="tracking_adherence_off_schedule_next">Pwochen %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Andeyò wout · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Andeyò wout</string>
+    <string name="tracking_adherence_next_stop">Pwochen</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">Ap tann GPS</string>
+    <string name="tracking_adherence_from">Depa</string>
+    <string name="tracking_adherence_run">Kous %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Kous %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Pa gen orè</string>
+    <string name="tracking_adherence_no_schedule_riders">Pasaje yo wè w kanmenm</string>
+    <string name="tracking_adherence_no_schedule_detail">Kous sa a pa gen orè</string>
+    <string name="tracking_map_recenter">Santre ankò</string>
+    <string name="tracking_map_downloading">Ap telechaje kat la, %1$d%%</string>
+    <string name="tracking_map_no_space">Pa gen ase espas pou kat la</string>
+    <string name="tracking_map_retrying">Kat la poko telechaje, n ap eseye ankò</string>
+    <string name="tracking_map_retry_on_open">Kat la pa telechaje, n ap eseye ankò pwochen fwa ou louvri aplikasyon an</string>
+    <string name="tracking_map_unusable">Fichye kat la pa ka sèvi, avèti konpayi ou</string>
+    <string name="tracking_map_needs_https">Lyen kat la dwe sèvi ak https, avèti konpayi ou</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Repran vwayaj ou a?</string>
+    <string name="resume_message">Aplikasyon an te fèmen pandan vwayaj sa a t ap fèt. Rapò yo an poz jiskaske ou chwazi.</string>
+    <string name="resume_route">Wout %1$s</string>
+    <string name="resume_run">Kous %1$s</string>
+    <string name="resume_bus">Machin %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">Kòmanse sa gen %1$d min, a %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Kòmanse sa gen %1$d h %2$d min, a %3$s</string>
+    <string name="resume_button">Repran vwayaj la</string>
+    <string name="resume_end_trip_button">Fini vwayaj</string>
+    <string name="resume_ending">Ap fini vwayaj la</string>
+    <string name="resume_loading">Ap chaje vwayaj ou a</string>
+    <string name="resume_end_failed">Sèvè a pa konfime vwayaj la fini. Eseye ankò, oswa fini l sou telefòn sa a sèlman.</string>
+    <string name="resume_end_failed_back">Pa fini vwayaj la</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Rapò vwayaj</string>
+    <string name="tracking_notification_title">Wout %1$s · %2$s</string>
+    <string name="tracking_notification_next">Pwochen %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Ou dekonekte. Louvri aplikasyon an pou konekte.</string>
+    <string name="tracking_notification_reports_refused">Sèvè a refize rapò yo. Mande sant kontwòl la.</string>
+    <string name="tracking_notification_resume_title">Rapò yo an poz</string>
+    <string name="tracking_notification_resume_text">Louvri aplikasyon an pou kontinye voye rapò.</string>
+    <string name="tracking_notification_attention_channel_name">Vwayaj la bezwen ou</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Anvan ou kòmanse</string>
+    <string name="preflight_message">Aplikasyon an bezwen bagay sa yo pou l voye rapò pou machin %1$s. Android ap mande ou pou chak youn apre sa.</string>
+    <string name="preflight_location">Pozisyon</string>
+    <string name="preflight_location_why">Pou aplikasyon an konnen ki kote machin nan ye</string>
+    <string name="preflight_precise">Pozisyon egzak</string>
+    <string name="preflight_precise_why">Pou pasaje yo wè machin nan sou bon arè a</string>
+    <string name="preflight_background">Tout tan</string>
+    <string name="preflight_background_why">Pou rapò yo ka rekòmanse si Android fèmen aplikasyon an</string>
+    <string name="preflight_notifications">Notifikasyon</string>
+    <string name="preflight_notifications_why">Pou ou ka wè rapò yo ap pati</string>
+    <string name="preflight_battery">Batri</string>
+    <string name="preflight_battery_why">Pou Android pa kanpe rapò yo nan mitan vwayaj la</string>
+    <string name="preflight_location_services">Sèvis pozisyon</string>
+    <string name="preflight_location_services_why">Pozisyon dwe aktive pou tout telefòn nan</string>
+    <string name="preflight_allowed">Pèmèt</string>
+    <string name="preflight_skipped">Sote</string>
+    <string name="preflight_next">Pwochen</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Pa pèmèt. Rapò yo mache kanmenm.</string>
+    <string name="preflight_location_needed">Aplikasyon an bezwen pozisyon pou voye rapò</string>
+    <string name="preflight_approximate">Se sèlman pozisyon apwoksimatif ki pèmèt</string>
+    <string name="preflight_try_again">Eseye ankò</string>
+    <string name="preflight_open_settings">Louvri paramèt yo</string>
+    <string name="preflight_continue">Kontinye</string>
+</resources>

@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Finnish, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    The driver is addressed with the informal "sinä", as Finnish apps do. "Vehicle" is ajoneuvo, never a word for
+    bus; "route" is linja; "run" is vuoro (a timetabled departure); "trip" is matka; "stop" is pysäkki;
+    "block" is kierto; "report" is raportti, "reporting" raportointi; "agency" is liikennöitsijä; "dispatcher" is
+    ajojärjestelijä; "fleet number" is kylkinumero; "diagnostics" is vianmääritystiedot.
+    A placeholder takes no case ending, so the word beside it carries the case ("linjalla %1$s", "ajoneuvolla %1$s").
+    A run's start time goes before vuoro with no "klo" ("6.58 vuoro"), since the phone formats the time.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Kirjaudu sisään</string>
+    <string name="login_subtitle">Käytä tämän liikennöitsijän kuljettajatiliäsi.</string>
+    <string name="login_server_url_label">Palvelimen osoite</string>
+    <string name="login_email_label">Sähköposti</string>
+    <string name="login_password_label">Salasana</string>
+    <string name="login_show_password">Näytä salasana</string>
+    <string name="login_hide_password">Piilota salasana</string>
+    <string name="login_server">Palvelin</string>
+    <string name="login_change_server">Vaihda</string>
+    <string name="login_button">Kirjaudu sisään</string>
+    <string name="login_signing_in">Kirjaudutaan sisään</string>
+    <string name="login_error_missing_server">Anna palvelimen osoite</string>
+    <string name="login_error_missing_email">Anna sähköpostisi</string>
+    <string name="login_error_missing_password">Anna salasanasi</string>
+    <string name="login_error_invalid_credentials">Väärä sähköposti tai salasana. Yritä uudelleen.</string>
+    <string name="login_error_invalid_address">Anna osoite muodossa https://tracker.example.org</string>
+    <string name="login_error_https_required">Käytä https://-osoitetta</string>
+    <string name="login_error_check_address">Tarkista osoite</string>
+    <string name="login_error_unreachable">Ei yhteyttä palvelimeen %1$s. Tarkista yhteytesi tai palvelimen osoite.</string>
+    <string name="login_error_not_tracker">%1$s ei näytä olevan seurantapalvelin.</string>
+    <string name="login_error_too_many_tries">Liian monta yritystä. Odota minuutti ja yritä sitten uudelleen.</string>
+    <string name="login_error_server">Kirjautuminen ei onnistunut. Yritä uudelleen.</string>
+    <string name="login_again_title">Kirjaudu uudelleen</string>
+    <string name="login_again_subtitle">Käyttäjänä %1$s</string>
+    <string name="login_again_button">Kirjaudu ja jatka raportointia</string>
+    <string name="login_trip_open_title">Matkasi on vielä kesken</string>
+    <string name="login_trip_open_message">Raportointi loppui, kun istuntosi päättyi. Kirjaudu sisään, niin raportointi jatkuu linjalla %1$s.</string>
+    <string name="login_server_managed">Liikennöitsijäsi asettama.</string>
+    <string name="login_server_managed_invalid">Liikennöitsijäsi palvelinasetus ei ole kelvollinen osoite, joten kirjoita osoite tähän.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Käytetäänkö palvelinta %1$s?</string>
+    <string name="server_setup_confirm_message">Jatka vain, jos liikennöitsijäsi lähetti sinulle tämän linkin.</string>
+    <string name="server_setup_use">Käytä tätä palvelinta</string>
+    <string name="server_setup_cancel">Peruuta</string>
+    <string name="server_setup_refused_signed_in">Tämä puhelin on kirjautunut palvelimeen %1$s. Linkkiä ei käytetty.</string>
+    <string name="server_setup_refused_trip_open">Tässä puhelimessa on matka kesken. Linkkiä ei käytetty.</string>
+    <string name="server_setup_refused_managed">Liikennöitsijäsi asettaa tämän puhelimen palvelimen.</string>
+    <string name="server_setup_invalid">Tässä linkissä ei ole palvelimen osoitetta, jota sovellus voi käyttää.</string>
+    <string name="server_setup_ok">OK</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Palvelimen osoite</string>
+    <string name="restriction_server_url_description">Liikennöitsijän seurantapalvelin, https://-osoite. Kuljettajat kirjautuvat siihen eivätkä voi vaihtaa sitä.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Ohita</string>
+    <string name="welcome_next">Seuraava</string>
+    <string name="welcome_continue">Jatka</string>
+    <!-- Read by TalkBack, so it is spelt out rather than written "1/3", which can be read as a fraction. -->
+    <string name="welcome_step">Vaihe %1$d, yhteensä %2$d</string>
+    <string name="welcome_riders_title">Matkustajat näkevät sinun tulevan</string>
+    <string name="welcome_riders_body">Aloita matka, niin matkustajat näkevät ajoneuvosi kartallaan. Lopeta matka, kun olet valmis.</string>
+    <string name="welcome_riders_picture">Kolme matkustajaa pysäkillä näkee ajoneuvosi tulevan.</string>
+    <string name="welcome_pieces_title">Ajoneuvo, linja, vuoro</string>
+    <string name="welcome_pieces_body">Valitse ne ja aloita napauttamalla vuoroasi. Lopeta matka, kun olet valmis.</string>
+    <string name="welcome_pieces_vehicle_hint">Ajoneuvon numero</string>
+    <string name="welcome_pieces_route_hint">Linjakilven numero</string>
+    <string name="welcome_pieces_run_hint">Napautus aloittaa matkan</string>
+    <string name="welcome_pieces_live">Matkustajat näkevät sinut</string>
+    <string name="welcome_pieces_finish">Kun olet valmis</string>
+    <string name="welcome_habits_title">Pidä raportointi käynnissä</string>
+    <string name="welcome_habits_body">Tee nämä 3 asiaa joka matkalla.</string>
+    <string name="welcome_habits_location">Salli sijainti aina</string>
+    <string name="welcome_habits_location_why">Jotta raportointi voi käynnistyä itsestään uudelleen</string>
+    <string name="welcome_habits_charge">Pidä puhelin latauksessa</string>
+    <string name="welcome_habits_charge_why">Näyttö pysyy päällä latauksen aikana</string>
+    <string name="welcome_habits_open">Jätä sovellus auki</string>
+    <string name="welcome_habits_open_why">Älä sulje sitä pyyhkäisemällä matkan aikana</string>
+    <string name="welcome_habits_if_stops">Jos raportointi pysähtyy</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Napauta vuoroasi</string>
+    <string name="tip_run_board_text">Napauta sitten %1$s. Siitä lähtien matkustajat näkevät ajoneuvosi.</string>
+    <string name="tip_sent_count_title">Lähetetyt raportit</string>
+    <string name="tip_sent_count_text">Luku kasvaa niin kauan kuin matkustajat näkevät sinut. Ei kenttää? Jatka ajoa. Raportit tallennetaan ja lähetetään myöhemmin.</string>
+    <string name="tip_got_it">Selvä</string>
+    <string name="first_trip_done_title">Ensimmäinen matka tehty</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="one">raportti lähetetty</item>
+        <item quantity="other">raporttia lähetetty</item>
+    </plurals>
+    <string name="first_trip_done_text">Matkustajat näkivät ajoneuvosi.</string>
+    <string name="first_trip_done_ok">OK</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Kieli: %1$s</string>
+    <string name="language_row_phone_note">Koskee koko puhelinta, vaihdetaan puhelimen asetuksista</string>
+    <string name="language_list_title">Kieli</string>
+    <string name="language_list_cancel">Peruuta</string>
+
+    <!-- Help -->
+    <string name="help_title">Ohje</string>
+    <string name="help_welcome_again">Näytä esittely uudelleen</string>
+    <string name="help_welcome_again_detail">3 lyhyttä näkymää</string>
+    <string name="help_section_status">Tilakortissa</string>
+    <string name="help_status_on_time">Olet aikataulussa.</string>
+    <string name="help_status_late">Aikataulusta jäljessä.</string>
+    <string name="help_status_early">Aikataulua edellä. Matkustajat voivat jäädä kyydistä.</string>
+    <string name="help_status_off_schedule">Kaukana aikataulusta. Tarkista, että valitsit oikean vuoron.</string>
+    <string name="help_status_off_route">Kartalla poissa linjan reitiltä.</string>
+    <string name="help_status_waiting_for_gps">Puhelin etsii sijaintiaan.</string>
+    <string name="help_status_no_schedule">Tällä vuorolla ei ole aikoja. Matkustajat näkevät sinut silti.</string>
+    <string name="help_waiting">Tallennettu ilman yhteyttä. Ne lähetetään, kun yhteys palaa.</string>
+    <string name="help_waiting_never">Tallennettu toisella kirjautumisella, joten tämä kirjautuminen ei voi lähettää niitä.</string>
+    <string name="help_section_problems">Kortin alla ja ilmoituksissa</string>
+    <string name="help_problem_no_network">Jatka ajoa. Raportit tallennetaan ja lähetetään myöhemmin.</string>
+    <string name="help_problem_no_gps">Matkustajat näkevät viimeisimmän sijaintisi, kunnes GPS palaa.</string>
+    <string name="help_problem_clock_skew">Ota automaattinen aika käyttöön puhelimen asetuksista.</string>
+    <string name="help_problem_reports_refused">Palvelin ei ota vastaan tämän ajoneuvon raportteja. Kysy ajojärjestelijältä.</string>
+    <string name="help_problem_signed_out">Raportointi on pysähtynyt. Kirjaudu sisään jatkaaksesi. Matkasi on vielä kesken.</string>
+    <string name="help_problem_reports_paused">Ilmoitus. Avaa sovellus, niin raportointi jatkuu.</string>
+    <string name="help_section_about">Tietoja</string>
+    <string name="help_version">Versio</string>
+    <string name="help_server">Palvelin</string>
+    <string name="help_share">Jaa vianmääritystiedot</string>
+    <string name="help_share_detail">Lähettää sovelluksen version, puhelimen mallin, palvelimen, sovelluksen luvat ja sen viimeaikaiset ongelmat, jotka se säilyttää vain käynnissä ollessaan. Ei sijainteja, ei kirjautumistietoja, ei sähköpostia.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Siirry ylös</string>
+    <string name="setup_trip_so_far">Valinnat tähän asti</string>
+    <string name="setup_bus">Ajoneuvo</string>
+    <string name="setup_route">Linja %1$s</string>
+    <string name="setup_step_route">Linja</string>
+    <string name="setup_step_run">Vuoro</string>
+    <string name="setup_clear_search">Tyhjennä haku</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Tili</string>
+    <string name="account_version">Versio %1$s</string>
+    <string name="account_sign_out">Kirjaudu ulos</string>
+    <string name="account_sign_out_title">Kirjaudutaanko ulos?</string>
+    <string name="account_sign_out_message">Seuraava kuljettaja voi kirjautua sisään tällä puhelimella.</string>
+    <string name="account_sign_out_cancel">Peruuta</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Valitse ajoneuvosi</string>
+    <string name="vehicles_empty">Sinulle ei ole määritetty ajoneuvoja</string>
+    <string name="vehicles_empty_detail">Pyydä ajojärjestelijää määrittämään sinulle ajoneuvo ja tarkista sitten uudelleen.</string>
+    <string name="vehicles_check_again">Tarkista uudelleen</string>
+    <string name="vehicles_error_message">Ajoneuvojasi ei voitu ladata</string>
+    <string name="vehicles_error_detail">Tarkista yhteytesi ja yritä uudelleen.</string>
+    <string name="vehicles_retry_button">Yritä uudelleen</string>
+    <string name="vehicles_search_label">Ajoneuvon numero</string>
+    <string name="vehicles_search_no_matches">Haulla %1$s ei löytynyt ajoneuvoa</string>
+    <string name="vehicles_search_no_matches_detail">Tarkista ajoneuvon kylkinumero.</string>
+    <string name="vehicles_section_favorites">Suosikit</string>
+    <string name="vehicles_section_recent">Viimeisimmät</string>
+    <string name="vehicles_section_all">Kaikki ajoneuvot</string>
+    <string name="vehicles_section_matches">Hakutulokset</string>
+    <string name="vehicles_tile_favorite">Suosikki</string>
+    <string name="vehicles_favorite_description">Lisää %1$s suosikkeihin</string>
+    <string name="vehicles_unfavorite_description">Poista %1$s suosikeista</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Valitse linja</string>
+    <string name="routes_search_label">Linjan numero tai nimi</string>
+    <string name="routes_section_recent">Viimeisimmät</string>
+    <string name="routes_section_all">Kaikki linjat</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Kaikki linjat · %1$d</item>
+        <item quantity="other">Kaikki linjat · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Hakutulokset</string>
+    <string name="routes_search_no_matches">Haulla %1$s ei löytynyt linjaa</string>
+    <string name="routes_search_no_matches_detail">Hae linjakilven numerolla tai osalla nimeä.</string>
+    <string name="routes_empty">Aikataulussa ei ole linjoja</string>
+    <string name="routes_empty_detail">Pyydä liikennöitsijäsi ylläpitäjää tarkistamaan aikataulu.</string>
+    <string name="routes_check_again">Tarkista uudelleen</string>
+    <string name="routes_error_message">Linjoja ei voitu ladata</string>
+    <string name="routes_error_detail">Tarkista yhteytesi ja yritä uudelleen.</string>
+    <string name="routes_no_schedule">Tällä palvelimella ei ole vielä aikataulua</string>
+    <string name="routes_no_schedule_detail">Ylläpitäjän on ladattava aikataulu, ennen kuin matkoja voi aloittaa. Kerro asiasta liikennöitsijäsi ylläpitäjälle.</string>
+    <string name="routes_retry_button">Yritä uudelleen</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Valitse vuoro</string>
+    <string name="runs_empty">Linjalla %1$s ei ole tänään vuoroja</string>
+    <string name="runs_empty_unnamed">Tällä linjalla ei ole tänään vuoroja</string>
+    <string name="runs_empty_detail">Valitse toinen linja tai tarkista uudelleen huomenna.</string>
+    <string name="runs_choose_another_route">Valitse toinen linja</string>
+    <string name="runs_badge_now">Nyt</string>
+    <string name="runs_badge_next">Seuraava</string>
+    <string name="runs_direction">Suunta %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Vuoro %1$s</string>
+    <string name="runs_row_block">Kierto %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Aloitetaan…</string>
+    <string name="runs_start_title">Aloitetaanko %1$s vuoro?</string>
+    <string name="runs_start_message">Linja %1$s, suunta %2$s, ajoneuvo %3$s.</string>
+    <string name="runs_start_message_no_headsign">Linja %1$s, ajoneuvo %2$s.</string>
+    <string name="runs_start_message_unnamed">Suunta %1$s, ajoneuvo %2$s.</string>
+    <string name="runs_start_message_vehicle">Ajoneuvo %1$s.</string>
+    <string name="runs_start_confirm">Aloita matka</string>
+    <string name="runs_start_cancel">Peruuta</string>
+    <string name="runs_error_message">Vuoroja ei voitu ladata</string>
+    <string name="runs_error_detail">Tarkista yhteytesi ja yritä uudelleen.</string>
+    <string name="runs_retry_button">Yritä uudelleen</string>
+    <string name="runs_error_not_assigned">Ajoneuvoa %1$s ei ole määritetty sinulle.</string>
+    <string name="runs_change_bus">Vaihda ajoneuvo</string>
+    <string name="runs_error_trip_active">Sinulla on jo matka käynnissä. Lopeta se, ennen kuin aloitat uuden.</string>
+    <string name="runs_error_vehicle_busy">Toisella kuljettajalla on matka käynnissä ajoneuvolla %1$s. Valitse toinen ajoneuvo tai kysy ajojärjestelijältä.</string>
+    <string name="runs_error_vehicle_inactive">Ajoneuvo %1$s on poissa liikenteestä. Valitse toinen ajoneuvo.</string>
+    <string name="runs_error_previous_trip_not_ended">Edellistä matkaasi ei vielä saatu lopetettua. Tarkista yhteytesi ja yritä uudelleen.</string>
+    <string name="runs_error_network">Ei yhteyttä palvelimeen. Tarkista yhteytesi.</string>
+    <string name="runs_error_no_geometry">Tällä vuorolla ei ole seurattavaa reittiä eikä pysäkkejä. Valitse toinen vuoro.</string>
+    <string name="runs_error_trip_not_active">Aikataulu on vaihtunut uuteen päivään.</string>
+    <string name="runs_reload_button">Lataa uudelleen</string>
+    <string name="runs_error_other">Matkaa ei voitu aloittaa.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d lähetetty</item>
+        <item quantity="other">%1$d lähetetty</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Näytä matkan tiedot</string>
+    <string name="tracking_end_trip_button">Lopeta matka</string>
+    <string name="tracking_end_trip_ending">Lopetetaan…</string>
+    <string name="tracking_occupancy_question">Kuinka täynnä ajoneuvo on?</string>
+    <string name="tracking_occupancy_many_seats">Paikkoja vapaana</string>
+    <string name="tracking_occupancy_few_seats">Vähän paikkoja</string>
+    <string name="tracking_occupancy_standing">Seisomapaikkoja</string>
+    <string name="tracking_occupancy_full">Täynnä</string>
+    <string name="tracking_occupancy_clear">Poista valinta</string>
+    <string name="tracking_fact_run">Vuoro</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Raportit</string>
+    <string name="tracking_reports_reporting">Raportoidaan</string>
+    <string name="tracking_reports_not_reporting">Ei raportoida</string>
+    <string name="tracking_reports_no_gps">Ei GPS:ää</string>
+    <string name="tracking_reports_stopped">Raportointi pysähtyi</string>
+    <string name="tracking_fact_street_map">Katukartta</string>
+    <string name="tracking_street_map_ready">Valmis</string>
+    <string name="tracking_street_map_downloading">Ladataan · %1$d %%</string>
+    <string name="tracking_street_map_not_downloaded">Ei vielä ladattu</string>
+    <string name="tracking_street_map_no_space">Tallennustila ei riitä</string>
+    <string name="tracking_street_map_unusable">Ei käyttökelpoinen</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d pysäkki ohitettu</item>
+        <item quantity="other">%1$d pysäkkiä ohitettu</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">laajennettu</string>
+    <string name="tracking_stops_passed_collapsed">tiivistetty</string>
+    <string name="tracking_end_trip_dialog_title">Lopetetaanko matka?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Raportointi loppuu, ja %2$s vuoro linjalla %1$s merkitään ajetuksi. %3$d raportti lähetettiin.</item>
+        <item quantity="other">Raportointi loppuu, ja %2$s vuoro linjalla %1$s merkitään ajetuksi. %3$d raporttia lähetettiin.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Raportointi loppuu, ja tämä vuoro merkitään ajetuksi. %1$d raportti lähetettiin.</item>
+        <item quantity="other">Raportointi loppuu, ja tämä vuoro merkitään ajetuksi. %1$d raporttia lähetettiin.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Lopeta matka</string>
+    <string name="tracking_end_trip_dialog_cancel">Jatka ajoa</string>
+    <string name="tracking_end_trip_error_title">Matkaa ei vielä lopetettu</string>
+    <string name="tracking_end_trip_error_message">Palvelin ei vahvistanut lopetusta. Tarkista kuuluvuus ja yritä uudelleen tai lopeta raportointi tällä puhelimella nyt.</string>
+    <string name="tracking_end_trip_error_retry">Yritä uudelleen</string>
+    <string name="tracking_end_trip_error_end_locally">Lopeta tällä puhelimella</string>
+    <string name="tracking_reauth_button">Kirjaudu sisään</string>
+    <string name="tracking_problem_no_network">Ei yhteyttä</string>
+    <string name="tracking_problem_no_network_detail">Matkustajat eivät näe sinua</string>
+    <string name="tracking_problem_no_gps">Ei GPS-signaalia</string>
+    <string name="tracking_problem_no_gps_detail">Sijainti tauolla</string>
+    <string name="tracking_problem_clock_skew">Puhelimen kello on väärässä</string>
+    <string name="tracking_problem_clock_skew_detail">Aseta aika automaattisesti</string>
+    <string name="tracking_problem_reports_refused">Raportit hylätty</string>
+    <string name="tracking_problem_reports_refused_detail">Kysy ajojärjestelijältä</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d raportti odottaa yhteyttä</item>
+        <item quantity="other">%1$,d raporttia odottaa yhteyttä</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d raportti jää lähettämättä</item>
+        <item quantity="other">%1$,d raporttia jää lähettämättä</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Kirjauduttu ulos</string>
+    <string name="tracking_signed_out_message">Raportointi on pysähtynyt. Matkasi on vielä kesken.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Aikataulussa</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d min myöhässä</item>
+        <item quantity="other">%1$d min myöhässä</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d min etuajassa</item>
+        <item quantity="other">%1$d min etuajassa</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Kaukana aikataulusta</string>
+    <string name="tracking_adherence_right_run">Onko tämä oikea vuoro?</string>
+    <string name="tracking_adherence_off_schedule_next">Seuraava %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Poissa reitiltä · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Poissa reitiltä</string>
+    <string name="tracking_adherence_next_stop">Seuraava</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">Odotetaan GPS:ää</string>
+    <string name="tracking_adherence_from">Lähtö</string>
+    <string name="tracking_adherence_run">%1$s vuoro</string>
+    <string name="tracking_adherence_run_vehicle">%1$s vuoro · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Ei aikataulua</string>
+    <string name="tracking_adherence_no_schedule_riders">Matkustajat näkevät sinut silti</string>
+    <string name="tracking_adherence_no_schedule_detail">Tällä vuorolla ei ole aikoja</string>
+    <string name="tracking_map_recenter">Keskitä</string>
+    <string name="tracking_map_downloading">Ladataan karttaa, %1$d %%</string>
+    <string name="tracking_map_no_space">Tallennustila ei riitä kartalle</string>
+    <string name="tracking_map_retrying">Karttaa ei vielä ladattu, yritetään uudelleen</string>
+    <string name="tracking_map_retry_on_open">Karttaa ei ladattu, yritetään uudelleen, kun sovellus avataan seuraavan kerran</string>
+    <string name="tracking_map_unusable">Karttatiedosto ei ole käyttökelpoinen, kerro liikennöitsijällesi</string>
+    <string name="tracking_map_needs_https">Karttalinkin on oltava https-osoite, kerro liikennöitsijällesi</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Jatketaanko matkaa?</string>
+    <string name="resume_message">Sovellus sulkeutui matkan aikana. Raportointi on tauolla, kunnes valitset.</string>
+    <string name="resume_route">Linja %1$s</string>
+    <string name="resume_run">%1$s vuoro</string>
+    <string name="resume_bus">Ajoneuvo %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Aloitettu %2$s, %1$d min sitten</item>
+        <item quantity="other">Aloitettu %2$s, %1$d min sitten</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Aloitettu %3$s, %1$d h %2$d min sitten</string>
+    <string name="resume_button">Jatka matkaa</string>
+    <string name="resume_end_trip_button">Lopeta matka</string>
+    <string name="resume_ending">Lopetetaan matkaa</string>
+    <string name="resume_loading">Ladataan matkaasi</string>
+    <string name="resume_end_failed">Palvelin ei vahvistanut matkan päättymistä. Yritä uudelleen tai lopeta matka vain tällä puhelimella.</string>
+    <string name="resume_end_failed_back">Älä lopeta matkaa</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Matkan raportointi</string>
+    <string name="tracking_notification_title">Linja %1$s · %2$s</string>
+    <string name="tracking_notification_next">Seuraava %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Kirjauduttu ulos. Kirjaudu sisään avaamalla sovellus.</string>
+    <string name="tracking_notification_reports_refused">Raportit hylätty. Kysy ajojärjestelijältä.</string>
+    <string name="tracking_notification_resume_title">Raportointi tauolla</string>
+    <string name="tracking_notification_resume_text">Avaa sovellus, niin raportointi jatkuu.</string>
+    <string name="tracking_notification_attention_channel_name">Matka vaatii huomiota</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Ennen kuin aloitat</string>
+    <string name="preflight_message">Sovellus tarvitsee nämä ajoneuvon %1$s raportointiin. Android kysyy niistä seuraavaksi yksi kerrallaan.</string>
+    <string name="preflight_location">Sijainti</string>
+    <string name="preflight_location_why">Jotta sovellus tietää, missä ajoneuvo on</string>
+    <string name="preflight_precise">Tarkka sijainti</string>
+    <string name="preflight_precise_why">Jotta matkustajat näkevät ajoneuvon oikealla pysäkillä</string>
+    <string name="preflight_background">Aina</string>
+    <string name="preflight_background_why">Jotta raportointi voi käynnistyä uudelleen, jos Android sulkee sovelluksen</string>
+    <string name="preflight_notifications">Ilmoitukset</string>
+    <string name="preflight_notifications_why">Jotta näet, että raportointi on päällä</string>
+    <string name="preflight_battery">Akku</string>
+    <string name="preflight_battery_why">Jotta Android ei pysäytä raportointia kesken matkan</string>
+    <string name="preflight_location_services">Sijaintipalvelut</string>
+    <string name="preflight_location_services_why">Sijainnin on oltava päällä koko puhelimessa</string>
+    <string name="preflight_allowed">Sallittu</string>
+    <string name="preflight_skipped">Ohitettu</string>
+    <string name="preflight_next">Seuraava</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Ei sallittu. Raportointi toimii silti.</string>
+    <string name="preflight_location_needed">Sijainti tarvitaan raportointiin</string>
+    <string name="preflight_approximate">Vain likimääräinen sijainti sallittiin</string>
+    <string name="preflight_try_again">Yritä uudelleen</string>
+    <string name="preflight_open_settings">Avaa asetukset</string>
+    <string name="preflight_continue">Jatka</string>
+</resources>

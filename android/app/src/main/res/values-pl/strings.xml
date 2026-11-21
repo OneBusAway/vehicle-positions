@@ -1,0 +1,408 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Polish, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Informal "ty" and impersonal forms, as Polish Android apps use ("Zaloguj się", "Spróbuj ponownie"); no gendered
+    past tense for the driver ("wybrałeś/wybrałaś" is avoided by rephrasing).
+    "Vehicle" is pojazd everywhere; "route" is linia, and its line on the map is trasa, so "off route" is
+    "Poza trasą"; "run" is kurs; "trip" is przejazd; "block" is brygada; "stop" is przystanek; "report" is raport;
+    "dispatcher" is dyspozytor; "agency" is przewoźnik; "riders" are pasażerowie; "tap" is kliknij;
+    "late" is "min opóźnienia", "early" is "min przed czasem"; "fleet number" is numer taborowy.
+    Vehicle numbers, route names, headsigns and stop names arrive undeclined, so they follow a noun that takes the case:
+    "pojazd %1$s", "linia %1$s", "kierunek %1$s" (as Polish destination signs write it), "Następny: %1$s".
+    A run's start time follows "o": "kurs o %1$s".
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Zaloguj się</string>
+    <string name="login_subtitle">Użyj swojego konta kierowcy u tego przewoźnika.</string>
+    <string name="login_server_url_label">Adres serwera</string>
+    <string name="login_email_label">E-mail</string>
+    <string name="login_password_label">Hasło</string>
+    <string name="login_show_password">Pokaż hasło</string>
+    <string name="login_hide_password">Ukryj hasło</string>
+    <string name="login_server">Serwer</string>
+    <string name="login_change_server">Zmień</string>
+    <string name="login_button">Zaloguj się</string>
+    <string name="login_signing_in">Logowanie</string>
+    <string name="login_error_missing_server">Wpisz adres serwera</string>
+    <string name="login_error_missing_email">Wpisz swój e-mail</string>
+    <string name="login_error_missing_password">Wpisz swoje hasło</string>
+    <string name="login_error_invalid_credentials">Błędny e-mail lub hasło. Spróbuj ponownie.</string>
+    <string name="login_error_invalid_address">Wpisz adres, np. https://tracker.example.org</string>
+    <string name="login_error_https_required">Użyj adresu https://</string>
+    <string name="login_error_check_address">Sprawdź adres</string>
+    <string name="login_error_unreachable">Brak łączności z %1$s. Sprawdź połączenie lub adres serwera.</string>
+    <string name="login_error_not_tracker">%1$s nie wygląda na serwer śledzenia pojazdów.</string>
+    <string name="login_error_too_many_tries">Za dużo prób. Odczekaj minutę i spróbuj ponownie.</string>
+    <string name="login_error_server">Nie udało się zalogować. Spróbuj ponownie.</string>
+    <string name="login_again_title">Zaloguj się ponownie</string>
+    <string name="login_again_subtitle">Jako %1$s</string>
+    <string name="login_again_button">Zaloguj się, aby dalej wysyłać raporty</string>
+    <string name="login_trip_open_title">Twój przejazd jest nadal otwarty</string>
+    <string name="login_trip_open_message">Raporty zatrzymały się, gdy sesja wygasła. Zaloguj się, aby dalej wysyłać raporty na linii %1$s.</string>
+    <string name="login_server_managed">Ustawiony przez przewoźnika.</string>
+    <string name="login_server_managed_invalid">Ustawienie serwera od przewoźnika nie jest poprawnym adresem, więc wpisz go tutaj.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Użyć serwera %1$s?</string>
+    <string name="server_setup_confirm_message">Kontynuuj tylko wtedy, gdy ten link wysłał ci przewoźnik.</string>
+    <string name="server_setup_use">Użyj tego serwera</string>
+    <string name="server_setup_cancel">Anuluj</string>
+    <string name="server_setup_refused_signed_in">Ten telefon jest zalogowany na serwerze %1$s. Link nie został użyty.</string>
+    <string name="server_setup_refused_trip_open">Na tym telefonie jest otwarty przejazd. Link nie został użyty.</string>
+    <string name="server_setup_refused_managed">Serwer na tym telefonie ustawia twój przewoźnik.</string>
+    <string name="server_setup_invalid">Ten link nie zawiera adresu serwera, którego aplikacja może użyć.</string>
+    <string name="server_setup_ok">OK</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Adres serwera</string>
+    <string name="restriction_server_url_description">Serwer śledzenia przewoźnika, adres https://. Kierowcy logują się do niego i nie mogą go zmienić.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Pomiń</string>
+    <string name="welcome_next">Dalej</string>
+    <string name="welcome_continue">Kontynuuj</string>
+    <string name="welcome_step">Krok %1$d z %2$d</string>
+    <string name="welcome_riders_title">Pasażerowie widzą, jak nadjeżdżasz</string>
+    <string name="welcome_riders_body">Rozpocznij przejazd, a pasażerowie zobaczą twój pojazd na mapie. Na koniec go zakończ.</string>
+    <string name="welcome_riders_picture">Trzech pasażerów na przystanku widzi, jak nadjeżdża twój pojazd.</string>
+    <string name="welcome_pieces_title">Pojazd, linia, kurs</string>
+    <string name="welcome_pieces_body">Wybierz je, potem kliknij swój kurs, aby zacząć. Na koniec zakończ przejazd.</string>
+    <string name="welcome_pieces_vehicle_hint">Numer na pojeździe</string>
+    <string name="welcome_pieces_route_hint">Numer na tablicy</string>
+    <string name="welcome_pieces_run_hint">Kliknięcie rozpoczyna przejazd</string>
+    <string name="welcome_pieces_live">Pasażerowie cię widzą</string>
+    <string name="welcome_pieces_finish">Gdy skończysz</string>
+    <string name="welcome_habits_title">Raporty bez przerw</string>
+    <string name="welcome_habits_body">Pamiętaj o tych 3 rzeczach podczas każdego przejazdu.</string>
+    <string name="welcome_habits_location">Zawsze zezwalaj na lokalizację</string>
+    <string name="welcome_habits_location_why">Aby raporty mogły same ruszyć ponownie</string>
+    <string name="welcome_habits_charge">Trzymaj telefon na ładowarce</string>
+    <string name="welcome_habits_charge_why">Ekran nie gaśnie podczas ładowania</string>
+    <string name="welcome_habits_open">Zostaw aplikację otwartą</string>
+    <string name="welcome_habits_open_why">Nie wyrzucaj jej z ostatnich aplikacji podczas przejazdu</string>
+    <string name="welcome_habits_if_stops">Gdy raporty się zatrzymają</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Kliknij swój kurs</string>
+    <string name="tip_run_board_text">Potem kliknij „%1$s”. Od tej chwili pasażerowie widzą twój pojazd.</string>
+    <string name="tip_sent_count_title">Wysłane raporty</string>
+    <string name="tip_sent_count_text">Ta liczba rośnie, gdy pasażerowie cię widzą. Brak zasięgu? Jedź dalej. Raporty zostaną zapisane i wysłane później.</string>
+    <string name="tip_got_it">Rozumiem</string>
+    <string name="first_trip_done_title">Pierwszy przejazd zakończony</string>
+    <!-- The words agree with the count shown before them: 1 wysłany raport, 2 wysłane raporty, 5 wysłanych raportów. -->
+    <plurals name="first_trip_done_reports">
+        <item quantity="one">wysłany raport</item>
+        <item quantity="few">wysłane raporty</item>
+        <item quantity="many">wysłanych raportów</item>
+        <item quantity="other">wysłanego raportu</item>
+    </plurals>
+    <string name="first_trip_done_text">Pasażerowie widzieli twój pojazd.</string>
+    <string name="first_trip_done_ok">OK</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Język: %1$s</string>
+    <string name="language_row_phone_note">Ustawiany dla całego telefonu, w jego ustawieniach</string>
+    <string name="language_list_title">Język</string>
+    <string name="language_list_cancel">Anuluj</string>
+
+    <!-- Help -->
+    <string name="help_title">Pomoc</string>
+    <string name="help_welcome_again">Pokaż powitanie jeszcze raz</string>
+    <string name="help_welcome_again_detail">3 krótkie ekrany</string>
+    <string name="help_section_status">Na karcie statusu</string>
+    <string name="help_status_on_time">Jedziesz zgodnie z rozkładem.</string>
+    <string name="help_status_late">Masz opóźnienie względem rozkładu.</string>
+    <string name="help_status_early">Jedziesz przed czasem. Pasażerowie mogą nie zdążyć.</string>
+    <string name="help_status_off_schedule">Duże odstępstwo od rozkładu. Sprawdź, czy wybrany kurs jest właściwy.</string>
+    <string name="help_status_off_route">Pojazd jest poza trasą linii na mapie.</string>
+    <string name="help_status_waiting_for_gps">Telefon ustala swoją pozycję.</string>
+    <string name="help_status_no_schedule">Ten kurs nie ma godzin odjazdów. Pasażerowie i tak cię widzą.</string>
+    <string name="help_waiting">Zapisane bez połączenia. Zostaną wysłane, gdy połączenie wróci.</string>
+    <string name="help_waiting_never">Zapisane przy innym logowaniu, więc to logowanie nie może ich wysłać.</string>
+    <string name="help_section_problems">Pod kartą i w powiadomieniach</string>
+    <string name="help_problem_no_network">Jedź dalej. Raporty zostaną zapisane i wysłane później.</string>
+    <string name="help_problem_no_gps">Pasażerowie widzą twoją ostatnią pozycję, dopóki sygnał nie wróci.</string>
+    <string name="help_problem_clock_skew">W ustawieniach telefonu włącz automatyczne ustawianie godziny.</string>
+    <string name="help_problem_reports_refused">Serwer nie przyjmuje raportów z tego pojazdu. Zapytaj dyspozytora.</string>
+    <string name="help_problem_signed_out">Raporty się zatrzymały. Zaloguj się, aby kontynuować. Twój przejazd jest nadal otwarty.</string>
+    <string name="help_problem_reports_paused">Powiadomienie. Otwórz aplikację, aby dalej wysyłać raporty.</string>
+    <string name="help_section_about">Informacje</string>
+    <string name="help_version">Wersja</string>
+    <string name="help_server">Serwer</string>
+    <string name="help_share">Udostępnij dane diagnostyczne</string>
+    <string name="help_share_detail">Wysyła wersję aplikacji, model telefonu, serwer, uprawnienia aplikacji i jej ostatnie problemy, które przechowuje tylko podczas działania. Bez pozycji, danych logowania i adresu e-mail.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Przejdź wyżej</string>
+    <string name="setup_trip_so_far">Wybrane do tej pory</string>
+    <string name="setup_bus">Pojazd</string>
+    <string name="setup_route">Linia %1$s</string>
+    <string name="setup_step_route">Linia</string>
+    <string name="setup_step_run">Kurs</string>
+    <string name="setup_clear_search">Wyczyść wyszukiwanie</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Konto</string>
+    <string name="account_version">Wersja %1$s</string>
+    <string name="account_sign_out">Wyloguj się</string>
+    <string name="account_sign_out_title">Wylogować się?</string>
+    <string name="account_sign_out_message">Następny kierowca może się wtedy zalogować na tym telefonie.</string>
+    <string name="account_sign_out_cancel">Anuluj</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Wybierz pojazd</string>
+    <string name="vehicles_empty">Nie masz przypisanych pojazdów</string>
+    <string name="vehicles_empty_detail">Poproś dyspozytora o przypisanie pojazdu, potem sprawdź ponownie.</string>
+    <string name="vehicles_check_again">Sprawdź ponownie</string>
+    <string name="vehicles_error_message">Nie udało się wczytać pojazdów</string>
+    <string name="vehicles_error_detail">Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="vehicles_retry_button">Spróbuj ponownie</string>
+    <string name="vehicles_search_label">Numer pojazdu</string>
+    <string name="vehicles_search_no_matches">Żaden pojazd nie pasuje do %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Sprawdź numer taborowy na pojeździe.</string>
+    <string name="vehicles_section_favorites">Ulubione</string>
+    <string name="vehicles_section_recent">Ostatnie</string>
+    <string name="vehicles_section_all">Wszystkie pojazdy</string>
+    <string name="vehicles_section_matches">Wyniki</string>
+    <string name="vehicles_tile_favorite">Ulubiony</string>
+    <string name="vehicles_favorite_description">Dodaj %1$s do ulubionych</string>
+    <string name="vehicles_unfavorite_description">Usuń %1$s z ulubionych</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Wybierz linię</string>
+    <string name="routes_search_label">Numer lub nazwa linii</string>
+    <string name="routes_section_recent">Ostatnie</string>
+    <string name="routes_section_all">Wszystkie linie</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Wszystkie linie · %1$d</item>
+        <item quantity="few">Wszystkie linie · %1$d</item>
+        <item quantity="many">Wszystkie linie · %1$d</item>
+        <item quantity="other">Wszystkie linie · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Wyniki</string>
+    <string name="routes_search_no_matches">Żadna linia nie pasuje do %1$s</string>
+    <string name="routes_search_no_matches_detail">Wpisz numer z tablicy albo część nazwy.</string>
+    <string name="routes_empty">W rozkładzie nie ma linii</string>
+    <string name="routes_empty_detail">Poproś administratora przewoźnika o sprawdzenie rozkładu.</string>
+    <string name="routes_check_again">Sprawdź ponownie</string>
+    <string name="routes_error_message">Nie udało się wczytać linii</string>
+    <string name="routes_error_detail">Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="routes_no_schedule">Na tym serwerze nie ma jeszcze rozkładu</string>
+    <string name="routes_no_schedule_detail">Rozkład musi zostać wgrany, zanim będzie można rozpocząć przejazdy. Powiadom administratora przewoźnika.</string>
+    <string name="routes_retry_button">Spróbuj ponownie</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Wybierz kurs</string>
+    <string name="runs_empty">Dziś brak kursów na linii %1$s</string>
+    <string name="runs_empty_unnamed">Dziś brak kursów na tej linii</string>
+    <string name="runs_empty_detail">Wybierz inną linię albo sprawdź ponownie jutro.</string>
+    <string name="runs_choose_another_route">Wybierz inną linię</string>
+    <string name="runs_badge_now">Teraz</string>
+    <string name="runs_badge_next">Następny</string>
+    <string name="runs_direction">Kierunek %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Kurs %1$s</string>
+    <string name="runs_row_block">Brygada %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Rozpoczynanie…</string>
+    <string name="runs_start_title">Rozpocząć kurs o %1$s?</string>
+    <string name="runs_start_message">Linia %1$s, kierunek %2$s, pojazd %3$s.</string>
+    <string name="runs_start_message_no_headsign">Linia %1$s, pojazd %2$s.</string>
+    <string name="runs_start_message_unnamed">Kierunek %1$s, pojazd %2$s.</string>
+    <string name="runs_start_message_vehicle">Pojazd %1$s.</string>
+    <string name="runs_start_confirm">Rozpocznij przejazd</string>
+    <string name="runs_start_cancel">Anuluj</string>
+    <string name="runs_error_message">Nie udało się wczytać kursów</string>
+    <string name="runs_error_detail">Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="runs_retry_button">Spróbuj ponownie</string>
+    <string name="runs_error_not_assigned">Nie masz przypisanego pojazdu %1$s.</string>
+    <string name="runs_change_bus">Zmień pojazd</string>
+    <string name="runs_error_trip_active">Masz już trwający przejazd. Zakończ go, zanim zaczniesz kolejny.</string>
+    <string name="runs_error_vehicle_busy">Inny kierowca jedzie już pojazdem %1$s. Wybierz inny pojazd albo zapytaj dyspozytora.</string>
+    <string name="runs_error_vehicle_inactive">Pojazd %1$s jest wyłączony z ruchu. Wybierz inny pojazd.</string>
+    <string name="runs_error_previous_trip_not_ended">Poprzedniego przejazdu nie udało się jeszcze zakończyć. Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="runs_error_network">Brak łączności z serwerem. Sprawdź połączenie.</string>
+    <string name="runs_error_no_geometry">Ten kurs nie ma trasy ani przystanków. Wybierz inny kurs.</string>
+    <string name="runs_error_trip_not_active">Rozkład przeszedł już na nowy dzień.</string>
+    <string name="runs_reload_button">Odśwież</string>
+    <string name="runs_error_other">Nie udało się rozpocząć przejazdu.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d wysłany</item>
+        <item quantity="few">%1$d wysłane</item>
+        <item quantity="many">%1$d wysłanych</item>
+        <item quantity="other">%1$d wysłanego</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Pokaż szczegóły przejazdu</string>
+    <string name="tracking_end_trip_button">Zakończ przejazd</string>
+    <string name="tracking_end_trip_ending">Kończenie…</string>
+    <string name="tracking_occupancy_question">Jak zapełniony jest pojazd?</string>
+    <string name="tracking_occupancy_many_seats">Wolne miejsca</string>
+    <string name="tracking_occupancy_few_seats">Mało miejsc</string>
+    <string name="tracking_occupancy_standing">Tylko stojące</string>
+    <string name="tracking_occupancy_full">Pełny</string>
+    <string name="tracking_occupancy_clear">Wyczyść</string>
+    <string name="tracking_fact_run">Kurs</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Raporty</string>
+    <string name="tracking_reports_reporting">Wysyłane</string>
+    <string name="tracking_reports_not_reporting">Niewysyłane</string>
+    <string name="tracking_reports_no_gps">Brak GPS</string>
+    <string name="tracking_reports_stopped">Raporty zatrzymane</string>
+    <string name="tracking_fact_street_map">Mapa ulic</string>
+    <string name="tracking_street_map_ready">Gotowa</string>
+    <string name="tracking_street_map_downloading">Pobieranie · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Jeszcze nie pobrano</string>
+    <string name="tracking_street_map_no_space">Za mało miejsca</string>
+    <string name="tracking_street_map_unusable">Nie do użytku</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d minięty przystanek</item>
+        <item quantity="few">%1$d minięte przystanki</item>
+        <item quantity="many">%1$d miniętych przystanków</item>
+        <item quantity="other">%1$d miniętego przystanku</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">rozwinięte</string>
+    <string name="tracking_stops_passed_collapsed">zwinięte</string>
+    <string name="tracking_end_trip_dialog_title">Zakończyć ten przejazd?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Raporty przestaną być wysyłane, a kurs linii %1$s o %2$s zostanie oznaczony jako wykonany. Wysłano %3$d raport.</item>
+        <item quantity="few">Raporty przestaną być wysyłane, a kurs linii %1$s o %2$s zostanie oznaczony jako wykonany. Wysłano %3$d raporty.</item>
+        <item quantity="many">Raporty przestaną być wysyłane, a kurs linii %1$s o %2$s zostanie oznaczony jako wykonany. Wysłano %3$d raportów.</item>
+        <item quantity="other">Raporty przestaną być wysyłane, a kurs linii %1$s o %2$s zostanie oznaczony jako wykonany. Wysłano %3$d raportu.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Raporty przestaną być wysyłane, a ten kurs zostanie oznaczony jako wykonany. Wysłano %1$d raport.</item>
+        <item quantity="few">Raporty przestaną być wysyłane, a ten kurs zostanie oznaczony jako wykonany. Wysłano %1$d raporty.</item>
+        <item quantity="many">Raporty przestaną być wysyłane, a ten kurs zostanie oznaczony jako wykonany. Wysłano %1$d raportów.</item>
+        <item quantity="other">Raporty przestaną być wysyłane, a ten kurs zostanie oznaczony jako wykonany. Wysłano %1$d raportu.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Zakończ przejazd</string>
+    <string name="tracking_end_trip_dialog_cancel">Jedź dalej</string>
+    <string name="tracking_end_trip_error_title">Przejazd nie został jeszcze zakończony</string>
+    <string name="tracking_end_trip_error_message">Serwer nie potwierdził zakończenia. Sprawdź zasięg i spróbuj ponownie albo od razu zatrzymaj raporty na tym telefonie.</string>
+    <string name="tracking_end_trip_error_retry">Spróbuj ponownie</string>
+    <string name="tracking_end_trip_error_end_locally">Zakończ na tym telefonie</string>
+    <string name="tracking_reauth_button">Zaloguj się</string>
+    <string name="tracking_problem_no_network">Brak połączenia</string>
+    <string name="tracking_problem_no_network_detail">Pasażerowie cię nie widzą</string>
+    <string name="tracking_problem_no_gps">Brak sygnału GPS</string>
+    <string name="tracking_problem_no_gps_detail">Pozycja wstrzymana</string>
+    <string name="tracking_problem_clock_skew">Zła godzina w telefonie</string>
+    <string name="tracking_problem_clock_skew_detail">Ustaw godzinę automatycznie</string>
+    <string name="tracking_problem_reports_refused">Raporty odrzucone</string>
+    <string name="tracking_problem_reports_refused_detail">Zapytaj dyspozytora</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d raport czeka na sieć</item>
+        <item quantity="few">%1$,d raporty czekają na sieć</item>
+        <item quantity="many">%1$,d raportów czeka na sieć</item>
+        <item quantity="other">%1$,d raportu czeka na sieć</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d raport nie zostanie wysłany</item>
+        <item quantity="few">%1$,d raporty nie zostaną wysłane</item>
+        <item quantity="many">%1$,d raportów nie zostanie wysłanych</item>
+        <item quantity="other">%1$,d raportu nie zostanie wysłane</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Wylogowano</string>
+    <string name="tracking_signed_out_message">Raporty się zatrzymały. Twój przejazd jest nadal otwarty.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Punktualnie</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d min opóźnienia</item>
+        <item quantity="few">%1$d min opóźnienia</item>
+        <item quantity="many">%1$d min opóźnienia</item>
+        <item quantity="other">%1$d min opóźnienia</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d min przed czasem</item>
+        <item quantity="few">%1$d min przed czasem</item>
+        <item quantity="many">%1$d min przed czasem</item>
+        <item quantity="other">%1$d min przed czasem</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Poza rozkładem</string>
+    <string name="tracking_adherence_right_run">Czy to właściwy kurs?</string>
+    <string name="tracking_adherence_off_schedule_next">Następny: %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Poza trasą · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Poza trasą</string>
+    <string name="tracking_adherence_next_stop">Następny</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">Oczekiwanie na GPS</string>
+    <!-- "First", agreeing with przystanek like Następny, since a stop name after "Z" would need declining. -->
+    <string name="tracking_adherence_from">Pierwszy</string>
+    <string name="tracking_adherence_run">Kurs o %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Kurs o %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Brak rozkładu</string>
+    <string name="tracking_adherence_no_schedule_riders">Pasażerowie i tak cię widzą</string>
+    <string name="tracking_adherence_no_schedule_detail">Ten kurs nie ma godzin odjazdów</string>
+    <string name="tracking_map_recenter">Wyśrodkuj</string>
+    <string name="tracking_map_downloading">Pobieranie mapy, %1$d%%</string>
+    <string name="tracking_map_no_space">Za mało miejsca na mapę</string>
+    <string name="tracking_map_retrying">Nie pobrano jeszcze mapy, aplikacja spróbuje ponownie</string>
+    <string name="tracking_map_retry_on_open">Nie pobrano mapy, aplikacja spróbuje ponownie przy następnym otwarciu</string>
+    <string name="tracking_map_unusable">Plik mapy nie nadaje się do użytku, powiadom przewoźnika</string>
+    <string name="tracking_map_needs_https">Link do mapy musi używać https, powiadom przewoźnika</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Wznowić przejazd?</string>
+    <string name="resume_message">Aplikacja zamknęła się w trakcie przejazdu. Raporty są wstrzymane do twojej decyzji.</string>
+    <string name="resume_route">Linia %1$s</string>
+    <string name="resume_run">Kurs o %1$s</string>
+    <string name="resume_bus">Pojazd %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Rozpoczęty %1$d min temu, o %2$s</item>
+        <item quantity="few">Rozpoczęty %1$d min temu, o %2$s</item>
+        <item quantity="many">Rozpoczęty %1$d min temu, o %2$s</item>
+        <item quantity="other">Rozpoczęty %1$d min temu, o %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Rozpoczęty %1$d godz. %2$d min temu, o %3$s</string>
+    <string name="resume_button">Wznów przejazd</string>
+    <string name="resume_end_trip_button">Zakończ przejazd</string>
+    <string name="resume_ending">Kończenie przejazdu</string>
+    <string name="resume_loading">Wczytywanie przejazdu</string>
+    <string name="resume_end_failed">Serwer nie potwierdził zakończenia przejazdu. Spróbuj ponownie albo zakończ go tylko na tym telefonie.</string>
+    <string name="resume_end_failed_back">Nie kończ przejazdu</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Raporty z przejazdu</string>
+    <string name="tracking_notification_title">Linia %1$s · %2$s</string>
+    <string name="tracking_notification_next">Następny: %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Wylogowano. Otwórz aplikację, aby się zalogować.</string>
+    <string name="tracking_notification_reports_refused">Raporty odrzucone. Zapytaj dyspozytora.</string>
+    <string name="tracking_notification_resume_title">Raporty wstrzymane</string>
+    <string name="tracking_notification_resume_text">Otwórz aplikację, aby dalej wysyłać raporty.</string>
+    <string name="tracking_notification_attention_channel_name">Przejazd wymaga uwagi</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Zanim zaczniesz</string>
+    <string name="preflight_message">Aplikacja potrzebuje tych rzeczy, aby wysyłać raporty z pojazdu %1$s. Android zaraz zapyta o każdą z nich.</string>
+    <string name="preflight_location">Lokalizacja</string>
+    <string name="preflight_location_why">Aby aplikacja wiedziała, gdzie jest pojazd</string>
+    <string name="preflight_precise">Dokładna lokalizacja</string>
+    <string name="preflight_precise_why">Aby pasażerowie widzieli pojazd na właściwym przystanku</string>
+    <string name="preflight_background">Zawsze</string>
+    <string name="preflight_background_why">Aby raporty mogły ruszyć ponownie, gdy Android zamknie aplikację</string>
+    <string name="preflight_notifications">Powiadomienia</string>
+    <string name="preflight_notifications_why">Aby było widać, że raporty są wysyłane</string>
+    <string name="preflight_battery">Bateria</string>
+    <string name="preflight_battery_why">Aby Android nie zatrzymał raportów w trakcie przejazdu</string>
+    <string name="preflight_location_services">Usługi lokalizacyjne</string>
+    <string name="preflight_location_services_why">Lokalizacja musi być włączona w całym telefonie</string>
+    <string name="preflight_allowed">Dozwolone</string>
+    <string name="preflight_skipped">Pominięte</string>
+    <string name="preflight_next">Następne</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Niedozwolone. Raporty i tak działają.</string>
+    <string name="preflight_location_needed">Lokalizacja jest potrzebna do wysyłania raportów</string>
+    <string name="preflight_approximate">Zezwolono tylko na przybliżoną lokalizację</string>
+    <string name="preflight_try_again">Spróbuj ponownie</string>
+    <string name="preflight_open_settings">Otwórz ustawienia</string>
+    <string name="preflight_continue">Kontynuuj</string>
+</resources>

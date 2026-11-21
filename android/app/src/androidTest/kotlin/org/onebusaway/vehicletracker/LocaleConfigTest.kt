@@ -11,10 +11,17 @@ import org.junit.runner.RunWith
 
 /**
  * The languages the app lists for Settings > Apps > Language, which Android reads from the locale config the build
- * generates from its values-<language> folders: English and Hindi, and in a debug build the two pseudolocales.
+ * generates from its values-<language> folders: English and each language the app is translated into, and in a debug
+ * build the two pseudolocales.
  */
 @RunWith(AndroidJUnit4::class)
 class LocaleConfigTest {
+    private val languages = setOf(
+        "en",
+        "hi",
+        "de", "es", "fi", "fil", "fr", "ht", "it", "om", "pl", "pt-BR", "sm", "so", "sw", "vi",
+    )
+
     @Test
     fun theAppListsItsLanguages_andInADebugBuildThePseudolocales() {
         assumeTrue("Android reads an app's languages from 13", Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
@@ -23,6 +30,6 @@ class LocaleConfigTest {
 
         assertEquals(LocaleConfig.STATUS_SUCCESS, config.status)
         val locales = checkNotNull(config.supportedLocales)
-        assertEquals(setOf("en", "hi", "en-XA", "ar-XB"), (0 until locales.size()).map { locales[it].toLanguageTag() }.toSet())
+        assertEquals(languages + setOf("en-XA", "ar-XB"), (0 until locales.size()).map { locales[it].toLanguageTag() }.toSet())
     }
 }
