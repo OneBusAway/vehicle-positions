@@ -22,6 +22,15 @@ const (
 	// gapRatioTop is the last tenth of the scheduled gap the kept totals count
 	// gaps by: 300% and over.
 	gapRatioTop = 30
+	// passingLateGrace is how much longer than its trip's scheduled run time
+	// a run may take after its last fix to reach a stop its trail never got
+	// to. A run still running, or ended, later than that is taken to have
+	// been left running by a driver who forgot to end it, and holds no place
+	// in the order at that stop after then. It is the 90 minutes the rest of
+	// the server lets a run be late: RIDER_SCHEDULE_LATE's default in rider
+	// mode, and how long after the day before's frequencies.txt window a run
+	// may leave and still be that day's (rider's runningLateGrace).
+	passingLateGrace = 90 * time.Minute
 )
 
 // directionGaps is one direction of a route's frequencies.txt service on the
@@ -253,6 +262,7 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 		}
 		rows := trip.Frequencies()
 		keys := stopKeys(trip.StopTimes)
+		open := arrives(trip) - departs(trip) + passingLateGrace
 		for i, key := range keys[:len(keys)-1] {
 			stop, ok := stops[key]
 			if !ok {
@@ -260,7 +270,7 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 			}
 			stop.schedule.addTrip(rows, dayStart, trip.StopTimes[i].Departure-trip.StopTimes[0].Departure)
 			for k, run := range tripRuns {
-				if p, served := runPassing(fixes[k], leftStopAt(trip, i), run); served {
+				if p, served := runPassing(fixes[k], leftStopAt(trip, i), run, open); served {
 					stop.passings = append(stop.passings, p)
 				}
 			}
@@ -270,26 +280,29 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 }
 
 // stopPassing is when a run left a stop: at when known, or else some time
-// from from up to to, with no end for a run still under way.
+// from from up to to.
 type stopPassing struct {
 	at, from, to time.Time
 }
 
 // between reports whether a passing not known could fall between a and b.
 func (p stopPassing) between(a, b time.Time) bool {
-	return p.from.Before(b) && (p.to.IsZero() || p.to.After(a))
+	return p.from.Before(b) && p.to.After(a)
 }
 
 // runPassing is when run got target metres along its trip's shape, from its
 // fixes placed on the shape. It is known when passedAt knows it, as On time
 // works out a departure. Otherwise the run got there between its last fix
 // short of target and its first fix past it, the trip's start standing in for
-// a fix before when the trail starts past target, and the trip's end, or no
-// end for a trip still running, for one after when the trail ends short of
-// it. served is false when the trail ends short of target and the trip ended
+// a fix before when the trail starts past target. When the trail ends short
+// of target, the run got there after its last fix, or its start when it sent
+// none, and before the trip's end, but no more than open after it: by then a
+// run on its way would have got there, so a trip left running, or ended hours
+// later, does not hold the stop's gaps unknown for the rest of the day.
+// served is false when the trail ends short of target and the trip ended
 // within reportFixWindow of its last fix: it ended early or turned short, and
 // did not serve the stop.
-func runPassing(fixes []placedFix, target float64, run TripSummary) (p stopPassing, served bool) {
+func runPassing(fixes []placedFix, target float64, run TripSummary, open time.Duration) (p stopPassing, served bool) {
 	if at, ok := passedAt(fixes, target); ok {
 		return stopPassing{at: at}, true
 	}
@@ -304,13 +317,13 @@ func runPassing(fixes []placedFix, target float64, run TripSummary) (p stopPassi
 	if len(fixes) > 0 {
 		p.from = fixes[len(fixes)-1].at
 	}
-	if run.EndTime == nil {
-		return p, true
-	}
-	if len(fixes) > 0 && run.EndTime.Sub(p.from) <= reportFixWindow {
+	if run.EndTime != nil && len(fixes) > 0 && run.EndTime.Sub(p.from) <= reportFixWindow {
 		return stopPassing{}, false
 	}
-	p.to = *run.EndTime
+	p.to = p.from.Add(open)
+	if run.EndTime != nil && run.EndTime.Before(p.to) {
+		p.to = *run.EndTime
+	}
 	return p, true
 }
 

@@ -1570,10 +1570,13 @@ paths:
         past their end, so the first passing of a stretch has no gap. A run
         whose passing at a stop is unknown passed some time between its fixes
         either side, its trip's start and its trip's end standing in for a
-        fix that is not there, or any time after its last fix while it is
-        still running; a gap it could fall in is unknown, not judged. A run
-        whose trail stops short of the stop and that ended within 2 minutes
-        of its last fix did not serve the stop and is not in the order. Only
+        fix that is not there; a gap it could fall in is unknown, not judged.
+        A run whose trail stops short of the stop passed it no later than
+        its trip's scheduled run time and 90 minutes after its last fix, or
+        its start when it sent none, whether it is still running or ended
+        later than that, so a trip a driver forgot to end leaves gaps unknown
+        only until then. If it ended within 2 minutes of its last fix, it did
+        not serve the stop and is not in the order. Only
         driver trips are counted, and a timetabled trip is not measured, even
         on a route with trips in frequencies.txt.
 
