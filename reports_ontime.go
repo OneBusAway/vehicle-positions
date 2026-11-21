@@ -128,9 +128,8 @@ func evaluateRuns(trip *rider.TripInfo, dayStart time.Time, trails [][]LocationP
 
 	last := len(trip.StopTimes) - 1
 	departure := func(i int) (time.Duration, bool) {
-		stop := trip.StopTimes[i]
-		at, ok := firstPassedAt(runs, math.Min(stop.AlongShape+stoppedAtDistance, trip.Shape.Length))
-		return at.Sub(dayStart.Add(stop.Departure)), ok
+		at, ok := firstPassedAt(runs, leftStopAt(trip, i))
+		return at.Sub(dayStart.Add(trip.StopTimes[i].Departure)), ok
 	}
 	arrival := func(i int) (time.Duration, bool) {
 		stop := trip.StopTimes[i]
@@ -157,6 +156,14 @@ func evaluateRuns(trip *rider.TripInfo, dayStart time.Time, trails [][]LocationP
 		eval.counts.add(verdict)
 	}
 	return eval
+}
+
+// leftStopAt is how far along trip's shape a run has left its i'th stop:
+// stoppedAtDistance past it, or the end of the shape if that is nearer. On
+// time judges a departure there and the gaps between vehicles are measured
+// there, so the two agree on when a vehicle left a stop.
+func leftStopAt(trip *rider.TripInfo, i int) float64 {
+	return math.Min(trip.StopTimes[i].AlongShape+stoppedAtDistance, trip.Shape.Length)
 }
 
 // judgedStops returns the indexes of the stops a run is judged at: the

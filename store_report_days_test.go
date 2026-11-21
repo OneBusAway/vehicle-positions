@@ -29,11 +29,17 @@ func TestStore_ServiceDays(t *testing.T) {
 		Routes: []routeDayTotals{{RouteID: "R1", ShortName: "1", LongName: "Straight", Hours: []hourTotals{
 			{Hour: 8, Scheduled: 2, Run: 1, OnTime: 5, Early: 1, Late: 2, Unknown: 1},
 			{Hour: 25, Scheduled: 1},
+		}, Gaps: []directionGapTotals{
+			{DirectionID: ptr(0), Headsign: "North", Hours: []gapHourTotals{
+				{Hour: 7, gapCounts: gapCounts{Gaps: 2, Bunched: 1, LongGaps: 1, Unknown: 1, SumGapS: 1200, SumGapSq: 1180800, SumScheduledS: 1200, SumScheduledSq: 720000}},
+			}},
+			{Headsign: "Loop", Hours: make([]gapHourTotals, 0)},
 		}}},
 		Arrivals:        []arrivalMinute{{Minute: -3, Early: 1}, {Minute: 4, OnTime: 1, Late: 1}},
 		ArrivalsLeftOut: 1,
+		GapRatios:       []gapRatioCount{{Tenth: 2, Gaps: 1}, {Tenth: 18, Gaps: 1}},
 	}
-	quiet := dayTotals{Routes: make([]routeDayTotals, 0), Arrivals: make([]arrivalMinute, 0)}
+	quiet := dayTotals{Routes: make([]routeDayTotals, 0), Arrivals: make([]arrivalMinute, 0), GapRatios: make([]gapRatioCount, 0)}
 	window := func(d time.Time, totals dayTotals, late time.Duration) storedServiceDay {
 		return storedServiceDay{Date: d, OnTimeEarly: time.Minute, OnTimeLate: late, Totals: totals}
 	}
