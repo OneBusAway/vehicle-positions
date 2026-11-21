@@ -29,6 +29,9 @@ type term struct {
 	// included: there, they are refused in every English string, the house
 	// rule's "vehicle, never bus".
 	forbidden map[string][]string
+	// words is each language's approved word for the term, which a
+	// translation sheet shows beside every string that uses it.
+	words map[string]string
 }
 
 // readGlossary reads glossary.csv: term, meaning, do_not_translate, then
@@ -41,7 +44,7 @@ func readGlossary(root string) ([]term, error) {
 	}
 	var out []term
 	for _, row := range rows {
-		t := term{term: row.get("term"), keep: row.get("do_not_translate") == "yes", forbidden: map[string][]string{}}
+		t := term{term: row.get("term"), keep: row.get("do_not_translate") == "yes", forbidden: map[string][]string{}, words: map[string]string{}}
 		if t.term == "" {
 			continue
 		}
@@ -53,6 +56,10 @@ func readGlossary(root string) ([]term, error) {
 						t.forbidden[lang] = append(t.forbidden[lang], w)
 					}
 				}
+			} else if strings.TrimSpace(value) != "" {
+				// The term, meaning and do_not_translate columns land here too,
+				// under names no language has.
+				t.words[col] = strings.TrimSpace(value)
 			}
 		}
 		out = append(out, t)
