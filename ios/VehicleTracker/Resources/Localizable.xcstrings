@@ -348,7 +348,7 @@
       }
     },
     "%@ · %@" : {
-      "comment" : "Two facts on one line: a stop's scheduled time then the distance to it, or the run's start time then the vehicle.",
+      "comment" : "Two facts on one line: a stop's scheduled time then the distance to it, the run's start time then the vehicle, or 'Off schedule' then the next stop and its time.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -3008,6 +3008,17 @@
         }
       }
     },
+    "%@. %@" : {
+      "comment" : "VoiceOver: the Live Activity in one sentence for a route with no short name: the headsign, then the status card's or the problem's sentence.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@"
+          }
+        }
+      }
+    },
     "%@. %@." : {
       "comment" : "VoiceOver: a card or a row of the welcome in one sentence: its title, then the line under it, e.g. 'Choose your vehicle. The number on the vehicle.'\nVoiceOver: a checklist row: its title, then why the app needs it or what went wrong, e.g. 'Precise location. Only approximate was allowed.'",
       "localizations" : {
@@ -4847,6 +4858,9 @@
           }
         }
       }
+    },
+    "%lld min" : {
+      "comment" : "Live Activity, the compact Dynamic Island: whole minutes late or early, beside the status symbol."
     },
     "%lld min early" : {
       "comment" : "Status card answer: whole minutes ahead of the schedule, e.g. '2 min early'.",
@@ -24009,7 +24023,7 @@
       }
     },
     "Next %@ · %@" : {
-      "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
+      "comment" : "The next stop's name, then its scheduled time in the agency's zone: status card line 2 while off schedule, and the Live Activity's second line.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -29204,6 +29218,12 @@
         }
       }
     },
+    "Open the app to keep reporting." : {
+      "comment" : "Live Activity: what to do about a location problem, or about reports that have paused, which only the app can fix."
+    },
+    "Open the app to sign in." : {
+      "comment" : "Live Activity, under 'Signed out': the sign-in expired and reports have stopped until the driver signs in again."
+    },
     "Opens Settings" : {
       "comment" : "VoiceOver hint on a problem line that opens the app's page in Settings.",
       "localizations" : {
@@ -31971,6 +31991,9 @@
           }
         }
       }
+    },
+    "Reports paused" : {
+      "comment" : "Live Activity, once the app has stopped updating it: reports are not being sent. Followed by 'Open the app to keep reporting.'"
     },
     "Reports refused" : {
       "comment" : "Problem line: the server refuses the vehicle's reports (not assigned, deactivated, or no active trip).",
@@ -37626,6 +37649,17 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Route %@ to %@. %@" : {
+      "comment" : "VoiceOver: the Live Activity in one sentence: the route's short name, the headsign, then the status card's or the problem's sentence.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Route %1$@ to %2$@. %3$@"
           }
         }
       }
