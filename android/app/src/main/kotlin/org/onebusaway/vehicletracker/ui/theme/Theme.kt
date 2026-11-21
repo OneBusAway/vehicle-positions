@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.unit.dp
 
 // The design's text fields have 8 dp corners; no other component here uses extraSmall.
@@ -26,7 +27,7 @@ fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable ()
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColors else LightColors,
-            typography = AppTypography,
+            typography = appTypography(LocalLocale.current.platformLocale),
             shapes = AppShapes,
             content = content,
         )

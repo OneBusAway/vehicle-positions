@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Hindi, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    "Vehicle" is गाड़ी, never बस; "run" is फेरा; "trip" is ट्रिप; "report" is रिपोर्ट (feminine);
+    "dispatcher" is कंट्रोल रूम; "diagnostics" is ऐप की जानकारी.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">साइन इन करें</string>
+    <string name="login_subtitle">इस एजेंसी का अपना ड्राइवर अकाउंट इस्तेमाल करें।</string>
+    <string name="login_server_url_label">सर्वर का पता</string>
+    <string name="login_email_label">ईमेल</string>
+    <string name="login_password_label">पासवर्ड</string>
+    <string name="login_show_password">पासवर्ड दिखाएँ</string>
+    <string name="login_hide_password">पासवर्ड छिपाएँ</string>
+    <string name="login_server">सर्वर</string>
+    <string name="login_change_server">बदलें</string>
+    <string name="login_button">साइन इन करें</string>
+    <string name="login_signing_in">साइन इन हो रहा है</string>
+    <string name="login_error_missing_server">सर्वर का पता डालें</string>
+    <string name="login_error_missing_email">अपना ईमेल डालें</string>
+    <string name="login_error_missing_password">अपना पासवर्ड डालें</string>
+    <string name="login_error_invalid_credentials">ईमेल या पासवर्ड गलत है। फिर से कोशिश करें।</string>
+    <string name="login_error_invalid_address">https://tracker.example.org जैसा पता डालें</string>
+    <string name="login_error_https_required">https:// वाला पता डालें</string>
+    <string name="login_error_check_address">पता जाँचें</string>
+    <string name="login_error_unreachable">%1$s तक नहीं पहुँच पा रहे। अपना कनेक्शन या सर्वर का पता जाँचें।</string>
+    <string name="login_error_not_tracker">%1$s ट्रैकर सर्वर नहीं लगता।</string>
+    <string name="login_error_too_many_tries">बहुत बार कोशिश हो गई। एक मिनट रुकें, फिर से कोशिश करें।</string>
+    <string name="login_error_server">साइन इन नहीं हो सका। फिर से कोशिश करें।</string>
+    <string name="login_again_title">फिर से साइन इन करें</string>
+    <string name="login_again_subtitle">%1$s के रूप में</string>
+    <string name="login_again_button">साइन इन करें और रिपोर्ट भेजते रहें</string>
+    <string name="login_trip_open_title">आपकी ट्रिप अभी खुली है</string>
+    <string name="login_trip_open_message">आपका सेशन खत्म होने पर रिपोर्ट रुक गईं। रूट %1$s पर रिपोर्ट भेजते रहने के लिए साइन इन करें।</string>
+    <string name="login_server_managed">आपकी एजेंसी ने सेट किया है।</string>
+    <string name="login_server_managed_invalid">आपकी एजेंसी की सर्वर सेटिंग में सही पता नहीं है, इसलिए उसे यहाँ टाइप करें।</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">%1$s इस्तेमाल करें?</string>
+    <string name="server_setup_confirm_message">आगे तभी बढ़ें जब यह लिंक आपकी एजेंसी ने भेजा हो।</string>
+    <string name="server_setup_use">यह सर्वर इस्तेमाल करें</string>
+    <string name="server_setup_cancel">रद्द करें</string>
+    <string name="server_setup_refused_signed_in">यह फ़ोन %1$s में साइन इन है। लिंक इस्तेमाल नहीं हुआ।</string>
+    <string name="server_setup_refused_trip_open">इस फ़ोन पर एक ट्रिप खुली है। लिंक इस्तेमाल नहीं हुआ।</string>
+    <string name="server_setup_refused_managed">इस फ़ोन पर सर्वर आपकी एजेंसी सेट करती है।</string>
+    <string name="server_setup_invalid">इस लिंक में ऐसा सर्वर पता नहीं है जिसे ऐप इस्तेमाल कर सके।</string>
+    <string name="server_setup_ok">ठीक है</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">सर्वर का पता</string>
+    <string name="restriction_server_url_description">एजेंसी का ट्रैकर सर्वर, https:// वाला पता। ड्राइवर इसमें साइन इन करते हैं और इसे बदल नहीं सकते।</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">छोड़ें</string>
+    <string name="welcome_next">आगे</string>
+    <string name="welcome_continue">जारी रखें</string>
+    <string name="welcome_step">%2$d में से चरण %1$d</string>
+    <string name="welcome_riders_title">यात्री देख सकते हैं कि आप आ रहे हैं</string>
+    <string name="welcome_riders_body">ट्रिप शुरू करें, तो यात्री अपने मैप पर आपकी गाड़ी देखते हैं। काम पूरा होने पर ट्रिप खत्म करें।</string>
+    <string name="welcome_riders_picture">स्टॉप पर खड़े तीन यात्री आपकी गाड़ी को आते हुए देख सकते हैं।</string>
+    <string name="welcome_pieces_title">गाड़ी, रूट, फेरा</string>
+    <string name="welcome_pieces_body">इन्हें चुनें, फिर शुरू करने के लिए अपने फेरे पर टैप करें। काम पूरा होने पर ट्रिप खत्म करें।</string>
+    <string name="welcome_pieces_vehicle_hint">गाड़ी पर लिखा नंबर</string>
+    <string name="welcome_pieces_route_hint">बोर्ड पर लिखा नंबर</string>
+    <string name="welcome_pieces_run_hint">टैप करते ही ट्रिप शुरू</string>
+    <string name="welcome_pieces_live">यात्री आपको देख रहे हैं</string>
+    <string name="welcome_pieces_finish">काम पूरा होने पर</string>
+    <string name="welcome_habits_title">रिपोर्ट चालू रखें</string>
+    <string name="welcome_habits_body">हर ट्रिप पर ये 3 काम करें।</string>
+    <string name="welcome_habits_location">लोकेशन की अनुमति हर समय दें</string>
+    <string name="welcome_habits_location_why">ताकि रिपोर्ट अपने-आप फिर शुरू हो सके</string>
+    <string name="welcome_habits_charge">फ़ोन चार्जिंग पर रखें</string>
+    <string name="welcome_habits_charge_why">चार्ज होते समय स्क्रीन चालू रहती है</string>
+    <string name="welcome_habits_open">ऐप खुला रहने दें</string>
+    <string name="welcome_habits_open_why">ट्रिप के दौरान इसे स्वाइप करके बंद न करें</string>
+    <string name="welcome_habits_if_stops">अगर रिपोर्ट रुक जाएँ</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">अपने फेरे पर टैप करें</string>
+    <string name="tip_run_board_text">फिर %1$s दबाएँ। उसके बाद यात्री आपकी गाड़ी देख सकते हैं।</string>
+    <string name="tip_sent_count_title">भेजी गई रिपोर्ट</string>
+    <string name="tip_sent_count_text">जब तक यात्री आपको देख सकते हैं, यह नंबर बढ़ता रहता है। सिग्नल नहीं है? गाड़ी चलाते रहें। रिपोर्ट सेव रहती हैं और बाद में भेजी जाती हैं।</string>
+    <string name="tip_got_it">ठीक है</string>
+    <string name="first_trip_done_title">पहली ट्रिप पूरी हुई</string>
+    <!-- The count is shown beside these words in large digits, so they need none of their own; Hindi's "one" is 0 and 1, and both read right. -->
+    <plurals name="first_trip_done_reports" tools:ignore="ImpliedQuantity">
+        <item quantity="one">रिपोर्ट भेजी गई</item>
+        <item quantity="other">रिपोर्ट भेजी गईं</item>
+    </plurals>
+    <string name="first_trip_done_text">यात्री आपकी गाड़ी देख पा रहे थे।</string>
+    <string name="first_trip_done_ok">ठीक है</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">भाषा: %1$s</string>
+    <string name="language_row_phone_note">पूरे फ़ोन के लिए, फ़ोन की सेटिंग में सेट होती है</string>
+    <string name="language_list_title">भाषा</string>
+    <string name="language_list_cancel">रद्द करें</string>
+
+    <!-- Help -->
+    <string name="help_title">मदद</string>
+    <string name="help_welcome_again">स्वागत स्क्रीन फिर से देखें</string>
+    <string name="help_welcome_again_detail">3 छोटी स्क्रीन</string>
+    <string name="help_section_status">स्टेटस कार्ड पर</string>
+    <string name="help_status_on_time">आप टाइम टेबल के हिसाब से चल रहे हैं।</string>
+    <string name="help_status_late">टाइम टेबल से पीछे।</string>
+    <string name="help_status_early">टाइम टेबल से आगे। यात्रियों की गाड़ी छूट सकती है।</string>
+    <string name="help_status_off_schedule">टाइम टेबल से बहुत दूर। जाँच लें कि आपने सही फेरा चुना है।</string>
+    <string name="help_status_off_route">मैप पर रूट से हटकर।</string>
+    <string name="help_status_waiting_for_gps">फ़ोन अपनी लोकेशन ढूँढ रहा है।</string>
+    <string name="help_status_no_schedule">इस फेरे का कोई समय नहीं है। यात्री फिर भी आपको देखते हैं।</string>
+    <string name="help_waiting">कनेक्शन न होने पर सेव हुईं। कनेक्शन लौटते ही भेज दी जाती हैं।</string>
+    <string name="help_waiting_never">किसी दूसरे साइन इन से सेव हुईं, इसलिए यह साइन इन उन्हें नहीं भेज सकता।</string>
+    <string name="help_section_problems">कार्ड के नीचे, और नोटिफ़िकेशन में</string>
+    <string name="help_problem_no_network">गाड़ी चलाते रहें। रिपोर्ट सेव रहती हैं और बाद में भेजी जाती हैं।</string>
+    <string name="help_problem_no_gps">इसके लौटने तक यात्री आपकी आखिरी लोकेशन देखते हैं।</string>
+    <string name="help_problem_clock_skew">फ़ोन की सेटिंग में समय अपने-आप सेट होना चालू करें।</string>
+    <string name="help_problem_reports_refused">सर्वर इस गाड़ी की रिपोर्ट नहीं ले रहा। कंट्रोल रूम से पूछें।</string>
+    <string name="help_problem_signed_out">रिपोर्ट रुक गई हैं। आगे बढ़ने के लिए साइन इन करें। आपकी ट्रिप अभी खुली है।</string>
+    <string name="help_problem_reports_paused">एक नोटिफ़िकेशन। रिपोर्ट भेजते रहने के लिए ऐप खोलें।</string>
+    <string name="help_section_about">ऐप के बारे में</string>
+    <string name="help_version">वर्शन</string>
+    <string name="help_server">सर्वर</string>
+    <string name="help_share">ऐप की जानकारी शेयर करें</string>
+    <string name="help_share_detail">ऐप का वर्शन, फ़ोन का मॉडल, सर्वर, ऐप को किन चीज़ों की अनुमति है और उसकी हाल की दिक्कतें भेजता है, जिन्हें ऐप सिर्फ़ चलते समय रखता है। कोई लोकेशन नहीं, साइन इन की कोई जानकारी नहीं, कोई ईमेल नहीं।</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">वापस जाएँ</string>
+    <string name="setup_trip_so_far">अब तक की ट्रिप</string>
+    <string name="setup_bus">गाड़ी</string>
+    <string name="setup_route">रूट %1$s</string>
+    <string name="setup_step_route">रूट</string>
+    <string name="setup_step_run">फेरा</string>
+    <string name="setup_clear_search">खोज मिटाएँ</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">अकाउंट</string>
+    <string name="account_version">वर्शन %1$s</string>
+    <string name="account_sign_out">साइन आउट करें</string>
+    <string name="account_sign_out_title">साइन आउट करें?</string>
+    <string name="account_sign_out_message">अगला ड्राइवर इस फ़ोन पर साइन इन कर सकता है।</string>
+    <string name="account_sign_out_cancel">रद्द करें</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">अपनी गाड़ी चुनें</string>
+    <string name="vehicles_empty">आपको कोई गाड़ी नहीं दी गई है</string>
+    <string name="vehicles_empty_detail">कंट्रोल रूम से एक गाड़ी देने को कहें, फिर दोबारा जाँचें।</string>
+    <string name="vehicles_check_again">दोबारा जाँचें</string>
+    <string name="vehicles_error_message">आपकी गाड़ियाँ लोड नहीं हो सकीं</string>
+    <string name="vehicles_error_detail">अपना कनेक्शन जाँचें और फिर से कोशिश करें।</string>
+    <string name="vehicles_retry_button">फिर से कोशिश करें</string>
+    <string name="vehicles_search_label">गाड़ी नंबर</string>
+    <string name="vehicles_search_no_matches">%1$s से कोई गाड़ी नहीं मिली</string>
+    <string name="vehicles_search_no_matches_detail">गाड़ी पर लिखा नंबर जाँचें।</string>
+    <string name="vehicles_section_favorites">पसंदीदा</string>
+    <string name="vehicles_section_recent">हाल की</string>
+    <string name="vehicles_section_all">सभी गाड़ियाँ</string>
+    <string name="vehicles_section_matches">खोज में मिलीं</string>
+    <string name="vehicles_tile_favorite">पसंदीदा</string>
+    <string name="vehicles_favorite_description">%1$s को पसंदीदा में जोड़ें</string>
+    <string name="vehicles_unfavorite_description">%1$s को पसंदीदा से हटाएँ</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">रूट चुनें</string>
+    <string name="routes_search_label">रूट नंबर या नाम</string>
+    <string name="routes_section_recent">हाल के</string>
+    <string name="routes_section_all">सभी रूट</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">सभी रूट · %1$d</item>
+        <item quantity="other">सभी रूट · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">खोज में मिले</string>
+    <string name="routes_search_no_matches">%1$s से कोई रूट नहीं मिला</string>
+    <string name="routes_search_no_matches_detail">बोर्ड पर लिखे नंबर से, या नाम के किसी हिस्से से खोजें।</string>
+    <string name="routes_empty">शेड्यूल में कोई रूट नहीं है</string>
+    <string name="routes_empty_detail">अपनी एजेंसी के एडमिन से शेड्यूल जाँचने को कहें।</string>
+    <string name="routes_check_again">दोबारा जाँचें</string>
+    <string name="routes_error_message">रूट लोड नहीं हो सके</string>
+    <string name="routes_error_detail">अपना कनेक्शन जाँचें और फिर से कोशिश करें।</string>
+    <string name="routes_no_schedule">इस सर्वर पर अभी कोई शेड्यूल नहीं है</string>
+    <string name="routes_no_schedule_detail">ट्रिप शुरू हो सकें, इसके लिए पहले किसी ऑपरेटर को शेड्यूल लोड करना होगा। अपनी एजेंसी के एडमिन को बताएँ।</string>
+    <string name="routes_retry_button">फिर से कोशिश करें</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">फेरा चुनें</string>
+    <string name="runs_empty">आज रूट %1$s पर कोई फेरा नहीं है</string>
+    <string name="runs_empty_unnamed">आज इस रूट पर कोई फेरा नहीं है</string>
+    <string name="runs_empty_detail">कोई दूसरा रूट चुनें, या कल फिर देखें।</string>
+    <string name="runs_choose_another_route">दूसरा रूट चुनें</string>
+    <string name="runs_badge_now">अभी</string>
+    <string name="runs_badge_next">अगला</string>
+    <string name="runs_direction">%1$s की ओर</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">फेरा %1$s</string>
+    <string name="runs_row_block">ब्लॉक %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">शुरू हो रहा है…</string>
+    <string name="runs_start_title">%1$s वाला फेरा शुरू करें?</string>
+    <string name="runs_start_message">रूट %1$s, %2$s की ओर, गाड़ी %3$s पर।</string>
+    <string name="runs_start_message_no_headsign">रूट %1$s, गाड़ी %2$s पर।</string>
+    <string name="runs_start_message_unnamed">%1$s की ओर, गाड़ी %2$s पर।</string>
+    <string name="runs_start_message_vehicle">गाड़ी %1$s पर।</string>
+    <string name="runs_start_confirm">ट्रिप शुरू करें</string>
+    <string name="runs_start_cancel">रद्द करें</string>
+    <string name="runs_error_message">फेरे लोड नहीं हो सके</string>
+    <string name="runs_error_detail">अपना कनेक्शन जाँचें और फिर से कोशिश करें।</string>
+    <string name="runs_retry_button">फिर से कोशिश करें</string>
+    <string name="runs_error_not_assigned">गाड़ी %1$s आपको नहीं दी गई है।</string>
+    <string name="runs_change_bus">गाड़ी बदलें</string>
+    <string name="runs_error_trip_active">आपकी एक ट्रिप पहले से चल रही है। दूसरी शुरू करने से पहले उसे खत्म करें।</string>
+    <string name="runs_error_vehicle_busy">गाड़ी %1$s पर किसी दूसरे ड्राइवर की ट्रिप चल रही है। कोई दूसरी गाड़ी चुनें या कंट्रोल रूम से पूछें।</string>
+    <string name="runs_error_vehicle_inactive">गाड़ी %1$s सेवा में नहीं है। कोई दूसरी गाड़ी चुनें।</string>
+    <string name="runs_error_previous_trip_not_ended">आपकी पिछली ट्रिप अभी खत्म नहीं हो सकी। अपना कनेक्शन जाँचें और फिर से कोशिश करें।</string>
+    <string name="runs_error_network">सर्वर तक नहीं पहुँच पा रहे। अपना कनेक्शन जाँचें।</string>
+    <string name="runs_error_no_geometry">इस फेरे में चलने के लिए कोई रूट या स्टॉप नहीं है। कोई दूसरा फेरा चुनें।</string>
+    <string name="runs_error_trip_not_active">शेड्यूल अगले दिन पर चला गया है।</string>
+    <string name="runs_reload_button">फिर से लोड करें</string>
+    <string name="runs_error_other">ट्रिप शुरू नहीं हो सकी।</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d भेजी गई</item>
+        <item quantity="other">%1$d भेजी गईं</item>
+    </plurals>
+    <string name="tracking_bar_click_label">ट्रिप की जानकारी दिखाएँ</string>
+    <string name="tracking_end_trip_button">ट्रिप खत्म करें</string>
+    <string name="tracking_end_trip_ending">खत्म हो रही है…</string>
+    <string name="tracking_occupancy_question">गाड़ी कितनी भरी है?</string>
+    <string name="tracking_occupancy_many_seats">सीटें खाली</string>
+    <string name="tracking_occupancy_few_seats">कुछ सीटें</string>
+    <string name="tracking_occupancy_standing">खड़े होने की जगह</string>
+    <string name="tracking_occupancy_full">पूरी भरी</string>
+    <string name="tracking_occupancy_clear">हटाएँ</string>
+    <string name="tracking_fact_run">फेरा</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">रिपोर्ट</string>
+    <string name="tracking_reports_reporting">भेजी जा रही हैं</string>
+    <string name="tracking_reports_not_reporting">नहीं भेजी जा रहीं</string>
+    <string name="tracking_reports_no_gps">GPS नहीं</string>
+    <string name="tracking_reports_stopped">रिपोर्ट रुक गईं</string>
+    <string name="tracking_fact_street_map">सड़कों का मैप</string>
+    <string name="tracking_street_map_ready">तैयार</string>
+    <string name="tracking_street_map_downloading">डाउनलोड हो रहा है · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">अभी डाउनलोड नहीं हुआ</string>
+    <string name="tracking_street_map_no_space">जगह कम है</string>
+    <string name="tracking_street_map_unusable">इस्तेमाल लायक नहीं</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d स्टॉप निकल गया</item>
+        <item quantity="other">%1$d स्टॉप निकल गए</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">खुला है</string>
+    <string name="tracking_stops_passed_collapsed">बंद है</string>
+    <string name="tracking_end_trip_dialog_title">यह ट्रिप खत्म करें?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">रिपोर्ट रुक जाएँगी, और रूट %1$s का %2$s वाला फेरा पूरा माना जाएगा। %3$d रिपोर्ट भेजी गई।</item>
+        <item quantity="other">रिपोर्ट रुक जाएँगी, और रूट %1$s का %2$s वाला फेरा पूरा माना जाएगा। %3$d रिपोर्ट भेजी गईं।</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">रिपोर्ट रुक जाएँगी, और यह फेरा पूरा माना जाएगा। %1$d रिपोर्ट भेजी गई।</item>
+        <item quantity="other">रिपोर्ट रुक जाएँगी, और यह फेरा पूरा माना जाएगा। %1$d रिपोर्ट भेजी गईं।</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">ट्रिप खत्म करें</string>
+    <string name="tracking_end_trip_dialog_cancel">चलाते रहें</string>
+    <string name="tracking_end_trip_error_title">ट्रिप अभी खत्म नहीं हुई</string>
+    <string name="tracking_end_trip_error_message">सर्वर ने ट्रिप खत्म होने की पुष्टि नहीं की। अपना सिग्नल जाँचें और फिर से कोशिश करें, या अभी इस फ़ोन पर रिपोर्ट भेजना बंद करें।</string>
+    <string name="tracking_end_trip_error_retry">फिर से कोशिश करें</string>
+    <string name="tracking_end_trip_error_end_locally">इस फ़ोन पर खत्म करें</string>
+    <string name="tracking_reauth_button">साइन इन करें</string>
+    <string name="tracking_problem_no_network">कनेक्शन नहीं है</string>
+    <string name="tracking_problem_no_network_detail">यात्री आपको नहीं देख सकते</string>
+    <string name="tracking_problem_no_gps">GPS सिग्नल नहीं है</string>
+    <string name="tracking_problem_no_gps_detail">लोकेशन रुकी हुई है</string>
+    <string name="tracking_problem_clock_skew">फ़ोन की घड़ी गलत है</string>
+    <string name="tracking_problem_clock_skew_detail">समय अपने-आप सेट होने दें</string>
+    <string name="tracking_problem_reports_refused">रिपोर्ट नहीं ली जा रहीं</string>
+    <string name="tracking_problem_reports_refused_detail">कंट्रोल रूम से पूछें</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d रिपोर्ट नेटवर्क आने पर जाएगी</item>
+        <item quantity="other">%1$,d रिपोर्ट नेटवर्क आने पर जाएँगी</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d रिपोर्ट नहीं जाएगी</item>
+        <item quantity="other">%1$,d रिपोर्ट नहीं जाएँगी</item>
+    </plurals>
+    <string name="tracking_signed_out_title">साइन आउट हो गया</string>
+    <string name="tracking_signed_out_message">रिपोर्ट रुक गई हैं। आपकी ट्रिप अभी खुली है।</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">समय पर</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d मिनट लेट</item>
+        <item quantity="other">%1$d मिनट लेट</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d मिनट जल्दी</item>
+        <item quantity="other">%1$d मिनट जल्दी</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">शेड्यूल से बाहर</string>
+    <string name="tracking_adherence_right_run">क्या यह सही फेरा है?</string>
+    <string name="tracking_adherence_off_schedule_next">अगला %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">रूट से बाहर · %1$s</string>
+    <string name="tracking_adherence_off_route_short">रूट से बाहर</string>
+    <string name="tracking_adherence_next_stop">अगला</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d मी</string>
+    <string name="tracking_adherence_distance_km">%1$.1f किमी</string>
+    <string name="tracking_adherence_waiting_for_gps">GPS का इंतज़ार</string>
+    <string name="tracking_adherence_from">शुरुआत</string>
+    <string name="tracking_adherence_run">%1$s वाला फेरा</string>
+    <string name="tracking_adherence_run_vehicle">%1$s वाला फेरा · %2$s</string>
+    <string name="tracking_adherence_no_schedule">कोई शेड्यूल नहीं</string>
+    <string name="tracking_adherence_no_schedule_riders">यात्री फिर भी आपको देखते हैं</string>
+    <string name="tracking_adherence_no_schedule_detail">इस फेरे का कोई समय नहीं है</string>
+    <string name="tracking_map_recenter">गाड़ी पर लौटें</string>
+    <string name="tracking_map_downloading">मैप डाउनलोड हो रहा है, %1$d%%</string>
+    <string name="tracking_map_no_space">मैप के लिए जगह कम है</string>
+    <string name="tracking_map_retrying">मैप अभी डाउनलोड नहीं हुआ, फिर कोशिश होगी</string>
+    <string name="tracking_map_retry_on_open">मैप डाउनलोड नहीं हुआ, अगली बार ऐप खोलने पर फिर कोशिश होगी</string>
+    <string name="tracking_map_unusable">मैप फ़ाइल इस्तेमाल लायक नहीं है, अपनी एजेंसी को बताएँ</string>
+    <string name="tracking_map_needs_https">मैप लिंक https वाला होना चाहिए, अपनी एजेंसी को बताएँ</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">अपनी ट्रिप फिर से शुरू करें?</string>
+    <string name="resume_message">ट्रिप चलते समय ऐप बंद हो गया। जब तक आप कुछ नहीं चुनते, रिपोर्ट रुकी रहेंगी।</string>
+    <string name="resume_route">रूट %1$s</string>
+    <string name="resume_run">%1$s वाला फेरा</string>
+    <string name="resume_bus">गाड़ी %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">%1$d मिनट पहले, %2$s पर शुरू हुई</item>
+        <item quantity="other">%1$d मिनट पहले, %2$s पर शुरू हुई</item>
+    </plurals>
+    <string name="resume_started_hours_ago">%1$d घंटे %2$d मिनट पहले, %3$s पर शुरू हुई</string>
+    <string name="resume_button">ट्रिप फिर से शुरू करें</string>
+    <string name="resume_end_trip_button">ट्रिप खत्म करें</string>
+    <string name="resume_ending">ट्रिप खत्म हो रही है</string>
+    <string name="resume_loading">आपकी ट्रिप लोड हो रही है</string>
+    <string name="resume_end_failed">सर्वर ने ट्रिप खत्म होने की पुष्टि नहीं की। फिर से कोशिश करें, या इसे सिर्फ़ इस फ़ोन पर खत्म करें।</string>
+    <string name="resume_end_failed_back">ट्रिप खत्म न करें</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">ट्रिप की रिपोर्टिंग</string>
+    <string name="tracking_notification_title">रूट %1$s · %2$s</string>
+    <string name="tracking_notification_next">अगला %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">साइन आउट हो गया। साइन इन करने के लिए ऐप खोलें।</string>
+    <string name="tracking_notification_reports_refused">रिपोर्ट नहीं ली जा रहीं। कंट्रोल रूम से पूछें।</string>
+    <string name="tracking_notification_resume_title">रिपोर्ट रुकी हुई हैं</string>
+    <string name="tracking_notification_resume_text">रिपोर्ट भेजते रहने के लिए ऐप खोलें।</string>
+    <string name="tracking_notification_attention_channel_name">ट्रिप में आपकी ज़रूरत है</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">शुरू करने से पहले</string>
+    <string name="preflight_message">गाड़ी %1$s की रिपोर्ट भेजने के लिए ऐप को ये चाहिए। Android आगे हर एक के बारे में पूछेगा।</string>
+    <string name="preflight_location">लोकेशन</string>
+    <string name="preflight_location_why">ताकि ऐप को पता रहे कि गाड़ी कहाँ है</string>
+    <string name="preflight_precise">सटीक लोकेशन</string>
+    <string name="preflight_precise_why">ताकि यात्री गाड़ी को सही स्टॉप पर देखें</string>
+    <string name="preflight_background">हर समय</string>
+    <string name="preflight_background_why">ताकि Android ऐप बंद कर दे, तब भी रिपोर्ट अपने-आप फिर शुरू हो सके</string>
+    <string name="preflight_notifications">नोटिफ़िकेशन</string>
+    <string name="preflight_notifications_why">ताकि आप देख सकें कि रिपोर्ट चालू है</string>
+    <string name="preflight_battery">बैटरी</string>
+    <string name="preflight_battery_why">ताकि Android ट्रिप के बीच में रिपोर्ट न रोके</string>
+    <string name="preflight_location_services">लोकेशन सेवाएँ</string>
+    <string name="preflight_location_services_why">पूरे फ़ोन के लिए लोकेशन चालू होनी चाहिए</string>
+    <string name="preflight_allowed">अनुमति है</string>
+    <string name="preflight_skipped">छोड़ा गया</string>
+    <string name="preflight_next">अगला</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">अनुमति नहीं दी। रिपोर्ट फिर भी काम करती हैं।</string>
+    <string name="preflight_location_needed">रिपोर्ट भेजने के लिए लोकेशन ज़रूरी है</string>
+    <string name="preflight_approximate">सिर्फ़ अनुमानित लोकेशन की अनुमति मिली</string>
+    <string name="preflight_try_again">फिर से कोशिश करें</string>
+    <string name="preflight_open_settings">सेटिंग खोलें</string>
+    <string name="preflight_continue">जारी रखें</string>
+</resources>

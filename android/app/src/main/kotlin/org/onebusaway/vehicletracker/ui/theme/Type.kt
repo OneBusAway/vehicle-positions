@@ -8,6 +8,7 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import org.onebusaway.vehicletracker.R
+import java.util.Locale
 
 /**
  * Google Sans Flex v5.000 (OFL, see `assets/licenses`) from google/fonts `ofl/googlesansflex` at bd8f81d, cut to
@@ -17,9 +18,9 @@ import org.onebusaway.vehicletracker.R
  * pyftsubset gsf-wght.ttf --output-file=google_sans_flex.ttf --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD" --layout-features+=tnum,lnum,pnum,zero --name-IDs='*' --name-languages='*' --notdef-outline
  * ```
  * A letter outside these ranges, as in the en-XA pseudolocale of a debug build, falls back to the system font.
- * Before a translation needs one, the font is cut again with upstream's latin-ext and vietnamese subsets, and a
- * language in another script uses the system font for all its text, and a font check added to the translation
- * checks of #502 holds each language to one or the other (#495).
+ * Before a translation needs one, the font is cut again with upstream's latin-ext and vietnamese subsets. A language
+ * in another script uses the system font for all its text ([appTypography]), and a font check added to the
+ * translation checks of #502 holds each language to one or the other (#495).
  */
 internal val AppFontFamily = FontFamily(
     Font(R.font.google_sans_flex, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
@@ -31,25 +32,37 @@ private val base = Typography()
 
 // Material's own sizes, weights and line heights, which the design uses. Tabular digits keep the ticking trip
 // time and sent count from wobbling, and the design sets no letter spacing.
-private fun TextStyle.inAppFont() = copy(fontFamily = AppFontFamily, fontFeatureSettings = "tnum", letterSpacing = 0.sp)
+private fun TextStyle.inFont(family: FontFamily) = copy(fontFamily = family, fontFeatureSettings = "tnum", letterSpacing = 0.sp)
 
-internal val AppTypography = Typography(
-    displayLarge = base.displayLarge.inAppFont(),
-    displayMedium = base.displayMedium.inAppFont(),
-    displaySmall = base.displaySmall.inAppFont(),
-    headlineLarge = base.headlineLarge.inAppFont(),
-    headlineMedium = base.headlineMedium.inAppFont(),
-    headlineSmall = base.headlineSmall.inAppFont(),
-    titleLarge = base.titleLarge.inAppFont(),
-    titleMedium = base.titleMedium.inAppFont(),
-    titleSmall = base.titleSmall.inAppFont(),
-    bodyLarge = base.bodyLarge.inAppFont(),
-    bodyMedium = base.bodyMedium.inAppFont(),
-    bodySmall = base.bodySmall.inAppFont(),
-    labelLarge = base.labelLarge.inAppFont(),
-    labelMedium = base.labelMedium.inAppFont(),
-    labelSmall = base.labelSmall.inAppFont(),
+private fun typographyIn(family: FontFamily) = Typography(
+    displayLarge = base.displayLarge.inFont(family),
+    displayMedium = base.displayMedium.inFont(family),
+    displaySmall = base.displaySmall.inFont(family),
+    headlineLarge = base.headlineLarge.inFont(family),
+    headlineMedium = base.headlineMedium.inFont(family),
+    headlineSmall = base.headlineSmall.inFont(family),
+    titleLarge = base.titleLarge.inFont(family),
+    titleMedium = base.titleMedium.inFont(family),
+    titleSmall = base.titleSmall.inFont(family),
+    bodyLarge = base.bodyLarge.inFont(family),
+    bodyMedium = base.bodyMedium.inFont(family),
+    bodySmall = base.bodySmall.inFont(family),
+    labelLarge = base.labelLarge.inFont(family),
+    labelMedium = base.labelMedium.inFont(family),
+    labelSmall = base.labelSmall.inFont(family),
 )
+
+private val AppTypography = typographyIn(AppFontFamily)
+private val SystemTypography = typographyIn(FontFamily.Default)
+
+// The languages whose letters the font above has. Any other is in a script it lacks, as Hindi's Devanagari is, and
+// sets all its text in the system font (for Hindi, the Noto Sans Devanagari Android ships), so a line never
+// mixes this font's digits and Latin words with the system's letters.
+private val bundledFontLanguages = setOf("en")
+
+/** The typography for text in [locale]'s language: the app's own font, or the system's for a script it lacks. */
+internal fun appTypography(locale: Locale): Typography =
+    if (locale.language in bundledFontLanguages) AppTypography else SystemTypography
 
 // The design's styles that Material has no role for, read like the others: MaterialTheme.typography.statusHero.
 
