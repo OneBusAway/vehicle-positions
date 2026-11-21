@@ -1,5 +1,6 @@
 package org.onebusaway.vehicletracker.ui
 
+import android.content.res.Configuration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.Locales
@@ -8,10 +9,12 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ActiveTrip
 import org.onebusaway.vehicletracker.ui.resume.ResumeCard
 import org.onebusaway.vehicletracker.ui.resume.ResumeShiftScreenContent
@@ -56,9 +59,13 @@ class AppLanguageFormattingTest {
                 }
             }
 
-            // The run's start on German's 24-hour clock (the words stay English: there is no German yet), and no time
-            // on the default's 12-hour one.
-            compose.onNodeWithText("18:58 run").assertExists()
+            // The run's start on German's 24-hour clock, in the app's own German words, read from its strings so a
+            // reviewer's rewording keeps this passing, and no time on the default's 12-hour one.
+            val app = InstrumentationRegistry.getInstrumentation().targetContext
+            val german = app.createConfigurationContext(
+                Configuration(app.resources.configuration).apply { setLocale(Locale.GERMAN) },
+            )
+            compose.onNodeWithText(german.getString(R.string.resume_run, "18:58")).assertExists()
             assertTrue(compose.onAllNodesWithText("PM", substring = true).fetchSemanticsNodes().isEmpty())
         } finally {
             Locale.setDefault(default)
