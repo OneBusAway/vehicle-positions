@@ -31,7 +31,10 @@ func TestAlertsPage_NotStarted(t *testing.T) {
 	ix := fixtureIndexEdited(t, func(name string, body []byte) []byte {
 		switch name {
 		case "calendar.txt":
-			return []byte(strings.Replace(string(body), "WEEKDAY,1,1,1,1,1,0,0", "WEEKDAY,1,1,1,1,1,1,1", 1))
+			// SAT runs no day: its T2 is on block B1 at 09:00, so on a Saturday
+			// morning it would come between T1 and T7 and be the trip not started.
+			cal := strings.Replace(string(body), "WEEKDAY,1,1,1,1,1,0,0", "WEEKDAY,1,1,1,1,1,1,1", 1)
+			return []byte(strings.Replace(cal, "SAT,0,0,0,0,0,1,0", "SAT,0,0,0,0,0,0,0", 1))
 		case "trips.txt":
 			return blockEdit(name, body)
 		case "stop_times.txt":
