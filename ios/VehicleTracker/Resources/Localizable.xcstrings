@@ -2,10 +2,26 @@
   "sourceLanguage" : "en",
   "strings" : {
     "%.1f kilometres" : {
-      "comment" : "VoiceOver: a distance in kilometres to one decimal place, read in place of '1.3 km', e.g. '1.3 kilometres'."
+      "comment" : "VoiceOver: a distance in kilometres to one decimal place, read in place of '1.3 km', e.g. '1.3 kilometres'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f किलोमीटर"
+          }
+        }
+      }
     },
     "%.1f km" : {
-      "comment" : "A distance of a kilometre or more, in kilometres to one decimal place with the short unit: to the next stop on the status card and in CarPlay, and how far off the route. E.g. '1.3 km'."
+      "comment" : "A distance of a kilometre or more, in kilometres to one decimal place with the short unit: to the next stop on the status card and in CarPlay, and how far off the route. E.g. '1.3 km'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f किमी"
+          }
+        }
+      }
     },
     "%@ · %@" : {
       "comment" : "Two facts on one line: a stop's scheduled time then the distance to it, or the run's start time then the vehicle.",
@@ -13,6 +29,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "%1$@ · %2$@"
           }
         }
@@ -26,6 +48,12 @@
             "state" : "new",
             "value" : "%1$@ %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@"
+          }
         }
       }
     },
@@ -37,11 +65,25 @@
             "state" : "new",
             "value" : "%1$@ → %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ → %2$@"
+          }
         }
       }
     },
     "%@ run" : {
-      "comment" : "Resume card: the run's first departure in the agency's zone, e.g. '6:58 AM run'."
+      "comment" : "Resume card: the run's first departure in the agency's zone, e.g. '6:58 AM run'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ वाला फेरा"
+          }
+        }
+      }
     },
     "%@ run · %@" : {
       "comment" : "Status card line 2 while waiting for GPS: the run's start time in the agency's zone, then the vehicle, e.g. '6:58 AM run · 4317'.",
@@ -50,6 +92,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ run · %2$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ वाला फेरा · %2$@"
           }
         }
       }
@@ -60,6 +108,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "%1$@, %2$@"
           }
         }
@@ -95,11 +149,47 @@
               }
             }
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %#@reports@"
+          },
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गई"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गईं"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
     "%@, allowed." : {
-      "comment" : "VoiceOver: said once when iOS allows a checklist row while the checklist shows: the row's title, e.g. 'Location, allowed.'"
+      "comment" : "VoiceOver: said once when iOS allows a checklist row while the checklist shows: the row's title, e.g. 'Location, allowed.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, अनुमति मिल गई।"
+          }
+        }
+      }
     },
     "%@, last stop, %@" : {
       "comment" : "VoiceOver: a stop list row for the end of the line: the stop's name, then its scheduled time, e.g. 'Downtown Transit Center, last stop, 7:52 AM'.",
@@ -108,6 +198,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@, last stop, %2$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, आखिरी स्टॉप, %2$@"
           }
         }
       }
@@ -120,6 +216,12 @@
             "state" : "new",
             "value" : "%1$@, next stop, %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, अगला स्टॉप, %2$@"
+          }
         }
       }
     },
@@ -130,6 +232,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@, passed, %2$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, निकल गया, %2$@"
           }
         }
       }
@@ -142,6 +250,12 @@
             "state" : "new",
             "value" : "%1$@. %2$@."
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@। %2$@।"
+          }
         }
       }
     },
@@ -152,6 +266,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@. %2$@. Allowed."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@। %2$@। अनुमति है।"
           }
         }
       }
@@ -164,6 +284,12 @@
             "state" : "new",
             "value" : "%1$@. %2$@. Next."
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@। %2$@। आगे यही पूछा जाएगा।"
+          }
         }
       }
     },
@@ -174,6 +300,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@. Next stop %2$@, %3$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@। अगला स्टॉप %2$@, %3$@"
           }
         }
       }
@@ -186,6 +318,12 @@
             "state" : "new",
             "value" : "%1$@. Next stop %2$@, %3$@, %4$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@। अगला स्टॉप %2$@, %3$@, %4$@"
+          }
         }
       }
     },
@@ -197,11 +335,25 @@
             "state" : "new",
             "value" : "%1$@. Off schedule, is this the right run? Next stop %2$@, %3$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@। शेड्यूल से बाहर, क्या यह सही फेरा है? अगला स्टॉप %2$@, %3$@"
+          }
         }
       }
     },
     "%lld m" : {
-      "comment" : "A distance under a kilometre, in whole metres with the short unit: to the next stop on the status card and in CarPlay, and how far off the route, as in 'Off route · 120 m'. E.g. '350 m'."
+      "comment" : "A distance under a kilometre, in whole metres with the short unit: to the next stop on the status card and in CarPlay, and how far off the route, as in 'Off route · 120 m'. E.g. '350 m'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld मी"
+          }
+        }
+      }
     },
     "%lld metres" : {
       "comment" : "VoiceOver: a distance under a kilometre in whole metres, read in place of '232 m', e.g. '232 metres'.",
@@ -223,14 +375,48 @@
               }
             }
           }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld मीटर"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld मीटर"
+                }
+              }
+            }
+          }
         }
       }
     },
     "%lld min early" : {
-      "comment" : "Status card answer: whole minutes ahead of the schedule, e.g. '2 min early'."
+      "comment" : "Status card answer: whole minutes ahead of the schedule, e.g. '2 min early'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld मिनट जल्दी"
+          }
+        }
+      }
     },
     "%lld min late" : {
-      "comment" : "Status card answer: whole minutes behind the schedule, e.g. '3 min late'."
+      "comment" : "Status card answer: whole minutes behind the schedule, e.g. '3 min late'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld मिनट लेट"
+          }
+        }
+      }
     },
     "%lld reports sent" : {
       "comment" : "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large wherever it stands in the sentence.",
@@ -248,6 +434,24 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld reports sent"
+                }
+              }
+            }
+          }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld रिपोर्ट भेजी गई"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld रिपोर्ट भेजी गईं"
                 }
               }
             }
@@ -275,6 +479,24 @@
               }
             }
           }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld भेजी गई"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld भेजी गईं"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -298,35 +520,125 @@
               }
             }
           }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld स्टॉप निकल गया"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld स्टॉप निकल गए"
+                }
+              }
+            }
+          }
         }
       }
     },
     "±%lld m" : {
-      "comment" : "CarPlay Details, the GPS row: how far off the phone's position may be, in whole metres with the short unit, e.g. '±8 m'."
+      "comment" : "CarPlay Details, the GPS row: how far off the phone's position may be, in whole metres with the short unit, e.g. '±8 m'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "±%lld मी"
+          }
+        }
+      }
     },
     "3 short screens" : {
-      "comment" : "Help: under 'See the welcome again'."
+      "comment" : "Help: under 'See the welcome again'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3 छोटी स्क्रीन"
+          }
+        }
+      }
     },
     "A problem on the server. Tell your dispatcher." : {
-      "comment" : "Help, under 'Server error'."
+      "comment" : "Help, under 'Server error'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर में दिक्कत है। कंट्रोल रूम को बताएँ।"
+          }
+        }
+      }
     },
     "A trip is already starting or running." : {
-      "comment" : "Error when a start is attempted while a trip is already starting or running."
+      "comment" : "Error when a start is attempted while a trip is already starting or running.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "एक ट्रिप पहले से शुरू हो रही है या चल रही है।"
+          }
+        }
+      }
     },
     "About" : {
-      "comment" : "Help: the heading over the app's version and the server."
+      "comment" : "Help: the heading over the app's version and the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऐप के बारे में"
+          }
+        }
+      }
     },
     "Account" : {
-      "comment" : "VoiceOver label of the account menu's button on each picker screen. The menu shows the driver's email, the server and the app's version."
+      "comment" : "VoiceOver label of the account menu's button on each picker screen. The menu shows the driver's email, the server and the app's version.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अकाउंट"
+          }
+        }
+      }
     },
     "Add %@ to favorites" : {
-      "comment" : "VoiceOver label of the star on a vehicle tile that is not yet a favourite: the fleet number, e.g. 'Add 4317 to favorites'."
+      "comment" : "VoiceOver label of the star on a vehicle tile that is not yet a favourite: the fleet number, e.g. 'Add 4317 to favorites'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ को पसंदीदा में जोड़ें"
+          }
+        }
+      }
     },
     "Ahead of the timetable. Riders may miss you." : {
-      "comment" : "Help, under a status like '3 min early'."
+      "comment" : "Help, under a status like '3 min early'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "टाइम टेबल से आगे। यात्रियों की गाड़ी छूट सकती है।"
+          }
+        }
+      }
     },
     "All routes" : {
-      "comment" : "Section header over every route in the schedule, as rows with names."
+      "comment" : "Section header over every route in the schedule, as rows with names.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सभी रूट"
+          }
+        }
+      }
     },
     "All routes · %lld" : {
       "comment" : "Section header over a grid of route numbers, from a feed that names none of its routes: how many there are, e.g. 'All routes · 24'.",
@@ -348,269 +660,983 @@
               }
             }
           }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "सभी रूट · %lld"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "सभी रूट · %lld"
+                }
+              }
+            }
+          }
         }
       }
     },
     "All vehicles" : {
-      "comment" : "Section header over the rest of the driver's assigned vehicles."
+      "comment" : "Section header over the rest of the driver's assigned vehicles.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सभी गाड़ियाँ"
+          }
+        }
+      }
     },
     "Allow location" : {
-      "comment" : "Welcome, screen 3: the first thing a trip needs."
+      "comment" : "Welcome, screen 3: the first thing a trip needs.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोकेशन की अनुमति दें"
+          }
+        }
+      }
     },
     "Allow location on iPhone" : {
-      "comment" : "CarPlay alert when a start from the car got no answer to the location prompt, which shows only on the iPhone."
+      "comment" : "CarPlay alert when a start from the car got no answer to the location prompt, which shows only on the iPhone.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone पर लोकेशन की अनुमति दें"
+          }
+        }
+      }
     },
     "Allowed" : {
-      "comment" : "At the end of a checklist row that iOS allowed."
+      "comment" : "At the end of a checklist row that iOS allowed.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अनुमति है"
+          }
+        }
+      }
     },
     "An operator has to load one before trips can start. Tell your agency's admin." : {
-      "comment" : "Empty state text under 'No schedule on this server yet'."
+      "comment" : "Empty state text under 'No schedule on this server yet'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप शुरू हो सकें, इसके लिए पहले किसी ऑपरेटर को शेड्यूल लोड करना होगा। अपनी एजेंसी के एडमिन को बताएँ।"
+          }
+        }
+      }
     },
     "Another driver has a trip running on vehicle %@. Pick another vehicle or ask your dispatcher." : {
-      "comment" : "Banner when the server refused a start because another driver has a trip running on the vehicle: the fleet number, e.g. 'Another driver has a trip running on vehicle 4317. Pick another vehicle or ask your dispatcher.'"
+      "comment" : "Banner when the server refused a start because another driver has a trip running on the vehicle: the fleet number, e.g. 'Another driver has a trip running on vehicle 4317. Pick another vehicle or ask your dispatcher.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी %@ पर किसी दूसरे ड्राइवर की ट्रिप चल रही है। कोई दूसरी गाड़ी चुनें या कंट्रोल रूम से पूछें।"
+          }
+        }
+      }
     },
     "As %@" : {
-      "comment" : "Under the trip card when signing in again: the email the trip's driver signed in with, e.g. 'As jordan.lee@example.org'."
+      "comment" : "Under the trip card when signing in again: the email the trip's driver signed in with, e.g. 'As jordan.lee@example.org'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ के रूप में"
+          }
+        }
+      }
     },
     "Ask your agency's admin to check the schedule." : {
-      "comment" : "Empty state text under 'The schedule has no routes'."
+      "comment" : "Empty state text under 'The schedule has no routes'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपनी एजेंसी के एडमिन से शेड्यूल जाँचने को कहें।"
+          }
+        }
+      }
     },
     "Ask your dispatcher" : {
-      "comment" : "Problem line, after 'Reports refused': only dispatch can fix the assignment."
+      "comment" : "Problem line, after 'Reports refused': only dispatch can fix the assignment.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कंट्रोल रूम से पूछें"
+          }
+        }
+      }
     },
     "Ask your dispatcher to assign one, then check again." : {
-      "comment" : "Empty state text under 'No vehicles are assigned to you'."
+      "comment" : "Empty state text under 'No vehicles are assigned to you'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कंट्रोल रूम से एक गाड़ी देने को कहें, फिर दोबारा जाँचें।"
+          }
+        }
+      }
     },
     "Away from the route on the map." : {
-      "comment" : "Help, under 'Off route'."
+      "comment" : "Help, under 'Off route'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "मैप पर रूट से हटकर।"
+          }
+        }
+      }
     },
     "Back" : {
-      "comment" : "VoiceOver: the welcome's button to the screen before."
+      "comment" : "VoiceOver: the welcome's button to the screen before.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "वापस"
+          }
+        }
+      }
     },
     "Before you start" : {
-      "comment" : "Title of the checklist shown before a trip when the app is missing location access."
+      "comment" : "Title of the checklist shown before a trip when the app is missing location access.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "शुरू करने से पहले"
+          }
+        }
+      }
     },
     "Behind the timetable." : {
-      "comment" : "Help, under a status like '6 min late'."
+      "comment" : "Help, under a status like '6 min late'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "टाइम टेबल से पीछे।"
+          }
+        }
+      }
     },
     "Block %@" : {
-      "comment" : "Under a run on the run list and in CarPlay: the agency's block, the chain of runs one vehicle drives, shown as the feed gives it, e.g. 'Block 599-20'."
+      "comment" : "Under a run on the run list and in CarPlay: the agency's block, the chain of runs one vehicle drives, shown as the feed gives it, e.g. 'Block 599-20'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ब्लॉक %@"
+          }
+        }
+      }
     },
     "Can't reach %@. Check your connection, or the server address." : {
-      "comment" : "Banner above the sign-in button when nothing answered. The server's address as the driver knows it, e.g. 'tracker.example.org'."
+      "comment" : "Banner above the sign-in button when nothing answered. The server's address as the driver knows it, e.g. 'tracker.example.org'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ तक नहीं पहुँच पा रहे। अपना कनेक्शन या सर्वर का पता जाँचें।"
+          }
+        }
+      }
     },
     "Can't reach the server. Check your connection." : {
-      "comment" : "Banner when a start could not reach the server."
+      "comment" : "Banner when a start could not reach the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर तक नहीं पहुँच पा रहे। अपना कनेक्शन जाँचें।"
+          }
+        }
+      }
     },
     "Cancel" : {
-      "comment" : "Closes the 'Sign out?' question without signing out.\nCloses the checklist without starting the run, once nothing on it asks iOS by itself.\nSetup link alert: the button that closes it without using the link.\nThe start confirmation's cancel button."
+      "comment" : "Closes the 'Sign out?' question without signing out.\nCloses the checklist without starting the run, once nothing on it asks iOS by itself.\nSetup link alert: the button that closes it without using the link.\nThe start confirmation's cancel button.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रद्द करें"
+          }
+        }
+      }
     },
     "Change" : {
-      "comment" : "Button at the end of the server line that opens the server address field to type another."
+      "comment" : "Button at the end of the server line that opens the server address field to type another.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बदलें"
+          }
+        }
+      }
     },
     "Change vehicle" : {
-      "comment" : "Banner button that goes back to the vehicle screen after a start was refused for the vehicle."
+      "comment" : "Banner button that goes back to the vehicle screen after a start was refused for the vehicle.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी बदलें"
+          }
+        }
+      }
     },
     "Check again" : {
-      "comment" : "Button that loads a picker's list again when it came back empty."
+      "comment" : "Button that loads a picker's list again when it came back empty.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "दोबारा जाँचें"
+          }
+        }
+      }
     },
     "Check the address" : {
-      "comment" : "Under the server field when nothing answered at that address, beside the banner that says so."
+      "comment" : "Under the server field when nothing answered at that address, beside the banner that says so.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पता जाँचें"
+          }
+        }
+      }
     },
     "Check the fleet number on the vehicle." : {
-      "comment" : "Empty state text under 'No vehicle matches …'."
+      "comment" : "Empty state text under 'No vehicle matches …'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी पर लिखा नंबर जाँचें।"
+          }
+        }
+      }
     },
     "Check your connection and try again." : {
-      "comment" : "Empty state text under a 'Couldn't load …' title."
+      "comment" : "Empty state text under a 'Couldn't load …' title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपना कनेक्शन जाँचें और फिर से कोशिश करें।"
+          }
+        }
+      }
     },
     "Choose a route" : {
-      "comment" : "Title of the second picker screen, the schedule's routes."
+      "comment" : "Title of the second picker screen, the schedule's routes.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट चुनें"
+          }
+        }
+      }
     },
     "Choose a run" : {
-      "comment" : "Title of the third picker screen, the route's runs today."
+      "comment" : "Title of the third picker screen, the route's runs today.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फेरा चुनें"
+          }
+        }
+      }
     },
     "Choose another route" : {
-      "comment" : "Button under 'No runs on route … today' that goes back to the route screen."
+      "comment" : "Button under 'No runs on route … today' that goes back to the route screen.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "दूसरा रूट चुनें"
+          }
+        }
+      }
     },
     "Choose them, then tap %@. End the trip when you finish." : {
-      "comment" : "Welcome, screen 2: under the title. The name of the button that starts a trip, filled in from that button, e.g. 'Choose them, then tap Start trip. End the trip when you finish.'"
+      "comment" : "Welcome, screen 2: under the title. The name of the button that starts a trip, filled in from that button, e.g. 'Choose them, then tap Start trip. End the trip when you finish.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इन्हें चुनें, फिर ‘%@’ दबाएँ। काम पूरा होने पर ट्रिप खत्म करें।"
+          }
+        }
+      }
     },
     "Choose your vehicle" : {
-      "comment" : "Title of the first picker screen, the driver's assigned vehicles."
+      "comment" : "Title of the first picker screen, the driver's assigned vehicles.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपनी गाड़ी चुनें"
+          }
+        }
+      }
     },
     "collapsed" : {
-      "comment" : "VoiceOver value of the folded stops row while the stops it stands for are hidden."
+      "comment" : "VoiceOver value of the folded stops row while the stops it stands for are hidden.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बंद है"
+          }
+        }
+      }
     },
     "Continue" : {
-      "comment" : "The checklist's button, which asks iOS about the next row.\nWelcome: the button on its last screen, which goes on to choosing a vehicle."
+      "comment" : "The checklist's button, which asks iOS about the next row.\nWelcome: the button on its last screen, which goes on to choosing a vehicle.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "जारी रखें"
+          }
+        }
+      }
     },
     "Couldn't load the routes" : {
-      "comment" : "Empty state title when the route list could not be loaded."
+      "comment" : "Empty state title when the route list could not be loaded.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट लोड नहीं हो सके"
+          }
+        }
+      }
     },
     "Couldn't load the runs" : {
-      "comment" : "Empty state title when the run list could not be loaded."
+      "comment" : "Empty state title when the run list could not be loaded.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फेरे लोड नहीं हो सके"
+          }
+        }
+      }
     },
     "Couldn't load your vehicles" : {
-      "comment" : "Empty state title when the vehicle list could not be loaded."
+      "comment" : "Empty state title when the vehicle list could not be loaded.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपकी गाड़ियाँ लोड नहीं हो सकीं"
+          }
+        }
+      }
     },
     "Couldn't sign in. Try again." : {
-      "comment" : "Banner above the sign-in button when the server answered, but not with a sign-in, such as a server error."
+      "comment" : "Banner above the sign-in button when the server answered, but not with a sign-in, such as a server error.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन इन नहीं हो सका। फिर से कोशिश करें।"
+          }
+        }
+      }
     },
     "Couldn't start the trip." : {
-      "comment" : "Banner when a start failed for a reason the app does not name. In CarPlay, also the short form of every refused start's alert."
+      "comment" : "Banner when a start failed for a reason the app does not name. In CarPlay, also the short form of every refused start's alert.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप शुरू नहीं हो सकी।"
+          }
+        }
+      }
     },
     "Details" : {
-      "comment" : "CarPlay: the navigation bar button during a trip that opens the trip's details: route, run, schedule, next stop, reports and GPS."
+      "comment" : "CarPlay: the navigation bar button during a trip that opens the trip's details: route, run, schedule, next stop, reports and GPS.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "जानकारी"
+          }
+        }
+      }
     },
     "Direction" : {
-      "comment" : "VoiceOver title of the direction switch over the run board."
+      "comment" : "VoiceOver title of the direction switch over the run board.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "दिशा"
+          }
+        }
+      }
     },
     "Do these 3 things on every trip." : {
-      "comment" : "Welcome, screen 3: under the title."
+      "comment" : "Welcome, screen 3: under the title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "हर ट्रिप पर ये 3 काम करें।"
+          }
+        }
+      }
     },
     "Don't end the trip" : {
-      "comment" : "Goes back from a failed end to Resume trip and End trip, for a driver who tapped End trip by mistake."
+      "comment" : "Goes back from a failed end to Resume trip and End trip, for a driver who tapped End trip by mistake.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप खत्म न करें"
+          }
+        }
+      }
     },
     "Done" : {
-      "comment" : "CarPlay: the navigation bar button that stops moving the map by hand."
+      "comment" : "CarPlay: the navigation bar button that stops moving the map by hand.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "हो गया"
+          }
+        }
+      }
     },
     "Email" : {
-      "comment" : "Label of the sign-in screen's email field."
+      "comment" : "Label of the sign-in screen's email field.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ईमेल"
+          }
+        }
+      }
     },
     "End" : {
-      "comment" : "CarPlay: the navigation bar button during a trip that asks whether to end it."
+      "comment" : "CarPlay: the navigation bar button during a trip that asks whether to end it.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "खत्म करें"
+          }
+        }
+      }
     },
     "End on this phone" : {
-      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: stop reporting now; the end is sent before the driver's next start."
+      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: stop reporting now; the end is sent before the driver's next start.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस फ़ोन पर खत्म करें"
+          }
+        }
+      }
     },
     "End this trip?" : {
-      "comment" : "Title of the alert that confirms ending the trip."
+      "comment" : "Title of the alert that confirms ending the trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह ट्रिप खत्म करें?"
+          }
+        }
+      }
     },
     "End trip" : {
-      "comment" : "The Resume screen's second button: end the open trip.\nThe button on the trip bar that ends the trip, and the confirming button in the 'End this trip?' alert."
+      "comment" : "The Resume screen's second button: end the open trip.\nThe button on the trip bar that ends the trip, and the confirming button in the 'End this trip?' alert.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप खत्म करें"
+          }
+        }
+      }
     },
     "End trip?" : {
-      "comment" : "CarPlay: the short form of the 'End this trip?' alert's title, for a car screen too narrow for it."
+      "comment" : "CarPlay: the short form of the 'End this trip?' alert's title, for a car screen too narrow for it.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप खत्म करें?"
+          }
+        }
+      }
     },
     "Ending trip" : {
-      "comment" : "The Resume screen's End trip button while the end is being sent to the server."
+      "comment" : "The Resume screen's End trip button while the end is being sent to the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप खत्म हो रही है"
+          }
+        }
+      }
     },
     "Ending…" : {
-      "comment" : "On the End trip button while the end is being sent to the server."
+      "comment" : "On the End trip button while the end is being sent to the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "खत्म हो रही है…"
+          }
+        }
+      }
     },
     "Enter the server address" : {
-      "comment" : "Under the server field when it was left empty."
+      "comment" : "Under the server field when it was left empty.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर का पता डालें"
+          }
+        }
+      }
     },
     "Enter your email" : {
-      "comment" : "Under the email field when it was left empty."
+      "comment" : "Under the email field when it was left empty.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपना ईमेल डालें"
+          }
+        }
+      }
     },
     "Enter your password" : {
-      "comment" : "Under the password field when it was left empty."
+      "comment" : "Under the password field when it was left empty.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपना पासवर्ड डालें"
+          }
+        }
+      }
     },
     "Error" : {
-      "comment" : "VoiceOver: read before the error under a sign-in field, e.g. 'Error, Enter your email'."
+      "comment" : "VoiceOver: read before the error under a sign-in field, e.g. 'Error, Enter your email'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गलती"
+          }
+        }
+      }
     },
     "expanded" : {
-      "comment" : "VoiceOver value of the folded stops row while the stops it stands for are showing."
+      "comment" : "VoiceOver value of the folded stops row while the stops it stands for are showing.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "खुला है"
+          }
+        }
+      }
     },
     "Far from the timetable. Check you chose the right run." : {
-      "comment" : "Help, under 'Off schedule'."
+      "comment" : "Help, under 'Off schedule'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "टाइम टेबल से बहुत दूर। जाँच लें कि आपने सही फेरा चुना है।"
+          }
+        }
+      }
     },
     "Favorite" : {
-      "comment" : "VoiceOver value of a starred vehicle tile."
+      "comment" : "VoiceOver value of a starred vehicle tile.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पसंदीदा"
+          }
+        }
+      }
     },
     "Favorites" : {
-      "comment" : "Section header over the vehicles the driver starred."
+      "comment" : "Section header over the vehicles the driver starred.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पसंदीदा"
+          }
+        }
+      }
     },
     "Few seats" : {
-      "comment" : "Occupancy button: only a few seats are free."
+      "comment" : "Occupancy button: only a few seats are free.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कुछ सीटें"
+          }
+        }
+      }
     },
     "First trip done" : {
-      "comment" : "Title of the sheet after the driver's first trip ends."
+      "comment" : "Title of the sheet after the driver's first trip ends.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पहली ट्रिप पूरी हुई"
+          }
+        }
+      }
     },
     "Fix on iPhone" : {
-      "comment" : "CarPlay Reports row, after 'Location off' or 'Precise Location off': the fix is in the iPhone's Settings, which the car can't open."
+      "comment" : "CarPlay Reports row, after 'Location off' or 'Precise Location off': the fix is in the iPhone's Settings, which the car can't open.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone पर ठीक करें"
+          }
+        }
+      }
     },
     "From" : {
-      "comment" : "Status card line 1 while waiting for GPS, before the trip's first stop."
+      "comment" : "Status card line 1 while waiting for GPS, before the trip's first stop.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "शुरुआत"
+          }
+        }
+      }
     },
     "Full" : {
-      "comment" : "Occupancy button: the vehicle is full."
+      "comment" : "Occupancy button: the vehicle is full.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पूरी भरी"
+          }
+        }
+      }
     },
     "GPS" : {
-      "comment" : "CarPlay Details: the row saying how accurate the phone's position is, e.g. '±8 m'. GPS stays as it is in every language."
+      "comment" : "CarPlay Details: the row saying how accurate the phone's position is, e.g. '±8 m'. GPS stays as it is in every language.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPS"
+          }
+        }
+      }
     },
     "Guidance" : {
-      "comment" : "CarPlay: the navigation bar button, once the car's own navigation has stopped this app's, that brings back the guidance to the trip's next stop."
+      "comment" : "CarPlay: the navigation bar button, once the car's own navigation has stopped this app's, that brings back the guidance to the trip's next stop.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रास्ता दिखाएँ"
+          }
+        }
+      }
     },
     "Help" : {
-      "comment" : "The account menu's item that opens Help, and the title of that page."
+      "comment" : "The account menu's item that opens Help, and the title of that page.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "मदद"
+          }
+        }
+      }
     },
     "Hide password" : {
-      "comment" : "VoiceOver label of the eye button that hides the typed password again."
+      "comment" : "VoiceOver label of the eye button that hides the typed password again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पासवर्ड छिपाएँ"
+          }
+        }
+      }
     },
     "How full is the vehicle?" : {
-      "comment" : "Trip sheet: the heading over the occupancy buttons, and the row's VoiceOver label."
+      "comment" : "Trip sheet: the heading over the occupancy buttons, and the row's VoiceOver label.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी कितनी भरी है?"
+          }
+        }
+      }
     },
     "If reporting stops" : {
-      "comment" : "Welcome, screen 3: heading over the card that shows what a stopped trip looks like."
+      "comment" : "Welcome, screen 3: heading over the card that shows what a stopped trip looks like.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगर रिपोर्ट रुक जाएँ"
+          }
+        }
+      }
     },
     "If you close it, reports stop" : {
-      "comment" : "Welcome, screen 3: under 'Leave the app open'."
+      "comment" : "Welcome, screen 3: under 'Leave the app open'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इसे बंद करने पर रिपोर्ट रुक जाती हैं"
+          }
+        }
+      }
     },
     "Is this the right run?" : {
-      "comment" : "Status card line 1 after 'Off schedule': the driver most likely picked the wrong run."
+      "comment" : "Status card line 1 after 'Off schedule': the driver most likely picked the wrong run.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "क्या यह सही फेरा है?"
+          }
+        }
+      }
     },
     "Keep driving. Reports start again with the signal." : {
-      "comment" : "Help, under 'No connection'."
+      "comment" : "Help, under 'No connection'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी चलाते रहें। सिग्नल लौटते ही रिपोर्ट फिर से शुरू हो जाती हैं।"
+          }
+        }
+      }
     },
     "Keep going" : {
-      "comment" : "The cancel button of the 'End this trip?' and 'Trip not ended yet' alerts: the trip carries on."
+      "comment" : "The cancel button of the 'End this trip?' and 'Trip not ended yet' alerts: the trip carries on.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "चलाते रहें"
+          }
+        }
+      }
     },
     "Keep it reporting" : {
-      "comment" : "Welcome, screen 3: title."
+      "comment" : "Welcome, screen 3: title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट चालू रखें"
+          }
+        }
+      }
     },
     "Keep Precise on, so riders see the right street" : {
-      "comment" : "Welcome, screen 3: under 'Allow location'. Precise is iOS's name for precise location."
+      "comment" : "Welcome, screen 3: under 'Allow location'. Precise is iOS's name for precise location.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘सटीक’ चालू रखें, ताकि यात्रियों को सही सड़क दिखे"
+          }
+        }
+      }
     },
     "Keep the phone on charge" : {
-      "comment" : "Welcome, screen 3: the second thing a trip needs."
+      "comment" : "Welcome, screen 3: the second thing a trip needs.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फ़ोन चार्जिंग पर रखें"
+          }
+        }
+      }
     },
     "Leave the app open" : {
-      "comment" : "Welcome, screen 3: the third thing a trip needs."
+      "comment" : "Welcome, screen 3: the third thing a trip needs.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऐप खुला रहने दें"
+          }
+        }
+      }
     },
     "Loading" : {
-      "comment" : "What VoiceOver says while a picker's Try again is loading the list again."
+      "comment" : "What VoiceOver says while a picker's Try again is loading the list again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोड हो रहा है"
+          }
+        }
+      }
     },
     "Location" : {
-      "comment" : "Checklist row: the app's location access."
+      "comment" : "Checklist row: the app's location access.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोकेशन"
+          }
+        }
+      }
     },
     "Location is needed to report" : {
-      "comment" : "Checklist: in place of the Location row's reason once location was refused."
+      "comment" : "Checklist: in place of the Location row's reason once location was refused.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट भेजने के लिए लोकेशन ज़रूरी है"
+          }
+        }
+      }
     },
     "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip." : {
-      "comment" : "Refusal when the app has no location access."
+      "comment" : "Refusal when the app has no location access.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OBA Vehicle Tracker के लिए लोकेशन बंद है। ट्रिप शुरू करने के लिए इसे सेटिंग में चालू करें।"
+          }
+        }
+      }
     },
     "Location must be on for the whole phone" : {
-      "comment" : "Checklist: why Location Services must be on."
+      "comment" : "Checklist: why Location Services must be on.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पूरे फ़ोन के लिए लोकेशन चालू होनी चाहिए"
+          }
+        }
+      }
     },
     "Location off" : {
-      "comment" : "Problem line: location access was turned off for the app during the trip."
+      "comment" : "Problem line: location access was turned off for the app during the trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोकेशन बंद है"
+          }
+        }
+      }
     },
     "Location services" : {
-      "comment" : "Checklist row: Location Services for the whole phone."
+      "comment" : "Checklist row: Location Services for the whole phone.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोकेशन सेवाएँ"
+          }
+        }
+      }
     },
     "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services." : {
-      "comment" : "Refusal when Location Services are off for the whole phone."
+      "comment" : "Refusal when Location Services are off for the whole phone.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस iPhone पर स्थान सेवा बंद है। इसे सेटिंग > गोपनीयता और सुरक्षा > स्थान सेवा में चालू करें।"
+          }
+        }
+      }
     },
     "Location stopped" : {
-      "comment" : "Problem line: the location stream ended during the trip."
+      "comment" : "Problem line: the location stream ended during the trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोकेशन रुक गई"
+          }
+        }
+      }
     },
     "Matches" : {
-      "comment" : "Section header over the vehicles or routes that match what the driver typed."
+      "comment" : "Section header over the vehicles or routes that match what the driver typed.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "खोज में मिले"
+          }
+        }
+      }
     },
     "Next" : {
-      "comment" : "At the end of the checklist row that Continue asks iOS about next.\nStatus card line 1, before the next stop's name.\nTag on the next run to start, when none is under way.\nWelcome: the button to the next of its three screens."
+      "comment" : "At the end of the checklist row that Continue asks iOS about next.\nStatus card line 1, before the next stop's name.\nTag on the next run to start, when none is under way.\nWelcome: the button to the next of its three screens.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगला"
+          }
+        }
+      }
     },
     "Next %@ · %@" : {
       "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
@@ -620,155 +1646,553 @@
             "state" : "new",
             "value" : "Next %1$@ · %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगला %1$@ · %2$@"
+          }
         }
       }
     },
     "Next stop" : {
-      "comment" : "CarPlay Details: the row with the next stop's name, its scheduled time and the distance to it, e.g. '3rd Ave & Seneca St · 7:18 AM · 232 m'."
+      "comment" : "CarPlay Details: the row with the next stop's name, its scheduled time and the distance to it, e.g. '3rd Ave & Seneca St · 7:18 AM · 232 m'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगला स्टॉप"
+          }
+        }
+      }
     },
     "Next stop, %@" : {
-      "comment" : "VoiceOver: the next stop's mark on the map, with the stop's name, e.g. 'Next stop, 3rd Ave & Seneca St'."
+      "comment" : "VoiceOver: the next stop's mark on the map, with the stop's name, e.g. 'Next stop, 3rd Ave & Seneca St'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगला स्टॉप, %@"
+          }
+        }
+      }
     },
     "No connection" : {
-      "comment" : "Problem line: the app cannot reach the server."
+      "comment" : "Problem line: the app cannot reach the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कनेक्शन नहीं है"
+          }
+        }
+      }
     },
     "No GPS" : {
-      "comment" : "Trip sheet Reports row: there is no position to report."
+      "comment" : "Trip sheet Reports row: there is no position to report.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPS नहीं"
+          }
+        }
+      }
     },
     "No GPS signal" : {
-      "comment" : "Problem line: the phone has no position fix."
+      "comment" : "Problem line: the phone has no position fix.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPS सिग्नल नहीं है"
+          }
+        }
+      }
     },
     "No route matches %@" : {
-      "comment" : "Empty state title when the route search finds nothing: what the driver typed, e.g. 'No route matches 999'."
+      "comment" : "Empty state title when the route search finds nothing: what the driver typed, e.g. 'No route matches 999'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ से कोई रूट नहीं मिला"
+          }
+        }
+      }
     },
     "No runs on route %@ today" : {
-      "comment" : "Empty state title when the route has no runs today: the route's number, e.g. 'No runs on route 7 today'."
+      "comment" : "Empty state title when the route has no runs today: the route's number, e.g. 'No runs on route 7 today'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आज रूट %@ पर कोई फेरा नहीं है"
+          }
+        }
+      }
     },
     "No runs on this route today" : {
-      "comment" : "Empty state title when a route whose feed gave no number has no runs today."
+      "comment" : "Empty state title when a route whose feed gave no number has no runs today.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आज इस रूट पर कोई फेरा नहीं है"
+          }
+        }
+      }
     },
     "No schedule on this server yet" : {
-      "comment" : "Empty state title when the server has no GTFS schedule loaded."
+      "comment" : "Empty state title when the server has no GTFS schedule loaded.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस सर्वर पर अभी कोई शेड्यूल नहीं है"
+          }
+        }
+      }
     },
     "No vehicle matches %@" : {
-      "comment" : "Empty state title when the vehicle search finds nothing: what the driver typed, e.g. 'No vehicle matches 999'."
+      "comment" : "Empty state title when the vehicle search finds nothing: what the driver typed, e.g. 'No vehicle matches 999'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ से कोई गाड़ी नहीं मिली"
+          }
+        }
+      }
     },
     "No vehicles are assigned to you" : {
-      "comment" : "Empty state title when the driver has no assigned vehicles."
+      "comment" : "Empty state title when the driver has no assigned vehicles.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपको कोई गाड़ी नहीं दी गई है"
+          }
+        }
+      }
     },
     "Not ended yet" : {
-      "comment" : "CarPlay: the short form of the 'Trip not ended yet' alert's title, for a car screen too narrow for it."
+      "comment" : "CarPlay: the short form of the 'Trip not ended yet' alert's title, for a car screen too narrow for it.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अभी खत्म नहीं हुई"
+          }
+        }
+      }
     },
     "Not now" : {
-      "comment" : "Closes the sign-in-again sheet without signing in; the trip stays open and the Signed out card stays."
+      "comment" : "Closes the sign-in-again sheet without signing in; the trip stays open and the Signed out card stays.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अभी नहीं"
+          }
+        }
+      }
     },
     "Not reporting" : {
-      "comment" : "Trip sheet Reports row: reports are not reaching the server (no connection, refused, or a wrong clock)."
+      "comment" : "Trip sheet Reports row: reports are not reaching the server (no connection, refused, or a wrong clock).",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नहीं भेजी जा रहीं"
+          }
+        }
+      }
     },
     "Not set" : {
-      "comment" : "VoiceOver value of the occupancy row when the driver has not chosen one."
+      "comment" : "VoiceOver value of the occupancy row when the driver has not chosen one.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "चुना नहीं गया"
+          }
+        }
+      }
     },
     "Now" : {
-      "comment" : "Tag on the run under way, and the VoiceOver label of the line between the runs gone and the rest."
+      "comment" : "Tag on the run under way, and the VoiceOver label of the line between the runs gone and the rest.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अभी"
+          }
+        }
+      }
     },
     "OBA Vehicle Tracker" : {
-      "comment" : "CarPlay: the navigation bar before a trip, the app's name. Keep it as it is in every language."
+      "comment" : "CarPlay: the navigation bar before a trip, the app's name. Keep it as it is in every language.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OBA Vehicle Tracker"
+          }
+        }
+      }
     },
     "Off route" : {
-      "comment" : "The off-route answer without its distance, for VoiceOver, the stop list's vehicle row, and CarPlay's off-route banner where the distance doesn't fit."
+      "comment" : "The off-route answer without its distance, for VoiceOver, the stop list's vehicle row, and CarPlay's off-route banner where the distance doesn't fit.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट से बाहर"
+          }
+        }
+      }
     },
     "Off route · %@" : {
-      "comment" : "Status card answer: how far the vehicle is from the route, e.g. 'Off route · 120 m'."
+      "comment" : "Status card answer: how far the vehicle is from the route, e.g. 'Off route · 120 m'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट से बाहर · %@"
+          }
+        }
+      }
     },
     "Off schedule" : {
-      "comment" : "Status card line 1 beyond the server's schedule window. The answer above it says how far off, e.g. '20 min late'."
+      "comment" : "Status card line 1 beyond the server's schedule window. The answer above it says how far off, e.g. '20 min late'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "शेड्यूल से बाहर"
+          }
+        }
+      }
     },
     "OK" : {
-      "comment" : "CarPlay: the button that closes an alert.\nFirst trip done: the button that closes the sheet.\nSetup link alert: the button that closes it after the link was not used."
+      "comment" : "CarPlay: the button that closes an alert.\nFirst trip done: the button that closes the sheet.\nSetup link alert: the button that closes it after the link was not used.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ठीक है"
+          }
+        }
+      }
     },
     "On the status card" : {
-      "comment" : "Help: the heading over what the status card on Tracking can say."
+      "comment" : "Help: the heading over what the status card on Tracking can say.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "स्टेटस कार्ड पर"
+          }
+        }
+      }
     },
     "On time" : {
-      "comment" : "Status card answer while the vehicle is inside the on-time window."
+      "comment" : "Status card answer while the vehicle is inside the on-time window.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "समय पर"
+          }
+        }
+      }
     },
     "Only approximate was allowed" : {
-      "comment" : "Checklist: in place of the Precise location row's reason once only approximate location was allowed."
+      "comment" : "Checklist: in place of the Precise location row's reason once only approximate location was allowed.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सिर्फ़ अनुमानित लोकेशन की अनुमति मिली"
+          }
+        }
+      }
     },
     "Only continue if your agency sent you this link." : {
-      "comment" : "Setup link alert: under 'Use tracker.example.org?'."
+      "comment" : "Setup link alert: under 'Use tracker.example.org?'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आगे तभी बढ़ें जब यह लिंक आपकी एजेंसी ने भेजा हो।"
+          }
+        }
+      }
     },
     "Open OBA Vehicle Tracker on your iPhone to allow location." : {
-      "comment" : "Refusal when the location prompt got no answer, usually because it never showed: the driver was never asked."
+      "comment" : "Refusal when the location prompt got no answer, usually because it never showed: the driver was never asked.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोकेशन की अनुमति देने के लिए अपने iPhone पर OBA Vehicle Tracker खोलें।"
+          }
+        }
+      }
     },
     "Open Settings" : {
-      "comment" : "Banner button that opens the app's page in the Settings app after a start was refused for location access.\nChecklist row button that opens the app's page in the Settings app, where refused location can be allowed."
+      "comment" : "Banner button that opens the app's page in the Settings app after a start was refused for location access.\nChecklist row button that opens the app's page in the Settings app, where refused location can be allowed.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सेटिंग खोलें"
+          }
+        }
+      }
     },
     "Open the app and tap %@." : {
-      "comment" : "Welcome, screen 3: what to do when reporting has stopped. The name of the Resume screen's main button, filled in from that button, e.g. 'Open the app and tap Resume trip.'"
+      "comment" : "Welcome, screen 3: what to do when reporting has stopped. The name of the Resume screen's main button, filled in from that button, e.g. 'Open the app and tap Resume trip.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऐप खोलें और ‘%@’ दबाएँ।"
+          }
+        }
+      }
     },
     "Open the app on iPhone" : {
-      "comment" : "Problem line: iOS refused a background location session because the app was not in the foreground."
+      "comment" : "Problem line: iOS refused a background location session because the app was not in the foreground.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone पर ऐप खोलें"
+          }
+        }
+      }
     },
     "Opens Settings" : {
-      "comment" : "VoiceOver hint on a problem line that opens the app's page in Settings."
+      "comment" : "VoiceOver hint on a problem line that opens the app's page in Settings.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सेटिंग खोलता है"
+          }
+        }
+      }
     },
     "Password" : {
-      "comment" : "Label of the sign-in screen's password field."
+      "comment" : "Label of the sign-in screen's password field.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पासवर्ड"
+          }
+        }
+      }
     },
     "Phone clock is wrong" : {
-      "comment" : "Problem line: the server rejects the reports' timestamps."
+      "comment" : "Problem line: the server rejects the reports' timestamps.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फ़ोन की घड़ी गलत है"
+          }
+        }
+      }
     },
     "Pick another route, or check again tomorrow." : {
-      "comment" : "Empty state text under 'No runs on route … today'."
+      "comment" : "Empty state text under 'No runs on route … today'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कोई दूसरा रूट चुनें, या कल फिर देखें।"
+          }
+        }
+      }
     },
     "Position paused" : {
-      "comment" : "Problem line, after 'No GPS signal': riders see the last position until a fix returns."
+      "comment" : "Problem line, after 'No GPS signal': riders see the last position until a fix returns.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लोकेशन रुकी हुई है"
+          }
+        }
+      }
     },
     "Precise location" : {
-      "comment" : "Checklist row: precise rather than approximate location."
+      "comment" : "Checklist row: precise rather than approximate location.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सटीक लोकेशन"
+          }
+        }
+      }
     },
     "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street." : {
-      "comment" : "Refusal when the app has only approximate location."
+      "comment" : "Refusal when the app has only approximate location.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सटीक स्थान बंद है। इसे सेटिंग में चालू करें, ताकि गाड़ी सही सड़क पर दिखे।"
+          }
+        }
+      }
     },
     "Precise Location off" : {
-      "comment" : "Problem line: Precise Location was turned off during the trip, so every fix is too coarse to report."
+      "comment" : "Problem line: Precise Location was turned off during the trip, so every fix is too coarse to report.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सटीक स्थान बंद है"
+          }
+        }
+      }
     },
     "Re-center" : {
-      "comment" : "The button over the map, once the driver has dragged it away from the vehicle, that makes the map follow the vehicle again."
+      "comment" : "The button over the map, once the driver has dragged it away from the vehicle, that makes the map follow the vehicle again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी पर लौटें"
+          }
+        }
+      }
     },
     "Re-center the map on the vehicle" : {
-      "comment" : "VoiceOver label of the Re-center button over the map."
+      "comment" : "VoiceOver label of the Re-center button over the map.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "मैप को वापस गाड़ी पर लाएँ"
+          }
+        }
+      }
     },
     "Recent" : {
-      "comment" : "Section header over the vehicles or routes the driver used last."
+      "comment" : "Section header over the vehicles or routes the driver used last.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "हाल के"
+          }
+        }
+      }
     },
     "Reload" : {
-      "comment" : "Banner button that loads the run list again after the schedule moved on to a new day."
+      "comment" : "Banner button that loads the run list again after the schedule moved on to a new day.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फिर से लोड करें"
+          }
+        }
+      }
     },
     "Remove %@ from favorites" : {
-      "comment" : "VoiceOver label of the star on a vehicle tile that is a favourite: the fleet number, e.g. 'Remove 4317 from favorites'."
+      "comment" : "VoiceOver label of the star on a vehicle tile that is a favourite: the fleet number, e.g. 'Remove 4317 from favorites'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ को पसंदीदा से हटाएँ"
+          }
+        }
+      }
     },
     "Reporting" : {
-      "comment" : "Trip sheet Reports row: reports are reaching the server."
+      "comment" : "Trip sheet Reports row: reports are reaching the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "भेजी जा रही हैं"
+          }
+        }
+      }
     },
     "Reports" : {
-      "comment" : "Trip sheet row label: whether reports are reaching the server follows it."
+      "comment" : "Trip sheet row label: whether reports are reaching the server follows it.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट"
+          }
+        }
+      }
     },
     "Reports have stopped. Sign in to go on. Your trip is still open." : {
-      "comment" : "Help, under 'Signed out'."
+      "comment" : "Help, under 'Signed out'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट रुक गई हैं। आगे बढ़ने के लिए साइन इन करें। आपकी ट्रिप अभी खुली है।"
+          }
+        }
+      }
     },
     "Reports have stopped. Your trip is still open." : {
-      "comment" : "Under 'Signed out': what the expired sign-in means for the trip."
+      "comment" : "Under 'Signed out': what the expired sign-in means for the trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट रुक गई हैं। आपकी ट्रिप अभी खुली है।"
+          }
+        }
+      }
     },
     "Reports refused" : {
-      "comment" : "Problem line: the server refuses the vehicle's reports (not assigned, deactivated, or no active trip)."
+      "comment" : "Problem line: the server refuses the vehicle's reports (not assigned, deactivated, or no active trip).",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट नहीं ली जा रहीं"
+          }
+        }
+      }
     },
     "Reports sent" : {
-      "comment" : "Tip on the trip bar's sent count, on the driver's first trip: its title."
+      "comment" : "Tip on the trip bar's sent count, on the driver's first trip: its title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "भेजी गई रिपोर्ट"
+          }
+        }
+      }
     },
     "Reports start when you do" : {
-      "comment" : "Problem line, after 'Open the app on iPhone': opening the app is what restarts reporting."
+      "comment" : "Problem line, after 'Open the app on iPhone': opening the app is what restarts reporting.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऐप खोलते ही रिपोर्ट शुरू होंगी"
+          }
+        }
+      }
     },
     "Reports stop, and route %@'s %@ run is marked complete. %lld reports were sent." : {
       "comment" : "Message of the 'End this trip?' alert: the route's short name, the run's start time in the agency's zone, then how many reports reached the server, e.g. 'Reports stop, and route 7's 6:58 AM run is marked complete. 142 reports were sent.'",
@@ -800,6 +2224,34 @@
               }
             }
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट रुक जाएँगी, और रूट %1$@ का %2$@ वाला फेरा पूरा माना जाएगा। %#@reports@"
+          },
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गई।"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गईं।"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -823,50 +2275,180 @@
               }
             }
           }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "रिपोर्ट रुक जाएँगी, और यह फेरा पूरा माना जाएगा। %lld रिपोर्ट भेजी गई।"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "रिपोर्ट रुक जाएँगी, और यह फेरा पूरा माना जाएगा। %lld रिपोर्ट भेजी गईं।"
+                }
+              }
+            }
+          }
         }
       }
     },
     "Reports stopped" : {
-      "comment" : "Trip sheet Reports row: the sign-in expired, so nothing is sent until the driver signs in again."
+      "comment" : "Trip sheet Reports row: the sign-in expired, so nothing is sent until the driver signs in again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट रुक गईं"
+          }
+        }
+      }
     },
     "Reports stopped when your session ended. Sign in to keep reporting on route %@." : {
-      "comment" : "On the sign-in-again sheet's card. The open trip's route, e.g. '7'."
+      "comment" : "On the sign-in-again sheet's card. The open trip's route, e.g. '7'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपका सेशन खत्म होने पर रिपोर्ट रुक गईं। रूट %@ पर रिपोर्ट भेजते रहने के लिए साइन इन करें।"
+          }
+        }
+      }
     },
     "Resume" : {
-      "comment" : "The button on the 'Location stopped' problem line that restarts location."
+      "comment" : "The button on the 'Location stopped' problem line that restarts location.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फिर से शुरू करें"
+          }
+        }
+      }
     },
     "Resume on iPhone" : {
-      "comment" : "CarPlay: the navigation bar while the trip is paused, and the Details screen's Reports row after 'Location stopped', e.g. 'Location stopped · Resume on iPhone'. The car can't resume reporting; the phone can."
+      "comment" : "CarPlay: the navigation bar while the trip is paused, and the Details screen's Reports row after 'Location stopped', e.g. 'Location stopped · Resume on iPhone'. The car can't resume reporting; the phone can.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone पर फिर से शुरू करें"
+          }
+        }
+      }
     },
     "Resume trip" : {
-      "comment" : "The Resume screen's main button: keep reporting on the open trip."
+      "comment" : "The Resume screen's main button: keep reporting on the open trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप फिर से शुरू करें"
+          }
+        }
+      }
     },
     "Resume your trip?" : {
-      "comment" : "Title of the screen at launch when the app closed while a trip was running."
+      "comment" : "Title of the screen at launch when the app closed while a trip was running.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपनी ट्रिप फिर से शुरू करें?"
+          }
+        }
+      }
     },
     "Riders can see you coming" : {
-      "comment" : "Welcome, screen 1: title."
+      "comment" : "Welcome, screen 1: title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यात्री देख सकते हैं कि आप आ रहे हैं"
+          }
+        }
+      }
     },
     "Riders can't see you" : {
-      "comment" : "Problem line, after 'No connection': the vehicle has dropped off riders' maps."
+      "comment" : "Problem line, after 'No connection': the vehicle has dropped off riders' maps.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यात्री आपको नहीं देख सकते"
+          }
+        }
+      }
     },
     "Riders could see your vehicle." : {
-      "comment" : "First trip done: under the sent count."
+      "comment" : "First trip done: under the sent count.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यात्री आपकी गाड़ी देख पा रहे थे।"
+          }
+        }
+      }
     },
     "Riders see you" : {
-      "comment" : "Welcome, screen 2: the green card that follows the three choices."
+      "comment" : "Welcome, screen 2: the green card that follows the three choices.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यात्री आपको देख रहे हैं"
+          }
+        }
+      }
     },
     "Riders see you." : {
-      "comment" : "VoiceOver: the welcome's green card on screen 2, 'Riders see you', as a sentence. The sent count beside it is not read."
+      "comment" : "VoiceOver: the welcome's green card on screen 2, 'Riders see you', as a sentence. The sent count beside it is not read.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यात्री आपको देख रहे हैं।"
+          }
+        }
+      }
     },
     "Riders see your last position until it comes back." : {
-      "comment" : "Help, under 'No GPS signal'."
+      "comment" : "Help, under 'No GPS signal'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इसके लौटने तक यात्री आपकी आखिरी लोकेशन देखते हैं।"
+          }
+        }
+      }
     },
     "Route" : {
-      "comment" : "CarPlay Details: the row with the route's short name and its name, e.g. '7 · Rainier Beach'."
+      "comment" : "CarPlay Details: the row with the route's short name and its name, e.g. '7 · Rainier Beach'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट"
+          }
+        }
+      }
     },
     "Route %@" : {
-      "comment" : "Resume card: in place of the headsign, for a trip that has none. The route's short name or id, e.g. '7'.\nVoiceOver label of a route badge: the route's number, or its name when the feed gives no number, e.g. 'Route 7'."
+      "comment" : "Resume card: in place of the headsign, for a trip that has none. The route's short name or id, e.g. '7'.\nVoiceOver label of a route badge: the route's number, or its name when the feed gives no number, e.g. 'Route 7'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट %@"
+          }
+        }
+      }
     },
     "Route %@ to %@" : {
       "comment" : "VoiceOver: the Resume card's route: its short name or id, then the headsign, e.g. 'Route 7 to Downtown Seattle'.",
@@ -875,6 +2457,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Route %1$@ to %2$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट %1$@, %2$@ की ओर"
           }
         }
       }
@@ -886,6 +2474,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Route %1$@ to %2$@ on vehicle %3$@."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट %1$@, %2$@ की ओर, गाड़ी %3$@ पर।"
           }
         }
       }
@@ -920,6 +2514,34 @@
               }
             }
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट %1$@, %2$@ की ओर, %#@reports@"
+          },
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गई"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg रिपोर्ट भेजी गईं"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -931,104 +2553,366 @@
             "state" : "new",
             "value" : "Route %1$@, %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट %1$@, %2$@"
+          }
         }
       }
     },
     "Route number or name" : {
-      "comment" : "Placeholder of the route screen's search field."
+      "comment" : "Placeholder of the route screen's search field.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट नंबर या नाम"
+          }
+        }
+      }
     },
     "Run" : {
-      "comment" : "Trip sheet row label: the run's start time and the vehicle follow it."
+      "comment" : "Trip sheet row label: the run's start time and the vehicle follow it.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फेरा"
+          }
+        }
+      }
     },
     "Run %@" : {
-      "comment" : "Under a run on the run list and in CarPlay: the agency's run or train number, shown as the feed gives it, e.g. 'Run 1503'. Followed by the block when there is one, as in 'Run 1503 · Block 599-20'."
+      "comment" : "Under a run on the run list and in CarPlay: the agency's run or train number, shown as the feed gives it, e.g. 'Run 1503'. Followed by the block when there is one, as in 'Run 1503 · Block 599-20'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फेरा %@"
+          }
+        }
+      }
     },
     "Schedule" : {
-      "comment" : "CarPlay Details: the row with the status card's answer, e.g. 'On time' or '3 min late'."
+      "comment" : "CarPlay Details: the row with the status card's answer, e.g. 'On time' or '3 min late'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "शेड्यूल"
+          }
+        }
+      }
     },
     "Search by the number on the sign, or part of the name." : {
-      "comment" : "Empty state text under 'No route matches …'."
+      "comment" : "Empty state text under 'No route matches …'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बोर्ड पर लिखे नंबर से, या नाम के किसी हिस्से से खोजें।"
+          }
+        }
+      }
     },
     "Seats free" : {
-      "comment" : "Occupancy button: many seats are free."
+      "comment" : "Occupancy button: many seats are free.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सीटें खाली"
+          }
+        }
+      }
     },
     "See the welcome again" : {
-      "comment" : "Help: the row that opens the three welcome screens again."
+      "comment" : "Help: the row that opens the three welcome screens again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "स्वागत स्क्रीन फिर से देखें"
+          }
+        }
+      }
     },
     "Sends the app version, the iPhone model, the server, what the app is allowed to do and recent errors. No positions, no sign-in details, no email." : {
-      "comment" : "Help: under 'Share diagnostics', what the file holds and what it never holds."
+      "comment" : "Help: under 'Share diagnostics', what the file holds and what it never holds.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऐप का वर्शन, iPhone का मॉडल, सर्वर, ऐप को किन चीज़ों की अनुमति है और हाल की दिक्कतें भेजता है। कोई लोकेशन नहीं, साइन इन की कोई जानकारी नहीं, कोई ईमेल नहीं।"
+          }
+        }
+      }
     },
     "Server" : {
-      "comment" : "Once the phone has signed in before, the one line naming the server it uses: this word, then the server, e.g. 'tracker.example.org'."
+      "comment" : "Once the phone has signed in before, the one line naming the server it uses: this word, then the server, e.g. 'tracker.example.org'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर"
+          }
+        }
+      }
     },
     "Server address" : {
-      "comment" : "Header over the field for the agency's server address, and that field's VoiceOver label."
+      "comment" : "Header over the field for the agency's server address, and that field's VoiceOver label.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर का पता"
+          }
+        }
+      }
     },
     "Server error" : {
-      "comment" : "Problem line: the server fails or refuses the reports for a reason the driver cannot fix (a server error), so they are not in the feed."
+      "comment" : "Problem line: the server fails or refuses the reports for a reason the driver cannot fix (a server error), so they are not in the feed.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर में गड़बड़ी"
+          }
+        }
+      }
     },
     "Server error %@" : {
-      "comment" : "Shown only where no screen has its own words for a request the server turned down. The HTTP status code it answered with, shown as it is, e.g. 'Server error 502'."
+      "comment" : "Shown only where no screen has its own words for a request the server turned down. The HTTP status code it answered with, shown as it is, e.g. 'Server error 502'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर में गड़बड़ी %@"
+          }
+        }
+      }
     },
     "Set automatic time" : {
-      "comment" : "Problem line, after 'Phone clock is wrong': turn on automatic date and time in Settings."
+      "comment" : "Problem line, after 'Phone clock is wrong': turn on automatic date and time in Settings.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "समय अपने-आप सेट होने दें"
+          }
+        }
+      }
     },
     "Set by your agency." : {
-      "comment" : "Under the server line when the agency's device management sets the server."
+      "comment" : "Under the server line when the agency's device management sets the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपकी एजेंसी ने सेट किया है।"
+          }
+        }
+      }
     },
     "Share diagnostics" : {
-      "comment" : "Help: opens the share sheet with a small text file about the app and the iPhone, for whoever looks after the app."
+      "comment" : "Help: opens the share sheet with a small text file about the app and the iPhone, for whoever looks after the app.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऐप की जानकारी शेयर करें"
+          }
+        }
+      }
     },
     "Show password" : {
-      "comment" : "VoiceOver label of the eye button that shows the typed password."
+      "comment" : "VoiceOver label of the eye button that shows the typed password.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पासवर्ड दिखाएँ"
+          }
+        }
+      }
     },
     "Sign in" : {
-      "comment" : "The button on the Signed out card that opens the sign-in sheet.\nThe sign-in screen's button.\nTitle of the sign-in screen."
+      "comment" : "The button on the Signed out card that opens the sign-in sheet.\nThe sign-in screen's button.\nTitle of the sign-in screen.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन इन करें"
+          }
+        }
+      }
     },
     "Sign in again" : {
-      "comment" : "Title of the sheet for signing in again after the session ended during a trip."
+      "comment" : "Title of the sheet for signing in again after the session ended during a trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फिर से साइन इन करें"
+          }
+        }
+      }
     },
     "Sign in and keep reporting" : {
-      "comment" : "The button that signs in again during a trip, so reports start again."
+      "comment" : "The button that signs in again during a trip, so reports start again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन इन करें और रिपोर्ट भेजते रहें"
+          }
+        }
+      }
     },
     "Sign in first." : {
-      "comment" : "Error when a server call is made while signed out."
+      "comment" : "Error when a server call is made while signed out.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पहले साइन इन करें।"
+          }
+        }
+      }
     },
     "Sign in on iPhone" : {
-      "comment" : "CarPlay: the navigation bar while signed out, and the Details screen's Reports row once the sign-in has expired, e.g. 'Reports stopped · Sign in on iPhone'. The car can't sign in; the phone can."
+      "comment" : "CarPlay: the navigation bar while signed out, and the Details screen's Reports row once the sign-in has expired, e.g. 'Reports stopped · Sign in on iPhone'. The car can't sign in; the phone can.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone पर साइन इन करें"
+          }
+        }
+      }
     },
     "Sign out" : {
-      "comment" : "The account menu's item that signs the driver out, and the confirming button of the 'Sign out?' question it asks first."
+      "comment" : "The account menu's item that signs the driver out, and the confirming button of the 'Sign out?' question it asks first.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन आउट करें"
+          }
+        }
+      }
     },
     "Sign out?" : {
-      "comment" : "Asked before signing out, since the phone is usually going to the next driver."
+      "comment" : "Asked before signing out, since the phone is usually going to the next driver.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन आउट करें?"
+          }
+        }
+      }
     },
     "Signed out" : {
-      "comment" : "The card that takes the status card's place once the driver's sign-in has expired."
+      "comment" : "The card that takes the status card's place once the driver's sign-in has expired.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन आउट हो गया"
+          }
+        }
+      }
     },
     "Signed out. %@" : {
-      "comment" : "VoiceOver: the Signed out card in one announcement, when it takes the status card's place. Then the card's message, 'Reports have stopped. Your trip is still open.'"
+      "comment" : "VoiceOver: the Signed out card in one announcement, when it takes the status card's place. Then the card's message, 'Reports have stopped. Your trip is still open.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन आउट हो गया। %@"
+          }
+        }
+      }
     },
     "Signing in" : {
-      "comment" : "The sign-in button while the server is being asked, beside a spinner."
+      "comment" : "The sign-in button while the server is being asked, beside a spinner.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन इन हो रहा है"
+          }
+        }
+      }
     },
     "Skip" : {
-      "comment" : "Welcome: the button on every screen that closes the welcome."
+      "comment" : "Welcome: the button on every screen that closes the welcome.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "छोड़ें"
+          }
+        }
+      }
     },
     "So riders see the vehicle at the right stop" : {
-      "comment" : "Checklist: why the app needs precise location."
+      "comment" : "Checklist: why the app needs precise location.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ताकि यात्री गाड़ी को सही स्टॉप पर देखें"
+          }
+        }
+      }
     },
     "So the app knows where the vehicle is" : {
-      "comment" : "Checklist: why the app needs location."
+      "comment" : "Checklist: why the app needs location.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ताकि ऐप को पता रहे कि गाड़ी कहाँ है"
+          }
+        }
+      }
     },
     "Standing" : {
-      "comment" : "Occupancy button: no seats, standing room only."
+      "comment" : "Occupancy button: no seats, standing room only.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "खड़े होने की जगह"
+          }
+        }
+      }
     },
     "Start a trip and riders see your vehicle on their map. End it when you finish." : {
-      "comment" : "Welcome, screen 1: under the title."
+      "comment" : "Welcome, screen 1: under the title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप शुरू करें, तो यात्री अपने मैप पर आपकी गाड़ी देखते हैं। काम पूरा होने पर ट्रिप खत्म करें।"
+          }
+        }
+      }
     },
     "Start the %@ run?" : {
-      "comment" : "Title of the start confirmation; the argument is the run's start time in the agency's zone, e.g. '6:43 AM'."
+      "comment" : "Title of the start confirmation; the argument is the run's start time in the agency's zone, e.g. '6:43 AM'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ वाला फेरा शुरू करें?"
+          }
+        }
+      }
     },
     "Start the %@ run? Route %@ to %@ on vehicle %@." : {
       "comment" : "CarPlay's start confirmation in one line: the run's start time in the agency's zone, the route's number, the headsign, then the vehicle's fleet number, e.g. 'Start the 6:43 AM run? Route 7 to Downtown Seattle on vehicle 4317.'",
@@ -1038,14 +2922,36 @@
             "state" : "new",
             "value" : "Start the %1$@ run? Route %2$@ to %3$@ on vehicle %4$@."
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ वाला फेरा शुरू करें? रूट %2$@, %3$@ की ओर, गाड़ी %4$@ पर।"
+          }
         }
       }
     },
     "Start this run?" : {
-      "comment" : "CarPlay: the shortest form of the start confirmation's title, 'Start the 6:43 AM run?', for a car screen too narrow for the run's time."
+      "comment" : "CarPlay: the shortest form of the start confirmation's title, 'Start the 6:43 AM run?', for a car screen too narrow for the run's time.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह फेरा शुरू करें?"
+          }
+        }
+      }
     },
     "Start trip" : {
-      "comment" : "The start confirmation's confirming button, also named inside the tips and the welcome. In CarPlay, the navigation bar button that opens the lists of vehicles, routes and runs."
+      "comment" : "The start confirmation's confirming button, also named inside the tips and the welcome. In CarPlay, the navigation bar button that opens the lists of vehicles, routes and runs.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप शुरू करें"
+          }
+        }
+      }
     },
     "Started %lld h %lld min ago, at %@" : {
       "comment" : "Resume card: hours, then minutes past the hour, then the time the trip began, e.g. 'Started 2 h 5 min ago, at 6:58 AM'.",
@@ -1054,6 +2960,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Started %1$lld h %2$lld min ago, at %3$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld घंटे %2$lld मिनट पहले, %3$@ पर शुरू हुई"
           }
         }
       }
@@ -1108,6 +3020,54 @@
               }
             }
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@hours@ %#@minutes@ पहले, %3$@ पर शुरू हुई"
+          },
+          "substitutions" : {
+            "hours" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg घंटे"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg घंटे"
+                    }
+                  }
+                }
+              }
+            },
+            "minutes" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg मिनट"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg मिनट"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -1135,6 +3095,34 @@
                     "stringUnit" : {
                       "state" : "translated",
                       "value" : "%arg min"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@minutes@ पहले, %2$@ पर शुरू हुई"
+          },
+          "substitutions" : {
+            "minutes" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg मिनट"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg मिनट"
                     }
                   }
                 }
@@ -1174,11 +3162,47 @@
               }
             }
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@minutes@ पहले, %2$@ पर शुरू हुई"
+          },
+          "substitutions" : {
+            "minutes" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg मिनट"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg मिनट"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
     "Starting…" : {
-      "comment" : "VoiceOver value of the run being started, and CarPlay's navigation bar while a trip starts."
+      "comment" : "VoiceOver value of the run being started, and CarPlay's navigation bar while a trip starts.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "शुरू हो रहा है…"
+          }
+        }
+      }
     },
     "Step %lld of %lld" : {
       "comment" : "VoiceOver: the welcome's progress line: the screen's number, then how many screens there are, e.g. 'Step 1 of 3'.",
@@ -1188,122 +3212,432 @@
             "state" : "new",
             "value" : "Step %1$lld of %2$lld"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$lld में से चरण %1$lld"
+          }
         }
       }
     },
     "Tap Resume" : {
-      "comment" : "Problem line, after 'Location stopped': what to do. The Resume button is on the same line."
+      "comment" : "Problem line, after 'Location stopped': what to do. The Resume button is on the same line.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘फिर से शुरू करें’ दबाएँ"
+          }
+        }
+      }
     },
     "Tap Resume on the same line." : {
-      "comment" : "Help, under 'Location stopped'. Resume is the button on that line."
+      "comment" : "Help, under 'Location stopped'. Resume is the button on that line.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "उसी लाइन पर ‘फिर से शुरू करें’ दबाएँ।"
+          }
+        }
+      }
     },
     "Tap the line. It opens Settings to turn it on." : {
-      "comment" : "Help, under 'Location off or Precise Location off': tapping that line on Tracking opens the app's page in Settings."
+      "comment" : "Help, under 'Location off or Precise Location off': tapping that line on Tracking opens the app's page in Settings.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "लाइन पर टैप करें। सेटिंग खुलेगी, वहाँ इसे चालू करें।"
+          }
+        }
+      }
     },
     "Tap to fix" : {
-      "comment" : "Problem line, after 'Location off' or 'Precise Location off': tapping the line opens the app's page in Settings."
+      "comment" : "Problem line, after 'Location off' or 'Precise Location off': tapping the line opens the app's page in Settings.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ठीक करने के लिए टैप करें"
+          }
+        }
+      }
     },
     "Tap your run" : {
-      "comment" : "Tip on 'Choose a run', pointing at the run under way: its title."
+      "comment" : "Tip on 'Choose a run', pointing at the run under way: its title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपने फेरे पर टैप करें"
+          }
+        }
+      }
     },
     "The app closed while this trip was running. Reports are paused until you choose." : {
-      "comment" : "Under the Resume screen's title."
+      "comment" : "Under the Resume screen's title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप चलते समय ऐप बंद हो गया। जब तक आप कुछ नहीं चुनते, रिपोर्ट रुकी रहेंगी।"
+          }
+        }
+      }
     },
     "The app needs these to report vehicle %@. iOS asks about each one next." : {
-      "comment" : "Under the checklist's title: the vehicle's fleet number, e.g. 'The app needs these to report vehicle 4317. iOS asks about each one next.'"
+      "comment" : "Under the checklist's title: the vehicle's fleet number, e.g. 'The app needs these to report vehicle 4317. iOS asks about each one next.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी %@ की रिपोर्ट भेजने के लिए ऐप को ये चाहिए। iOS आगे हर एक के बारे में पूछेगा।"
+          }
+        }
+      }
     },
     "The iPhone is finding its position." : {
-      "comment" : "Help, under 'Waiting for GPS'."
+      "comment" : "Help, under 'Waiting for GPS'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone अपनी लोकेशन ढूँढ रहा है।"
+          }
+        }
+      }
     },
     "The next driver can sign in on this phone." : {
-      "comment" : "Under 'Sign out?'."
+      "comment" : "Under 'Sign out?'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगला ड्राइवर इस फ़ोन पर साइन इन कर सकता है।"
+          }
+        }
+      }
     },
     "The number on the sign" : {
-      "comment" : "Welcome, screen 2: under 'Choose a route'."
+      "comment" : "Welcome, screen 2: under 'Choose a route'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बोर्ड पर लिखा नंबर"
+          }
+        }
+      }
     },
     "The number on the vehicle" : {
-      "comment" : "Welcome, screen 2: under 'Choose your vehicle'."
+      "comment" : "Welcome, screen 2: under 'Choose your vehicle'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी पर लिखा नंबर"
+          }
+        }
+      }
     },
     "The schedule has no routes" : {
-      "comment" : "Empty state title when the server's schedule lists no routes."
+      "comment" : "Empty state title when the server's schedule lists no routes.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "शेड्यूल में कोई रूट नहीं है"
+          }
+        }
+      }
     },
     "The schedule moved on to a new day." : {
-      "comment" : "Banner when the server refused a start because the run is not in service on the day it now resolves to."
+      "comment" : "Banner when the server refused a start because the run is not in service on the day it now resolves to.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "शेड्यूल अगले दिन पर चला गया है।"
+          }
+        }
+      }
     },
     "The screen stays on while it charges" : {
-      "comment" : "Welcome, screen 3: under 'Keep the phone on charge'."
+      "comment" : "Welcome, screen 3: under 'Keep the phone on charge'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "चार्ज होते समय स्क्रीन चालू रहती है"
+          }
+        }
+      }
     },
     "The server didn't confirm the end. Check your signal and try again, or stop reporting on this phone now." : {
-      "comment" : "Message of the 'Trip not ended yet' alert."
+      "comment" : "Message of the 'Trip not ended yet' alert.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर ने ट्रिप खत्म होने की पुष्टि नहीं की। अपना सिग्नल जाँचें और फिर से कोशिश करें, या अभी इस फ़ोन पर रिपोर्ट भेजना बंद करें।"
+          }
+        }
+      }
     },
     "The server didn't confirm the trip ended. Try again, or end it on this phone only." : {
-      "comment" : "Banner on the Resume screen once the server did not confirm the end; the buttons then say Try again and End on this phone."
+      "comment" : "Banner on the Resume screen once the server did not confirm the end; the buttons then say Try again and End on this phone.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर ने ट्रिप खत्म होने की पुष्टि नहीं की। फिर से कोशिश करें, या इसे सिर्फ़ इस फ़ोन पर खत्म करें।"
+          }
+        }
+      }
     },
     "The server is not taking this vehicle's reports. Ask your dispatcher." : {
-      "comment" : "Help, under 'Reports refused'."
+      "comment" : "Help, under 'Reports refused'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर इस गाड़ी की रिपोर्ट नहीं ले रहा। कंट्रोल रूम से पूछें।"
+          }
+        }
+      }
     },
     "The server's reply could not be read." : {
-      "comment" : "Shown only where no screen has its own words for a reply the app could not read, such as a Wi-Fi sign-in page answering in place of the server."
+      "comment" : "Shown only where no screen has its own words for a reply the app could not read, such as a Wi-Fi sign-in page answering in place of the server.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सर्वर का जवाब पढ़ा नहीं जा सका।"
+          }
+        }
+      }
     },
     "Then tap %@" : {
-      "comment" : "Welcome, screen 2: under 'Choose a run'. The name of the button that starts a trip, filled in from that button, e.g. 'Then tap Start trip'."
+      "comment" : "Welcome, screen 2: under 'Choose a run'. The name of the button that starts a trip, filled in from that button, e.g. 'Then tap Start trip'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फिर ‘%@’ दबाएँ"
+          }
+        }
+      }
     },
     "Then tap %@. Riders see your vehicle from then on." : {
-      "comment" : "Tip on 'Choose a run', under its title. The name of the start confirmation's button that starts the trip, filled in from that button, e.g. 'Then tap Start trip. Riders see your vehicle from then on.'"
+      "comment" : "Tip on 'Choose a run', under its title. The name of the start confirmation's button that starts the trip, filled in from that button, e.g. 'Then tap Start trip. Riders see your vehicle from then on.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फिर %@ दबाएँ। उसके बाद यात्री आपकी गाड़ी देख सकते हैं।"
+          }
+        }
+      }
     },
     "This link does not contain a server address the app can use." : {
-      "comment" : "Title of the setup link alert when the link names no server address the app may use."
+      "comment" : "Title of the setup link alert when the link names no server address the app may use.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस लिंक में ऐसा सर्वर पता नहीं है जिसे ऐप इस्तेमाल कर सके।"
+          }
+        }
+      }
     },
     "This number grows while riders can see you. With no signal, keep driving." : {
-      "comment" : "Tip on the trip bar's sent count, under its title."
+      "comment" : "Tip on the trip bar's sent count, under its title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "जब तक यात्री आपको देख सकते हैं, यह नंबर बढ़ता रहता है। सिग्नल न हो, तो गाड़ी चलाते रहें।"
+          }
+        }
+      }
     },
     "This phone is signed in to %@. The link was not used." : {
-      "comment" : "Title of the setup link alert when the phone is already signed in, so it keeps its server: the host of that server, e.g. 'This phone is signed in to tracker.example.org. The link was not used.'"
+      "comment" : "Title of the setup link alert when the phone is already signed in, so it keeps its server: the host of that server, e.g. 'This phone is signed in to tracker.example.org. The link was not used.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह फ़ोन %@ में साइन इन है। लिंक इस्तेमाल नहीं हुआ।"
+          }
+        }
+      }
     },
     "This run has no route or stops to follow. Pick another run." : {
-      "comment" : "Refusal when the run's geometry has no shape or no stops to judge adherence against."
+      "comment" : "Refusal when the run's geometry has no shape or no stops to judge adherence against.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस फेरे में चलने के लिए कोई रूट या स्टॉप नहीं है। कोई दूसरा फेरा चुनें।"
+          }
+        }
+      }
     },
     "Three riders at a stop can see your vehicle coming." : {
-      "comment" : "VoiceOver: the picture on the welcome's first screen, a vehicle on its route, riders waving at the next stop and a rider's phone showing the vehicle."
+      "comment" : "VoiceOver: the picture on the welcome's first screen, a vehicle on its route, riders waving at the next stop and a rider's phone showing the vehicle.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "स्टॉप पर खड़े तीन यात्री आपकी गाड़ी को आते हुए देख सकते हैं।"
+          }
+        }
+      }
     },
     "To %@" : {
-      "comment" : "A segment of the direction switch over the run board; the argument is the headsign most of that direction's runs show, e.g. 'To Downtown Seattle'."
+      "comment" : "A segment of the direction switch over the run board; the argument is the headsign most of that direction's runs show, e.g. 'To Downtown Seattle'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ की ओर"
+          }
+        }
+      }
     },
     "Too many tries. Wait a minute, then try again." : {
-      "comment" : "Banner above the sign-in button when the server refused for too many attempts; its window is one minute."
+      "comment" : "Banner above the sign-in button when the server refused for too many attempts; its window is one minute.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बहुत बार कोशिश हो गई। एक मिनट रुकें, फिर से कोशिश करें।"
+          }
+        }
+      }
     },
     "Trip" : {
-      "comment" : "CarPlay: the title of the trip's Details screen, and its row with the headsign and the run's start time, e.g. 'Downtown Seattle · 6:58 AM'."
+      "comment" : "CarPlay: the title of the trip's Details screen, and its row with the headsign and the run's start time, e.g. 'Downtown Seattle · 6:58 AM'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप"
+          }
+        }
+      }
     },
     "Trip not ended yet" : {
-      "comment" : "Title of the alert shown when the server did not confirm the end of the trip."
+      "comment" : "Title of the alert shown when the server did not confirm the end of the trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप अभी खत्म नहीं हुई"
+          }
+        }
+      }
     },
     "Try again" : {
-      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: send the end again.\nButton that retries a load or a start that failed.\nChecklist row button: ask iOS for precise location again, or check Location Services again."
+      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: send the end again.\nButton that retries a load or a start that failed.\nChecklist row button: ask iOS for precise location again, or check Location Services again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "फिर से कोशिश करें"
+          }
+        }
+      }
     },
     "Turn on automatic time in Settings." : {
-      "comment" : "Help, under 'Phone clock is wrong'."
+      "comment" : "Help, under 'Phone clock is wrong'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सेटिंग में समय अपने-आप सेट होना चालू करें।"
+          }
+        }
+      }
     },
     "Under the card" : {
-      "comment" : "Help: the heading over the lines that can show under the status card on Tracking, and the card that takes its place when signed out."
+      "comment" : "Help: the heading over the lines that can show under the status card on Tracking, and the card that takes its place when signed out.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कार्ड के नीचे"
+          }
+        }
+      }
     },
     "Use %@?" : {
-      "comment" : "Title of the alert a setup link from the agency opens, which fills in the server on the sign-in screen once the driver agrees. The server's host, e.g. 'Use tracker.example.org?'."
+      "comment" : "Title of the alert a setup link from the agency opens, which fills in the server on the sign-in screen once the driver agrees. The server's host, e.g. 'Use tracker.example.org?'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ इस्तेमाल करें?"
+          }
+        }
+      }
     },
     "Use https://. Plain http:// is allowed only for localhost, 127.0.0.1 or a .local host." : {
-      "comment" : "Under the server field when the address is plain http to a host the app won't send a password to."
+      "comment" : "Under the server field when the address is plain http to a host the app won't send a password to.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https:// इस्तेमाल करें। सादा http:// सिर्फ़ localhost, 127.0.0.1 या .local होस्ट के लिए चलता है।"
+          }
+        }
+      }
     },
     "Use iPhone to see more" : {
-      "comment" : "CarPlay: the last row of a list the car cut short; the rest of the list is on the phone."
+      "comment" : "CarPlay: the last row of a list the car cut short; the rest of the list is on the phone.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "और देखने के लिए iPhone इस्तेमाल करें"
+          }
+        }
+      }
     },
     "Use this server" : {
-      "comment" : "Setup link alert: the button that fills in the link's server on the sign-in screen."
+      "comment" : "Setup link alert: the button that fills in the link's server on the sign-in screen.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह सर्वर इस्तेमाल करें"
+          }
+        }
+      }
     },
     "Use your driver account for this agency." : {
-      "comment" : "Under the sign-in screen's title."
+      "comment" : "Under the sign-in screen's title.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस एजेंसी का अपना ड्राइवर अकाउंट इस्तेमाल करें।"
+          }
+        }
+      }
     },
     "Vehicle %@" : {
-      "comment" : "Resume card: the vehicle's fleet number, e.g. 'Vehicle 4317'.\nSubtitle of the route screen: the fleet number of the vehicle the driver chose, e.g. 'Vehicle 4317'.\nVoiceOver: the vehicle's row of the stop list before the first fix, and the vehicle on the map: its label or fleet number, e.g. 'Vehicle 4317'."
+      "comment" : "Resume card: the vehicle's fleet number, e.g. 'Vehicle 4317'.\nSubtitle of the route screen: the fleet number of the vehicle the driver chose, e.g. 'Vehicle 4317'.\nVoiceOver: the vehicle's row of the stop list before the first fix, and the vehicle on the map: its label or fleet number, e.g. 'Vehicle 4317'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी %@"
+          }
+        }
+      }
     },
     "Vehicle %@ · Route %@" : {
       "comment" : "Subtitle of the run screen: the fleet number of the vehicle, then the route's number, e.g. 'Vehicle 4317 · Route 7'.",
@@ -1313,11 +3647,25 @@
             "state" : "new",
             "value" : "Vehicle %1$@ · Route %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी %1$@ · रूट %2$@"
+          }
         }
       }
     },
     "Vehicle %@ is out of service. Pick another vehicle." : {
-      "comment" : "Banner when the server refused a start because the vehicle was taken out of service: the fleet number, e.g. 'Vehicle 4317 is out of service. Pick another vehicle.'"
+      "comment" : "Banner when the server refused a start because the vehicle was taken out of service: the fleet number, e.g. 'Vehicle 4317 is out of service. Pick another vehicle.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी %@ सेवा में नहीं है। कोई दूसरी गाड़ी चुनें।"
+          }
+        }
+      }
     },
     "Vehicle %@, %@" : {
       "comment" : "VoiceOver: the vehicle's row of the stop list: its label or fleet number, then the status card's answer, e.g. 'Vehicle 4317, 3 min late'.",
@@ -1327,17 +3675,47 @@
             "state" : "new",
             "value" : "Vehicle %1$@, %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी %1$@, %2$@"
+          }
         }
       }
     },
     "Vehicle number" : {
-      "comment" : "Placeholder of the vehicle screen's search field: the fleet number painted on the vehicle."
+      "comment" : "Placeholder of the vehicle screen's search field: the fleet number painted on the vehicle.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी नंबर"
+          }
+        }
+      }
     },
     "Vehicle, route, run" : {
-      "comment" : "Welcome, screen 2: title. The three things a driver chooses before a trip."
+      "comment" : "Welcome, screen 2: title. The three things a driver chooses before a trip.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी, रूट, फेरा"
+          }
+        }
+      }
     },
     "Version" : {
-      "comment" : "Help, About: the label beside the app's version, e.g. '1.0.0 (1)'."
+      "comment" : "Help, About: the label beside the app's version, e.g. '1.0.0 (1)'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "वर्शन"
+          }
+        }
+      }
     },
     "Version %@ (%@)" : {
       "comment" : "Account menu: the app's version, then its build number in brackets, e.g. 'Version 1.0.0 (7)'.",
@@ -1347,11 +3725,25 @@
             "state" : "new",
             "value" : "Version %1$@ (%2$@)"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "वर्शन %1$@ (%2$@)"
+          }
         }
       }
     },
     "Waiting for GPS" : {
-      "comment" : "Status card answer before the trip's first position fix."
+      "comment" : "Status card answer before the trip's first position fix.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPS का इंतज़ार"
+          }
+        }
+      }
     },
     "Waiting for GPS. From %@, %@ run, vehicle %@" : {
       "comment" : "VoiceOver: the status card in one sentence before the first fix. The trip's first stop, the run's start time in the agency's zone, then the vehicle's label or fleet number, e.g. 'Waiting for GPS. From Northgate Station, 6:58 AM run, vehicle 4317'.",
@@ -1361,41 +3753,135 @@
             "state" : "new",
             "value" : "Waiting for GPS. From %1$@, %2$@ run, vehicle %3$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPS का इंतज़ार। %1$@ से, %2$@ वाला फेरा, गाड़ी %3$@"
+          }
         }
       }
     },
     "When you finish" : {
-      "comment" : "Welcome, screen 2: beside a picture of the End trip button."
+      "comment" : "Welcome, screen 2: beside a picture of the End trip button.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "काम पूरा होने पर"
+          }
+        }
+      }
     },
     "When you finish, %@." : {
-      "comment" : "VoiceOver: the welcome's last row on screen 2, 'When you finish', then the name of the End trip button it pictures, filled in from that button, e.g. 'When you finish, End trip.'"
+      "comment" : "VoiceOver: the welcome's last row on screen 2, 'When you finish', then the name of the End trip button it pictures, filled in from that button, e.g. 'When you finish, End trip.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "काम पूरा होने पर, %@।"
+          }
+        }
+      }
     },
     "With CarPlay. Reports start when you open the app." : {
-      "comment" : "Help, under 'Open the app on iPhone': the line shows when a trip started from the car cannot report until the app is opened on the phone."
+      "comment" : "Help, under 'Open the app on iPhone': the line shows when a trip started from the car cannot report until the app is opened on the phone.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CarPlay से शुरू हुई ट्रिप में, ऐप खोलते ही रिपोर्ट शुरू हो जाती हैं।"
+          }
+        }
+      }
     },
     "Wrong email or password. Try again." : {
-      "comment" : "Under the password field when the server turned the email and password down."
+      "comment" : "Under the password field when the server turned the email and password down.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ईमेल या पासवर्ड गलत है। फिर से कोशिश करें।"
+          }
+        }
+      }
     },
     "You already have a trip running. End it before starting another." : {
-      "comment" : "Banner when the server refused a start because the driver already has a trip running."
+      "comment" : "Banner when the server refused a start because the driver already has a trip running.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपकी एक ट्रिप पहले से चल रही है। दूसरी शुरू करने से पहले उसे खत्म करें।"
+          }
+        }
+      }
     },
     "You are on the timetable." : {
-      "comment" : "Help, under 'On time'."
+      "comment" : "Help, under 'On time'.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आप टाइम टेबल के हिसाब से चल रहे हैं।"
+          }
+        }
+      }
     },
     "You're not assigned to vehicle %@." : {
-      "comment" : "Banner when the server refused a start because the driver is not assigned to the vehicle: the fleet number, e.g. 'You're not assigned to vehicle 4317.'"
+      "comment" : "Banner when the server refused a start because the driver is not assigned to the vehicle: the fleet number, e.g. 'You're not assigned to vehicle 4317.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "गाड़ी %@ आपको नहीं दी गई है।"
+          }
+        }
+      }
     },
     "Your agency sets the server on this phone." : {
-      "comment" : "Title of the setup link alert when the agency's device management sets the server, so the link was not used."
+      "comment" : "Title of the setup link alert when the agency's device management sets the server, so the link was not used.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस फ़ोन पर सर्वर आपकी एजेंसी सेट करती है।"
+          }
+        }
+      }
     },
     "Your agency's server setting is not a valid address, so type it here." : {
-      "comment" : "Under the server field when the agency's device management set a server the app can't use."
+      "comment" : "Under the server field when the agency's device management set a server the app can't use.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपकी एजेंसी की सर्वर सेटिंग में सही पता नहीं है, इसलिए उसे यहाँ टाइप करें।"
+          }
+        }
+      }
     },
     "Your previous trip could not be ended yet. Check your connection and try again." : {
-      "comment" : "Refusal when the end of a trip ended on this phone only could not be sent before the next start."
+      "comment" : "Refusal when the end of a trip ended on this phone only could not be sent before the next start.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपकी पिछली ट्रिप अभी खत्म नहीं हो सकी। अपना कनेक्शन जाँचें और फिर से कोशिश करें।"
+          }
+        }
+      }
     },
     "Your trip is still open" : {
-      "comment" : "Title of the card at the top of the sign-in-again sheet."
+      "comment" : "Title of the card at the top of the sign-in-again sheet.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपकी ट्रिप अभी खुली है"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
