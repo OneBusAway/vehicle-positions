@@ -58,22 +58,30 @@ private val AppTypography = typographyIn(AppFontFamily)
 private val SystemTypography = typographyIn(FontFamily.Default)
 
 // The languages in a script the font above lacks: Devanagari, Ethiopic, Japanese, Khmer, Hangul, Lao, Gurmukhi,
-// Cyrillic and Chinese. Their text is set all in the system font (for Hindi, the Noto Sans Devanagari Android ships),
-// so a line never mixes this font's digits and Latin words with the system's letters. Every other language keeps the
-// font: English, the English a phone in a language the app lacks is shown, and every Latin-script translation.
-// FontCoverageTest fails a language missing from here whose letters the font lacks.
+// Cyrillic, Chinese and Arabic. Their text is set all in the system font (for Hindi, the Noto Sans Devanagari Android
+// ships), so a line never mixes this font's digits and Latin words with the system's letters. Every other language
+// keeps the font: English, the English a phone in a language the app lacks is shown, and every Latin-script
+// translation. FontCoverageTest fails a language missing from here whose letters the font lacks.
 internal val systemFontLanguages = setOf(
     "hi",
     "am", "ja", "km", "ko", "lo", "pa", "ru", "ti", "uk", "zh",
+    "ar", "fa",
 )
+
+// The pseudolocales of a debug build, en-XA and ar-XB, are for checking layout, so they keep the font the app ships
+// with even where their language is set in the system font.
+private val pseudolocaleRegions = setOf("XA", "XB")
 
 /**
  * The typography for the language the app shows a phone or app set to [preferred], of the app's [available]
  * languages, chosen as Android chooses its strings ([shownLanguage]): the app's own font, or the system's for a script
  * it lacks. A phone set to Spanish, which the app lacks, is shown English, in the app's own font.
  */
-internal fun appTypography(preferred: List<Locale>, available: List<Locale>): Typography =
-    if (shownLanguage(preferred, available).language in systemFontLanguages) SystemTypography else AppTypography
+internal fun appTypography(preferred: List<Locale>, available: List<Locale>): Typography {
+    val shown = shownLanguage(preferred, available)
+    val systemFont = shown.language in systemFontLanguages && shown.country !in pseudolocaleRegions
+    return if (systemFont) SystemTypography else AppTypography
+}
 
 // The design's styles that Material has no role for, read like the others: MaterialTheme.typography.statusHero.
 

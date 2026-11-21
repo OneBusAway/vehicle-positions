@@ -47,4 +47,10 @@ class AppTypographyTest {
     @Test fun `a phone that lists Hindi after a language the app lacks is shown Hindi, in the system font`() {
         assertEquals(FontFamily.Default, appTypography(locales("es-US", "hi-IN"), available).bodyLarge.fontFamily)
     }
+
+    @Test fun `Arabic is set in the system font, and its pseudolocale in the app's own`() {
+        val available = locales("en", "ar", "ar-XB")
+        assertEquals(FontFamily.Default, appTypography(locales("ar-EG"), available).bodyLarge.fontFamily)
+        assertNotEquals(FontFamily.Default, appTypography(locales("ar-XB"), available).bodyLarge.fontFamily)
+    }
 }
