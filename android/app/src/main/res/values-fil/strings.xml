@@ -235,7 +235,7 @@
     <string name="tracking_occupancy_question">Gaano kapuno ang sasakyan?</string>
     <string name="tracking_occupancy_many_seats">Maraming bakante</string>
     <string name="tracking_occupancy_few_seats">Kaunting bakante</string>
-    <string name="tracking_occupancy_standing">May nakatayo</string>
+    <string name="tracking_occupancy_standing">Tayuan na lang</string>
     <string name="tracking_occupancy_full">Puno</string>
     <string name="tracking_occupancy_clear">I-clear</string>
     <string name="tracking_fact_run">Biyahe</string>
