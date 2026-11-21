@@ -94,19 +94,22 @@ func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 	return max(time.Second, time.Duration(math.Round(1/rate))*time.Second)
 }
 
-// windowAt is the one of a trip's windows that holds t, or else the one
-// whose last headway does. frequencies.txt allows no overlap between a trip's
-// windows, so there is at most one of each.
+// windowAt is the one of a trip's windows that holds t, or else the latest
+// to end of those whose last headway does. frequencies.txt allows no overlap
+// between a trip's windows, so at most one holds t, but a short window can
+// end inside the last headway of the one before it.
 func windowAt(windows []stopWindow, t time.Time) (stopWindow, bool) {
 	for _, w := range windows {
 		if !t.Before(w.from) && t.Before(w.to) {
 			return w, true
 		}
 	}
+	var last stopWindow
+	found := false
 	for _, w := range windows {
-		if !t.Before(w.to) && t.Before(w.to.Add(w.headway)) {
-			return w, true
+		if !t.Before(w.to) && t.Before(w.to.Add(w.headway)) && (!found || w.to.After(last.to)) {
+			last, found = w, true
 		}
 	}
-	return stopWindow{}, false
+	return last, found
 }

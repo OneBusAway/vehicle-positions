@@ -65,6 +65,12 @@ func TestStopSchedule_GapAt(t *testing.T) {
 		{"a row that holds the time comes before one that has just ended",
 			[]trip{{[]rider.Frequency{every(30*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(5*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0}},
 			at(8, 1, 0), 5 * time.Minute},
+		{"after two rows end, the later one's gap, not the longer one's",
+			[]trip{{[]rider.Frequency{every(30*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(5*time.Minute, hms(8, 0, 0), hms(8, 10, 0))}, 0}},
+			at(8, 12, 0), 5 * time.Minute},
+		{"the later row wins in whatever order the rows come",
+			[]trip{{[]rider.Frequency{every(5*time.Minute, hms(8, 0, 0), hms(8, 10, 0)), every(30*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0}},
+			at(8, 12, 0), 5 * time.Minute},
 		// 1 / (1/600 + 1/800) is 342.86 seconds.
 		{"to the nearest second",
 			[]trip{
