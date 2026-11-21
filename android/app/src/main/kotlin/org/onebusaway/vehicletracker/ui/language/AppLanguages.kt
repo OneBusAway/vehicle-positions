@@ -9,6 +9,11 @@ import android.os.Build
 import android.os.LocaleList
 import android.provider.Settings
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.AppLog
 import org.xmlpull.v1.XmlPullParser
@@ -47,6 +52,21 @@ internal fun shownLanguage(preferred: List<Locale>, available: List<Locale>): Lo
         if (match != null) return match
     }
     return UNQUALIFIED
+}
+
+/** The phone's languages, or the one the app is set to, in the order the configuration gives them. */
+@Composable
+@ReadOnlyComposable
+internal fun preferredLocales(): List<Locale> {
+    val locales = LocalConfiguration.current.locales
+    return (0 until locales.size()).map(locales::get)
+}
+
+/** The app's languages, as [appLanguageTags] reads them, read once for each [Resources]. */
+@Composable
+internal fun availableLanguages(): List<Locale> {
+    val resources = LocalResources.current
+    return remember(resources) { appLanguageTags(resources).map(Locale::forLanguageTag) }
 }
 
 /** The Language list: the language [shown] first, as Settings lists the one in use, then the rest by English name. */

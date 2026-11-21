@@ -9,6 +9,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.dp
+import org.onebusaway.vehicletracker.ui.language.availableLanguages
+import org.onebusaway.vehicletracker.ui.language.preferredLocales
 
 // The design's text fields have 8 dp corners; no other component here uses extraSmall.
 private val AppShapes = Shapes(extraSmall = RoundedCornerShape(8.dp))
@@ -26,7 +28,7 @@ fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable ()
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColors else LightColors,
-            typography = AppTypography,
+            typography = appTypography(preferredLocales(), availableLanguages()),
             shapes = AppShapes,
             content = content,
         )

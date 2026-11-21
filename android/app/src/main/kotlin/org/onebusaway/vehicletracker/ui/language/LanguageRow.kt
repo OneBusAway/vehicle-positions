@@ -28,9 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -42,7 +40,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.QuietButton
-import java.util.Locale
 
 private val RowShape = RoundedCornerShape(20.dp)
 
@@ -54,10 +51,8 @@ private val RowShape = RoundedCornerShape(20.dp)
 @Composable
 internal fun LanguageRow(modifier: Modifier = Modifier, enabled: Boolean = true) {
     val context = LocalContext.current
-    val phoneOrApp = LocalConfiguration.current.locales
-    val resources = LocalResources.current
-    val available = remember(resources) { appLanguageTags(resources).map(Locale::forLanguageTag) }
-    val shown = shownLanguage((0 until phoneOrApp.size()).map(phoneOrApp::get), available)
+    val available = availableLanguages()
+    val shown = shownLanguage(preferredLocales(), available)
     val controller = remember(context) { LanguageRowController(Build.VERSION.SDK_INT, AndroidLanguageSettings(context)) }
     var listOpen by rememberSaveable { mutableStateOf(false) }
 
