@@ -23,7 +23,11 @@ import (
 // hour each is due, and none of its stops is judged.
 // 2: the gaps between vehicles on a route's frequencies.txt trips, by
 // direction and hour, and the day's gaps by tenths of their scheduled gap.
-const dayTotalsVersion = 2
+// 3: a run whose trail ends short of a stop passed it no later than its
+// trip's scheduled run time and passingLateGrace after its last fix, so a
+// trip a driver forgot to end no longer leaves the stop's gaps unknown for
+// the rest of the day.
+const dayTotalsVersion = 3
 
 // dayTotals is one service day as the Analytics page adds it up over a
 // period: each route's counts by the hour its trips leave in, and when the

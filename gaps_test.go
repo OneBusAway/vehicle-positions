@@ -121,7 +121,7 @@ func TestDirectionStops_Gaps(t *testing.T) {
 				run("C", hms(7, 20, 0), hms(7, 25, 0)),
 			},
 			[]string{"ST1 07:20:06 unknown", "ST2 07:25:06 unknown"}},
-		{"B is still running, waiting at ST1: it may pass either stop at any time after its last fix",
+		{"B is still running, waiting at ST1: it may pass either stop up to 100 minutes after its last fix",
 			[]gapRun{
 				run("A", hms(7, 0, 0), hms(7, 5, 0)),
 				{name: "B", tripID: "GN", running: true, legs: func(*rider.TripInfo) []reportLeg {
@@ -153,6 +153,62 @@ func TestDirectionStops_Gaps(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			runs, trails := gapTrips(t, ix, 1, tc.runs)
+			assert.Equal(t, tc.want, gapLines(t, []*rider.TripInfo{gn}, runs, trails))
+		})
+	}
+}
+
+// TestDirectionStops_ForgottenTrip: B leaves ST1 and its phone goes silent a
+// minute later, short of ST2. A run on its way would have left ST2 within
+// GN's 10-minute run time and passingLateGrace of that last fix, so a trip
+// left running, or ended hours later, holds the gaps at ST2 unknown only
+// until then, while a run late on its way still holds them until it ended.
+// In the evening stretch P leaves ST2 at 19:05:00, C at 19:06:00 and D at
+// 19:15:06; P leaves ST1 before the stretch there, so ST1's first gap is C
+// to D.
+func TestDirectionStops_ForgottenTrip(t *testing.T) {
+	ix := gapFixtureIndex(t)
+	gn := mustTrip(t, ix, "GN")
+	evening := []gapRun{
+		{name: "P", tripID: "GN", legs: north(hms(18, 59, 0), hms(19, 4, 54))},
+		{name: "C", tripID: "GN", legs: north(hms(19, 0, 0), hms(19, 5, 54))},
+		{name: "D", tripID: "GN", legs: north(hms(19, 10, 0), hms(19, 15, 0))},
+	}
+	// silentAfter leaves ST1 at leave and is last seen a minute later, 300 m
+	// along, short of ST2.
+	silentAfter := func(leave time.Duration) func(*rider.TripInfo) []reportLeg {
+		return func(*rider.TripInfo) []reportLeg {
+			return []reportLeg{{leave - time.Minute, 0}, {leave, 0}, {leave + time.Minute, 300}}
+		}
+	}
+	tests := []struct {
+		name string
+		b    gapRun
+		want []string
+	}{
+		{"last seen at 17:26 and left running: ST2 is unknown up to 19:06, 100 minutes on, and judged after",
+			gapRun{legs: silentAfter(hms(17, 25, 0)), running: true},
+			[]string{"ST1 19:10:06 10m0s of 10m0s", "ST2 19:06:00 unknown", "ST2 19:15:06 9m6s of 10m0s"}},
+		{"last seen at 17:26 and ended at 22:00: the same",
+			gapRun{legs: silentAfter(hms(17, 25, 0)), end: hms(22, 0, 0)},
+			[]string{"ST1 19:10:06 10m0s of 10m0s", "ST2 19:06:00 unknown", "ST2 19:15:06 9m6s of 10m0s"}},
+		{"last seen at 17:36 and ended at 19:15, late on its way: ST2 is unknown up to its end",
+			gapRun{legs: silentAfter(hms(17, 35, 0)), end: hms(19, 15, 0)},
+			[]string{"ST1 19:10:06 10m0s of 10m0s", "ST2 19:06:00 unknown", "ST2 19:15:06 unknown"}},
+		{"last seen at 19:05:30 and ended within two minutes of it: it turned short and did not serve ST2",
+			gapRun{legs: silentAfter(hms(19, 4, 30)), end: hms(19, 7, 0)},
+			[]string{"ST1 19:04:36 4m30s of 10m0s", "ST1 19:10:06 5m30s of 10m0s", "ST2 19:06:00 1m0s of 10m0s", "ST2 19:15:06 9m6s of 10m0s"}},
+		{"sent no fix from its start at 17:26 and left running: both stops are unknown up to 19:06",
+			gapRun{noFixes: true, running: true, legs: func(*rider.TripInfo) []reportLeg {
+				return []reportLeg{{hms(17, 26, 0), 0}, {hms(17, 30, 0), 0}}
+			}},
+			[]string{"ST1 19:10:06 unknown", "ST2 19:06:00 unknown", "ST2 19:15:06 9m6s of 10m0s"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			b := tc.b
+			b.name, b.tripID = "B", "GN"
+			runs, trails := gapTrips(t, ix, 1, append([]gapRun{b}, evening...))
 			assert.Equal(t, tc.want, gapLines(t, []*rider.TripInfo{gn}, runs, trails))
 		})
 	}
@@ -229,6 +285,8 @@ func TestRunPassing(t *testing.T) {
 	at := func(s int) time.Time { return base.Add(time.Duration(s) * time.Second) }
 	fix := func(s int, along float64) placedFix { return placedFix{at: at(s), along: along} }
 	ended := func(s int) *time.Time { e := at(s); return &e }
+	// A run is held open for 20 minutes after its last fix.
+	const open = 20 * time.Minute
 	tests := []struct {
 		name   string
 		fixes  []placedFix
@@ -241,14 +299,18 @@ func TestRunPassing(t *testing.T) {
 		{"the trail starts past it: between the trip's start and its first fix", []placedFix{fix(60, 100), fix(70, 150)}, ended(600), stopPassing{from: at(-30), to: at(60)}, true},
 		{"the trail ends short and the trip ended two minutes after: it did not serve it", []placedFix{fix(0, 0), fix(10, 20)}, ended(130), stopPassing{}, false},
 		{"the trail ends short and the trip ended later: between its last fix and its end", []placedFix{fix(0, 0), fix(10, 20)}, ended(131), stopPassing{from: at(10), to: at(131)}, true},
-		{"the trail ends short and the trip runs on: any time after its last fix", []placedFix{fix(0, 0), fix(10, 20)}, nil, stopPassing{from: at(10)}, true},
+		{"the trail ends short and the trip ended a second inside open: at its end", []placedFix{fix(0, 0), fix(10, 20)}, ended(1209), stopPassing{from: at(10), to: at(1209)}, true},
+		{"the trail ends short and the trip ended a second after open: open after its last fix", []placedFix{fix(0, 0), fix(10, 20)}, ended(1211), stopPassing{from: at(10), to: at(1210)}, true},
+		{"the trail ends short and the trip ended hours later: open after its last fix", []placedFix{fix(0, 0), fix(10, 20)}, ended(5 * 3600), stopPassing{from: at(10), to: at(1210)}, true},
+		{"the trail ends short and the trip runs on: open after its last fix", []placedFix{fix(0, 0), fix(10, 20)}, nil, stopPassing{from: at(10), to: at(1210)}, true},
 		{"no fixes, the trip ended: between its start and end", nil, ended(60), stopPassing{from: at(-30), to: at(60)}, true},
-		{"no fixes, the trip runs on: any time after it started", nil, nil, stopPassing{from: at(-30)}, true},
+		{"no fixes, the trip ended hours later: open after its start", nil, ended(5 * 3600), stopPassing{from: at(-30), to: at(1170)}, true},
+		{"no fixes, the trip runs on: open after its start", nil, nil, stopPassing{from: at(-30), to: at(1170)}, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			run := TripSummary{StartTime: at(-30), EndTime: tc.end}
-			got, served := runPassing(tc.fixes, 30, run)
+			got, served := runPassing(tc.fixes, 30, run, open)
 			require.Equal(t, tc.served, served)
 			assert.Equal(t, tc.want, got)
 		})
@@ -269,8 +331,6 @@ func TestStopPassing_Between(t *testing.T) {
 		{"starts as the gap ends", stopPassing{from: at(20), to: at(25)}, false},
 		{"ends a second into it", stopPassing{from: at(5), to: at(10).Add(time.Second)}, true},
 		{"starts a second before it ends", stopPassing{from: at(20).Add(-time.Second), to: at(25)}, true},
-		{"still running, from before the gap", stopPassing{from: at(5)}, true},
-		{"still running, from after the gap", stopPassing{from: at(20)}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

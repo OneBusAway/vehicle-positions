@@ -318,6 +318,93 @@ func TestReportsPage_KeptDaysBeforeGapsAreWorkedOutAgain(t *testing.T) {
 	assert.Contains(t, string(encoded), `"gaps":[{"direction_id":0`, "with route 5's gaps")
 }
 
+// forgottenTripRuns is a day north on route 5 whose Z was never ended: it
+// leaves ST1 at 07:30 between A and B, its phone goes silent a minute later,
+// short of ST2, and it is still running. P and Q run late at night, every
+// 30 minutes. Every run leaves ST2 five minutes after ST1.
+var forgottenTripRuns = []gapRun{
+	{name: "A", tripID: "GN", legs: north(hms(7, 20, 0), hms(7, 25, 0))},
+	{name: "Z", tripID: "GN", running: true, legs: func(*rider.TripInfo) []reportLeg {
+		return []reportLeg{{hms(7, 29, 0), 0}, {hms(7, 30, 0), 0}, {hms(7, 31, 0), 300}}
+	}},
+	{name: "B", tripID: "GN", legs: north(hms(7, 40, 0), hms(7, 45, 0))},
+	{name: "P", tripID: "GN", legs: north(hms(23, 40, 0), hms(23, 45, 0))},
+	{name: "Q", tripID: "GN", legs: north(hms(24, 10, 0), hms(24, 15, 0))},
+}
+
+// newForgottenTripReporter is a reporter over forgottenTripRuns alone, its
+// clock at the fixture's now.
+func newForgottenTripReporter(t *testing.T) (*serviceReporter, *fakeReportStore) {
+	t.Helper()
+	ix := gapFixtureIndex(t)
+	trips, trails := gapTrips(t, ix, 1, forgottenTripRuns)
+	store := &fakeReportStore{trips: trips, trails: trails}
+	r := newServiceReporter(store, func() *rider.Index { return ix }, testReportSettings)
+	r.now = func() time.Time { return reportFixtureNow }
+	return r, store
+}
+
+// TestServiceReporter_HeadwayGapsAfterAForgottenTrip: Z could have left ST2
+// no later than 09:11, GN's 10-minute run time and passingLateGrace after
+// its last fix, so of ST2's gaps only A to B is unknown and the night's is
+// judged, in the day's report and in its kept totals.
+func TestServiceReporter_HeadwayGapsAfterAForgottenTrip(t *testing.T) {
+	r, _ := newForgottenTripReporter(t)
+	rep, err := r.report(context.Background(), "2026-09-02")
+	require.NoError(t, err)
+
+	// ST1: A to Z, Z to B and P to Q. ST2: A to B unknown, and P to Q.
+	none := `"gaps_judged":0,"bunched":0,"long_gaps":0,"unknown":0,"extra_wait_s":null,"scheduled_gap_s":null`
+	assert.JSONEq(t, `[
+		{"direction_id":0,"headsign":"North","gaps_judged":4,"bunched":0,"long_gaps":0,"unknown":1,"extra_wait_s":0,"scheduled_gap_s":600},
+		{"direction_id":1,"headsign":"South",`+none+`}
+	]`, routeGapsJSON(t, reportRoute(t, rep, "R5")))
+
+	encoded, err := json.Marshal(newDayTotals(rep, testReportSettings))
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"gaps":[{"direction_id":0,"headsign":"North","hours":[`+
+		`{"hour":7,"gaps":2,"bunched":0,"long_gaps":0,"unknown":1,"sum_gap_s":1200,"sum_gap_sq":720000,"sum_scheduled_s":1200,"sum_scheduled_sq":720000},`+
+		`{"hour":24,"gaps":2,"bunched":0,"long_gaps":0,"unknown":0,"sum_gap_s":3600,"sum_gap_sq":6480000,"sum_scheduled_s":3600,"sum_scheduled_sq":6480000}]}`)
+}
+
+// TestReportsPage_KeptDaysBeforeTheLateGraceAreWorkedOutAgain: a day kept
+// by a server that held a forgotten trip's passing open for the rest of the
+// day, version 2, is worked out again and kept with the night's gap at ST2
+// judged.
+func TestReportsPage_KeptDaysBeforeTheLateGraceAreWorkedOutAgain(t *testing.T) {
+	r, store := newForgottenTripReporter(t)
+	reportsView(t, r, "date=2026-09-02&range=day")
+	kept := store.days["2026-09-02"]
+	require.Equal(t, dayTotalsVersion, kept.Totals.Version)
+	want := kept.Totals
+
+	// What version 2 kept: P to Q at ST2 unknown, as A to B is.
+	old := kept
+	old.Totals.Version = 2
+	old.Totals.Routes = []routeDayTotals{{RouteID: "R5", ShortName: "5", LongName: "Every ten", Hours: make([]hourTotals, 0),
+		Gaps: []directionGapTotals{{DirectionID: ptr(0), Headsign: "North", Hours: []gapHourTotals{
+			{Hour: 7, gapCounts: gapCounts{Gaps: 2, Unknown: 1, SumGapS: 1200, SumGapSq: 720000, SumScheduledS: 1200, SumScheduledSq: 720000}},
+			{Hour: 24, gapCounts: gapCounts{Gaps: 1, Unknown: 1, SumGapS: 1800, SumGapSq: 3240000, SumScheduledS: 1800, SumScheduledSq: 3240000}},
+		}}}}}
+	old.Totals.GapRatios = []gapRatioCount{{Tenth: 10, Gaps: 3}}
+	store.days["2026-09-02"] = old
+	reads, saves := store.reads, store.saves
+
+	again := newServiceReporter(store, r.index, testReportSettings)
+	again.now = r.now
+	days, err := again.storedDays(context.Background(), reportDay, reportDay)
+	require.NoError(t, err)
+	assert.Empty(t, days, "a day kept before the late grace is not read as kept")
+
+	reportsView(t, again, "date=2026-09-02&range=day")
+	assert.Equal(t, reads+1, store.reads, "worked out again")
+	assert.Equal(t, saves+1, store.saves, "and kept again")
+	assert.Equal(t, want, store.days["2026-09-02"].Totals)
+	encoded, err := json.Marshal(store.days["2026-09-02"].Totals)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `{"hour":24,"gaps":2,"bunched":0,"long_gaps":0,"unknown":0,`, "with the night's gap at ST2 judged")
+}
+
 // serviceClock is d on the service day's clock, which runs past 24:00.
 func serviceClock(d time.Duration) string {
 	s := int(d / time.Second)
