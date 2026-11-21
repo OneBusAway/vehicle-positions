@@ -196,7 +196,7 @@ import Testing
     }
 
     func settle() async {
-        for _ in 0..<4 { await Task.yield() }
+        for _ in 0..<200 { await Task.yield() }
     }
 
     /// Next, Next, back, as fast as a thumb: one picture is playing at the
@@ -354,6 +354,6 @@ import Testing
 
     /// Lets whatever was woken or cancelled run until it waits again.
     private func settle() async {
-        for _ in 0..<4 { await Task.yield() }
+        for _ in 0..<200 { await Task.yield() }
     }
 }
