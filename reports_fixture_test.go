@@ -45,6 +45,15 @@ func refreshedReportFixtureIndex(t *testing.T) *rider.Index {
 // at loadedAt.
 func loadReportFixture(t *testing.T, source string, loadedAt time.Time) *rider.Index {
 	t.Helper()
+	ix, err := rider.IndexFromBytes(reportFixtureZip(t, nil), source, loadedAt)
+	require.NoError(t, err)
+	return ix
+}
+
+// reportFixtureZip is the report fixture's feed, each member then passed
+// through more when it is set, with added appended.
+func reportFixtureZip(t *testing.T, more func(name string, body []byte) []byte, added ...fixtureMember) []byte {
+	t.Helper()
 	appendLines := func(body []byte, lines ...string) []byte {
 		return []byte(string(body) + strings.Join(lines, "\n") + "\n")
 	}
@@ -56,19 +65,19 @@ func loadReportFixture(t *testing.T, source string, loadedAt time.Time) *rider.I
 			trip + "," + st3 + "," + st3 + ",ST3,3,1001.000000",
 		}
 	}
-	zip := fixtureZipEdited(t, func(name string, body []byte) []byte {
+	return fixtureZipEdited(t, func(name string, body []byte) []byte {
 		switch name {
 		case "routes.txt":
-			return appendLines(body, "R3,A,3,Out and back,3,3,,")
+			body = appendLines(body, "R3,A,3,Out and back,3,3,,")
 		case "shapes.txt":
-			return appendLines(body,
+			body = appendLines(body,
 				"S3,47.620000,-122.330000,1,",
 				"S3,47.629000,-122.330000,2,",
 				"S3,47.629000,-122.329800,3,",
 				"S3,47.620000,-122.329800,4,",
 			)
 		case "stops.txt":
-			return appendLines(body,
+			body = appendLines(body,
 				"OB1,Stop OB1,47.620000,-122.330000",
 				"OB2,Stop OB2,47.624500,-122.330000",
 				"OB3,Stop OB3,47.629000,-122.330000",
@@ -76,7 +85,7 @@ func loadReportFixture(t *testing.T, source string, loadedAt time.Time) *rider.I
 				"OB5,Stop OB5,47.620000,-122.329800",
 			)
 		case "trips.txt":
-			return appendLines(body,
+			body = appendLines(body,
 				"R1,WEEKDAY,RE,S1,North,0",
 				"R1,WEEKDAY,RL,S1,North,0",
 				"R1,WEEKDAY,RN,S1,North,0",
@@ -97,13 +106,13 @@ func loadReportFixture(t *testing.T, source string, loadedAt time.Time) *rider.I
 			lines = append(lines, onS1("RN", "12:00:00", "12:05:00", "12:10:00")...)
 			lines = append(lines, onS1("RG", "13:00:00", "13:05:00", "13:10:00")...)
 			lines = append(lines, onS1("RM", "24:10:00", "24:15:00", "24:20:00")...)
-			return appendLines(body, lines...)
+			body = appendLines(body, lines...)
+		}
+		if more != nil {
+			return more(name, body)
 		}
 		return body
-	})
-	ix, err := rider.IndexFromBytes(zip, source, loadedAt)
-	require.NoError(t, err)
-	return ix
+	}, added...)
 }
 
 // hms is a time of day on the service day's clock, which runs past 24:00.

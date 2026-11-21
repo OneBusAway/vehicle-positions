@@ -14,6 +14,15 @@ import (
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
+// dayTotalsVersion is the shape of the totals newDayTotals adds up. A kept
+// day of another version is worked out again and replaced, as one judged by
+// another on-time window is; a day kept before the totals had a version reads
+// as 0. Raise it whenever what the totals count changes.
+//
+// 1: a trip in frequencies.txt counts the runs its windows schedule, by the
+// hour each is due, and none of its stops is judged.
+const dayTotalsVersion = 1
+
 // dayTotals is one service day as the Analytics page adds it up over a
 // period: each route's counts by the hour its trips leave in, and when the
 // trips that ran reached their last stop. A day older than yesterday is kept
@@ -21,8 +30,9 @@ import (
 // worked out again from every trail.
 type dayTotals struct {
 	// Date is the service date, YYYY-MM-DD.
-	Date   string           `json:"-"`
-	Routes []routeDayTotals `json:"routes"`
+	Date    string           `json:"-"`
+	Version int              `json:"version"`
+	Routes  []routeDayTotals `json:"routes"`
 	// Arrivals counts the trips that ran by the whole minute, early (below
 	// zero) or late, they reached their last stop in.
 	Arrivals []arrivalMinute `json:"arrivals"`
@@ -41,7 +51,8 @@ type routeDayTotals struct {
 }
 
 // hourTotals is a route's trips that leave in one hour of the service day,
-// which can pass 23 for a trip after midnight.
+// which can pass 23 for a trip after midnight. A trip in frequencies.txt is
+// counted once for each of its runs, in the hour the run is due to leave.
 type hourTotals struct {
 	Hour      int `json:"hour"`
 	Scheduled int `json:"scheduled"`
@@ -85,19 +96,34 @@ func (d dayTotals) counts() reportCounts {
 func newDayTotals(rep *serviceReport, s reportSettings) dayTotals {
 	day := dayTotals{
 		Date:     rep.Date,
+		Version:  dayTotalsVersion,
 		Routes:   make([]routeDayTotals, 0, len(rep.Routes)),
 		Arrivals: make([]arrivalMinute, 0),
 	}
 	arrivals := make(map[int]*arrivalMinute)
 	for _, route := range rep.Routes {
 		hours := make(map[int]*hourTotals)
-		for _, trip := range route.Trips {
-			hour := serviceHour(rep, trip)
+		inHour := func(at time.Time) *hourTotals {
+			hour := serviceHour(rep, at)
 			h, ok := hours[hour]
 			if !ok {
 				h = &hourTotals{Hour: hour}
 				hours[hour] = h
 			}
+			return h
+		}
+		for _, trip := range route.Trips {
+			if trip.Frequencies != nil {
+				for _, slot := range trip.slots {
+					h := inHour(slot.at)
+					h.Scheduled++
+					if slot.run {
+						h.Run++
+					}
+				}
+				continue
+			}
+			h := inHour(trip.ScheduledDeparture)
 			h.Scheduled++
 			// Only a trip that ran has stops judged, so these add nothing for
 			// the others.

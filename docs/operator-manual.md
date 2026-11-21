@@ -748,12 +748,21 @@ The columns of **By route**:
 - **Trips run**: how many of the trips the schedule has, holidays included, a
   driver ran. A driver's trip counts for the run of its GTFS trip nearest to
   when the driver started it, so a trip started a few minutes before
-  midnight, or run after midnight, lands on the right day.
+  midnight, or run after midnight, lands on the right day. A trip your
+  schedule runs from its GTFS frequencies, every few minutes rather than to a
+  timetable, counts once for each run its frequencies schedule: every 10
+  minutes from 06:00 to 22:00 is 96 runs. Each trip a driver starts fills the
+  scheduled run nearest it, so a run that left a little late still counts in
+  the hour it was due, and the day it belongs to is the one whose frequencies
+  cover when it started.
 - **On time**: the share of stops the vehicles passed from 1 minute early to 5
   minutes late, with a bar that splits early, on time and late. A stop counts
   when the vehicle leaves it, the last stop when the vehicle reaches it, so a
   driver waiting at the first stop before departure is not early. When the
-  agency's schedule marks timepoints, only those stops are counted.
+  agency's schedule marks timepoints, only those stops are counted. A trip
+  run from the GTFS frequencies has no timetable to be early or late against
+  (its headway is the minutes between vehicles), so its stops are not
+  counted here.
 - **Early** and **Late**: the shares of the stops judged that were outside
   that window. Early is red and late is blue, as in the OneBusAway apps.
 - **No report**: the share of stops the report cannot judge, because the
@@ -766,8 +775,12 @@ Click a route to open its trips for the last day shown, by departure. Each
 shows when it was scheduled, the vehicle and driver that ran it (**Not run** if
 none), how it left the first stop and reached the last, and its own on-time
 share. Inside the on-time window a stop says **On time** with the difference
-beside it; outside it, how early or late. **Replay** opens the trip's page,
-with its time at every stop. **All routes** goes back.
+beside it; outside it, how early or late. A trip run from the GTFS
+frequencies says how often it runs and how many of its runs ran, such as
+**every 10 min, 06:00 to 22:00** and **41 of 96 runs**, lists every run with
+its vehicle and driver, and says **no timetable** in place of the stops.
+**Replay** opens the trip's page, with its time at every stop. **All routes**
+goes back.
 
 **Download CSV**, on a single day, saves that day's route rows as a
 spreadsheet. Today's figures are worked out afresh at most once a minute, so
@@ -789,7 +802,8 @@ the background work then stops at the first day the history is still whole
 for. Your server
 administrator can change the 1 and 5 minutes (`REPORT_ON_TIME_EARLY` and
 `REPORT_ON_TIME_LATE`, see [`configuration.md`](configuration.md)); the days
-kept are worked out again under the new window.
+kept are worked out again under the new window. A kept day is also worked
+out again once after an upgrade that changes what Analytics counts.
 
 ### The feed itself
 

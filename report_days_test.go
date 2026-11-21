@@ -258,7 +258,7 @@ func TestServiceReporter_WarmKeepsTheDaysThePageOpensOn(t *testing.T) {
 	before := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
 	require.NoError(t, store.SaveServiceDay(context.Background(), storedServiceDay{
 		Date: before, OnTimeEarly: testReportSettings.onTimeEarly, OnTimeLate: testReportSettings.onTimeLate,
-		Totals: dayTotals{Routes: make([]routeDayTotals, 0), Arrivals: make([]arrivalMinute, 0)},
+		Totals: dayTotals{Version: dayTotalsVersion, Routes: make([]routeDayTotals, 0), Arrivals: make([]arrivalMinute, 0)},
 	}))
 
 	require.NoError(t, r.warm(context.Background()))
