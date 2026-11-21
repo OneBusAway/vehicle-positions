@@ -77,6 +77,10 @@ func setState(key, state string) edit {
 // status table.
 var vietnamese = replace(statusFile, "hi,Hindi,draft,,,\n", "hi,Hindi,draft,,,\nvi,Vietnamese,draft,,,\n")
 
+// french adds French, whose plural forms are one, many and other on Android
+// and one and other on iOS, to the fixture.
+var french = replace(statusFile, "hi,Hindi,draft,,,\n", "hi,Hindi,draft,,,\nfr,French,draft,,,\n")
+
 // fixture copies testdata/good to a temporary directory, applies edits and
 // returns its root.
 func fixture(t *testing.T, edits ...edit) string {
@@ -201,6 +205,20 @@ func TestCheck_Rules(t *testing.T) {
 `), 0o644))
 			}}, options{},
 			errorLevel, "plurals", "reports_sent", "vi", "android/app/src/main/res/values-vi/strings.xml"},
+		{"many missing from an Android plural in a language whose iOS strings need one and other alone",
+			[]edit{french, func(t *testing.T, root string) {
+				dir := filepath.Join(root, androidRes, "values-fr")
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "strings.xml"), []byte(`<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="reports_sent">
+        <item quantity="one">%1$d rapport envoyé</item>
+        <item quantity="other">%1$d rapports envoyés</item>
+    </plurals>
+</resources>
+`), 0o644))
+			}}, options{},
+			errorLevel, "plurals", "reports_sent", "fr", "android/app/src/main/res/values-fr/strings.xml"},
 		{"a single string without the count, in a language with no plural forms but other",
 			[]edit{vietnamese, editCatalog(func(t *testing.T, entries map[string]any) {
 				object(t, entries, "%lld reports sent", "localizations")["vi"] = map[string]any{
@@ -325,6 +343,15 @@ func TestCheck_RulesDoNotOverreach(t *testing.T) {
 			[]edit{vietnamese, editCatalog(func(t *testing.T, entries map[string]any) {
 				object(t, entries, "%lld reports sent", "localizations")["vi"] = map[string]any{
 					"stringUnit": map[string]any{"state": "translated", "value": "Đã gửi %lld báo cáo"},
+				}
+			})}},
+		{"an iOS plural with one and other alone, as Xcode offers French",
+			[]edit{french, editCatalog(func(t *testing.T, entries map[string]any) {
+				object(t, entries, "%lld reports sent", "localizations")["fr"] = map[string]any{
+					"variations": map[string]any{"plural": map[string]any{
+						"one":   map[string]any{"stringUnit": map[string]any{"state": "translated", "value": "%lld rapport envoyé"}},
+						"other": map[string]any{"stringUnit": map[string]any{"state": "translated", "value": "%lld rapports envoyés"}},
+					}},
 				}
 			})}},
 		{"an iOS placeholder given a position the English doesn't write",

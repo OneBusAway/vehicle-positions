@@ -54,6 +54,7 @@ says, so a language should translate them the same way in both. The check warns 
 - Give a plural every form your language needs, by the Unicode CLDR rules in `cmd/l10n/plurals.go`. Hindi and
   Swahili need `one` and `other`. Arabic needs six forms, and Polish, Russian and Ukrainian need `few` and `many` as
   well. In Spanish, French, Italian and Portuguese, `many` is used only for exact millions, so it can repeat `other`.
+  On iOS those four need only `one` and `other`: Xcode offers no more, and iOS reads millions from `other`.
   Where the English is a plural, the translation is one too, even if its forms read the same. Only an iOS
   translation into a language with `other` alone, such as Chinese or Vietnamese, may be a single string.
 - Write numbers in digits, in your language's own digits if you like (`२४` for 24), never as words.

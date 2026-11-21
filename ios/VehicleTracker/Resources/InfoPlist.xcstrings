@@ -5,16 +5,100 @@
       "comment" : "Why the app asks for location: iOS shows it under the location prompt before the first trip, and on the app's Location page in Settings.",
       "extractionState" : "extracted_with_value",
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ihre Position wird während einer Fahrt an den Server des Verkehrsbetriebs gesendet, damit Fahrgäste sehen, wo das Fahrzeug ist."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu ubicación se envía al servidor de la empresa de transporte mientras hay un viaje en curso, para que los pasajeros puedan ver dónde está el vehículo."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sijaintisi lähetetään liikennöitsijän palvelimelle, kun matka on käynnissä, jotta matkustajat näkevät, missä ajoneuvo on."
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nire-report ang posisyon mo sa server ng kumpanya habang tumatakbo ang trip, para makita ng mga pasahero kung nasaan ang sasakyan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre position est envoyée au serveur de la compagnie de transport pendant qu’un trajet est en cours, pour que les passagers puissent voir où se trouve le véhicule."
+          }
+        },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "ट्रिप चलते समय आपकी लोकेशन ट्रांज़िट एजेंसी के सर्वर पर भेजी जाती है, ताकि यात्री देख सकें कि गाड़ी कहाँ है।"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aplikasyon an voye pozisyon ou bay sèvè konpayi transpò a pandan yon vwayaj ap fèt, pou pasaje yo ka wè ki kote machin nan ye."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mentre un viaggio è in corso, la tua posizione viene inviata al server dell'azienda di trasporto, così i passeggeri possono vedere dove si trova il veicolo."
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeroo imalli deemaa jiru, bakki kee sarvarii dhaabbata geejjibaatti ni gabaafama, akka imaltoonni bakka konkolaataan jiru arguu danda'aniif."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Podczas przejazdu twoja pozycja jest wysyłana na serwer przewoźnika, aby pasażerowie widzieli, gdzie jest pojazd."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sua posição é enviada ao servidor da empresa de transporte enquanto uma viagem está em andamento, para os passageiros verem onde o veículo está."
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "E lafo lou nofoaga i le server a le kamupani aʻo faʻagasolo se malaga, ina ʻia iloa atu e pasese le mea o i ai le taʻavale."
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inta safarku socdo, goobtaada waxaa loo diraa server-ka shirkadda gaadiidka, si rakaabku u arkaan halka uu gaarigu joogo."
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahali ulipo huripotiwa kwa seva ya shirika la usafiri wakati safari inaendelea, ili abiria waweze kuona gari liko wapi."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vị trí của bạn được gửi đến máy chủ của đơn vị vận hành trong khi hành trình đang chạy, để hành khách thấy được xe đang ở đâu."
           }
         }
       }
@@ -23,16 +107,100 @@
       "comment" : "Why the app asks for Precise Location: iOS shows it under its prompt to turn Precise Location on for this trip, when only approximate location is allowed. The key is the purpose the app names in code (NSLocationTemporaryUsageDescriptionDictionary).",
       "extractionState" : "manual",
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit dem genauen Standort erscheint das Fahrzeug auf den Karten der Fahrgäste in der richtigen Straße."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Precise location puts the vehicle on the right street on riders' maps."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La ubicación precisa muestra el vehículo en la calle correcta en el mapa de los pasajeros."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tarkka sijainti näyttää ajoneuvon oikealla kadulla matkustajien kartoilla."
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sa eksaktong lokasyon, nasa tamang kalsada ang sasakyan sa mapa ng mga pasahero."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La position exacte place le véhicule dans la bonne rue sur la carte des passagers."
+          }
+        },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "सटीक स्थान से गाड़ी यात्रियों के मैप पर सही सड़क पर दिखती है।"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pozisyon egzak mete machin nan sou bon lari a nan kat pasaje yo."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La posizione precisa mostra il veicolo sulla strada giusta nelle mappe dei passeggeri."
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bakki sirriin konkolaataa kaartaa imaltootaa irratti karaa sirrii irra kaa'a."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dokładna lokalizacja pokazuje pojazd na właściwej ulicy na mapach pasażerów."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O local exato mostra o veículo na rua certa no mapa dos passageiros."
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ona o le nofoaga tonu, e iloa atu ai e pasese le taʻavale i le auala saʻo i a lātou faʻafanua."
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goobta saxda ah waxay gaariga ku dhigtaa waddada saxda ah ee khariidadda rakaabka."
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahali sahihi huonyesha gari kwenye barabara sahihi katika ramani za abiria."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vị trí chính xác giúp xe hiện ở đúng con đường trên bản đồ của hành khách."
           }
         }
       }
