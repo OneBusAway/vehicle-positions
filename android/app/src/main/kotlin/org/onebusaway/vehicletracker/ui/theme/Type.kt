@@ -8,6 +8,7 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.ui.language.shownLanguage
 import java.util.Locale
 
 /**
@@ -19,8 +20,7 @@ import java.util.Locale
  * ```
  * A letter outside these ranges, as in the en-XA pseudolocale of a debug build, falls back to the system font.
  * Before a translation needs one, the font is cut again with upstream's latin-ext and vietnamese subsets. A language
- * in another script uses the system font for all its text ([appTypography]), and a font check added to the
- * translation checks of #502 holds each language to one or the other (#495).
+ * in a script the font lacks, as Hindi's Devanagari is, sets all its text in the system font ([appTypography]).
  */
 internal val AppFontFamily = FontFamily(
     Font(R.font.google_sans_flex, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
@@ -55,14 +55,19 @@ private fun typographyIn(family: FontFamily) = Typography(
 private val AppTypography = typographyIn(AppFontFamily)
 private val SystemTypography = typographyIn(FontFamily.Default)
 
-// The languages whose letters the font above has. Any other is in a script it lacks, as Hindi's Devanagari is, and
-// sets all its text in the system font (for Hindi, the Noto Sans Devanagari Android ships), so a line never
-// mixes this font's digits and Latin words with the system's letters.
-private val bundledFontLanguages = setOf("en")
+// The languages in a script the font above lacks, as Hindi's Devanagari is. Their text is set all in the system font
+// (for Hindi, the Noto Sans Devanagari Android ships), so a line never mixes this font's digits and Latin words with
+// the system's letters. Every other language keeps the font: English, and the English a phone in a language the app
+// lacks is shown.
+private val systemFontLanguages = setOf("hi")
 
-/** The typography for text in [locale]'s language: the app's own font, or the system's for a script it lacks. */
-internal fun appTypography(locale: Locale): Typography =
-    if (locale.language in bundledFontLanguages) AppTypography else SystemTypography
+/**
+ * The typography for the language the app shows a phone or app set to [preferred], of the app's [available]
+ * languages, chosen as Android chooses its strings ([shownLanguage]): the app's own font, or the system's for a script
+ * it lacks. A phone set to Spanish, which the app lacks, is shown English, in the app's own font.
+ */
+internal fun appTypography(preferred: List<Locale>, available: List<Locale>): Typography =
+    if (shownLanguage(preferred, available).language in systemFontLanguages) SystemTypography else AppTypography
 
 // The design's styles that Material has no role for, read like the others: MaterialTheme.typography.statusHero.
 
