@@ -115,8 +115,9 @@ type routeReport struct {
 	OnTimePercent  *float64     `json:"on_time_percent"`
 	UnknownPercent *float64     `json:"unknown_percent"`
 	Trips          []tripReport `json:"trips"`
-	// Gaps is the gaps between vehicles on the route's frequencies.txt trips,
-	// a direction at a time; empty for a route run only by timetable.
+	// Gaps is the gaps between vehicles on the route's frequent service, a
+	// direction at a time; empty for a route with no trip in frequencies.txt
+	// and no timetable every frequentSpacing or more often.
 	Gaps []directionGaps `json:"gaps"`
 }
 

@@ -27,7 +27,9 @@ import (
 // trip's scheduled run time and passingLateGrace after its last fix, so a
 // trip a driver forgot to end no longer leaves the stop's gaps unknown for
 // the rest of the day.
-const dayTotalsVersion = 3
+// 4: the gaps are also measured where a route's timetable runs every
+// frequentSpacing or more often at a stop.
+const dayTotalsVersion = 4
 
 // dayTotals is one service day as the Analytics page adds it up over a
 // period: each route's counts by the hour its trips leave in, and when the
@@ -57,8 +59,8 @@ type routeDayTotals struct {
 	ShortName string       `json:"short_name"`
 	LongName  string       `json:"long_name"`
 	Hours     []hourTotals `json:"hours"`
-	// Gaps is the gaps between vehicles on the route's frequencies.txt trips,
-	// a direction at a time, as the day's report gives them.
+	// Gaps is the gaps between vehicles on the route's frequent service, a
+	// direction at a time, as the day's report gives them.
 	Gaps []directionGapTotals `json:"gaps"`
 }
 
@@ -75,8 +77,8 @@ type hourTotals struct {
 	Unknown   int `json:"unknown"`
 }
 
-// directionGapTotals is one direction of a route's frequencies.txt service,
-// its gaps by the hour the later vehicle passed in.
+// directionGapTotals is one direction of a route's frequent service, its
+// gaps by the hour the later vehicle passed in.
 type directionGapTotals struct {
 	DirectionID *int            `json:"direction_id"`
 	Headsign    string          `json:"headsign"`

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -153,4 +154,168 @@ func TestStopSchedule_AddTripShiftsTheWindows(t *testing.T) {
 	var s stopSchedule
 	s.addTrip([]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, reportDayStart, 5*time.Minute)
 	assert.Equal(t, []timeSpan{{reportDayStart.Add(hms(7, 5, 0)), reportDayStart.Add(hms(8, 15, 0))}}, s.stretches())
+}
+
+// departing are times on the report fixture's service day.
+func departing(times ...time.Duration) []time.Time {
+	out := make([]time.Time, 0, len(times))
+	for _, at := range times {
+		out = append(out, reportDayStart.Add(at))
+	}
+	return out
+}
+
+// everyFrom is a departure every spacing from first up to and including last.
+func everyFrom(spacing, first, last time.Duration) []time.Duration {
+	var out []time.Duration
+	for at := first; at <= last; at += spacing {
+		out = append(out, at)
+	}
+	return out
+}
+
+func TestStopSchedule_TimetableGapAt(t *testing.T) {
+	at := func(h, m, s int) time.Time { return reportDayStart.Add(hms(h, m, s)) }
+	// The spacing is 6 minutes up to 07:06, then 10.
+	sixThenTen := []time.Duration{hms(7, 0, 0), hms(7, 6, 0), hms(7, 16, 0), hms(7, 26, 0)}
+	tests := []struct {
+		name       string
+		departures []time.Duration
+		trip       []rider.Frequency
+		at         time.Time
+		want       time.Duration
+	}{
+		{"every 10 minutes", everyFrom(10*time.Minute, hms(7, 0, 0), hms(7, 30, 0)), nil, at(7, 14, 0), 10 * time.Minute},
+		{"every 12 minutes is frequent", []time.Duration{hms(7, 0, 0), hms(7, 12, 0)}, nil, at(7, 6, 0), 12 * time.Minute},
+		{"12 minutes and a second apart is not", []time.Duration{hms(7, 0, 0), hms(7, 12, 1)}, nil, at(7, 6, 0), 0},
+		{"a vehicle passing on time is judged against the spacing up to its departure",
+			sixThenTen, nil, at(7, 6, 6), 6 * time.Minute},
+		{"and still when late, up to halfway to the next departure",
+			sixThenTen, nil, at(7, 10, 59), 6 * time.Minute},
+		{"from halfway, the next spacing",
+			sixThenTen, nil, at(7, 11, 0), 10 * time.Minute},
+		{"a little early, the spacing up to the departure it is early for",
+			sixThenTen, nil, at(7, 15, 0), 10 * time.Minute},
+		{"from the first departure, the spacing after it",
+			sixThenTen, nil, at(7, 0, 0), 6 * time.Minute},
+		{"every 8 then 12 minutes: a vehicle on time after the 12 is judged against 12, not the 8 after it",
+			[]time.Duration{hms(7, 0, 0), hms(7, 8, 0), hms(7, 20, 0), hms(7, 28, 0), hms(7, 40, 0)}, nil, at(7, 20, 6), 12 * time.Minute},
+		{"a late last run is held to the last spacing for one spacing",
+			sixThenTen, nil, at(7, 35, 59), 10 * time.Minute},
+		{"a spacing after the last departure, nothing is due",
+			sixThenTen, nil, at(7, 36, 0), 0},
+		{"before the first departure, nothing is due",
+			sixThenTen, nil, at(6, 59, 59), 0},
+		{"a vehicle late after a short spacing is held to it up to halfway to a longer next one",
+			[]time.Duration{hms(7, 0, 0), hms(7, 2, 0), hms(7, 14, 0)}, nil, at(7, 5, 0), 2 * time.Minute},
+		{"a short last spacing late on is held to the longer one before it",
+			[]time.Duration{hms(7, 0, 0), hms(7, 12, 0), hms(7, 13, 0)}, nil, at(7, 20, 0), 12 * time.Minute},
+		{"a lone departure sets no gap", []time.Duration{hms(7, 35, 0)}, nil, at(7, 35, 0), 0},
+		{"two trips due at the same time are one departure",
+			[]time.Duration{hms(7, 0, 0), hms(7, 0, 0), hms(7, 10, 0), hms(7, 10, 0), hms(7, 20, 0)}, nil, at(7, 10, 6), 10 * time.Minute},
+		{"departures in any order",
+			[]time.Duration{hms(7, 26, 0), hms(7, 6, 0), hms(7, 16, 0), hms(7, 0, 0)}, nil, at(7, 6, 6), 6 * time.Minute},
+		{"a trip every 10 minutes and a timetable every 10 make it every 5",
+			everyFrom(10*time.Minute, hms(7, 0, 0), hms(7, 30, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 14, 0), 5 * time.Minute},
+		// 1 / (1/600 + 1/360) is 225 seconds.
+		{"a trip every 10 minutes and a timetable every 6 make it every 3m45s",
+			everyFrom(6*time.Minute, hms(7, 0, 0), hms(7, 30, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 14, 0), 225 * time.Second},
+		{"a timetable less often than every 12 minutes adds nothing to a trip every 10",
+			everyFrom(15*time.Minute, hms(7, 0, 0), hms(7, 45, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 14, 0), 10 * time.Minute},
+		{"after the timetable's last spacing, the trip alone",
+			[]time.Duration{hms(7, 0, 0), hms(7, 10, 0)}, []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 20, 0), 10 * time.Minute},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var s stopSchedule
+			if tc.trip != nil {
+				s.addTrip(tc.trip, reportDayStart, 0)
+			}
+			s.setTimetable(departing(tc.departures...))
+			assert.Equal(t, tc.want, s.gapAt(tc.at))
+		})
+	}
+}
+
+func TestStopSchedule_TimetableStretches(t *testing.T) {
+	at := func(h, m int) time.Time { return reportDayStart.Add(hms(h, m, 0)) }
+	tests := []struct {
+		name       string
+		departures []time.Duration
+		trip       []rider.Frequency
+		want       []timeSpan
+	}{
+		{"none", nil, nil, []timeSpan{}},
+		{"departures each within 12 minutes of the next, held the last spacing past the last",
+			[]time.Duration{hms(7, 0, 0), hms(7, 10, 0), hms(7, 22, 0)}, nil, []timeSpan{{at(7, 0), at(7, 34)}}},
+		{"12 minutes and a second apart is no stretch",
+			[]time.Duration{hms(7, 0, 0), hms(7, 12, 1)}, nil, []timeSpan{}},
+		{"a route frequent only in the peaks",
+			slices.Concat(everyFrom(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), everyFrom(20*time.Minute, hms(8, 20, 0), hms(15, 40, 0)), everyFrom(10*time.Minute, hms(16, 0, 0), hms(17, 0, 0))),
+			nil, []timeSpan{{at(7, 0), at(8, 10)}, {at(16, 0), at(17, 10)}}},
+		{"a timetable that starts as a trip's window is held to is one stretch with it",
+			[]time.Duration{hms(8, 10, 0), hms(8, 20, 0), hms(8, 30, 0)}, []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))},
+			[]timeSpan{{at(7, 0), at(8, 40)}}},
+		{"one apart from it is not",
+			[]time.Duration{hms(9, 0, 0), hms(9, 10, 0)}, []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))},
+			[]timeSpan{{at(7, 0), at(8, 10)}, {at(9, 0), at(9, 20)}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var s stopSchedule
+			if tc.trip != nil {
+				s.addTrip(tc.trip, reportDayStart, 0)
+			}
+			s.setTimetable(departing(tc.departures...))
+			assert.Equal(t, tc.want, s.stretches())
+		})
+	}
+}
+
+// TestStopSchedule_SetTimetableWindows: each frequent spacing holds from
+// halfway after the departure before it to halfway to the next, the first of
+// a run of them from its first departure and the last up to its last, so a
+// timetable's windows meet without overlapping, as windowAt needs. A
+// departure with no other within 12 minutes has none.
+func TestStopSchedule_SetTimetableWindows(t *testing.T) {
+	at := func(h, m int) time.Time { return reportDayStart.Add(hms(h, m, 0)) }
+	var s stopSchedule
+	s.setTimetable(departing(hms(7, 0, 0), hms(7, 6, 0), hms(7, 16, 0), hms(7, 26, 0), hms(8, 0, 0), hms(9, 0, 0), hms(9, 10, 0)))
+	assert.Equal(t, []stopWindow{
+		{at(7, 0), at(7, 11), 6 * time.Minute},
+		{at(7, 11), at(7, 21), 10 * time.Minute},
+		{at(7, 21), at(7, 26), 10 * time.Minute},
+		{at(9, 0), at(9, 10), 10 * time.Minute},
+	}, s.timetable)
+	assert.Equal(t, departing(hms(7, 0, 0), hms(7, 6, 0), hms(7, 16, 0), hms(7, 26, 0), hms(9, 0, 0), hms(9, 10, 0)), s.timetabled)
+}
+
+// TestStopSchedule_TimetabledAt: a departure is part of the timetable's
+// frequent service when the one before or after it is within 12 minutes.
+func TestStopSchedule_TimetabledAt(t *testing.T) {
+	var s stopSchedule
+	s.setTimetable(departing(hms(8, 30, 0), hms(7, 0, 0), hms(6, 30, 0), hms(7, 10, 0), hms(7, 20, 0), hms(7, 32, 0), hms(7, 45, 0)))
+	tests := []struct {
+		name string
+		at   time.Duration
+		want bool
+	}{
+		{"30 minutes before the next", hms(6, 30, 0), false},
+		{"10 minutes before the next", hms(7, 0, 0), true},
+		{"10 minutes either side", hms(7, 10, 0), true},
+		{"12 minutes after the one before", hms(7, 32, 0), true},
+		{"13 minutes after the one before and 45 before the next", hms(7, 45, 0), false},
+		{"45 minutes after the one before, the last", hms(8, 30, 0), false},
+		{"not a departure", hms(7, 5, 0), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, s.timetabledAt(reportDayStart.Add(tc.at)))
+		})
+	}
+
+	var same stopSchedule
+	same.setTimetable(departing(hms(7, 35, 0), hms(7, 35, 0)))
+	assert.False(t, same.timetabledAt(reportDayStart.Add(hms(7, 35, 0))), "two trips due at the same time, alone, are one departure")
+	assert.Empty(t, same.stretches())
 }

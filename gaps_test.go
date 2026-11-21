@@ -431,10 +431,10 @@ func TestMostOften(t *testing.T) {
 		"the shortest of those seen as often")
 }
 
-// TestRouteGaps_Directions: a route's headway trips are grouped by
-// direction_id, or by headsign where the feed gives none, in that order;
-// each direction is listed even with nothing run, and the route's timetabled
-// trips are left out.
+// TestRouteGaps_Directions: a route's trips are grouped by direction_id, or
+// by headsign where the feed gives none, in that order; each direction with
+// a headway trip is listed even with nothing run, and a route with only GX,
+// a timetabled trip with no other within 12 minutes, has none.
 func TestRouteGaps_Directions(t *testing.T) {
 	ix := gapFixtureIndex(t)
 	rep := &serviceReport{Date: "2026-09-02", location: ix.Timezone()}
@@ -470,5 +470,89 @@ func TestRouteGaps_Directions(t *testing.T) {
 	}
 
 	assert.Empty(t, routeGaps(rep, []*rider.TripInfo{mustTrip(t, ix, "GX")}, reportDayStart, nil, nil, testReportSettings),
-		"a route run only by timetable")
+		"a route run only by a timetable less often than every 12 minutes")
+}
+
+// TestDirectionStops_Timetable is the gap maths on route 6, by timetable
+// every 10 minutes from 07:00 to 07:30 and then at 07:42, 12 minutes later:
+// frequent from 07:00 up to a spacing after 07:42 at ST1, and five minutes
+// later at ST2. 6A at 06:30 and 6G at 07:55 have no departure within 12
+// minutes of theirs, so they are On time's alone.
+func TestDirectionStops_Timetable(t *testing.T) {
+	ix := timetableFixtureIndex(t)
+	route6 := make([]*rider.TripInfo, 0, 7)
+	for _, id := range []string{"6A", "6B", "6C", "6D", "6E", "6F", "6G"} {
+		route6 = append(route6, mustTrip(t, ix, id))
+	}
+	run := func(tripID string, leave time.Duration) gapRun {
+		return gapRun{name: tripID, tripID: tripID, legs: north(leave, leave+5*time.Minute)}
+	}
+	tests := []struct {
+		name string
+		runs []gapRun
+		want []string
+	}{
+		{"every 10 minutes, on time",
+			[]gapRun{run("6B", hms(7, 0, 0)), run("6C", hms(7, 10, 0))},
+			[]string{"ST1 07:10:06 10m0s of 10m0s", "ST2 07:15:06 10m0s of 10m0s"}},
+		{"bunched",
+			[]gapRun{run("6B", hms(7, 0, 0)), run("6C", hms(7, 8, 0)), run("6D", hms(7, 10, 0))},
+			[]string{"ST1 07:08:06 8m0s of 10m0s", "ST1 07:10:06 2m0s of 10m0s", "ST2 07:13:06 8m0s of 10m0s", "ST2 07:15:06 2m0s of 10m0s"}},
+		{"12 minutes after 6E, 6F is frequent",
+			[]gapRun{run("6E", hms(7, 30, 0)), run("6F", hms(7, 42, 0))},
+			[]string{"ST1 07:42:06 12m0s of 12m0s", "ST2 07:47:06 12m0s of 12m0s"}},
+		{"a vehicle on time is judged against the spacing up to its departure, not the 12 minutes after it",
+			[]gapRun{run("6D", hms(7, 20, 0)), run("6E", hms(7, 30, 0))},
+			[]string{"ST1 07:30:06 10m0s of 10m0s", "ST2 07:35:06 10m0s of 10m0s"}},
+		{"6G, 13 minutes after 6F, is not in the order even leaving early inside the stretch",
+			[]gapRun{run("6F", hms(7, 42, 0)), run("6G", hms(7, 50, 0))},
+			[]string{}},
+		{"6A, alone at 06:30, is not in the order even running late into it",
+			[]gapRun{run("6B", hms(7, 0, 0)), run("6A", hms(7, 5, 0)), run("6C", hms(7, 10, 0))},
+			[]string{"ST1 07:10:06 10m0s of 10m0s", "ST2 07:15:06 10m0s of 10m0s"}},
+		{"a late last vehicle is held to the last spacing, for one spacing",
+			[]gapRun{run("6E", hms(7, 30, 0)), run("6F", hms(7, 53, 0))},
+			[]string{"ST1 07:53:06 23m0s of 12m0s", "ST2 07:58:06 23m0s of 12m0s"}},
+		{"after that, nothing is judged",
+			[]gapRun{run("6E", hms(7, 30, 0)), run("6F", hms(7, 54, 0))},
+			[]string{}},
+		{"before the first departure, nothing is judged",
+			[]gapRun{run("6B", hms(6, 50, 0)), run("6C", hms(6, 59, 0))},
+			[]string{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runs, trails := gapTrips(t, ix, 1, tc.runs)
+			assert.Equal(t, tc.want, gapLines(t, route6, runs, trails))
+		})
+	}
+}
+
+// TestDirectionStops_MixedGroup: on route 7 the timetable every 10 minutes
+// adds to 7F every 20, making every 6m40s while both run, and the runs of
+// both are in the order. Once the timetable's last spacing is past, 7F
+// alone is due.
+func TestDirectionStops_MixedGroup(t *testing.T) {
+	ix := timetableFixtureIndex(t)
+	route7 := []*rider.TripInfo{mustTrip(t, ix, "7F"), mustTrip(t, ix, "7B"), mustTrip(t, ix, "7C"), mustTrip(t, ix, "7D")}
+	runs, trails := gapTrips(t, ix, 1, slices.DeleteFunc(slices.Clone(timetableDayRuns), func(run gapRun) bool { return run.tripID[0] == '6' }))
+	assert.Equal(t, []string{
+		"ST1 08:05:06 5m0s of 6m40s", "ST1 08:16:06 11m0s of 6m40s", "ST1 08:20:06 4m0s of 6m40s", "ST1 08:25:06 5m0s of 6m40s", "ST1 08:40:06 15m0s of 20m0s",
+		"ST2 08:10:06 5m0s of 6m40s", "ST2 08:21:06 11m0s of 6m40s", "ST2 08:25:06 4m0s of 6m40s", "ST2 08:30:06 5m0s of 6m40s", "ST2 08:45:06 15m0s of 20m0s",
+	}, gapLines(t, route7, runs, trails))
+}
+
+// TestRouteGaps_FrequentTimetable: a direction run by timetable alone is
+// listed when two of its departures from a stop it is measured at are 12
+// minutes apart, even with nothing run, and not when they are 13.
+func TestRouteGaps_FrequentTimetable(t *testing.T) {
+	ix := timetableFixtureIndex(t)
+	rep := &serviceReport{Date: "2026-09-02", location: ix.Timezone()}
+	none := `"gaps_judged":0,"bunched":0,"long_gaps":0,"unknown":0,"extra_wait_s":null,"scheduled_gap_s":null`
+	gaps := routeGaps(rep, []*rider.TripInfo{mustTrip(t, ix, "6E"), mustTrip(t, ix, "6F")}, reportDayStart, nil, nil, testReportSettings)
+	encoded, err := json.Marshal(gaps)
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"direction_id":0,"headsign":"North",`+none+`}]`, string(encoded), "07:30 and 07:42")
+	assert.Empty(t, routeGaps(rep, []*rider.TripInfo{mustTrip(t, ix, "6F"), mustTrip(t, ix, "6G")}, reportDayStart, nil, nil, testReportSettings),
+		"07:42 and 07:55")
 }
