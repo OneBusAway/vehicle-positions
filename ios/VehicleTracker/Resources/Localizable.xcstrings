@@ -3016,6 +3016,12 @@
             "state" : "new",
             "value" : "%1$@. %2$@"
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@। %2$@"
+          }
         }
       }
     },
@@ -4860,7 +4866,15 @@
       }
     },
     "%lld min" : {
-      "comment" : "Live Activity, the compact Dynamic Island: whole minutes late or early, beside the status symbol."
+      "comment" : "Live Activity, the compact Dynamic Island: whole minutes late or early, beside the status symbol.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld मिनट"
+          }
+        }
+      }
     },
     "%lld min early" : {
       "comment" : "Status card answer: whole minutes ahead of the schedule, e.g. '2 min early'.",
@@ -29219,10 +29233,26 @@
       }
     },
     "Open the app to keep reporting." : {
-      "comment" : "Live Activity: what to do about a location problem, or about reports that have paused, which only the app can fix."
+      "comment" : "Live Activity: what to do about a location problem, or about reports that have paused, which only the app can fix.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट भेजते रहने के लिए ऐप खोलें।"
+          }
+        }
+      }
     },
     "Open the app to sign in." : {
-      "comment" : "Live Activity, under 'Signed out': the sign-in expired and reports have stopped until the driver signs in again."
+      "comment" : "Live Activity, under 'Signed out': the sign-in expired and reports have stopped until the driver signs in again.",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साइन इन करने के लिए ऐप खोलें।"
+          }
+        }
+      }
     },
     "Opens Settings" : {
       "comment" : "VoiceOver hint on a problem line that opens the app's page in Settings.",
@@ -31993,7 +32023,15 @@
       }
     },
     "Reports paused" : {
-      "comment" : "Live Activity, once the app has stopped updating it: reports are not being sent. Followed by 'Open the app to keep reporting.'"
+      "comment" : "Live Activity, once the app has stopped updating it: reports are not being sent. Followed by 'Open the app to keep reporting.'",
+      "localizations" : {
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रिपोर्ट रुकी हुई हैं"
+          }
+        }
+      }
     },
     "Reports refused" : {
       "comment" : "Problem line: the server refuses the vehicle's reports (not assigned, deactivated, or no active trip).",
@@ -37660,6 +37698,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Route %1$@ to %2$@. %3$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रूट %1$@, %2$@ की ओर। %3$@"
           }
         }
       }
