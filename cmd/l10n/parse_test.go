@@ -60,6 +60,18 @@ func TestPluralCategories(t *testing.T) {
 	assert.Equal(t, []string{"other"}, pluralCategories("ht"), "a language CLDR has no rules for uses the root's")
 }
 
+// TestPluralCategoriesFor: iOS needs one and other alone where Xcode offers
+// no more, and every other language and app keeps CLDR's categories.
+func TestPluralCategoriesFor(t *testing.T) {
+	for _, lang := range []string{"es", "fr", "it", "pt-BR"} {
+		assert.Equal(t, []string{"one", "other"}, pluralCategoriesFor(ios, lang), lang)
+		assert.Equal(t, []string{"one", "many", "other"}, pluralCategoriesFor(android, lang), lang)
+	}
+	assert.Equal(t, []string{"one", "few", "many", "other"}, pluralCategoriesFor(ios, "pl"))
+	assert.Equal(t, []string{"one", "other"}, pluralCategoriesFor(ios, "hi"))
+	assert.Equal(t, []string{"other"}, pluralCategoriesFor(ios, "vi"))
+}
+
 // TestUnescapeAndroid: a string's text as aapt builds it, \u escapes
 // included.
 func TestUnescapeAndroid(t *testing.T) {

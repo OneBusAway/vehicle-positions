@@ -213,7 +213,7 @@ func checkPlurals(r *report, u *unit, lang string, v *version) {
 		}
 	}
 	if v != u.source {
-		single := u.app == ios && slices.Equal(pluralCategories(lang), []string{"other"})
+		single := u.app == ios && slices.Equal(pluralCategoriesFor(u.app, lang), []string{"other"})
 		for path := range u.source.forms {
 			prefix, _, ok := pluralGroup(path)
 			if !ok {
@@ -235,7 +235,7 @@ func checkPlurals(r *report, u *unit, lang string, v *version) {
 	sort.Strings(prefixes)
 	for _, prefix := range prefixes {
 		var missing []string
-		for _, c := range pluralCategories(lang) {
+		for _, c := range pluralCategoriesFor(u.app, lang) {
 			if !slices.Contains(groups[prefix], c) {
 				missing = append(missing, c)
 			}

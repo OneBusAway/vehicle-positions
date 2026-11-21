@@ -36,6 +36,27 @@ var cardinalCategories = map[string][]string{
 	"zh":  {"other"},
 }
 
+// xcodeCategories is where an iOS translation needs fewer plural categories
+// than CLDR gives. Xcode offers Spanish, French, Italian and Portuguese one and
+// other alone, and none of iOS's own strings in them has many, CLDR's form for
+// a million and more, which iOS then reads from other.
+var xcodeCategories = map[string][]string{
+	"es": {"one", "other"},
+	"fr": {"one", "other"},
+	"it": {"one", "other"},
+	"pt": {"one", "other"},
+}
+
+// pluralCategoriesFor is the plural categories one app's strings need in a
+// language: pluralCategories, but fewer on iOS where Xcode needs fewer.
+func pluralCategoriesFor(app, lang string) []string {
+	base, _, _ := strings.Cut(lang, "-")
+	if cats, ok := xcodeCategories[base]; ok && app == ios {
+		return cats
+	}
+	return pluralCategories(lang)
+}
+
 // pluralCategories is the plural categories a language's strings need, by its
 // language subtag: pt-BR goes by pt. A language CLDR gives no rules, such as
 // Haitian Creole or Samoan, uses CLDR's root rules, which have "other" alone.
