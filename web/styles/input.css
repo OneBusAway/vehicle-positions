@@ -386,6 +386,7 @@
   .row-link.an-route { display: inline-flex; align-items: center; gap: 10px; }
   .an-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
   .an-tiles .tile { min-height: 120px; }
+  .an-tiles.an-tiles-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .an-trend { overflow: hidden; margin-bottom: 16px; }
   .an-chart { padding: 8px 18px 14px; }
   .an-plot { padding: 0 18px 14px; }
@@ -408,6 +409,8 @@
   .legend .line-key { background: var(--tone, var(--chart-1)); }
   .chart .dot { fill: var(--tone, var(--chart-1)); }
   .chart .ok-band { fill: var(--ok); opacity: 0.1; }
+  .chart .early-band { fill: var(--early); opacity: 0.1; }
+  .chart .late-band { fill: var(--late); opacity: 0.1; }
   .chart .bar-ok { fill: var(--ok); }
 
   /* Sign in */

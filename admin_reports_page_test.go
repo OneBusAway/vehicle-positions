@@ -68,6 +68,8 @@ func TestParseAnalyticsQuery(t *testing.T) {
 		{"range=28&metric=speed&compare=no", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
 		{"date=2026-09-02&route_id=R1&range=7&metric=late", analyticsQuery{Date: "2026-09-02", RouteID: "R1", Days: 1, Metric: metricLate, Compare: true}, "/admin/reports?date=2026-09-02&route_id=R1"},
 		{"days=28", analyticsQuery{Days: 28, Metric: metricOnTime, Compare: true}, "/admin/reports?days=28"},
+		{"metric=bunched", analyticsQuery{Days: 7, Metric: metricBunched, Compare: true}, "/admin/reports?metric=bunched"},
+		{"days=28&metric=long_gaps", analyticsQuery{Days: 28, Metric: metricLongGaps, Compare: true}, "/admin/reports?days=28&metric=long_gaps"},
 		{"date=2026-09-02&days=28&metric=late&compare=off", analyticsQuery{Date: "2026-09-02", Days: 28, Metric: metricLate, Compare: false}, "/admin/reports?compare=off&date=2026-09-02&days=28&metric=late"},
 		{"days=7", analyticsQuery{Days: 7, Metric: metricOnTime, Compare: true}, "/admin/reports"},
 		{"days=28&range=day", analyticsQuery{Days: 1, Metric: metricOnTime, Compare: true}, "/admin/reports?range=day"},
@@ -631,10 +633,10 @@ func TestHoursOfDay(t *testing.T) {
 	hours := hoursOfDay(totalsOf(rep, rep))
 
 	require.Len(t, hours, 19, "06:00 to the hour after midnight, with none left out")
-	assert.Equal(t, hourShares{Hour: 6, Trips: 4, reportCounts: reportCounts{OnTime: 4, Early: 2, Late: 2}}, hours[0], "both days' trips, and no stop without a verdict")
-	assert.Equal(t, hourShares{Hour: 7}, hours[1])
-	assert.Equal(t, hourShares{Hour: 9, Trips: 2}, hours[3])
-	assert.Equal(t, hourShares{Hour: 24, Trips: 2, reportCounts: reportCounts{OnTime: 6}}, hours[18], "after midnight sorts after the evening")
+	assert.Equal(t, hourSplit{Hour: 6, Count: 4, Lower: 2, Upper: 2, Rest: 4}, hours[0], "both days' trips, late, early and on time, and no stop without a verdict")
+	assert.Equal(t, hourSplit{Hour: 7}, hours[1])
+	assert.Equal(t, hourSplit{Hour: 9, Count: 2}, hours[3])
+	assert.Equal(t, hourSplit{Hour: 24, Count: 2, Rest: 6}, hours[18], "after midnight sorts after the evening")
 	assert.Empty(t, hoursOfDay(totalsOf(&serviceReport{Date: "2026-09-02", location: la})))
 }
 
@@ -679,7 +681,7 @@ func TestNewAnalyticsMetrics(t *testing.T) {
 	total := reportCounts{Scheduled: 1848, Run: 1764, OnTime: 860, Early: 30, Late: 110, Unknown: 64}
 	before := reportCounts{Scheduled: 1848, Run: 1700, OnTime: 830, Early: 30, Late: 140, Unknown: 75}
 
-	metrics := newAnalyticsMetrics(query, total, &before)
+	metrics := newAnalyticsMetrics(query, total, &before, false)
 
 	require.Len(t, metrics, 5)
 	notes := make([]string, 0, 5)
@@ -691,16 +693,16 @@ func TestNewAnalyticsMetrics(t *testing.T) {
 	assert.False(t, metrics[0].Selected)
 	assert.Equal(t, "/admin/reports?date=2026-11-17&metric=trips_run", metrics[1].URL)
 
-	alone := newAnalyticsMetrics(query, total, nil)
+	alone := newAnalyticsMetrics(query, total, nil, false)
 	assert.Equal(t, "860 of 1000 stops", alone[0].Note)
 	assert.Equal(t, "30 stops", alone[2].Note)
 	assert.Equal(t, "64 of 1064 stops", alone[4].Note)
 
 	// A period with nothing to set a share against keeps its counts.
-	nothingBefore := newAnalyticsMetrics(query, total, &reportCounts{})
+	nothingBefore := newAnalyticsMetrics(query, total, &reportCounts{}, false)
 	assert.Equal(t, "860 of 1000 stops", nothingBefore[0].Note)
 
-	empty := newAnalyticsMetrics(query, reportCounts{}, nil)
+	empty := newAnalyticsMetrics(query, reportCounts{}, nil, false)
 	assert.Equal(t, "None", empty[0].Value)
 	assert.Equal(t, "0 of 0 stops", empty[0].Note)
 }
