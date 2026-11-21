@@ -5,7 +5,8 @@ import Testing
 /// The welcome's three timelines, driven by a clock the test moves: when
 /// each beat lands, where a picture rests, and what Next and back do to a
 /// picture that is still playing.
-@Suite struct WelcomeFlowTests {
+// A clock that never settled would wait for ever; the limit turns that into a failure.
+@Suite(.timeLimit(.minutes(1))) struct WelcomeFlowTests {
     let clock = StepClock()
 
     /// A welcome that has just come onto the screen.
@@ -196,7 +197,7 @@ import Testing
     }
 
     func settle() async {
-        for _ in 0..<4 { await Task.yield() }
+        await settleMainActor()
     }
 
     /// Next, Next, back, as fast as a thumb: one picture is playing at the
@@ -301,12 +302,25 @@ import Testing
     }
 }
 
+/// Lets the jobs already queued on the main actor run: a picture just
+/// started, or the wake its cancellation sends. A `Task.yield()` makes no such
+/// promise, since a task the executor thinks most urgent is resumed at once;
+/// a task queued behind them does.
+@MainActor func settleMainActor() async {
+    await Task { @MainActor in }.value
+}
+
 /// Time that moves when a test says so. A sleeper wakes when the clock
 /// reaches its time, one at a time and in order, and gets to sleep again or
 /// finish before the clock moves on, so a picture's beats land as they would.
 @MainActor final class StepClock {
     private var now = Duration.zero
     private var parked: [Int: (wakeAt: Duration, continuation: CheckedContinuation<Void, any Error>)] = [:]
+    /// Sleepers woken, at their time or by cancellation, that have not run
+    /// again yet.
+    private var waking: Set<Int> = []
+    /// The clock, waiting for the last of them to run again.
+    private var settled: CheckedContinuation<Void, Never>?
     private var nextID = 0
 
     var sleepers: Int { parked.count }
@@ -315,6 +329,9 @@ import Testing
         let id = nextID
         nextID += 1
         let wakeAt = now + duration
+        // A woken sleeper runs on from here with no wait until it sleeps
+        // again or finishes, so once this has run it has settled.
+        defer { ran(id) }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 if Task.isCancelled {
@@ -343,8 +360,15 @@ import Testing
         now = max(now, time)
     }
 
+    private func ran(_ id: Int) {
+        guard waking.remove(id) != nil, waking.isEmpty, let settled else { return }
+        self.settled = nil
+        settled.resume()
+    }
+
     private func wake(_ id: Int, throwing error: (any Error)?) {
         guard let sleeper = parked.removeValue(forKey: id) else { return }
+        waking.insert(id)
         if let error {
             sleeper.continuation.resume(throwing: error)
         } else {
@@ -352,8 +376,19 @@ import Testing
         }
     }
 
-    /// Lets whatever was woken or cancelled run until it waits again.
+    /// Lets whatever was woken, started or cancelled run until it sleeps again
+    /// or finishes. A woken sleeper comes back to the main actor by way of
+    /// the global executor, so nothing queued on the main actor is sure to
+    /// run after it, and the count of yields this used was a guess that a
+    /// busy machine could beat (#534). The clock waits for the last woken
+    /// sleeper to run again instead, then for what was queued straight onto
+    /// the main actor, which may have woken more.
     private func settle() async {
-        for _ in 0..<4 { await Task.yield() }
+        repeat {
+            if !waking.isEmpty {
+                await withCheckedContinuation { settled = $0 }
+            }
+            await settleMainActor()
+        } while !waking.isEmpty
     }
 }
