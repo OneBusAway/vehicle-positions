@@ -10,6 +10,12 @@
             "state" : "new",
             "value" : "Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is."
           }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ट्रिप चलते समय आपकी लोकेशन ट्रांज़िट एजेंसी के सर्वर पर भेजी जाती है, ताकि यात्री देख सकें कि गाड़ी कहाँ है।"
+          }
         }
       }
     },
@@ -21,6 +27,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Precise location puts the vehicle on the right street on riders' maps."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सटीक स्थान से गाड़ी यात्रियों के मैप पर सही सड़क पर दिखती है।"
           }
         }
       }
