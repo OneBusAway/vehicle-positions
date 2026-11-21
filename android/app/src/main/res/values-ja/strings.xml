@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Japanese, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Polite です/ます in sentences; short nouns and verb stems on buttons and labels. Japanese has one plural form
+    (other), so each plural has only that one. "Vehicle" is 車両; "run" is 便 (a timetabled departure, "6:43発の便",
+    "1503便"); "trip" is 運行 (運行開始, 運行終了, 運行を再開); "report" is 送信, counted in 件 ("142件送信"), and a
+    saved report is 位置; "dispatcher" is 運行管理者; "block" is 運用; "route" is 路線; "stop" is 停留所; "agency" is
+    事業者; "driver" is 運転士; "riders" is 乗客; "schedule" and "timetable" are 時刻表; "phone" is スマートフォン;
+    "diagnostics" is 診断情報. Half-width spaces set Latin text and placeholders for names and numbers apart
+    ("路線 %1$s", "GPS なし"), but not counts from their counters ("%1$d分遅れ").
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">ログイン</string>
+    <string name="login_subtitle">この事業者の運転士アカウントでログインしてください。</string>
+    <string name="login_server_url_label">サーバーアドレス</string>
+    <string name="login_email_label">メールアドレス</string>
+    <string name="login_password_label">パスワード</string>
+    <string name="login_show_password">パスワードを表示</string>
+    <string name="login_hide_password">パスワードを非表示</string>
+    <string name="login_server">サーバー</string>
+    <string name="login_change_server">変更</string>
+    <string name="login_button">ログイン</string>
+    <string name="login_signing_in">ログイン中</string>
+    <string name="login_error_missing_server">サーバーアドレスを入力してください</string>
+    <string name="login_error_missing_email">メールアドレスを入力してください</string>
+    <string name="login_error_missing_password">パスワードを入力してください</string>
+    <string name="login_error_invalid_credentials">メールアドレスまたはパスワードが違います。もう一度お試しください。</string>
+    <string name="login_error_invalid_address">https://tracker.example.org のようなアドレスを入力してください</string>
+    <string name="login_error_https_required">https:// で始まるアドレスを使用してください</string>
+    <string name="login_error_check_address">アドレスを確認してください</string>
+    <string name="login_error_unreachable">%1$s に接続できません。通信状況かサーバーアドレスを確認してください。</string>
+    <string name="login_error_not_tracker">%1$s はトラッカーサーバーではないようです。</string>
+    <string name="login_error_too_many_tries">試行回数が多すぎます。1分待ってから、もう一度お試しください。</string>
+    <string name="login_error_server">ログインできませんでした。もう一度お試しください。</string>
+    <string name="login_again_title">再ログイン</string>
+    <string name="login_again_subtitle">%1$s として</string>
+    <string name="login_again_button">ログインして送信を続ける</string>
+    <string name="login_trip_open_title">運行はまだ終了していません</string>
+    <string name="login_trip_open_message">セッションが切れたため、送信が止まりました。路線 %1$s の送信を続けるには、ログインしてください。</string>
+    <string name="login_server_managed">事業者が設定しています。</string>
+    <string name="login_server_managed_invalid">事業者が設定したサーバーアドレスが正しくないため、ここに入力してください。</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">%1$s を使用しますか？</string>
+    <string name="server_setup_confirm_message">このリンクが事業者から送られてきた場合のみ、続行してください。</string>
+    <string name="server_setup_use">このサーバーを使用</string>
+    <string name="server_setup_cancel">キャンセル</string>
+    <string name="server_setup_refused_signed_in">このスマートフォンは %1$s にログインしています。リンクは使用されませんでした。</string>
+    <string name="server_setup_refused_trip_open">このスマートフォンには終了していない運行があります。リンクは使用されませんでした。</string>
+    <string name="server_setup_refused_managed">このスマートフォンのサーバーは事業者が設定しています。</string>
+    <string name="server_setup_invalid">このリンクには、アプリで使用できるサーバーアドレスが含まれていません。</string>
+    <string name="server_setup_ok">OK</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">サーバーアドレス</string>
+    <string name="restriction_server_url_description">事業者のトラッカーサーバー（https:// のアドレス）。運転士はこのサーバーにログインし、変更はできません。</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">スキップ</string>
+    <string name="welcome_next">次へ</string>
+    <string name="welcome_continue">続行</string>
+    <string name="welcome_step">%2$dステップ中%1$dステップ目</string>
+    <string name="welcome_riders_title">乗客が車両の接近を確認できます</string>
+    <string name="welcome_riders_body">運行を開始すると、乗客の地図に車両が表示されます。走り終えたら運行を終了してください。</string>
+    <string name="welcome_riders_picture">停留所で待つ3人の乗客が、近づく車両を確認できます。</string>
+    <string name="welcome_pieces_title">車両、路線、便</string>
+    <string name="welcome_pieces_body">これらを選び、自分の便をタップすると運行が始まります。走り終えたら運行を終了してください。</string>
+    <string name="welcome_pieces_vehicle_hint">車両に書かれた番号</string>
+    <string name="welcome_pieces_route_hint">行先表示の番号</string>
+    <string name="welcome_pieces_run_hint">タップで運行開始</string>
+    <string name="welcome_pieces_live">乗客に表示中</string>
+    <string name="welcome_pieces_finish">走り終えたら</string>
+    <string name="welcome_habits_title">送信を止めないために</string>
+    <string name="welcome_habits_body">運行のたびに、次の3つを守ってください。</string>
+    <string name="welcome_habits_location">位置情報を常に許可</string>
+    <string name="welcome_habits_location_why">送信が自動で再開できるように</string>
+    <string name="welcome_habits_charge">スマートフォンを充電したままにする</string>
+    <string name="welcome_habits_charge_why">充電中は画面がオンのままになります</string>
+    <string name="welcome_habits_open">アプリを開いたままにする</string>
+    <string name="welcome_habits_open_why">運行中はスワイプして閉じないでください</string>
+    <string name="welcome_habits_if_stops">送信が止まったら</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">自分の便をタップ</string>
+    <string name="tip_run_board_text">次に「%1$s」をタップしてください。それ以降、乗客に車両が表示されます。</string>
+    <string name="tip_sent_count_title">送信件数</string>
+    <string name="tip_sent_count_text">乗客に表示されている間、この数字が増えていきます。電波がなくても、そのまま運転を続けてください。位置は保存され、あとで送信されます。</string>
+    <string name="tip_got_it">OK</string>
+    <string name="first_trip_done_title">初めての運行が完了しました</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">件を送信しました</item>
+    </plurals>
+    <string name="first_trip_done_text">乗客に車両が表示されていました。</string>
+    <string name="first_trip_done_ok">OK</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">言語：%1$s</string>
+    <string name="language_row_phone_note">スマートフォン全体の設定で変更します</string>
+    <string name="language_list_title">言語</string>
+    <string name="language_list_cancel">キャンセル</string>
+
+    <!-- Help -->
+    <string name="help_title">ヘルプ</string>
+    <string name="help_welcome_again">ようこそ画面をもう一度見る</string>
+    <string name="help_welcome_again_detail">3つの短い画面</string>
+    <string name="help_section_status">ステータスカードの表示</string>
+    <string name="help_status_on_time">時刻表どおりに運行しています。</string>
+    <string name="help_status_late">時刻表より遅れています。</string>
+    <string name="help_status_early">時刻表より早く運行しています。乗客が乗り遅れるおそれがあります。</string>
+    <string name="help_status_off_schedule">時刻表から大きく外れています。正しい便を選んだか確認してください。</string>
+    <string name="help_status_off_route">地図上の路線から外れています。</string>
+    <string name="help_status_waiting_for_gps">スマートフォンが現在地を取得しています。</string>
+    <string name="help_status_no_schedule">この便には時刻がありません。乗客には引き続き表示されます。</string>
+    <string name="help_waiting">接続がない間に保存されたものです。接続が戻ると送信されます。</string>
+    <string name="help_waiting_never">別のアカウントでログインしていたときに保存されたため、このログインでは送信できません。</string>
+    <string name="help_section_problems">カードの下と通知の表示</string>
+    <string name="help_problem_no_network">そのまま運転を続けてください。位置は保存され、あとで送信されます。</string>
+    <string name="help_problem_no_gps">GPS が戻るまで、乗客には最後の位置が表示されます。</string>
+    <string name="help_problem_clock_skew">スマートフォンの設定で、時刻の自動設定をオンにしてください。</string>
+    <string name="help_problem_reports_refused">サーバーがこの車両からの送信を受け付けていません。運行管理者に確認してください。</string>
+    <string name="help_problem_signed_out">送信が止まっています。続けるにはログインしてください。運行はまだ終了していません。</string>
+    <string name="help_problem_reports_paused">通知です。送信を続けるにはアプリを開いてください。</string>
+    <string name="help_section_about">アプリについて</string>
+    <string name="help_version">バージョン</string>
+    <string name="help_server">サーバー</string>
+    <string name="help_share">診断情報を共有</string>
+    <string name="help_share_detail">アプリのバージョン、スマートフォンの機種、サーバー、アプリに許可されている権限、最近の問題（アプリの実行中だけ保持）を送ります。位置、ログイン情報、メールアドレスは含まれません。</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">上へ移動</string>
+    <string name="setup_trip_so_far">ここまでの選択</string>
+    <string name="setup_bus">車両</string>
+    <string name="setup_route">路線 %1$s</string>
+    <string name="setup_step_route">路線</string>
+    <string name="setup_step_run">便</string>
+    <string name="setup_clear_search">検索をクリア</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">アカウント</string>
+    <string name="account_version">バージョン %1$s</string>
+    <string name="account_sign_out">ログアウト</string>
+    <string name="account_sign_out_title">ログアウトしますか？</string>
+    <string name="account_sign_out_message">次の運転士がこのスマートフォンでログインできるようになります。</string>
+    <string name="account_sign_out_cancel">キャンセル</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">車両を選択</string>
+    <string name="vehicles_empty">割り当てられた車両がありません</string>
+    <string name="vehicles_empty_detail">運行管理者に車両の割り当てを依頼してから、もう一度確認してください。</string>
+    <string name="vehicles_check_again">再確認</string>
+    <string name="vehicles_error_message">車両を読み込めませんでした</string>
+    <string name="vehicles_error_detail">通信状況を確認して、もう一度お試しください。</string>
+    <string name="vehicles_retry_button">再試行</string>
+    <string name="vehicles_search_label">車両番号</string>
+    <string name="vehicles_search_no_matches">「%1$s」に一致する車両はありません</string>
+    <string name="vehicles_search_no_matches_detail">車両に書かれた番号を確認してください。</string>
+    <string name="vehicles_section_favorites">お気に入り</string>
+    <string name="vehicles_section_recent">最近使用</string>
+    <string name="vehicles_section_all">すべての車両</string>
+    <string name="vehicles_section_matches">検索結果</string>
+    <string name="vehicles_tile_favorite">お気に入り</string>
+    <string name="vehicles_favorite_description">%1$s をお気に入りに追加</string>
+    <string name="vehicles_unfavorite_description">%1$s をお気に入りから削除</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">路線を選択</string>
+    <string name="routes_search_label">路線番号または路線名</string>
+    <string name="routes_section_recent">最近使用</string>
+    <string name="routes_section_all">すべての路線</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">すべての路線 · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">検索結果</string>
+    <string name="routes_search_no_matches">「%1$s」に一致する路線はありません</string>
+    <string name="routes_search_no_matches_detail">行先表示の番号か、路線名の一部で検索してください。</string>
+    <string name="routes_empty">時刻表に路線がありません</string>
+    <string name="routes_empty_detail">事業者の管理者に時刻表の確認を依頼してください。</string>
+    <string name="routes_check_again">再確認</string>
+    <string name="routes_error_message">路線を読み込めませんでした</string>
+    <string name="routes_error_detail">通信状況を確認して、もう一度お試しください。</string>
+    <string name="routes_no_schedule">このサーバーにはまだ時刻表がありません</string>
+    <string name="routes_no_schedule_detail">運行を開始するには、先に担当者が時刻表を読み込む必要があります。事業者の管理者に連絡してください。</string>
+    <string name="routes_retry_button">再試行</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">便を選択</string>
+    <string name="runs_empty">本日、路線 %1$s の便はありません</string>
+    <string name="runs_empty_unnamed">本日、この路線の便はありません</string>
+    <string name="runs_empty_detail">別の路線を選ぶか、明日もう一度確認してください。</string>
+    <string name="runs_choose_another_route">別の路線を選択</string>
+    <string name="runs_badge_now">現在</string>
+    <string name="runs_badge_next">次</string>
+    <string name="runs_direction">%1$s行き</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">%1$s便</string>
+    <string name="runs_row_block">運用 %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">開始中…</string>
+    <string name="runs_start_title">%1$s発の便を開始しますか？</string>
+    <string name="runs_start_message">車両 %3$s で路線 %1$s（%2$s行き）を運行します。</string>
+    <string name="runs_start_message_no_headsign">車両 %2$s で路線 %1$s を運行します。</string>
+    <string name="runs_start_message_unnamed">車両 %2$s で %1$s行きを運行します。</string>
+    <string name="runs_start_message_vehicle">車両 %1$s で運行します。</string>
+    <string name="runs_start_confirm">運行開始</string>
+    <string name="runs_start_cancel">キャンセル</string>
+    <string name="runs_error_message">便を読み込めませんでした</string>
+    <string name="runs_error_detail">通信状況を確認して、もう一度お試しください。</string>
+    <string name="runs_retry_button">再試行</string>
+    <string name="runs_error_not_assigned">車両 %1$s はあなたに割り当てられていません。</string>
+    <string name="runs_change_bus">車両を変更</string>
+    <string name="runs_error_trip_active">すでに運行中です。別の運行を開始する前に、今の運行を終了してください。</string>
+    <string name="runs_error_vehicle_busy">車両 %1$s は別の運転士が運行中です。別の車両を選ぶか、運行管理者に確認してください。</string>
+    <string name="runs_error_vehicle_inactive">車両 %1$s は使用停止中です。別の車両を選んでください。</string>
+    <string name="runs_error_previous_trip_not_ended">前回の運行をまだ終了できていません。通信状況を確認して、もう一度お試しください。</string>
+    <string name="runs_error_network">サーバーに接続できません。通信状況を確認してください。</string>
+    <string name="runs_error_no_geometry">この便には経路や停留所の情報がありません。別の便を選んでください。</string>
+    <string name="runs_error_trip_not_active">時刻表が翌日に切り替わりました。</string>
+    <string name="runs_reload_button">再読み込み</string>
+    <string name="runs_error_other">運行を開始できませんでした。</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">%1$d件送信</item>
+    </plurals>
+    <string name="tracking_bar_click_label">運行の詳細を表示</string>
+    <string name="tracking_end_trip_button">運行終了</string>
+    <string name="tracking_end_trip_ending">終了中…</string>
+    <string name="tracking_occupancy_question">車内の混雑状況は？</string>
+    <string name="tracking_occupancy_many_seats">空席あり</string>
+    <string name="tracking_occupancy_few_seats">空席わずか</string>
+    <string name="tracking_occupancy_standing">立ち客あり</string>
+    <string name="tracking_occupancy_full">満員</string>
+    <string name="tracking_occupancy_clear">選択を解除</string>
+    <string name="tracking_fact_run">便</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">送信</string>
+    <string name="tracking_reports_reporting">送信中</string>
+    <string name="tracking_reports_not_reporting">送信していません</string>
+    <string name="tracking_reports_no_gps">GPS なし</string>
+    <string name="tracking_reports_stopped">送信停止</string>
+    <string name="tracking_fact_street_map">道路地図</string>
+    <string name="tracking_street_map_ready">準備完了</string>
+    <string name="tracking_street_map_downloading">ダウンロード中 · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">まだダウンロードしていません</string>
+    <string name="tracking_street_map_no_space">空き容量不足</string>
+    <string name="tracking_street_map_unusable">使用できません</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">通過した停留所（%1$d）</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">展開済み</string>
+    <string name="tracking_stops_passed_collapsed">折りたたみ済み</string>
+    <string name="tracking_end_trip_dialog_title">この運行を終了しますか？</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">送信が止まり、路線 %1$s の %2$s発の便は完了となります。%3$d件を送信しました。</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">送信が止まり、この便は完了となります。%1$d件を送信しました。</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">運行終了</string>
+    <string name="tracking_end_trip_dialog_cancel">運行を続ける</string>
+    <string name="tracking_end_trip_error_title">運行はまだ終了していません</string>
+    <string name="tracking_end_trip_error_message">サーバーから終了の確認がありませんでした。電波状況を確認してもう一度お試しいただくか、このスマートフォンでの送信を今すぐ止めてください。</string>
+    <string name="tracking_end_trip_error_retry">再試行</string>
+    <string name="tracking_end_trip_error_end_locally">このスマートフォンで終了</string>
+    <string name="tracking_reauth_button">ログイン</string>
+    <string name="tracking_problem_no_network">接続なし</string>
+    <string name="tracking_problem_no_network_detail">乗客に表示されません</string>
+    <string name="tracking_problem_no_gps">GPS 信号なし</string>
+    <string name="tracking_problem_no_gps_detail">位置の更新が停止中</string>
+    <string name="tracking_problem_clock_skew">時計がずれています</string>
+    <string name="tracking_problem_clock_skew_detail">時刻を自動設定に</string>
+    <string name="tracking_problem_reports_refused">送信拒否</string>
+    <string name="tracking_problem_reports_refused_detail">運行管理者に確認</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">%1$,d件を接続後に送信</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">%1$,d件は送信されません</item>
+    </plurals>
+    <string name="tracking_signed_out_title">ログアウトされました</string>
+    <string name="tracking_signed_out_message">送信が止まっています。運行はまだ終了していません。</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">定刻</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">%1$d分遅れ</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">%1$d分早い</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">時刻表外</string>
+    <string name="tracking_adherence_right_run">この便で合っていますか？</string>
+    <string name="tracking_adherence_off_schedule_next">次は %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">路線外 · %1$s</string>
+    <string name="tracking_adherence_off_route_short">路線外</string>
+    <string name="tracking_adherence_next_stop">次は</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">GPS を待っています</string>
+    <string name="tracking_adherence_from">出発</string>
+    <string name="tracking_adherence_run">%1$s発の便</string>
+    <string name="tracking_adherence_run_vehicle">%1$s発の便 · %2$s</string>
+    <string name="tracking_adherence_no_schedule">時刻表なし</string>
+    <string name="tracking_adherence_no_schedule_riders">乗客には表示されています</string>
+    <string name="tracking_adherence_no_schedule_detail">この便には時刻がありません</string>
+    <string name="tracking_map_recenter">現在地に戻る</string>
+    <string name="tracking_map_downloading">地図をダウンロード中（%1$d%%）</string>
+    <string name="tracking_map_no_space">地図を保存する空き容量がありません</string>
+    <string name="tracking_map_retrying">地図をまだダウンロードできていません。あとで再試行します</string>
+    <string name="tracking_map_retry_on_open">地図をダウンロードできませんでした。次にアプリを開いたときに再試行します</string>
+    <string name="tracking_map_unusable">地図ファイルが使用できません。事業者に連絡してください</string>
+    <string name="tracking_map_needs_https">地図のリンクは https である必要があります。事業者に連絡してください</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">運行を再開しますか？</string>
+    <string name="resume_message">運行中にアプリが終了しました。選択するまで送信は一時停止しています。</string>
+    <string name="resume_route">路線 %1$s</string>
+    <string name="resume_run">%1$s発の便</string>
+    <string name="resume_bus">車両 %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">%1$d分前（%2$s）に開始</item>
+    </plurals>
+    <string name="resume_started_hours_ago">%1$d時間%2$d分前（%3$s）に開始</string>
+    <string name="resume_button">運行を再開</string>
+    <string name="resume_end_trip_button">運行終了</string>
+    <string name="resume_ending">運行を終了中</string>
+    <string name="resume_loading">運行を読み込み中</string>
+    <string name="resume_end_failed">サーバーから運行終了の確認がありませんでした。もう一度お試しいただくか、このスマートフォンだけで終了してください。</string>
+    <string name="resume_end_failed_back">運行を終了しない</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">運行中の送信</string>
+    <string name="tracking_notification_title">路線 %1$s · %2$s</string>
+    <string name="tracking_notification_next">次は %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">ログアウトされました。アプリを開いてログインしてください。</string>
+    <string name="tracking_notification_reports_refused">送信拒否。運行管理者に確認してください。</string>
+    <string name="tracking_notification_resume_title">送信を一時停止中</string>
+    <string name="tracking_notification_resume_text">送信を続けるにはアプリを開いてください。</string>
+    <string name="tracking_notification_attention_channel_name">運行の要対応</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">開始する前に</string>
+    <string name="preflight_message">車両 %1$s の位置を送信するには、次の設定が必要です。このあと Android が1つずつ確認します。</string>
+    <string name="preflight_location">位置情報</string>
+    <string name="preflight_location_why">車両の位置をアプリが把握するため</string>
+    <string name="preflight_precise">正確な位置情報</string>
+    <string name="preflight_precise_why">乗客の地図で、車両が正しい停留所に表示されるようにするため</string>
+    <string name="preflight_background">常に許可</string>
+    <string name="preflight_background_why">Android がアプリを閉じても、送信を自動で再開できるようにするため</string>
+    <string name="preflight_notifications">通知</string>
+    <string name="preflight_notifications_why">送信中であることを確認できるようにするため</string>
+    <string name="preflight_battery">バッテリー</string>
+    <string name="preflight_battery_why">運行中に Android が送信を止めないようにするため</string>
+    <string name="preflight_location_services">位置情報サービス</string>
+    <string name="preflight_location_services_why">スマートフォン全体で位置情報をオンにする必要があります</string>
+    <string name="preflight_allowed">許可済み</string>
+    <string name="preflight_skipped">スキップ済み</string>
+    <string name="preflight_next">次に確認</string>
+    <string name="preflight_row_state">%1$s、%2$s</string>
+    <string name="preflight_skipped_why">許可されていません。送信はそのまま行えます。</string>
+    <string name="preflight_location_needed">送信には位置情報が必要です</string>
+    <string name="preflight_approximate">おおよその位置情報のみ許可されています</string>
+    <string name="preflight_try_again">再試行</string>
+    <string name="preflight_open_settings">設定を開く</string>
+    <string name="preflight_continue">続行</string>
+</resources>

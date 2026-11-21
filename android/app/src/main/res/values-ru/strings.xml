@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Russian, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    "Vehicle" is машина everywhere, the word drivers use at work for whatever they drive; "run" is рейс;
+    "trip" is поездка; "report" is отметка (feminine: one position sent), and "reporting" is отправка;
+    "dispatcher" is диспетчер; "block" is выход (a vehicle's day of runs, as depots say "выход 5");
+    "agency" is перевозчик; "fleet number" is бортовой номер; late and early are опоздание and опережение;
+    "diagnostics" is данные диагностики. The driver is addressed as "вы", lower case.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Вход</string>
+    <string name="login_subtitle">Используйте свой аккаунт водителя у этого перевозчика.</string>
+    <string name="login_server_url_label">Адрес сервера</string>
+    <string name="login_email_label">Электронная почта</string>
+    <string name="login_password_label">Пароль</string>
+    <string name="login_show_password">Показать пароль</string>
+    <string name="login_hide_password">Скрыть пароль</string>
+    <string name="login_server">Сервер</string>
+    <string name="login_change_server">Изменить</string>
+    <string name="login_button">Войти</string>
+    <string name="login_signing_in">Выполняется вход</string>
+    <string name="login_error_missing_server">Введите адрес сервера</string>
+    <string name="login_error_missing_email">Введите электронную почту</string>
+    <string name="login_error_missing_password">Введите пароль</string>
+    <string name="login_error_invalid_credentials">Неверная почта или пароль. Попробуйте ещё раз.</string>
+    <string name="login_error_invalid_address">Введите адрес вида https://tracker.example.org</string>
+    <string name="login_error_https_required">Используйте адрес с https://</string>
+    <string name="login_error_check_address">Проверьте адрес</string>
+    <string name="login_error_unreachable">Не удаётся подключиться к %1$s. Проверьте связь или адрес сервера.</string>
+    <string name="login_error_not_tracker">Похоже, %1$s — не сервер трекера.</string>
+    <string name="login_error_too_many_tries">Слишком много попыток. Подождите минуту и попробуйте ещё раз.</string>
+    <string name="login_error_server">Не удалось войти. Попробуйте ещё раз.</string>
+    <string name="login_again_title">Войдите снова</string>
+    <string name="login_again_subtitle">Аккаунт: %1$s</string>
+    <string name="login_again_button">Войти и продолжить отправку</string>
+    <string name="login_trip_open_title">Ваша поездка не завершена</string>
+    <string name="login_trip_open_message">Когда закончился сеанс, отправка отметок остановилась. Войдите, чтобы продолжить отправку по маршруту %1$s.</string>
+    <string name="login_server_managed">Задано вашим перевозчиком.</string>
+    <string name="login_server_managed_invalid">В настройках перевозчика указан неверный адрес сервера, поэтому введите его здесь.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Использовать %1$s?</string>
+    <string name="server_setup_confirm_message">Продолжайте, только если эту ссылку прислал ваш перевозчик.</string>
+    <string name="server_setup_use">Использовать этот сервер</string>
+    <string name="server_setup_cancel">Отмена</string>
+    <string name="server_setup_refused_signed_in">На этом телефоне выполнен вход на сервер %1$s. Ссылка не использована.</string>
+    <string name="server_setup_refused_trip_open">На этом телефоне есть незавершённая поездка. Ссылка не использована.</string>
+    <string name="server_setup_refused_managed">Сервер на этом телефоне задаёт ваш перевозчик.</string>
+    <string name="server_setup_invalid">В этой ссылке нет адреса сервера, который может использовать приложение.</string>
+    <string name="server_setup_ok">ОК</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Адрес сервера</string>
+    <string name="restriction_server_url_description">Сервер трекера перевозчика, адрес с https://. Водители входят на этот сервер и не могут его изменить.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Пропустить</string>
+    <string name="welcome_next">Далее</string>
+    <string name="welcome_continue">Продолжить</string>
+    <string name="welcome_step">Шаг %1$d из %2$d</string>
+    <string name="welcome_riders_title">Пассажиры видят, что вы подъезжаете</string>
+    <string name="welcome_riders_body">Начните поездку, и пассажиры увидят вашу машину на карте. В конце завершите её.</string>
+    <string name="welcome_riders_picture">Три пассажира на остановке видят, что подъезжает ваша машина.</string>
+    <string name="welcome_pieces_title">Машина, маршрут, рейс</string>
+    <string name="welcome_pieces_body">Выберите их, затем нажмите на свой рейс, чтобы начать. В конце завершите поездку.</string>
+    <string name="welcome_pieces_vehicle_hint">Бортовой номер</string>
+    <string name="welcome_pieces_route_hint">Номер на табличке</string>
+    <string name="welcome_pieces_run_hint">Нажмите, чтобы начать поездку</string>
+    <string name="welcome_pieces_live">Пассажиры вас видят</string>
+    <string name="welcome_pieces_finish">Когда закончите</string>
+    <string name="welcome_habits_title">Чтобы отправка не прерывалась</string>
+    <string name="welcome_habits_body">Делайте эти 3 вещи в каждой поездке.</string>
+    <string name="welcome_habits_location">Разрешите доступ к местоположению в любом режиме</string>
+    <string name="welcome_habits_location_why">Чтобы отправка могла сама возобновиться</string>
+    <string name="welcome_habits_charge">Держите телефон на зарядке</string>
+    <string name="welcome_habits_charge_why">Во время зарядки экран не гаснет</string>
+    <string name="welcome_habits_open">Не закрывайте приложение</string>
+    <string name="welcome_habits_open_why">Не смахивайте его во время поездки</string>
+    <string name="welcome_habits_if_stops">Если отправка остановилась</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Нажмите на свой рейс</string>
+    <string name="tip_run_board_text">Затем нажмите «%1$s». С этого момента пассажиры видят вашу машину.</string>
+    <string name="tip_sent_count_title">Отправленные отметки</string>
+    <string name="tip_sent_count_text">Это число растёт, пока пассажиры вас видят. Нет сигнала? Продолжайте ехать. Отметки сохраняются и отправятся позже.</string>
+    <string name="tip_got_it">Понятно</string>
+    <string name="first_trip_done_title">Первая поездка завершена</string>
+    <!-- The count is shown beside these words in large digits, so they need none of their own; Russian's "one" is 1, 21, 31 and so on, and all read right. -->
+    <plurals name="first_trip_done_reports" tools:ignore="ImpliedQuantity">
+        <item quantity="one">отметка отправлена</item>
+        <item quantity="few">отметки отправлены</item>
+        <item quantity="many">отметок отправлено</item>
+        <item quantity="other">отметки отправлено</item>
+    </plurals>
+    <string name="first_trip_done_text">Пассажиры видели вашу машину.</string>
+    <string name="first_trip_done_ok">ОК</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Язык: %1$s</string>
+    <string name="language_row_phone_note">Задаётся для всего телефона в его настройках</string>
+    <string name="language_list_title">Язык</string>
+    <string name="language_list_cancel">Отмена</string>
+
+    <!-- Help -->
+    <string name="help_title">Справка</string>
+    <string name="help_welcome_again">Снова показать приветствие</string>
+    <string name="help_welcome_again_detail">3 коротких экрана</string>
+    <string name="help_section_status">На карточке статуса</string>
+    <string name="help_status_on_time">Вы едете по расписанию.</string>
+    <string name="help_status_late">Вы отстаёте от расписания.</string>
+    <string name="help_status_early">Вы опережаете расписание. Пассажиры могут опоздать на вашу машину.</string>
+    <string name="help_status_off_schedule">Сильное отклонение от расписания. Проверьте, тот ли рейс вы выбрали.</string>
+    <string name="help_status_off_route">Вы в стороне от маршрута на карте.</string>
+    <string name="help_status_waiting_for_gps">Телефон определяет своё местоположение.</string>
+    <string name="help_status_no_schedule">У этого рейса нет расписания. Пассажиры всё равно вас видят.</string>
+    <string name="help_waiting">Сохранены без связи. Отправятся, когда связь вернётся.</string>
+    <string name="help_waiting_never">Сохранены под другим аккаунтом, поэтому с этого аккаунта их не отправить.</string>
+    <string name="help_section_problems">Под карточкой и в уведомлениях</string>
+    <string name="help_problem_no_network">Продолжайте ехать. Отметки сохраняются и отправятся позже.</string>
+    <string name="help_problem_no_gps">Пока сигнал не вернётся, пассажиры видят ваше последнее местоположение.</string>
+    <string name="help_problem_clock_skew">Включите автоматическое время в настройках телефона.</string>
+    <string name="help_problem_reports_refused">Сервер не принимает отметки этой машины. Обратитесь к диспетчеру.</string>
+    <string name="help_problem_signed_out">Отправка остановлена. Войдите, чтобы продолжить. Ваша поездка не завершена.</string>
+    <string name="help_problem_reports_paused">Уведомление. Откройте приложение, чтобы продолжить отправку.</string>
+    <string name="help_section_about">О приложении</string>
+    <string name="help_version">Версия</string>
+    <string name="help_server">Сервер</string>
+    <string name="help_share">Поделиться данными диагностики</string>
+    <string name="help_share_detail">Отправляет версию приложения, модель телефона, сервер, разрешения приложения и его недавние проблемы (они хранятся, только пока приложение работает). Без местоположения, данных для входа и почты.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Перейти вверх</string>
+    <string name="setup_trip_so_far">Выбрано для поездки</string>
+    <string name="setup_bus">Машина</string>
+    <string name="setup_route">Маршрут %1$s</string>
+    <string name="setup_step_route">Маршрут</string>
+    <string name="setup_step_run">Рейс</string>
+    <string name="setup_clear_search">Очистить поиск</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Аккаунт</string>
+    <string name="account_version">Версия %1$s</string>
+    <string name="account_sign_out">Выйти</string>
+    <string name="account_sign_out_title">Выйти из аккаунта?</string>
+    <string name="account_sign_out_message">Следующий водитель сможет войти на этом телефоне.</string>
+    <string name="account_sign_out_cancel">Отмена</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Выберите машину</string>
+    <string name="vehicles_empty">За вами не закреплено ни одной машины</string>
+    <string name="vehicles_empty_detail">Попросите диспетчера закрепить за вами машину, затем проверьте снова.</string>
+    <string name="vehicles_check_again">Проверить снова</string>
+    <string name="vehicles_error_message">Не удалось загрузить ваши машины</string>
+    <string name="vehicles_error_detail">Проверьте связь и попробуйте ещё раз.</string>
+    <string name="vehicles_retry_button">Повторить</string>
+    <string name="vehicles_search_label">Номер машины</string>
+    <string name="vehicles_search_no_matches">Машин по запросу %1$s не найдено</string>
+    <string name="vehicles_search_no_matches_detail">Проверьте бортовой номер на машине.</string>
+    <string name="vehicles_section_favorites">Избранное</string>
+    <string name="vehicles_section_recent">Недавние</string>
+    <string name="vehicles_section_all">Все машины</string>
+    <string name="vehicles_section_matches">Найдено</string>
+    <string name="vehicles_tile_favorite">В избранном</string>
+    <string name="vehicles_favorite_description">Добавить %1$s в избранное</string>
+    <string name="vehicles_unfavorite_description">Удалить %1$s из избранного</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Выберите маршрут</string>
+    <string name="routes_search_label">Номер или название маршрута</string>
+    <string name="routes_section_recent">Недавние</string>
+    <string name="routes_section_all">Все маршруты</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Все маршруты · %1$d</item>
+        <item quantity="few">Все маршруты · %1$d</item>
+        <item quantity="many">Все маршруты · %1$d</item>
+        <item quantity="other">Все маршруты · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Найдено</string>
+    <string name="routes_search_no_matches">Маршрутов по запросу %1$s не найдено</string>
+    <string name="routes_search_no_matches_detail">Ищите по номеру на табличке или по части названия.</string>
+    <string name="routes_empty">В расписании нет маршрутов</string>
+    <string name="routes_empty_detail">Попросите администратора перевозчика проверить расписание.</string>
+    <string name="routes_check_again">Проверить снова</string>
+    <string name="routes_error_message">Не удалось загрузить маршруты</string>
+    <string name="routes_error_detail">Проверьте связь и попробуйте ещё раз.</string>
+    <string name="routes_no_schedule">На этом сервере пока нет расписания</string>
+    <string name="routes_no_schedule_detail">Чтобы можно было начинать поездки, оператор должен загрузить расписание. Сообщите администратору перевозчика.</string>
+    <string name="routes_retry_button">Повторить</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Выберите рейс</string>
+    <string name="runs_empty">Сегодня нет рейсов по маршруту %1$s</string>
+    <string name="runs_empty_unnamed">Сегодня нет рейсов по этому маршруту</string>
+    <string name="runs_empty_detail">Выберите другой маршрут или проверьте снова завтра.</string>
+    <string name="runs_choose_another_route">Выбрать другой маршрут</string>
+    <string name="runs_badge_now">Сейчас</string>
+    <string name="runs_badge_next">Следующий</string>
+    <string name="runs_direction">Направление: %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Рейс %1$s</string>
+    <string name="runs_row_block">Выход %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Запуск…</string>
+    <string name="runs_start_title">Начать рейс в %1$s?</string>
+    <string name="runs_start_message">Маршрут %1$s, направление %2$s, машина %3$s.</string>
+    <string name="runs_start_message_no_headsign">Маршрут %1$s, машина %2$s.</string>
+    <string name="runs_start_message_unnamed">Направление %1$s, машина %2$s.</string>
+    <string name="runs_start_message_vehicle">Машина %1$s.</string>
+    <string name="runs_start_confirm">Начать поездку</string>
+    <string name="runs_start_cancel">Отмена</string>
+    <string name="runs_error_message">Не удалось загрузить рейсы</string>
+    <string name="runs_error_detail">Проверьте связь и попробуйте ещё раз.</string>
+    <string name="runs_retry_button">Повторить</string>
+    <string name="runs_error_not_assigned">Машина %1$s не закреплена за вами.</string>
+    <string name="runs_change_bus">Сменить машину</string>
+    <string name="runs_error_trip_active">У вас уже идёт поездка. Завершите её, прежде чем начать новую.</string>
+    <string name="runs_error_vehicle_busy">На машине %1$s уже идёт поездка другого водителя. Выберите другую машину или обратитесь к диспетчеру.</string>
+    <string name="runs_error_vehicle_inactive">Машина %1$s сейчас не в работе. Выберите другую машину.</string>
+    <string name="runs_error_previous_trip_not_ended">Предыдущую поездку пока не удалось завершить. Проверьте связь и попробуйте ещё раз.</string>
+    <string name="runs_error_network">Не удаётся подключиться к серверу. Проверьте связь.</string>
+    <string name="runs_error_no_geometry">У этого рейса нет схемы маршрута или остановок. Выберите другой рейс.</string>
+    <string name="runs_error_trip_not_active">Расписание уже перешло на следующий день.</string>
+    <string name="runs_reload_button">Обновить</string>
+    <string name="runs_error_other">Не удалось начать поездку.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">Отправлено: %1$d</item>
+        <item quantity="few">Отправлено: %1$d</item>
+        <item quantity="many">Отправлено: %1$d</item>
+        <item quantity="other">Отправлено: %1$d</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Показать сведения о поездке</string>
+    <string name="tracking_end_trip_button">Завершить поездку</string>
+    <string name="tracking_end_trip_ending">Завершение…</string>
+    <string name="tracking_occupancy_question">Насколько заполнена машина?</string>
+    <string name="tracking_occupancy_many_seats">Есть места</string>
+    <string name="tracking_occupancy_few_seats">Мало мест</string>
+    <string name="tracking_occupancy_standing">Только стоя</string>
+    <string name="tracking_occupancy_full">Полная</string>
+    <string name="tracking_occupancy_clear">Сбросить</string>
+    <string name="tracking_fact_run">Рейс</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Отметки</string>
+    <string name="tracking_reports_reporting">Отправляются</string>
+    <string name="tracking_reports_not_reporting">Не отправляются</string>
+    <string name="tracking_reports_no_gps">Нет GPS</string>
+    <string name="tracking_reports_stopped">Отправка остановлена</string>
+    <string name="tracking_fact_street_map">Карта улиц</string>
+    <string name="tracking_street_map_ready">Готова</string>
+    <string name="tracking_street_map_downloading">Загрузка · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Ещё не загружена</string>
+    <string name="tracking_street_map_no_space">Недостаточно места</string>
+    <string name="tracking_street_map_unusable">Непригодна</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d остановка пройдена</item>
+        <item quantity="few">%1$d остановки пройдены</item>
+        <item quantity="many">%1$d остановок пройдено</item>
+        <item quantity="other">%1$d остановки пройдено</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">развёрнуто</string>
+    <string name="tracking_stops_passed_collapsed">свёрнуто</string>
+    <string name="tracking_end_trip_dialog_title">Завершить эту поездку?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Отправка остановится, а рейс в %2$s по маршруту %1$s будет считаться выполненным. Отправлена %3$d отметка.</item>
+        <item quantity="few">Отправка остановится, а рейс в %2$s по маршруту %1$s будет считаться выполненным. Отправлены %3$d отметки.</item>
+        <item quantity="many">Отправка остановится, а рейс в %2$s по маршруту %1$s будет считаться выполненным. Отправлено %3$d отметок.</item>
+        <item quantity="other">Отправка остановится, а рейс в %2$s по маршруту %1$s будет считаться выполненным. Отправлено %3$d отметки.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Отправка остановится, а этот рейс будет считаться выполненным. Отправлена %1$d отметка.</item>
+        <item quantity="few">Отправка остановится, а этот рейс будет считаться выполненным. Отправлены %1$d отметки.</item>
+        <item quantity="many">Отправка остановится, а этот рейс будет считаться выполненным. Отправлено %1$d отметок.</item>
+        <item quantity="other">Отправка остановится, а этот рейс будет считаться выполненным. Отправлено %1$d отметки.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Завершить поездку</string>
+    <string name="tracking_end_trip_dialog_cancel">Продолжить</string>
+    <string name="tracking_end_trip_error_title">Поездка ещё не завершена</string>
+    <string name="tracking_end_trip_error_message">Сервер не подтвердил завершение. Проверьте сигнал и попробуйте ещё раз или прямо сейчас остановите отправку на этом телефоне.</string>
+    <string name="tracking_end_trip_error_retry">Повторить</string>
+    <string name="tracking_end_trip_error_end_locally">Завершить на этом телефоне</string>
+    <string name="tracking_reauth_button">Войти</string>
+    <string name="tracking_problem_no_network">Нет связи</string>
+    <string name="tracking_problem_no_network_detail">Пассажиры вас не видят</string>
+    <string name="tracking_problem_no_gps">Нет сигнала GPS</string>
+    <string name="tracking_problem_no_gps_detail">Местоположение не обновляется</string>
+    <string name="tracking_problem_clock_skew">Неверное время на телефоне</string>
+    <string name="tracking_problem_clock_skew_detail">Включите автоматическое время</string>
+    <string name="tracking_problem_reports_refused">Отметки отклонены</string>
+    <string name="tracking_problem_reports_refused_detail">Обратитесь к диспетчеру</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d отметка ждёт связи</item>
+        <item quantity="few">%1$,d отметки ждут связи</item>
+        <item quantity="many">%1$,d отметок ждут связи</item>
+        <item quantity="other">%1$,d отметки ждут связи</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d отметка не отправится</item>
+        <item quantity="few">%1$,d отметки не отправятся</item>
+        <item quantity="many">%1$,d отметок не отправятся</item>
+        <item quantity="other">%1$,d отметки не отправятся</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Сеанс завершён</string>
+    <string name="tracking_signed_out_message">Отправка остановлена. Ваша поездка не завершена.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Вовремя</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">Опоздание %1$d мин</item>
+        <item quantity="few">Опоздание %1$d мин</item>
+        <item quantity="many">Опоздание %1$d мин</item>
+        <item quantity="other">Опоздание %1$d мин</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">Опережение %1$d мин</item>
+        <item quantity="few">Опережение %1$d мин</item>
+        <item quantity="many">Опережение %1$d мин</item>
+        <item quantity="other">Опережение %1$d мин</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Вне расписания</string>
+    <string name="tracking_adherence_right_run">Тот ли это рейс?</string>
+    <string name="tracking_adherence_off_schedule_next">Следующая: %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Вне маршрута · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Вне маршрута</string>
+    <string name="tracking_adherence_next_stop">Следующая</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d м</string>
+    <string name="tracking_adherence_distance_km">%1$.1f км</string>
+    <string name="tracking_adherence_waiting_for_gps">Ожидание GPS</string>
+    <string name="tracking_adherence_from">Начальная</string>
+    <string name="tracking_adherence_run">Рейс в %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Рейс в %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Нет расписания</string>
+    <string name="tracking_adherence_no_schedule_riders">Пассажиры всё равно вас видят</string>
+    <string name="tracking_adherence_no_schedule_detail">У этого рейса нет расписания</string>
+    <string name="tracking_map_recenter">Вернуться к машине</string>
+    <string name="tracking_map_downloading">Загрузка карты, %1$d%%</string>
+    <string name="tracking_map_no_space">Недостаточно места для карты</string>
+    <string name="tracking_map_retrying">Карта ещё не загружена, попробуем снова</string>
+    <string name="tracking_map_retry_on_open">Карта не загружена, попробуем снова при следующем открытии приложения</string>
+    <string name="tracking_map_unusable">Файл карты непригоден, сообщите перевозчику</string>
+    <string name="tracking_map_needs_https">Ссылка на карту должна начинаться с https, сообщите перевозчику</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Продолжить поездку?</string>
+    <string name="resume_message">Приложение закрылось во время поездки. Отправка на паузе, пока вы не сделаете выбор.</string>
+    <string name="resume_route">Маршрут %1$s</string>
+    <string name="resume_run">Рейс в %1$s</string>
+    <string name="resume_bus">Машина %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Начата %1$d мин назад, в %2$s</item>
+        <item quantity="few">Начата %1$d мин назад, в %2$s</item>
+        <item quantity="many">Начата %1$d мин назад, в %2$s</item>
+        <item quantity="other">Начата %1$d мин назад, в %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Начата %1$d ч %2$d мин назад, в %3$s</string>
+    <string name="resume_button">Продолжить поездку</string>
+    <string name="resume_end_trip_button">Завершить поездку</string>
+    <string name="resume_ending">Завершение поездки</string>
+    <string name="resume_loading">Загрузка поездки</string>
+    <string name="resume_end_failed">Сервер не подтвердил завершение поездки. Попробуйте ещё раз или завершите её только на этом телефоне.</string>
+    <string name="resume_end_failed_back">Не завершать поездку</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Отправка отметок в поездке</string>
+    <string name="tracking_notification_title">Маршрут %1$s · %2$s</string>
+    <string name="tracking_notification_next">Следующая: %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Сеанс завершён. Откройте приложение, чтобы войти.</string>
+    <string name="tracking_notification_reports_refused">Отметки отклонены. Обратитесь к диспетчеру.</string>
+    <string name="tracking_notification_resume_title">Отправка на паузе</string>
+    <string name="tracking_notification_resume_text">Откройте приложение, чтобы продолжить отправку.</string>
+    <string name="tracking_notification_attention_channel_name">Поездка: нужно ваше внимание</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Перед началом</string>
+    <string name="preflight_message">Это нужно приложению, чтобы отправлять отметки машины %1$s. Далее Android спросит о каждом пункте.</string>
+    <string name="preflight_location">Местоположение</string>
+    <string name="preflight_location_why">Чтобы приложение знало, где машина</string>
+    <string name="preflight_precise">Точное местоположение</string>
+    <string name="preflight_precise_why">Чтобы пассажиры видели машину у нужной остановки</string>
+    <string name="preflight_background">В любом режиме</string>
+    <string name="preflight_background_why">Чтобы отправка возобновилась, если Android закроет приложение</string>
+    <string name="preflight_notifications">Уведомления</string>
+    <string name="preflight_notifications_why">Чтобы вы видели, что отправка идёт</string>
+    <string name="preflight_battery">Батарея</string>
+    <string name="preflight_battery_why">Чтобы Android не остановил отправку посреди поездки</string>
+    <string name="preflight_location_services">Службы геолокации</string>
+    <string name="preflight_location_services_why">Геолокация должна быть включена для всего телефона</string>
+    <string name="preflight_allowed">Разрешено</string>
+    <string name="preflight_skipped">Пропущено</string>
+    <string name="preflight_next">Далее</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Не разрешено. Отметки всё равно отправляются.</string>
+    <string name="preflight_location_needed">Для отправки нужен доступ к местоположению</string>
+    <string name="preflight_approximate">Разрешено только приблизительное местоположение</string>
+    <string name="preflight_try_again">Повторить</string>
+    <string name="preflight_open_settings">Открыть настройки</string>
+    <string name="preflight_continue">Продолжить</string>
+</resources>

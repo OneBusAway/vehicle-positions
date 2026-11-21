@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Korean, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Polite 해요체 in sentences (-요, -하세요), short nouns on buttons and labels (로그인, 다시 시도, 취소, 다음).
+    "Vehicle" is 차량, never the word for bus; "run" is 배차 (a timetabled departure, "오전 6:43 배차");
+    "trip" is 운행 (운행 시작, 운행 종료, 운행 재개); "report" is 위치 전송, counted with 건 ("142건 전송");
+    "dispatcher" is 관제실; "block" is 블록; "agency" is 회사; "route" is 노선; "stop" is 정류장;
+    "rider" is 승객; "driver" is 기사; "phone" is 휴대전화, as Android's own screens say; the route sign is 행선판.
+    A placeholder is never followed by a particle that changes with the word before it (을/를, 이/가, 은/는):
+    only 에, 에서, 의, or a noun such as 차량 %1$s, 노선 %1$s, %1$s 방면, %1$s 배차.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">로그인</string>
+    <string name="login_subtitle">이 회사의 기사 계정을 사용하세요.</string>
+    <string name="login_server_url_label">서버 주소</string>
+    <string name="login_email_label">이메일</string>
+    <string name="login_password_label">비밀번호</string>
+    <string name="login_show_password">비밀번호 표시</string>
+    <string name="login_hide_password">비밀번호 숨기기</string>
+    <string name="login_server">서버</string>
+    <string name="login_change_server">변경</string>
+    <string name="login_button">로그인</string>
+    <string name="login_signing_in">로그인 중</string>
+    <string name="login_error_missing_server">서버 주소를 입력하세요</string>
+    <string name="login_error_missing_email">이메일을 입력하세요</string>
+    <string name="login_error_missing_password">비밀번호를 입력하세요</string>
+    <string name="login_error_invalid_credentials">이메일 또는 비밀번호가 틀렸어요. 다시 시도하세요.</string>
+    <string name="login_error_invalid_address">https://tracker.example.org 같은 주소를 입력하세요</string>
+    <string name="login_error_https_required">https:// 주소를 사용하세요</string>
+    <string name="login_error_check_address">주소를 확인하세요</string>
+    <string name="login_error_unreachable">%1$s에 연결할 수 없어요. 인터넷 연결이나 서버 주소를 확인하세요.</string>
+    <string name="login_error_not_tracker">%1$s 주소는 트래커 서버가 아닌 것 같아요.</string>
+    <string name="login_error_too_many_tries">시도 횟수가 너무 많아요. 1분 후에 다시 시도하세요.</string>
+    <string name="login_error_server">로그인하지 못했어요. 다시 시도하세요.</string>
+    <string name="login_again_title">다시 로그인</string>
+    <string name="login_again_subtitle">%1$s 계정으로</string>
+    <string name="login_again_button">로그인하고 위치 전송 계속하기</string>
+    <string name="login_trip_open_title">운행이 아직 끝나지 않았어요</string>
+    <string name="login_trip_open_message">로그인이 만료돼서 위치 전송이 멈췄어요. 노선 %1$s에서 위치 전송을 계속하려면 로그인하세요.</string>
+    <string name="login_server_managed">회사에서 설정했어요.</string>
+    <string name="login_server_managed_invalid">회사의 서버 설정이 올바른 주소가 아니에요. 여기에 직접 입력하세요.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">%1$s 서버를 사용할까요?</string>
+    <string name="server_setup_confirm_message">회사에서 보낸 링크일 때만 계속하세요.</string>
+    <string name="server_setup_use">이 서버 사용</string>
+    <string name="server_setup_cancel">취소</string>
+    <string name="server_setup_refused_signed_in">이 휴대전화는 %1$s에 로그인되어 있어요. 링크를 사용하지 않았어요.</string>
+    <string name="server_setup_refused_trip_open">이 휴대전화에 끝나지 않은 운행이 있어요. 링크를 사용하지 않았어요.</string>
+    <string name="server_setup_refused_managed">이 휴대전화의 서버는 회사에서 설정해요.</string>
+    <string name="server_setup_invalid">이 링크에는 앱에서 사용할 수 있는 서버 주소가 없어요.</string>
+    <string name="server_setup_ok">확인</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">서버 주소</string>
+    <string name="restriction_server_url_description">회사의 트래커 서버로, https:// 주소예요. 기사는 이 서버에 로그인하며 주소를 바꿀 수 없어요.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">건너뛰기</string>
+    <string name="welcome_next">다음</string>
+    <string name="welcome_continue">계속</string>
+    <string name="welcome_step">%2$d단계 중 %1$d단계</string>
+    <string name="welcome_riders_title">승객이 다가오는 차량을 볼 수 있어요</string>
+    <string name="welcome_riders_body">운행을 시작하면 승객이 지도에서 차량을 볼 수 있어요. 다 마치면 운행을 종료하세요.</string>
+    <string name="welcome_riders_picture">정류장의 승객 세 명이 다가오는 차량을 볼 수 있어요.</string>
+    <string name="welcome_pieces_title">차량, 노선, 배차</string>
+    <string name="welcome_pieces_body">모두 고른 뒤 내 배차를 눌러 시작하세요. 다 마치면 운행을 종료하세요.</string>
+    <string name="welcome_pieces_vehicle_hint">차량에 적힌 번호</string>
+    <string name="welcome_pieces_route_hint">행선판에 적힌 번호</string>
+    <string name="welcome_pieces_run_hint">누르면 운행 시작</string>
+    <string name="welcome_pieces_live">승객에게 보여요</string>
+    <string name="welcome_pieces_finish">다 마치면</string>
+    <string name="welcome_habits_title">위치 전송이 끊기지 않게</string>
+    <string name="welcome_habits_body">운행할 때마다 이 3가지를 지키세요.</string>
+    <string name="welcome_habits_location">위치를 항상 허용하세요</string>
+    <string name="welcome_habits_location_why">위치 전송이 자동으로 다시 시작되도록</string>
+    <string name="welcome_habits_charge">휴대전화를 충전해 두세요</string>
+    <string name="welcome_habits_charge_why">충전하는 동안 화면이 켜져 있어요</string>
+    <string name="welcome_habits_open">앱을 열어 두세요</string>
+    <string name="welcome_habits_open_why">운행 중에는 앱을 밀어서 닫지 마세요</string>
+    <string name="welcome_habits_if_stops">위치 전송이 멈추면</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">내 배차를 누르세요</string>
+    <string name="tip_run_board_text">그다음 %1$s 버튼을 누르세요. 그때부터 승객에게 차량이 보여요.</string>
+    <string name="tip_sent_count_title">위치 전송 건수</string>
+    <string name="tip_sent_count_text">승객에게 차량이 보이는 동안 이 숫자가 올라가요. 신호가 없나요? 계속 운전하세요. 위치는 저장했다가 나중에 전송해요.</string>
+    <string name="tip_got_it">확인</string>
+    <string name="first_trip_done_title">첫 운행 완료</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">건 전송됨</item>
+    </plurals>
+    <string name="first_trip_done_text">승객이 차량을 볼 수 있었어요.</string>
+    <string name="first_trip_done_ok">확인</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">언어: %1$s</string>
+    <string name="language_row_phone_note">휴대전화 설정에서 바꾸면 휴대전화 전체에 적용돼요</string>
+    <string name="language_list_title">언어</string>
+    <string name="language_list_cancel">취소</string>
+
+    <!-- Help -->
+    <string name="help_title">도움말</string>
+    <string name="help_welcome_again">시작 안내 다시 보기</string>
+    <string name="help_welcome_again_detail">짧은 화면 3개</string>
+    <string name="help_section_status">상태 카드에 나오는 말</string>
+    <string name="help_status_on_time">시간표대로 가고 있어요.</string>
+    <string name="help_status_late">시간표보다 늦어요.</string>
+    <string name="help_status_early">시간표보다 빨라요. 승객이 차량을 놓칠 수 있어요.</string>
+    <string name="help_status_off_schedule">시간표와 많이 달라요. 배차를 맞게 골랐는지 확인하세요.</string>
+    <string name="help_status_off_route">지도에서 노선을 벗어났어요.</string>
+    <string name="help_status_waiting_for_gps">휴대전화가 위치를 찾고 있어요.</string>
+    <string name="help_status_no_schedule">이 배차에는 시간 정보가 없어요. 승객에게는 그래도 차량이 보여요.</string>
+    <string name="help_waiting">인터넷 연결이 없을 때 저장된 위치예요. 연결되면 전송돼요.</string>
+    <string name="help_waiting_never">다른 로그인 상태에서 저장된 위치라 지금 로그인으로는 전송할 수 없어요.</string>
+    <string name="help_section_problems">카드 아래와 알림에 나오는 말</string>
+    <string name="help_problem_no_network">계속 운전하세요. 위치는 저장했다가 나중에 전송해요.</string>
+    <string name="help_problem_no_gps">GPS 신호가 돌아올 때까지 승객에게는 마지막 위치가 보여요.</string>
+    <string name="help_problem_clock_skew">휴대전화 설정에서 시간 자동 설정을 켜세요.</string>
+    <string name="help_problem_reports_refused">서버가 이 차량의 위치 전송을 받지 않고 있어요. 관제실에 문의하세요.</string>
+    <string name="help_problem_signed_out">위치 전송이 멈췄어요. 계속하려면 로그인하세요. 운행은 아직 끝나지 않았어요.</string>
+    <string name="help_problem_reports_paused">알림이에요. 위치 전송을 계속하려면 앱을 여세요.</string>
+    <string name="help_section_about">앱 정보</string>
+    <string name="help_version">버전</string>
+    <string name="help_server">서버</string>
+    <string name="help_share">진단 정보 공유</string>
+    <string name="help_share_detail">앱 버전, 휴대전화 모델, 서버, 앱에 허용된 권한, 최근 문제를 보내요. 최근 문제는 앱이 실행 중일 때만 보관해요. 위치, 로그인 정보, 이메일은 보내지 않아요.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">뒤로</string>
+    <string name="setup_trip_so_far">지금까지 선택한 내용</string>
+    <string name="setup_bus">차량</string>
+    <string name="setup_route">노선 %1$s</string>
+    <string name="setup_step_route">노선</string>
+    <string name="setup_step_run">배차</string>
+    <string name="setup_clear_search">검색어 지우기</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">계정</string>
+    <string name="account_version">버전 %1$s</string>
+    <string name="account_sign_out">로그아웃</string>
+    <string name="account_sign_out_title">로그아웃할까요?</string>
+    <string name="account_sign_out_message">다음 기사가 이 휴대전화로 로그인할 수 있어요.</string>
+    <string name="account_sign_out_cancel">취소</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">차량 선택</string>
+    <string name="vehicles_empty">배정된 차량이 없어요</string>
+    <string name="vehicles_empty_detail">관제실에 차량 배정을 요청한 뒤 다시 확인하세요.</string>
+    <string name="vehicles_check_again">다시 확인</string>
+    <string name="vehicles_error_message">차량 목록을 불러오지 못했어요</string>
+    <string name="vehicles_error_detail">인터넷 연결을 확인하고 다시 시도하세요.</string>
+    <string name="vehicles_retry_button">다시 시도</string>
+    <string name="vehicles_search_label">차량 번호</string>
+    <string name="vehicles_search_no_matches">%1$s에 해당하는 차량이 없어요</string>
+    <string name="vehicles_search_no_matches_detail">차량에 적힌 번호를 확인하세요.</string>
+    <string name="vehicles_section_favorites">즐겨찾기</string>
+    <string name="vehicles_section_recent">최근</string>
+    <string name="vehicles_section_all">전체 차량</string>
+    <string name="vehicles_section_matches">검색 결과</string>
+    <string name="vehicles_tile_favorite">즐겨찾기</string>
+    <string name="vehicles_favorite_description">%1$s 즐겨찾기에 추가</string>
+    <string name="vehicles_unfavorite_description">%1$s 즐겨찾기 해제</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">노선 선택</string>
+    <string name="routes_search_label">노선 번호 또는 이름</string>
+    <string name="routes_section_recent">최근</string>
+    <string name="routes_section_all">전체 노선</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">전체 노선 · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">검색 결과</string>
+    <string name="routes_search_no_matches">%1$s에 해당하는 노선이 없어요</string>
+    <string name="routes_search_no_matches_detail">행선판에 적힌 번호나 이름 일부로 검색하세요.</string>
+    <string name="routes_empty">시간표에 노선이 없어요</string>
+    <string name="routes_empty_detail">회사 관리자에게 시간표 확인을 요청하세요.</string>
+    <string name="routes_check_again">다시 확인</string>
+    <string name="routes_error_message">노선 목록을 불러오지 못했어요</string>
+    <string name="routes_error_detail">인터넷 연결을 확인하고 다시 시도하세요.</string>
+    <string name="routes_no_schedule">이 서버에 아직 시간표가 없어요</string>
+    <string name="routes_no_schedule_detail">운행을 시작하려면 먼저 운영자가 시간표를 등록해야 해요. 회사 관리자에게 알리세요.</string>
+    <string name="routes_retry_button">다시 시도</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">배차 선택</string>
+    <string name="runs_empty">오늘은 노선 %1$s에 배차가 없어요</string>
+    <string name="runs_empty_unnamed">오늘은 이 노선에 배차가 없어요</string>
+    <string name="runs_empty_detail">다른 노선을 고르거나 내일 다시 확인하세요.</string>
+    <string name="runs_choose_another_route">다른 노선 선택</string>
+    <string name="runs_badge_now">지금</string>
+    <string name="runs_badge_next">다음</string>
+    <string name="runs_direction">%1$s 방면</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">배차 %1$s</string>
+    <string name="runs_row_block">블록 %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">시작하는 중…</string>
+    <string name="runs_start_title">%1$s 배차를 시작할까요?</string>
+    <string name="runs_start_message">노선 %1$s, %2$s 방면, 차량 %3$s.</string>
+    <string name="runs_start_message_no_headsign">노선 %1$s, 차량 %2$s.</string>
+    <string name="runs_start_message_unnamed">%1$s 방면, 차량 %2$s.</string>
+    <string name="runs_start_message_vehicle">차량 %1$s.</string>
+    <string name="runs_start_confirm">운행 시작</string>
+    <string name="runs_start_cancel">취소</string>
+    <string name="runs_error_message">배차 목록을 불러오지 못했어요</string>
+    <string name="runs_error_detail">인터넷 연결을 확인하고 다시 시도하세요.</string>
+    <string name="runs_retry_button">다시 시도</string>
+    <string name="runs_error_not_assigned">차량 %1$s에 배정되지 않았어요.</string>
+    <string name="runs_change_bus">차량 변경</string>
+    <string name="runs_error_trip_active">이미 진행 중인 운행이 있어요. 새 운행을 시작하기 전에 종료하세요.</string>
+    <string name="runs_error_vehicle_busy">차량 %1$s에서 다른 기사의 운행이 진행 중이에요. 다른 차량을 고르거나 관제실에 문의하세요.</string>
+    <string name="runs_error_vehicle_inactive">차량 %1$s의 사용이 중지됐어요. 다른 차량을 고르세요.</string>
+    <string name="runs_error_previous_trip_not_ended">이전 운행을 아직 종료하지 못했어요. 인터넷 연결을 확인하고 다시 시도하세요.</string>
+    <string name="runs_error_network">서버에 연결할 수 없어요. 인터넷 연결을 확인하세요.</string>
+    <string name="runs_error_no_geometry">이 배차에는 따라갈 노선이나 정류장 정보가 없어요. 다른 배차를 고르세요.</string>
+    <string name="runs_error_trip_not_active">시간표가 다음 날로 넘어갔어요.</string>
+    <string name="runs_reload_button">새로고침</string>
+    <string name="runs_error_other">운행을 시작하지 못했어요.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">%1$d건 전송</item>
+    </plurals>
+    <string name="tracking_bar_click_label">운행 정보 보기</string>
+    <string name="tracking_end_trip_button">운행 종료</string>
+    <string name="tracking_end_trip_ending">종료하는 중…</string>
+    <string name="tracking_occupancy_question">차량이 얼마나 붐비나요?</string>
+    <string name="tracking_occupancy_many_seats">빈자리 있음</string>
+    <string name="tracking_occupancy_few_seats">빈자리 적음</string>
+    <string name="tracking_occupancy_standing">입석</string>
+    <string name="tracking_occupancy_full">만차</string>
+    <string name="tracking_occupancy_clear">선택 해제</string>
+    <string name="tracking_fact_run">배차</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">위치 전송</string>
+    <string name="tracking_reports_reporting">전송 중</string>
+    <string name="tracking_reports_not_reporting">전송 안 됨</string>
+    <string name="tracking_reports_no_gps">GPS 없음</string>
+    <string name="tracking_reports_stopped">전송 멈춤</string>
+    <string name="tracking_fact_street_map">도로 지도</string>
+    <string name="tracking_street_map_ready">준비됨</string>
+    <string name="tracking_street_map_downloading">다운로드 중 · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">아직 다운로드 안 됨</string>
+    <string name="tracking_street_map_no_space">저장 공간 부족</string>
+    <string name="tracking_street_map_unusable">사용할 수 없음</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">정류장 %1$d곳 지남</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">펼쳐짐</string>
+    <string name="tracking_stops_passed_collapsed">접힘</string>
+    <string name="tracking_end_trip_dialog_title">운행을 종료할까요?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">위치 전송이 멈추고 노선 %1$s의 %2$s 배차가 완료로 처리돼요. 위치 %3$d건을 전송했어요.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">위치 전송이 멈추고 이 배차가 완료로 처리돼요. 위치 %1$d건을 전송했어요.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">운행 종료</string>
+    <string name="tracking_end_trip_dialog_cancel">계속 운행</string>
+    <string name="tracking_end_trip_error_title">운행이 아직 종료되지 않았어요</string>
+    <string name="tracking_end_trip_error_message">서버가 종료를 확인하지 않았어요. 신호를 확인하고 다시 시도하거나, 지금 이 휴대전화에서 위치 전송을 멈추세요.</string>
+    <string name="tracking_end_trip_error_retry">다시 시도</string>
+    <string name="tracking_end_trip_error_end_locally">이 휴대전화에서 종료</string>
+    <string name="tracking_reauth_button">로그인</string>
+    <string name="tracking_problem_no_network">인터넷 연결 없음</string>
+    <string name="tracking_problem_no_network_detail">승객에게 차량이 안 보여요</string>
+    <string name="tracking_problem_no_gps">GPS 신호 없음</string>
+    <string name="tracking_problem_no_gps_detail">위치 갱신이 멈췄어요</string>
+    <string name="tracking_problem_clock_skew">휴대전화 시간이 맞지 않음</string>
+    <string name="tracking_problem_clock_skew_detail">시간 자동 설정을 켜세요</string>
+    <string name="tracking_problem_reports_refused">위치 전송 거부됨</string>
+    <string name="tracking_problem_reports_refused_detail">관제실에 문의하세요</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">연결되면 %1$,d건 전송</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">%1$,d건 전송 불가</item>
+    </plurals>
+    <string name="tracking_signed_out_title">로그아웃됨</string>
+    <string name="tracking_signed_out_message">위치 전송이 멈췄어요. 운행은 아직 끝나지 않았어요.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">정시</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">%1$d분 지연</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">%1$d분 빠름</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">시간표 이탈</string>
+    <string name="tracking_adherence_right_run">배차가 맞나요?</string>
+    <string name="tracking_adherence_off_schedule_next">다음 %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">노선 이탈 · %1$s</string>
+    <string name="tracking_adherence_off_route_short">노선 이탈</string>
+    <string name="tracking_adherence_next_stop">다음</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$dm</string>
+    <string name="tracking_adherence_distance_km">%1$.1fkm</string>
+    <string name="tracking_adherence_waiting_for_gps">GPS 대기 중</string>
+    <string name="tracking_adherence_from">출발</string>
+    <string name="tracking_adherence_run">%1$s 배차</string>
+    <string name="tracking_adherence_run_vehicle">%1$s 배차 · %2$s</string>
+    <string name="tracking_adherence_no_schedule">시간표 없음</string>
+    <string name="tracking_adherence_no_schedule_riders">승객에게는 계속 보여요</string>
+    <string name="tracking_adherence_no_schedule_detail">이 배차에는 시간 정보가 없어요</string>
+    <string name="tracking_map_recenter">차량 위치로</string>
+    <string name="tracking_map_downloading">지도 다운로드 중, %1$d%%</string>
+    <string name="tracking_map_no_space">지도를 저장할 공간이 부족해요</string>
+    <string name="tracking_map_retrying">지도를 아직 다운로드하지 못했어요. 다시 시도할게요</string>
+    <string name="tracking_map_retry_on_open">지도를 다운로드하지 못했어요. 다음에 앱을 열 때 다시 시도할게요</string>
+    <string name="tracking_map_unusable">지도 파일을 사용할 수 없어요. 회사에 알리세요</string>
+    <string name="tracking_map_needs_https">지도 링크는 https여야 해요. 회사에 알리세요</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">운행을 재개할까요?</string>
+    <string name="resume_message">운행 중에 앱이 닫혔어요. 선택할 때까지 위치 전송이 일시중지돼요.</string>
+    <string name="resume_route">노선 %1$s</string>
+    <string name="resume_run">%1$s 배차</string>
+    <string name="resume_bus">차량 %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">%1$d분 전, %2$s에 시작</item>
+    </plurals>
+    <string name="resume_started_hours_ago">%1$d시간 %2$d분 전, %3$s에 시작</string>
+    <string name="resume_button">운행 재개</string>
+    <string name="resume_end_trip_button">운행 종료</string>
+    <string name="resume_ending">운행 종료 중</string>
+    <string name="resume_loading">운행 정보를 불러오는 중</string>
+    <string name="resume_end_failed">서버가 운행 종료를 확인하지 않았어요. 다시 시도하거나 이 휴대전화에서만 종료하세요.</string>
+    <string name="resume_end_failed_back">운행 종료 안 함</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">운행 위치 전송</string>
+    <string name="tracking_notification_title">노선 %1$s · %2$s</string>
+    <string name="tracking_notification_next">다음 %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">로그아웃됐어요. 앱을 열어 로그인하세요.</string>
+    <string name="tracking_notification_reports_refused">위치 전송 거부됨. 관제실에 문의하세요.</string>
+    <string name="tracking_notification_resume_title">위치 전송 일시중지됨</string>
+    <string name="tracking_notification_resume_text">위치 전송을 계속하려면 앱을 여세요.</string>
+    <string name="tracking_notification_attention_channel_name">운행 확인 필요</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">시작하기 전에</string>
+    <string name="preflight_message">차량 %1$s의 위치를 전송하려면 앱에 다음 항목이 필요해요. 이어서 Android가 하나씩 물어봐요.</string>
+    <string name="preflight_location">위치</string>
+    <string name="preflight_location_why">앱이 차량 위치를 알 수 있도록</string>
+    <string name="preflight_precise">정확한 위치</string>
+    <string name="preflight_precise_why">승객에게 차량이 맞는 정류장에 표시되도록</string>
+    <string name="preflight_background">항상 허용</string>
+    <string name="preflight_background_why">Android가 앱을 닫아도 위치 전송이 다시 시작되도록</string>
+    <string name="preflight_notifications">알림</string>
+    <string name="preflight_notifications_why">위치 전송이 켜져 있는지 볼 수 있도록</string>
+    <string name="preflight_battery">배터리</string>
+    <string name="preflight_battery_why">Android가 운행 중에 위치 전송을 멈추지 않도록</string>
+    <string name="preflight_location_services">위치 서비스</string>
+    <string name="preflight_location_services_why">휴대전화의 위치 사용이 켜져 있어야 해요</string>
+    <string name="preflight_allowed">허용됨</string>
+    <string name="preflight_skipped">건너뜀</string>
+    <string name="preflight_next">다음</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">허용하지 않았지만 위치 전송은 작동해요.</string>
+    <string name="preflight_location_needed">위치 전송에는 위치 권한이 필요해요</string>
+    <string name="preflight_approximate">대략적인 위치만 허용됐어요</string>
+    <string name="preflight_try_again">다시 시도</string>
+    <string name="preflight_open_settings">설정 열기</string>
+    <string name="preflight_continue">계속</string>
+</resources>

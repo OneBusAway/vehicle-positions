@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Lao, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    The driver is ທ່ານ. "Vehicle" is ລົດ, the everyday word for any vehicle (ພາຫະນະ is the formal one), never the
+    word for bus; "route" is ສາຍ, and the route's line on the map is ເສັ້ນທາງ ("off route" ອອກນອກເສັ້ນທາງ);
+    "run" is ຖ້ຽວ; "trip" is ການເດີນທາງ; "stop" is ບ່ອນຈອດ; "block" is ຊຸດຖ້ຽວ; "agency" is ບໍລິສັດ;
+    "report" is ລາຍງານ ("reporting" ການລາຍງານ); "dispatcher" is ສູນຄວບຄຸມ; riders are ຜູ້ໂດຍສານ;
+    "location" is ສະຖານທີ່, as Android's Lao screens say; "diagnostics" is ຂໍ້ມູນແອັບ.
+    Lao has one plural form, so each plural has "other" only. Distances keep m and km.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">ເຂົ້າສູ່ລະບົບ</string>
+    <string name="login_subtitle">ໃຊ້ບັນຊີຄົນຂັບຂອງທ່ານສຳລັບບໍລິສັດນີ້.</string>
+    <string name="login_server_url_label">ທີ່ຢູ່ເຊີບເວີ</string>
+    <string name="login_email_label">ອີເມວ</string>
+    <string name="login_password_label">ລະຫັດຜ່ານ</string>
+    <string name="login_show_password">ສະແດງລະຫັດຜ່ານ</string>
+    <string name="login_hide_password">ເຊື່ອງລະຫັດຜ່ານ</string>
+    <string name="login_server">ເຊີບເວີ</string>
+    <string name="login_change_server">ປ່ຽນ</string>
+    <string name="login_button">ເຂົ້າສູ່ລະບົບ</string>
+    <string name="login_signing_in">ກຳລັງເຂົ້າສູ່ລະບົບ</string>
+    <string name="login_error_missing_server">ໃສ່ທີ່ຢູ່ເຊີບເວີ</string>
+    <string name="login_error_missing_email">ໃສ່ອີເມວຂອງທ່ານ</string>
+    <string name="login_error_missing_password">ໃສ່ລະຫັດຜ່ານຂອງທ່ານ</string>
+    <string name="login_error_invalid_credentials">ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ. ລອງໃໝ່.</string>
+    <string name="login_error_invalid_address">ໃສ່ທີ່ຢູ່ແບບ https://tracker.example.org</string>
+    <string name="login_error_https_required">ໃຊ້ທີ່ຢູ່ແບບ https://</string>
+    <string name="login_error_check_address">ກວດເບິ່ງທີ່ຢູ່</string>
+    <string name="login_error_unreachable">ເຊື່ອມຕໍ່ຫາ %1$s ບໍ່ໄດ້. ກວດເບິ່ງການເຊື່ອມຕໍ່ ຫຼື ທີ່ຢູ່ເຊີບເວີ.</string>
+    <string name="login_error_not_tracker">%1$s ເບິ່ງຄືວ່າບໍ່ແມ່ນເຊີບເວີຕິດຕາມລົດ.</string>
+    <string name="login_error_too_many_tries">ລອງຫຼາຍເທື່ອເກີນໄປ. ລໍຖ້າໜຶ່ງນາທີ ແລ້ວລອງໃໝ່.</string>
+    <string name="login_error_server">ເຂົ້າສູ່ລະບົບບໍ່ໄດ້. ລອງໃໝ່.</string>
+    <string name="login_again_title">ເຂົ້າສູ່ລະບົບອີກຄັ້ງ</string>
+    <string name="login_again_subtitle">ດ້ວຍ %1$s</string>
+    <string name="login_again_button">ເຂົ້າສູ່ລະບົບ ແລະ ລາຍງານຕໍ່</string>
+    <string name="login_trip_open_title">ການເດີນທາງຂອງທ່ານຍັງເປີດຢູ່</string>
+    <string name="login_trip_open_message">ການລາຍງານຢຸດແລ້ວ ເມື່ອການເຂົ້າສູ່ລະບົບຂອງທ່ານໝົດອາຍຸ. ເຂົ້າສູ່ລະບົບເພື່ອລາຍງານຕໍ່ໃນສາຍ %1$s.</string>
+    <string name="login_server_managed">ບໍລິສັດຂອງທ່ານຕັ້ງໄວ້.</string>
+    <string name="login_server_managed_invalid">ທີ່ຢູ່ເຊີບເວີທີ່ບໍລິສັດຂອງທ່ານຕັ້ງໄວ້ໃຊ້ບໍ່ໄດ້, ສະນັ້ນໃຫ້ພິມຢູ່ບ່ອນນີ້.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">ໃຊ້ %1$s ບໍ?</string>
+    <string name="server_setup_confirm_message">ສືບຕໍ່ສະເພາະເມື່ອບໍລິສັດຂອງທ່ານສົ່ງລິ້ງນີ້ໃຫ້ທ່ານ.</string>
+    <string name="server_setup_use">ໃຊ້ເຊີບເວີນີ້</string>
+    <string name="server_setup_cancel">ຍົກເລີກ</string>
+    <string name="server_setup_refused_signed_in">ໂທລະສັບນີ້ເຂົ້າສູ່ລະບົບ %1$s ຢູ່ແລ້ວ. ບໍ່ໄດ້ໃຊ້ລິ້ງນີ້.</string>
+    <string name="server_setup_refused_trip_open">ໂທລະສັບນີ້ມີການເດີນທາງທີ່ເປີດຢູ່. ບໍ່ໄດ້ໃຊ້ລິ້ງນີ້.</string>
+    <string name="server_setup_refused_managed">ບໍລິສັດຂອງທ່ານເປັນຜູ້ຕັ້ງເຊີບເວີໃນໂທລະສັບນີ້.</string>
+    <string name="server_setup_invalid">ລິ້ງນີ້ບໍ່ມີທີ່ຢູ່ເຊີບເວີທີ່ແອັບໃຊ້ໄດ້.</string>
+    <string name="server_setup_ok">ຕົກລົງ</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">ທີ່ຢູ່ເຊີບເວີ</string>
+    <string name="restriction_server_url_description">ເຊີບເວີຕິດຕາມລົດຂອງບໍລິສັດ, ເປັນທີ່ຢູ່ແບບ https://. ຄົນຂັບເຂົ້າສູ່ລະບົບເຊີບເວີນີ້ ແລະ ປ່ຽນບໍ່ໄດ້.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">ຂ້າມ</string>
+    <string name="welcome_next">ຕໍ່ໄປ</string>
+    <string name="welcome_continue">ສືບຕໍ່</string>
+    <string name="welcome_step">ຂັ້ນຕອນ %1$d ຈາກ %2$d</string>
+    <string name="welcome_riders_title">ຜູ້ໂດຍສານເຫັນວ່າທ່ານກຳລັງມາ</string>
+    <string name="welcome_riders_body">ເລີ່ມການເດີນທາງ ແລ້ວຜູ້ໂດຍສານຈະເຫັນລົດຂອງທ່ານໃນແຜນທີ່ຂອງເຂົາເຈົ້າ. ຈົບການເດີນທາງເມື່ອສຳເລັດ.</string>
+    <string name="welcome_riders_picture">ຜູ້ໂດຍສານສາມຄົນຢູ່ບ່ອນຈອດ ເຫັນລົດຂອງທ່ານກຳລັງມາ.</string>
+    <string name="welcome_pieces_title">ລົດ, ສາຍ, ຖ້ຽວ</string>
+    <string name="welcome_pieces_body">ເລືອກທັງສາມຢ່າງ, ແລ້ວແຕະຖ້ຽວຂອງທ່ານເພື່ອເລີ່ມ. ຈົບການເດີນທາງເມື່ອສຳເລັດ.</string>
+    <string name="welcome_pieces_vehicle_hint">ເລກທີ່ຢູ່ເທິງລົດ</string>
+    <string name="welcome_pieces_route_hint">ເລກທີ່ຢູ່ເທິງປ້າຍ</string>
+    <string name="welcome_pieces_run_hint">ແຕະເພື່ອເລີ່ມການເດີນທາງ</string>
+    <string name="welcome_pieces_live">ຜູ້ໂດຍສານເຫັນທ່ານ</string>
+    <string name="welcome_pieces_finish">ເມື່ອສຳເລັດ</string>
+    <string name="welcome_habits_title">ໃຫ້ລາຍງານຕໍ່ເນື່ອງ</string>
+    <string name="welcome_habits_body">ເຮັດ 3 ຢ່າງນີ້ໃນທຸກການເດີນທາງ.</string>
+    <string name="welcome_habits_location">ອະນຸຍາດສະຖານທີ່ຕະຫຼອດເວລາ</string>
+    <string name="welcome_habits_location_why">ເພື່ອໃຫ້ການລາຍງານເລີ່ມຄືນເອງໄດ້</string>
+    <string name="welcome_habits_charge">ສຽບສາກໂທລະສັບໄວ້</string>
+    <string name="welcome_habits_charge_why">ໜ້າຈໍຈະເປີດຄ້າງໄວ້ໃນຂະນະສາກ</string>
+    <string name="welcome_habits_open">ເປີດແອັບໄວ້</string>
+    <string name="welcome_habits_open_why">ຢ່າປັດແອັບອອກລະຫວ່າງການເດີນທາງ</string>
+    <string name="welcome_habits_if_stops">ຖ້າການລາຍງານຢຸດ</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">ແຕະຖ້ຽວຂອງທ່ານ</string>
+    <string name="tip_run_board_text">ແລ້ວແຕະ %1$s. ຈາກນັ້ນຜູ້ໂດຍສານຈະເຫັນລົດຂອງທ່ານ.</string>
+    <string name="tip_sent_count_title">ລາຍງານທີ່ສົ່ງແລ້ວ</string>
+    <string name="tip_sent_count_text">ຕົວເລກນີ້ເພີ່ມຂຶ້ນ ຕາບໃດທີ່ຜູ້ໂດຍສານເຫັນທ່ານ. ບໍ່ມີສັນຍານບໍ? ຂັບຕໍ່ໄປ. ແອັບຈະບັນທຶກລາຍງານໄວ້ ແລ້ວສົ່ງພາຍຫຼັງ.</string>
+    <string name="tip_got_it">ເຂົ້າໃຈແລ້ວ</string>
+    <string name="first_trip_done_title">ການເດີນທາງທຳອິດສຳເລັດແລ້ວ</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">ລາຍງານທີ່ສົ່ງແລ້ວ</item>
+    </plurals>
+    <string name="first_trip_done_text">ຜູ້ໂດຍສານໄດ້ເຫັນລົດຂອງທ່ານແລ້ວ.</string>
+    <string name="first_trip_done_ok">ຕົກລົງ</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">ພາສາ: %1$s</string>
+    <string name="language_row_phone_note">ຕັ້ງສຳລັບທັງໂທລະສັບ, ໃນການຕັ້ງຄ່າຂອງໂທລະສັບ</string>
+    <string name="language_list_title">ພາສາ</string>
+    <string name="language_list_cancel">ຍົກເລີກ</string>
+
+    <!-- Help -->
+    <string name="help_title">ຊ່ວຍເຫຼືອ</string>
+    <string name="help_welcome_again">ເບິ່ງໜ້າຕ້ອນຮັບອີກຄັ້ງ</string>
+    <string name="help_welcome_again_detail">3 ໜ້າສັ້ນໆ</string>
+    <string name="help_section_status">ໃນບັດສະຖານະ</string>
+    <string name="help_status_on_time">ທ່ານຂັບຕົງຕາມຕາຕະລາງເວລາ.</string>
+    <string name="help_status_late">ຊ້າກວ່າຕາຕະລາງເວລາ.</string>
+    <string name="help_status_early">ໄວກວ່າຕາຕະລາງເວລາ. ຜູ້ໂດຍສານອາດຈະຂຶ້ນລົດບໍ່ທັນ.</string>
+    <string name="help_status_off_schedule">ຫ່າງຈາກຕາຕະລາງເວລາຫຼາຍ. ກວດເບິ່ງວ່າທ່ານເລືອກຖ້ຽວຖືກແລ້ວ.</string>
+    <string name="help_status_off_route">ອອກນອກເສັ້ນທາງຂອງສາຍໃນແຜນທີ່.</string>
+    <string name="help_status_waiting_for_gps">ໂທລະສັບກຳລັງຊອກຫາຕຳແໜ່ງ.</string>
+    <string name="help_status_no_schedule">ຖ້ຽວນີ້ບໍ່ມີກຳນົດເວລາ. ຜູ້ໂດຍສານຍັງເຫັນທ່ານຢູ່.</string>
+    <string name="help_waiting">ບັນທຶກໄວ້ຕອນບໍ່ມີການເຊື່ອມຕໍ່. ຈະສົ່ງເມື່ອການເຊື່ອມຕໍ່ກັບມາ.</string>
+    <string name="help_waiting_never">ບັນທຶກໄວ້ໃນການເຂົ້າສູ່ລະບົບອື່ນ, ສະນັ້ນການເຂົ້າສູ່ລະບົບນີ້ສົ່ງບໍ່ໄດ້.</string>
+    <string name="help_section_problems">ລຸ່ມບັດ ແລະ ໃນການແຈ້ງເຕືອນ</string>
+    <string name="help_problem_no_network">ຂັບຕໍ່ໄປ. ແອັບຈະບັນທຶກລາຍງານໄວ້ ແລ້ວສົ່ງພາຍຫຼັງ.</string>
+    <string name="help_problem_no_gps">ຜູ້ໂດຍສານຈະເຫັນຕຳແໜ່ງສຸດທ້າຍຂອງທ່ານ ຈົນກວ່າ GPS ຈະກັບມາ.</string>
+    <string name="help_problem_clock_skew">ເປີດເວລາອັດຕະໂນມັດໃນການຕັ້ງຄ່າໂທລະສັບ.</string>
+    <string name="help_problem_reports_refused">ເຊີບເວີບໍ່ຮັບລາຍງານຂອງລົດຄັນນີ້. ຖາມສູນຄວບຄຸມ.</string>
+    <string name="help_problem_signed_out">ການລາຍງານຢຸດແລ້ວ. ເຂົ້າສູ່ລະບົບເພື່ອສືບຕໍ່. ການເດີນທາງຂອງທ່ານຍັງເປີດຢູ່.</string>
+    <string name="help_problem_reports_paused">ເປັນການແຈ້ງເຕືອນ. ເປີດແອັບເພື່ອລາຍງານຕໍ່.</string>
+    <string name="help_section_about">ກ່ຽວກັບແອັບ</string>
+    <string name="help_version">ເວີຊັນ</string>
+    <string name="help_server">ເຊີບເວີ</string>
+    <string name="help_share">ແບ່ງປັນຂໍ້ມູນແອັບ</string>
+    <string name="help_share_detail">ສົ່ງເວີຊັນແອັບ, ລຸ້ນໂທລະສັບ, ເຊີບເວີ, ສິ່ງທີ່ແອັບໄດ້ຮັບອະນຸຍາດ ແລະ ບັນຫາຫຼ້າສຸດຂອງແອັບ ເຊິ່ງເກັບໄວ້ສະເພາະຕອນແອັບເຮັດວຽກຢູ່ເທົ່ານັ້ນ. ບໍ່ມີຕຳແໜ່ງ, ບໍ່ມີຂໍ້ມູນເຂົ້າສູ່ລະບົບ, ບໍ່ມີອີເມວ.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">ກັບຄືນ</string>
+    <string name="setup_trip_so_far">ການເດີນທາງທີ່ເລືອກໄວ້</string>
+    <string name="setup_bus">ລົດ</string>
+    <string name="setup_route">ສາຍ %1$s</string>
+    <string name="setup_step_route">ສາຍ</string>
+    <string name="setup_step_run">ຖ້ຽວ</string>
+    <string name="setup_clear_search">ລຶບການຄົ້ນຫາ</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">ບັນຊີ</string>
+    <string name="account_version">ເວີຊັນ %1$s</string>
+    <string name="account_sign_out">ອອກຈາກລະບົບ</string>
+    <string name="account_sign_out_title">ອອກຈາກລະບົບບໍ?</string>
+    <string name="account_sign_out_message">ຄົນຂັບຄົນຕໍ່ໄປຈະເຂົ້າສູ່ລະບົບໃນໂທລະສັບນີ້ໄດ້.</string>
+    <string name="account_sign_out_cancel">ຍົກເລີກ</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">ເລືອກລົດຂອງທ່ານ</string>
+    <string name="vehicles_empty">ບໍ່ມີລົດທີ່ມອບໝາຍໃຫ້ທ່ານ</string>
+    <string name="vehicles_empty_detail">ຂໍໃຫ້ສູນຄວບຄຸມມອບໝາຍລົດໃຫ້ທ່ານ, ແລ້ວກວດເບິ່ງອີກຄັ້ງ.</string>
+    <string name="vehicles_check_again">ກວດເບິ່ງອີກຄັ້ງ</string>
+    <string name="vehicles_error_message">ໂຫຼດລາຍການລົດຂອງທ່ານບໍ່ໄດ້</string>
+    <string name="vehicles_error_detail">ກວດເບິ່ງການເຊື່ອມຕໍ່ ແລ້ວລອງໃໝ່.</string>
+    <string name="vehicles_retry_button">ລອງໃໝ່</string>
+    <string name="vehicles_search_label">ເລກລົດ</string>
+    <string name="vehicles_search_no_matches">ບໍ່ພົບລົດທີ່ກົງກັບ %1$s</string>
+    <string name="vehicles_search_no_matches_detail">ກວດເບິ່ງເລກທີ່ຢູ່ເທິງລົດ.</string>
+    <string name="vehicles_section_favorites">ລາຍການທີ່ມັກ</string>
+    <string name="vehicles_section_recent">ໃຊ້ຫຼ້າສຸດ</string>
+    <string name="vehicles_section_all">ລົດທັງໝົດ</string>
+    <string name="vehicles_section_matches">ຜົນການຄົ້ນຫາ</string>
+    <string name="vehicles_tile_favorite">ລາຍການທີ່ມັກ</string>
+    <string name="vehicles_favorite_description">ເພີ່ມ %1$s ໃສ່ລາຍການທີ່ມັກ</string>
+    <string name="vehicles_unfavorite_description">ເອົາ %1$s ອອກຈາກລາຍການທີ່ມັກ</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">ເລືອກສາຍ</string>
+    <string name="routes_search_label">ເລກສາຍ ຫຼື ຊື່ສາຍ</string>
+    <string name="routes_section_recent">ໃຊ້ຫຼ້າສຸດ</string>
+    <string name="routes_section_all">ທຸກສາຍ</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">ທຸກສາຍ · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">ຜົນການຄົ້ນຫາ</string>
+    <string name="routes_search_no_matches">ບໍ່ພົບສາຍທີ່ກົງກັບ %1$s</string>
+    <string name="routes_search_no_matches_detail">ຄົ້ນຫາດ້ວຍເລກທີ່ຢູ່ເທິງປ້າຍ ຫຼື ບາງສ່ວນຂອງຊື່.</string>
+    <string name="routes_empty">ຕາຕະລາງເວລາບໍ່ມີສາຍໃດເລີຍ</string>
+    <string name="routes_empty_detail">ຂໍໃຫ້ຜູ້ດູແລລະບົບຂອງບໍລິສັດກວດເບິ່ງຕາຕະລາງເວລາ.</string>
+    <string name="routes_check_again">ກວດເບິ່ງອີກຄັ້ງ</string>
+    <string name="routes_error_message">ໂຫຼດລາຍການສາຍບໍ່ໄດ້</string>
+    <string name="routes_error_detail">ກວດເບິ່ງການເຊື່ອມຕໍ່ ແລ້ວລອງໃໝ່.</string>
+    <string name="routes_no_schedule">ເຊີບເວີນີ້ຍັງບໍ່ມີຕາຕະລາງເວລາ</string>
+    <string name="routes_no_schedule_detail">ຕ້ອງມີຜູ້ດູແລໂຫຼດຕາຕະລາງເວລາກ່ອນ ຈຶ່ງຈະເລີ່ມການເດີນທາງໄດ້. ແຈ້ງຜູ້ດູແລລະບົບຂອງບໍລິສັດ.</string>
+    <string name="routes_retry_button">ລອງໃໝ່</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">ເລືອກຖ້ຽວ</string>
+    <string name="runs_empty">ມື້ນີ້ບໍ່ມີຖ້ຽວໃນສາຍ %1$s</string>
+    <string name="runs_empty_unnamed">ມື້ນີ້ບໍ່ມີຖ້ຽວໃນສາຍນີ້</string>
+    <string name="runs_empty_detail">ເລືອກສາຍອື່ນ ຫຼື ກວດເບິ່ງອີກຄັ້ງມື້ອື່ນ.</string>
+    <string name="runs_choose_another_route">ເລືອກສາຍອື່ນ</string>
+    <string name="runs_badge_now">ຕອນນີ້</string>
+    <string name="runs_badge_next">ຕໍ່ໄປ</string>
+    <string name="runs_direction">ໄປ %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">ຖ້ຽວ %1$s</string>
+    <string name="runs_row_block">ຊຸດຖ້ຽວ %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">ກຳລັງເລີ່ມ…</string>
+    <string name="runs_start_title">ເລີ່ມຖ້ຽວ %1$s ບໍ?</string>
+    <string name="runs_start_message">ສາຍ %1$s ໄປ %2$s ດ້ວຍລົດ %3$s.</string>
+    <string name="runs_start_message_no_headsign">ສາຍ %1$s ດ້ວຍລົດ %2$s.</string>
+    <string name="runs_start_message_unnamed">ໄປ %1$s ດ້ວຍລົດ %2$s.</string>
+    <string name="runs_start_message_vehicle">ດ້ວຍລົດ %1$s.</string>
+    <string name="runs_start_confirm">ເລີ່ມການເດີນທາງ</string>
+    <string name="runs_start_cancel">ຍົກເລີກ</string>
+    <string name="runs_error_message">ໂຫຼດລາຍການຖ້ຽວບໍ່ໄດ້</string>
+    <string name="runs_error_detail">ກວດເບິ່ງການເຊື່ອມຕໍ່ ແລ້ວລອງໃໝ່.</string>
+    <string name="runs_retry_button">ລອງໃໝ່</string>
+    <string name="runs_error_not_assigned">ທ່ານບໍ່ໄດ້ຮັບມອບໝາຍໃຫ້ຂັບລົດ %1$s.</string>
+    <string name="runs_change_bus">ປ່ຽນລົດ</string>
+    <string name="runs_error_trip_active">ທ່ານມີການເດີນທາງທີ່ກຳລັງດຳເນີນຢູ່ແລ້ວ. ຈົບອັນນັ້ນກ່ອນ ແລ້ວຈຶ່ງເລີ່ມອັນໃໝ່.</string>
+    <string name="runs_error_vehicle_busy">ຄົນຂັບຄົນອື່ນມີການເດີນທາງຢູ່ໃນລົດ %1$s. ເລືອກລົດຄັນອື່ນ ຫຼື ຖາມສູນຄວບຄຸມ.</string>
+    <string name="runs_error_vehicle_inactive">ລົດ %1$s ງົດໃຫ້ບໍລິການ. ເລືອກລົດຄັນອື່ນ.</string>
+    <string name="runs_error_previous_trip_not_ended">ຍັງຈົບການເດີນທາງຄັ້ງກ່ອນຂອງທ່ານບໍ່ໄດ້. ກວດເບິ່ງການເຊື່ອມຕໍ່ ແລ້ວລອງໃໝ່.</string>
+    <string name="runs_error_network">ເຊື່ອມຕໍ່ຫາເຊີບເວີບໍ່ໄດ້. ກວດເບິ່ງການເຊື່ອມຕໍ່.</string>
+    <string name="runs_error_no_geometry">ຖ້ຽວນີ້ບໍ່ມີເສັ້ນທາງ ຫຼື ບ່ອນຈອດໃຫ້ຂັບຕາມ. ເລືອກຖ້ຽວອື່ນ.</string>
+    <string name="runs_error_trip_not_active">ຕາຕະລາງເວລາປ່ຽນເປັນມື້ໃໝ່ແລ້ວ.</string>
+    <string name="runs_reload_button">ໂຫຼດຄືນໃໝ່</string>
+    <string name="runs_error_other">ເລີ່ມການເດີນທາງບໍ່ໄດ້.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">ສົ່ງແລ້ວ %1$d</item>
+    </plurals>
+    <string name="tracking_bar_click_label">ສະແດງລາຍລະອຽດການເດີນທາງ</string>
+    <string name="tracking_end_trip_button">ຈົບການເດີນທາງ</string>
+    <string name="tracking_end_trip_ending">ກຳລັງຈົບ…</string>
+    <string name="tracking_occupancy_question">ລົດເຕັມປານໃດ?</string>
+    <string name="tracking_occupancy_many_seats">ມີບ່ອນນັ່ງຫວ່າງ</string>
+    <string name="tracking_occupancy_few_seats">ບ່ອນນັ່ງເຫຼືອໜ້ອຍ</string>
+    <string name="tracking_occupancy_standing">ມີແຕ່ບ່ອນຢືນ</string>
+    <string name="tracking_occupancy_full">ເຕັມ</string>
+    <string name="tracking_occupancy_clear">ລຶບອອກ</string>
+    <string name="tracking_fact_run">ຖ້ຽວ</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">ການລາຍງານ</string>
+    <string name="tracking_reports_reporting">ກຳລັງລາຍງານ</string>
+    <string name="tracking_reports_not_reporting">ບໍ່ໄດ້ລາຍງານ</string>
+    <string name="tracking_reports_no_gps">ບໍ່ມີ GPS</string>
+    <string name="tracking_reports_stopped">ການລາຍງານຢຸດແລ້ວ</string>
+    <string name="tracking_fact_street_map">ແຜນທີ່ຖະໜົນ</string>
+    <string name="tracking_street_map_ready">ພ້ອມແລ້ວ</string>
+    <string name="tracking_street_map_downloading">ກຳລັງດາວໂຫຼດ · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">ຍັງບໍ່ໄດ້ດາວໂຫຼດ</string>
+    <string name="tracking_street_map_no_space">ພື້ນທີ່ບໍ່ພໍ</string>
+    <string name="tracking_street_map_unusable">ໃຊ້ບໍ່ໄດ້</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">ຜ່ານ %1$d ບ່ອນຈອດແລ້ວ</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">ຂະຫຍາຍແລ້ວ</string>
+    <string name="tracking_stops_passed_collapsed">ຫຍໍ້ແລ້ວ</string>
+    <string name="tracking_end_trip_dialog_title">ຈົບການເດີນທາງນີ້ບໍ?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">ການລາຍງານຈະຢຸດ ແລະ ຖ້ຽວ %2$s ຂອງສາຍ %1$s ຈະຖືວ່າສຳເລັດ. ສົ່ງແລ້ວ %3$d ລາຍງານ.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">ການລາຍງານຈະຢຸດ ແລະ ຖ້ຽວນີ້ຈະຖືວ່າສຳເລັດ. ສົ່ງແລ້ວ %1$d ລາຍງານ.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">ຈົບການເດີນທາງ</string>
+    <string name="tracking_end_trip_dialog_cancel">ເດີນທາງຕໍ່</string>
+    <string name="tracking_end_trip_error_title">ການເດີນທາງຍັງບໍ່ຈົບ</string>
+    <string name="tracking_end_trip_error_message">ເຊີບເວີບໍ່ໄດ້ຢືນຢັນວ່າຈົບແລ້ວ. ກວດເບິ່ງສັນຍານ ແລ້ວລອງໃໝ່ ຫຼື ຢຸດລາຍງານໃນໂທລະສັບນີ້ດຽວນີ້.</string>
+    <string name="tracking_end_trip_error_retry">ລອງໃໝ່</string>
+    <string name="tracking_end_trip_error_end_locally">ຈົບໃນໂທລະສັບນີ້</string>
+    <string name="tracking_reauth_button">ເຂົ້າສູ່ລະບົບ</string>
+    <string name="tracking_problem_no_network">ບໍ່ມີການເຊື່ອມຕໍ່</string>
+    <string name="tracking_problem_no_network_detail">ຜູ້ໂດຍສານເບິ່ງບໍ່ເຫັນທ່ານ</string>
+    <string name="tracking_problem_no_gps">ບໍ່ມີສັນຍານ GPS</string>
+    <string name="tracking_problem_no_gps_detail">ຕຳແໜ່ງຢຸດຊົ່ວຄາວ</string>
+    <string name="tracking_problem_clock_skew">ໂມງໂທລະສັບບໍ່ຖືກ</string>
+    <string name="tracking_problem_clock_skew_detail">ຕັ້ງເວລາອັດຕະໂນມັດ</string>
+    <string name="tracking_problem_reports_refused">ລາຍງານຖືກປະຕິເສດ</string>
+    <string name="tracking_problem_reports_refused_detail">ຖາມສູນຄວບຄຸມ</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">%1$,d ລາຍງານຈະສົ່ງເມື່ອມີເນັດ</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">%1$,d ລາຍງານສົ່ງບໍ່ໄດ້</item>
+    </plurals>
+    <string name="tracking_signed_out_title">ອອກຈາກລະບົບແລ້ວ</string>
+    <string name="tracking_signed_out_message">ການລາຍງານຢຸດແລ້ວ. ການເດີນທາງຂອງທ່ານຍັງເປີດຢູ່.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">ຕົງເວລາ</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">ຊ້າ %1$d ນາທີ</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">ໄວ %1$d ນາທີ</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">ນອກຕາຕະລາງເວລາ</string>
+    <string name="tracking_adherence_right_run">ຖ້ຽວນີ້ຖືກບໍ?</string>
+    <string name="tracking_adherence_off_schedule_next">ຕໍ່ໄປ %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">ອອກນອກເສັ້ນທາງ · %1$s</string>
+    <string name="tracking_adherence_off_route_short">ອອກນອກເສັ້ນທາງ</string>
+    <string name="tracking_adherence_next_stop">ຕໍ່ໄປ</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">ກຳລັງລໍຖ້າ GPS</string>
+    <string name="tracking_adherence_from">ຈາກ</string>
+    <string name="tracking_adherence_run">ຖ້ຽວ %1$s</string>
+    <string name="tracking_adherence_run_vehicle">ຖ້ຽວ %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">ບໍ່ມີຕາຕະລາງເວລາ</string>
+    <string name="tracking_adherence_no_schedule_riders">ຜູ້ໂດຍສານຍັງເຫັນທ່ານຢູ່</string>
+    <string name="tracking_adherence_no_schedule_detail">ຖ້ຽວນີ້ບໍ່ມີກຳນົດເວລາ</string>
+    <string name="tracking_map_recenter">ກັບໄປທີ່ລົດ</string>
+    <string name="tracking_map_downloading">ກຳລັງດາວໂຫຼດແຜນທີ່, %1$d%%</string>
+    <string name="tracking_map_no_space">ພື້ນທີ່ບໍ່ພໍສຳລັບແຜນທີ່</string>
+    <string name="tracking_map_retrying">ຍັງບໍ່ໄດ້ດາວໂຫຼດແຜນທີ່, ຈະລອງໃໝ່</string>
+    <string name="tracking_map_retry_on_open">ບໍ່ໄດ້ດາວໂຫຼດແຜນທີ່, ຈະລອງໃໝ່ເມື່ອເປີດແອັບເທື່ອໜ້າ</string>
+    <string name="tracking_map_unusable">ໄຟລ໌ແຜນທີ່ໃຊ້ບໍ່ໄດ້, ແຈ້ງບໍລິສັດຂອງທ່ານ</string>
+    <string name="tracking_map_needs_https">ລິ້ງແຜນທີ່ຕ້ອງໃຊ້ https, ແຈ້ງບໍລິສັດຂອງທ່ານ</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">ສືບຕໍ່ການເດີນທາງບໍ?</string>
+    <string name="resume_message">ແອັບປິດໄປ ໃນຂະນະທີ່ການເດີນທາງນີ້ກຳລັງດຳເນີນຢູ່. ການລາຍງານຢຸດຊົ່ວຄາວ ຈົນກວ່າທ່ານຈະເລືອກ.</string>
+    <string name="resume_route">ສາຍ %1$s</string>
+    <string name="resume_run">ຖ້ຽວ %1$s</string>
+    <string name="resume_bus">ລົດ %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">ເລີ່ມເມື່ອ %1$d ນາທີກ່ອນ, ເວລາ %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">ເລີ່ມເມື່ອ %1$d ຊົ່ວໂມງ %2$d ນາທີກ່ອນ, ເວລາ %3$s</string>
+    <string name="resume_button">ສືບຕໍ່ການເດີນທາງ</string>
+    <string name="resume_end_trip_button">ຈົບການເດີນທາງ</string>
+    <string name="resume_ending">ກຳລັງຈົບການເດີນທາງ</string>
+    <string name="resume_loading">ກຳລັງໂຫຼດການເດີນທາງຂອງທ່ານ</string>
+    <string name="resume_end_failed">ເຊີບເວີບໍ່ໄດ້ຢືນຢັນວ່າການເດີນທາງຈົບແລ້ວ. ລອງໃໝ່ ຫຼື ຈົບສະເພາະໃນໂທລະສັບນີ້.</string>
+    <string name="resume_end_failed_back">ບໍ່ຈົບການເດີນທາງ</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">ການລາຍງານການເດີນທາງ</string>
+    <string name="tracking_notification_title">ສາຍ %1$s · %2$s</string>
+    <string name="tracking_notification_next">ຕໍ່ໄປ %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">ອອກຈາກລະບົບແລ້ວ. ເປີດແອັບເພື່ອເຂົ້າສູ່ລະບົບ.</string>
+    <string name="tracking_notification_reports_refused">ລາຍງານຖືກປະຕິເສດ. ຖາມສູນຄວບຄຸມ.</string>
+    <string name="tracking_notification_resume_title">ການລາຍງານຢຸດຊົ່ວຄາວ</string>
+    <string name="tracking_notification_resume_text">ເປີດແອັບເພື່ອລາຍງານຕໍ່.</string>
+    <string name="tracking_notification_attention_channel_name">ການເດີນທາງຕ້ອງການຄວາມສົນໃຈ</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">ກ່ອນເລີ່ມ</string>
+    <string name="preflight_message">ແອັບຕ້ອງການສິ່ງເຫຼົ່ານີ້ເພື່ອລາຍງານລົດ %1$s. ຕໍ່ໄປ Android ຈະຖາມທີລະຢ່າງ.</string>
+    <string name="preflight_location">ສະຖານທີ່</string>
+    <string name="preflight_location_why">ເພື່ອໃຫ້ແອັບຮູ້ວ່າລົດຢູ່ໃສ</string>
+    <string name="preflight_precise">ສະຖານທີ່ແນ່ນອນ</string>
+    <string name="preflight_precise_why">ເພື່ອໃຫ້ຜູ້ໂດຍສານເຫັນລົດຢູ່ບ່ອນຈອດທີ່ຖືກຕ້ອງ</string>
+    <string name="preflight_background">ຕະຫຼອດເວລາ</string>
+    <string name="preflight_background_why">ເພື່ອໃຫ້ການລາຍງານເລີ່ມຄືນໄດ້ ຖ້າ Android ປິດແອັບ</string>
+    <string name="preflight_notifications">ການແຈ້ງເຕືອນ</string>
+    <string name="preflight_notifications_why">ເພື່ອໃຫ້ທ່ານເຫັນວ່າການລາຍງານເປີດຢູ່</string>
+    <string name="preflight_battery">ແບັດເຕີຣີ</string>
+    <string name="preflight_battery_why">ເພື່ອບໍ່ໃຫ້ Android ຢຸດການລາຍງານລະຫວ່າງການເດີນທາງ</string>
+    <string name="preflight_location_services">ບໍລິການສະຖານທີ່</string>
+    <string name="preflight_location_services_why">ຕ້ອງເປີດສະຖານທີ່ສຳລັບທັງໂທລະສັບ</string>
+    <string name="preflight_allowed">ອະນຸຍາດແລ້ວ</string>
+    <string name="preflight_skipped">ຂ້າມແລ້ວ</string>
+    <string name="preflight_next">ຕໍ່ໄປ</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">ບໍ່ໄດ້ອະນຸຍາດ. ການລາຍງານຍັງໃຊ້ໄດ້.</string>
+    <string name="preflight_location_needed">ຕ້ອງໃຊ້ສະຖານທີ່ເພື່ອລາຍງານ</string>
+    <string name="preflight_approximate">ອະນຸຍາດພຽງແຕ່ສະຖານທີ່ໂດຍປະມານ</string>
+    <string name="preflight_try_again">ລອງໃໝ່</string>
+    <string name="preflight_open_settings">ເປີດການຕັ້ງຄ່າ</string>
+    <string name="preflight_continue">ສືບຕໍ່</string>
+</resources>

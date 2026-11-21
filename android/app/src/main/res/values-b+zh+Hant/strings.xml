@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Chinese (Traditional), a draft not yet read by a fluent reviewer (#495). The notes on each string are in
+    values/strings.xml. Written in Taiwan usage, readable in Hong Kong; the driver is addressed as 你.
+    "Vehicle" is 車輛, the general word, never a word for one kind of vehicle; "route" is 路線; "run" is 班次;
+    "trip" is 行程; "stop" is 站 (下一站, 站點); "block" is 排班; "agency" is 營運單位; "dispatcher" is 調度員;
+    "report" is 回報, counted with 筆; "timetable" and "schedule" are both 時刻表; "on time" is 準點, and
+    "late" and "early" are 晚 and 早, as rail boards write "晚 3 分"; "diagnostics" is 診斷資訊.
+    Location words follow Android's own: 位置資訊, 精確位置, 大概位置, 一律允許.
+    Chinese has one plural form, so each plural has its "other" item alone.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">登入</string>
+    <string name="login_subtitle">使用你在這個營運單位的駕駛帳號。</string>
+    <string name="login_server_url_label">伺服器網址</string>
+    <string name="login_email_label">電子郵件</string>
+    <string name="login_password_label">密碼</string>
+    <string name="login_show_password">顯示密碼</string>
+    <string name="login_hide_password">隱藏密碼</string>
+    <string name="login_server">伺服器</string>
+    <string name="login_change_server">變更</string>
+    <string name="login_button">登入</string>
+    <string name="login_signing_in">正在登入</string>
+    <string name="login_error_missing_server">請輸入伺服器網址</string>
+    <string name="login_error_missing_email">請輸入電子郵件</string>
+    <string name="login_error_missing_password">請輸入密碼</string>
+    <string name="login_error_invalid_credentials">電子郵件或密碼錯誤，請再試一次。</string>
+    <string name="login_error_invalid_address">請輸入像 https://tracker.example.org 這樣的網址</string>
+    <string name="login_error_https_required">請使用 https:// 開頭的網址</string>
+    <string name="login_error_check_address">請檢查網址</string>
+    <string name="login_error_unreachable">無法連上 %1$s。請檢查網路連線或伺服器網址。</string>
+    <string name="login_error_not_tracker">%1$s 看起來不是車輛追蹤伺服器。</string>
+    <string name="login_error_too_many_tries">嘗試次數太多。請等一分鐘後再試一次。</string>
+    <string name="login_error_server">無法登入，請再試一次。</string>
+    <string name="login_again_title">重新登入</string>
+    <string name="login_again_subtitle">以 %1$s 身分登入</string>
+    <string name="login_again_button">登入並繼續回報</string>
+    <string name="login_trip_open_title">你的行程還沒結束</string>
+    <string name="login_trip_open_message">登入已失效，回報因此停止。請登入，繼續在路線 %1$s 回報。</string>
+    <string name="login_server_managed">由你的營運單位設定。</string>
+    <string name="login_server_managed_invalid">營運單位設定的伺服器網址無效，請在這裡輸入。</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">要使用 %1$s 嗎？</string>
+    <string name="server_setup_confirm_message">請先確定這個連結是營運單位傳給你的，再繼續。</string>
+    <string name="server_setup_use">使用這個伺服器</string>
+    <string name="server_setup_cancel">取消</string>
+    <string name="server_setup_refused_signed_in">這支手機已登入 %1$s。未使用此連結。</string>
+    <string name="server_setup_refused_trip_open">這支手機有一趟行程還沒結束。未使用此連結。</string>
+    <string name="server_setup_refused_managed">這支手機的伺服器由你的營運單位設定。</string>
+    <string name="server_setup_invalid">這個連結裡沒有應用程式可用的伺服器網址。</string>
+    <string name="server_setup_ok">確定</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">伺服器網址</string>
+    <string name="restriction_server_url_description">營運單位的追蹤伺服器，須為 https:// 網址。駕駛會登入此伺服器，無法自行變更。</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">略過</string>
+    <string name="welcome_next">下一步</string>
+    <string name="welcome_continue">繼續</string>
+    <string name="welcome_step">第 %1$d 步，共 %2$d 步</string>
+    <string name="welcome_riders_title">乘客看得到你快到了</string>
+    <string name="welcome_riders_body">開始行程，乘客就能在地圖上看到你的車輛。完成後請結束行程。</string>
+    <string name="welcome_riders_picture">在站點等車的三位乘客，看得到你的車輛快到了。</string>
+    <string name="welcome_pieces_title">車輛、路線、班次</string>
+    <string name="welcome_pieces_body">選好後，點一下你的班次就會開始。完成後請結束行程。</string>
+    <string name="welcome_pieces_vehicle_hint">車輛上的編號</string>
+    <string name="welcome_pieces_route_hint">路線牌上的號碼</string>
+    <string name="welcome_pieces_run_hint">點一下就開始行程</string>
+    <string name="welcome_pieces_live">乘客看得到你</string>
+    <string name="welcome_pieces_finish">完成後</string>
+    <string name="welcome_habits_title">保持回報</string>
+    <string name="welcome_habits_body">每趟行程都要做到這 3 件事。</string>
+    <string name="welcome_habits_location">位置資訊設為「一律允許」</string>
+    <string name="welcome_habits_location_why">這樣回報才能自動重新開始</string>
+    <string name="welcome_habits_charge">手機保持充電</string>
+    <string name="welcome_habits_charge_why">充電時螢幕會保持開啟</string>
+    <string name="welcome_habits_open">讓應用程式保持開啟</string>
+    <string name="welcome_habits_open_why">行程中不要把它滑掉</string>
+    <string name="welcome_habits_if_stops">如果回報停止</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">點一下你的班次</string>
+    <string name="tip_run_board_text">接著點「%1$s」。之後乘客就看得到你的車輛。</string>
+    <string name="tip_sent_count_title">已送出的回報</string>
+    <string name="tip_sent_count_text">乘客看得到你時，這個數字會一直增加。沒有訊號？繼續開就好。回報會先儲存，稍後再送出。</string>
+    <string name="tip_got_it">知道了</string>
+    <string name="first_trip_done_title">第一趟行程完成</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">筆回報已送出</item>
+    </plurals>
+    <string name="first_trip_done_text">乘客一路都看得到你的車輛。</string>
+    <string name="first_trip_done_ok">確定</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">語言：%1$s</string>
+    <string name="language_row_phone_note">在手機設定中設定，適用於整支手機</string>
+    <string name="language_list_title">語言</string>
+    <string name="language_list_cancel">取消</string>
+
+    <!-- Help -->
+    <string name="help_title">說明</string>
+    <string name="help_welcome_again">再看一次歡迎畫面</string>
+    <string name="help_welcome_again_detail">3 個簡短畫面</string>
+    <string name="help_section_status">狀態卡上的訊息</string>
+    <string name="help_status_on_time">你正按照時刻表行駛。</string>
+    <string name="help_status_late">比時刻表晚。</string>
+    <string name="help_status_early">比時刻表早。乘客可能會錯過你。</string>
+    <string name="help_status_off_schedule">和時刻表差很多。請確認班次是否選對。</string>
+    <string name="help_status_off_route">在地圖上偏離了路線。</string>
+    <string name="help_status_waiting_for_gps">手機正在取得目前位置。</string>
+    <string name="help_status_no_schedule">這個班次沒有表定時間。乘客仍然看得到你。</string>
+    <string name="help_waiting">沒有連線時先儲存，恢復連線後就會送出。</string>
+    <string name="help_waiting_never">在另一次登入時儲存，目前的登入無法送出。</string>
+    <string name="help_section_problems">狀態卡下方和通知中</string>
+    <string name="help_problem_no_network">繼續開就好。回報會先儲存，稍後再送出。</string>
+    <string name="help_problem_no_gps">GPS 恢復前，乘客會看到你最後的位置。</string>
+    <string name="help_problem_clock_skew">請在手機設定中開啟「自動設定時間」。</string>
+    <string name="help_problem_reports_refused">伺服器不接受這部車輛的回報。請詢問調度員。</string>
+    <string name="help_problem_signed_out">回報已停止。請登入以繼續。你的行程還沒結束。</string>
+    <string name="help_problem_reports_paused">一則通知。請開啟應用程式繼續回報。</string>
+    <string name="help_section_about">關於</string>
+    <string name="help_version">版本</string>
+    <string name="help_server">伺服器</string>
+    <string name="help_share">分享診斷資訊</string>
+    <string name="help_share_detail">會傳送應用程式版本、手機型號、伺服器、應用程式獲得的權限，以及最近發生的問題（只在應用程式執行時保留）。不含位置、登入資料或電子郵件。</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">向上瀏覽</string>
+    <string name="setup_trip_so_far">目前的行程</string>
+    <string name="setup_bus">車輛</string>
+    <string name="setup_route">路線 %1$s</string>
+    <string name="setup_step_route">路線</string>
+    <string name="setup_step_run">班次</string>
+    <string name="setup_clear_search">清除搜尋</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">帳號</string>
+    <string name="account_version">版本 %1$s</string>
+    <string name="account_sign_out">登出</string>
+    <string name="account_sign_out_title">要登出嗎？</string>
+    <string name="account_sign_out_message">下一位駕駛可以在這支手機上登入。</string>
+    <string name="account_sign_out_cancel">取消</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">選擇你的車輛</string>
+    <string name="vehicles_empty">目前沒有指派給你的車輛</string>
+    <string name="vehicles_empty_detail">請調度員指派車輛給你，然後再檢查一次。</string>
+    <string name="vehicles_check_again">再檢查一次</string>
+    <string name="vehicles_error_message">無法載入你的車輛</string>
+    <string name="vehicles_error_detail">請檢查網路連線，然後再試一次。</string>
+    <string name="vehicles_retry_button">重試</string>
+    <string name="vehicles_search_label">車輛編號</string>
+    <string name="vehicles_search_no_matches">沒有符合 %1$s 的車輛</string>
+    <string name="vehicles_search_no_matches_detail">請確認車輛上的編號。</string>
+    <string name="vehicles_section_favorites">我的最愛</string>
+    <string name="vehicles_section_recent">最近使用</string>
+    <string name="vehicles_section_all">所有車輛</string>
+    <string name="vehicles_section_matches">搜尋結果</string>
+    <string name="vehicles_tile_favorite">我的最愛</string>
+    <string name="vehicles_favorite_description">將 %1$s 加入我的最愛</string>
+    <string name="vehicles_unfavorite_description">將 %1$s 從我的最愛中移除</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">選擇路線</string>
+    <string name="routes_search_label">路線號碼或名稱</string>
+    <string name="routes_section_recent">最近使用</string>
+    <string name="routes_section_all">所有路線</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">所有路線 · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">搜尋結果</string>
+    <string name="routes_search_no_matches">沒有符合 %1$s 的路線</string>
+    <string name="routes_search_no_matches_detail">可用路線牌上的號碼或部分名稱搜尋。</string>
+    <string name="routes_empty">時刻表裡沒有路線</string>
+    <string name="routes_empty_detail">請營運單位的管理員檢查時刻表。</string>
+    <string name="routes_check_again">再檢查一次</string>
+    <string name="routes_error_message">無法載入路線</string>
+    <string name="routes_error_detail">請檢查網路連線，然後再試一次。</string>
+    <string name="routes_no_schedule">這個伺服器還沒有時刻表</string>
+    <string name="routes_no_schedule_detail">必須先有人載入時刻表，才能開始行程。請告訴營運單位的管理員。</string>
+    <string name="routes_retry_button">重試</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">選擇班次</string>
+    <string name="runs_empty">路線 %1$s 今天沒有班次</string>
+    <string name="runs_empty_unnamed">這條路線今天沒有班次</string>
+    <string name="runs_empty_detail">請選擇其他路線，或明天再查看。</string>
+    <string name="runs_choose_another_route">選擇其他路線</string>
+    <string name="runs_badge_now">現在</string>
+    <string name="runs_badge_next">下一班</string>
+    <string name="runs_direction">往 %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">班次 %1$s</string>
+    <string name="runs_row_block">排班 %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">正在開始…</string>
+    <string name="runs_start_title">要開始 %1$s 的班次嗎？</string>
+    <string name="runs_start_message">路線 %1$s 往 %2$s，使用車輛 %3$s。</string>
+    <string name="runs_start_message_no_headsign">路線 %1$s，使用車輛 %2$s。</string>
+    <string name="runs_start_message_unnamed">往 %1$s，使用車輛 %2$s。</string>
+    <string name="runs_start_message_vehicle">使用車輛 %1$s。</string>
+    <string name="runs_start_confirm">開始行程</string>
+    <string name="runs_start_cancel">取消</string>
+    <string name="runs_error_message">無法載入班次</string>
+    <string name="runs_error_detail">請檢查網路連線，然後再試一次。</string>
+    <string name="runs_retry_button">重試</string>
+    <string name="runs_error_not_assigned">車輛 %1$s 沒有指派給你。</string>
+    <string name="runs_change_bus">更換車輛</string>
+    <string name="runs_error_trip_active">你已經有一趟進行中的行程。請先結束它，再開始另一趟。</string>
+    <string name="runs_error_vehicle_busy">另一位駕駛正在車輛 %1$s 上進行行程。請選擇其他車輛，或詢問調度員。</string>
+    <string name="runs_error_vehicle_inactive">車輛 %1$s 目前暫停服務。請選擇其他車輛。</string>
+    <string name="runs_error_previous_trip_not_ended">你的上一趟行程還無法結束。請檢查網路連線，然後再試一次。</string>
+    <string name="runs_error_network">無法連上伺服器。請檢查網路連線。</string>
+    <string name="runs_error_no_geometry">這個班次沒有可依循的路線或站點。請選擇其他班次。</string>
+    <string name="runs_error_trip_not_active">時刻表已換到新的一天。</string>
+    <string name="runs_reload_button">重新載入</string>
+    <string name="runs_error_other">無法開始行程。</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">已送出 %1$d 筆</item>
+    </plurals>
+    <string name="tracking_bar_click_label">顯示行程詳細資料</string>
+    <string name="tracking_end_trip_button">結束行程</string>
+    <string name="tracking_end_trip_ending">正在結束…</string>
+    <string name="tracking_occupancy_question">車內有多擠？</string>
+    <string name="tracking_occupancy_many_seats">有空位</string>
+    <string name="tracking_occupancy_few_seats">空位不多</string>
+    <string name="tracking_occupancy_standing">只剩站位</string>
+    <string name="tracking_occupancy_full">已客滿</string>
+    <string name="tracking_occupancy_clear">清除</string>
+    <string name="tracking_fact_run">班次</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">回報</string>
+    <string name="tracking_reports_reporting">回報中</string>
+    <string name="tracking_reports_not_reporting">未回報</string>
+    <string name="tracking_reports_no_gps">無 GPS</string>
+    <string name="tracking_reports_stopped">回報已停止</string>
+    <string name="tracking_fact_street_map">街道地圖</string>
+    <string name="tracking_street_map_ready">已就緒</string>
+    <string name="tracking_street_map_downloading">下載中 · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">尚未下載</string>
+    <string name="tracking_street_map_no_space">空間不足</string>
+    <string name="tracking_street_map_unusable">無法使用</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">已過 %1$d 站</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">已展開</string>
+    <string name="tracking_stops_passed_collapsed">已收合</string>
+    <string name="tracking_end_trip_dialog_title">要結束這趟行程嗎？</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">回報將停止，路線 %1$s 的 %2$s 班次會標示為已完成。已送出 %3$d 筆回報。</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">回報將停止，這個班次會標示為已完成。已送出 %1$d 筆回報。</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">結束行程</string>
+    <string name="tracking_end_trip_dialog_cancel">繼續行駛</string>
+    <string name="tracking_end_trip_error_title">行程尚未結束</string>
+    <string name="tracking_end_trip_error_message">伺服器沒有確認行程已結束。請檢查訊號後再試一次，或現在就停止這支手機的回報。</string>
+    <string name="tracking_end_trip_error_retry">重試</string>
+    <string name="tracking_end_trip_error_end_locally">在這支手機上結束</string>
+    <string name="tracking_reauth_button">登入</string>
+    <string name="tracking_problem_no_network">沒有連線</string>
+    <string name="tracking_problem_no_network_detail">乘客看不到你</string>
+    <string name="tracking_problem_no_gps">沒有 GPS 訊號</string>
+    <string name="tracking_problem_no_gps_detail">位置暫停更新</string>
+    <string name="tracking_problem_clock_skew">手機時間不正確</string>
+    <string name="tracking_problem_clock_skew_detail">請開啟自動設定時間</string>
+    <string name="tracking_problem_reports_refused">回報被拒絕</string>
+    <string name="tracking_problem_reports_refused_detail">請詢問調度員</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">%1$,d 筆回報待連線後送出</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">%1$,d 筆回報無法送出</item>
+    </plurals>
+    <string name="tracking_signed_out_title">已登出</string>
+    <string name="tracking_signed_out_message">回報已停止。你的行程還沒結束。</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">準點</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">晚 %1$d 分</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">早 %1$d 分</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">偏離時刻表</string>
+    <string name="tracking_adherence_right_run">班次選對了嗎？</string>
+    <string name="tracking_adherence_off_schedule_next">下一站 %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">偏離路線 · %1$s</string>
+    <string name="tracking_adherence_off_route_short">偏離路線</string>
+    <string name="tracking_adherence_next_stop">下一站</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">等待 GPS 訊號</string>
+    <string name="tracking_adherence_from">起點</string>
+    <string name="tracking_adherence_run">%1$s 班次</string>
+    <string name="tracking_adherence_run_vehicle">%1$s 班次 · %2$s</string>
+    <string name="tracking_adherence_no_schedule">沒有時刻表</string>
+    <string name="tracking_adherence_no_schedule_riders">乘客仍然看得到你</string>
+    <string name="tracking_adherence_no_schedule_detail">這個班次沒有表定時間</string>
+    <string name="tracking_map_recenter">重新置中</string>
+    <string name="tracking_map_downloading">正在下載地圖，%1$d%%</string>
+    <string name="tracking_map_no_space">空間不足，無法存放地圖</string>
+    <string name="tracking_map_retrying">地圖尚未下載，稍後會重試</string>
+    <string name="tracking_map_retry_on_open">地圖未下載，下次開啟應用程式時會再試一次</string>
+    <string name="tracking_map_unusable">地圖檔案無法使用，請告知營運單位</string>
+    <string name="tracking_map_needs_https">地圖連結必須使用 https，請告知營運單位</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">要繼續行程嗎？</string>
+    <string name="resume_message">行程進行中時應用程式關閉了。在你選擇之前，回報會暫停。</string>
+    <string name="resume_route">路線 %1$s</string>
+    <string name="resume_run">%1$s 班次</string>
+    <string name="resume_bus">車輛 %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">%1$d 分鐘前（%2$s）開始</item>
+    </plurals>
+    <string name="resume_started_hours_ago">%1$d 小時 %2$d 分鐘前（%3$s）開始</string>
+    <string name="resume_button">繼續行程</string>
+    <string name="resume_end_trip_button">結束行程</string>
+    <string name="resume_ending">正在結束行程</string>
+    <string name="resume_loading">正在載入你的行程</string>
+    <string name="resume_end_failed">伺服器沒有確認行程已結束。請再試一次，或只在這支手機上結束。</string>
+    <string name="resume_end_failed_back">不要結束行程</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">行程回報</string>
+    <string name="tracking_notification_title">路線 %1$s · %2$s</string>
+    <string name="tracking_notification_next">下一站 %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">已登出。請開啟應用程式登入。</string>
+    <string name="tracking_notification_reports_refused">回報被拒絕。請詢問調度員。</string>
+    <string name="tracking_notification_resume_title">回報已暫停</string>
+    <string name="tracking_notification_resume_text">請開啟應用程式繼續回報。</string>
+    <string name="tracking_notification_attention_channel_name">行程需要你處理</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">開始之前</string>
+    <string name="preflight_message">應用程式需要這些權限，才能回報車輛 %1$s 的位置。接下來 Android 會逐一詢問。</string>
+    <string name="preflight_location">位置資訊</string>
+    <string name="preflight_location_why">讓應用程式知道車輛在哪裡</string>
+    <string name="preflight_precise">精確位置</string>
+    <string name="preflight_precise_why">讓乘客在正確的站點看到車輛</string>
+    <string name="preflight_background">一律允許</string>
+    <string name="preflight_background_why">這樣 Android 關閉應用程式時，回報才能自動重新開始</string>
+    <string name="preflight_notifications">通知</string>
+    <string name="preflight_notifications_why">讓你看得到回報正在進行</string>
+    <string name="preflight_battery">電池</string>
+    <string name="preflight_battery_why">避免 Android 在行程中途停止回報</string>
+    <string name="preflight_location_services">定位服務</string>
+    <string name="preflight_location_services_why">整支手機的位置資訊必須開啟</string>
+    <string name="preflight_allowed">已允許</string>
+    <string name="preflight_skipped">已略過</string>
+    <string name="preflight_next">下一項</string>
+    <string name="preflight_row_state">%1$s，%2$s</string>
+    <string name="preflight_skipped_why">未允許。回報仍可運作。</string>
+    <string name="preflight_location_needed">必須有位置資訊才能回報</string>
+    <string name="preflight_approximate">只允許了大概位置</string>
+    <string name="preflight_try_again">重試</string>
+    <string name="preflight_open_settings">開啟設定</string>
+    <string name="preflight_continue">繼續</string>
+</resources>

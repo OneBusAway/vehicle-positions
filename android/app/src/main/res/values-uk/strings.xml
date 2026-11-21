@@ -1,0 +1,404 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Ukrainian, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    "Vehicle" is транспортний засіб everywhere, never the Ukrainian word for bus; "run" is рейс; "trip" is поїздка;
+    "report" is звіт; "dispatcher" is диспетчер; "block" is випуск; "agency" is перевізник; "stop" is зупинка;
+    "timetable" and "schedule" are both розклад; "app" is застосунок (Android's own screens say додаток);
+    "location" is місцезнаходження and "all the time" is завжди, as Android's permission screens say;
+    "diagnostics" is діагностика. The driver is addressed as "ви", lower case. Apostrophes are written ’.
+    A run's start time follows "о" ("Рейс о 6:43"); headsigns and stop names follow a colon, since they can't be declined.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Увійти</string>
+    <string name="login_subtitle">Скористайтеся своїм обліковим записом водія цього перевізника.</string>
+    <string name="login_server_url_label">Адреса сервера</string>
+    <string name="login_email_label">Електронна адреса</string>
+    <string name="login_password_label">Пароль</string>
+    <string name="login_show_password">Показати пароль</string>
+    <string name="login_hide_password">Сховати пароль</string>
+    <string name="login_server">Сервер</string>
+    <string name="login_change_server">Змінити</string>
+    <string name="login_button">Увійти</string>
+    <string name="login_signing_in">Виконується вхід</string>
+    <string name="login_error_missing_server">Введіть адресу сервера</string>
+    <string name="login_error_missing_email">Введіть свою електронну адресу</string>
+    <string name="login_error_missing_password">Введіть свій пароль</string>
+    <string name="login_error_invalid_credentials">Неправильна електронна адреса або пароль. Спробуйте ще раз.</string>
+    <string name="login_error_invalid_address">Введіть адресу на зразок https://tracker.example.org</string>
+    <string name="login_error_https_required">Потрібна адреса з https://</string>
+    <string name="login_error_check_address">Перевірте адресу</string>
+    <string name="login_error_unreachable">Не вдається зв’язатися з %1$s. Перевірте з’єднання або адресу сервера.</string>
+    <string name="login_error_not_tracker">Схоже, %1$s — не сервер трекера.</string>
+    <string name="login_error_too_many_tries">Забагато спроб. Зачекайте хвилину й спробуйте ще раз.</string>
+    <string name="login_error_server">Не вдалося увійти. Спробуйте ще раз.</string>
+    <string name="login_again_title">Увійдіть знову</string>
+    <string name="login_again_subtitle">Як %1$s</string>
+    <string name="login_again_button">Увійти й далі надсилати звіти</string>
+    <string name="login_trip_open_title">Ваша поїздка ще не завершена</string>
+    <string name="login_trip_open_message">Звіти зупинилися, коли завершився ваш сеанс. Увійдіть, щоб далі надсилати звіти на маршруті %1$s.</string>
+    <string name="login_server_managed">Задає ваш перевізник.</string>
+    <string name="login_server_managed_invalid">Ваш перевізник указав недійсну адресу сервера, тому введіть її тут.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Використовувати %1$s?</string>
+    <string name="server_setup_confirm_message">Продовжуйте, лише якщо це посилання надіслав ваш перевізник.</string>
+    <string name="server_setup_use">Використовувати цей сервер</string>
+    <string name="server_setup_cancel">Скасувати</string>
+    <string name="server_setup_refused_signed_in">На цьому телефоні виконано вхід на %1$s. Посилання не використано.</string>
+    <string name="server_setup_refused_trip_open">На цьому телефоні є незавершена поїздка. Посилання не використано.</string>
+    <string name="server_setup_refused_managed">Сервер на цьому телефоні задає ваш перевізник.</string>
+    <string name="server_setup_invalid">У цьому посиланні немає адреси сервера, яку може використати застосунок.</string>
+    <string name="server_setup_ok">OK</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Адреса сервера</string>
+    <string name="restriction_server_url_description">Сервер трекера перевізника, адреса https://. Водії входять на нього й не можуть його змінити.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Пропустити</string>
+    <string name="welcome_next">Далі</string>
+    <string name="welcome_continue">Продовжити</string>
+    <string name="welcome_step">Крок %1$d з %2$d</string>
+    <string name="welcome_riders_title">Пасажири бачать, що ви під’їжджаєте</string>
+    <string name="welcome_riders_body">Почніть поїздку, і пасажири бачитимуть ваш транспортний засіб на своїй карті. Коли закінчите, завершіть її.</string>
+    <string name="welcome_riders_picture">Троє пасажирів на зупинці бачать, як під’їжджає ваш транспортний засіб.</string>
+    <string name="welcome_pieces_title">Транспортний засіб, маршрут, рейс</string>
+    <string name="welcome_pieces_body">Виберіть їх, потім натисніть свій рейс, щоб почати. Коли закінчите, завершіть поїздку.</string>
+    <string name="welcome_pieces_vehicle_hint">Номер на транспортному засобі</string>
+    <string name="welcome_pieces_route_hint">Номер на табличці</string>
+    <string name="welcome_pieces_run_hint">Натискання починає поїздку</string>
+    <string name="welcome_pieces_live">Пасажири вас бачать</string>
+    <string name="welcome_pieces_finish">Коли закінчите</string>
+    <string name="welcome_habits_title">Щоб звіти не зупинялися</string>
+    <string name="welcome_habits_body">Робіть ці 3 речі в кожній поїздці.</string>
+    <string name="welcome_habits_location">Завжди дозволяйте доступ до місцезнаходження</string>
+    <string name="welcome_habits_location_why">Щоб звіти могли відновитися самі</string>
+    <string name="welcome_habits_charge">Тримайте телефон на зарядці</string>
+    <string name="welcome_habits_charge_why">Під час заряджання екран не вимикається</string>
+    <string name="welcome_habits_open">Залиште застосунок відкритим</string>
+    <string name="welcome_habits_open_why">Не закривайте його змахуванням під час поїздки</string>
+    <string name="welcome_habits_if_stops">Якщо звіти зупинилися</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Натисніть свій рейс</string>
+    <string name="tip_run_board_text">Потім натисніть «%1$s». З цього моменту пасажири бачать ваш транспортний засіб.</string>
+    <string name="tip_sent_count_title">Надіслані звіти</string>
+    <string name="tip_sent_count_text">Це число зростає, поки пасажири вас бачать. Немає сигналу? Їдьте далі. Звіти зберігаються й надсилаються пізніше.</string>
+    <string name="tip_got_it">Зрозуміло</string>
+    <string name="first_trip_done_title">Першу поїздку завершено</string>
+    <!-- The count is shown beside these words in large digits, so they need none of their own; Ukrainian's "one" is also 21, 31 and so on, and those read right. -->
+    <plurals name="first_trip_done_reports" tools:ignore="ImpliedQuantity">
+        <item quantity="one">звіт надіслано</item>
+        <item quantity="few">звіти надіслано</item>
+        <item quantity="many">звітів надіслано</item>
+        <item quantity="other">звіту надіслано</item>
+    </plurals>
+    <string name="first_trip_done_text">Пасажири бачили ваш транспортний засіб.</string>
+    <string name="first_trip_done_ok">OK</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Мова: %1$s</string>
+    <string name="language_row_phone_note">Задається для всього телефона в його налаштуваннях</string>
+    <string name="language_list_title">Мова</string>
+    <string name="language_list_cancel">Скасувати</string>
+
+    <!-- Help -->
+    <string name="help_title">Довідка</string>
+    <string name="help_welcome_again">Переглянути вітання ще раз</string>
+    <string name="help_welcome_again_detail">3 короткі екрани</string>
+    <string name="help_section_status">На картці стану</string>
+    <string name="help_status_on_time">Ви їдете за розкладом.</string>
+    <string name="help_status_late">Відстаєте від розкладу.</string>
+    <string name="help_status_early">Випереджаєте розклад. Пасажири можуть на вас не встигнути.</string>
+    <string name="help_status_off_schedule">Сильно відхилилися від розкладу. Перевірте, чи ви вибрали правильний рейс.</string>
+    <string name="help_status_off_route">На карті ви відхилилися від маршруту.</string>
+    <string name="help_status_waiting_for_gps">Телефон визначає своє місцезнаходження.</string>
+    <string name="help_status_no_schedule">Для цього рейсу не вказано час. Пасажири все одно вас бачать.</string>
+    <string name="help_waiting">Збережено без з’єднання. Їх буде надіслано, щойно воно відновиться.</string>
+    <string name="help_waiting_never">Збережено під час іншого входу, тому поточний вхід не може їх надіслати.</string>
+    <string name="help_section_problems">Під карткою та в сповіщеннях</string>
+    <string name="help_problem_no_network">Їдьте далі. Звіти зберігаються й надсилаються пізніше.</string>
+    <string name="help_problem_no_gps">Пасажири бачать ваше останнє місцезнаходження, доки сигнал GPS не повернеться.</string>
+    <string name="help_problem_clock_skew">Увімкніть автоматичний час у налаштуваннях телефона.</string>
+    <string name="help_problem_reports_refused">Сервер не приймає звіти цього транспортного засобу. Зверніться до диспетчера.</string>
+    <string name="help_problem_signed_out">Звіти зупинилися. Увійдіть, щоб продовжити. Ваша поїздка ще не завершена.</string>
+    <string name="help_problem_reports_paused">Сповіщення. Відкрийте застосунок, щоб далі надсилати звіти.</string>
+    <string name="help_section_about">Про застосунок</string>
+    <string name="help_version">Версія</string>
+    <string name="help_server">Сервер</string>
+    <string name="help_share">Поділитися діагностикою</string>
+    <string name="help_share_detail">Надсилає версію застосунку, модель телефона, сервер, дозволи застосунку та його недавні проблеми, які він зберігає лише під час роботи. Без даних про місцезнаходження, без даних для входу, без електронної адреси.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Перейти вгору</string>
+    <string name="setup_trip_so_far">Вибране для поїздки</string>
+    <string name="setup_bus">Транспортний засіб</string>
+    <string name="setup_route">Маршрут %1$s</string>
+    <string name="setup_step_route">Маршрут</string>
+    <string name="setup_step_run">Рейс</string>
+    <string name="setup_clear_search">Очистити пошук</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Обліковий запис</string>
+    <string name="account_version">Версія %1$s</string>
+    <string name="account_sign_out">Вийти</string>
+    <string name="account_sign_out_title">Вийти?</string>
+    <string name="account_sign_out_message">Наступний водій зможе увійти на цьому телефоні.</string>
+    <string name="account_sign_out_cancel">Скасувати</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Виберіть свій транспортний засіб</string>
+    <string name="vehicles_empty">Вам не призначено жодного транспортного засобу</string>
+    <string name="vehicles_empty_detail">Попросіть диспетчера призначити вам транспортний засіб, а потім перевірте ще раз.</string>
+    <string name="vehicles_check_again">Перевірити ще раз</string>
+    <string name="vehicles_error_message">Не вдалося завантажити ваші транспортні засоби</string>
+    <string name="vehicles_error_detail">Перевірте з’єднання й спробуйте ще раз.</string>
+    <string name="vehicles_retry_button">Повторити</string>
+    <string name="vehicles_search_label">Номер транспортного засобу</string>
+    <string name="vehicles_search_no_matches">Немає транспортних засобів за запитом %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Перевірте бортовий номер на транспортному засобі.</string>
+    <string name="vehicles_section_favorites">Вибране</string>
+    <string name="vehicles_section_recent">Нещодавні</string>
+    <string name="vehicles_section_all">Усі транспортні засоби</string>
+    <string name="vehicles_section_matches">Знайдено</string>
+    <string name="vehicles_tile_favorite">У вибраному</string>
+    <string name="vehicles_favorite_description">Додати %1$s до вибраного</string>
+    <string name="vehicles_unfavorite_description">Вилучити %1$s з вибраного</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Виберіть маршрут</string>
+    <string name="routes_search_label">Номер або назва маршруту</string>
+    <string name="routes_section_recent">Нещодавні</string>
+    <string name="routes_section_all">Усі маршрути</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Усі маршрути · %1$d</item>
+        <item quantity="few">Усі маршрути · %1$d</item>
+        <item quantity="many">Усі маршрути · %1$d</item>
+        <item quantity="other">Усі маршрути · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Знайдено</string>
+    <string name="routes_search_no_matches">Немає маршрутів за запитом %1$s</string>
+    <string name="routes_search_no_matches_detail">Шукайте за номером на табличці або частиною назви.</string>
+    <string name="routes_empty">У розкладі немає маршрутів</string>
+    <string name="routes_empty_detail">Попросіть адміністратора вашого перевізника перевірити розклад.</string>
+    <string name="routes_check_again">Перевірити ще раз</string>
+    <string name="routes_error_message">Не вдалося завантажити маршрути</string>
+    <string name="routes_error_detail">Перевірте з’єднання й спробуйте ще раз.</string>
+    <string name="routes_no_schedule">На цьому сервері ще немає розкладу</string>
+    <string name="routes_no_schedule_detail">Щоб можна було починати поїздки, оператор має спершу завантажити розклад. Повідомте адміністратора вашого перевізника.</string>
+    <string name="routes_retry_button">Повторити</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Виберіть рейс</string>
+    <string name="runs_empty">Сьогодні на маршруті %1$s немає рейсів</string>
+    <string name="runs_empty_unnamed">Сьогодні на цьому маршруті немає рейсів</string>
+    <string name="runs_empty_detail">Виберіть інший маршрут або перевірте завтра.</string>
+    <string name="runs_choose_another_route">Вибрати інший маршрут</string>
+    <string name="runs_badge_now">Зараз</string>
+    <string name="runs_badge_next">Наступний</string>
+    <string name="runs_direction">Напрямок: %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Рейс %1$s</string>
+    <string name="runs_row_block">Випуск %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Починається…</string>
+    <string name="runs_start_title">Почати рейс о %1$s?</string>
+    <string name="runs_start_message">Маршрут %1$s, напрямок: %2$s. Транспортний засіб %3$s.</string>
+    <string name="runs_start_message_no_headsign">Маршрут %1$s. Транспортний засіб %2$s.</string>
+    <string name="runs_start_message_unnamed">Напрямок: %1$s. Транспортний засіб %2$s.</string>
+    <string name="runs_start_message_vehicle">Транспортний засіб %1$s.</string>
+    <string name="runs_start_confirm">Почати поїздку</string>
+    <string name="runs_start_cancel">Скасувати</string>
+    <string name="runs_error_message">Не вдалося завантажити рейси</string>
+    <string name="runs_error_detail">Перевірте з’єднання й спробуйте ще раз.</string>
+    <string name="runs_retry_button">Повторити</string>
+    <string name="runs_error_not_assigned">Вам не призначено транспортний засіб %1$s.</string>
+    <string name="runs_change_bus">Змінити транспортний засіб</string>
+    <string name="runs_error_trip_active">У вас уже триває поїздка. Завершіть її, перш ніж почати іншу.</string>
+    <string name="runs_error_vehicle_busy">На транспортному засобі %1$s уже триває поїздка іншого водія. Виберіть інший транспортний засіб або зверніться до диспетчера.</string>
+    <string name="runs_error_vehicle_inactive">Транспортний засіб %1$s не в експлуатації. Виберіть інший транспортний засіб.</string>
+    <string name="runs_error_previous_trip_not_ended">Поки що не вдалося завершити вашу попередню поїздку. Перевірте з’єднання й спробуйте ще раз.</string>
+    <string name="runs_error_network">Сервер недоступний. Перевірте з’єднання.</string>
+    <string name="runs_error_no_geometry">Для цього рейсу немає маршруту чи зупинок. Виберіть інший рейс.</string>
+    <string name="runs_error_trip_not_active">Розклад уже перейшов на новий день.</string>
+    <string name="runs_reload_button">Оновити</string>
+    <string name="runs_error_other">Не вдалося почати поїздку.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d надіслано</item>
+        <item quantity="few">%1$d надіслано</item>
+        <item quantity="many">%1$d надіслано</item>
+        <item quantity="other">%1$d надіслано</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Показати деталі поїздки</string>
+    <string name="tracking_end_trip_button">Завершити поїздку</string>
+    <string name="tracking_end_trip_ending">Завершення…</string>
+    <string name="tracking_occupancy_question">Наскільки заповнений транспортний засіб?</string>
+    <string name="tracking_occupancy_many_seats">Є вільні місця</string>
+    <string name="tracking_occupancy_few_seats">Мало місць</string>
+    <string name="tracking_occupancy_standing">Лише стоячи</string>
+    <string name="tracking_occupancy_full">Повний</string>
+    <string name="tracking_occupancy_clear">Зняти вибір</string>
+    <string name="tracking_fact_run">Рейс</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Звіти</string>
+    <string name="tracking_reports_reporting">Надсилаються</string>
+    <string name="tracking_reports_not_reporting">Не надсилаються</string>
+    <string name="tracking_reports_no_gps">Немає GPS</string>
+    <string name="tracking_reports_stopped">Звіти зупинилися</string>
+    <string name="tracking_fact_street_map">Карта вулиць</string>
+    <string name="tracking_street_map_ready">Готова</string>
+    <string name="tracking_street_map_downloading">Завантаження · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Ще не завантажена</string>
+    <string name="tracking_street_map_no_space">Недостатньо місця</string>
+    <string name="tracking_street_map_unusable">Непридатна</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">Пройдено %1$d зупинку</item>
+        <item quantity="few">Пройдено %1$d зупинки</item>
+        <item quantity="many">Пройдено %1$d зупинок</item>
+        <item quantity="other">Пройдено %1$d зупинки</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">розгорнуто</string>
+    <string name="tracking_stops_passed_collapsed">згорнуто</string>
+    <string name="tracking_end_trip_dialog_title">Завершити цю поїздку?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Звіти припиняться, а рейс маршруту %1$s о %2$s буде позначено як завершений. Надіслано %3$d звіт.</item>
+        <item quantity="few">Звіти припиняться, а рейс маршруту %1$s о %2$s буде позначено як завершений. Надіслано %3$d звіти.</item>
+        <item quantity="many">Звіти припиняться, а рейс маршруту %1$s о %2$s буде позначено як завершений. Надіслано %3$d звітів.</item>
+        <item quantity="other">Звіти припиняться, а рейс маршруту %1$s о %2$s буде позначено як завершений. Надіслано %3$d звіту.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Звіти припиняться, а цей рейс буде позначено як завершений. Надіслано %1$d звіт.</item>
+        <item quantity="few">Звіти припиняться, а цей рейс буде позначено як завершений. Надіслано %1$d звіти.</item>
+        <item quantity="many">Звіти припиняться, а цей рейс буде позначено як завершений. Надіслано %1$d звітів.</item>
+        <item quantity="other">Звіти припиняться, а цей рейс буде позначено як завершений. Надіслано %1$d звіту.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Завершити поїздку</string>
+    <string name="tracking_end_trip_dialog_cancel">Їхати далі</string>
+    <string name="tracking_end_trip_error_title">Поїздку ще не завершено</string>
+    <string name="tracking_end_trip_error_message">Сервер не підтвердив завершення. Перевірте сигнал і спробуйте ще раз або зараз зупиніть надсилання звітів з цього телефона.</string>
+    <string name="tracking_end_trip_error_retry">Повторити</string>
+    <string name="tracking_end_trip_error_end_locally">Завершити на цьому телефоні</string>
+    <string name="tracking_reauth_button">Увійти</string>
+    <string name="tracking_problem_no_network">Немає з’єднання</string>
+    <string name="tracking_problem_no_network_detail">Пасажири вас не бачать</string>
+    <string name="tracking_problem_no_gps">Немає сигналу GPS</string>
+    <string name="tracking_problem_no_gps_detail">Місцезнаходження не оновлюється</string>
+    <string name="tracking_problem_clock_skew">Неправильний час на телефоні</string>
+    <string name="tracking_problem_clock_skew_detail">Увімкніть автоматичний час</string>
+    <string name="tracking_problem_reports_refused">Звіти відхилено</string>
+    <string name="tracking_problem_reports_refused_detail">Зверніться до диспетчера</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d звіт чекає на з’єднання</item>
+        <item quantity="few">%1$,d звіти чекають на з’єднання</item>
+        <item quantity="many">%1$,d звітів чекають на з’єднання</item>
+        <item quantity="other">%1$,d звіту чекає на з’єднання</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d звіт не буде надіслано</item>
+        <item quantity="few">%1$,d звіти не буде надіслано</item>
+        <item quantity="many">%1$,d звітів не буде надіслано</item>
+        <item quantity="other">%1$,d звіту не буде надіслано</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Ви вийшли</string>
+    <string name="tracking_signed_out_message">Звіти зупинилися. Ваша поїздка ще не завершена.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Вчасно</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">Запізнення %1$d хв</item>
+        <item quantity="few">Запізнення %1$d хв</item>
+        <item quantity="many">Запізнення %1$d хв</item>
+        <item quantity="other">Запізнення %1$d хв</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">Раніше на %1$d хв</item>
+        <item quantity="few">Раніше на %1$d хв</item>
+        <item quantity="many">Раніше на %1$d хв</item>
+        <item quantity="other">Раніше на %1$d хв</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Поза розкладом</string>
+    <string name="tracking_adherence_right_run">Це правильний рейс?</string>
+    <string name="tracking_adherence_off_schedule_next">Наступна: %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Поза маршрутом · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Поза маршрутом</string>
+    <string name="tracking_adherence_next_stop">Наступна</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d м</string>
+    <string name="tracking_adherence_distance_km">%1$.1f км</string>
+    <string name="tracking_adherence_waiting_for_gps">Очікування GPS</string>
+    <string name="tracking_adherence_from">Початкова</string>
+    <string name="tracking_adherence_run">Рейс о %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Рейс о %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Немає розкладу</string>
+    <string name="tracking_adherence_no_schedule_riders">Пасажири все одно вас бачать</string>
+    <string name="tracking_adherence_no_schedule_detail">Для цього рейсу не вказано час</string>
+    <string name="tracking_map_recenter">Відцентрувати</string>
+    <string name="tracking_map_downloading">Завантаження карти, %1$d%%</string>
+    <string name="tracking_map_no_space">Недостатньо місця для карти</string>
+    <string name="tracking_map_retrying">Карту ще не завантажено, спробуємо ще раз</string>
+    <string name="tracking_map_retry_on_open">Карту не завантажено, спробуємо ще раз, коли ви знову відкриєте застосунок</string>
+    <string name="tracking_map_unusable">Файл карти непридатний, повідомте свого перевізника</string>
+    <string name="tracking_map_needs_https">Посилання на карту має використовувати https, повідомте свого перевізника</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Продовжити поїздку?</string>
+    <string name="resume_message">Застосунок закрився під час поїздки. Звіти призупинено, доки ви не зробите вибір.</string>
+    <string name="resume_route">Маршрут %1$s</string>
+    <string name="resume_run">Рейс о %1$s</string>
+    <string name="resume_bus">Транспортний засіб %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Почалася %1$d хв тому, о %2$s</item>
+        <item quantity="few">Почалася %1$d хв тому, о %2$s</item>
+        <item quantity="many">Почалася %1$d хв тому, о %2$s</item>
+        <item quantity="other">Почалася %1$d хв тому, о %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Почалася %1$d год %2$d хв тому, о %3$s</string>
+    <string name="resume_button">Продовжити поїздку</string>
+    <string name="resume_end_trip_button">Завершити поїздку</string>
+    <string name="resume_ending">Поїздка завершується</string>
+    <string name="resume_loading">Завантаження вашої поїздки</string>
+    <string name="resume_end_failed">Сервер не підтвердив завершення поїздки. Спробуйте ще раз або завершіть її лише на цьому телефоні.</string>
+    <string name="resume_end_failed_back">Не завершувати поїздку</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Звіти про поїздку</string>
+    <string name="tracking_notification_title">Маршрут %1$s · %2$s</string>
+    <string name="tracking_notification_next">Наступна: %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Ви вийшли. Відкрийте застосунок, щоб увійти.</string>
+    <string name="tracking_notification_reports_refused">Звіти відхилено. Зверніться до диспетчера.</string>
+    <string name="tracking_notification_resume_title">Звіти призупинено</string>
+    <string name="tracking_notification_resume_text">Відкрийте застосунок, щоб далі надсилати звіти.</string>
+    <string name="tracking_notification_attention_channel_name">Поїздка потребує вашої уваги</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Перш ніж почати</string>
+    <string name="preflight_message">Щоб надсилати звіти про транспортний засіб %1$s, застосунку потрібно ось що. Далі Android запитає про кожен пункт.</string>
+    <string name="preflight_location">Місцезнаходження</string>
+    <string name="preflight_location_why">Щоб застосунок знав, де перебуває транспортний засіб</string>
+    <string name="preflight_precise">Точне місцезнаходження</string>
+    <string name="preflight_precise_why">Щоб пасажири бачили транспортний засіб на правильній зупинці</string>
+    <string name="preflight_background">Завжди</string>
+    <string name="preflight_background_why">Щоб звіти могли відновитися, якщо Android закриє застосунок</string>
+    <string name="preflight_notifications">Сповіщення</string>
+    <string name="preflight_notifications_why">Щоб ви бачили, що звіти надсилаються</string>
+    <string name="preflight_battery">Акумулятор</string>
+    <string name="preflight_battery_why">Щоб Android не зупиняв звіти посеред поїздки</string>
+    <string name="preflight_location_services">Служби геолокації</string>
+    <string name="preflight_location_services_why">Місцезнаходження має бути ввімкнене для всього телефона</string>
+    <string name="preflight_allowed">Дозволено</string>
+    <string name="preflight_skipped">Пропущено</string>
+    <string name="preflight_next">Далі</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Не дозволено. Звіти все одно надсилатимуться.</string>
+    <string name="preflight_location_needed">Для звітів потрібен доступ до місцезнаходження</string>
+    <string name="preflight_approximate">Дозволено лише приблизне місцезнаходження</string>
+    <string name="preflight_try_again">Повторити</string>
+    <string name="preflight_open_settings">Відкрити налаштування</string>
+    <string name="preflight_continue">Продовжити</string>
+</resources>
