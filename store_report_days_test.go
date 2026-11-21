@@ -25,6 +25,7 @@ func TestStore_ServiceDays(t *testing.T) {
 	t.Cleanup(clear)
 
 	busy := dayTotals{
+		Version: dayTotalsVersion,
 		Routes: []routeDayTotals{{RouteID: "R1", ShortName: "1", LongName: "Straight", Hours: []hourTotals{
 			{Hour: 8, Scheduled: 2, Run: 1, OnTime: 5, Early: 1, Late: 2, Unknown: 1},
 			{Hour: 25, Scheduled: 1},

@@ -359,9 +359,7 @@ func newOverviewView(in overviewInput) overviewView {
 		for _, route := range in.today.Routes {
 			v.TripsRun += route.TripsRun
 			for _, trip := range route.Trips {
-				if !trip.ScheduledDeparture.After(in.now) {
-					v.TripsScheduled++
-				}
+				v.TripsScheduled += trip.scheduledBy(in.now)
 			}
 		}
 	}

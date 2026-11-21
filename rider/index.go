@@ -475,6 +475,28 @@ func (ix *Index) InWindow(trip *TripInfo, at time.Time) bool {
 	})
 }
 
+// Frequency is one frequencies.txt row of a trip: a run every Headway from
+// StartTime up to but not including EndTime, both since the start of the
+// service day. ExactTimes is set for an exact_times=1 row, whose runs leave
+// at those times; an exact_times=0 row runs by headway.
+type Frequency struct {
+	StartTime  time.Duration
+	EndTime    time.Duration
+	Headway    time.Duration
+	ExactTimes bool
+}
+
+// Frequencies returns the trip's frequencies.txt rows by start_time, none for
+// a trip run by timetable. The slice is the caller's to keep.
+func (t *TripInfo) Frequencies() []Frequency {
+	out := make([]Frequency, 0, len(t.frequencies))
+	for _, f := range t.frequencies {
+		out = append(out, Frequency{StartTime: f.StartTime, EndTime: f.EndTime, Headway: f.Headway, ExactTimes: f.ExactTimes == gtfs.ScheduleBased})
+	}
+	slices.SortStableFunc(out, func(a, b Frequency) int { return cmp.Compare(a.StartTime, b.StartTime) })
+	return out
+}
+
 // Run describes the run of a trip in frequencies.txt that started at
 // startedAt on serviceDate, as a GTFS-RT TripDescriptor names it: its
 // start_time, and whether it is run by headway (UNSCHEDULED). The run

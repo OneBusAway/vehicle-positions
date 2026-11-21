@@ -46,11 +46,16 @@ type reportRouteRow struct {
 type reportTripRow struct {
 	GtfsTripID string
 	Headsign   string
-	Scheduled  string
-	Runs       []reportRunRow
-	Departure  reportDeviation
-	Arrival    reportDeviation
-	OnTime     string
+	// Scheduled is when the trip leaves its first stop and reaches its last,
+	// or for a trip in frequencies.txt how often it runs and when.
+	Scheduled string
+	// RunCount is how many of a trip in frequencies.txt's runs ran, "41 of
+	// 48 runs"; "" for a trip run by timetable.
+	RunCount  string
+	Runs      []reportRunRow
+	Departure reportDeviation
+	Arrival   reportDeviation
+	OnTime    string
 	// NoReport is how many of the trip's stops had no report near them.
 	NoReport int
 }
@@ -482,6 +487,9 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 			trips := make([]reportTripRow, 0, len(route.Trips))
 			for _, trip := range route.Trips {
 				trips = append(trips, newReportTripRow(rep, trip, day))
+				if trip.Frequencies != nil {
+					data["HasFrequencies"] = true
+				}
 			}
 			data["Trips"] = trips
 			return data, http.StatusOK, nil
@@ -719,12 +727,12 @@ func worstRouteSentence(days []dayTotals, routes []routeTotal, total reportCount
 	return sentence + "."
 }
 
-// serviceHour is the hour of the service day trip was scheduled to leave in,
-// on the agency's clock: 24 and up after midnight, so the last trips of a
-// day sort after its evening.
-func serviceHour(rep *serviceReport, trip tripReport) int {
+// serviceHour is the hour of rep's service day that t falls in, on the
+// agency's clock: 24 and up after midnight, so the last trips of a day sort
+// after its evening.
+func serviceHour(rep *serviceReport, t time.Time) int {
 	day, _ := time.Parse(reportDateLayout, rep.Date)
-	local := trip.ScheduledDeparture.In(rep.location)
+	local := t.In(rep.location)
 	y, m, d := local.Date()
 	return local.Hour() + 24*int(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Sub(day).Hours()/24)
 }
@@ -961,11 +969,32 @@ func newReportTripRow(rep *serviceReport, trip tripReport, day time.Time) report
 			TrailURL: "/admin/trips/" + strconv.FormatInt(run.ID, 10),
 		})
 	}
+	if trip.Frequencies != nil {
+		row.Scheduled, row.RunCount = frequencyWords(trip.Frequencies, rep.location, day)
+		return row
+	}
 	if len(trip.Runs) > 0 {
 		row.Departure = formatDeviation(trip.DepartureDeviationS, settings)
 		row.Arrival = formatDeviation(trip.ArrivalDeviationS, settings)
 	}
 	return row
+}
+
+// frequencyWords says how often a trip in frequencies.txt runs and when,
+// "every 10 min, 06:00 to 22:00", a window at a time joined by "then", and
+// how many of its runs ran, "41 of 48 runs".
+func frequencyWords(f *tripFrequencies, loc *time.Location, day time.Time) (scheduled, runs string) {
+	windows := make([]string, 0, len(f.Windows))
+	for _, w := range f.Windows {
+		from := formatScheduledTime(w.Start, loc, day)
+		if w.HeadwayS <= 0 {
+			windows = append(windows, "once at "+from)
+			continue
+		}
+		windows = append(windows, fmt.Sprintf("every %s, %s to %s",
+			humanizeDuration(time.Duration(w.HeadwayS)*time.Second), from, formatScheduledTime(w.End, loc, day)))
+	}
+	return strings.Join(windows, ", then "), fmt.Sprintf("%d of %s", f.RunsRun, countOf(f.RunsScheduled, "run", "runs"))
 }
 
 // formatScheduledTime is a scheduled time on the agency's clock, marked when

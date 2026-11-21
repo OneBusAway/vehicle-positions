@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -118,7 +119,9 @@ type routeReport struct {
 
 // tripReport is one scheduled trip of a route, run or not. A trip run more
 // than once, say by a second vehicle after a breakdown, is judged at each stop
-// on the first run known to have passed it.
+// on the first run known to have passed it. A trip in frequencies.txt is not
+// judged at all: it has Frequencies, its scheduled departure is its first
+// run's and its scheduled arrival its last run's.
 type tripReport struct {
 	GtfsTripID          string    `json:"gtfs_trip_id"`
 	Headsign            string    `json:"headsign"`
@@ -133,6 +136,37 @@ type tripReport struct {
 	StopsUnknown        int       `json:"stops_unknown"`
 	OnTimePercent       *float64  `json:"on_time_percent"`
 	UnknownPercent      *float64  `json:"unknown_percent"`
+	// Frequencies is nil for a trip run by timetable.
+	Frequencies *tripFrequencies `json:"frequencies"`
+
+	// slots are the runs a trip in frequencies.txt is scheduled to run.
+	slots []runSlot
+}
+
+// tripFrequencies is a trip that frequencies.txt runs, by headway or at exact
+// times: the windows it runs in, and how many of the runs they schedule a
+// driver ran.
+type tripFrequencies struct {
+	Windows       []frequencyWindow `json:"windows"`
+	RunsScheduled int               `json:"runs_scheduled"`
+	RunsRun       int               `json:"runs_run"`
+}
+
+// frequencyWindow is one frequencies.txt row of a trip on the day: a run
+// every HeadwayS seconds from Start up to but not including End. ExactTimes
+// is set when the runs leave at those times, exact_times=1.
+type frequencyWindow struct {
+	Start      time.Time `json:"start"`
+	End        time.Time `json:"end"`
+	HeadwayS   int       `json:"headway_s"`
+	ExactTimes bool      `json:"exact_times"`
+}
+
+// runSlot is one run a trip's windows schedule: when it is due to leave the
+// first stop, and whether a driver ran it.
+type runSlot struct {
+	at  time.Time
+	run bool
 }
 
 // tripRun is a driver's trip that ran a scheduled trip.
@@ -396,8 +430,9 @@ func (r *serviceReporter) storable(ix *rider.Index, date string, rep *serviceRep
 }
 
 // storedDays returns the totals kept for the days from first to last, by date
-// YYYY-MM-DD. A day judged by another on-time window than the reporter's is
-// left out, to be worked out again and replaced.
+// YYYY-MM-DD. A day judged by another on-time window than the reporter's, or
+// added up in another shape than dayTotalsVersion, is left out, to be worked
+// out again and replaced.
 func (r *serviceReporter) storedDays(ctx context.Context, first, last time.Time) (map[string]dayTotals, error) {
 	days, err := r.store.ListServiceDays(ctx, first, last)
 	if err != nil {
@@ -405,7 +440,7 @@ func (r *serviceReporter) storedDays(ctx context.Context, first, last time.Time)
 	}
 	out := make(map[string]dayTotals, len(days))
 	for _, d := range days {
-		if d.OnTimeEarly == r.settings.onTimeEarly && d.OnTimeLate == r.settings.onTimeLate {
+		if d.OnTimeEarly == r.settings.onTimeEarly && d.OnTimeLate == r.settings.onTimeLate && d.Totals.Version == dayTotalsVersion {
 			out[d.Totals.Date] = d.Totals
 		}
 	}
@@ -512,18 +547,28 @@ func buildServiceReport(ix *rider.Index, day time.Time, runs map[string][]TripSu
 			continue
 		}
 		row := routeReport{
-			RouteID:        route.ID,
-			ShortName:      route.ShortName,
-			LongName:       route.LongName,
-			TripsScheduled: len(scheduled),
-			Trips:          make([]tripReport, 0, len(scheduled)),
+			RouteID:   route.ID,
+			ShortName: route.ShortName,
+			LongName:  route.LongName,
+			Trips:     make([]tripReport, 0, len(scheduled)),
 		}
 		var counts stopCounts
 		for _, trip := range scheduled {
+			if trip.InFrequencies() {
+				tr := newFrequencyTripReport(trip, dayStart, runs[trip.ID])
+				if ends := tr.ScheduledArrival; ends.After(rep.serviceEnds) {
+					rep.serviceEnds = ends
+				}
+				row.TripsScheduled += tr.Frequencies.RunsScheduled
+				row.TripsRun += tr.Frequencies.RunsRun
+				row.Trips = append(row.Trips, tr)
+				continue
+			}
 			tr := newTripReport(trip, dayStart, runs[trip.ID])
 			if ends := tr.ScheduledArrival; ends.After(rep.serviceEnds) {
 				rep.serviceEnds = ends
 			}
+			row.TripsScheduled++
 			if len(tr.Runs) > 0 {
 				row.TripsRun++
 				eval := evaluateRuns(trip, dayStart, trails[trip.ID], s)
@@ -554,6 +599,103 @@ func newTripReport(trip *rider.TripInfo, dayStart time.Time, runs []TripSummary)
 	return tr
 }
 
+// newFrequencyTripReport is a trip that frequencies.txt runs, with the driver
+// trips that ran it on the service day starting at dayStart. Its stop times
+// are only the pattern each run follows, so no stop is judged against them,
+// as the trip page and the feed's schedule deviation judge none. It counts
+// the runs its windows schedule and those a driver ran.
+func newFrequencyTripReport(trip *rider.TripInfo, dayStart time.Time, runs []TripSummary) tripReport {
+	tr := newTripReport(trip, dayStart, runs)
+	rows := trip.Frequencies()
+	f := &tripFrequencies{Windows: make([]frequencyWindow, 0, len(rows))}
+	for _, row := range rows {
+		f.Windows = append(f.Windows, frequencyWindow{
+			Start: dayStart.Add(row.StartTime), End: dayStart.Add(row.EndTime),
+			HeadwayS: int(row.Headway / time.Second), ExactTimes: row.ExactTimes,
+		})
+	}
+	starts := make([]time.Time, 0, len(runs))
+	for _, t := range runs {
+		starts = append(starts, t.StartTime)
+	}
+	slots := scheduledRuns(rows, dayStart)
+	filled := fillRuns(slots, starts)
+	tr.slots = make([]runSlot, 0, len(slots))
+	for i, at := range slots {
+		tr.slots = append(tr.slots, runSlot{at: at, run: filled[i]})
+		if filled[i] {
+			f.RunsRun++
+		}
+	}
+	f.RunsScheduled = len(slots)
+	tr.Frequencies = f
+	if len(slots) > 0 {
+		pattern := trip.StopTimes[len(trip.StopTimes)-1].Arrival - trip.StopTimes[0].Departure
+		tr.ScheduledDeparture = slots[0]
+		tr.ScheduledArrival = slots[len(slots)-1].Add(pattern)
+	}
+	return tr
+}
+
+// scheduledRuns are when the runs rows schedule on the service day starting
+// at dayStart leave the first stop, in time order: one every headway from a
+// row's start_time up to but not including its end_time. A row with no
+// headway is one run at its start_time, as rider.TripInfo.Run reads it.
+func scheduledRuns(rows []rider.Frequency, dayStart time.Time) []time.Time {
+	out := make([]time.Time, 0)
+	for _, row := range rows {
+		if row.Headway <= 0 {
+			out = append(out, dayStart.Add(row.StartTime))
+			continue
+		}
+		for at := row.StartTime; at < row.EndTime; at += row.Headway {
+			out = append(out, dayStart.Add(at))
+		}
+	}
+	slices.SortFunc(out, time.Time.Compare)
+	return out
+}
+
+// fillRuns says which of slots, the runs a trip's windows schedule in time
+// order, a driver ran. Each run of starts, earliest first, fills the free slot
+// nearest its start, the earlier of two as near. So a run that left late or
+// early still counts in the hour it was due, two runs close together count
+// twice, and a run beyond those the windows schedule fills none: a trip is
+// never run more than scheduled, as a timetabled trip run twice counts once.
+func fillRuns(slots, starts []time.Time) []bool {
+	filled := make([]bool, len(slots))
+	for _, start := range slices.SortedFunc(slices.Values(starts), time.Time.Compare) {
+		best := -1
+		for i, at := range slots {
+			if !filled[i] && (best < 0 || at.Sub(start).Abs() < slots[best].Sub(start).Abs()) {
+				best = i
+			}
+		}
+		if best >= 0 {
+			filled[best] = true
+		}
+	}
+	return filled
+}
+
+// scheduledBy is how many of tr's runs were due to leave the first stop by
+// t: each run of a trip in frequencies.txt, or a timetabled trip once.
+func (tr tripReport) scheduledBy(t time.Time) int {
+	if tr.Frequencies == nil {
+		if tr.ScheduledDeparture.After(t) {
+			return 0
+		}
+		return 1
+	}
+	n := 0
+	for _, slot := range tr.slots {
+		if !slot.at.After(t) {
+			n++
+		}
+	}
+	return n
+}
+
 func (tr *tripReport) setEvaluation(eval runEvaluation) {
 	tr.DepartureDeviationS = durationSeconds(eval.departure)
 	tr.ArrivalDeviationS = durationSeconds(eval.arrival)
@@ -577,7 +719,20 @@ func durationSeconds(d *time.Duration) *int {
 // run of the day a little before midnight. ok is false when no run of the
 // trip is within maxRunGap of start: a trip driven on a holiday it does not
 // run on is not the next day's run.
+//
+// A trip in frequencies.txt runs all day from a pattern of one run, so its
+// run is dated by the window that holds its start (rider.Index.RunServiceDate)
+// rather than by the pattern: a run at 20:00 of a pattern from 06:00 to 06:10
+// is that day's, not the next morning's. ok is false when the trip does not
+// run on that date.
 func runServiceDate(ix *rider.Index, trip *rider.TripInfo, start time.Time) (string, bool) {
+	if trip.InFrequencies() {
+		date := ix.RunServiceDate(trip, start)
+		if !ix.ActiveOn(trip, date) {
+			return "", false
+		}
+		return date, true
+	}
 	y, m, d := start.In(ix.Timezone()).Date()
 	calendarDay := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 

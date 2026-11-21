@@ -1547,6 +1547,13 @@ paths:
         `REPORT_ON_TIME_LATE`) is on time. A trip whose shape the feed does
         not give is unknown at every stop.
 
+        A trip in frequencies.txt, by headway or at exact times, has no
+        timetable for any one run, so none of its stops is judged. It counts
+        once for each run its windows schedule, and a driver's trip is a run
+        of the service day whose window holds its start. Each run a driver
+        started fills the scheduled run nearest it that no earlier run
+        filled, so a trip never counts more runs than scheduled.
+
         A day before today's service date is kept in memory once its last
         scheduled arrival is an hour past, until the schedule is next
         reloaded; today is worked out again on every request.
@@ -3603,10 +3610,15 @@ components:
         trips_scheduled:
           type: integer
           minimum: 0
+          description: |
+            Scheduled trips, counting a trip in frequencies.txt once for each
+            run its windows schedule.
         trips_run:
           type: integer
           minimum: 0
-          description: Scheduled trips a driver ran at least once.
+          description: |
+            Scheduled trips a driver ran at least once, counting a trip in
+            frequencies.txt once for each of its runs a driver ran.
         stops_on_time:
           type: integer
           minimum: 0
@@ -3653,6 +3665,7 @@ components:
         - stops_unknown
         - on_time_percent
         - unknown_percent
+        - frequencies
       properties:
         gtfs_trip_id:
           type: string
@@ -3661,11 +3674,15 @@ components:
         scheduled_departure:
           type: string
           format: date-time
-          description: Departure from the first stop, with the agency's UTC offset.
+          description: |
+            Departure from the first stop, with the agency's UTC offset. For a
+            trip in frequencies.txt, its first run's.
         scheduled_arrival:
           type: string
           format: date-time
-          description: Arrival at the last stop, with the agency's UTC offset.
+          description: |
+            Arrival at the last stop, with the agency's UTC offset. For a trip
+            in frequencies.txt, its last run's.
         runs:
           type: array
           description: The driver trips that ran it. Empty when it was not run.
@@ -3693,6 +3710,54 @@ components:
           type: [number, 'null']
         unknown_percent:
           type: [number, 'null']
+        frequencies:
+          description: |
+            How a trip in frequencies.txt runs and how many of its runs ran.
+            Null for a trip run by timetable. Such a trip's stops are not
+            judged, so its deviations and percentages are null and its stop
+            counts zero.
+          anyOf:
+            - $ref: '#/components/schemas/ServiceReportFrequencies'
+            - type: 'null'
+
+    ServiceReportFrequencies:
+      type: object
+      required: [windows, runs_scheduled, runs_run]
+      properties:
+        windows:
+          type: array
+          description: The trip's frequencies.txt rows, by start.
+          items:
+            $ref: '#/components/schemas/ServiceReportFrequencyWindow'
+        runs_scheduled:
+          type: integer
+          minimum: 0
+          description: |
+            The runs the windows schedule: one every headway from each
+            window's start up to but not including its end.
+        runs_run:
+          type: integer
+          minimum: 0
+          description: The scheduled runs a driver's trip filled, never more than `runs_scheduled`.
+
+    ServiceReportFrequencyWindow:
+      type: object
+      required: [start, end, headway_s, exact_times]
+      properties:
+        start:
+          type: string
+          format: date-time
+          description: The window's start_time on the service day, with the agency's UTC offset.
+        end:
+          type: string
+          format: date-time
+          description: The window's end_time, when no run is due any more.
+        headway_s:
+          type: integer
+          description: Seconds between runs, headway_secs.
+        exact_times:
+          type: boolean
+          description: True when the runs leave at exactly those times (exact_times=1), false when they run by headway.
 
     ServiceReportRun:
       type: object
