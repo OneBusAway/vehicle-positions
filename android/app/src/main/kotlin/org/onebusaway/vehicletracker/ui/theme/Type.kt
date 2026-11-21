@@ -13,14 +13,16 @@ import java.util.Locale
 
 /**
  * Google Sans Flex v5.000 (OFL, see `assets/licenses`) from google/fonts `ofl/googlesansflex` at bd8f81d, cut to
- * weights 400 to 600 and Latin with fontTools 4.60. Bundled, not downloadable: drivers start shifts with no signal.
+ * weights 400 to 600 and to Latin with Google Fonts' latin-ext and vietnamese subsets, with fontTools 4.60. Bundled,
+ * not downloadable: drivers start shifts with no signal.
  * ```
  * fonttools varLib.instancer "GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf" wght=400:600 wdth=100 slnt=0 ROND=0 opsz=drop -o gsf-wght.ttf
- * pyftsubset gsf-wght.ttf --output-file=google_sans_flex.ttf --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD" --layout-features+=tnum,lnum,pnum,zero --name-IDs='*' --name-languages='*' --notdef-outline
+ * pyftsubset gsf-wght.ttf --output-file=google_sans_flex.ttf --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD,U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF,U+0300-0301,U+0303,U+0309,U+0323,U+1EA0-1EF9" --layout-features+=tnum,lnum,pnum,zero --name-IDs='*' --name-languages='*' --notdef-outline
  * ```
- * A letter outside these ranges, as in the en-XA pseudolocale of a debug build, falls back to the system font.
- * Before a translation needs one, the font is cut again with upstream's latin-ext and vietnamese subsets. A language
- * in a script the font lacks, as Hindi's Devanagari is, sets all its text in the system font ([appTypography]).
+ * A character the font has no glyph for, such as the run list's → or a letter of the en-XA pseudolocale of a debug
+ * build, falls back to the system font on its own. A language in a script the font lacks, as Hindi's Devanagari is,
+ * sets all its text in the system font ([systemFontLanguages]), and FontCoverageTest holds every other language to
+ * having all its letters in this font.
  */
 internal val AppFontFamily = FontFamily(
     Font(R.font.google_sans_flex, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
@@ -57,9 +59,10 @@ private val SystemTypography = typographyIn(FontFamily.Default)
 
 // The languages in a script the font above lacks, as Hindi's Devanagari is. Their text is set all in the system font
 // (for Hindi, the Noto Sans Devanagari Android ships), so a line never mixes this font's digits and Latin words with
-// the system's letters. Every other language keeps the font: English, and the English a phone in a language the app
-// lacks is shown.
-private val systemFontLanguages = setOf("hi")
+// the system's letters. Every other language keeps the font: English, the English a phone in a language the app lacks
+// is shown, and every Latin-script translation. FontCoverageTest fails a language missing from here whose letters the
+// font lacks.
+internal val systemFontLanguages = setOf("hi")
 
 /**
  * The typography for the language the app shows a phone or app set to [preferred], of the app's [available]

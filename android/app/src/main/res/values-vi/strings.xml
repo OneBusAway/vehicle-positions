@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Vietnamese, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    The driver is "bạn". "Vehicle" is xe, never the word for bus; "route" is tuyến; "run" is chuyến (a timetabled departure);
+    "trip" is hành trình (the driver's journey in the app, as in "giám sát hành trình"); "stop" is điểm dừng;
+    "block" is chuỗi chuyến; "agency" is đơn vị vận hành; "dispatcher" is điều độ; "riders" is hành khách;
+    "report" is vị trí (one position sent, counted as "142 vị trí"), so "reporting" is gửi vị trí;
+    "server" is máy chủ; "late" and "early" are trễ and sớm; "off route" is lệch tuyến;
+    "diagnostics" is thông tin chẩn đoán. Vietnamese has one plural form, "other".
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Đăng nhập</string>
+    <string name="login_subtitle">Dùng tài khoản tài xế của bạn ở đơn vị vận hành này.</string>
+    <string name="login_server_url_label">Địa chỉ máy chủ</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_password_label">Mật khẩu</string>
+    <string name="login_show_password">Hiện mật khẩu</string>
+    <string name="login_hide_password">Ẩn mật khẩu</string>
+    <string name="login_server">Máy chủ</string>
+    <string name="login_change_server">Đổi</string>
+    <string name="login_button">Đăng nhập</string>
+    <string name="login_signing_in">Đang đăng nhập</string>
+    <string name="login_error_missing_server">Nhập địa chỉ máy chủ</string>
+    <string name="login_error_missing_email">Nhập email của bạn</string>
+    <string name="login_error_missing_password">Nhập mật khẩu của bạn</string>
+    <string name="login_error_invalid_credentials">Sai email hoặc mật khẩu. Hãy thử lại.</string>
+    <string name="login_error_invalid_address">Nhập địa chỉ dạng https://tracker.example.org</string>
+    <string name="login_error_https_required">Dùng địa chỉ https://</string>
+    <string name="login_error_check_address">Kiểm tra lại địa chỉ</string>
+    <string name="login_error_unreachable">Không kết nối được với %1$s. Hãy kiểm tra kết nối mạng hoặc địa chỉ máy chủ.</string>
+    <string name="login_error_not_tracker">%1$s có vẻ không phải máy chủ theo dõi xe.</string>
+    <string name="login_error_too_many_tries">Thử quá nhiều lần. Đợi một phút rồi thử lại.</string>
+    <string name="login_error_server">Không đăng nhập được. Hãy thử lại.</string>
+    <string name="login_again_title">Đăng nhập lại</string>
+    <string name="login_again_subtitle">Tài khoản %1$s</string>
+    <string name="login_again_button">Đăng nhập và tiếp tục gửi vị trí</string>
+    <string name="login_trip_open_title">Hành trình của bạn vẫn đang mở</string>
+    <string name="login_trip_open_message">Đã ngừng gửi vị trí khi phiên đăng nhập của bạn kết thúc. Đăng nhập để tiếp tục gửi vị trí trên tuyến %1$s.</string>
+    <string name="login_server_managed">Do đơn vị vận hành của bạn thiết lập.</string>
+    <string name="login_server_managed_invalid">Cài đặt máy chủ của đơn vị vận hành không phải là địa chỉ hợp lệ, vì vậy hãy nhập địa chỉ ở đây.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Dùng %1$s?</string>
+    <string name="server_setup_confirm_message">Chỉ tiếp tục nếu đơn vị vận hành của bạn đã gửi đường liên kết này.</string>
+    <string name="server_setup_use">Dùng máy chủ này</string>
+    <string name="server_setup_cancel">Hủy</string>
+    <string name="server_setup_refused_signed_in">Điện thoại này đang đăng nhập vào %1$s. Đã bỏ qua đường liên kết.</string>
+    <string name="server_setup_refused_trip_open">Điện thoại này đang có một hành trình đang mở. Đã bỏ qua đường liên kết.</string>
+    <string name="server_setup_refused_managed">Đơn vị vận hành của bạn thiết lập máy chủ trên điện thoại này.</string>
+    <string name="server_setup_invalid">Đường liên kết này không có địa chỉ máy chủ mà ứng dụng dùng được.</string>
+    <string name="server_setup_ok">OK</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Địa chỉ máy chủ</string>
+    <string name="restriction_server_url_description">Máy chủ theo dõi xe của đơn vị vận hành, một địa chỉ https://. Tài xế đăng nhập vào đó và không thể thay đổi.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Bỏ qua</string>
+    <string name="welcome_next">Tiếp theo</string>
+    <string name="welcome_continue">Tiếp tục</string>
+    <string name="welcome_step">Bước %1$d trên %2$d</string>
+    <string name="welcome_riders_title">Hành khách thấy bạn đang đến</string>
+    <string name="welcome_riders_body">Khi bạn bắt đầu hành trình, hành khách sẽ thấy xe của bạn trên bản đồ. Kết thúc hành trình khi xong việc.</string>
+    <string name="welcome_riders_picture">Ba hành khách ở điểm dừng thấy xe của bạn đang đến.</string>
+    <string name="welcome_pieces_title">Xe, tuyến, chuyến</string>
+    <string name="welcome_pieces_body">Chọn các mục này, rồi chạm vào chuyến của bạn để bắt đầu. Kết thúc hành trình khi xong việc.</string>
+    <string name="welcome_pieces_vehicle_hint">Số hiệu ghi trên xe</string>
+    <string name="welcome_pieces_route_hint">Số trên bảng tuyến</string>
+    <string name="welcome_pieces_run_hint">Chạm là bắt đầu hành trình</string>
+    <string name="welcome_pieces_live">Hành khách thấy bạn</string>
+    <string name="welcome_pieces_finish">Khi xong việc</string>
+    <string name="welcome_habits_title">Luôn gửi vị trí</string>
+    <string name="welcome_habits_body">Làm 3 việc này trong mỗi hành trình.</string>
+    <string name="welcome_habits_location">Cho phép truy cập vị trí mọi lúc</string>
+    <string name="welcome_habits_location_why">Để việc gửi vị trí có thể tự chạy lại</string>
+    <string name="welcome_habits_charge">Luôn cắm sạc điện thoại</string>
+    <string name="welcome_habits_charge_why">Màn hình luôn sáng khi đang sạc</string>
+    <string name="welcome_habits_open">Để ứng dụng mở</string>
+    <string name="welcome_habits_open_why">Đừng vuốt tắt ứng dụng trong hành trình</string>
+    <string name="welcome_habits_if_stops">Nếu ngừng gửi vị trí</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Chạm vào chuyến của bạn</string>
+    <string name="tip_run_board_text">Sau đó chạm vào %1$s. Từ lúc đó, hành khách sẽ thấy xe của bạn.</string>
+    <string name="tip_sent_count_title">Vị trí đã gửi</string>
+    <string name="tip_sent_count_text">Con số này tăng dần khi hành khách thấy được bạn. Mất sóng? Cứ tiếp tục lái. Vị trí được lưu lại và gửi sau.</string>
+    <string name="tip_got_it">Đã hiểu</string>
+    <string name="first_trip_done_title">Đã xong hành trình đầu tiên</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="other">vị trí đã gửi</item>
+    </plurals>
+    <string name="first_trip_done_text">Hành khách đã thấy được xe của bạn.</string>
+    <string name="first_trip_done_ok">OK</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Ngôn ngữ: %1$s</string>
+    <string name="language_row_phone_note">Áp dụng cho cả điện thoại, đặt trong phần cài đặt của máy</string>
+    <string name="language_list_title">Ngôn ngữ</string>
+    <string name="language_list_cancel">Hủy</string>
+
+    <!-- Help -->
+    <string name="help_title">Trợ giúp</string>
+    <string name="help_welcome_again">Xem lại phần chào mừng</string>
+    <string name="help_welcome_again_detail">3 màn hình ngắn</string>
+    <string name="help_section_status">Trên thẻ trạng thái</string>
+    <string name="help_status_on_time">Bạn đang chạy đúng lịch trình.</string>
+    <string name="help_status_late">Chậm hơn lịch trình.</string>
+    <string name="help_status_early">Sớm hơn lịch trình. Hành khách có thể bị lỡ xe.</string>
+    <string name="help_status_off_schedule">Lệch xa lịch trình. Hãy kiểm tra xem bạn đã chọn đúng chuyến chưa.</string>
+    <string name="help_status_off_route">Đi lệch khỏi tuyến trên bản đồ.</string>
+    <string name="help_status_waiting_for_gps">Điện thoại đang xác định vị trí.</string>
+    <string name="help_status_no_schedule">Chuyến này không có giờ chạy. Hành khách vẫn thấy bạn.</string>
+    <string name="help_waiting">Đã lưu khi không có kết nối. Sẽ được gửi khi có mạng trở lại.</string>
+    <string name="help_waiting_never">Đã lưu khi đăng nhập bằng tài khoản khác, nên tài khoản này không gửi được.</string>
+    <string name="help_section_problems">Dưới thẻ, và trong thông báo</string>
+    <string name="help_problem_no_network">Cứ tiếp tục lái. Vị trí được lưu lại và gửi sau.</string>
+    <string name="help_problem_no_gps">Hành khách thấy vị trí cuối cùng của bạn cho đến khi có lại tín hiệu.</string>
+    <string name="help_problem_clock_skew">Bật đặt giờ tự động trong phần cài đặt của điện thoại.</string>
+    <string name="help_problem_reports_refused">Máy chủ không nhận vị trí của xe này. Hãy hỏi điều độ.</string>
+    <string name="help_problem_signed_out">Đã ngừng gửi vị trí. Đăng nhập để tiếp tục. Hành trình của bạn vẫn đang mở.</string>
+    <string name="help_problem_reports_paused">Một thông báo. Mở ứng dụng để tiếp tục gửi vị trí.</string>
+    <string name="help_section_about">Giới thiệu</string>
+    <string name="help_version">Phiên bản</string>
+    <string name="help_server">Máy chủ</string>
+    <string name="help_share">Chia sẻ thông tin chẩn đoán</string>
+    <string name="help_share_detail">Gửi phiên bản ứng dụng, mẫu điện thoại, máy chủ, những gì ứng dụng được phép làm và các sự cố gần đây, vốn chỉ được lưu khi ứng dụng đang chạy. Không có vị trí, không có thông tin đăng nhập, không có email.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Quay lại</string>
+    <string name="setup_trip_so_far">Hành trình đã chọn</string>
+    <string name="setup_bus">Xe</string>
+    <string name="setup_route">Tuyến %1$s</string>
+    <string name="setup_step_route">Tuyến</string>
+    <string name="setup_step_run">Chuyến</string>
+    <string name="setup_clear_search">Xóa tìm kiếm</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Tài khoản</string>
+    <string name="account_version">Phiên bản %1$s</string>
+    <string name="account_sign_out">Đăng xuất</string>
+    <string name="account_sign_out_title">Đăng xuất?</string>
+    <string name="account_sign_out_message">Tài xế tiếp theo có thể đăng nhập trên điện thoại này.</string>
+    <string name="account_sign_out_cancel">Hủy</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Chọn xe của bạn</string>
+    <string name="vehicles_empty">Bạn chưa được giao xe nào</string>
+    <string name="vehicles_empty_detail">Nhờ điều độ giao xe cho bạn, rồi kiểm tra lại.</string>
+    <string name="vehicles_check_again">Kiểm tra lại</string>
+    <string name="vehicles_error_message">Không tải được danh sách xe của bạn</string>
+    <string name="vehicles_error_detail">Hãy kiểm tra kết nối mạng rồi thử lại.</string>
+    <string name="vehicles_retry_button">Thử lại</string>
+    <string name="vehicles_search_label">Số hiệu xe</string>
+    <string name="vehicles_search_no_matches">Không có xe nào khớp với %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Kiểm tra số hiệu ghi trên xe.</string>
+    <string name="vehicles_section_favorites">Yêu thích</string>
+    <string name="vehicles_section_recent">Gần đây</string>
+    <string name="vehicles_section_all">Tất cả xe</string>
+    <string name="vehicles_section_matches">Kết quả</string>
+    <string name="vehicles_tile_favorite">Yêu thích</string>
+    <string name="vehicles_favorite_description">Thêm %1$s vào mục yêu thích</string>
+    <string name="vehicles_unfavorite_description">Xóa %1$s khỏi mục yêu thích</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Chọn tuyến</string>
+    <string name="routes_search_label">Số hoặc tên tuyến</string>
+    <string name="routes_section_recent">Gần đây</string>
+    <string name="routes_section_all">Tất cả tuyến</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="other">Tất cả tuyến · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Kết quả</string>
+    <string name="routes_search_no_matches">Không có tuyến nào khớp với %1$s</string>
+    <string name="routes_search_no_matches_detail">Tìm theo số trên bảng tuyến, hoặc một phần tên tuyến.</string>
+    <string name="routes_empty">Lịch trình không có tuyến nào</string>
+    <string name="routes_empty_detail">Nhờ quản trị viên của đơn vị vận hành kiểm tra lịch trình.</string>
+    <string name="routes_check_again">Kiểm tra lại</string>
+    <string name="routes_error_message">Không tải được danh sách tuyến</string>
+    <string name="routes_error_detail">Hãy kiểm tra kết nối mạng rồi thử lại.</string>
+    <string name="routes_no_schedule">Máy chủ này chưa có lịch trình</string>
+    <string name="routes_no_schedule_detail">Phải có người tải lịch trình lên thì mới bắt đầu được hành trình. Hãy báo quản trị viên của đơn vị vận hành.</string>
+    <string name="routes_retry_button">Thử lại</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Chọn chuyến</string>
+    <string name="runs_empty">Hôm nay tuyến %1$s không có chuyến nào</string>
+    <string name="runs_empty_unnamed">Hôm nay tuyến này không có chuyến nào</string>
+    <string name="runs_empty_detail">Chọn tuyến khác, hoặc kiểm tra lại vào ngày mai.</string>
+    <string name="runs_choose_another_route">Chọn tuyến khác</string>
+    <string name="runs_badge_now">Bây giờ</string>
+    <string name="runs_badge_next">Tiếp theo</string>
+    <string name="runs_direction">Hướng %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Chuyến %1$s</string>
+    <string name="runs_row_block">Chuỗi chuyến %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Đang bắt đầu…</string>
+    <string name="runs_start_title">Bắt đầu chuyến %1$s?</string>
+    <string name="runs_start_message">Tuyến %1$s đi %2$s, xe %3$s.</string>
+    <string name="runs_start_message_no_headsign">Tuyến %1$s, xe %2$s.</string>
+    <string name="runs_start_message_unnamed">Đi %1$s, xe %2$s.</string>
+    <string name="runs_start_message_vehicle">Xe %1$s.</string>
+    <string name="runs_start_confirm">Bắt đầu hành trình</string>
+    <string name="runs_start_cancel">Hủy</string>
+    <string name="runs_error_message">Không tải được danh sách chuyến</string>
+    <string name="runs_error_detail">Hãy kiểm tra kết nối mạng rồi thử lại.</string>
+    <string name="runs_retry_button">Thử lại</string>
+    <string name="runs_error_not_assigned">Bạn không được giao xe %1$s.</string>
+    <string name="runs_change_bus">Đổi xe</string>
+    <string name="runs_error_trip_active">Bạn đã có một hành trình đang chạy. Hãy kết thúc hành trình đó trước khi bắt đầu hành trình mới.</string>
+    <string name="runs_error_vehicle_busy">Một tài xế khác đang chạy hành trình trên xe %1$s. Hãy chọn xe khác hoặc hỏi điều độ.</string>
+    <string name="runs_error_vehicle_inactive">Xe %1$s đang ngừng hoạt động. Hãy chọn xe khác.</string>
+    <string name="runs_error_previous_trip_not_ended">Chưa kết thúc được hành trình trước của bạn. Hãy kiểm tra kết nối mạng rồi thử lại.</string>
+    <string name="runs_error_network">Không kết nối được với máy chủ. Hãy kiểm tra kết nối mạng.</string>
+    <string name="runs_error_no_geometry">Chuyến này không có tuyến hay điểm dừng để đi theo. Hãy chọn chuyến khác.</string>
+    <string name="runs_error_trip_not_active">Lịch trình đã chuyển sang ngày mới.</string>
+    <string name="runs_reload_button">Tải lại</string>
+    <string name="runs_error_other">Không bắt đầu được hành trình.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="other">Đã gửi %1$d</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Xem chi tiết hành trình</string>
+    <string name="tracking_end_trip_button">Kết thúc hành trình</string>
+    <string name="tracking_end_trip_ending">Đang kết thúc…</string>
+    <string name="tracking_occupancy_question">Xe đông đến mức nào?</string>
+    <string name="tracking_occupancy_many_seats">Còn ghế trống</string>
+    <string name="tracking_occupancy_few_seats">Còn ít ghế</string>
+    <string name="tracking_occupancy_standing">Còn chỗ đứng</string>
+    <string name="tracking_occupancy_full">Hết chỗ</string>
+    <string name="tracking_occupancy_clear">Bỏ chọn</string>
+    <string name="tracking_fact_run">Chuyến</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Gửi vị trí</string>
+    <string name="tracking_reports_reporting">Đang gửi</string>
+    <string name="tracking_reports_not_reporting">Không gửi được</string>
+    <string name="tracking_reports_no_gps">Không có GPS</string>
+    <string name="tracking_reports_stopped">Đã ngừng gửi</string>
+    <string name="tracking_fact_street_map">Bản đồ đường phố</string>
+    <string name="tracking_street_map_ready">Sẵn sàng</string>
+    <string name="tracking_street_map_downloading">Đang tải xuống · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Chưa tải xuống</string>
+    <string name="tracking_street_map_no_space">Không đủ dung lượng</string>
+    <string name="tracking_street_map_unusable">Không dùng được</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="other">Đã qua %1$d điểm dừng</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">đã mở rộng</string>
+    <string name="tracking_stops_passed_collapsed">đã thu gọn</string>
+    <string name="tracking_end_trip_dialog_title">Kết thúc hành trình này?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="other">Sẽ ngừng gửi vị trí, và chuyến %2$s của tuyến %1$s sẽ được đánh dấu là hoàn thành. Đã gửi %3$d vị trí.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="other">Sẽ ngừng gửi vị trí, và chuyến này sẽ được đánh dấu là hoàn thành. Đã gửi %1$d vị trí.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Kết thúc hành trình</string>
+    <string name="tracking_end_trip_dialog_cancel">Tiếp tục chạy</string>
+    <string name="tracking_end_trip_error_title">Hành trình chưa kết thúc</string>
+    <string name="tracking_end_trip_error_message">Máy chủ chưa xác nhận hành trình đã kết thúc. Hãy kiểm tra sóng rồi thử lại, hoặc ngừng gửi vị trí trên điện thoại này ngay.</string>
+    <string name="tracking_end_trip_error_retry">Thử lại</string>
+    <string name="tracking_end_trip_error_end_locally">Kết thúc trên điện thoại này</string>
+    <string name="tracking_reauth_button">Đăng nhập</string>
+    <string name="tracking_problem_no_network">Mất kết nối</string>
+    <string name="tracking_problem_no_network_detail">Hành khách không thấy bạn</string>
+    <string name="tracking_problem_no_gps">Không có tín hiệu GPS</string>
+    <string name="tracking_problem_no_gps_detail">Vị trí tạm dừng</string>
+    <string name="tracking_problem_clock_skew">Đồng hồ điện thoại bị sai</string>
+    <string name="tracking_problem_clock_skew_detail">Bật đặt giờ tự động</string>
+    <string name="tracking_problem_reports_refused">Vị trí bị từ chối</string>
+    <string name="tracking_problem_reports_refused_detail">Hỏi điều độ</string>
+    <plurals name="tracking_waiting">
+        <item quantity="other">%1$,d vị trí chờ gửi khi có mạng</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="other">%1$,d vị trí không gửi được</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Đã đăng xuất</string>
+    <string name="tracking_signed_out_message">Đã ngừng gửi vị trí. Hành trình của bạn vẫn đang mở.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Đúng giờ</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="other">Trễ %1$d phút</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="other">Sớm %1$d phút</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Lệch lịch trình</string>
+    <string name="tracking_adherence_right_run">Đây có đúng chuyến không?</string>
+    <string name="tracking_adherence_off_schedule_next">Tiếp theo %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Lệch tuyến · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Lệch tuyến</string>
+    <string name="tracking_adherence_next_stop">Tiếp theo</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">Đang chờ GPS</string>
+    <string name="tracking_adherence_from">Từ</string>
+    <string name="tracking_adherence_run">Chuyến %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Chuyến %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Không có lịch trình</string>
+    <string name="tracking_adherence_no_schedule_riders">Hành khách vẫn thấy bạn</string>
+    <string name="tracking_adherence_no_schedule_detail">Chuyến này không có giờ chạy</string>
+    <string name="tracking_map_recenter">Về vị trí xe</string>
+    <string name="tracking_map_downloading">Đang tải bản đồ, %1$d%%</string>
+    <string name="tracking_map_no_space">Không đủ dung lượng cho bản đồ</string>
+    <string name="tracking_map_retrying">Chưa tải được bản đồ, sẽ thử lại</string>
+    <string name="tracking_map_retry_on_open">Chưa tải được bản đồ, sẽ thử lại khi bạn mở ứng dụng lần sau</string>
+    <string name="tracking_map_unusable">Tệp bản đồ không dùng được, hãy báo đơn vị vận hành</string>
+    <string name="tracking_map_needs_https">Đường liên kết bản đồ phải dùng https, hãy báo đơn vị vận hành</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Tiếp tục hành trình?</string>
+    <string name="resume_message">Ứng dụng đã đóng khi hành trình này đang chạy. Việc gửi vị trí đang tạm dừng cho đến khi bạn chọn.</string>
+    <string name="resume_route">Tuyến %1$s</string>
+    <string name="resume_run">Chuyến %1$s</string>
+    <string name="resume_bus">Xe %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="other">Bắt đầu %1$d phút trước, lúc %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Bắt đầu %1$d giờ %2$d phút trước, lúc %3$s</string>
+    <string name="resume_button">Tiếp tục hành trình</string>
+    <string name="resume_end_trip_button">Kết thúc hành trình</string>
+    <string name="resume_ending">Đang kết thúc hành trình</string>
+    <string name="resume_loading">Đang tải hành trình của bạn</string>
+    <string name="resume_end_failed">Máy chủ chưa xác nhận hành trình đã kết thúc. Hãy thử lại, hoặc chỉ kết thúc trên điện thoại này.</string>
+    <string name="resume_end_failed_back">Không kết thúc hành trình</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Gửi vị trí hành trình</string>
+    <string name="tracking_notification_title">Tuyến %1$s · %2$s</string>
+    <string name="tracking_notification_next">Tiếp theo %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Đã đăng xuất. Mở ứng dụng để đăng nhập.</string>
+    <string name="tracking_notification_reports_refused">Vị trí bị từ chối. Hãy hỏi điều độ.</string>
+    <string name="tracking_notification_resume_title">Đã tạm dừng gửi vị trí</string>
+    <string name="tracking_notification_resume_text">Mở ứng dụng để tiếp tục gửi vị trí.</string>
+    <string name="tracking_notification_attention_channel_name">Hành trình cần bạn chú ý</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Trước khi bắt đầu</string>
+    <string name="preflight_message">Ứng dụng cần các mục sau để gửi vị trí của xe %1$s. Android sẽ hỏi lần lượt từng mục.</string>
+    <string name="preflight_location">Vị trí</string>
+    <string name="preflight_location_why">Để ứng dụng biết xe đang ở đâu</string>
+    <string name="preflight_precise">Vị trí chính xác</string>
+    <string name="preflight_precise_why">Để hành khách thấy xe ở đúng điểm dừng</string>
+    <string name="preflight_background">Cho phép mọi lúc</string>
+    <string name="preflight_background_why">Để việc gửi vị trí có thể tự chạy lại nếu Android đóng ứng dụng</string>
+    <string name="preflight_notifications">Thông báo</string>
+    <string name="preflight_notifications_why">Để bạn thấy việc gửi vị trí đang bật</string>
+    <string name="preflight_battery">Pin</string>
+    <string name="preflight_battery_why">Để Android không dừng việc gửi vị trí giữa hành trình</string>
+    <string name="preflight_location_services">Dịch vụ vị trí</string>
+    <string name="preflight_location_services_why">Phải bật vị trí cho cả điện thoại</string>
+    <string name="preflight_allowed">Đã cho phép</string>
+    <string name="preflight_skipped">Đã bỏ qua</string>
+    <string name="preflight_next">Tiếp theo</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Chưa cho phép. Vẫn gửi được vị trí.</string>
+    <string name="preflight_location_needed">Phải cho phép vị trí thì mới gửi được</string>
+    <string name="preflight_approximate">Chỉ được cho phép vị trí gần đúng</string>
+    <string name="preflight_try_again">Thử lại</string>
+    <string name="preflight_open_settings">Mở cài đặt</string>
+    <string name="preflight_continue">Tiếp tục</string>
+</resources>

@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Filipino, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Everyday Filipino with the English words drivers use on phones (sign in, server, app, link, trip, route, report).
+    "You" is mo/ka/iyo, without "po", as Android's own Filipino does.
+    "Vehicle" is sasakyan everywhere; "run" is biyahe (a timetabled departure, kept apart from "trip", which stays trip);
+    "report" is report ("mga report", no -s); "dispatcher" is dispatcher; "block" is block; "stop" is hintuan;
+    "agency" is kumpanya; "rider" is pasahero; "timetable" and "schedule" are both schedule; "check" is i-check;
+    "diagnostics" is detalye ng app.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Mag-sign in</string>
+    <string name="login_subtitle">Gamitin ang driver account mo para sa kumpanyang ito.</string>
+    <string name="login_server_url_label">Address ng server</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_show_password">Ipakita ang password</string>
+    <string name="login_hide_password">Itago ang password</string>
+    <string name="login_server">Server</string>
+    <string name="login_change_server">Palitan</string>
+    <string name="login_button">Mag-sign in</string>
+    <string name="login_signing_in">Nagsa-sign in</string>
+    <string name="login_error_missing_server">Ilagay ang address ng server</string>
+    <string name="login_error_missing_email">Ilagay ang email mo</string>
+    <string name="login_error_missing_password">Ilagay ang password mo</string>
+    <string name="login_error_invalid_credentials">Mali ang email o password. Subukan ulit.</string>
+    <string name="login_error_invalid_address">Maglagay ng address na tulad ng https://tracker.example.org</string>
+    <string name="login_error_https_required">Gumamit ng https:// na address</string>
+    <string name="login_error_check_address">I-check ang address</string>
+    <string name="login_error_unreachable">Hindi maabot ang %1$s. I-check ang koneksyon mo, o ang address ng server.</string>
+    <string name="login_error_not_tracker">Mukhang hindi tracker server ang %1$s.</string>
+    <string name="login_error_too_many_tries">Masyadong maraming pagsubok. Maghintay nang isang minuto, saka subukan ulit.</string>
+    <string name="login_error_server">Hindi maka-sign in. Subukan ulit.</string>
+    <string name="login_again_title">Mag-sign in ulit</string>
+    <string name="login_again_subtitle">Bilang %1$s</string>
+    <string name="login_again_button">Mag-sign in at ituloy ang pag-report</string>
+    <string name="login_trip_open_title">Bukas pa ang trip mo</string>
+    <string name="login_trip_open_message">Huminto ang mga report nang matapos ang session mo. Mag-sign in para ituloy ang pag-report sa route %1$s.</string>
+    <string name="login_server_managed">Itinakda ng kumpanya mo.</string>
+    <string name="login_server_managed_invalid">Hindi valid na address ang server setting ng kumpanya mo, kaya i-type ito rito.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Gamitin ang %1$s?</string>
+    <string name="server_setup_confirm_message">Ituloy lang kung ang kumpanya mo ang nagpadala sa iyo ng link na ito.</string>
+    <string name="server_setup_use">Gamitin ang server na ito</string>
+    <string name="server_setup_cancel">Kanselahin</string>
+    <string name="server_setup_refused_signed_in">Naka-sign in ang phone na ito sa %1$s. Hindi ginamit ang link.</string>
+    <string name="server_setup_refused_trip_open">May bukas na trip ang phone na ito. Hindi ginamit ang link.</string>
+    <string name="server_setup_refused_managed">Ang kumpanya mo ang nagtatakda ng server sa phone na ito.</string>
+    <string name="server_setup_invalid">Walang address ng server sa link na ito na magagamit ng app.</string>
+    <string name="server_setup_ok">OK</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Address ng server</string>
+    <string name="restriction_server_url_description">Ang tracker server ng kumpanya, isang https:// na address. Dito nagsa-sign in ang mga driver at hindi nila ito mapapalitan.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Laktawan</string>
+    <string name="welcome_next">Susunod</string>
+    <string name="welcome_continue">Magpatuloy</string>
+    <string name="welcome_step">Hakbang %1$d sa %2$d</string>
+    <string name="welcome_riders_title">Nakikita ng mga pasahero na paparating ka</string>
+    <string name="welcome_riders_body">Magsimula ng trip at makikita ng mga pasahero ang sasakyan mo sa mapa nila. Tapusin ito kapag tapos ka na.</string>
+    <string name="welcome_riders_picture">Nakikita ng tatlong pasahero sa hintuan na paparating ang sasakyan mo.</string>
+    <string name="welcome_pieces_title">Sasakyan, route, biyahe</string>
+    <string name="welcome_pieces_body">Piliin ang mga ito, saka i-tap ang biyahe mo para magsimula. Tapusin ang trip kapag tapos ka na.</string>
+    <string name="welcome_pieces_vehicle_hint">Ang numero sa sasakyan</string>
+    <string name="welcome_pieces_route_hint">Ang numero sa karatula</string>
+    <string name="welcome_pieces_run_hint">Isang tap, simula na ang trip</string>
+    <string name="welcome_pieces_live">Nakikita ka ng mga pasahero</string>
+    <string name="welcome_pieces_finish">Kapag tapos ka na</string>
+    <string name="welcome_habits_title">Para tuloy-tuloy ang pag-report</string>
+    <string name="welcome_habits_body">Gawin ang 3 bagay na ito sa bawat trip.</string>
+    <string name="welcome_habits_location">Payagan ang lokasyon sa lahat ng oras</string>
+    <string name="welcome_habits_location_why">Para kusang makapagsimula ulit ang pag-report</string>
+    <string name="welcome_habits_charge">Ikabit ang phone sa charger</string>
+    <string name="welcome_habits_charge_why">Naka-on ang screen habang nagcha-charge</string>
+    <string name="welcome_habits_open">Iwanang bukas ang app</string>
+    <string name="welcome_habits_open_why">Huwag itong i-swipe para isara habang may trip</string>
+    <string name="welcome_habits_if_stops">Kung huminto ang pag-report</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">I-tap ang biyahe mo</string>
+    <string name="tip_run_board_text">Saka i-tap ang %1$s. Mula noon, nakikita na ng mga pasahero ang sasakyan mo.</string>
+    <string name="tip_sent_count_title">Mga naipadalang report</string>
+    <string name="tip_sent_count_text">Lumalaki ang numerong ito habang nakikita ka ng mga pasahero. Walang signal? Tuloy lang sa pagmamaneho. Naka-save ang mga report at ipapadala mamaya.</string>
+    <string name="tip_got_it">Sige</string>
+    <string name="first_trip_done_title">Tapos na ang unang trip</string>
+    <!-- The count is shown beside these words in large digits, so they need none of their own; Filipino's "one" also covers 2, 3, 5, 7, 8 and more, and the same words read right for any count. -->
+    <plurals name="first_trip_done_reports" tools:ignore="ImpliedQuantity">
+        <item quantity="one">report ang naipadala</item>
+        <item quantity="other">report ang naipadala</item>
+    </plurals>
+    <string name="first_trip_done_text">Nakita ng mga pasahero ang sasakyan mo.</string>
+    <string name="first_trip_done_ok">OK</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Wika: %1$s</string>
+    <string name="language_row_phone_note">Para sa buong phone, itinatakda sa settings nito</string>
+    <string name="language_list_title">Wika</string>
+    <string name="language_list_cancel">Kanselahin</string>
+
+    <!-- Help -->
+    <string name="help_title">Tulong</string>
+    <string name="help_welcome_again">Tingnan ulit ang welcome</string>
+    <string name="help_welcome_again_detail">3 maikling screen</string>
+    <string name="help_section_status">Sa status card</string>
+    <string name="help_status_on_time">Nasa schedule ka.</string>
+    <string name="help_status_late">Huli sa schedule.</string>
+    <string name="help_status_early">Maaga sa schedule. Baka maiwan mo ang mga pasahero.</string>
+    <string name="help_status_off_schedule">Malayo sa schedule. I-check kung tama ang biyaheng pinili mo.</string>
+    <string name="help_status_off_route">Wala sa route sa mapa.</string>
+    <string name="help_status_waiting_for_gps">Hinahanap ng phone ang posisyon nito.</string>
+    <string name="help_status_no_schedule">Walang oras ang biyaheng ito. Nakikita ka pa rin ng mga pasahero.</string>
+    <string name="help_waiting">Na-save nang walang koneksyon. Ipapadala ang mga ito pagbalik ng koneksyon.</string>
+    <string name="help_waiting_never">Na-save sa ibang sign-in, kaya hindi ito maipapadala ng sign-in na ito.</string>
+    <string name="help_section_problems">Sa ilalim ng card, at sa mga notification</string>
+    <string name="help_problem_no_network">Tuloy lang sa pagmamaneho. Naka-save ang mga report at ipapadala mamaya.</string>
+    <string name="help_problem_no_gps">Ang huling posisyon mo ang nakikita ng mga pasahero hanggang bumalik ito.</string>
+    <string name="help_problem_clock_skew">I-on ang awtomatikong oras sa settings ng phone.</string>
+    <string name="help_problem_reports_refused">Hindi tinatanggap ng server ang mga report ng sasakyang ito. Magtanong sa dispatcher mo.</string>
+    <string name="help_problem_signed_out">Huminto na ang mga report. Mag-sign in para magpatuloy. Bukas pa ang trip mo.</string>
+    <string name="help_problem_reports_paused">Isang notification. Buksan ang app para ituloy ang pag-report.</string>
+    <string name="help_section_about">Tungkol sa app</string>
+    <string name="help_version">Bersyon</string>
+    <string name="help_server">Server</string>
+    <string name="help_share">I-share ang detalye ng app</string>
+    <string name="help_share_detail">Ipinapadala ang bersyon ng app, ang modelo ng phone, ang server, kung ano ang pinapayagang gawin ng app at ang mga problema nito kamakailan, na itinatago lang nito habang tumatakbo. Walang posisyon, walang detalye ng sign-in, walang email.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Bumalik</string>
+    <string name="setup_trip_so_far">Ang trip sa ngayon</string>
+    <string name="setup_bus">Sasakyan</string>
+    <string name="setup_route">Route %1$s</string>
+    <string name="setup_step_route">Route</string>
+    <string name="setup_step_run">Biyahe</string>
+    <string name="setup_clear_search">I-clear ang paghahanap</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Account</string>
+    <string name="account_version">Bersyon %1$s</string>
+    <string name="account_sign_out">Mag-sign out</string>
+    <string name="account_sign_out_title">Mag-sign out?</string>
+    <string name="account_sign_out_message">Puwede nang mag-sign in ang susunod na driver sa phone na ito.</string>
+    <string name="account_sign_out_cancel">Kanselahin</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Piliin ang sasakyan mo</string>
+    <string name="vehicles_empty">Walang sasakyang naka-assign sa iyo</string>
+    <string name="vehicles_empty_detail">Sabihan ang dispatcher mo na mag-assign ng isa, saka i-check ulit.</string>
+    <string name="vehicles_check_again">I-check ulit</string>
+    <string name="vehicles_error_message">Hindi ma-load ang mga sasakyan mo</string>
+    <string name="vehicles_error_detail">I-check ang koneksyon mo at subukan ulit.</string>
+    <string name="vehicles_retry_button">Subukan ulit</string>
+    <string name="vehicles_search_label">Numero ng sasakyan</string>
+    <string name="vehicles_search_no_matches">Walang sasakyang tugma sa %1$s</string>
+    <string name="vehicles_search_no_matches_detail">I-check ang numero sa sasakyan.</string>
+    <string name="vehicles_section_favorites">Mga paborito</string>
+    <string name="vehicles_section_recent">Kamakailan</string>
+    <string name="vehicles_section_all">Lahat ng sasakyan</string>
+    <string name="vehicles_section_matches">Mga tugma</string>
+    <string name="vehicles_tile_favorite">Paborito</string>
+    <string name="vehicles_favorite_description">Idagdag ang %1$s sa mga paborito</string>
+    <string name="vehicles_unfavorite_description">Alisin ang %1$s sa mga paborito</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Pumili ng route</string>
+    <string name="routes_search_label">Numero o pangalan ng route</string>
+    <string name="routes_section_recent">Kamakailan</string>
+    <string name="routes_section_all">Lahat ng route</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Lahat ng route · %1$d</item>
+        <item quantity="other">Lahat ng route · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Mga tugma</string>
+    <string name="routes_search_no_matches">Walang route na tugma sa %1$s</string>
+    <string name="routes_search_no_matches_detail">Maghanap gamit ang numero sa karatula, o bahagi ng pangalan.</string>
+    <string name="routes_empty">Walang route sa schedule</string>
+    <string name="routes_empty_detail">Sabihan ang admin ng kumpanya mo na i-check ang schedule.</string>
+    <string name="routes_check_again">I-check ulit</string>
+    <string name="routes_error_message">Hindi ma-load ang mga route</string>
+    <string name="routes_error_detail">I-check ang koneksyon mo at subukan ulit.</string>
+    <string name="routes_no_schedule">Wala pang schedule sa server na ito</string>
+    <string name="routes_no_schedule_detail">Kailangan munang mag-load ng schedule ang isang operator bago makapagsimula ng trip. Sabihan ang admin ng kumpanya mo.</string>
+    <string name="routes_retry_button">Subukan ulit</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Pumili ng biyahe</string>
+    <string name="runs_empty">Walang biyahe sa route %1$s ngayong araw</string>
+    <string name="runs_empty_unnamed">Walang biyahe sa route na ito ngayong araw</string>
+    <string name="runs_empty_detail">Pumili ng ibang route, o i-check ulit bukas.</string>
+    <string name="runs_choose_another_route">Pumili ng ibang route</string>
+    <string name="runs_badge_now">Ngayon</string>
+    <string name="runs_badge_next">Susunod</string>
+    <string name="runs_direction">Papuntang %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Biyahe %1$s</string>
+    <string name="runs_row_block">Block %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Sinisimulan…</string>
+    <string name="runs_start_title">Simulan ang %1$s na biyahe?</string>
+    <string name="runs_start_message">Route %1$s papuntang %2$s, gamit ang sasakyan %3$s.</string>
+    <string name="runs_start_message_no_headsign">Route %1$s, gamit ang sasakyan %2$s.</string>
+    <string name="runs_start_message_unnamed">Papuntang %1$s, gamit ang sasakyan %2$s.</string>
+    <string name="runs_start_message_vehicle">Gamit ang sasakyan %1$s.</string>
+    <string name="runs_start_confirm">Simulan ang trip</string>
+    <string name="runs_start_cancel">Kanselahin</string>
+    <string name="runs_error_message">Hindi ma-load ang mga biyahe</string>
+    <string name="runs_error_detail">I-check ang koneksyon mo at subukan ulit.</string>
+    <string name="runs_retry_button">Subukan ulit</string>
+    <string name="runs_error_not_assigned">Hindi ka naka-assign sa sasakyan %1$s.</string>
+    <string name="runs_change_bus">Palitan ang sasakyan</string>
+    <string name="runs_error_trip_active">May trip ka nang tumatakbo. Tapusin ito bago magsimula ng bago.</string>
+    <string name="runs_error_vehicle_busy">May tumatakbong trip ang ibang driver sa sasakyan %1$s. Pumili ng ibang sasakyan o magtanong sa dispatcher mo.</string>
+    <string name="runs_error_vehicle_inactive">Wala sa serbisyo ang sasakyan %1$s. Pumili ng ibang sasakyan.</string>
+    <string name="runs_error_previous_trip_not_ended">Hindi pa naitatapos ang dati mong trip. I-check ang koneksyon mo at subukan ulit.</string>
+    <string name="runs_error_network">Hindi maabot ang server. I-check ang koneksyon mo.</string>
+    <string name="runs_error_no_geometry">Walang route o hintuang susundan ang biyaheng ito. Pumili ng ibang biyahe.</string>
+    <string name="runs_error_trip_not_active">Lumipat na ang schedule sa bagong araw.</string>
+    <string name="runs_reload_button">I-reload</string>
+    <string name="runs_error_other">Hindi masimulan ang trip.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d naipadala</item>
+        <item quantity="other">%1$d naipadala</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Ipakita ang detalye ng trip</string>
+    <string name="tracking_end_trip_button">Tapusin ang trip</string>
+    <string name="tracking_end_trip_ending">Tinatapos…</string>
+    <string name="tracking_occupancy_question">Gaano kapuno ang sasakyan?</string>
+    <string name="tracking_occupancy_many_seats">Maraming bakante</string>
+    <string name="tracking_occupancy_few_seats">Kaunting bakante</string>
+    <string name="tracking_occupancy_standing">Tayuan na lang</string>
+    <string name="tracking_occupancy_full">Puno</string>
+    <string name="tracking_occupancy_clear">I-clear</string>
+    <string name="tracking_fact_run">Biyahe</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Mga report</string>
+    <string name="tracking_reports_reporting">Nagre-report</string>
+    <string name="tracking_reports_not_reporting">Hindi nagre-report</string>
+    <string name="tracking_reports_no_gps">Walang GPS</string>
+    <string name="tracking_reports_stopped">Huminto ang mga report</string>
+    <string name="tracking_fact_street_map">Mapa ng kalsada</string>
+    <string name="tracking_street_map_ready">Handa na</string>
+    <string name="tracking_street_map_downloading">Dina-download · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Hindi pa na-download</string>
+    <string name="tracking_street_map_no_space">Kulang ang espasyo</string>
+    <string name="tracking_street_map_unusable">Hindi magamit</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d hintuan ang nadaanan</item>
+        <item quantity="other">%1$d hintuan ang nadaanan</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">nakabukas</string>
+    <string name="tracking_stops_passed_collapsed">nakasara</string>
+    <string name="tracking_end_trip_dialog_title">Tapusin ang trip na ito?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Hihinto ang mga report, at mamarkahang tapos ang %2$s na biyahe ng route %1$s. %3$d report ang naipadala.</item>
+        <item quantity="other">Hihinto ang mga report, at mamarkahang tapos ang %2$s na biyahe ng route %1$s. %3$d report ang naipadala.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Hihinto ang mga report, at mamarkahang tapos ang biyaheng ito. %1$d report ang naipadala.</item>
+        <item quantity="other">Hihinto ang mga report, at mamarkahang tapos ang biyaheng ito. %1$d report ang naipadala.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Tapusin ang trip</string>
+    <string name="tracking_end_trip_dialog_cancel">Tuloy lang</string>
+    <string name="tracking_end_trip_error_title">Hindi pa tapos ang trip</string>
+    <string name="tracking_end_trip_error_message">Hindi kinumpirma ng server ang pagtatapos. I-check ang signal mo at subukan ulit, o itigil na ngayon ang pag-report sa phone na ito.</string>
+    <string name="tracking_end_trip_error_retry">Subukan ulit</string>
+    <string name="tracking_end_trip_error_end_locally">Tapusin sa phone na ito</string>
+    <string name="tracking_reauth_button">Mag-sign in</string>
+    <string name="tracking_problem_no_network">Walang koneksyon</string>
+    <string name="tracking_problem_no_network_detail">Hindi ka nakikita ng mga pasahero</string>
+    <string name="tracking_problem_no_gps">Walang GPS signal</string>
+    <string name="tracking_problem_no_gps_detail">Naka-pause ang posisyon</string>
+    <string name="tracking_problem_clock_skew">Mali ang oras ng phone</string>
+    <string name="tracking_problem_clock_skew_detail">I-on ang awtomatikong oras</string>
+    <string name="tracking_problem_reports_refused">Tinanggihan ang mga report</string>
+    <string name="tracking_problem_reports_refused_detail">Magtanong sa dispatcher mo</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d report na ipapadala kapag online</item>
+        <item quantity="other">%1$,d report na ipapadala kapag online</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d report na hindi maipapadala</item>
+        <item quantity="other">%1$,d report na hindi maipapadala</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Naka-sign out</string>
+    <string name="tracking_signed_out_message">Huminto na ang mga report. Bukas pa ang trip mo.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Nasa oras</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">Huli nang %1$d min</item>
+        <item quantity="other">Huli nang %1$d min</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">Maaga nang %1$d min</item>
+        <item quantity="other">Maaga nang %1$d min</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Wala sa schedule</string>
+    <string name="tracking_adherence_right_run">Tama ba ang biyaheng ito?</string>
+    <string name="tracking_adherence_off_schedule_next">Susunod: %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Wala sa route · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Wala sa route</string>
+    <string name="tracking_adherence_next_stop">Susunod</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">Hinihintay ang GPS</string>
+    <string name="tracking_adherence_from">Mula sa</string>
+    <string name="tracking_adherence_run">%1$s na biyahe</string>
+    <string name="tracking_adherence_run_vehicle">%1$s na biyahe · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Walang schedule</string>
+    <string name="tracking_adherence_no_schedule_riders">Nakikita ka pa rin ng mga pasahero</string>
+    <string name="tracking_adherence_no_schedule_detail">Walang oras ang biyaheng ito</string>
+    <string name="tracking_map_recenter">I-center ulit</string>
+    <string name="tracking_map_downloading">Dina-download ang mapa, %1$d%%</string>
+    <string name="tracking_map_no_space">Kulang ang espasyo para sa mapa</string>
+    <string name="tracking_map_retrying">Hindi pa na-download ang mapa, susubukan ulit</string>
+    <string name="tracking_map_retry_on_open">Hindi na-download ang mapa, susubukan ulit sa susunod na pagbukas ng app</string>
+    <string name="tracking_map_unusable">Hindi magamit ang file ng mapa, sabihan ang kumpanya mo</string>
+    <string name="tracking_map_needs_https">Dapat https ang link ng mapa, sabihan ang kumpanya mo</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Ituloy ang trip mo?</string>
+    <string name="resume_message">Nagsara ang app habang tumatakbo ang trip na ito. Naka-pause ang mga report hangga\'t hindi ka pumipili.</string>
+    <string name="resume_route">Route %1$s</string>
+    <string name="resume_run">%1$s na biyahe</string>
+    <string name="resume_bus">Sasakyan %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Nagsimula nang %2$s, %1$d min na ang nakalipas</item>
+        <item quantity="other">Nagsimula nang %2$s, %1$d min na ang nakalipas</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Nagsimula nang %3$s, %1$d oras %2$d min na ang nakalipas</string>
+    <string name="resume_button">Ituloy ang trip</string>
+    <string name="resume_end_trip_button">Tapusin ang trip</string>
+    <string name="resume_ending">Tinatapos ang trip</string>
+    <string name="resume_loading">Nilo-load ang trip mo</string>
+    <string name="resume_end_failed">Hindi kinumpirma ng server na natapos ang trip. Subukan ulit, o tapusin ito sa phone na ito lang.</string>
+    <string name="resume_end_failed_back">Huwag tapusin ang trip</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Pag-report ng trip</string>
+    <string name="tracking_notification_title">Route %1$s · %2$s</string>
+    <string name="tracking_notification_next">Susunod: %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Naka-sign out. Buksan ang app para mag-sign in.</string>
+    <string name="tracking_notification_reports_refused">Tinanggihan ang mga report. Magtanong sa dispatcher mo.</string>
+    <string name="tracking_notification_resume_title">Naka-pause ang mga report</string>
+    <string name="tracking_notification_resume_text">Buksan ang app para ituloy ang pag-report.</string>
+    <string name="tracking_notification_attention_channel_name">Kailangan ka ng trip</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Bago ka magsimula</string>
+    <string name="preflight_message">Kailangan ng app ang mga ito para i-report ang sasakyan %1$s. Isa-isang itatanong ng Android ang mga ito.</string>
+    <string name="preflight_location">Lokasyon</string>
+    <string name="preflight_location_why">Para malaman ng app kung nasaan ang sasakyan</string>
+    <string name="preflight_precise">Eksaktong lokasyon</string>
+    <string name="preflight_precise_why">Para makita ng mga pasahero ang sasakyan sa tamang hintuan</string>
+    <string name="preflight_background">Sa lahat ng oras</string>
+    <string name="preflight_background_why">Para kusang makapagsimula ulit ang pag-report kung isara ng Android ang app</string>
+    <string name="preflight_notifications">Mga notification</string>
+    <string name="preflight_notifications_why">Para makita mong naka-on ang pag-report</string>
+    <string name="preflight_battery">Baterya</string>
+    <string name="preflight_battery_why">Para hindi ihinto ng Android ang mga report sa gitna ng trip</string>
+    <string name="preflight_location_services">Mga serbisyo ng lokasyon</string>
+    <string name="preflight_location_services_why">Dapat naka-on ang lokasyon para sa buong phone</string>
+    <string name="preflight_allowed">Pinayagan</string>
+    <string name="preflight_skipped">Nilaktawan</string>
+    <string name="preflight_next">Susunod</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Hindi pinayagan. Gumagana pa rin ang mga report.</string>
+    <string name="preflight_location_needed">Kailangan ang lokasyon para makapag-report</string>
+    <string name="preflight_approximate">Tinatantyang lokasyon lang ang pinayagan</string>
+    <string name="preflight_try_again">Subukan ulit</string>
+    <string name="preflight_open_settings">Buksan ang settings</string>
+    <string name="preflight_continue">Magpatuloy</string>
+</resources>

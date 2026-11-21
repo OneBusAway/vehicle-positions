@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Somali, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Standard Somali in the Latin alphabet, speaking to the driver as "adiga" (singular imperatives: Dooro, Bilow).
+    "Vehicle" is gaari (gaariga, plural gaadiid), never the word for bus; "route" is khad (khadka 7);
+    "run" is wareeg (wareegga 6:43); "trip" is safar (safarka); "stop" is joogsi; "block" is silsilad;
+    "agency" is shirkad (shirkaddaada), the everyday word, where hay'ad would be the formal one;
+    "dispatcher" is kormeere (kormeerahaaga); "admin" is maamule; "report" is warbixin (feminine,
+    warbixinood after a number above one); "rider" is raakib, plural rakaab.
+    "Sign in" is soo gal, "sign out" is ka bax; "server", "app" and "link" stay as loanwords
+    (server-ka, app-ka, linkiga); "location" is goob; "connection" is internet; "diagnostics" is xogta app-ka.
+    "On time" is waqtigii, "late" is daahay, "early" is hore. Minutes stay daqiiqo, which does not change
+    with the number; hours are written saac, the short form used in counts such as 24 saac.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Soo gal</string>
+    <string name="login_subtitle">Isticmaal akoonkaaga darawalnimo ee shirkaddan.</string>
+    <string name="login_server_url_label">Cinwaanka server-ka</string>
+    <string name="login_email_label">Iimayl</string>
+    <string name="login_password_label">Furaha sirta</string>
+    <string name="login_show_password">Muuji furaha sirta</string>
+    <string name="login_hide_password">Qari furaha sirta</string>
+    <string name="login_server">Server</string>
+    <string name="login_change_server">Beddel</string>
+    <string name="login_button">Soo gal</string>
+    <string name="login_signing_in">Waa la soo galayaa</string>
+    <string name="login_error_missing_server">Geli cinwaanka server-ka</string>
+    <string name="login_error_missing_email">Geli iimaylkaaga</string>
+    <string name="login_error_missing_password">Geli furahaaga sirta</string>
+    <string name="login_error_invalid_credentials">Iimaylka ama furaha sirta waa khalad. Isku day mar kale.</string>
+    <string name="login_error_invalid_address">Geli cinwaan sida https://tracker.example.org</string>
+    <string name="login_error_https_required">Isticmaal cinwaan https:// ah</string>
+    <string name="login_error_check_address">Hubi cinwaanka</string>
+    <string name="login_error_unreachable">%1$s lama heli karo. Hubi internetkaaga, ama cinwaanka server-ka.</string>
+    <string name="login_error_not_tracker">%1$s uma eka server raad-raac ah.</string>
+    <string name="login_error_too_many_tries">Isku dayo aad u badan. Sug hal daqiiqo, kadib isku day mar kale.</string>
+    <string name="login_error_server">Lama soo geli karin. Isku day mar kale.</string>
+    <string name="login_again_title">Mar kale soo gal</string>
+    <string name="login_again_subtitle">%1$s ahaan</string>
+    <string name="login_again_button">Soo gal oo sii wad warbixinta</string>
+    <string name="login_trip_open_title">Safarkaagu weli wuu furan yahay</string>
+    <string name="login_trip_open_message">Warbixinnadu way joogsadeen markii akoonka laga baxay. Soo gal si aad warbixinta khadka %1$s u sii wadato.</string>
+    <string name="login_server_managed">Waxaa dejisay shirkaddaada.</string>
+    <string name="login_server_managed_invalid">Dejinta server-ka ee shirkaddaada maaha cinwaan sax ah, markaa halkan ku qor.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Ma isticmaalaysaa %1$s?</string>
+    <string name="server_setup_confirm_message">Sii wad oo keliya haddii shirkaddaadu kuu soo dirtay linkigan.</string>
+    <string name="server_setup_use">Isticmaal server-kan</string>
+    <string name="server_setup_cancel">Jooji</string>
+    <string name="server_setup_refused_signed_in">Taleefankan wuxuu ku xiran yahay %1$s. Linkiga lama isticmaalin.</string>
+    <string name="server_setup_refused_trip_open">Taleefankan waxaa ku furan safar. Linkiga lama isticmaalin.</string>
+    <string name="server_setup_refused_managed">Shirkaddaada ayaa dejisa server-ka taleefankan.</string>
+    <string name="server_setup_invalid">Linkigan kuma jiro cinwaan server oo app-ku isticmaali karo.</string>
+    <string name="server_setup_ok">Hagaag</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Cinwaanka server-ka</string>
+    <string name="restriction_server_url_description">Server-ka raad-raaca ee shirkadda, cinwaan https:// ah. Darawalladu way ku soo galaan, mana beddeli karaan.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Ka bood</string>
+    <string name="welcome_next">Xiga</string>
+    <string name="welcome_continue">Sii wad</string>
+    <string name="welcome_step">Tallaabo %1$d oo ka mid ah %2$d</string>
+    <string name="welcome_riders_title">Rakaabku way arki karaan inaad soo socoto</string>
+    <string name="welcome_riders_body">Bilow safar, rakaabkuna gaarigaaga ayay ku arkaan khariidaddooda. Markaad shaqada dhammayso, dhammee safarka.</string>
+    <string name="welcome_riders_picture">Saddex raakib oo joogsi ku sugaya ayaa arki kara gaarigaaga oo soo socda.</string>
+    <string name="welcome_pieces_title">Gaari, khad, wareeg</string>
+    <string name="welcome_pieces_body">Kuwan dooro, kadibna taabo wareeggaaga si aad u bilowdo. Markaad shaqada dhammayso, dhammee safarka.</string>
+    <string name="welcome_pieces_vehicle_hint">Lambarka gaariga ku qoran</string>
+    <string name="welcome_pieces_route_hint">Lambarka calaamadda ku qoran</string>
+    <string name="welcome_pieces_run_hint">Taabo si safarku u bilaabmo</string>
+    <string name="welcome_pieces_live">Rakaabku way ku arkaan</string>
+    <string name="welcome_pieces_finish">Markaad dhammayso</string>
+    <string name="welcome_habits_title">Warbixintu ha sii socoto</string>
+    <string name="welcome_habits_body">Safar kasta samee 3-dan shay.</string>
+    <string name="welcome_habits_location">Oggolow goobta mar walba</string>
+    <string name="welcome_habits_location_why">Si warbixintu iskeed dib ugu bilaabmi karto</string>
+    <string name="welcome_habits_charge">Taleefanka koronto ku xir</string>
+    <string name="welcome_habits_charge_why">Shaashaddu way shidan tahay inta uu korontada ku xiran yahay</string>
+    <string name="welcome_habits_open">App-ka furan u daa</string>
+    <string name="welcome_habits_open_why">Ha xirin inta safarku socdo</string>
+    <string name="welcome_habits_if_stops">Haddii warbixintu joogsato</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Taabo wareeggaaga</string>
+    <string name="tip_run_board_text">Kadib taabo %1$s. Laga bilaabo markaas, rakaabku way arkaan gaarigaaga.</string>
+    <string name="tip_sent_count_title">Warbixinnada la diray</string>
+    <string name="tip_sent_count_text">Lambarkani wuu kordhayaa inta rakaabku ku arki karaan. Shabakad ma jirto? Gaariga sii wad. Warbixinnada waa la kaydiyaa, dabadeedna waa la diraa.</string>
+    <string name="tip_got_it">Waan fahmay</string>
+    <string name="first_trip_done_title">Safarkii koowaad waa dhammaaday</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="one">warbixin la diray</item>
+        <item quantity="other">warbixinood la diray</item>
+    </plurals>
+    <string name="first_trip_done_text">Rakaabku way arki kareen gaarigaaga.</string>
+    <string name="first_trip_done_ok">Hagaag</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Luqadda: %1$s</string>
+    <string name="language_row_phone_note">Waxaa loo dejiyaa taleefanka oo dhan, dejintiisa dhexdeeda</string>
+    <string name="language_list_title">Luqadda</string>
+    <string name="language_list_cancel">Jooji</string>
+
+    <!-- Help -->
+    <string name="help_title">Caawimaad</string>
+    <string name="help_welcome_again">Mar kale eeg soo dhaweynta</string>
+    <string name="help_welcome_again_detail">3 shaashadood oo gaagaaban</string>
+    <string name="help_section_status">Kaarka xaaladda</string>
+    <string name="help_status_on_time">Waxaad ku socotaa jadwalka.</string>
+    <string name="help_status_late">Waad ka dambaysaa jadwalka.</string>
+    <string name="help_status_early">Waad ka horreysaa jadwalka. Rakaabku way ku seegi karaan.</string>
+    <string name="help_status_off_schedule">Aad baad uga fog tahay jadwalka. Hubi inaad dooratay wareegga saxda ah.</string>
+    <string name="help_status_off_route">Waad ka fog tahay khadka khariidadda ku yaal.</string>
+    <string name="help_status_waiting_for_gps">Taleefanku wuxuu raadinayaa goobtiisa.</string>
+    <string name="help_status_no_schedule">Wareeggan waqtiyo ma laha. Rakaabku weli way ku arkaan.</string>
+    <string name="help_waiting">Waxaa la kaydiyay iyadoo aan internet jirin. Waa la diri doonaa marka uu soo laabto.</string>
+    <string name="help_waiting_never">Waxaa lagu kaydiyay akoon kale, markaa akoonkan ma diri karo.</string>
+    <string name="help_section_problems">Kaarka hoostiisa, iyo ogeysiisyada</string>
+    <string name="help_problem_no_network">Gaariga sii wad. Warbixinnada waa la kaydiyaa, dabadeedna waa la diraa.</string>
+    <string name="help_problem_no_gps">Rakaabku waxay arkaan goobtaadii ugu dambeysay ilaa uu soo laabto.</string>
+    <string name="help_problem_clock_skew">Dejinta taleefanka, ka shid waqtiga tooska ah.</string>
+    <string name="help_problem_reports_refused">Server-ku ma aqbalayo warbixinnada gaarigan. Weydii kormeerahaaga.</string>
+    <string name="help_problem_signed_out">Warbixinnadu way joogsadeen. Soo gal si aad u sii wadato. Safarkaagu weli wuu furan yahay.</string>
+    <string name="help_problem_reports_paused">Ogeysiis. Fur app-ka si warbixintu u sii socoto.</string>
+    <string name="help_section_about">Ku saabsan</string>
+    <string name="help_version">Nooca</string>
+    <string name="help_server">Server</string>
+    <string name="help_share">La wadaag xogta app-ka</string>
+    <string name="help_share_detail">Waxaa la diraa nooca app-ka, moodelka taleefanka, server-ka, waxa app-ka loo oggol yahay iyo dhibaatooyinkii u dambeeyay, oo uu hayo inta uu shaqaynayo oo keliya. Lama diro goobo, xogta soo galka ama iimayl.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Dib u noqo</string>
+    <string name="setup_trip_so_far">Safarka ilaa hadda</string>
+    <string name="setup_bus">Gaari</string>
+    <string name="setup_route">Khadka %1$s</string>
+    <string name="setup_step_route">Khad</string>
+    <string name="setup_step_run">Wareeg</string>
+    <string name="setup_clear_search">Tirtir raadinta</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Akoon</string>
+    <string name="account_version">Nooca %1$s</string>
+    <string name="account_sign_out">Ka bax</string>
+    <string name="account_sign_out_title">Ma ka baxaysaa?</string>
+    <string name="account_sign_out_message">Darawalka xiga wuxuu taleefankan ku soo geli karaa.</string>
+    <string name="account_sign_out_cancel">Jooji</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Dooro gaarigaaga</string>
+    <string name="vehicles_empty">Gaari laguma siin</string>
+    <string name="vehicles_empty_detail">Ka codso kormeerahaaga inuu ku siiyo mid, kadib mar kale hubi.</string>
+    <string name="vehicles_check_again">Mar kale hubi</string>
+    <string name="vehicles_error_message">Gaadiidkaaga lama soo heli karin</string>
+    <string name="vehicles_error_detail">Hubi internetkaaga oo isku day mar kale.</string>
+    <string name="vehicles_retry_button">Isku day mar kale</string>
+    <string name="vehicles_search_label">Lambarka gaariga</string>
+    <string name="vehicles_search_no_matches">Gaari u dhigma %1$s lama helin</string>
+    <string name="vehicles_search_no_matches_detail">Hubi lambarka gaariga ku qoran.</string>
+    <string name="vehicles_section_favorites">Kuwa la jecel yahay</string>
+    <string name="vehicles_section_recent">Dhowaan</string>
+    <string name="vehicles_section_all">Gaadiidka oo dhan</string>
+    <string name="vehicles_section_matches">Natiijooyinka</string>
+    <string name="vehicles_tile_favorite">La jecel yahay</string>
+    <string name="vehicles_favorite_description">Ku dar %1$s kuwa la jecel yahay</string>
+    <string name="vehicles_unfavorite_description">Ka saar %1$s kuwa la jecel yahay</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Dooro khad</string>
+    <string name="routes_search_label">Lambarka ama magaca khadka</string>
+    <string name="routes_section_recent">Dhowaan</string>
+    <string name="routes_section_all">Khadadka oo dhan</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Khadadka oo dhan · %1$d</item>
+        <item quantity="other">Khadadka oo dhan · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Natiijooyinka</string>
+    <string name="routes_search_no_matches">Khad u dhigma %1$s lama helin</string>
+    <string name="routes_search_no_matches_detail">Ku raadi lambarka calaamadda ku qoran, ama qayb ka mid ah magaca.</string>
+    <string name="routes_empty">Jadwalku khad ma leh</string>
+    <string name="routes_empty_detail">Ka codso maamulaha shirkaddaada inuu hubiyo jadwalka.</string>
+    <string name="routes_check_again">Mar kale hubi</string>
+    <string name="routes_error_message">Khadadka lama soo heli karin</string>
+    <string name="routes_error_detail">Hubi internetkaaga oo isku day mar kale.</string>
+    <string name="routes_no_schedule">Server-kan weli jadwal kuma jiro</string>
+    <string name="routes_no_schedule_detail">Qof shaqaalaha ka mid ah waa inuu jadwal soo geliyaa ka hor inta aan safarro la bilaabin. U sheeg maamulaha shirkaddaada.</string>
+    <string name="routes_retry_button">Isku day mar kale</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Dooro wareeg</string>
+    <string name="runs_empty">Maanta wareeg kuma jiro khadka %1$s</string>
+    <string name="runs_empty_unnamed">Maanta wareeg kuma jiro khadkan</string>
+    <string name="runs_empty_detail">Dooro khad kale, ama berri mar kale hubi.</string>
+    <string name="runs_choose_another_route">Dooro khad kale</string>
+    <string name="runs_badge_now">Hadda</string>
+    <string name="runs_badge_next">Xiga</string>
+    <string name="runs_direction">Xagga %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Wareeg %1$s</string>
+    <string name="runs_row_block">Silsilad %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Waa la bilaabayaa…</string>
+    <string name="runs_start_title">Ma bilaabaysaa wareegga %1$s?</string>
+    <string name="runs_start_message">Khadka %1$s xagga %2$s, gaariga %3$s.</string>
+    <string name="runs_start_message_no_headsign">Khadka %1$s, gaariga %2$s.</string>
+    <string name="runs_start_message_unnamed">Xagga %1$s, gaariga %2$s.</string>
+    <string name="runs_start_message_vehicle">Gaariga %1$s.</string>
+    <string name="runs_start_confirm">Bilow safarka</string>
+    <string name="runs_start_cancel">Jooji</string>
+    <string name="runs_error_message">Wareegyada lama soo heli karin</string>
+    <string name="runs_error_detail">Hubi internetkaaga oo isku day mar kale.</string>
+    <string name="runs_retry_button">Isku day mar kale</string>
+    <string name="runs_error_not_assigned">Gaariga %1$s laguma siin.</string>
+    <string name="runs_change_bus">Beddel gaariga</string>
+    <string name="runs_error_trip_active">Waxaad horey u leedahay safar socda. Dhammee ka hor intaadan bilaabin mid kale.</string>
+    <string name="runs_error_vehicle_busy">Darawal kale ayaa safar ku haya gaariga %1$s. Dooro gaari kale ama weydii kormeerahaaga.</string>
+    <string name="runs_error_vehicle_inactive">Gaariga %1$s wuu ka baxsan yahay adeegga. Dooro gaari kale.</string>
+    <string name="runs_error_previous_trip_not_ended">Safarkaagii hore weli lama dhammayn karin. Hubi internetkaaga oo isku day mar kale.</string>
+    <string name="runs_error_network">Server-ka lama heli karo. Hubi internetkaaga.</string>
+    <string name="runs_error_no_geometry">Wareeggan ma laha khad ama joogsiyo la raaco. Dooro wareeg kale.</string>
+    <string name="runs_error_trip_not_active">Jadwalku wuxuu u gudbay maalin cusub.</string>
+    <string name="runs_reload_button">Cusbooneysii</string>
+    <string name="runs_error_other">Safarka lama bilaabi karin.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d la diray</item>
+        <item quantity="other">%1$d la diray</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Muuji faahfaahinta safarka</string>
+    <string name="tracking_end_trip_button">Dhammee safarka</string>
+    <string name="tracking_end_trip_ending">Waa la dhammaynayaa…</string>
+    <string name="tracking_occupancy_question">Gaarigu intee buu buuxaa?</string>
+    <string name="tracking_occupancy_many_seats">Kursiyo bannaan</string>
+    <string name="tracking_occupancy_few_seats">Kursiyo yar</string>
+    <string name="tracking_occupancy_standing">Dad taagan</string>
+    <string name="tracking_occupancy_full">Buuxa</string>
+    <string name="tracking_occupancy_clear">Tirtir</string>
+    <string name="tracking_fact_run">Wareeg</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Warbixinno</string>
+    <string name="tracking_reports_reporting">Waa la dirayaa</string>
+    <string name="tracking_reports_not_reporting">Lama dirayo</string>
+    <string name="tracking_reports_no_gps">GPS ma jiro</string>
+    <string name="tracking_reports_stopped">Warbixinnadu way joogsadeen</string>
+    <string name="tracking_fact_street_map">Khariidadda waddooyinka</string>
+    <string name="tracking_street_map_ready">Diyaar</string>
+    <string name="tracking_street_map_downloading">Waa la soo dejinayaa · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Weli lama soo dejin</string>
+    <string name="tracking_street_map_no_space">Meel ku filan ma jirto</string>
+    <string name="tracking_street_map_unusable">Lama isticmaali karo</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d joogsi oo la dhaafay</item>
+        <item quantity="other">%1$d joogsi oo la dhaafay</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">furan</string>
+    <string name="tracking_stops_passed_collapsed">xiran</string>
+    <string name="tracking_end_trip_dialog_title">Ma dhammaynaysaa safarkan?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Warbixinnadu way joogsan doonaan, wareegga %2$s ee khadka %1$s waxaa loo calaamadeyn doonaa inuu dhammaaday. %3$d warbixin ayaa la diray.</item>
+        <item quantity="other">Warbixinnadu way joogsan doonaan, wareegga %2$s ee khadka %1$s waxaa loo calaamadeyn doonaa inuu dhammaaday. %3$d warbixinood ayaa la diray.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Warbixinnadu way joogsan doonaan, wareeggan waxaa loo calaamadeyn doonaa inuu dhammaaday. %1$d warbixin ayaa la diray.</item>
+        <item quantity="other">Warbixinnadu way joogsan doonaan, wareeggan waxaa loo calaamadeyn doonaa inuu dhammaaday. %1$d warbixinood ayaa la diray.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Dhammee safarka</string>
+    <string name="tracking_end_trip_dialog_cancel">Sii soco</string>
+    <string name="tracking_end_trip_error_title">Safarka weli lama dhammayn</string>
+    <string name="tracking_end_trip_error_message">Server-ku ma xaqiijin dhammaadka. Hubi shabakaddaada oo isku day mar kale, ama hadda jooji warbixinta taleefankan.</string>
+    <string name="tracking_end_trip_error_retry">Isku day mar kale</string>
+    <string name="tracking_end_trip_error_end_locally">Ku dhammee taleefankan</string>
+    <string name="tracking_reauth_button">Soo gal</string>
+    <string name="tracking_problem_no_network">Internet ma jiro</string>
+    <string name="tracking_problem_no_network_detail">Rakaabku kuma arki karaan</string>
+    <string name="tracking_problem_no_gps">GPS lama helayo</string>
+    <string name="tracking_problem_no_gps_detail">Goobta waa la hakiyay</string>
+    <string name="tracking_problem_clock_skew">Saacadda taleefanka waa khalad</string>
+    <string name="tracking_problem_clock_skew_detail">Deji waqtiga tooska ah</string>
+    <string name="tracking_problem_reports_refused">Warbixinnada waa la diiday</string>
+    <string name="tracking_problem_reports_refused_detail">Weydii kormeerahaaga</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d warbixin oo internet sugaysa</item>
+        <item quantity="other">%1$,d warbixinood oo internet sugaya</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d warbixin lama diri doono</item>
+        <item quantity="other">%1$,d warbixinood lama diri doono</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Akoonka waa laga baxay</string>
+    <string name="tracking_signed_out_message">Warbixinnadu way joogsadeen. Safarkaagu weli wuu furan yahay.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Waqtigii</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d daqiiqo daahay</item>
+        <item quantity="other">%1$d daqiiqo daahay</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d daqiiqo hore</item>
+        <item quantity="other">%1$d daqiiqo hore</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Jadwalka ka baxsan</string>
+    <string name="tracking_adherence_right_run">Ma dooratay wareegga saxda ah?</string>
+    <string name="tracking_adherence_off_schedule_next">Xiga %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Khadka ka baxsan · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Khadka ka baxsan</string>
+    <string name="tracking_adherence_next_stop">Xiga</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">GPS ayaa la sugayaa</string>
+    <string name="tracking_adherence_from">Bilowga</string>
+    <string name="tracking_adherence_run">Wareegga %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Wareegga %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Jadwal ma jiro</string>
+    <string name="tracking_adherence_no_schedule_riders">Rakaabku weli way ku arkaan</string>
+    <string name="tracking_adherence_no_schedule_detail">Wareeggan waqtiyo ma laha</string>
+    <string name="tracking_map_recenter">Ku noqo gaariga</string>
+    <string name="tracking_map_downloading">Khariidadda waa la soo dejinayaa, %1$d%%</string>
+    <string name="tracking_map_no_space">Khariidadda meel ku filan uma jirto</string>
+    <string name="tracking_map_retrying">Khariidadda weli lama soo dejin, mar kale ayaa la isku dayi doonaa</string>
+    <string name="tracking_map_retry_on_open">Khariidadda lama soo dejin, mar kale ayaa la isku dayi doonaa marka app-ka la furo</string>
+    <string name="tracking_map_unusable">Faylka khariidadda lama isticmaali karo, u sheeg shirkaddaada</string>
+    <string name="tracking_map_needs_https">Linkiga khariidadda waa inuu isticmaalaa https, u sheeg shirkaddaada</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Ma sii wadaysaa safarkaaga?</string>
+    <string name="resume_message">App-ku wuu xirmay intii safarkani socday. Warbixinnada waa la hakiyay ilaa aad doorato.</string>
+    <string name="resume_route">Khadka %1$s</string>
+    <string name="resume_run">Wareegga %1$s</string>
+    <string name="resume_bus">Gaariga %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Wuxuu bilaabmay %1$d daqiiqo ka hor, %2$s</item>
+        <item quantity="other">Wuxuu bilaabmay %1$d daqiiqo ka hor, %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Wuxuu bilaabmay %1$d saac iyo %2$d daqiiqo ka hor, %3$s</string>
+    <string name="resume_button">Sii wad safarka</string>
+    <string name="resume_end_trip_button">Dhammee safarka</string>
+    <string name="resume_ending">Safarka waa la dhammaynayaa</string>
+    <string name="resume_loading">Safarkaaga waa la soo helayaa</string>
+    <string name="resume_end_failed">Server-ku ma xaqiijin in safarku dhammaaday. Isku day mar kale, ama ku dhammee taleefankan oo keliya.</string>
+    <string name="resume_end_failed_back">Ha dhammayn safarka</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Warbixinta safarka</string>
+    <string name="tracking_notification_title">Khadka %1$s · %2$s</string>
+    <string name="tracking_notification_next">Xiga %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Akoonka waa laga baxay. Fur app-ka si aad u soo gasho.</string>
+    <string name="tracking_notification_reports_refused">Warbixinnada waa la diiday. Weydii kormeerahaaga.</string>
+    <string name="tracking_notification_resume_title">Warbixinnada waa la hakiyay</string>
+    <string name="tracking_notification_resume_text">Fur app-ka si warbixintu u sii socoto.</string>
+    <string name="tracking_notification_attention_channel_name">Safarku wuu kuu baahan yahay</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Intaadan bilaabin</string>
+    <string name="preflight_message">App-ku wuxuu u baahan yahay kuwan si uu warbixinta gaariga %1$s u diro. Android ayaa mid walba kaa weydiin doona.</string>
+    <string name="preflight_location">Goobta</string>
+    <string name="preflight_location_why">Si app-ku u ogaado halka uu gaarigu joogo</string>
+    <string name="preflight_precise">Goobta saxda ah</string>
+    <string name="preflight_precise_why">Si rakaabku gaariga ugu arkaan joogsiga saxda ah</string>
+    <string name="preflight_background">Mar walba</string>
+    <string name="preflight_background_why">Si warbixintu dib ugu bilaabmi karto haddii Android xiro app-ka</string>
+    <string name="preflight_notifications">Ogeysiisyada</string>
+    <string name="preflight_notifications_why">Si aad u aragto in warbixintu socoto</string>
+    <string name="preflight_battery">Baytariga</string>
+    <string name="preflight_battery_why">Si Android aanu warbixinta u joojin inta safarku socdo</string>
+    <string name="preflight_location_services">Adeegyada goobta</string>
+    <string name="preflight_location_services_why">Goobtu waa inay ka shidan tahay taleefanka oo dhan</string>
+    <string name="preflight_allowed">La oggolaaday</string>
+    <string name="preflight_skipped">Laga booday</string>
+    <string name="preflight_next">Xiga</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Lama oggolaan. Warbixintu weli way shaqaysaa.</string>
+    <string name="preflight_location_needed">Goobta ayaa loo baahan yahay si warbixin loo diro</string>
+    <string name="preflight_approximate">Goob qiyaas ah oo keliya ayaa la oggolaaday</string>
+    <string name="preflight_try_again">Isku day mar kale</string>
+    <string name="preflight_open_settings">Fur dejinta</string>
+    <string name="preflight_continue">Sii wad</string>
+</resources>

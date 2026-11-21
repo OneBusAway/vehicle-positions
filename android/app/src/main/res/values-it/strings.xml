@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Italian, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    The driver is addressed as "tu". "Vehicle" is veicolo, the general word, never one kind of vehicle; "route" is linea
+    (off route: fuori percorso); "run" is corsa, a timetabled departure ("la corsa delle 6:43"); "trip" is viaggio;
+    "stop" is fermata; "block" is turno (short for turno macchina); "agency" is azienda; "dispatcher" is centrale
+    (the control room, centrale operativa); "report" is segnalazione (feminine), and reporting is l'invio; "riders"
+    are passeggeri; "driver" is autista; "schedule" and "timetable" are orario; "sign in" is Accedi, "sign out" is
+    Esci, and an expired sign-in is Accesso scaduto. Dialog titles ask with an infinitive ("Terminare questo
+    viaggio?"), as Android does. Plural "many" is for exact millions only, which Italian writes with "di"
+    ("1.000.000 di segnalazioni").
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Accedi</string>
+    <string name="login_subtitle">Usa il tuo account da autista di questa azienda.</string>
+    <string name="login_server_url_label">Indirizzo del server</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_show_password">Mostra password</string>
+    <string name="login_hide_password">Nascondi password</string>
+    <string name="login_server">Server</string>
+    <string name="login_change_server">Cambia</string>
+    <string name="login_button">Accedi</string>
+    <string name="login_signing_in">Accesso in corso</string>
+    <string name="login_error_missing_server">Inserisci l\'indirizzo del server</string>
+    <string name="login_error_missing_email">Inserisci la tua email</string>
+    <string name="login_error_missing_password">Inserisci la tua password</string>
+    <string name="login_error_invalid_credentials">Email o password errate. Riprova.</string>
+    <string name="login_error_invalid_address">Inserisci un indirizzo come https://tracker.example.org</string>
+    <string name="login_error_https_required">Usa un indirizzo https://</string>
+    <string name="login_error_check_address">Controlla l\'indirizzo</string>
+    <string name="login_error_unreachable">Impossibile raggiungere %1$s. Controlla la connessione o l\'indirizzo del server.</string>
+    <string name="login_error_not_tracker">%1$s non sembra un server di tracciamento.</string>
+    <string name="login_error_too_many_tries">Troppi tentativi. Aspetta un minuto, poi riprova.</string>
+    <string name="login_error_server">Impossibile accedere. Riprova.</string>
+    <string name="login_again_title">Accedi di nuovo</string>
+    <string name="login_again_subtitle">Come %1$s</string>
+    <string name="login_again_button">Accedi e continua l\'invio</string>
+    <string name="login_trip_open_title">Il tuo viaggio è ancora aperto</string>
+    <string name="login_trip_open_message">Le segnalazioni si sono interrotte alla fine della sessione. Accedi per continuare l\'invio sulla linea %1$s.</string>
+    <string name="login_server_managed">Impostato dalla tua azienda.</string>
+    <string name="login_server_managed_invalid">L\'impostazione del server della tua azienda non è un indirizzo valido, quindi scrivilo qui.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Usare %1$s?</string>
+    <string name="server_setup_confirm_message">Continua solo se questo link te l\'ha inviato la tua azienda.</string>
+    <string name="server_setup_use">Usa questo server</string>
+    <string name="server_setup_cancel">Annulla</string>
+    <string name="server_setup_refused_signed_in">Questo telefono ha eseguito l\'accesso a %1$s. Il link non è stato usato.</string>
+    <string name="server_setup_refused_trip_open">Su questo telefono c\'è un viaggio aperto. Il link non è stato usato.</string>
+    <string name="server_setup_refused_managed">Su questo telefono il server lo imposta la tua azienda.</string>
+    <string name="server_setup_invalid">Questo link non contiene un indirizzo del server che l\'app possa usare.</string>
+    <string name="server_setup_ok">OK</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Indirizzo del server</string>
+    <string name="restriction_server_url_description">Il server di tracciamento dell\'azienda, un indirizzo https://. Gli autisti vi accedono e non possono cambiarlo.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Salta</string>
+    <string name="welcome_next">Avanti</string>
+    <string name="welcome_continue">Continua</string>
+    <string name="welcome_step">Passaggio %1$d di %2$d</string>
+    <string name="welcome_riders_title">I passeggeri ti vedono arrivare</string>
+    <string name="welcome_riders_body">Inizia un viaggio e i passeggeri vedono il tuo veicolo sulla loro mappa. Terminalo quando hai finito.</string>
+    <string name="welcome_riders_picture">Tre passeggeri a una fermata vedono arrivare il tuo veicolo.</string>
+    <string name="welcome_pieces_title">Veicolo, linea, corsa</string>
+    <string name="welcome_pieces_body">Sceglili, poi tocca la tua corsa per iniziare. Termina il viaggio quando hai finito.</string>
+    <string name="welcome_pieces_vehicle_hint">Il numero sul veicolo</string>
+    <string name="welcome_pieces_route_hint">Il numero sul cartello</string>
+    <string name="welcome_pieces_run_hint">Un tocco avvia il viaggio</string>
+    <string name="welcome_pieces_live">I passeggeri ti vedono</string>
+    <string name="welcome_pieces_finish">Quando hai finito</string>
+    <string name="welcome_habits_title">Tieni attivo l\'invio</string>
+    <string name="welcome_habits_body">Fai queste 3 cose in ogni viaggio.</string>
+    <string name="welcome_habits_location">Consenti sempre l\'accesso alla posizione</string>
+    <string name="welcome_habits_location_why">Così l\'invio può ripartire da solo</string>
+    <string name="welcome_habits_charge">Tieni il telefono in carica</string>
+    <string name="welcome_habits_charge_why">Lo schermo resta acceso mentre si carica</string>
+    <string name="welcome_habits_open">Lascia l\'app aperta</string>
+    <string name="welcome_habits_open_why">Non chiuderla scorrendo durante un viaggio</string>
+    <string name="welcome_habits_if_stops">Se l\'invio si ferma</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Tocca la tua corsa</string>
+    <string name="tip_run_board_text">Poi tocca %1$s. Da quel momento i passeggeri vedono il tuo veicolo.</string>
+    <string name="tip_sent_count_title">Segnalazioni inviate</string>
+    <string name="tip_sent_count_text">Questo numero cresce mentre i passeggeri ti vedono. Niente segnale? Continua a guidare. Le segnalazioni vengono salvate e inviate più tardi.</string>
+    <string name="tip_got_it">Ho capito</string>
+    <string name="first_trip_done_title">Primo viaggio completato</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="one">segnalazione inviata</item>
+        <item quantity="many">di segnalazioni inviate</item>
+        <item quantity="other">segnalazioni inviate</item>
+    </plurals>
+    <string name="first_trip_done_text">I passeggeri hanno potuto vedere il tuo veicolo.</string>
+    <string name="first_trip_done_ok">OK</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Lingua: %1$s</string>
+    <string name="language_row_phone_note">Si imposta per tutto il telefono, nelle impostazioni</string>
+    <string name="language_list_title">Lingua</string>
+    <string name="language_list_cancel">Annulla</string>
+
+    <!-- Help -->
+    <string name="help_title">Aiuto</string>
+    <string name="help_welcome_again">Rivedi il benvenuto</string>
+    <string name="help_welcome_again_detail">3 schermate brevi</string>
+    <string name="help_section_status">Sulla scheda di stato</string>
+    <string name="help_status_on_time">Sei in orario.</string>
+    <string name="help_status_late">In ritardo sull\'orario.</string>
+    <string name="help_status_early">In anticipo sull\'orario. I passeggeri potrebbero perderti.</string>
+    <string name="help_status_off_schedule">Molto fuori orario. Controlla di aver scelto la corsa giusta.</string>
+    <string name="help_status_off_route">Fuori dal percorso sulla mappa.</string>
+    <string name="help_status_waiting_for_gps">Il telefono sta cercando la sua posizione.</string>
+    <string name="help_status_no_schedule">Questa corsa non ha orari. I passeggeri ti vedono comunque.</string>
+    <string name="help_waiting">Salvate senza connessione. Vengono inviate quando torna.</string>
+    <string name="help_waiting_never">Salvate con un altro accesso, quindi questo non può inviarle.</string>
+    <string name="help_section_problems">Sotto la scheda e nelle notifiche</string>
+    <string name="help_problem_no_network">Continua a guidare. Le segnalazioni vengono salvate e inviate più tardi.</string>
+    <string name="help_problem_no_gps">I passeggeri vedono la tua ultima posizione finché il GPS non torna.</string>
+    <string name="help_problem_clock_skew">Attiva l\'ora automatica nelle impostazioni del telefono.</string>
+    <string name="help_problem_reports_refused">Il server non accetta le segnalazioni di questo veicolo. Chiedi alla centrale.</string>
+    <string name="help_problem_signed_out">Le segnalazioni si sono interrotte. Accedi per continuare. Il tuo viaggio è ancora aperto.</string>
+    <string name="help_problem_reports_paused">Una notifica. Apri l\'app per continuare l\'invio.</string>
+    <string name="help_section_about">Informazioni</string>
+    <string name="help_version">Versione</string>
+    <string name="help_server">Server</string>
+    <string name="help_share">Condividi diagnostica</string>
+    <string name="help_share_detail">Invia la versione dell\'app, il modello del telefono, il server, i permessi dell\'app e i suoi problemi recenti, che conserva solo mentre è in esecuzione. Nessuna posizione, nessun dato di accesso, nessuna email.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Indietro</string>
+    <string name="setup_trip_so_far">Viaggio finora</string>
+    <string name="setup_bus">Veicolo</string>
+    <string name="setup_route">Linea %1$s</string>
+    <string name="setup_step_route">Linea</string>
+    <string name="setup_step_run">Corsa</string>
+    <string name="setup_clear_search">Cancella ricerca</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Account</string>
+    <string name="account_version">Versione %1$s</string>
+    <string name="account_sign_out">Esci</string>
+    <string name="account_sign_out_title">Uscire dall\'account?</string>
+    <string name="account_sign_out_message">Il prossimo autista potrà accedere su questo telefono.</string>
+    <string name="account_sign_out_cancel">Annulla</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Scegli il tuo veicolo</string>
+    <string name="vehicles_empty">Non ti è assegnato nessun veicolo</string>
+    <string name="vehicles_empty_detail">Chiedi alla centrale di assegnartene uno, poi controlla di nuovo.</string>
+    <string name="vehicles_check_again">Controlla di nuovo</string>
+    <string name="vehicles_error_message">Impossibile caricare i tuoi veicoli</string>
+    <string name="vehicles_error_detail">Controlla la connessione e riprova.</string>
+    <string name="vehicles_retry_button">Riprova</string>
+    <string name="vehicles_search_label">Numero del veicolo</string>
+    <string name="vehicles_search_no_matches">Nessun veicolo corrisponde a %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Controlla il numero di matricola sul veicolo.</string>
+    <string name="vehicles_section_favorites">Preferiti</string>
+    <string name="vehicles_section_recent">Recenti</string>
+    <string name="vehicles_section_all">Tutti i veicoli</string>
+    <string name="vehicles_section_matches">Risultati</string>
+    <string name="vehicles_tile_favorite">Preferito</string>
+    <string name="vehicles_favorite_description">Aggiungi %1$s ai preferiti</string>
+    <string name="vehicles_unfavorite_description">Rimuovi %1$s dai preferiti</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Scegli una linea</string>
+    <string name="routes_search_label">Numero o nome della linea</string>
+    <string name="routes_section_recent">Recenti</string>
+    <string name="routes_section_all">Tutte le linee</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Tutte le linee · %1$d</item>
+        <item quantity="many">Tutte le linee · %1$d</item>
+        <item quantity="other">Tutte le linee · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Risultati</string>
+    <string name="routes_search_no_matches">Nessuna linea corrisponde a %1$s</string>
+    <string name="routes_search_no_matches_detail">Cerca per numero sul cartello o per parte del nome.</string>
+    <string name="routes_empty">Nell\'orario non ci sono linee</string>
+    <string name="routes_empty_detail">Chiedi all\'amministratore della tua azienda di controllare l\'orario.</string>
+    <string name="routes_check_again">Controlla di nuovo</string>
+    <string name="routes_error_message">Impossibile caricare le linee</string>
+    <string name="routes_error_detail">Controlla la connessione e riprova.</string>
+    <string name="routes_no_schedule">Ancora nessun orario su questo server</string>
+    <string name="routes_no_schedule_detail">Un operatore deve caricarne uno prima che i viaggi possano iniziare. Avvisa l\'amministratore della tua azienda.</string>
+    <string name="routes_retry_button">Riprova</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Scegli una corsa</string>
+    <string name="runs_empty">Nessuna corsa oggi sulla linea %1$s</string>
+    <string name="runs_empty_unnamed">Nessuna corsa oggi su questa linea</string>
+    <string name="runs_empty_detail">Scegli un\'altra linea o controlla di nuovo domani.</string>
+    <string name="runs_choose_another_route">Scegli un\'altra linea</string>
+    <string name="runs_badge_now">Adesso</string>
+    <string name="runs_badge_next">Prossima</string>
+    <string name="runs_direction">Direzione %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Corsa %1$s</string>
+    <string name="runs_row_block">Turno %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Avvio…</string>
+    <string name="runs_start_title">Iniziare la corsa delle %1$s?</string>
+    <string name="runs_start_message">Linea %1$s per %2$s sul veicolo %3$s.</string>
+    <string name="runs_start_message_no_headsign">Linea %1$s sul veicolo %2$s.</string>
+    <string name="runs_start_message_unnamed">Per %1$s sul veicolo %2$s.</string>
+    <string name="runs_start_message_vehicle">Sul veicolo %1$s.</string>
+    <string name="runs_start_confirm">Inizia viaggio</string>
+    <string name="runs_start_cancel">Annulla</string>
+    <string name="runs_error_message">Impossibile caricare le corse</string>
+    <string name="runs_error_detail">Controlla la connessione e riprova.</string>
+    <string name="runs_retry_button">Riprova</string>
+    <string name="runs_error_not_assigned">Il veicolo %1$s non ti è assegnato.</string>
+    <string name="runs_change_bus">Cambia veicolo</string>
+    <string name="runs_error_trip_active">Hai già un viaggio in corso. Terminalo prima di iniziarne un altro.</string>
+    <string name="runs_error_vehicle_busy">Un altro autista ha un viaggio in corso sul veicolo %1$s. Scegli un altro veicolo o chiedi alla centrale.</string>
+    <string name="runs_error_vehicle_inactive">Il veicolo %1$s è fuori servizio. Scegli un altro veicolo.</string>
+    <string name="runs_error_previous_trip_not_ended">Il tuo viaggio precedente non è ancora stato terminato. Controlla la connessione e riprova.</string>
+    <string name="runs_error_network">Impossibile raggiungere il server. Controlla la connessione.</string>
+    <string name="runs_error_no_geometry">Questa corsa non ha un percorso o fermate da seguire. Scegli un\'altra corsa.</string>
+    <string name="runs_error_trip_not_active">L\'orario è passato a un nuovo giorno.</string>
+    <string name="runs_reload_button">Ricarica</string>
+    <string name="runs_error_other">Impossibile iniziare il viaggio.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d inviata</item>
+        <item quantity="many">%1$d inviate</item>
+        <item quantity="other">%1$d inviate</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Mostra dettagli del viaggio</string>
+    <string name="tracking_end_trip_button">Termina viaggio</string>
+    <string name="tracking_end_trip_ending">Chiusura…</string>
+    <string name="tracking_occupancy_question">Quanto è pieno il veicolo?</string>
+    <string name="tracking_occupancy_many_seats">Posti liberi</string>
+    <string name="tracking_occupancy_few_seats">Pochi posti</string>
+    <string name="tracking_occupancy_standing">Posti in piedi</string>
+    <string name="tracking_occupancy_full">Pieno</string>
+    <string name="tracking_occupancy_clear">Deseleziona</string>
+    <string name="tracking_fact_run">Corsa</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Segnalazioni</string>
+    <string name="tracking_reports_reporting">Invio in corso</string>
+    <string name="tracking_reports_not_reporting">Nessun invio</string>
+    <string name="tracking_reports_no_gps">Senza GPS</string>
+    <string name="tracking_reports_stopped">Segnalazioni interrotte</string>
+    <string name="tracking_fact_street_map">Mappa stradale</string>
+    <string name="tracking_street_map_ready">Pronta</string>
+    <string name="tracking_street_map_downloading">Download in corso · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Non ancora scaricata</string>
+    <string name="tracking_street_map_no_space">Spazio insufficiente</string>
+    <string name="tracking_street_map_unusable">Non utilizzabile</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d fermata superata</item>
+        <item quantity="many">%1$d di fermate superate</item>
+        <item quantity="other">%1$d fermate superate</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">espanso</string>
+    <string name="tracking_stops_passed_collapsed">compresso</string>
+    <string name="tracking_end_trip_dialog_title">Terminare questo viaggio?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Le segnalazioni si interrompono e la corsa delle %2$s della linea %1$s viene segnata come completata. È stata inviata %3$d segnalazione.</item>
+        <item quantity="many">Le segnalazioni si interrompono e la corsa delle %2$s della linea %1$s viene segnata come completata. Sono state inviate %3$d di segnalazioni.</item>
+        <item quantity="other">Le segnalazioni si interrompono e la corsa delle %2$s della linea %1$s viene segnata come completata. Sono state inviate %3$d segnalazioni.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Le segnalazioni si interrompono e questa corsa viene segnata come completata. È stata inviata %1$d segnalazione.</item>
+        <item quantity="many">Le segnalazioni si interrompono e questa corsa viene segnata come completata. Sono state inviate %1$d di segnalazioni.</item>
+        <item quantity="other">Le segnalazioni si interrompono e questa corsa viene segnata come completata. Sono state inviate %1$d segnalazioni.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Termina viaggio</string>
+    <string name="tracking_end_trip_dialog_cancel">Prosegui</string>
+    <string name="tracking_end_trip_error_title">Viaggio non ancora terminato</string>
+    <string name="tracking_end_trip_error_message">Il server non ha confermato la fine. Controlla il segnale e riprova, oppure interrompi ora l\'invio su questo telefono.</string>
+    <string name="tracking_end_trip_error_retry">Riprova</string>
+    <string name="tracking_end_trip_error_end_locally">Termina su questo telefono</string>
+    <string name="tracking_reauth_button">Accedi</string>
+    <string name="tracking_problem_no_network">Nessuna connessione</string>
+    <string name="tracking_problem_no_network_detail">I passeggeri non ti vedono</string>
+    <string name="tracking_problem_no_gps">Nessun segnale GPS</string>
+    <string name="tracking_problem_no_gps_detail">Posizione in pausa</string>
+    <string name="tracking_problem_clock_skew">Ora del telefono sbagliata</string>
+    <string name="tracking_problem_clock_skew_detail">Imposta l\'ora automatica</string>
+    <string name="tracking_problem_reports_refused">Segnalazioni rifiutate</string>
+    <string name="tracking_problem_reports_refused_detail">Chiedi alla centrale</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d segnalazione in attesa di rete</item>
+        <item quantity="many">%1$,d di segnalazioni in attesa di rete</item>
+        <item quantity="other">%1$,d segnalazioni in attesa di rete</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d segnalazione non verrà inviata</item>
+        <item quantity="many">%1$,d di segnalazioni non verranno inviate</item>
+        <item quantity="other">%1$,d segnalazioni non verranno inviate</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Accesso scaduto</string>
+    <string name="tracking_signed_out_message">Le segnalazioni si sono interrotte. Il tuo viaggio è ancora aperto.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">In orario</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d min di ritardo</item>
+        <item quantity="many">%1$d min di ritardo</item>
+        <item quantity="other">%1$d min di ritardo</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d min di anticipo</item>
+        <item quantity="many">%1$d min di anticipo</item>
+        <item quantity="other">%1$d min di anticipo</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Fuori orario</string>
+    <string name="tracking_adherence_right_run">È la corsa giusta?</string>
+    <string name="tracking_adherence_off_schedule_next">Prossima %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Fuori percorso · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Fuori percorso</string>
+    <string name="tracking_adherence_next_stop">Prossima</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">In attesa del GPS</string>
+    <string name="tracking_adherence_from">Partenza</string>
+    <string name="tracking_adherence_run">Corsa delle %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Corsa delle %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Nessun orario</string>
+    <string name="tracking_adherence_no_schedule_riders">I passeggeri ti vedono comunque</string>
+    <string name="tracking_adherence_no_schedule_detail">Questa corsa non ha orari</string>
+    <string name="tracking_map_recenter">Ricentra</string>
+    <string name="tracking_map_downloading">Download della mappa, %1$d%%</string>
+    <string name="tracking_map_no_space">Spazio insufficiente per la mappa</string>
+    <string name="tracking_map_retrying">Mappa non ancora scaricata, l\'app riproverà</string>
+    <string name="tracking_map_retry_on_open">Mappa non scaricata, l\'app riproverà alla prossima apertura</string>
+    <string name="tracking_map_unusable">File della mappa non utilizzabile, avvisa la tua azienda</string>
+    <string name="tracking_map_needs_https">Il link della mappa deve usare https, avvisa la tua azienda</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Riprendere il viaggio?</string>
+    <string name="resume_message">L\'app si è chiusa durante il viaggio. Le segnalazioni restano in pausa finché non scegli.</string>
+    <string name="resume_route">Linea %1$s</string>
+    <string name="resume_run">Corsa delle %1$s</string>
+    <string name="resume_bus">Veicolo %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Iniziato %1$d min fa, alle %2$s</item>
+        <item quantity="many">Iniziato %1$d min fa, alle %2$s</item>
+        <item quantity="other">Iniziato %1$d min fa, alle %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Iniziato %1$d h %2$d min fa, alle %3$s</string>
+    <string name="resume_button">Riprendi viaggio</string>
+    <string name="resume_end_trip_button">Termina viaggio</string>
+    <string name="resume_ending">Chiusura del viaggio</string>
+    <string name="resume_loading">Caricamento del tuo viaggio</string>
+    <string name="resume_end_failed">Il server non ha confermato la fine del viaggio. Riprova o terminalo solo su questo telefono.</string>
+    <string name="resume_end_failed_back">Non terminare il viaggio</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Segnalazioni del viaggio</string>
+    <string name="tracking_notification_title">Linea %1$s · %2$s</string>
+    <string name="tracking_notification_next">Prossima %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Accesso scaduto. Apri l\'app per accedere.</string>
+    <string name="tracking_notification_reports_refused">Segnalazioni rifiutate. Chiedi alla centrale.</string>
+    <string name="tracking_notification_resume_title">Segnalazioni in pausa</string>
+    <string name="tracking_notification_resume_text">Apri l\'app per continuare l\'invio.</string>
+    <string name="tracking_notification_attention_channel_name">Il viaggio ha bisogno di te</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Prima di iniziare</string>
+    <string name="preflight_message">L\'app ha bisogno di questi permessi per inviare le segnalazioni del veicolo %1$s. Android te li chiederà uno alla volta.</string>
+    <string name="preflight_location">Posizione</string>
+    <string name="preflight_location_why">Così l\'app sa dov\'è il veicolo</string>
+    <string name="preflight_precise">Posizione precisa</string>
+    <string name="preflight_precise_why">Così i passeggeri vedono il veicolo alla fermata giusta</string>
+    <string name="preflight_background">Sempre</string>
+    <string name="preflight_background_why">Così l\'invio può ripartire se Android chiude l\'app</string>
+    <string name="preflight_notifications">Notifiche</string>
+    <string name="preflight_notifications_why">Così vedi che l\'invio è attivo</string>
+    <string name="preflight_battery">Batteria</string>
+    <string name="preflight_battery_why">Così Android non ferma le segnalazioni durante il viaggio</string>
+    <string name="preflight_location_services">Servizi di localizzazione</string>
+    <string name="preflight_location_services_why">La posizione deve essere attiva su tutto il telefono</string>
+    <string name="preflight_allowed">Consentito</string>
+    <string name="preflight_skipped">Saltato</string>
+    <string name="preflight_next">A seguire</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Non consentito. Le segnalazioni funzionano comunque.</string>
+    <string name="preflight_location_needed">La posizione serve per inviare le segnalazioni</string>
+    <string name="preflight_approximate">Consentita solo la posizione approssimativa</string>
+    <string name="preflight_try_again">Riprova</string>
+    <string name="preflight_open_settings">Apri impostazioni</string>
+    <string name="preflight_continue">Continua</string>
+</resources>

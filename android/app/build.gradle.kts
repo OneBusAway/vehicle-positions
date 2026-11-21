@@ -51,8 +51,13 @@ android {
         generateLocaleConfig = true
         // The languages the app has its own strings in. A library's strings in any other language are left out, so a
         // phone set to one shows the app in English throughout, not English mixed with the library's words. A
-        // language is added here in the same pull request as its values-<language>/strings.xml (#495).
-        localeFilters += listOf("en", "hi")
+        // language is added here in the same pull request as its values-<language>/strings.xml (#495), written as
+        // the folder's qualifier ("pt-rBR"), which is how aapt reads these.
+        localeFilters += listOf(
+            "en",
+            "hi",
+            "de", "es", "fi", "fil", "fr", "ht", "it", "om", "pl", "pt-rBR", "sm", "so", "sw", "vi",
+        )
     }
 
     buildTypes {
@@ -80,8 +85,8 @@ android {
         resValues = true
     }
     testOptions.unitTests.isReturnDefaultValues = true
-    // MapAssetsTest, WindowColorsTest, StringsXmlTest and TranslationsXmlTest read committed files from disk, so a
-    // change to them has to rerun the tests.
+    // MapAssetsTest, WindowColorsTest, StringsXmlTest, TranslationsXmlTest and FontCoverageTest read committed files
+    // from disk, so a change to them has to rerun the tests.
     testOptions.unitTests.all {
         it.inputs.dir("src/main/assets/map")
         it.inputs.files(
@@ -89,6 +94,7 @@ android {
             "src/main/res/values-night/colors.xml",
         )
         it.inputs.files(fileTree("src/main/res") { include("values*/strings.xml") })
+        it.inputs.file("src/main/res/font/google_sans_flex.ttf")
     }
     // The translation checks (#495). New strings land in English first, so one not translated yet is a warning; a
     // translation that breaks a placeholder or a plural, or translates what must stay as it is, is an error. Compose's

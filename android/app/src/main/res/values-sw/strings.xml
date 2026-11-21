@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Swahili, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Everyday Kenyan Swahili, addressing the driver as "wewe". "Vehicle" is gari (class 5: gari lako, magari),
+    never the word for bus, not even in its other sense "then"; "run" is raundi; "trip" is safari; "report" is
+    ripoti (class 9/10: ripoti 1 imetumwa, ripoti 5 zimetumwa); "stop" is kituo; "route" is njia; "block" is bloku;
+    "agency" is shirika; "dispatcher" is mratibu, and the agency's admin is msimamizi; "timetable" and "schedule"
+    are ratiba; "sign in" is ingia and "sign out" is ondoka; "location" is mahali, as Android's Swahili settings say;
+    "diagnostics" is taarifa za programu. Minutes are "dak" before the number, as Swahili puts the unit first.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Ingia</string>
+    <string name="login_subtitle">Tumia akaunti yako ya dereva katika shirika hili.</string>
+    <string name="login_server_url_label">Anwani ya seva</string>
+    <string name="login_email_label">Barua pepe</string>
+    <string name="login_password_label">Nenosiri</string>
+    <string name="login_show_password">Onyesha nenosiri</string>
+    <string name="login_hide_password">Ficha nenosiri</string>
+    <string name="login_server">Seva</string>
+    <string name="login_change_server">Badilisha</string>
+    <string name="login_button">Ingia</string>
+    <string name="login_signing_in">Inaingia</string>
+    <string name="login_error_missing_server">Weka anwani ya seva</string>
+    <string name="login_error_missing_email">Weka barua pepe yako</string>
+    <string name="login_error_missing_password">Weka nenosiri lako</string>
+    <string name="login_error_invalid_credentials">Barua pepe au nenosiri si sahihi. Jaribu tena.</string>
+    <string name="login_error_invalid_address">Weka anwani kama https://tracker.example.org</string>
+    <string name="login_error_https_required">Tumia anwani ya https://</string>
+    <string name="login_error_check_address">Angalia anwani</string>
+    <string name="login_error_unreachable">Imeshindwa kufikia %1$s. Angalia mtandao wako, au anwani ya seva.</string>
+    <string name="login_error_not_tracker">%1$s haionekani kuwa seva ya ufuatiliaji.</string>
+    <string name="login_error_too_many_tries">Umejaribu mara nyingi mno. Subiri dakika moja, kisha ujaribu tena.</string>
+    <string name="login_error_server">Imeshindwa kuingia. Jaribu tena.</string>
+    <string name="login_again_title">Ingia tena</string>
+    <string name="login_again_subtitle">Kama %1$s</string>
+    <string name="login_again_button">Ingia na uendelee kuripoti</string>
+    <string name="login_trip_open_title">Safari yako bado haijaisha</string>
+    <string name="login_trip_open_message">Ripoti zilisimama kipindi chako kilipoisha. Ingia ili uendelee kuripoti kwenye njia %1$s.</string>
+    <string name="login_server_managed">Imewekwa na shirika lako.</string>
+    <string name="login_server_managed_invalid">Mipangilio ya seva ya shirika lako si anwani sahihi, kwa hivyo iandike hapa.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">Tumia %1$s?</string>
+    <string name="server_setup_confirm_message">Endelea tu ikiwa shirika lako ndilo lililokutumia kiungo hiki.</string>
+    <string name="server_setup_use">Tumia seva hii</string>
+    <string name="server_setup_cancel">Ghairi</string>
+    <string name="server_setup_refused_signed_in">Simu hii imeingia kwenye %1$s. Kiungo hakikutumika.</string>
+    <string name="server_setup_refused_trip_open">Simu hii ina safari ambayo haijaisha. Kiungo hakikutumika.</string>
+    <string name="server_setup_refused_managed">Shirika lako ndilo huweka seva kwenye simu hii.</string>
+    <string name="server_setup_invalid">Kiungo hiki hakina anwani ya seva ambayo programu inaweza kutumia.</string>
+    <string name="server_setup_ok">Sawa</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">Anwani ya seva</string>
+    <string name="restriction_server_url_description">Seva ya ufuatiliaji ya shirika, anwani ya https://. Madereva huingia kwenye seva hii na hawawezi kuibadilisha.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">Ruka</string>
+    <string name="welcome_next">Inayofuata</string>
+    <string name="welcome_continue">Endelea</string>
+    <string name="welcome_step">Hatua %1$d kati ya %2$d</string>
+    <string name="welcome_riders_title">Abiria wanaweza kukuona ukija</string>
+    <string name="welcome_riders_body">Anza safari, na abiria wataona gari lako kwenye ramani zao. Ukimaliza kazi, maliza safari.</string>
+    <string name="welcome_riders_picture">Abiria watatu kwenye kituo wanaweza kuona gari lako likija.</string>
+    <string name="welcome_pieces_title">Gari, njia, raundi</string>
+    <string name="welcome_pieces_body">Vichague, kisha gusa raundi yako ili kuanza. Ukimaliza kazi, maliza safari.</string>
+    <string name="welcome_pieces_vehicle_hint">Nambari iliyo kwenye gari</string>
+    <string name="welcome_pieces_route_hint">Nambari iliyo kwenye bango</string>
+    <string name="welcome_pieces_run_hint">Ukigusa, safari inaanza</string>
+    <string name="welcome_pieces_live">Abiria wanakuona</string>
+    <string name="welcome_pieces_finish">Ukimaliza kazi</string>
+    <string name="welcome_habits_title">Ripoti ziendelee</string>
+    <string name="welcome_habits_body">Fanya mambo haya 3 kila safari.</string>
+    <string name="welcome_habits_location">Ruhusu mahali wakati wote</string>
+    <string name="welcome_habits_location_why">Ili ripoti zianze tena zenyewe</string>
+    <string name="welcome_habits_charge">Weka simu kwenye chaji</string>
+    <string name="welcome_habits_charge_why">Skrini hubaki ikiwaka wakati simu inachaji</string>
+    <string name="welcome_habits_open">Acha programu ikiwa wazi</string>
+    <string name="welcome_habits_open_why">Usiifunge kwa kutelezesha wakati wa safari</string>
+    <string name="welcome_habits_if_stops">Ripoti zikisimama</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">Gusa raundi yako</string>
+    <string name="tip_run_board_text">Kisha gusa %1$s. Abiria wataona gari lako kuanzia hapo.</string>
+    <string name="tip_sent_count_title">Ripoti zilizotumwa</string>
+    <string name="tip_sent_count_text">Nambari hii huongezeka wakati abiria wanaweza kukuona. Hakuna mtandao? Endelea kuendesha. Ripoti huhifadhiwa na kutumwa baadaye.</string>
+    <string name="tip_got_it">Nimeelewa</string>
+    <string name="first_trip_done_title">Safari ya kwanza imekamilika</string>
+    <plurals name="first_trip_done_reports">
+        <item quantity="one">ripoti imetumwa</item>
+        <item quantity="other">ripoti zimetumwa</item>
+    </plurals>
+    <string name="first_trip_done_text">Abiria waliweza kuona gari lako.</string>
+    <string name="first_trip_done_ok">Sawa</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">Lugha: %1$s</string>
+    <string name="language_row_phone_note">Inawekwa kwa simu nzima, kwenye mipangilio yake</string>
+    <string name="language_list_title">Lugha</string>
+    <string name="language_list_cancel">Ghairi</string>
+
+    <!-- Help -->
+    <string name="help_title">Msaada</string>
+    <string name="help_welcome_again">Tazama utangulizi tena</string>
+    <string name="help_welcome_again_detail">Skrini 3 fupi</string>
+    <string name="help_section_status">Kwenye kadi ya hali</string>
+    <string name="help_status_on_time">Unafuata ratiba.</string>
+    <string name="help_status_late">Nyuma ya ratiba.</string>
+    <string name="help_status_early">Mbele ya ratiba. Abiria wanaweza kukukosa.</string>
+    <string name="help_status_off_schedule">Mbali sana na ratiba. Hakikisha umechagua raundi sahihi.</string>
+    <string name="help_status_off_route">Nje ya njia kwenye ramani.</string>
+    <string name="help_status_waiting_for_gps">Simu inatafuta mahali ilipo.</string>
+    <string name="help_status_no_schedule">Raundi hii haina saa zilizopangwa. Abiria bado wanakuona.</string>
+    <string name="help_waiting">Zimehifadhiwa bila mtandao. Zitatumwa mtandao ukirudi.</string>
+    <string name="help_waiting_never">Zimehifadhiwa chini ya akaunti nyingine, kwa hivyo akaunti hii haiwezi kuzituma.</string>
+    <string name="help_section_problems">Chini ya kadi, na kwenye arifa</string>
+    <string name="help_problem_no_network">Endelea kuendesha. Ripoti huhifadhiwa na kutumwa baadaye.</string>
+    <string name="help_problem_no_gps">Abiria wanaona mahali ulipokuwa mwisho hadi GPS irudi.</string>
+    <string name="help_problem_clock_skew">Washa saa ya kiotomatiki katika mipangilio ya simu.</string>
+    <string name="help_problem_reports_refused">Seva haipokei ripoti za gari hili. Uliza mratibu wako.</string>
+    <string name="help_problem_signed_out">Ripoti zimesimama. Ingia ili uendelee. Safari yako bado haijaisha.</string>
+    <string name="help_problem_reports_paused">Arifa. Fungua programu ili uendelee kuripoti.</string>
+    <string name="help_section_about">Kuhusu</string>
+    <string name="help_version">Toleo</string>
+    <string name="help_server">Seva</string>
+    <string name="help_share">Shiriki taarifa za programu</string>
+    <string name="help_share_detail">Hutuma toleo la programu, muundo wa simu, seva, kile ambacho programu inaruhusiwa kufanya na matatizo yake ya hivi karibuni, ambayo huyahifadhi tu inapofanya kazi. Haitumi mahali, maelezo ya kuingia wala barua pepe.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">Rudi</string>
+    <string name="setup_trip_so_far">Safari hadi sasa</string>
+    <string name="setup_bus">Gari</string>
+    <string name="setup_route">Njia %1$s</string>
+    <string name="setup_step_route">Njia</string>
+    <string name="setup_step_run">Raundi</string>
+    <string name="setup_clear_search">Futa utafutaji</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">Akaunti</string>
+    <string name="account_version">Toleo %1$s</string>
+    <string name="account_sign_out">Ondoka</string>
+    <string name="account_sign_out_title">Ondoka kwenye akaunti?</string>
+    <string name="account_sign_out_message">Dereva anayefuata anaweza kuingia kwenye simu hii.</string>
+    <string name="account_sign_out_cancel">Ghairi</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">Chagua gari lako</string>
+    <string name="vehicles_empty">Hujapewa gari lolote</string>
+    <string name="vehicles_empty_detail">Mwombe mratibu wako akupe gari, kisha uangalie tena.</string>
+    <string name="vehicles_check_again">Angalia tena</string>
+    <string name="vehicles_error_message">Imeshindwa kupakia magari yako</string>
+    <string name="vehicles_error_detail">Angalia mtandao wako kisha ujaribu tena.</string>
+    <string name="vehicles_retry_button">Jaribu tena</string>
+    <string name="vehicles_search_label">Nambari ya gari</string>
+    <string name="vehicles_search_no_matches">Hakuna gari linalolingana na %1$s</string>
+    <string name="vehicles_search_no_matches_detail">Angalia nambari iliyo kwenye gari.</string>
+    <string name="vehicles_section_favorites">Vipendwa</string>
+    <string name="vehicles_section_recent">Hivi karibuni</string>
+    <string name="vehicles_section_all">Magari yote</string>
+    <string name="vehicles_section_matches">Matokeo</string>
+    <string name="vehicles_tile_favorite">Kipendwa</string>
+    <string name="vehicles_favorite_description">Ongeza %1$s kwenye vipendwa</string>
+    <string name="vehicles_unfavorite_description">Ondoa %1$s kwenye vipendwa</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">Chagua njia</string>
+    <string name="routes_search_label">Nambari au jina la njia</string>
+    <string name="routes_section_recent">Hivi karibuni</string>
+    <string name="routes_section_all">Njia zote</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">Njia zote · %1$d</item>
+        <item quantity="other">Njia zote · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">Matokeo</string>
+    <string name="routes_search_no_matches">Hakuna njia inayolingana na %1$s</string>
+    <string name="routes_search_no_matches_detail">Tafuta kwa nambari iliyo kwenye bango, au sehemu ya jina.</string>
+    <string name="routes_empty">Ratiba haina njia zozote</string>
+    <string name="routes_empty_detail">Mwombe msimamizi wa shirika lako aangalie ratiba.</string>
+    <string name="routes_check_again">Angalia tena</string>
+    <string name="routes_error_message">Imeshindwa kupakia njia</string>
+    <string name="routes_error_detail">Angalia mtandao wako kisha ujaribu tena.</string>
+    <string name="routes_no_schedule">Bado hakuna ratiba kwenye seva hii</string>
+    <string name="routes_no_schedule_detail">Ratiba lazima ipakiwe kwanza ndipo safari ziweze kuanza. Mwambie msimamizi wa shirika lako.</string>
+    <string name="routes_retry_button">Jaribu tena</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">Chagua raundi</string>
+    <string name="runs_empty">Hakuna raundi kwenye njia %1$s leo</string>
+    <string name="runs_empty_unnamed">Hakuna raundi kwenye njia hii leo</string>
+    <string name="runs_empty_detail">Chagua njia nyingine, au uangalie tena kesho.</string>
+    <string name="runs_choose_another_route">Chagua njia nyingine</string>
+    <string name="runs_badge_now">Sasa</string>
+    <string name="runs_badge_next">Inayofuata</string>
+    <string name="runs_direction">Kwenda %1$s</string>
+    <string name="runs_row_stops">%1$s → %2$s</string>
+    <string name="runs_row_run">Raundi %1$s</string>
+    <string name="runs_row_block">Bloku %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">Inaanza…</string>
+    <string name="runs_start_title">Anza raundi ya %1$s?</string>
+    <string name="runs_start_message">Njia %1$s kwenda %2$s, kwa gari %3$s.</string>
+    <string name="runs_start_message_no_headsign">Njia %1$s, kwa gari %2$s.</string>
+    <string name="runs_start_message_unnamed">Kwenda %1$s, kwa gari %2$s.</string>
+    <string name="runs_start_message_vehicle">Kwa gari %1$s.</string>
+    <string name="runs_start_confirm">Anza safari</string>
+    <string name="runs_start_cancel">Ghairi</string>
+    <string name="runs_error_message">Imeshindwa kupakia raundi</string>
+    <string name="runs_error_detail">Angalia mtandao wako kisha ujaribu tena.</string>
+    <string name="runs_retry_button">Jaribu tena</string>
+    <string name="runs_error_not_assigned">Hujapewa gari %1$s.</string>
+    <string name="runs_change_bus">Badilisha gari</string>
+    <string name="runs_error_trip_active">Tayari una safari inayoendelea. Imalize kabla ya kuanza nyingine.</string>
+    <string name="runs_error_vehicle_busy">Dereva mwingine ana safari inayoendelea kwenye gari %1$s. Chagua gari lingine au uliza mratibu wako.</string>
+    <string name="runs_error_vehicle_inactive">Gari %1$s haliko kazini. Chagua gari lingine.</string>
+    <string name="runs_error_previous_trip_not_ended">Safari yako iliyopita bado haijaweza kumalizwa. Angalia mtandao wako kisha ujaribu tena.</string>
+    <string name="runs_error_network">Imeshindwa kufikia seva. Angalia mtandao wako.</string>
+    <string name="runs_error_no_geometry">Raundi hii haina njia wala vituo vya kufuata. Chagua raundi nyingine.</string>
+    <string name="runs_error_trip_not_active">Ratiba imeshahamia siku mpya.</string>
+    <string name="runs_reload_button">Pakia upya</string>
+    <string name="runs_error_other">Imeshindwa kuanza safari.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d imetumwa</item>
+        <item quantity="other">%1$d zimetumwa</item>
+    </plurals>
+    <string name="tracking_bar_click_label">Onyesha maelezo ya safari</string>
+    <string name="tracking_end_trip_button">Maliza safari</string>
+    <string name="tracking_end_trip_ending">Inamaliza…</string>
+    <string name="tracking_occupancy_question">Gari limejaa kiasi gani?</string>
+    <string name="tracking_occupancy_many_seats">Kuna viti</string>
+    <string name="tracking_occupancy_few_seats">Viti vichache</string>
+    <string name="tracking_occupancy_standing">Nafasi ya kusimama</string>
+    <string name="tracking_occupancy_full">Limejaa</string>
+    <string name="tracking_occupancy_clear">Futa</string>
+    <string name="tracking_fact_run">Raundi</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">Ripoti</string>
+    <string name="tracking_reports_reporting">Inaripoti</string>
+    <string name="tracking_reports_not_reporting">Hairipoti</string>
+    <string name="tracking_reports_no_gps">Hakuna GPS</string>
+    <string name="tracking_reports_stopped">Ripoti zimesimama</string>
+    <string name="tracking_fact_street_map">Ramani ya barabara</string>
+    <string name="tracking_street_map_ready">Iko tayari</string>
+    <string name="tracking_street_map_downloading">Inapakua · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">Bado haijapakuliwa</string>
+    <string name="tracking_street_map_no_space">Nafasi haitoshi</string>
+    <string name="tracking_street_map_unusable">Haiwezi kutumika</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">Kituo %1$d kimepitwa</item>
+        <item quantity="other">Vituo %1$d vimepitwa</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">imepanuliwa</string>
+    <string name="tracking_stops_passed_collapsed">imekunjwa</string>
+    <string name="tracking_end_trip_dialog_title">Maliza safari hii?</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">Ripoti zitasimama, na raundi ya %2$s ya njia %1$s itaandikwa kuwa imekamilika. Ripoti %3$d imetumwa.</item>
+        <item quantity="other">Ripoti zitasimama, na raundi ya %2$s ya njia %1$s itaandikwa kuwa imekamilika. Ripoti %3$d zimetumwa.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">Ripoti zitasimama, na raundi hii itaandikwa kuwa imekamilika. Ripoti %1$d imetumwa.</item>
+        <item quantity="other">Ripoti zitasimama, na raundi hii itaandikwa kuwa imekamilika. Ripoti %1$d zimetumwa.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">Maliza safari</string>
+    <string name="tracking_end_trip_dialog_cancel">Endelea kuendesha</string>
+    <string name="tracking_end_trip_error_title">Safari bado haijamalizwa</string>
+    <string name="tracking_end_trip_error_message">Seva haikuthibitisha kuwa safari imeisha. Angalia mtandao wako kisha ujaribu tena, au acha kuripoti kwenye simu hii sasa.</string>
+    <string name="tracking_end_trip_error_retry">Jaribu tena</string>
+    <string name="tracking_end_trip_error_end_locally">Maliza kwenye simu hii</string>
+    <string name="tracking_reauth_button">Ingia</string>
+    <string name="tracking_problem_no_network">Hakuna mtandao</string>
+    <string name="tracking_problem_no_network_detail">Abiria hawakuoni</string>
+    <string name="tracking_problem_no_gps">Hakuna ishara ya GPS</string>
+    <string name="tracking_problem_no_gps_detail">Mahali pamesitishwa</string>
+    <string name="tracking_problem_clock_skew">Saa ya simu si sahihi</string>
+    <string name="tracking_problem_clock_skew_detail">Weka saa ya kiotomatiki</string>
+    <string name="tracking_problem_reports_refused">Ripoti zimekataliwa</string>
+    <string name="tracking_problem_reports_refused_detail">Uliza mratibu wako</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">Ripoti %1$,d inasubiri mtandao</item>
+        <item quantity="other">Ripoti %1$,d zinasubiri mtandao</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">Ripoti %1$,d haitatumwa</item>
+        <item quantity="other">Ripoti %1$,d hazitatumwa</item>
+    </plurals>
+    <string name="tracking_signed_out_title">Umeondolewa kwenye akaunti</string>
+    <string name="tracking_signed_out_message">Ripoti zimesimama. Safari yako bado haijaisha.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">Kwa wakati</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">Umechelewa dak %1$d</item>
+        <item quantity="other">Umechelewa dak %1$d</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">Uko mapema dak %1$d</item>
+        <item quantity="other">Uko mapema dak %1$d</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">Nje ya ratiba</string>
+    <string name="tracking_adherence_right_run">Je, hii ndiyo raundi sahihi?</string>
+    <string name="tracking_adherence_off_schedule_next">Kijacho %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">Nje ya njia · %1$s</string>
+    <string name="tracking_adherence_off_route_short">Nje ya njia</string>
+    <!-- "Kijacho" agrees with kituo (stop): the next one. -->
+    <string name="tracking_adherence_next_stop">Kijacho</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d m</string>
+    <string name="tracking_adherence_distance_km">%1$.1f km</string>
+    <string name="tracking_adherence_waiting_for_gps">Inasubiri GPS</string>
+    <string name="tracking_adherence_from">Kutoka</string>
+    <string name="tracking_adherence_run">Raundi ya %1$s</string>
+    <string name="tracking_adherence_run_vehicle">Raundi ya %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">Hakuna ratiba</string>
+    <string name="tracking_adherence_no_schedule_riders">Abiria bado wanakuona</string>
+    <string name="tracking_adherence_no_schedule_detail">Raundi hii haina saa zilizopangwa</string>
+    <string name="tracking_map_recenter">Weka katikati</string>
+    <string name="tracking_map_downloading">Inapakua ramani, %1$d%%</string>
+    <string name="tracking_map_no_space">Hakuna nafasi ya kutosha kwa ramani</string>
+    <string name="tracking_map_retrying">Ramani bado haijapakuliwa, itajaribiwa tena</string>
+    <string name="tracking_map_retry_on_open">Ramani haijapakuliwa, itajaribiwa tena utakapofungua programu</string>
+    <string name="tracking_map_unusable">Faili ya ramani haiwezi kutumika, wasiliana na shirika lako</string>
+    <string name="tracking_map_needs_https">Kiungo cha ramani lazima kitumie https, wasiliana na shirika lako</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">Endelea na safari yako?</string>
+    <string name="resume_message">Programu ilifungwa safari hii ikiendelea. Ripoti zimesitishwa hadi uchague.</string>
+    <string name="resume_route">Njia %1$s</string>
+    <string name="resume_run">Raundi ya %1$s</string>
+    <string name="resume_bus">Gari %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">Ilianza dak %1$d iliyopita (%2$s)</item>
+        <item quantity="other">Ilianza dak %1$d zilizopita (%2$s)</item>
+    </plurals>
+    <string name="resume_started_hours_ago">Ilianza saa %1$d dak %2$d zilizopita (%3$s)</string>
+    <string name="resume_button">Endelea na safari</string>
+    <string name="resume_end_trip_button">Maliza safari</string>
+    <string name="resume_ending">Inamaliza safari</string>
+    <string name="resume_loading">Inapakia safari yako</string>
+    <string name="resume_end_failed">Seva haikuthibitisha kuwa safari imeisha. Jaribu tena, au imalize kwenye simu hii pekee.</string>
+    <string name="resume_end_failed_back">Usimalize safari</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">Ripoti za safari</string>
+    <string name="tracking_notification_title">Njia %1$s · %2$s</string>
+    <string name="tracking_notification_next">Kijacho %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">Umeondolewa kwenye akaunti. Fungua programu ili uingie.</string>
+    <string name="tracking_notification_reports_refused">Ripoti zimekataliwa. Uliza mratibu wako.</string>
+    <string name="tracking_notification_resume_title">Ripoti zimesitishwa</string>
+    <string name="tracking_notification_resume_text">Fungua programu ili uendelee kuripoti.</string>
+    <string name="tracking_notification_attention_channel_name">Safari inakuhitaji</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">Kabla ya kuanza</string>
+    <string name="preflight_message">Programu inahitaji haya ili kuripoti gari %1$s. Kisha Android itakuuliza kuhusu kila moja.</string>
+    <string name="preflight_location">Mahali</string>
+    <string name="preflight_location_why">Ili programu ijue gari liko wapi</string>
+    <string name="preflight_precise">Mahali sahihi</string>
+    <string name="preflight_precise_why">Ili abiria waone gari kwenye kituo sahihi</string>
+    <string name="preflight_background">Wakati wote</string>
+    <string name="preflight_background_why">Ili ripoti ziweze kuanza tena Android ikifunga programu</string>
+    <string name="preflight_notifications">Arifa</string>
+    <string name="preflight_notifications_why">Ili uweze kuona kwamba ripoti zinatumwa</string>
+    <string name="preflight_battery">Betri</string>
+    <string name="preflight_battery_why">Ili Android isisimamishe ripoti katikati ya safari</string>
+    <string name="preflight_location_services">Huduma za mahali</string>
+    <string name="preflight_location_services_why">Lazima uwashe mahali kwa simu nzima</string>
+    <string name="preflight_allowed">Imeruhusiwa</string>
+    <string name="preflight_skipped">Imerukwa</string>
+    <string name="preflight_next">Inayofuata</string>
+    <string name="preflight_row_state">%1$s, %2$s</string>
+    <string name="preflight_skipped_why">Haijaruhusiwa. Ripoti bado zinafanya kazi.</string>
+    <string name="preflight_location_needed">Ruhusa ya mahali inahitajika ili kuripoti</string>
+    <string name="preflight_approximate">Umeruhusu mahali pa takriban pekee</string>
+    <string name="preflight_try_again">Jaribu tena</string>
+    <string name="preflight_open_settings">Fungua mipangilio</string>
+    <string name="preflight_continue">Endelea</string>
+</resources>
