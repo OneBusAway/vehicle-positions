@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -34,10 +36,14 @@ func (m matchIndex) lookup(path, format, english string) string {
 
 // readMatches reads the translations into lang under dir: each Android
 // values/strings.xml beside a values-<lang>/strings.xml, and each String
-// Catalog.
-func readMatches(dir, lang string) (matchIndex, error) {
+// Catalog. The suggestions are optional, so a file it can't read is skipped,
+// with a warning to warn.
+func readMatches(dir, lang string, warn io.Writer) (matchIndex, error) {
 	m := matchIndex{}
 	langDir := valuesDirFor(lang)
+	skip := func(err error) {
+		fmt.Fprintf(warn, "l10n: skipped %v; the sheet has no suggestions from it\n", err)
+	}
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -51,11 +57,14 @@ func readMatches(dir, lang string) (matchIndex, error) {
 		}
 		switch {
 		case d.Name() == "strings.xml" && filepath.Base(filepath.Dir(path)) == "values":
-			return m.addAndroid(dir, path, filepath.Join(filepath.Dir(filepath.Dir(path)), langDir, "strings.xml"))
+			if err := m.addAndroid(dir, path, filepath.Join(filepath.Dir(filepath.Dir(path)), langDir, "strings.xml")); err != nil {
+				skip(err)
+			}
 		case filepath.Ext(path) == ".xcstrings":
 			units, err := readCatalog(dir, path)
 			if err != nil {
-				return err
+				skip(err)
+				return nil
 			}
 			for _, u := range units {
 				if v, ok := u.trans[lang]; ok {

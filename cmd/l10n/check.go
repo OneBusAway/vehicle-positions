@@ -143,6 +143,11 @@ func checkTranslation(r *report, u *unit, lang string, glossary []term, status s
 		if len(missing) > 0 || len(extra) > 0 {
 			r.add(u.finding(errorLevel, rulePlaceholders, lang, v, fmt.Sprintf("%splaceholders %s missing, %s not in the English", at, describe(missing), describe(extra))))
 		}
+		if u.format() == ios {
+			for _, msg := range otherSpecifiers(english.value, f.value) {
+				r.add(u.finding(errorLevel, rulePlaceholders, lang, v, at+msg))
+			}
+		}
 		have := numbers(u.format(), f.value)
 		for _, n := range numbers(u.format(), english.value) {
 			if !slices.Contains(have, n) {
@@ -174,6 +179,26 @@ func checkTranslation(r *report, u *unit, lang string, glossary []term, status s
 			r.add(u.finding(errorLevel, ruleIOSState, lang, v, fmt.Sprintf("%sa machine translation in a reviewed language", at)))
 		}
 	}
+}
+
+// otherSpecifiers says which of an iOS translation's values are written with
+// a specifier other than its English's for the same type: Android's %s where
+// iOS takes %@, or %d where it takes %lld. Each type name covers both, but a
+// C string or a 32-bit number read in place of an object or a 64-bit one
+// shows garbage or crashes.
+func otherSpecifiers(english, translated string) []string {
+	want := map[int]iosValue{}
+	for _, v := range iosValues(english) {
+		want[v.arg] = v
+	}
+	var out []string
+	for _, v := range iosValues(translated) {
+		// A value of another type is already a placeholders finding.
+		if w, ok := want[v.arg]; ok && w.kind == v.kind && w.specifier != v.specifier {
+			out = append(out, fmt.Sprintf("%s is %s: write it as the English does, %s", describe([]string{fmt.Sprintf("%d:%s", v.arg, v.kind)}), v.written, w.written))
+		}
+	}
+	return out
 }
 
 // checkPlurals checks that each of v's plural groups has every category the

@@ -14,7 +14,7 @@ import (
 // for an object ("%@", "%lld", "%1$@"), and "%#@name@" for a substitution.
 var (
 	androidPlaceholder = regexp.MustCompile(`%(?:(\d+)\$)?[-#+ 0,(<]*\d*(?:\.\d+)?([tT][a-zA-Z]|[a-zA-Z%])`)
-	iosPlaceholder     = regexp.MustCompile(`%(?:(\d+)\$)?(?:#@([A-Za-z0-9_]+)@|[-+ #0']*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:hh|h|ll|l|q|L|z|t|j)?([@dDiuUxXoOfFeEgGaAcCsSp%]))`)
+	iosPlaceholder     = regexp.MustCompile(`%(?:(\d+)\$)?(?:#@([A-Za-z0-9_]+)@|[-+ #0']*(?:\d+|\*)?(?:\.(?:\d+|\*))?(hh|h|ll|l|q|L|z|t|j)?([@dDiuUxXoOfFeEgGaAcCsSp%]))`)
 )
 
 // placeholderType names the kind of value a conversion takes, "" for one that
@@ -63,6 +63,34 @@ func placeholders(format, text string) []string {
 			next++
 		}
 		out = append(out, fmt.Sprintf("%d:%s", arg, kind))
+	}
+	return out
+}
+
+// An iosValue is one value an iOS text takes: its argument and type, as
+// placeholders gives them, its placeholder as written, and its specifier, the
+// length and conversion that say the type in full ("lld", "@"), without
+// position, flags, width or precision.
+type iosValue struct {
+	arg                      int
+	kind, written, specifier string
+}
+
+func iosValues(text string) []iosValue {
+	var out []iosValue
+	next := 1
+	for _, m := range iosPlaceholder.FindAllStringSubmatch(text, -1) {
+		conversion := m[len(m)-1]
+		if m[2] != "" || placeholderType(conversion) == "" {
+			continue
+		}
+		arg := next
+		if m[1] != "" {
+			arg, _ = strconv.Atoi(m[1])
+		} else {
+			next++
+		}
+		out = append(out, iosValue{arg: arg, kind: placeholderType(conversion), written: m[0], specifier: m[3] + conversion})
 	}
 	return out
 }

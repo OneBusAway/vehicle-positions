@@ -49,6 +49,7 @@ says, so a language should translate them the same way in both. The check warns 
 ## Rules for translations
 
 - Keep every placeholder (`%1$s`, `%d`, `%@`, `%lld`), with the same type. Reorder them only by position (`%2$s`).
+  On iOS, write each one as the English does: `%@`, not Android's `%s`, and `%lld`, not `%d`.
   A plural form may leave out the count, as in "one report".
 - Give a plural every form your language needs, by the Unicode CLDR rules in `cmd/l10n/plurals.go`. Hindi and
   Swahili need `one` and `other`. Arabic needs six forms, and Polish, Russian and Ukrainian need `few` and `many` as
@@ -82,10 +83,16 @@ opens. The tool writes it from the apps and writes it back into them.
 
    Without `-xliff`, the sheet has the Android strings alone. With `-matches <folder>`, a folder holding checkouts
    of other OneBusAway apps, the sheet also shows how those apps translate the same English. The tool reads only
-   that folder and downloads nothing.
+   that folder and downloads nothing. A file there it can't read is skipped, with a warning.
 
-3. Fill in the `translation` column. A cell left empty keeps the `current` translation. Don't change the
-   `android`, `ios` or `form` columns: they say where each translation goes.
+3. Open the sheet in Google Sheets, or in Excel through Data > From Text/CSV with the file origin set to UTF-8,
+   and save it as CSV (in Excel, "CSV UTF-8"). The sheet starts with a byte order mark, which tells Excel it is
+   UTF-8, but an older Excel opening the file directly may still read it in another encoding and garble every
+   letter outside English. A garbled sheet imported would write that over the translations.
+
+   Fill in the `translation` column. A cell left empty keeps the `current` translation. Don't change the
+   `android`, `ios` or `form` columns: they say where each translation goes, and two rows for the same string
+   and form are refused. In a row with an `ios` id and no `android` name, write placeholders as its English does.
 
 4. Write the sheet back, let Xcode bring the iOS strings into the String Catalog, then run the check:
 
@@ -102,13 +109,15 @@ opens. The tool writes it from the apps and writes it back into them.
 What the import does:
 - It refuses a sheet whose placeholders or plural forms break the check. It names each row that does, and writes
   nothing.
-- A sheet read back with no edits changes nothing.
-- It writes `strings.xml` in one layout, without comments, so a file written by hand is laid out again the first
-  time.
+- It writes both files or neither: when one can't be written, the other is left as it was.
+- It writes `strings.xml` in one layout, without comments. A sheet read back with no edits changes nothing once
+  `values-<language>/strings.xml` is in that layout, but a file written by hand, or with comments, is laid out
+  again the first time.
 
 The sheet's columns:
 - **`android`**, **`ios`** and **`form`**: the string's Android name, its iOS id, and the plural form a row is
-  for. A plural has a row for each form the language needs.
+  for. A plural has a row for each form the language needs. A form only iOS has, such as a zero variation the
+  language's plural rules don't list, has a row of its own.
 - **`screen`**: where the string shows, from the first word of its Android name.
 - **`english`**: the English. A string both apps say alike and translate alike has one row. That row is in
   Android's placeholders (`%1$s`), and the import writes iOS's (`%@`) for the iOS app.
@@ -139,7 +148,8 @@ coverage table.
 
 Errors:
 
-- **`placeholders`**: a translation takes values its English doesn't, or leaves one out.
+- **`placeholders`**: a translation takes values its English doesn't, or leaves one out, or on iOS writes a value
+  another way than its English (`%s` or `%d` where the English has `%@` or `%lld`).
 - **`plurals`**: a plural is missing a form its language needs (English included), or a translation is a single
   string where the English is a plural.
 - **`numbers`**: a number in the English isn't in the translation in digits.

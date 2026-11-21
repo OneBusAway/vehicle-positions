@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/csv"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,7 @@ func readRows(t *testing.T, sheet string) [][]string {
 	defer f.Close()
 	rows, err := csv.NewReader(f).ReadAll()
 	require.NoError(t, err)
+	rows[0][0] = strings.TrimPrefix(rows[0][0], "\ufeff")
 	require.Equal(t, sheetColumns, rows[0])
 	return rows[1:]
 }
@@ -480,4 +482,261 @@ func TestValuesDirFor(t *testing.T) {
 	assert.Equal(t, "values-b+zh+Hans", valuesDirFor("zh-Hans"))
 	assert.Equal(t, "values-b+fil", valuesDirFor("fil"), "the older qualifier takes a two-letter language")
 	assert.Empty(t, valuesDirFor("../hi"), "not a language")
+}
+
+func TestExport_StartsWithAByteOrderMark(t *testing.T) {
+	p := newSheetProject(t)
+	sheet := p.export(t, "hi", "-xliff", p.xliff)
+
+	body, err := os.ReadFile(sheet)
+	require.NoError(t, err)
+
+	// Without it, older Excel opens the sheet in the system's legacy encoding,
+	// and saving it writes mojibake over the translations.
+	assert.True(t, strings.HasPrefix(string(body), "\ufeffandroid,ios,form,"), "%.40q", body)
+	code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, out, "nothing to change")
+}
+
+func TestExport_AFailedExportLeavesTheSheetAsItWas(t *testing.T) {
+	p := newSheetProject(t)
+	sheet := filepath.Join(p.dir, "hi.csv")
+	require.NoError(t, os.WriteFile(sheet, []byte("a sheet with translations in it\n"), 0o644))
+	var stdout, stderr bytes.Buffer
+
+	code := run([]string{"export", "-root", p.root, "-xliff", filepath.Join(p.dir, "hi.xclco"), "-o", sheet, "hi"}, &stdout, &stderr)
+
+	assert.Equal(t, 2, code)
+	assert.Contains(t, stderr.String(), "hi.xclco")
+	body, err := os.ReadFile(sheet)
+	require.NoError(t, err)
+	assert.Equal(t, "a sheet with translations in it\n", string(body))
+}
+
+func TestImport_AFileThatCannotBeWrittenLeavesTheOtherUnchanged(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes a read-only file")
+	}
+	tests := []struct {
+		name  string
+		edits []edit
+	}{
+		{"a language with a strings.xml", nil},
+		{"a language with no strings.xml yet", []edit{func(t *testing.T, root string) {
+			require.NoError(t, os.RemoveAll(filepath.Join(root, filepath.Dir(androidHindi))))
+		}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newSheetProject(t, tc.edits...)
+			valuesHi := filepath.Join(p.root, filepath.Dir(androidHindi))
+			_, statErr := os.Stat(valuesHi)
+			hadFolder := statErr == nil
+			sheet := p.export(t, "hi", "-xliff", p.xliff)
+			translate(t, sheet, map[string]string{
+				"GPS is off":          "GPS बंद",             // Android alone, written first
+				"OBA Vehicle Tracker": "OBA Vehicle Tracker", // iOS alone
+			})
+			var strings0 string
+			if hadFolder {
+				strings0 = p.read(t, androidHindi)
+			}
+			xliff0 := p.xliffText(t)
+			require.NoError(t, os.Chmod(p.xliff, 0o444))
+
+			code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+			assert.Equal(t, 2, code, out)
+			assert.Contains(t, out, "permission denied")
+			assert.Equal(t, xliff0, p.xliffText(t))
+			if hadFolder {
+				assert.Equal(t, strings0, p.read(t, androidHindi), "Android keeps what it had when the XLIFF can't be written")
+			} else {
+				assert.NoDirExists(t, valuesHi, "no folder is left for a file that wasn't written")
+			}
+			for _, dir := range []string{valuesHi, p.dir} {
+				entries, err := os.ReadDir(dir)
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				require.NoError(t, err)
+				for _, e := range entries {
+					assert.False(t, strings.HasPrefix(e.Name(), "."), "no temporary file is left in %s: %s", dir, e.Name())
+				}
+			}
+
+			// Once it can be written, both files are, and the XLIFF keeps its mode.
+			require.NoError(t, os.Chmod(p.xliff, 0o640))
+			code, out = p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+			require.Equal(t, 0, code, out)
+			assert.Contains(t, p.read(t, androidHindi), `<string name="tracking_gps">GPS बंद</string>`)
+			assert.Contains(t, p.xliffText(t), `<target state="translated">OBA Vehicle Tracker</target>`)
+			info, err := os.Stat(p.xliff)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+			info, err = os.Stat(filepath.Join(p.root, androidHindi))
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "a new strings.xml is readable by all, as before")
+		})
+	}
+}
+
+func TestImport_RefusesTwoRowsForTheSameStringAndForm(t *testing.T) {
+	tests := []struct{ name, rows, want string }{
+		{"an Android string", "tracking_gps,,,,GPS बंद\nlogin_title,,,,साइन इन\ntracking_gps,,,,GPS बंद है\n",
+			"hi.csv:4: tracking_gps has a row on line 2 already: keep one"},
+		{"a plural form", "reports_sent,,one,,%1$d रिपोर्ट\nreports_sent,,other,,%1$d रिपोर्टें\nreports_sent,,one,,एक रिपोर्ट\n",
+			"hi.csv:4: reports_sent (one) has a row on line 2 already: keep one"},
+		{"an iOS string", ",CFBundleDisplayName,,,OBA Vehicle Tracker\n,CFBundleDisplayName,,,OBA\n",
+			`hi.csv:3: iOS's "CFBundleDisplayName" has a row on line 2 already: keep one`},
+		{"a shared row and the same iOS string's own", "login_title,Sign in,,,साइन इन\n,Sign in,,,लॉग इन\n",
+			`hi.csv:3: iOS's "Sign in" has a row on line 2 already: keep one`},
+		{"a shared row and the same Android string's own", "login_title,Sign in,,,साइन इन\nlogin_title,,,,लॉग इन\n",
+			"hi.csv:3: login_title has a row on line 2 already: keep one"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newSheetProject(t)
+			strings0, xliff0 := p.read(t, androidHindi), p.xliffText(t)
+			sheet := filepath.Join(p.dir, "hi.csv")
+			require.NoError(t, os.WriteFile(sheet, []byte("android,ios,form,current,translation\n"+tc.rows), 0o644))
+
+			code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+			assert.Equal(t, 2, code, out)
+			assert.Contains(t, out, tc.want)
+			assert.Equal(t, strings0, p.read(t, androidHindi))
+			assert.Equal(t, xliff0, p.xliffText(t))
+		})
+	}
+}
+
+func TestImport_RefusesAnotherAppsSpecifiers(t *testing.T) {
+	tests := []struct {
+		name  string
+		texts map[string]string
+		want  string
+	}{
+		{"Android's %s in an iOS row", map[string]string{"Route %1$@, %2$#@reports@": "रूट %s, %2$#@reports@"},
+			"[placeholders] Route %@, %lld reports sent (hi): #1 (text) is %s: write it as the English does, %1$@"},
+		{"Android's positional %1$s in an iOS row", map[string]string{"Route %1$@, %2$#@reports@": "रूट %1$s, %2$#@reports@"},
+			"[placeholders] Route %@, %lld reports sent (hi): #1 (text) is %1$s: write it as the English does, %1$@"},
+		{"Android's %d in an iOS row", map[string]string{"%2$lld report sent": "%2$d रिपोर्ट भेजी गई"},
+			"[placeholders] Route %@, %lld reports sent (hi): @reports/plural.one: #2 (whole number) is %2$d: write it as the English does, %2$lld"},
+		// Android's format has no %@ or %lld, so the existing check already
+		// refuses them in a row only Android reads.
+		{"iOS's %@ in an Android row", map[string]string{"Vehicle on route %1$s, heading to %2$s": "गाड़ी रूट %@ पर, %2$s की ओर"},
+			"[placeholders] vehicle_route_stop (hi): placeholders #1 (text) missing"},
+		{"iOS's %lld in an Android row", map[string]string{"Vehicle on route %1$s, heading to %2$s": "गाड़ी रूट %1$s पर, %2$lld की ओर"},
+			"[placeholders] vehicle_route_stop (hi): placeholders #2 (text) missing"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newSheetProject(t)
+			strings0, xliff0 := p.read(t, androidHindi), p.xliffText(t)
+			sheet := p.export(t, "hi", "-xliff", p.xliff)
+			translate(t, sheet, tc.texts)
+
+			code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+			assert.Equal(t, 1, code, out)
+			assert.Contains(t, out, tc.want)
+			assert.Equal(t, strings0, p.read(t, androidHindi))
+			assert.Equal(t, xliff0, p.xliffText(t))
+		})
+	}
+}
+
+func TestImport_ASharedRowTakesAndroidsSpecifiersAndWritesIOSs(t *testing.T) {
+	p := newSheetProject(t)
+	sheet := p.export(t, "hi", "-xliff", p.xliff)
+	translate(t, sheet, map[string]string{"Can't reach %1$s. Check your connection.": "%s तक नहीं पहुँच सके।"})
+
+	code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, p.read(t, androidHindi), `<string name="login_error_unreachable">%s तक नहीं पहुँच सके।</string>`)
+	assert.Contains(t, p.xliffText(t), `<target state="translated">%@ तक नहीं पहुँच सके।</target>`)
+}
+
+// zeroUnit is a zero variation of the iOS string "%lld reports sent", which
+// Hindi's plural rules don't list.
+const zeroUnit = `<trans-unit id="%lld reports sent|==|plural.zero" xml:space="preserve">
+        <source>No reports sent</source>
+        <note>How many reports the trip sent.</note>
+      </trans-unit>
+      `
+
+func TestExportAndImport_ASharedIOSPluralsExtraFormHasItsOwnRow(t *testing.T) {
+	tests := []struct {
+		name  string
+		edits []edit
+	}{
+		{"Android's English has the form too", []edit{replace(androidSource, `<item quantity="one">%1$d report sent</item>`,
+			`<item quantity="zero">No reports sent</item>
+        <item quantity="one">%1$d report sent</item>`)}},
+		{"Android's English doesn't", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newSheetProject(t, tc.edits...)
+			p.editXLIFF(t, `<trans-unit id="Can't reach`, zeroUnit+`<trans-unit id="Can't reach`)
+			strings0 := p.read(t, androidHindi)
+			reportRows := func(sheet string) [][]string {
+				var out [][]string
+				for _, row := range readRows(t, sheet) {
+					if cell(row, "android") == "reports_sent" || strings.HasPrefix(cell(row, "ios"), "%lld reports sent") {
+						out = append(out, []string{cell(row, "android"), cell(row, "ios"), cell(row, "form"), cell(row, "english")})
+					}
+				}
+				return out
+			}
+			want := [][]string{
+				{"reports_sent", "%lld reports sent|==|plural.one", "one", "%1$d report sent"},
+				{"reports_sent", "%lld reports sent|==|plural.other", "other", "%1$d reports sent"},
+				{"", "%lld reports sent|==|plural.zero", "zero", "No reports sent"},
+			}
+			sheet := p.export(t, "hi", "-xliff", p.xliff)
+			require.Equal(t, want, reportRows(sheet))
+
+			translate(t, sheet, map[string]string{"No reports sent": "कोई रिपोर्ट नहीं भेजी गई"})
+			code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+			require.Equal(t, 0, code, out)
+			assert.Contains(t, p.xliffText(t), `<source>No reports sent</source>
+        <target state="translated">कोई रिपोर्ट नहीं भेजी गई</target>`)
+			assert.Equal(t, strings0, p.read(t, androidHindi), "Android has no zero form in Hindi")
+
+			// Translated, it keeps the same rows, and reads back unchanged.
+			sheet = p.export(t, "hi", "-xliff", p.xliff)
+			assert.Equal(t, want, reportRows(sheet))
+			code, out = p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+			require.Equal(t, 0, code, out)
+			assert.Contains(t, out, "nothing to change")
+		})
+	}
+}
+
+func TestExport_MatchesSkipsAFileItCannotRead(t *testing.T) {
+	p := newSheetProject(t)
+	out := filepath.Join(p.dir, "hi.csv")
+	var stdout, stderr bytes.Buffer
+
+	code := run([]string{"export", "-root", p.root, "-xliff", p.xliff, "-matches", "testdata/matches-broken", "-o", out, "hi"}, &stdout, &stderr)
+
+	require.Equal(t, 0, code, stderr.String())
+	assert.Contains(t, stderr.String(), "l10n: skipped broken-android/res/values-hi/strings.xml:")
+	assert.Contains(t, stderr.String(), "l10n: skipped broken-ios/Localizable.xcstrings:")
+	for _, row := range readRows(t, out) {
+		if cell(row, "english") == "Sign in" {
+			assert.Equal(t, "लॉग इन", cell(row, "onebusaway"), "the apps it can read still give suggestions")
+		}
+	}
+
+	// A folder that isn't there is still an error.
+	stderr.Reset()
+	code = run([]string{"export", "-root", p.root, "-matches", filepath.Join(p.dir, "no-such-folder"), "-o", out, "hi"}, &stdout, &stderr)
+	assert.Equal(t, 2, code)
+	assert.Contains(t, stderr.String(), "no-such-folder")
 }
