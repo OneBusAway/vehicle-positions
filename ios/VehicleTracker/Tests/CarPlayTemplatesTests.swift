@@ -207,7 +207,7 @@ import Testing
         try #require(off.status == .offRoute)
         off.projection.distanceToShape = 98
         let alert = CarPlayTemplates.offRouteAlert(adherence: off)
-        #expect(alert.titleVariants == ["Off route · 98 m"])
+        #expect(alert.titleVariants == ["Off route · 98 m", "Off route"])
         #expect(alert.subtitleVariants.isEmpty)
         #expect(alert.duration == 0)
         #expect(alert.primaryAction.title == "OK")
@@ -217,7 +217,7 @@ import Testing
     @Test func theEndAlertsUseThePhonesWords() {
         var ended = false, kept = false
         let end = CarPlayTemplates.endTripAlert(onEnd: { ended = true }, onKeepGoing: { kept = true })
-        #expect(end.titleVariants == ["End this trip?"])
+        #expect(end.titleVariants == ["End this trip?", "End trip?"])
         #expect(end.actions.map(\.title) == ["End trip", "Keep going"])
         #expect(end.actions.map(\.style) == [.destructive, .cancel])
         end.actions[0].handler(end.actions[0])
@@ -227,7 +227,7 @@ import Testing
 
         var tried = false, local = false, going = false
         let notEnded = CarPlayTemplates.notEndedAlert(onTryAgain: { tried = true }, onEndOnThisPhone: { local = true }, onKeepGoing: { going = true })
-        #expect(notEnded.titleVariants == ["Trip not ended yet"])
+        #expect(notEnded.titleVariants == ["Trip not ended yet", "Not ended yet"])
         #expect(notEnded.actions.map(\.title) == ["Try again", "End on this phone", "Keep going"])
         #expect(notEnded.actions.map(\.style) == [.default, .destructive, .cancel])
         notEnded.actions[0].handler(notEnded.actions[0])
@@ -260,7 +260,8 @@ import Testing
         var started = false, cancelled = false
         let start = CarPlayTemplates.startAlert(time: "6:43 AM", route: "7", headsign: "Downtown Seattle", vehicle: "4317",
                                                 onStart: { started = true }, onCancel: { cancelled = true })
-        #expect(start.titleVariants == ["Start the 6:43 AM run? Route 7 to Downtown Seattle on vehicle 4317.", "Start the 6:43 AM run?"])
+        #expect(start.titleVariants == ["Start the 6:43 AM run? Route 7 to Downtown Seattle on vehicle 4317.", "Start the 6:43 AM run?",
+                                        "Start this run?"])
         #expect(start.actions.map(\.title) == ["Start trip", "Cancel"])
         #expect(start.actions.map(\.style) == [.default, .cancel])
         start.actions[0].handler(start.actions[0])
@@ -268,20 +269,28 @@ import Testing
         start.actions[1].handler(start.actions[1])
         #expect(cancelled)
 
-        // The refusal reads the phone's sentence, never the server's.
+        // The refusal reads the phone's sentence, never the server's, and
+        // only that the start failed where the sentence doesn't fit.
         var dismissed = false
         let refused = CarPlayTemplates.startRefusedAlert(APIError.status(403, message: "driver is not assigned to this vehicle"),
                                                          vehicleID: "4317") { dismissed = true }
-        #expect(refused.titleVariants == ["You're not assigned to vehicle 4317."])
+        #expect(refused.titleVariants == ["You're not assigned to vehicle 4317.", "Couldn't start the trip."])
         #expect(refused.actions.map(\.title) == ["OK"])
         refused.actions[0].handler(refused.actions[0])
         #expect(dismissed)
         let busy = CarPlayTemplates.startRefusedAlert(TripSessionError.busy, vehicleID: "4317") {}
-        #expect(busy.titleVariants == ["You already have a trip running. End it before starting another."])
+        #expect(busy.titleVariants == ["You already have a trip running. End it before starting another.", "Couldn't start the trip."])
         let taken = CarPlayTemplates.startRefusedAlert(APIError.status(409, message: "vehicle already has an active trip"), vehicleID: "4317") {}
-        #expect(taken.titleVariants == ["Another driver has a trip running on vehicle 4317. Pick another vehicle or ask your dispatcher."])
+        #expect(taken.titleVariants == ["Another driver has a trip running on vehicle 4317. Pick another vehicle or ask your dispatcher.",
+                                        "Couldn't start the trip."])
         let retired = CarPlayTemplates.startRefusedAlert(APIError.status(409, message: "vehicle is inactive"), vehicleID: "4317") {}
-        #expect(retired.titleVariants == ["Vehicle 4317 is out of service. Pick another vehicle."])
+        #expect(retired.titleVariants == ["Vehicle 4317 is out of service. Pick another vehicle.", "Couldn't start the trip."])
+    }
+
+    /// A start that failed for no reason the app names says so once.
+    @Test func anUnnamedRefusalHasOneTitle() {
+        let failed = CarPlayTemplates.startRefusedAlert(APIError.status(500, message: "failed to start trip"), vehicleID: "4317") {}
+        #expect(failed.titleVariants == ["Couldn't start the trip."])
     }
 
     /// The prompt shows only on the phone, so the car names the iPhone, as
@@ -294,7 +303,7 @@ import Testing
         alert.actions[0].handler(alert.actions[0])
         #expect(dismissed)
         let denied = CarPlayTemplates.startRefusedAlert(TripSessionError.locationDenied, vehicleID: "4317") {}
-        #expect(denied.titleVariants == [TripSessionError.locationDenied.localizedDescription], "only the unasked start reads differently")
+        #expect(denied.titleVariants.first == TripSessionError.locationDenied.localizedDescription, "only the unasked start reads differently")
     }
 
     @Test func routeSectionsPutRecentFirst() {

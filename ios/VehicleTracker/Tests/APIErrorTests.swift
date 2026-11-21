@@ -4,23 +4,25 @@ import Testing
 
 /// Each error reads as a sentence, not as the enum's own name, which is what
 /// an `Error` without `LocalizedError` falls back to: the run board and
-/// CarPlay show `TripSessionError`'s, and a failed refresh logs `APIError`'s.
+/// CarPlay show `TripSessionError`'s. An `APIError`'s is the app's own words,
+/// never the server's English or the system's.
 @Suite struct APIErrorTests {
-    @Test func insecureURLExplainsThePolicy() {
-        #expect(APIError.insecureURL.localizedDescription == ServerURLPolicy.explanation)
+    @Test func insecureURLSaysWhatSignInSays() {
+        #expect(APIError.insecureURL.localizedDescription == SignInText.useHTTPS)
     }
 
-    @Test func aStatusPrefersTheServersMessage() {
-        #expect(APIError.status(409, message: "driver already has an active trip").localizedDescription
-                == "driver already has an active trip")
+    @Test(arguments: [
+        APIError.status(409, message: "driver already has an active trip"),
+        APIError.status(409, message: ""),
+    ])
+    func aStatusNamesTheCodeAndNeverTheServersMessage(error: APIError) {
+        #expect(error.localizedDescription == "Server error 409")
     }
 
-    @Test func aStatusWithoutAMessageNamesTheCode() {
-        #expect(APIError.status(502, message: "").localizedDescription == "Server error 502")
-    }
-
-    @Test func transportNamesTheReach() {
-        #expect(APIError.transport("offline").localizedDescription == "Could not reach the server: offline")
+    @Test func transportSaysWhatAStartSays() {
+        let error = APIError.transport("The Internet connection appears to be offline.")
+        #expect(error.localizedDescription == PickerText.cannotReachServer)
+        #expect(!error.localizedDescription.contains("Internet"))
     }
 
     @Test func decodingHidesTheSwiftDetail() {

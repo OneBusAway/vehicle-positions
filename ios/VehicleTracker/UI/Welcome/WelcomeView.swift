@@ -69,7 +69,7 @@ struct WelcomeView: View {
     private var topRow: some View {
         HStack(spacing: 0) {
             Button(action: back) {
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.backward")
                     .font(.body.weight(.semibold))
                     .frame(width: 30, height: 30)
             }

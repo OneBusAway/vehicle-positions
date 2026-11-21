@@ -327,15 +327,12 @@ import Testing
         #expect(try store.load() == signedIn)
     }
 
+    /// The reason is logged, so it is English whatever the phone's language.
     @Test func aRefreshReplyThatIsNotATokenPairKeepsTheRefreshToken() async throws {
         serve(refresh: (200, "<html>Sign in to the station Wi-Fi</html>"))
         let store = InMemoryTokenStore(signedIn)
-        do {
-            _ = try await refreshingClient(store).myVehicles()
-            Issue.record("expected a transport error")
-        } catch APIError.transport {
-        } catch {
-            Issue.record("unexpected \(error)")
+        await #expect(throws: APIError.transport("the server's reply could not be read")) {
+            try await refreshingClient(store).myVehicles()
         }
         #expect(try store.load() == signedIn)
     }

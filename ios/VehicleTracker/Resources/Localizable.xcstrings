@@ -1,30 +1,94 @@
 {
-  "sourceLanguage": "en",
-  "strings": {
-    "%@, %lld reports sent": {
-      "comment": "VoiceOver: the trip bar in one sentence for a route with no short name: the headsign, then how many reports have reached the server.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@, %2$#@reports@"
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%.1f kilometres" : {
+      "comment" : "VoiceOver: a distance in kilometres to one decimal place, read in place of '1.3 km', e.g. '1.3 kilometres'."
+    },
+    "%.1f km" : {
+      "comment" : "A distance of a kilometre or more, in kilometres to one decimal place with the short unit: to the next stop on the status card and in CarPlay, and how far off the route. E.g. '1.3 km'."
+    },
+    "%@ · %@" : {
+      "comment" : "Two facts on one line: a stop's scheduled time then the distance to it, or the run's start time then the vehicle.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ %@" : {
+      "comment" : "VoiceOver: the welcome's card for a stopped trip in one announcement: its title, the Resume screen's question, then what to do, e.g. 'Resume your trip? Open the app and tap Resume trip.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ → %@" : {
+      "comment" : "Under the run board's date, and under a run in CarPlay: the direction's first stop, then its last stop, e.g. 'Northgate Station → Downtown Seattle'. The arrow points from the first to the last; turn it for a language written right to left.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "%@ run" : {
+      "comment" : "Resume card: the run's first departure in the agency's zone, e.g. '6:58 AM run'."
+    },
+    "%@ run · %@" : {
+      "comment" : "Status card line 2 while waiting for GPS: the run's start time in the agency's zone, then the vehicle, e.g. '6:58 AM run · 4317'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ run · %2$@"
+          }
+        }
+      }
+    },
+    "%@, %@" : {
+      "comment" : "VoiceOver label of a vehicle tile: the fleet number, then the label the agency gave the vehicle, e.g. '4317, Airport shuttle'.\nVoiceOver: a stop list row for a stop still ahead: the stop's name, then its scheduled time, e.g. 'Pine St & 4th Ave, 7:24 AM'.\nVoiceOver: the problem line in one sentence: what happened, then what it means or what to do, e.g. 'No connection, Riders can't see you'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%@, %lld reports sent" : {
+      "comment" : "VoiceOver: the trip bar in one sentence for a route with no short name: the headsign, then how many reports have reached the server, e.g. 'Downtown Seattle, 142 reports sent'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$#@reports@"
           },
-          "substitutions": {
-            "reports": {
-              "argNum": 2,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg report sent"
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg report sent"
                     }
                   },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg reports sent"
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg reports sent"
                     }
                   }
                 }
@@ -34,22 +98,127 @@
         }
       }
     },
-    "%lld metres": {
-      "comment": "VoiceOver: a distance in whole metres.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld metre"
+    "%@, allowed." : {
+      "comment" : "VoiceOver: said once when iOS allows a checklist row while the checklist shows: the row's title, e.g. 'Location, allowed.'"
+    },
+    "%@, last stop, %@" : {
+      "comment" : "VoiceOver: a stop list row for the end of the line: the stop's name, then its scheduled time, e.g. 'Downtown Transit Center, last stop, 7:52 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, last stop, %2$@"
+          }
+        }
+      }
+    },
+    "%@, next stop, %@" : {
+      "comment" : "VoiceOver: a stop list row for the next stop: the stop's name, then its scheduled time, e.g. '3rd Ave & Seneca St, next stop, 7:18 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, next stop, %2$@"
+          }
+        }
+      }
+    },
+    "%@, passed, %@" : {
+      "comment" : "VoiceOver: a stop list row for a stop the vehicle has passed: the stop's name, then its scheduled time, e.g. 'Northgate Station, passed, 6:58 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, passed, %2$@"
+          }
+        }
+      }
+    },
+    "%@. %@." : {
+      "comment" : "VoiceOver: a card or a row of the welcome in one sentence: its title, then the line under it, e.g. 'Choose your vehicle. The number on the vehicle.'\nVoiceOver: a checklist row: its title, then why the app needs it or what went wrong, e.g. 'Precise location. Only approximate was allowed.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@."
+          }
+        }
+      }
+    },
+    "%@. %@. Allowed." : {
+      "comment" : "VoiceOver: a checklist row iOS allowed: its title, then why the app needs it, e.g. 'Precise location. So riders see the vehicle at the right stop. Allowed.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@. Allowed."
+          }
+        }
+      }
+    },
+    "%@. %@. Next." : {
+      "comment" : "VoiceOver: a checklist row that Continue asks about next: its title, then why the app needs it, e.g. 'Location. So the app knows where the vehicle is. Next.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@. Next."
+          }
+        }
+      }
+    },
+    "%@. Next stop %@, %@" : {
+      "comment" : "VoiceOver: the status card in one sentence, with no distance. The card's answer, then the next stop's name and its scheduled time, e.g. '3 min late. Next stop 3rd Ave & Seneca St, 7:18 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. Next stop %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "%@. Next stop %@, %@, %@" : {
+      "comment" : "VoiceOver: the status card in one sentence. The card's answer, then the next stop's name, its scheduled time and the distance to it, e.g. 'On time. Next stop 3rd Ave & Seneca St, 7:18 AM, 232 metres'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. Next stop %2$@, %3$@, %4$@"
+          }
+        }
+      }
+    },
+    "%@. Off schedule, is this the right run? Next stop %@, %@" : {
+      "comment" : "VoiceOver: the status card in one sentence while off schedule. The card's answer, then the next stop's name and its scheduled time, e.g. '20 min late. Off schedule, is this the right run? Next stop 3rd Ave & Seneca St, 7:18 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. Off schedule, is this the right run? Next stop %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "%lld m" : {
+      "comment" : "A distance under a kilometre, in whole metres with the short unit: to the next stop on the status card and in CarPlay, and how far off the route, as in 'Off route · 120 m'. E.g. '350 m'."
+    },
+    "%lld metres" : {
+      "comment" : "VoiceOver: a distance under a kilometre in whole metres, read in place of '232 m', e.g. '232 metres'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld metre"
                 }
               },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld metres"
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld metres"
                 }
               }
             }
@@ -57,22 +226,28 @@
         }
       }
     },
-    "%lld reports sent": {
-      "comment": "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld report sent"
+    "%lld min early" : {
+      "comment" : "Status card answer: whole minutes ahead of the schedule, e.g. '2 min early'."
+    },
+    "%lld min late" : {
+      "comment" : "Status card answer: whole minutes behind the schedule, e.g. '3 min late'."
+    },
+    "%lld reports sent" : {
+      "comment" : "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large wherever it stands in the sentence.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld report sent"
                 }
               },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld reports sent"
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reports sent"
                 }
               }
             }
@@ -80,22 +255,22 @@
         }
       }
     },
-    "%lld sent": {
-      "comment": "Trip bar: how many reports have reached the server, e.g. '142 sent'.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld sent"
+    "%lld sent" : {
+      "comment" : "Trip bar: how many reports have reached the server, e.g. '142 sent'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sent"
                 }
               },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld sent"
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sent"
                 }
               }
             }
@@ -103,22 +278,22 @@
         }
       }
     },
-    "%lld stops passed": {
-      "comment": "Trip sheet stop list: the folded row standing in for the stops the vehicle has already passed, e.g. '6 stops passed'.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld stop passed"
+    "%lld stops passed" : {
+      "comment" : "Trip sheet stop list: the folded row standing in for the stops the vehicle has already passed, e.g. '6 stops passed'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld stop passed"
                 }
               },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld stops passed"
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld stops passed"
                 }
               }
             }
@@ -126,22 +301,49 @@
         }
       }
     },
-    "All routes · %lld": {
-      "comment": "Section header over a grid of route numbers, from a feed that names none of its routes: how many there are.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "All routes · %lld"
+    "±%lld m" : {
+      "comment" : "CarPlay Details, the GPS row: how far off the phone's position may be, in whole metres with the short unit, e.g. '±8 m'."
+    },
+    "3 short screens" : {
+      "comment" : "Help: under 'See the welcome again'."
+    },
+    "A problem on the server. Tell your dispatcher." : {
+      "comment" : "Help, under 'Server error'."
+    },
+    "A trip is already starting or running." : {
+      "comment" : "Error when a start is attempted while a trip is already starting or running."
+    },
+    "About" : {
+      "comment" : "Help: the heading over the app's version and the server."
+    },
+    "Account" : {
+      "comment" : "VoiceOver label of the account menu's button on each picker screen. The menu shows the driver's email, the server and the app's version."
+    },
+    "Add %@ to favorites" : {
+      "comment" : "VoiceOver label of the star on a vehicle tile that is not yet a favourite: the fleet number, e.g. 'Add 4317 to favorites'."
+    },
+    "Ahead of the timetable. Riders may miss you." : {
+      "comment" : "Help, under a status like '3 min early'."
+    },
+    "All routes" : {
+      "comment" : "Section header over every route in the schedule, as rows with names."
+    },
+    "All routes · %lld" : {
+      "comment" : "Section header over a grid of route numbers, from a feed that names none of its routes: how many there are, e.g. 'All routes · 24'.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "All routes · %lld"
                 }
               },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "All routes · %lld"
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "All routes · %lld"
                 }
               }
             }
@@ -149,30 +351,449 @@
         }
       }
     },
-    "Reports stop, and route %@'s %@ run is marked complete. %lld reports were sent.": {
-      "comment": "Message of the 'End this trip?' alert: the route's short name, the run's start time in the agency's zone, then how many reports reached the server.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reports stop, and route %1$@'s %2$@ run is marked complete. %3$#@reports@"
+    "All vehicles" : {
+      "comment" : "Section header over the rest of the driver's assigned vehicles."
+    },
+    "Allow location" : {
+      "comment" : "Welcome, screen 3: the first thing a trip needs."
+    },
+    "Allow location on iPhone" : {
+      "comment" : "CarPlay alert when a start from the car got no answer to the location prompt, which shows only on the iPhone."
+    },
+    "Allowed" : {
+      "comment" : "At the end of a checklist row that iOS allowed."
+    },
+    "An operator has to load one before trips can start. Tell your agency's admin." : {
+      "comment" : "Empty state text under 'No schedule on this server yet'."
+    },
+    "Another driver has a trip running on vehicle %@. Pick another vehicle or ask your dispatcher." : {
+      "comment" : "Banner when the server refused a start because another driver has a trip running on the vehicle: the fleet number, e.g. 'Another driver has a trip running on vehicle 4317. Pick another vehicle or ask your dispatcher.'"
+    },
+    "As %@" : {
+      "comment" : "Under the trip card when signing in again: the email the trip's driver signed in with, e.g. 'As jordan.lee@example.org'."
+    },
+    "Ask your agency's admin to check the schedule." : {
+      "comment" : "Empty state text under 'The schedule has no routes'."
+    },
+    "Ask your dispatcher" : {
+      "comment" : "Problem line, after 'Reports refused': only dispatch can fix the assignment."
+    },
+    "Ask your dispatcher to assign one, then check again." : {
+      "comment" : "Empty state text under 'No vehicles are assigned to you'."
+    },
+    "Away from the route on the map." : {
+      "comment" : "Help, under 'Off route'."
+    },
+    "Back" : {
+      "comment" : "VoiceOver: the welcome's button to the screen before."
+    },
+    "Before you start" : {
+      "comment" : "Title of the checklist shown before a trip when the app is missing location access."
+    },
+    "Behind the timetable." : {
+      "comment" : "Help, under a status like '6 min late'."
+    },
+    "Block %@" : {
+      "comment" : "Under a run on the run list and in CarPlay: the agency's block, the chain of runs one vehicle drives, shown as the feed gives it, e.g. 'Block 599-20'."
+    },
+    "Can't reach %@. Check your connection, or the server address." : {
+      "comment" : "Banner above the sign-in button when nothing answered. The server's address as the driver knows it, e.g. 'tracker.example.org'."
+    },
+    "Can't reach the server. Check your connection." : {
+      "comment" : "Banner when a start could not reach the server."
+    },
+    "Cancel" : {
+      "comment" : "Closes the 'Sign out?' question without signing out.\nCloses the checklist without starting the run, once nothing on it asks iOS by itself.\nSetup link alert: the button that closes it without using the link.\nThe start confirmation's cancel button."
+    },
+    "Change" : {
+      "comment" : "Button at the end of the server line that opens the server address field to type another."
+    },
+    "Change vehicle" : {
+      "comment" : "Banner button that goes back to the vehicle screen after a start was refused for the vehicle."
+    },
+    "Check again" : {
+      "comment" : "Button that loads a picker's list again when it came back empty."
+    },
+    "Check the address" : {
+      "comment" : "Under the server field when nothing answered at that address, beside the banner that says so."
+    },
+    "Check the fleet number on the vehicle." : {
+      "comment" : "Empty state text under 'No vehicle matches …'."
+    },
+    "Check your connection and try again." : {
+      "comment" : "Empty state text under a 'Couldn't load …' title."
+    },
+    "Choose a route" : {
+      "comment" : "Title of the second picker screen, the schedule's routes."
+    },
+    "Choose a run" : {
+      "comment" : "Title of the third picker screen, the route's runs today."
+    },
+    "Choose another route" : {
+      "comment" : "Button under 'No runs on route … today' that goes back to the route screen."
+    },
+    "Choose them, then tap %@. End the trip when you finish." : {
+      "comment" : "Welcome, screen 2: under the title. The name of the button that starts a trip, filled in from that button, e.g. 'Choose them, then tap Start trip. End the trip when you finish.'"
+    },
+    "Choose your vehicle" : {
+      "comment" : "Title of the first picker screen, the driver's assigned vehicles."
+    },
+    "collapsed" : {
+      "comment" : "VoiceOver value of the folded stops row while the stops it stands for are hidden."
+    },
+    "Continue" : {
+      "comment" : "The checklist's button, which asks iOS about the next row.\nWelcome: the button on its last screen, which goes on to choosing a vehicle."
+    },
+    "Couldn't load the routes" : {
+      "comment" : "Empty state title when the route list could not be loaded."
+    },
+    "Couldn't load the runs" : {
+      "comment" : "Empty state title when the run list could not be loaded."
+    },
+    "Couldn't load your vehicles" : {
+      "comment" : "Empty state title when the vehicle list could not be loaded."
+    },
+    "Couldn't sign in. Try again." : {
+      "comment" : "Banner above the sign-in button when the server answered, but not with a sign-in, such as a server error."
+    },
+    "Couldn't start the trip." : {
+      "comment" : "Banner when a start failed for a reason the app does not name. In CarPlay, also the short form of every refused start's alert."
+    },
+    "Details" : {
+      "comment" : "CarPlay: the navigation bar button during a trip that opens the trip's details: route, run, schedule, next stop, reports and GPS."
+    },
+    "Direction" : {
+      "comment" : "VoiceOver title of the direction switch over the run board."
+    },
+    "Do these 3 things on every trip." : {
+      "comment" : "Welcome, screen 3: under the title."
+    },
+    "Don't end the trip" : {
+      "comment" : "Goes back from a failed end to Resume trip and End trip, for a driver who tapped End trip by mistake."
+    },
+    "Done" : {
+      "comment" : "CarPlay: the navigation bar button that stops moving the map by hand."
+    },
+    "Email" : {
+      "comment" : "Label of the sign-in screen's email field."
+    },
+    "End" : {
+      "comment" : "CarPlay: the navigation bar button during a trip that asks whether to end it."
+    },
+    "End on this phone" : {
+      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: stop reporting now; the end is sent before the driver's next start."
+    },
+    "End this trip?" : {
+      "comment" : "Title of the alert that confirms ending the trip."
+    },
+    "End trip" : {
+      "comment" : "The Resume screen's second button: end the open trip.\nThe button on the trip bar that ends the trip, and the confirming button in the 'End this trip?' alert."
+    },
+    "End trip?" : {
+      "comment" : "CarPlay: the short form of the 'End this trip?' alert's title, for a car screen too narrow for it."
+    },
+    "Ending trip" : {
+      "comment" : "The Resume screen's End trip button while the end is being sent to the server."
+    },
+    "Ending…" : {
+      "comment" : "On the End trip button while the end is being sent to the server."
+    },
+    "Enter the server address" : {
+      "comment" : "Under the server field when it was left empty."
+    },
+    "Enter your email" : {
+      "comment" : "Under the email field when it was left empty."
+    },
+    "Enter your password" : {
+      "comment" : "Under the password field when it was left empty."
+    },
+    "Error" : {
+      "comment" : "VoiceOver: read before the error under a sign-in field, e.g. 'Error, Enter your email'."
+    },
+    "expanded" : {
+      "comment" : "VoiceOver value of the folded stops row while the stops it stands for are showing."
+    },
+    "Far from the timetable. Check you chose the right run." : {
+      "comment" : "Help, under 'Off schedule'."
+    },
+    "Favorite" : {
+      "comment" : "VoiceOver value of a starred vehicle tile."
+    },
+    "Favorites" : {
+      "comment" : "Section header over the vehicles the driver starred."
+    },
+    "Few seats" : {
+      "comment" : "Occupancy button: only a few seats are free."
+    },
+    "First trip done" : {
+      "comment" : "Title of the sheet after the driver's first trip ends."
+    },
+    "Fix on iPhone" : {
+      "comment" : "CarPlay Reports row, after 'Location off' or 'Precise Location off': the fix is in the iPhone's Settings, which the car can't open."
+    },
+    "From" : {
+      "comment" : "Status card line 1 while waiting for GPS, before the trip's first stop."
+    },
+    "Full" : {
+      "comment" : "Occupancy button: the vehicle is full."
+    },
+    "GPS" : {
+      "comment" : "CarPlay Details: the row saying how accurate the phone's position is, e.g. '±8 m'. GPS stays as it is in every language."
+    },
+    "Guidance" : {
+      "comment" : "CarPlay: the navigation bar button, once the car's own navigation has stopped this app's, that brings back the guidance to the trip's next stop."
+    },
+    "Help" : {
+      "comment" : "The account menu's item that opens Help, and the title of that page."
+    },
+    "Hide password" : {
+      "comment" : "VoiceOver label of the eye button that hides the typed password again."
+    },
+    "How full is the vehicle?" : {
+      "comment" : "Trip sheet: the heading over the occupancy buttons, and the row's VoiceOver label."
+    },
+    "If reporting stops" : {
+      "comment" : "Welcome, screen 3: heading over the card that shows what a stopped trip looks like."
+    },
+    "If you close it, reports stop" : {
+      "comment" : "Welcome, screen 3: under 'Leave the app open'."
+    },
+    "Is this the right run?" : {
+      "comment" : "Status card line 1 after 'Off schedule': the driver most likely picked the wrong run."
+    },
+    "Keep driving. Reports start again with the signal." : {
+      "comment" : "Help, under 'No connection'."
+    },
+    "Keep going" : {
+      "comment" : "The cancel button of the 'End this trip?' and 'Trip not ended yet' alerts: the trip carries on."
+    },
+    "Keep it reporting" : {
+      "comment" : "Welcome, screen 3: title."
+    },
+    "Keep Precise on, so riders see the right street" : {
+      "comment" : "Welcome, screen 3: under 'Allow location'. Precise is iOS's name for precise location."
+    },
+    "Keep the phone on charge" : {
+      "comment" : "Welcome, screen 3: the second thing a trip needs."
+    },
+    "Leave the app open" : {
+      "comment" : "Welcome, screen 3: the third thing a trip needs."
+    },
+    "Loading" : {
+      "comment" : "What VoiceOver says while a picker's Try again is loading the list again."
+    },
+    "Location" : {
+      "comment" : "Checklist row: the app's location access."
+    },
+    "Location is needed to report" : {
+      "comment" : "Checklist: in place of the Location row's reason once location was refused."
+    },
+    "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip." : {
+      "comment" : "Refusal when the app has no location access."
+    },
+    "Location must be on for the whole phone" : {
+      "comment" : "Checklist: why Location Services must be on."
+    },
+    "Location off" : {
+      "comment" : "Problem line: location access was turned off for the app during the trip."
+    },
+    "Location services" : {
+      "comment" : "Checklist row: Location Services for the whole phone."
+    },
+    "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services." : {
+      "comment" : "Refusal when Location Services are off for the whole phone."
+    },
+    "Location stopped" : {
+      "comment" : "Problem line: the location stream ended during the trip."
+    },
+    "Matches" : {
+      "comment" : "Section header over the vehicles or routes that match what the driver typed."
+    },
+    "Next" : {
+      "comment" : "At the end of the checklist row that Continue asks iOS about next.\nStatus card line 1, before the next stop's name.\nTag on the next run to start, when none is under way.\nWelcome: the button to the next of its three screens."
+    },
+    "Next %@ · %@" : {
+      "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Next %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Next stop" : {
+      "comment" : "CarPlay Details: the row with the next stop's name, its scheduled time and the distance to it, e.g. '3rd Ave & Seneca St · 7:18 AM · 232 m'."
+    },
+    "Next stop, %@" : {
+      "comment" : "VoiceOver: the next stop's mark on the map, with the stop's name, e.g. 'Next stop, 3rd Ave & Seneca St'."
+    },
+    "No connection" : {
+      "comment" : "Problem line: the app cannot reach the server."
+    },
+    "No GPS" : {
+      "comment" : "Trip sheet Reports row: there is no position to report."
+    },
+    "No GPS signal" : {
+      "comment" : "Problem line: the phone has no position fix."
+    },
+    "No route matches %@" : {
+      "comment" : "Empty state title when the route search finds nothing: what the driver typed, e.g. 'No route matches 999'."
+    },
+    "No runs on route %@ today" : {
+      "comment" : "Empty state title when the route has no runs today: the route's number, e.g. 'No runs on route 7 today'."
+    },
+    "No runs on this route today" : {
+      "comment" : "Empty state title when a route whose feed gave no number has no runs today."
+    },
+    "No schedule on this server yet" : {
+      "comment" : "Empty state title when the server has no GTFS schedule loaded."
+    },
+    "No vehicle matches %@" : {
+      "comment" : "Empty state title when the vehicle search finds nothing: what the driver typed, e.g. 'No vehicle matches 999'."
+    },
+    "No vehicles are assigned to you" : {
+      "comment" : "Empty state title when the driver has no assigned vehicles."
+    },
+    "Not ended yet" : {
+      "comment" : "CarPlay: the short form of the 'Trip not ended yet' alert's title, for a car screen too narrow for it."
+    },
+    "Not now" : {
+      "comment" : "Closes the sign-in-again sheet without signing in; the trip stays open and the Signed out card stays."
+    },
+    "Not reporting" : {
+      "comment" : "Trip sheet Reports row: reports are not reaching the server (no connection, refused, or a wrong clock)."
+    },
+    "Not set" : {
+      "comment" : "VoiceOver value of the occupancy row when the driver has not chosen one."
+    },
+    "Now" : {
+      "comment" : "Tag on the run under way, and the VoiceOver label of the line between the runs gone and the rest."
+    },
+    "OBA Vehicle Tracker" : {
+      "comment" : "CarPlay: the navigation bar before a trip, the app's name. Keep it as it is in every language."
+    },
+    "Off route" : {
+      "comment" : "The off-route answer without its distance, for VoiceOver, the stop list's vehicle row, and CarPlay's off-route banner where the distance doesn't fit."
+    },
+    "Off route · %@" : {
+      "comment" : "Status card answer: how far the vehicle is from the route, e.g. 'Off route · 120 m'."
+    },
+    "Off schedule" : {
+      "comment" : "Status card line 1 beyond the server's schedule window. The answer above it says how far off, e.g. '20 min late'."
+    },
+    "OK" : {
+      "comment" : "CarPlay: the button that closes an alert.\nFirst trip done: the button that closes the sheet.\nSetup link alert: the button that closes it after the link was not used."
+    },
+    "On the status card" : {
+      "comment" : "Help: the heading over what the status card on Tracking can say."
+    },
+    "On time" : {
+      "comment" : "Status card answer while the vehicle is inside the on-time window."
+    },
+    "Only approximate was allowed" : {
+      "comment" : "Checklist: in place of the Precise location row's reason once only approximate location was allowed."
+    },
+    "Only continue if your agency sent you this link." : {
+      "comment" : "Setup link alert: under 'Use tracker.example.org?'."
+    },
+    "Open OBA Vehicle Tracker on your iPhone to allow location." : {
+      "comment" : "Refusal when the location prompt got no answer, usually because it never showed: the driver was never asked."
+    },
+    "Open Settings" : {
+      "comment" : "Banner button that opens the app's page in the Settings app after a start was refused for location access.\nChecklist row button that opens the app's page in the Settings app, where refused location can be allowed."
+    },
+    "Open the app and tap %@." : {
+      "comment" : "Welcome, screen 3: what to do when reporting has stopped. The name of the Resume screen's main button, filled in from that button, e.g. 'Open the app and tap Resume trip.'"
+    },
+    "Open the app on iPhone" : {
+      "comment" : "Problem line: iOS refused a background location session because the app was not in the foreground."
+    },
+    "Opens Settings" : {
+      "comment" : "VoiceOver hint on a problem line that opens the app's page in Settings."
+    },
+    "Password" : {
+      "comment" : "Label of the sign-in screen's password field."
+    },
+    "Phone clock is wrong" : {
+      "comment" : "Problem line: the server rejects the reports' timestamps."
+    },
+    "Pick another route, or check again tomorrow." : {
+      "comment" : "Empty state text under 'No runs on route … today'."
+    },
+    "Position paused" : {
+      "comment" : "Problem line, after 'No GPS signal': riders see the last position until a fix returns."
+    },
+    "Precise location" : {
+      "comment" : "Checklist row: precise rather than approximate location."
+    },
+    "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street." : {
+      "comment" : "Refusal when the app has only approximate location."
+    },
+    "Precise Location off" : {
+      "comment" : "Problem line: Precise Location was turned off during the trip, so every fix is too coarse to report."
+    },
+    "Re-center" : {
+      "comment" : "The button over the map, once the driver has dragged it away from the vehicle, that makes the map follow the vehicle again."
+    },
+    "Re-center the map on the vehicle" : {
+      "comment" : "VoiceOver label of the Re-center button over the map."
+    },
+    "Recent" : {
+      "comment" : "Section header over the vehicles or routes the driver used last."
+    },
+    "Reload" : {
+      "comment" : "Banner button that loads the run list again after the schedule moved on to a new day."
+    },
+    "Remove %@ from favorites" : {
+      "comment" : "VoiceOver label of the star on a vehicle tile that is a favourite: the fleet number, e.g. 'Remove 4317 from favorites'."
+    },
+    "Reporting" : {
+      "comment" : "Trip sheet Reports row: reports are reaching the server."
+    },
+    "Reports" : {
+      "comment" : "Trip sheet row label: whether reports are reaching the server follows it."
+    },
+    "Reports have stopped. Sign in to go on. Your trip is still open." : {
+      "comment" : "Help, under 'Signed out'."
+    },
+    "Reports have stopped. Your trip is still open." : {
+      "comment" : "Under 'Signed out': what the expired sign-in means for the trip."
+    },
+    "Reports refused" : {
+      "comment" : "Problem line: the server refuses the vehicle's reports (not assigned, deactivated, or no active trip)."
+    },
+    "Reports sent" : {
+      "comment" : "Tip on the trip bar's sent count, on the driver's first trip: its title."
+    },
+    "Reports start when you do" : {
+      "comment" : "Problem line, after 'Open the app on iPhone': opening the app is what restarts reporting."
+    },
+    "Reports stop, and route %@'s %@ run is marked complete. %lld reports were sent." : {
+      "comment" : "Message of the 'End this trip?' alert: the route's short name, the run's start time in the agency's zone, then how many reports reached the server, e.g. 'Reports stop, and route 7's 6:58 AM run is marked complete. 142 reports were sent.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reports stop, and route %1$@'s %2$@ run is marked complete. %3$#@reports@"
           },
-          "substitutions": {
-            "reports": {
-              "argNum": 3,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg report was sent."
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg report was sent."
                     }
                   },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg reports were sent."
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg reports were sent."
                     }
                   }
                 }
@@ -182,22 +803,22 @@
         }
       }
     },
-    "Reports stop, and this run is marked complete. %lld reports were sent.": {
-      "comment": "Message of the 'End this trip?' alert for a route with no short name: how many reports reached the server.",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Reports stop, and this run is marked complete. %lld report was sent."
+    "Reports stop, and this run is marked complete. %lld reports were sent." : {
+      "comment" : "Message of the 'End this trip?' alert for a route with no short name: how many reports reached the server, e.g. 'Reports stop, and this run is marked complete. 142 reports were sent.'",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Reports stop, and this run is marked complete. %lld report was sent."
                 }
               },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Reports stop, and this run is marked complete. %lld reports were sent."
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Reports stop, and this run is marked complete. %lld reports were sent."
                 }
               }
             }
@@ -205,30 +826,94 @@
         }
       }
     },
-    "Route %@ to %@, %lld reports sent": {
-      "comment": "VoiceOver: the trip bar in one sentence: the route's short name, the headsign, then how many reports have reached the server.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Route %1$@ to %2$@, %3$#@reports@"
+    "Reports stopped" : {
+      "comment" : "Trip sheet Reports row: the sign-in expired, so nothing is sent until the driver signs in again."
+    },
+    "Reports stopped when your session ended. Sign in to keep reporting on route %@." : {
+      "comment" : "On the sign-in-again sheet's card. The open trip's route, e.g. '7'."
+    },
+    "Resume" : {
+      "comment" : "The button on the 'Location stopped' problem line that restarts location."
+    },
+    "Resume on iPhone" : {
+      "comment" : "CarPlay: the navigation bar while the trip is paused, and the Details screen's Reports row after 'Location stopped', e.g. 'Location stopped · Resume on iPhone'. The car can't resume reporting; the phone can."
+    },
+    "Resume trip" : {
+      "comment" : "The Resume screen's main button: keep reporting on the open trip."
+    },
+    "Resume your trip?" : {
+      "comment" : "Title of the screen at launch when the app closed while a trip was running."
+    },
+    "Riders can see you coming" : {
+      "comment" : "Welcome, screen 1: title."
+    },
+    "Riders can't see you" : {
+      "comment" : "Problem line, after 'No connection': the vehicle has dropped off riders' maps."
+    },
+    "Riders could see your vehicle." : {
+      "comment" : "First trip done: under the sent count."
+    },
+    "Riders see you" : {
+      "comment" : "Welcome, screen 2: the green card that follows the three choices."
+    },
+    "Riders see you." : {
+      "comment" : "VoiceOver: the welcome's green card on screen 2, 'Riders see you', as a sentence. The sent count beside it is not read."
+    },
+    "Riders see your last position until it comes back." : {
+      "comment" : "Help, under 'No GPS signal'."
+    },
+    "Route" : {
+      "comment" : "CarPlay Details: the row with the route's short name and its name, e.g. '7 · Rainier Beach'."
+    },
+    "Route %@" : {
+      "comment" : "Resume card: in place of the headsign, for a trip that has none. The route's short name or id, e.g. '7'.\nVoiceOver label of a route badge: the route's number, or its name when the feed gives no number, e.g. 'Route 7'."
+    },
+    "Route %@ to %@" : {
+      "comment" : "VoiceOver: the Resume card's route: its short name or id, then the headsign, e.g. 'Route 7 to Downtown Seattle'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Route %1$@ to %2$@"
+          }
+        }
+      }
+    },
+    "Route %@ to %@ on vehicle %@." : {
+      "comment" : "Message of the start confirmation: the route's number, the run's headsign, then the vehicle's fleet number, e.g. 'Route 7 to Downtown Seattle on vehicle 4317.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Route %1$@ to %2$@ on vehicle %3$@."
+          }
+        }
+      }
+    },
+    "Route %@ to %@, %lld reports sent" : {
+      "comment" : "VoiceOver: the trip bar in one sentence: the route's short name, the headsign, then how many reports have reached the server, e.g. 'Route 7 to Downtown Seattle, 142 reports sent'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route %1$@ to %2$@, %3$#@reports@"
           },
-          "substitutions": {
-            "reports": {
-              "argNum": 3,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg report sent"
+          "substitutions" : {
+            "reports" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg report sent"
                     }
                   },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg reports sent"
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg reports sent"
                     }
                   }
                 }
@@ -238,83 +923,185 @@
         }
       }
     },
-    "Started %lld min ago, at %@": {
-      "comment": "Resume card: whole minutes since the trip began, then the time it began, e.g. 'Started 23 min ago, at 6:58 AM'.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Started %1$#@minutes@ ago, at %2$@"
-          },
-          "substitutions": {
-            "minutes": {
-              "argNum": 1,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg min"
-                    }
-                  },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg min"
-                    }
-                  }
-                }
-              }
-            }
+    "Route %@, %@" : {
+      "comment" : "VoiceOver label of a route row: the route's number, then its name, e.g. 'Route 7, Rainier Beach'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Route %1$@, %2$@"
           }
         }
       }
     },
-    "started %lld hours %lld minutes ago, at %@": {
-      "comment": "VoiceOver: the Resume card's start from an hour on, e.g. 'started 2 hours 5 minutes ago, at 6:58 AM'.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "started %1$#@hours@ %2$#@minutes@ ago, at %3$@"
+    "Route number or name" : {
+      "comment" : "Placeholder of the route screen's search field."
+    },
+    "Run" : {
+      "comment" : "Trip sheet row label: the run's start time and the vehicle follow it."
+    },
+    "Run %@" : {
+      "comment" : "Under a run on the run list and in CarPlay: the agency's run or train number, shown as the feed gives it, e.g. 'Run 1503'. Followed by the block when there is one, as in 'Run 1503 · Block 599-20'."
+    },
+    "Schedule" : {
+      "comment" : "CarPlay Details: the row with the status card's answer, e.g. 'On time' or '3 min late'."
+    },
+    "Search by the number on the sign, or part of the name." : {
+      "comment" : "Empty state text under 'No route matches …'."
+    },
+    "Seats free" : {
+      "comment" : "Occupancy button: many seats are free."
+    },
+    "See the welcome again" : {
+      "comment" : "Help: the row that opens the three welcome screens again."
+    },
+    "Sends the app version, the iPhone model, the server, what the app is allowed to do and recent errors. No positions, no sign-in details, no email." : {
+      "comment" : "Help: under 'Share diagnostics', what the file holds and what it never holds."
+    },
+    "Server" : {
+      "comment" : "Once the phone has signed in before, the one line naming the server it uses: this word, then the server, e.g. 'tracker.example.org'."
+    },
+    "Server address" : {
+      "comment" : "Header over the field for the agency's server address, and that field's VoiceOver label."
+    },
+    "Server error" : {
+      "comment" : "Problem line: the server fails or refuses the reports for a reason the driver cannot fix (a server error), so they are not in the feed."
+    },
+    "Server error %@" : {
+      "comment" : "Shown only where no screen has its own words for a request the server turned down. The HTTP status code it answered with, shown as it is, e.g. 'Server error 502'."
+    },
+    "Set automatic time" : {
+      "comment" : "Problem line, after 'Phone clock is wrong': turn on automatic date and time in Settings."
+    },
+    "Set by your agency." : {
+      "comment" : "Under the server line when the agency's device management sets the server."
+    },
+    "Share diagnostics" : {
+      "comment" : "Help: opens the share sheet with a small text file about the app and the iPhone, for whoever looks after the app."
+    },
+    "Show password" : {
+      "comment" : "VoiceOver label of the eye button that shows the typed password."
+    },
+    "Sign in" : {
+      "comment" : "The button on the Signed out card that opens the sign-in sheet.\nThe sign-in screen's button.\nTitle of the sign-in screen."
+    },
+    "Sign in again" : {
+      "comment" : "Title of the sheet for signing in again after the session ended during a trip."
+    },
+    "Sign in and keep reporting" : {
+      "comment" : "The button that signs in again during a trip, so reports start again."
+    },
+    "Sign in first." : {
+      "comment" : "Error when a server call is made while signed out."
+    },
+    "Sign in on iPhone" : {
+      "comment" : "CarPlay: the navigation bar while signed out, and the Details screen's Reports row once the sign-in has expired, e.g. 'Reports stopped · Sign in on iPhone'. The car can't sign in; the phone can."
+    },
+    "Sign out" : {
+      "comment" : "The account menu's item that signs the driver out, and the confirming button of the 'Sign out?' question it asks first."
+    },
+    "Sign out?" : {
+      "comment" : "Asked before signing out, since the phone is usually going to the next driver."
+    },
+    "Signed out" : {
+      "comment" : "The card that takes the status card's place once the driver's sign-in has expired."
+    },
+    "Signed out. %@" : {
+      "comment" : "VoiceOver: the Signed out card in one announcement, when it takes the status card's place. Then the card's message, 'Reports have stopped. Your trip is still open.'"
+    },
+    "Signing in" : {
+      "comment" : "The sign-in button while the server is being asked, beside a spinner."
+    },
+    "Skip" : {
+      "comment" : "Welcome: the button on every screen that closes the welcome."
+    },
+    "So riders see the vehicle at the right stop" : {
+      "comment" : "Checklist: why the app needs precise location."
+    },
+    "So the app knows where the vehicle is" : {
+      "comment" : "Checklist: why the app needs location."
+    },
+    "Standing" : {
+      "comment" : "Occupancy button: no seats, standing room only."
+    },
+    "Start a trip and riders see your vehicle on their map. End it when you finish." : {
+      "comment" : "Welcome, screen 1: under the title."
+    },
+    "Start the %@ run?" : {
+      "comment" : "Title of the start confirmation; the argument is the run's start time in the agency's zone, e.g. '6:43 AM'."
+    },
+    "Start the %@ run? Route %@ to %@ on vehicle %@." : {
+      "comment" : "CarPlay's start confirmation in one line: the run's start time in the agency's zone, the route's number, the headsign, then the vehicle's fleet number, e.g. 'Start the 6:43 AM run? Route 7 to Downtown Seattle on vehicle 4317.'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Start the %1$@ run? Route %2$@ to %3$@ on vehicle %4$@."
+          }
+        }
+      }
+    },
+    "Start this run?" : {
+      "comment" : "CarPlay: the shortest form of the start confirmation's title, 'Start the 6:43 AM run?', for a car screen too narrow for the run's time."
+    },
+    "Start trip" : {
+      "comment" : "The start confirmation's confirming button, also named inside the tips and the welcome. In CarPlay, the navigation bar button that opens the lists of vehicles, routes and runs."
+    },
+    "Started %lld h %lld min ago, at %@" : {
+      "comment" : "Resume card: hours, then minutes past the hour, then the time the trip began, e.g. 'Started 2 h 5 min ago, at 6:58 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Started %1$lld h %2$lld min ago, at %3$@"
+          }
+        }
+      }
+    },
+    "started %lld hours %lld minutes ago, at %@" : {
+      "comment" : "VoiceOver: the Resume card's start from an hour on, read after the card's other lines, so in lower case: hours, then minutes past the hour, then the time the trip began, e.g. 'started 2 hours 5 minutes ago, at 6:58 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "started %1$#@hours@ %2$#@minutes@ ago, at %3$@"
           },
-          "substitutions": {
-            "hours": {
-              "argNum": 1,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg hour"
+          "substitutions" : {
+            "hours" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg hour"
                     }
                   },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg hours"
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg hours"
                     }
                   }
                 }
               }
             },
-            "minutes": {
-              "argNum": 2,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg minute"
+            "minutes" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg minute"
                     }
                   },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg minutes"
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg minutes"
                     }
                   }
                 }
@@ -324,30 +1111,30 @@
         }
       }
     },
-    "started %lld minutes ago, at %@": {
-      "comment": "VoiceOver: the Resume card's start, e.g. 'started 19 minutes ago, at 6:58 AM'.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "started %1$#@minutes@ ago, at %2$@"
+    "Started %lld min ago, at %@" : {
+      "comment" : "Resume card: whole minutes since the trip began, then the time it began, e.g. 'Started 23 min ago, at 6:58 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Started %1$#@minutes@ ago, at %2$@"
           },
-          "substitutions": {
-            "minutes": {
-              "argNum": 1,
-              "formatSpecifier": "lld",
-              "variations": {
-                "plural": {
-                  "one": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg minute"
+          "substitutions" : {
+            "minutes" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg min"
                     }
                   },
-                  "other": {
-                    "stringUnit": {
-                      "state": "translated",
-                      "value": "%arg minutes"
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg min"
                     }
                   }
                 }
@@ -356,7 +1143,260 @@
           }
         }
       }
+    },
+    "started %lld minutes ago, at %@" : {
+      "comment" : "VoiceOver: the Resume card's start, read after the card's other lines, so in lower case: whole minutes since the trip began, then the time it began, e.g. 'started 19 minutes ago, at 6:58 AM'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "started %1$#@minutes@ ago, at %2$@"
+          },
+          "substitutions" : {
+            "minutes" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg minute"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg minutes"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Starting…" : {
+      "comment" : "VoiceOver value of the run being started, and CarPlay's navigation bar while a trip starts."
+    },
+    "Step %lld of %lld" : {
+      "comment" : "VoiceOver: the welcome's progress line: the screen's number, then how many screens there are, e.g. 'Step 1 of 3'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Step %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Tap Resume" : {
+      "comment" : "Problem line, after 'Location stopped': what to do. The Resume button is on the same line."
+    },
+    "Tap Resume on the same line." : {
+      "comment" : "Help, under 'Location stopped'. Resume is the button on that line."
+    },
+    "Tap the line. It opens Settings to turn it on." : {
+      "comment" : "Help, under 'Location off or Precise Location off': tapping that line on Tracking opens the app's page in Settings."
+    },
+    "Tap to fix" : {
+      "comment" : "Problem line, after 'Location off' or 'Precise Location off': tapping the line opens the app's page in Settings."
+    },
+    "Tap your run" : {
+      "comment" : "Tip on 'Choose a run', pointing at the run under way: its title."
+    },
+    "The app closed while this trip was running. Reports are paused until you choose." : {
+      "comment" : "Under the Resume screen's title."
+    },
+    "The app needs these to report vehicle %@. iOS asks about each one next." : {
+      "comment" : "Under the checklist's title: the vehicle's fleet number, e.g. 'The app needs these to report vehicle 4317. iOS asks about each one next.'"
+    },
+    "The iPhone is finding its position." : {
+      "comment" : "Help, under 'Waiting for GPS'."
+    },
+    "The next driver can sign in on this phone." : {
+      "comment" : "Under 'Sign out?'."
+    },
+    "The number on the sign" : {
+      "comment" : "Welcome, screen 2: under 'Choose a route'."
+    },
+    "The number on the vehicle" : {
+      "comment" : "Welcome, screen 2: under 'Choose your vehicle'."
+    },
+    "The schedule has no routes" : {
+      "comment" : "Empty state title when the server's schedule lists no routes."
+    },
+    "The schedule moved on to a new day." : {
+      "comment" : "Banner when the server refused a start because the run is not in service on the day it now resolves to."
+    },
+    "The screen stays on while it charges" : {
+      "comment" : "Welcome, screen 3: under 'Keep the phone on charge'."
+    },
+    "The server didn't confirm the end. Check your signal and try again, or stop reporting on this phone now." : {
+      "comment" : "Message of the 'Trip not ended yet' alert."
+    },
+    "The server didn't confirm the trip ended. Try again, or end it on this phone only." : {
+      "comment" : "Banner on the Resume screen once the server did not confirm the end; the buttons then say Try again and End on this phone."
+    },
+    "The server is not taking this vehicle's reports. Ask your dispatcher." : {
+      "comment" : "Help, under 'Reports refused'."
+    },
+    "The server's reply could not be read." : {
+      "comment" : "Shown only where no screen has its own words for a reply the app could not read, such as a Wi-Fi sign-in page answering in place of the server."
+    },
+    "Then tap %@" : {
+      "comment" : "Welcome, screen 2: under 'Choose a run'. The name of the button that starts a trip, filled in from that button, e.g. 'Then tap Start trip'."
+    },
+    "Then tap %@. Riders see your vehicle from then on." : {
+      "comment" : "Tip on 'Choose a run', under its title. The name of the start confirmation's button that starts the trip, filled in from that button, e.g. 'Then tap Start trip. Riders see your vehicle from then on.'"
+    },
+    "This link does not contain a server address the app can use." : {
+      "comment" : "Title of the setup link alert when the link names no server address the app may use."
+    },
+    "This number grows while riders can see you. With no signal, keep driving." : {
+      "comment" : "Tip on the trip bar's sent count, under its title."
+    },
+    "This phone is signed in to %@. The link was not used." : {
+      "comment" : "Title of the setup link alert when the phone is already signed in, so it keeps its server: the host of that server, e.g. 'This phone is signed in to tracker.example.org. The link was not used.'"
+    },
+    "This run has no route or stops to follow. Pick another run." : {
+      "comment" : "Refusal when the run's geometry has no shape or no stops to judge adherence against."
+    },
+    "Three riders at a stop can see your vehicle coming." : {
+      "comment" : "VoiceOver: the picture on the welcome's first screen, a vehicle on its route, riders waving at the next stop and a rider's phone showing the vehicle."
+    },
+    "To %@" : {
+      "comment" : "A segment of the direction switch over the run board; the argument is the headsign most of that direction's runs show, e.g. 'To Downtown Seattle'."
+    },
+    "Too many tries. Wait a minute, then try again." : {
+      "comment" : "Banner above the sign-in button when the server refused for too many attempts; its window is one minute."
+    },
+    "Trip" : {
+      "comment" : "CarPlay: the title of the trip's Details screen, and its row with the headsign and the run's start time, e.g. 'Downtown Seattle · 6:58 AM'."
+    },
+    "Trip not ended yet" : {
+      "comment" : "Title of the alert shown when the server did not confirm the end of the trip."
+    },
+    "Try again" : {
+      "comment" : "Button in the 'Trip not ended yet' alert, and on the Resume screen after a failed end: send the end again.\nButton that retries a load or a start that failed.\nChecklist row button: ask iOS for precise location again, or check Location Services again."
+    },
+    "Turn on automatic time in Settings." : {
+      "comment" : "Help, under 'Phone clock is wrong'."
+    },
+    "Under the card" : {
+      "comment" : "Help: the heading over the lines that can show under the status card on Tracking, and the card that takes its place when signed out."
+    },
+    "Use %@?" : {
+      "comment" : "Title of the alert a setup link from the agency opens, which fills in the server on the sign-in screen once the driver agrees. The server's host, e.g. 'Use tracker.example.org?'."
+    },
+    "Use https://. Plain http:// is allowed only for localhost, 127.0.0.1 or a .local host." : {
+      "comment" : "Under the server field when the address is plain http to a host the app won't send a password to."
+    },
+    "Use iPhone to see more" : {
+      "comment" : "CarPlay: the last row of a list the car cut short; the rest of the list is on the phone."
+    },
+    "Use this server" : {
+      "comment" : "Setup link alert: the button that fills in the link's server on the sign-in screen."
+    },
+    "Use your driver account for this agency." : {
+      "comment" : "Under the sign-in screen's title."
+    },
+    "Vehicle %@" : {
+      "comment" : "Resume card: the vehicle's fleet number, e.g. 'Vehicle 4317'.\nSubtitle of the route screen: the fleet number of the vehicle the driver chose, e.g. 'Vehicle 4317'.\nVoiceOver: the vehicle's row of the stop list before the first fix, and the vehicle on the map: its label or fleet number, e.g. 'Vehicle 4317'."
+    },
+    "Vehicle %@ · Route %@" : {
+      "comment" : "Subtitle of the run screen: the fleet number of the vehicle, then the route's number, e.g. 'Vehicle 4317 · Route 7'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Vehicle %1$@ · Route %2$@"
+          }
+        }
+      }
+    },
+    "Vehicle %@ is out of service. Pick another vehicle." : {
+      "comment" : "Banner when the server refused a start because the vehicle was taken out of service: the fleet number, e.g. 'Vehicle 4317 is out of service. Pick another vehicle.'"
+    },
+    "Vehicle %@, %@" : {
+      "comment" : "VoiceOver: the vehicle's row of the stop list: its label or fleet number, then the status card's answer, e.g. 'Vehicle 4317, 3 min late'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Vehicle %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "Vehicle number" : {
+      "comment" : "Placeholder of the vehicle screen's search field: the fleet number painted on the vehicle."
+    },
+    "Vehicle, route, run" : {
+      "comment" : "Welcome, screen 2: title. The three things a driver chooses before a trip."
+    },
+    "Version" : {
+      "comment" : "Help, About: the label beside the app's version, e.g. '1.0.0 (1)'."
+    },
+    "Version %@ (%@)" : {
+      "comment" : "Account menu: the app's version, then its build number in brackets, e.g. 'Version 1.0.0 (7)'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Version %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "Waiting for GPS" : {
+      "comment" : "Status card answer before the trip's first position fix."
+    },
+    "Waiting for GPS. From %@, %@ run, vehicle %@" : {
+      "comment" : "VoiceOver: the status card in one sentence before the first fix. The trip's first stop, the run's start time in the agency's zone, then the vehicle's label or fleet number, e.g. 'Waiting for GPS. From Northgate Station, 6:58 AM run, vehicle 4317'.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Waiting for GPS. From %1$@, %2$@ run, vehicle %3$@"
+          }
+        }
+      }
+    },
+    "When you finish" : {
+      "comment" : "Welcome, screen 2: beside a picture of the End trip button."
+    },
+    "When you finish, %@." : {
+      "comment" : "VoiceOver: the welcome's last row on screen 2, 'When you finish', then the name of the End trip button it pictures, filled in from that button, e.g. 'When you finish, End trip.'"
+    },
+    "With CarPlay. Reports start when you open the app." : {
+      "comment" : "Help, under 'Open the app on iPhone': the line shows when a trip started from the car cannot report until the app is opened on the phone."
+    },
+    "Wrong email or password. Try again." : {
+      "comment" : "Under the password field when the server turned the email and password down."
+    },
+    "You already have a trip running. End it before starting another." : {
+      "comment" : "Banner when the server refused a start because the driver already has a trip running."
+    },
+    "You are on the timetable." : {
+      "comment" : "Help, under 'On time'."
+    },
+    "You're not assigned to vehicle %@." : {
+      "comment" : "Banner when the server refused a start because the driver is not assigned to the vehicle: the fleet number, e.g. 'You're not assigned to vehicle 4317.'"
+    },
+    "Your agency sets the server on this phone." : {
+      "comment" : "Title of the setup link alert when the agency's device management sets the server, so the link was not used."
+    },
+    "Your agency's server setting is not a valid address, so type it here." : {
+      "comment" : "Under the server field when the agency's device management set a server the app can't use."
+    },
+    "Your previous trip could not be ended yet. Check your connection and try again." : {
+      "comment" : "Refusal when the end of a trip ended on this phone only could not be sent before the next start."
+    },
+    "Your trip is still open" : {
+      "comment" : "Title of the card at the top of the sign-in-again sheet."
     }
   },
-  "version": "1.0"
+  "version" : "1.0"
 }

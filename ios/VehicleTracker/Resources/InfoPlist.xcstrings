@@ -1,0 +1,30 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSLocationWhenInUseUsageDescription" : {
+      "comment" : "Why the app asks for location: iOS shows it under the location prompt before the first trip, and on the app's Location page in Settings.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is."
+          }
+        }
+      }
+    },
+    "TripReporting" : {
+      "comment" : "Why the app asks for Precise Location: iOS shows it under its prompt to turn Precise Location on for this trip, when only approximate location is allowed. The key is the purpose the app names in code (NSLocationTemporaryUsageDescriptionDictionary).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Precise location puts the vehicle on the right street on riders' maps."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

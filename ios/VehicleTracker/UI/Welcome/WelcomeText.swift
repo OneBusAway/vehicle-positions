@@ -22,7 +22,7 @@ nonisolated enum WelcomeText {
     }
 
     static func step(_ number: Int, of count: Int) -> String {
-        String(localized: "Step \(number) of \(count)", comment: "VoiceOver: the welcome's progress line, e.g. 'Step 1 of 3'.")
+        String(localized: "Step \(number) of \(count)", comment: "VoiceOver: the welcome's progress line: the screen's number, then how many screens there are, e.g. 'Step 1 of 3'.")
     }
 
     // MARK: Riders can see you coming
@@ -46,7 +46,7 @@ nonisolated enum WelcomeText {
     }
 
     static var choicesSentence: String {
-        String(localized: "Choose them, then tap \(PickerText.startTrip). End the trip when you finish.", comment: "Welcome, screen 2: under the title. The name of the button that starts a trip.")
+        String(localized: "Choose them, then tap \(PickerText.startTrip). End the trip when you finish.", comment: "Welcome, screen 2: under the title. The name of the button that starts a trip, filled in from that button, e.g. 'Choose them, then tap Start trip. End the trip when you finish.'")
     }
 
     static var vehicleHint: String {
@@ -58,7 +58,7 @@ nonisolated enum WelcomeText {
     }
 
     static var runHint: String {
-        String(localized: "Then tap \(PickerText.startTrip)", comment: "Welcome, screen 2: under 'Choose a run'. The name of the button that starts a trip.")
+        String(localized: "Then tap \(PickerText.startTrip)", comment: "Welcome, screen 2: under 'Choose a run'. The name of the button that starts a trip, filled in from that button, e.g. 'Then tap Start trip'.")
     }
 
     static var ridersSeeYou: String {
@@ -112,7 +112,7 @@ nonisolated enum WelcomeText {
     static var stoppedTitle: String { ResumeText.title }
 
     static var stoppedDetail: String {
-        String(localized: "Open the app and tap \(ResumeText.resumeTrip).", comment: "Welcome, screen 3: what to do when reporting has stopped. The name of the Resume screen's button.")
+        String(localized: "Open the app and tap \(ResumeText.resumeTrip).", comment: "Welcome, screen 3: what to do when reporting has stopped. The name of the Resume screen's main button, filled in from that button, e.g. 'Open the app and tap Resume trip.'")
     }
 
     // MARK: VoiceOver
@@ -120,21 +120,21 @@ nonisolated enum WelcomeText {
     /// A card or a row as one element: "Choose your vehicle. The number on
     /// the vehicle."
     static func spoken(title: String, detail: String) -> String {
-        String(localized: "\(title). \(detail).", comment: "VoiceOver: a card or a row of the welcome in one sentence, its title then the line under it.")
+        String(localized: "\(title). \(detail).", comment: "VoiceOver: a card or a row of the welcome in one sentence: its title, then the line under it, e.g. 'Choose your vehicle. The number on the vehicle.'")
     }
 
     static var spokenRidersSeeYou: String {
-        String(localized: "\(ridersSeeYou).", comment: "VoiceOver: the welcome's green card as a sentence. The sent count beside it is not read.")
+        String(localized: "Riders see you.", comment: "VoiceOver: the welcome's green card on screen 2, 'Riders see you', as a sentence. The sent count beside it is not read.")
     }
 
     /// On the main actor, as the trip bar's words are.
     @MainActor static var spokenWhenYouFinish: String {
-        String(localized: "\(whenYouFinish), \(TripStatusText.endTrip).", comment: "VoiceOver: the welcome's last row on screen 2, then the name of the End trip button it pictures.")
+        String(localized: "When you finish, \(TripStatusText.endTrip).", comment: "VoiceOver: the welcome's last row on screen 2, 'When you finish', then the name of the End trip button it pictures, filled in from that button, e.g. 'When you finish, End trip.'")
     }
 
     /// The stopped-trip card as one element. Its title is a question, so it
     /// brings its own stop.
     static var spokenStopped: String {
-        String(localized: "\(stoppedTitle) \(stoppedDetail)", comment: "VoiceOver: the welcome's card for a stopped trip, its title then what to do.")
+        String(localized: "\(stoppedTitle) \(stoppedDetail)", comment: "VoiceOver: the welcome's card for a stopped trip in one announcement: its title, the Resume screen's question, then what to do, e.g. 'Resume your trip? Open the app and tap Resume trip.'")
     }
 }

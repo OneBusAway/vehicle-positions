@@ -38,8 +38,11 @@ enum Formatters {
     static let metresPerKilometre = 1000.0
 
     static func distance(_ metres: Double) -> String {
-        if metres < metresPerKilometre { return "\(Int(metres.rounded())) m" }
-        return String(format: "%.1f km", kilometres(metres))
+        guard metres >= metresPerKilometre else {
+            let whole = Int(metres.rounded())
+            return String(localized: "\(whole) m", comment: "A distance under a kilometre, in whole metres with the short unit: to the next stop on the status card and in CarPlay, and how far off the route, as in 'Off route · 120 m'. E.g. '350 m'.")
+        }
+        return String(localized: "\(kilometres(metres), specifier: "%.1f") km", comment: "A distance of a kilometre or more, in kilometres to one decimal place with the short unit: to the next stop on the status card and in CarPlay, and how far off the route. E.g. '1.3 km'.")
     }
 
     /// `metres` in kilometres to one decimal place, rounded away from zero on
