@@ -27,15 +27,21 @@ const (
 	feedSnapshotSpeed = 10.0
 )
 
-// TestWriteFeedSnapshots writes the GTFS-RT feed to FEED_SNAPSHOT_DIR once per
-// round of reports, for MobilityData's gtfs-realtime-validator to check
+// TestWriteFeedSnapshots writes both GTFS-RT feeds to FEED_SNAPSHOT_DIR once
+// per round of reports, for MobilityData's gtfs-realtime-validator to check
 // against rider/testdata/fixture.zip (.github/workflows/gtfs-rt-validator.yml,
 // and docs/development.md for a local run). It is skipped unless
 // FEED_SNAPSHOT_DIR is set, because the rounds are rateInterval apart.
 //
-// The feed is the production mux's. noopStore stands in for Postgres, so every
-// report is authorized and none is saved; the rest, from the auth middleware
-// to the protobuf bytes, is what a deployed server runs.
+// Each feed gets its own directory, because the validator compares each
+// snapshot with the one before it. A third, combined, holds both feeds'
+// entities in one message: the validator runs its cross-feed rules, E047 among
+// them (a trip paired with a different vehicle.id in each feed), only on a
+// message that carries both.
+//
+// The feeds are the production mux's. noopStore stands in for Postgres, so
+// every report is authorized and none is saved; the rest, from the auth
+// middleware to the protobuf bytes, is what a deployed server runs.
 func TestWriteFeedSnapshots(t *testing.T) {
 	dir := os.Getenv("FEED_SNAPSHOT_DIR")
 	if dir == "" {
@@ -45,6 +51,9 @@ func TestWriteFeedSnapshots(t *testing.T) {
 	existing, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	require.Empty(t, existing, "FEED_SNAPSHOT_DIR must be empty: the validator reads every file in it")
+	for _, feed := range feedSnapshotDirs {
+		require.NoError(t, os.Mkdir(filepath.Join(dir, feed), 0o755))
+	}
 
 	ix := loadFixtureIndex(t)
 	t1, ok := ix.Trip("T1")
@@ -52,6 +61,9 @@ func TestWriteFeedSnapshots(t *testing.T) {
 	t3, ok := ix.Trip("T3")
 	require.True(t, ok)
 	startDate := ix.ServiceDate(time.Now())
+	// The trip updates feed needs a run of T3 to measure bus-101 against, and
+	// the fixture runs it on weekdays only.
+	t3Date := latestRunDate(t, ix, t3, time.Now())
 
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
@@ -119,16 +131,18 @@ func TestWriteFeedSnapshots(t *testing.T) {
 		now := time.Now()
 		along := float64(round) * step
 
-		onTrip := t3.Shape.PointAt(along)
+		// A step along already, so bus-101 has left its first stop and has a
+		// delay in every round.
+		onTrip := t3.Shape.PointAt(along + step)
 		onRoute := t1.Shape.PointAt(t1.Shape.Length/2 + along)
 		parked := t3.Shape.PointAt(t3.Shape.Length / 2)
 		// A driver on a trip who says how full the vehicle is, a driver who
 		// knows only the route, and a vehicle that is not in service and sends
 		// no bearing or speed.
 		postLocation(LocationReport{
-			VehicleID: "bus-101", TripID: t3.ID, RouteID: t3.RouteID, StartDate: startDate,
+			VehicleID: "bus-101", TripID: t3.ID, RouteID: t3.RouteID, StartDate: t3Date,
 			Latitude: onTrip.Lat, Longitude: onTrip.Lon,
-			Bearing: float64ptr(t3.Shape.BearingAt(along)), Speed: float64ptr(feedSnapshotSpeed),
+			Bearing: float64ptr(t3.Shape.BearingAt(along + step)), Speed: float64ptr(feedSnapshotSpeed),
 			Timestamp: now.Unix(), OccupancyStatus: stringptr("FEW_SEATS_AVAILABLE"),
 		})
 		postLocation(LocationReport{
@@ -152,18 +166,12 @@ func TestWriteFeedSnapshots(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, res.Published, "the rider's trip must be in the feed: %+v", res.Summary)
 
-		resp, err := srv.Client().Get(srv.URL + "/gtfs-rt/vehicle-positions")
-		require.NoError(t, err)
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, resp.Body.Close())
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode, "%s", body)
+		positionsBody, positions := fetchSnapshot(t, srv, "/gtfs-rt/vehicle-positions")
+		tripUpdatesBody, tripUpdates := fetchSnapshot(t, srv, "/gtfs-rt/trip-updates")
 		fetched := time.Now().UTC()
 
-		var feed gtfsrt.FeedMessage
-		require.NoError(t, proto.Unmarshal(body, &feed))
 		var ids []string
-		for _, e := range feed.GetEntity() {
+		for _, e := range positions.GetEntity() {
 			ids = append(ids, e.GetId())
 			if e.GetId() == "bus-101" {
 				require.NotEmpty(t, e.GetVehicle().GetStopId(),
@@ -172,10 +180,53 @@ func TestWriteFeedSnapshots(t *testing.T) {
 		}
 		require.ElementsMatch(t, []string{"bus-101", "bus-102", "bus-103", "rider:T1:" + startDate}, ids,
 			"a snapshot missing an entity would pass the validator while checking less")
+		require.Len(t, tripUpdates.GetEntity(), 1,
+			"only bus-101 has a measured delay; without it the validator checks no trip update")
+		require.Equal(t, "bus-101", tripUpdates.GetEntity()[0].GetTripUpdate().GetVehicle().GetId())
+
+		combined := proto.Clone(positions).(*gtfsrt.FeedMessage)
+		combined.Entity = append(combined.Entity, tripUpdates.GetEntity()...)
+		combined.Header.Timestamp = proto.Uint64(max(positions.GetHeader().GetTimestamp(), tripUpdates.GetHeader().GetTimestamp()))
+		combinedBody, err := proto.Marshal(combined)
+		require.NoError(t, err)
 
 		// With -sort name the validator takes the fetch time from the last 20
 		// characters of the name, so the result does not depend on file mtimes.
-		name := "vehicle-positions-" + fetched.Format("2006-01-02T15-04-05Z") + ".pb"
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), body, 0o644))
+		stamp := fetched.Format("2006-01-02T15-04-05Z") + ".pb"
+		for feed, body := range map[string][]byte{"vehicle-positions": positionsBody, "trip-updates": tripUpdatesBody, "combined": combinedBody} {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, feed, feed+"-"+stamp), body, 0o644))
+		}
 	}
+}
+
+// feedSnapshotDirs are the directories TestWriteFeedSnapshots writes, one
+// validator run each.
+var feedSnapshotDirs = []string{"vehicle-positions", "trip-updates", "combined"}
+
+// fetchSnapshot fetches one feed from srv as protobuf: its bytes as served,
+// and the feed they hold.
+func fetchSnapshot(t *testing.T, srv *httptest.Server, path string) ([]byte, *gtfsrt.FeedMessage) {
+	t.Helper()
+	resp, err := srv.Client().Get(srv.URL + path)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, resp.Body.Close())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
+	var feed gtfsrt.FeedMessage
+	require.NoError(t, proto.Unmarshal(body, &feed))
+	return body, &feed
+}
+
+// latestRunDate is the latest service date, on or before from's, that ix runs
+// trip on.
+func latestRunDate(t *testing.T, ix *rider.Index, trip *rider.TripInfo, from time.Time) string {
+	t.Helper()
+	for day := range 7 {
+		if date := ix.ServiceDate(from.AddDate(0, 0, -day)); ix.ActiveOn(trip, date) {
+			return date
+		}
+	}
+	require.FailNow(t, "the trip runs on no day of the week before", "%s, %s", trip.ID, from)
+	return ""
 }

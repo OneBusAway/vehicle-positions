@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
+	gtfsrt "github.com/OneBusAway/go-gtfs/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
@@ -560,26 +563,33 @@ func TestDriverVehiclesRoute_Wiring(t *testing.T) {
 }
 
 // apiKeyStubStore is a noopStore that recognizes exactly one API key, so the
-// wired feed route can be exercised with a key that actually validates.
+// wired feed route can be exercised with a key that actually validates, and
+// one deactivated key, which it knows but refuses.
 type apiKeyStubStore struct {
 	noopStore
 	rawKey string
 }
 
+const deactivatedFeedKey = "deactivated-feed-key"
+
 func (s *apiKeyStubStore) GetAPIKeyByHash(_ context.Context, keyHash string) (*APIKey, error) {
-	if keyHash != hashAPIKey(s.rawKey) {
-		return nil, ErrAPIKeyNotFound
+	switch keyHash {
+	case hashAPIKey(s.rawKey):
+		return &APIKey{ID: 1, Name: "feed consumer", KeyHash: keyHash, Active: true}, nil
+	case hashAPIKey(deactivatedFeedKey):
+		return &APIKey{ID: 2, Name: "old consumer", KeyHash: keyHash, Active: false}, nil
 	}
-	return &APIKey{ID: 1, Name: "feed consumer", KeyHash: keyHash, Active: true}, nil
+	return nil, ErrAPIKeyNotFound
 }
 
-// TestFeedRoute_Wiring verifies that FEED_AUTH_ENABLED actually gates the
-// wired GTFS-RT route. Middleware unit tests cannot catch a refactor that
-// drops the requireAPIKey wrapper from newMux — the feed would silently go
-// public again and every other test would still pass — so for this security
-// control the wiring is the thing worth pinning. It also pins the other
-// direction: with feed auth off the route stays open, which is what every
-// existing deployment upgrades into.
+// TestFeedRoute_Wiring verifies that FEED_AUTH_ENABLED actually gates both
+// wired GTFS-RT routes, the same way. Middleware unit tests cannot catch a
+// refactor that drops the requireAPIKey wrapper from newMux — the feed would
+// silently go public again and every other test would still pass — so for
+// this security control the wiring is the thing worth pinning. It also pins
+// the other direction: with feed auth off the routes stay open, which is what
+// every existing deployment upgrades into. And each route that answers 200
+// answers with its own feed, which the status alone would not show.
 func TestFeedRoute_Wiring(t *testing.T) {
 	const rawKey = "wired-feed-key"
 
@@ -592,28 +602,51 @@ func TestFeedRoute_Wiring(t *testing.T) {
 		{"auth disabled, no key", false, "", http.StatusOK},
 		{"auth enabled, no key", true, "", http.StatusUnauthorized},
 		{"auth enabled, wrong key", true, "not-the-key", http.StatusUnauthorized},
+		{"auth enabled, deactivated key", true, deactivatedFeedKey, http.StatusUnauthorized},
 		{"auth enabled, valid key", true, rawKey, http.StatusOK},
+		{"auth enabled, valid key, JSON", true, rawKey, http.StatusOK},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			tracker := NewTracker(5 * time.Minute)
-			defer tracker.Stop()
+	// A route-only vehicle is in the positions feed and, with no delay to
+	// measure, never in the trip updates feed.
+	wantEntities := map[string]int{"/gtfs-rt/vehicle-positions": 1, "/gtfs-rt/trip-updates": 0}
 
-			mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, tc.feedAuthEnabled, "", nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
+	for _, path := range []string{"/gtfs-rt/vehicle-positions", "/gtfs-rt/trip-updates"} {
+		for _, tc := range tests {
+			t.Run(path+" "+tc.name, func(t *testing.T) {
+				tracker := NewTracker(5 * time.Minute)
+				defer tracker.Stop()
+				tracker.Update(&LocationReport{VehicleID: "bus-1", RouteID: "R1", Latitude: 47.6, Longitude: -122.33, Timestamp: time.Now().Unix()})
 
-			req := httptest.NewRequest(http.MethodGet, "/gtfs-rt/vehicle-positions", nil)
-			if tc.apiKey != "" {
-				req.Header.Set(apiKeyHeader, tc.apiKey)
-			}
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, req)
+				mux := newMux(&apiKeyStubStore{rawKey: rawKey}, tracker, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, tc.feedAuthEnabled, "", nil, nil, nil, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
-			assert.Equal(t, tc.wantStatus, w.Code)
-			if tc.wantStatus == http.StatusUnauthorized {
-				assert.Contains(t, decodeError(t, w), "API key")
-			}
-		})
+				asJSON := strings.HasSuffix(tc.name, "JSON")
+				url := path
+				if asJSON {
+					url += "?format=json"
+				}
+				req := httptest.NewRequest(http.MethodGet, url, nil)
+				if tc.apiKey != "" {
+					req.Header.Set(apiKeyHeader, tc.apiKey)
+				}
+				w := httptest.NewRecorder()
+				mux.ServeHTTP(w, req)
+
+				assert.Equal(t, tc.wantStatus, w.Code)
+				if tc.wantStatus == http.StatusUnauthorized {
+					assert.Contains(t, decodeError(t, w), "API key")
+				}
+				if tc.wantStatus == http.StatusOK {
+					var feed gtfsrt.FeedMessage
+					if asJSON {
+						require.NoError(t, protojson.Unmarshal(w.Body.Bytes(), &feed))
+					} else {
+						require.NoError(t, proto.Unmarshal(w.Body.Bytes(), &feed))
+					}
+					assert.Len(t, feed.GetEntity(), wantEntities[path], "the route must serve its own feed")
+				}
+			})
+		}
 	}
 }
 
@@ -737,16 +770,18 @@ func TestFeedHealthRoutes_Wiring(t *testing.T) {
 			require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodPost, "/api/v1/locations/history", ""))
 			require.Equal(t, http.StatusOK, serve(mux, http.MethodGet, "/gtfs-rt/vehicle-positions", rawKey))
 			require.Equal(t, http.StatusOK, serve(mux, http.MethodGet, "/gtfs-rt/vehicle-positions?format=json", rawKey))
+			require.Equal(t, http.StatusOK, serve(mux, http.MethodGet, "/gtfs-rt/trip-updates", rawKey))
 			// Not a report or a feed fetch, so not counted.
 			require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodPost, "/api/v1/trips/start", ""))
 
 			want := healthPeriod{
 				Reports: reportOutcomes{Unauthorized: 2},
-				Feed:    feedOutcomes{Served: 2},
+				Feed:    feedOutcomes{Served: 3},
 			}
 			if feedAuthEnabled {
 				require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodGet, "/gtfs-rt/vehicle-positions", ""))
-				want.Feed.Refused = 1
+				require.Equal(t, http.StatusUnauthorized, serve(mux, http.MethodGet, "/gtfs-rt/trip-updates", ""))
+				want.Feed.Refused = 2
 			}
 
 			got := healthOf(mux)

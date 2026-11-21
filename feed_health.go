@@ -27,8 +27,8 @@ const (
 	// healthReports is a driver phone sending positions: POST
 	// /api/v1/locations and POST /api/v1/locations/history.
 	healthReports healthEndpoint = iota
-	// healthFeed is a consumer fetching GET /gtfs-rt/vehicle-positions, in
-	// either format.
+	// healthFeed is a consumer fetching GET /gtfs-rt/vehicle-positions or GET
+	// /gtfs-rt/trip-updates, in either format.
 	healthFeed
 	numHealthEndpoints
 )

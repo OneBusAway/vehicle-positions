@@ -203,7 +203,7 @@ its own accuracy is left out of reports too.
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
 | `TRUST_PROXY_HEADERS` | `false` | Required behind a reverse proxy | Trust `X-Forwarded-For` and `X-Forwarded-Proto`. Controls which address the per-IP rate limiters bucket on, whether the admin session cookie is marked `Secure`, and the client IP recorded for rider requests. Unparseable: warn and default. |
-| `FEED_AUTH_ENABLED` | `false` | Optional | Require an `X-API-Key` header on `GET /gtfs-rt/vehicle-positions`. Unlike every other boolean here, an unparseable value **refuses to start** rather than warning and defaulting: `strconv.ParseBool` rejects `yes` and `on`, and falling back to `false` would leave the feed public while the operator believes it is locked. Checked before the database is opened, so a typo fails immediately. |
+| `FEED_AUTH_ENABLED` | `false` | Optional | Require an `X-API-Key` header on `GET /gtfs-rt/vehicle-positions` and `GET /gtfs-rt/trip-updates`. Unlike every other boolean here, an unparseable value **refuses to start** rather than warning and defaulting: `strconv.ParseBool` rejects `yes` and `on`, and falling back to `false` would leave the feed public while the operator believes it is locked. Checked before the database is opened, so a typo fails immediately. |
 
 ## Prometheus metrics
 

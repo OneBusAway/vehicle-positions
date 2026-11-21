@@ -99,11 +99,17 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	// Outermost, so a request the auth middleware refuses is counted too.
 	countReports := health.count(healthReports)
 	countFeed := health.count(healthFeed)
-	feed := handleGetFeed(tracker, riderEstimates)
+	positions := handleGetFeed(tracker, riderEstimates)
+	tripUpdates := handleGetTripUpdates(tracker)
 	if feedAuthEnabled {
-		mux.Handle("GET /gtfs-rt/vehicle-positions", countFeed(requireAPIKey(store, trustProxy)(feed)))
+		// One middleware for both feeds, so a consumer polling both shares one
+		// key's grace window and last-used stamp.
+		apiKey := requireAPIKey(store, trustProxy)
+		mux.Handle("GET /gtfs-rt/vehicle-positions", countFeed(apiKey(positions)))
+		mux.Handle("GET /gtfs-rt/trip-updates", countFeed(apiKey(tripUpdates)))
 	} else {
-		mux.Handle("GET /gtfs-rt/vehicle-positions", countFeed(feed))
+		mux.Handle("GET /gtfs-rt/vehicle-positions", countFeed(positions))
+		mux.Handle("GET /gtfs-rt/trip-updates", countFeed(tripUpdates))
 	}
 	mux.Handle("GET /api/v1/admin/status", authMiddleware(adminMiddleware(handleAdminStatus(tracker, startTime))))
 	mux.Handle("GET /api/v1/admin/vehicles", authMiddleware(adminMiddleware(handleListVehicles(store))))

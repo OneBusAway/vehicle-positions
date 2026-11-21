@@ -1,7 +1,7 @@
 name: GTFS-RT validator
 
-# Runs MobilityData's gtfs-realtime-validator against feed snapshots this
-# server produced. docs/development.md has the same steps for a local run.
+# Runs MobilityData's gtfs-realtime-validator against snapshots of both feeds
+# this server produces. docs/development.md has the same steps for a local run.
 on:
   push:
     branches: [main]
@@ -80,22 +80,32 @@ jobs:
         working-directory: gtfs-realtime-validator
         run: mvn --batch-mode --no-transfer-progress --strict-checksums -DskipTests -pl gtfs-realtime-validator-lib package
 
+      # One run per directory TestWriteFeedSnapshots writes: the validator
+      # compares each snapshot with the one before it, so two feeds cannot
+      # share a run, and combined/ is both feeds in one message, the only way
+      # it runs its cross-feed rules (E047).
       - name: Run the validator
         run: |
           sha256sum "$VALIDATOR_JAR"
-          java -jar "$VALIDATOR_JAR" -gtfs rider/testdata/fixture.zip -gtfsRealtimePath "$FEED_SNAPSHOT_DIR" -sort name
+          for feed in vehicle-positions trip-updates combined; do
+            java -jar "$VALIDATOR_JAR" -gtfs rider/testdata/fixture.zip -gtfsRealtimePath "$FEED_SNAPSHOT_DIR/$feed" -sort name
+          done
 
       - name: Fail on validator errors
         run: |
           shopt -s nullglob
-          snapshots=("$FEED_SNAPSHOT_DIR"/*.pb)
-          results=("$FEED_SNAPSHOT_DIR"/*.pb.results.json)
           # The validator skips a file it cannot read, so a missing result is
           # a snapshot nothing checked.
-          if [ "${#snapshots[@]}" -eq 0 ] || [ "${#results[@]}" -ne "${#snapshots[@]}" ]; then
-            echo "::error::${#snapshots[@]} snapshots but ${#results[@]} result files"
-            exit 1
-          fi
+          for feed in vehicle-positions trip-updates combined; do
+            snapshots=("$FEED_SNAPSHOT_DIR/$feed"/*.pb)
+            results=("$FEED_SNAPSHOT_DIR/$feed"/*.pb.results.json)
+            if [ "${#snapshots[@]}" -eq 0 ] || [ "${#results[@]}" -ne "${#snapshots[@]}" ]; then
+              echo "::error::$feed: ${#snapshots[@]} snapshots but ${#results[@]} result files"
+              exit 1
+            fi
+          done
+          snapshots=("$FEED_SNAPSHOT_DIR"/*/*.pb)
+          results=("$FEED_SNAPSHOT_DIR"/*/*.pb.results.json)
 
           findings=$(jq -r '
             (input_filename | sub(".*/"; "") | sub("\\.results\\.json$"; "")) as $snapshot

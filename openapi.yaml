@@ -733,6 +733,67 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /gtfs-rt/trip-updates:
+    get:
+      tags: [feed]
+      summary: GTFS-RT Trip Updates feed
+      description: |
+        Returns a standards-compliant GTFS-RT `FeedMessage` with one
+        `TripUpdate` per driver vehicle, among those that have reported
+        within the staleness threshold, whose delay against its trip's
+        timetable the server measured from its latest report. The Java
+        OneBusAway server builds its vehicles from a trip updates feed, so it
+        needs this one alongside the positions feed.
+
+        Each `TripUpdate` carries the trip as the positions feed describes it,
+        the same `vehicle.id`, the report's timestamp capped as the positions
+        feed caps it, `delay` in seconds (positive late), and one
+        `stop_time_update` for the stop the positions feed names, with the
+        same delay on its `arrival`. A vehicle is left out, rather than
+        published as on time, when its delay is not known: no `trip_id`, a
+        trip in `frequencies.txt`, off its route, not yet left its first stop
+        or past its last. Rider-derived trips are never included.
+
+        Defaults to protobuf; pass `?format=json` for the protojson-encoded
+        form for debugging.
+
+        Access is the positions feed's: with `FEED_AUTH_ENABLED` it sits
+        behind `requireAPIKey` and needs an `X-API-Key` header; without it the
+        feed is public and the header is ignored.
+      security:
+        - apiKey: []
+      parameters:
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [json]
+          description: When set to `json`, returns the protojson-encoded feed.
+      responses:
+        '200':
+          description: GTFS-RT FeedMessage.
+          content:
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+                description: Serialized GTFS-RT `FeedMessage` protobuf.
+            application/json:
+              schema:
+                type: object
+                description: protojson-encoded GTFS-RT `FeedMessage`.
+        '401':
+          description: |
+            The API key was missing, unknown or deactivated. Only reachable
+            when the server runs with `FEED_AUTH_ENABLED`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /health:
     get:
       tags: [health]
@@ -1638,8 +1699,9 @@ paths:
         The same counts the admin UI's Feed health page shows. Every response to
         a driver's position report (`POST /api/v1/locations` and
         `POST /api/v1/locations/history`) and to a feed fetch
-        (`GET /gtfs-rt/vehicle-positions`, in either format) is counted by its
-        status, including requests refused before they reach the handler. The
+        (`GET /gtfs-rt/vehicle-positions` or `GET /gtfs-rt/trip-updates`, in
+        either format) is counted by its status, including requests refused
+        before they reach the handler. The
         minutes and the total are kept in memory: a restart starts them again
         from `since`. Each hour is saved to the database when it closes, and
         the hour in progress when the server stops, so `hours` is kept
@@ -2109,9 +2171,9 @@ components:
       in: header
       name: X-API-Key
       description: |
-        A feed key created by `POST /api/v1/admin/api-keys`. It gates the
-        GTFS-RT feed only when the server runs with `FEED_AUTH_ENABLED`; with
-        the flag off the feed is public and the header is ignored.
+        A feed key created by `POST /api/v1/admin/api-keys`. It gates both
+        GTFS-RT feeds only when the server runs with `FEED_AUTH_ENABLED`; with
+        the flag off the feeds are public and the header is ignored.
 
     riderAuth:
       type: http
