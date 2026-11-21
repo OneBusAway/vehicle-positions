@@ -88,7 +88,7 @@ There is no service layer, repository pattern, or middleware chain. Handlers cal
 | Actor | Interaction |
 |-------|-------------|
 | Driver Application | Sends periodic `POST /api/v1/locations` requests containing JSON vehicle location reports. |
-| GTFS-RT Consumer | Polls `GET /gtfs-rt/vehicle-positions` to retrieve the current vehicle positions feed as protobuf or JSON. |
+| GTFS-RT Consumer | Polls `GET /gtfs-rt/vehicle-positions` to retrieve the current vehicle positions feed as protobuf or JSON, and `GET /gtfs-rt/trip-updates` for each vehicle's measured delay (§6.3). |
 | Operator / Monitor | Queries `GET /api/v1/admin/status` to inspect uptime, active vehicle count, total tracked vehicles, and last update time. |
 | Infra / Orchestrator | Polls `GET /health` as a liveness check for container platforms, load balancers, or process supervisors. |
 
@@ -342,6 +342,7 @@ sequenceDiagram
 |--------|------|----------|---------|
 | `POST` | `/api/v1/locations` | `201` / `4xx` / `5xx` JSON | Ingest a vehicle location report. |
 | `GET` | `/gtfs-rt/vehicle-positions` | `200` protobuf or JSON | Return GTFS-RT feed of active vehicles. |
+| `GET` | `/gtfs-rt/trip-updates` | `200` protobuf or JSON | Return GTFS-RT trip updates: the measured delay of each active vehicle whose delay is known. |
 | `GET` | `/api/v1/admin/status` | `200` JSON | Return server uptime, active vehicle count, total tracked vehicle count, and last update time. |
 | `GET` | `/health` | `200` JSON | Liveness probe returning `{"status":"ok"}`. |
 
@@ -349,7 +350,7 @@ Authentication is per endpoint, not global:
 
 | Surface | Requirement |
 |---------|-------------|
-| `/health`, `/ready`, `GET /gtfs-rt/vehicle-positions` | None. The feed is public by design. |
+| `/health`, `/ready`, `GET /gtfs-rt/vehicle-positions`, `GET /gtfs-rt/trip-updates` | None, unless `FEED_AUTH_ENABLED` puts both feeds behind an `X-API-Key`. |
 | `POST /api/v1/auth/login` | None, but rate limited per client. |
 | `GET /metrics` | The `METRICS_TOKEN` bearer token. Registered only when `METRICS_ENABLED` is `true`. |
 | `POST /api/v1/locations`, `/api/v1/trips/*`, `GET /api/v1/vehicles` | A driver's JWT (`authMiddleware`). |
@@ -438,6 +439,8 @@ A driver vehicle's `VehiclePosition` carries:
 A rider-reported entity differs: its `id` and `vehicle.id` are both `rider:<trip_id>:<start_date>`, with `:<start_time>` added for a run of a trip in `frequencies.txt`, and `vehicle.label` is always `Rider-reported`; `trip` is always there, with `trip_id`, `start_date`, `schedule_relationship` and `start_time` by the same rules and the trip's `route_id` from the schedule, the run's start being when the schedule has it leave its first stop (its departure there) to be where its riders put it, or the estimate's own time when they put it at the first stop. Every run of a trip in `frequencies.txt` on a service day shares its `trip_id` and `start_date`, so the riders of such a trip are split into runs along the shape, a new run wherever the next rider is more than 200 m on, twice the trim's 100 m, with each rider carried on at their point's speed to the newest rider's point so an older point does not read as distance, and each run is its own entity; a trip run by timetable has one run a day and its riders stay one group. A run's start is kept while each estimate of it is where the last one's vehicle could be, no more than 150 m back along the shape and no further ahead than 150 m plus `RIDER_MAX_SPEED` for the time between them; of the kept runs an estimate could be, it takes the one whose start is nearest its own, an estimate that takes none is a new run with its own start, and a run no estimate has placed for 15 minutes, or whose trip's last ride is removed, is let go. Two runs that come out at the same `start_time` are published once, the one with more riders; `bearing` is always set, from the shape, and `speed` when the riders' phones reported one; the stop fields name the next stop along the shape, with `current_status` always `IN_TRANSIT_TO`, never `STOPPED_AT`; and it has no `occupancy_status`.
 
 Consumers can request JSON encoding by appending `?format=json` to the URL. The default response is binary protobuf (`application/x-protobuf`). Any other `format` value falls back to protobuf because only the exact string `json` is checked.
+
+`GET /gtfs-rt/trip-updates` (`trip_updates.go`) is a second feed from the same Tracker, with the same staleness, header, timestamp cap, `?format=json` and feed auth (`writeFeed`, `feedClock`). The Java OneBusAway server builds its vehicles only from trip updates, so it needs this feed beside the positions feed. `buildTripUpdates()` publishes one `TripUpdate` per driver vehicle whose `ScheduleDeviation` is known: `tripLocator` measures it as each report is accepted (`scheduleDeviation`, `schedule_deviation.go`), as the vehicle's place along its trip's shape against the timetable's time for that point, interpolated between the stops either side. The entity `id` is the `vehicle_id`, and it carries `trip` and `vehicle` exactly as the vehicle's `VehiclePosition` has them (`driverTrip`, `vehicleDescriptor`), the capped `timestamp`, `delay` in whole seconds (positive late), and one `stop_time_update` for the stop the positions feed names, with `stop_sequence`, `stop_id` and the same delay as `arrival.delay`. A vehicle is left out, not published as on time, when the delay is not known or the vehicle has no `trip_id`, is on a trip in `frequencies.txt`, or has no stop; rider-reported trips are never in this feed.
 
 ### 6.4 Staleness & In-Memory Lifecycle
 

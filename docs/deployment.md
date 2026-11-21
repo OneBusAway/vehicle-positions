@@ -11,7 +11,9 @@ codebase before. For running the project on a laptop while developing it, read
 What you are deploying is one Go binary plus one PostgreSQL database. The
 binary ingests location reports from the Android driver app, keeps the current
 position of every active vehicle in memory, and publishes a standard GTFS
-Realtime **Vehicle Positions** feed at `GET /gtfs-rt/vehicle-positions`. The
+Realtime **Vehicle Positions** feed at `GET /gtfs-rt/vehicle-positions`, with
+a **Trip Updates** feed carrying each vehicle's measured delay at
+`GET /gtfs-rt/trip-updates`. The
 same binary serves a browser admin UI at `/admin` (sign-in, dashboard, live
 fleet map, vehicle and user management, trip history) and a JSON API under
 `/api/v1/`. Database migrations and the admin UI's templates and CSS are
@@ -116,7 +118,7 @@ hours.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `FEED_AUTH_ENABLED` | `false` | Require an `X-API-Key` header on `GET /gtfs-rt/vehicle-positions`. Accepts only what `strconv.ParseBool` accepts; anything else (`yes`, `on`, a typo) stops the server at startup instead of defaulting, so a misspelled value can't leave the feed public while you believe it is locked. |
+| `FEED_AUTH_ENABLED` | `false` | Require an `X-API-Key` header on `GET /gtfs-rt/vehicle-positions` and `GET /gtfs-rt/trip-updates`. Accepts only what `strconv.ParseBool` accepts; anything else (`yes`, `on`, a typo) stops the server at startup instead of defaulting, so a misspelled value can't leave the feed public while you believe it is locked. |
 
 Turning this on is a breaking change for every feed consumer: anything that
 doesn't send a valid key starts getting `401` with `missing API key`,
@@ -969,14 +971,51 @@ consumer that reads Vehicle Positions on their own works the same way (see the
 README's [How This Connects to OneBusAway](../README.md#8-how-this-connects-to-onebusaway)).
 
 The Java OneBusAway server (the application suite that onebusaway-docker runs,
-as of 2.7.2) shows no vehicles from this feed. It builds vehicle records only
-from a trip updates feed and uses a vehicle position only to place the vehicle
-of a trip update, and this server publishes vehicle positions alone. Pointed at
-the feed, it loads the schedule and lists the running trips, but
-`vehicles-for-agency` stays empty. Run Maglev for this feed instead.
+as of 2.7.2) builds vehicle records only from a trip updates feed and uses a
+vehicle position only to place the vehicle of a trip update. Pointed at the
+positions feed alone, it loads the schedule and lists the running trips, but
+`vehicles-for-agency` stays empty. Give it both feeds, as one realtime source:
+
+```
+https://tracker.example.org/gtfs-rt/trip-updates
+https://tracker.example.org/gtfs-rt/vehicle-positions
+```
+
+With onebusaway-docker, set them on the `oba_app` service, with your agency id
+from `agency.txt` and the timezone from that file:
+
+```yaml
+environment:
+  - TZ=Africa/Nairobi
+  - AGENCY_ID=YOUR_AGENCY
+  - TRIP_UPDATES_URL=https://tracker.example.org/gtfs-rt/trip-updates
+  - VEHICLE_POSITIONS_URL=https://tracker.example.org/gtfs-rt/vehicle-positions
+  - REFRESH_INTERVAL=10
+```
+
+If you configure it with `GTFS_RT_FEEDS` instead, put both URLs in one object,
+`[{"tripUpdatesUrl":"…/gtfs-rt/trip-updates","vehiclePositionsUrl":"…/gtfs-rt/vehicle-positions","agencyIds":["YOUR_AGENCY"]}]`:
+two objects are two sources, and the one with positions alone shows nothing.
+
+The trip updates feed has one `TripUpdate` per driver vehicle whose delay the
+server measured from its latest report: where it is along its trip's shape
+against the timetable's time for that point. It carries the trip as the
+positions feed describes it, the same `vehicle.id`, which is how the Java
+server pairs the two, `delay` in seconds (positive late), and one
+`stop_time_update` for the stop the vehicle is at or heading to, with the same
+delay. The Java server adds that delay to the timetable for the trip's later
+stops. A vehicle whose delay is not known is left out rather than sent as on
+time, so the Java server does not show it at that moment: a trip in
+`frequencies.txt`, which has no timetable to be late against; a driver who gave
+only the route; a vehicle off its route, not yet left its first stop or past
+its last; a vehicle the server restored at startup, until its next report; and
+every rider-reported trip. Maglev reads the positions feed alone and needs none
+of this.
 
 If you set `FEED_AUTH_ENABLED=true`, every consumer must send its key in an
-`X-API-Key` header, OneBusAway included. Configure that header on the consumer
+`X-API-Key` header, OneBusAway included, on both feeds; onebusaway-docker sends
+it with `FEED_API_KEY=X-API-Key` and `FEED_API_VALUE` set to the key. Configure
+that header on the consumer
 before you turn the flag on; a consumer that cannot send custom request headers
 cannot read an authenticated feed, so leave feed auth off for it. To check by
 hand, add `-H "X-API-Key: $KEY"` to the `curl` commands below.

@@ -300,56 +300,95 @@ func handleGetFeed(tracker *Tracker, estimates estimateSource) http.HandlerFunc 
 		if wantRider {
 			ests = estimates.Estimates(time.Now())
 		}
-		feed := buildFeed(vehicles, ests)
+		writeFeed(w, r, buildFeed(vehicles, ests))
+	}
+}
 
-		if r.URL.Query().Get("format") == "json" {
-			data, err := protojson.Marshal(feed)
-			if err != nil {
-				slog.Error("failed to marshal feed", "format", "json", "error", err)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to marshal feed"})
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			if _, err := w.Write(data); err != nil {
-				slog.Error("failed to write response", "format", "json", "error", err)
-			}
-			return
-		}
-
-		data, err := proto.Marshal(feed)
+// writeFeed answers a GTFS-RT feed request with feed: protobuf, or with
+// ?format=json the protojson encoding for reading by hand. Both feeds answer
+// through it.
+func writeFeed(w http.ResponseWriter, r *http.Request, feed *gtfsrt.FeedMessage) {
+	if r.URL.Query().Get("format") == "json" {
+		data, err := protojson.Marshal(feed)
 		if err != nil {
-			slog.Error("failed to marshal feed", "format", "protobuf", "error", err)
+			slog.Error("failed to marshal feed", "path", r.URL.Path, "format", "json", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to marshal feed"})
 			return
 		}
-		w.Header().Set("Content-Type", "application/x-protobuf")
+		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write(data); err != nil {
-			slog.Error("failed to write response", "format", "protobuf", "error", err)
+			slog.Error("failed to write response", "path", r.URL.Path, "format", "json", "error", err)
 		}
+		return
+	}
+
+	data, err := proto.Marshal(feed)
+	if err != nil {
+		slog.Error("failed to marshal feed", "path", r.URL.Path, "format", "protobuf", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to marshal feed"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-protobuf")
+	if _, err := w.Write(data); err != nil {
+		slog.Error("failed to write response", "path", r.URL.Path, "format", "protobuf", "error", err)
+	}
+}
+
+// feedClock holds one feed's timestamps to the validator's rules, the same
+// way in both feeds: no entity timestamp more than 60 s after the feed's own
+// time (E050), and a header timestamp no older than any entity's (E012).
+type feedClock struct {
+	// limit is the latest timestamp an entity may carry. validate() accepts
+	// reports up to maxTimestampSkew ahead so a phone with a fast clock is not
+	// refused, so the feed caps them here instead.
+	limit  uint64
+	header uint64
+}
+
+func newFeedClock(now time.Time) *feedClock {
+	unix := uint64(now.Unix())
+	return &feedClock{limit: unix + 60, header: unix}
+}
+
+// vehicleTimestamp is the timestamp a feed publishes for a driver vehicle:
+// its latest report's, capped at limit. ok is false, and the vehicle is left
+// out, when that timestamp is not positive.
+func (c *feedClock) vehicleTimestamp(v *VehicleState) (ts uint64, ok bool) {
+	if v.Timestamp <= 0 {
+		slog.Warn("skipping vehicle with non-positive timestamp", "vehicle_id", v.VehicleID, "timestamp", v.Timestamp)
+		return 0, false
+	}
+	ts = min(uint64(v.Timestamp), c.limit)
+	c.include(ts)
+	return ts, true
+}
+
+// include keeps the header timestamp at or after ts.
+func (c *feedClock) include(ts uint64) {
+	c.header = max(c.header, ts)
+}
+
+// message is a full GTFS-RT 2.0 dataset of entities, stamped with the header
+// timestamp.
+func (c *feedClock) message(entities []*gtfsrt.FeedEntity) *gtfsrt.FeedMessage {
+	return &gtfsrt.FeedMessage{
+		Header: &gtfsrt.FeedHeader{
+			GtfsRealtimeVersion: proto.String("2.0"),
+			Incrementality:      gtfsrt.FeedHeader_FULL_DATASET.Enum(),
+			Timestamp:           proto.Uint64(c.header),
+		},
+		Entity: entities,
 	}
 }
 
 func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt.FeedMessage {
-	now := uint64(time.Now().Unix())
-	version := "2.0"
-	inc := gtfsrt.FeedHeader_FULL_DATASET
-
-	// E012 (gtfs-realtime-validator): header.timestamp must be >= all entity timestamps.
-	headerTimestamp := now
-	// E050: no timestamp more than 60s in the future. validate() accepts
-	// reports up to maxTimestampSkew ahead so a phone with a fast clock is not
-	// refused, so the feed caps them here instead.
-	timestampCap := now + 60
+	clock := newFeedClock(time.Now())
 
 	var entities []*gtfsrt.FeedEntity
 	for _, v := range vehicles {
-		if v.Timestamp <= 0 {
-			slog.Warn("buildFeed: skipping vehicle with non-positive timestamp", "vehicle_id", v.VehicleID, "timestamp", v.Timestamp)
+		ts, ok := clock.vehicleTimestamp(v)
+		if !ok {
 			continue
-		}
-		ts := min(uint64(v.Timestamp), timestampCap)
-		if ts > headerTimestamp {
-			headerTimestamp = ts
 		}
 
 		position := &gtfsrt.Position{
@@ -372,28 +411,7 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 			},
 		}
 
-		if v.TripID != "" || v.RouteID != "" {
-			trip := &gtfsrt.TripDescriptor{}
-			// A trip_id was checked against the schedule when its trip was
-			// started, so it names a trip in the schedule. A route-only report
-			// names no trip instance, so it claims no relationship to one.
-			if v.TripID != "" {
-				trip.TripId = proto.String(v.TripID)
-				trip.ScheduleRelationship = scheduleRelationship(v.FrequencyBased)
-				if v.StartTime != "" {
-					trip.StartTime = proto.String(v.StartTime)
-				}
-			}
-			if v.RouteID != "" {
-				trip.RouteId = proto.String(v.RouteID)
-			}
-			// A run's start_time needs its start_date, so a report that gave
-			// none is published with the one the start_time counts from.
-			if startDate := cmp.Or(v.StartDate, v.StartTimeDate); startDate != "" {
-				trip.StartDate = proto.String(startDate)
-			}
-			entity.Vehicle.Trip = trip
-		}
+		entity.Vehicle.Trip = driverTrip(v)
 		// Placed when the report was accepted (Tracker.UpdateAuthorized); the
 		// feed only reads it.
 		if status, ok := stopStatus(v); ok {
@@ -415,20 +433,41 @@ func buildFeed(vehicles []*VehicleState, estimates []rider.TripEstimate) *gtfsrt
 				"trip_id", est.Key.TripID, "start_date", est.Key.StartDate, "timestamp", ts)
 			continue
 		}
-		if uint64(ts) > headerTimestamp {
-			headerTimestamp = uint64(ts)
-		}
+		clock.include(uint64(ts))
 		entities = append(entities, riderEntity(est))
 	}
 
-	return &gtfsrt.FeedMessage{
-		Header: &gtfsrt.FeedHeader{
-			GtfsRealtimeVersion: &version,
-			Incrementality:      &inc,
-			Timestamp:           &headerTimestamp,
-		},
-		Entity: entities,
+	return clock.message(entities)
+}
+
+// driverTrip is the TripDescriptor of a driver vehicle's trip, nil when its
+// latest report named neither a trip nor a route. Both feeds describe the
+// vehicle's trip with it, so a consumer pairing a trip update with a position
+// finds the same trip in each.
+func driverTrip(v *VehicleState) *gtfsrt.TripDescriptor {
+	if v.TripID == "" && v.RouteID == "" {
+		return nil
 	}
+	trip := &gtfsrt.TripDescriptor{}
+	// A trip_id was checked against the schedule when its trip was
+	// started, so it names a trip in the schedule. A route-only report
+	// names no trip instance, so it claims no relationship to one.
+	if v.TripID != "" {
+		trip.TripId = proto.String(v.TripID)
+		trip.ScheduleRelationship = scheduleRelationship(v.FrequencyBased)
+		if v.StartTime != "" {
+			trip.StartTime = proto.String(v.StartTime)
+		}
+	}
+	if v.RouteID != "" {
+		trip.RouteId = proto.String(v.RouteID)
+	}
+	// A run's start_time needs its start_date, so a report that gave
+	// none is published with the one the start_time counts from.
+	if startDate := cmp.Or(v.StartDate, v.StartTimeDate); startDate != "" {
+		trip.StartDate = proto.String(startDate)
+	}
+	return trip
 }
 
 // vehicleDescriptor identifies a driver-reported vehicle. label is the

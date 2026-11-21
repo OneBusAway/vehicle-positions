@@ -815,8 +815,15 @@ https://your-server/gtfs-rt/vehicle-positions
 ```
 
 Maglev, the Go OneBusAway server, reads it as-is and shows your vehicles. The
-Java OneBusAway server shows none of them, because it needs a trip
-updates feed that this server does not publish. See
+Java OneBusAway server needs a second address as well, the trip updates feed,
+which says how late each vehicle is:
+
+```
+https://your-server/gtfs-rt/trip-updates
+```
+
+It shows a vehicle only while the server knows how late it is, so not one on a
+headway route, one whose driver gave only the route, or one off its route. See
 [`deployment.md` §11](deployment.md#11-connecting-the-feed-to-onebusaway) for
 the details your IT contact needs.
 

@@ -168,15 +168,20 @@ Notes:
 ## Validating the Feed with gtfs-realtime-validator
 
 CI runs MobilityData's [gtfs-realtime-validator](https://github.com/MobilityData/gtfs-realtime-validator)
-against the feed on every pull request that touches Go code
+against both feeds on every pull request that touches Go code
 (`.github/workflows/gtfs-rt-validator.yml`). It fails on any error rule
 (`E...`) and prints the warnings (`W...`). To run the same check locally you
 need JDK 17, Maven and `jq`; no database or Docker.
 
 1. Write the feed snapshots. `TestWriteFeedSnapshots` runs the server's real
    routes in-process with the test feed `rider/testdata/fixture.zip` loaded:
-   three drivers report, a rider's trip is published, and the feed is fetched
-   four times, five seconds apart. The directory must be empty or not exist:
+   three drivers report, a rider's trip is published, and both feeds are
+   fetched four times, five seconds apart. Each feed goes in its own
+   directory, `vehicle-positions/` and `trip-updates/`, because the validator
+   compares each snapshot with the one before it; `combined/` holds both in one
+   message, the only form on which the validator runs its cross-feed rules,
+   such as E047 (a trip paired with a different `vehicle.id` in each feed).
+   The directory must be empty or not exist:
 
    ```bash
    FEED_SNAPSHOT_DIR=/tmp/feed-snapshots go test -run '^TestWriteFeedSnapshots$' -count=1 .
@@ -194,12 +199,14 @@ need JDK 17, Maven and `jq`; no database or Docker.
    cd -
    ```
 
-3. Run it. `-sort name` makes it read each snapshot's fetch time from the
-   file name instead of the file's modified time:
+3. Run it once per directory. `-sort name` makes it read each snapshot's
+   fetch time from the file name instead of the file's modified time:
 
    ```bash
-   java -jar /tmp/gtfs-realtime-validator/gtfs-realtime-validator-lib/target/gtfs-realtime-validator-lib-1.0.0-SNAPSHOT-withAllDependencies.jar \
-     -gtfs rider/testdata/fixture.zip -gtfsRealtimePath /tmp/feed-snapshots -sort name
+   for feed in vehicle-positions trip-updates combined; do
+     java -jar /tmp/gtfs-realtime-validator/gtfs-realtime-validator-lib/target/gtfs-realtime-validator-lib-1.0.0-SNAPSHOT-withAllDependencies.jar \
+       -gtfs rider/testdata/fixture.zip -gtfsRealtimePath /tmp/feed-snapshots/$feed -sort name
+   done
    ```
 
 4. Read the findings. The validator writes one `.results.json` next to each
@@ -208,15 +215,18 @@ need JDK 17, Maven and `jq`; no database or Docker.
    ```bash
    jq -r '.[] | .errorMessage.validationRule as $rule | .occurrenceList[]
      | "\($rule.errorId) \($rule.title): \(.prefix) \($rule.occurrenceSuffix)"' \
-     /tmp/feed-snapshots/*.results.json | sort | uniq -c
+     /tmp/feed-snapshots/*/*.results.json | sort | uniq -c
    ```
 
-Two warnings are expected today, once per snapshot, both for the vehicle whose
-driver knows only the route: `W006` because its trip has no `trip_id`, and
-`W009` (`schedule_relationship` not populated) because a route alone names no
-trip to be scheduled against. Every trip the feed does name is `SCHEDULED`, or
-`UNSCHEDULED` when `frequencies.txt` runs it by headway. Any line starting with
-`E` is what fails CI.
+In `vehicle-positions/` two warnings are expected today, once per snapshot,
+both for the vehicle whose driver knows only the route: `W006` because its trip
+has no `trip_id`, and `W009` (`schedule_relationship` not populated) because a
+route alone names no trip to be scheduled against. Every trip the feed does
+name is `SCHEDULED`, or `UNSCHEDULED` when `frequencies.txt` runs it by
+headway. `trip-updates/` has none. `combined/` repeats those two and adds
+`W003` for each vehicle and trip in the positions feed with no trip update: the
+route-only vehicle, the parked one, and the rider-reported trip, which the trip
+updates feed leaves out by design. Any line starting with `E` is what fails CI.
 
 ## Simulating Vehicle Traffic
 

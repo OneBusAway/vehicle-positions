@@ -248,7 +248,7 @@ This project fills that gap by creating a lightweight, open-source vehicle track
 ### Non-Goals
 
 - Offline data queuing and sync (v2 — see Future Work; v1 requires an active network connection to report locations)
-- Arrival predictions / trip updates (this project produces Vehicle Positions only; arrival estimation is a separate, significantly more complex problem that can build on this data later)
+- Arrival predictions (the server publishes a Trip Updates feed, but it carries only the delay measured from each driver vehicle's position against the schedule, so that OneBusAway servers, which build their vehicles from trip updates, can show them; there is no arrival-time model, no learning from history and no dwell or traffic estimates, a separate, significantly more complex problem that can build on this data later)
 - iOS driver app for the GSoC deliverable (the target user base overwhelmingly uses Android). An iOS driver app with CarPlay was added later by the project owner; see docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md
 - Rider-facing features (riders consume the GTFS-RT feed through existing apps like OneBusAway; this project focuses on the data production side)
 - Replacing existing AVL systems for agencies that already have them
@@ -315,6 +315,7 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |`POST /api/v1/auth/logout`          |POST  |Revoke the caller's own JWT → 204 No Content        |
 |`POST /api/v1/locations`            |POST  |Single location report from driver app              |
 |`GET /gtfs-rt/vehicle-positions`    |GET   |GTFS-RT feed (protobuf or JSON) — see Feed API Keys |
+|`GET /gtfs-rt/trip-updates`         |GET   |GTFS-RT Trip Updates: each vehicle's measured delay |
 |`GET /api/v1/admin/vehicles`        |GET   |List vehicles                                       |
 |`POST /api/v1/admin/vehicles`       |POST  |Create/update vehicle                               |
 |`GET /api/v1/admin/users`           |GET   |List users                                          |
@@ -487,13 +488,14 @@ export LOCATION_PRUNE_INTERVAL=1h
 
 **Feed API Keys**
 
-`GET /gtfs-rt/vehicle-positions` is the only data endpoint the server can serve
+The GTFS-RT feeds, `GET /gtfs-rt/vehicle-positions` and
+`GET /gtfs-rt/trip-updates`, are the only data endpoints the server can serve
 without authentication. An agency that doesn't want its live fleet positions on
-the open internet can require an API key on it:
+the open internet can require an API key on both:
 
 |Variable           |Default|Purpose                                          |
 |-------------------|-------|-------------------------------------------------|
-|`FEED_AUTH_ENABLED`|`false`|Require an `X-API-Key` header on the GTFS-RT feed|
+|`FEED_AUTH_ENABLED`|`false`|Require an `X-API-Key` header on the GTFS-RT feeds|
 
 **Upgrade note.** Feed auth is off by default, so upgrading changes nothing on
 its own. Turning it on is a breaking change for feed consumers: every consumer
@@ -968,7 +970,7 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
 
 ## 8. How This Connects to OneBusAway
 
-The output of this project is a GTFS-RT Vehicle Positions feed. [Maglev](https://github.com/OneBusAway/maglev), the OneBusAway server written in Go, reads it as-is and shows the vehicles: once a transit agency deploys the Vehicle Tracker server and equips its drivers with the app, the feed can be pointed at a Maglev instance as a realtime data source, with no changes to Maglev. The Java OneBusAway server (the application suite that onebusaway-docker runs, as of 2.7.2) shows no vehicles from it. It builds vehicle records only from a trip updates feed and uses a vehicle position only to place the vehicle of a trip update, and this server publishes vehicle positions alone. Agencies that want OneBusAway on this feed should run Maglev; [docs/demo.md](docs/demo.md#add-the-feed-to-a-onebusaway-server) shows both servers against the demo.
+The output of this project is a GTFS-RT Vehicle Positions feed, with a Trip Updates feed beside it. [Maglev](https://github.com/OneBusAway/maglev), the OneBusAway server written in Go, reads the positions feed as-is and shows the vehicles: once a transit agency deploys the Vehicle Tracker server and equips its drivers with the app, the feed can be pointed at a Maglev instance as a realtime data source, with no changes to Maglev. The Java OneBusAway server (the application suite that onebusaway-docker runs, as of 2.7.2) builds vehicle records only from a trip updates feed and uses a vehicle position only to place the vehicle of a trip update, so it needs both. `GET /gtfs-rt/trip-updates` carries, for each driver vehicle, the delay the server measured from its position against the schedule and the `vehicle.id` the positions feed gives it. A vehicle whose delay is not known (a trip in `frequencies.txt`, a driver who gave only the route, a vehicle off its route, or a rider-reported trip) is left out of it rather than published as on time, so the Java server does not show that vehicle at that moment. [docs/deployment.md](docs/deployment.md#11-connecting-the-feed-to-onebusaway) shows how to point each server at the feeds.
 
 This makes the Vehicle Tracker a force multiplier for OBA adoption: it removes the single biggest prerequisite (an AVL system) that has historically prevented transit agencies in developing countries from using OneBusAway. A city that has a GTFS static feed and a fleet of Android phones can go from zero realtime data to a working Maglev deployment in a day.
 
@@ -991,7 +993,7 @@ This is a significant engineering effort (estimated 60–80 hours) involving car
 
 ### Other Future Work
 
-- **Arrival predictions:** Use the historical location data to estimate arrival times at stops, generating GTFS-RT TripUpdate feeds in addition to Vehicle Positions
+- **Arrival predictions:** Use the historical location data to estimate arrival times at stops, rather than leaving consumers to add the current measured delay to the timetable as the Trip Updates feed does today
 - **Driver incentives and gamification:** Track on-time performance, route adherence, and other metrics to help agencies improve service quality
 - **Passenger counting:** Integrate with Android’s camera or simple tap-counter UI to estimate ridership
 - **Multi-agency support:** Add tenant isolation so a single server instance can serve multiple transit agencies

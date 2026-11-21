@@ -222,12 +222,14 @@ the agency id in front of trip ids:
 ### The Java OneBusAway server
 
 The OneBusAway application suite, which
-[onebusaway-docker](https://github.com/OneBusAway/onebusaway-docker) runs,
-shows no vehicles from this feed, as of OneBusAway 2.7.2. It uses a vehicle
-position only to place the vehicle of a trip update for the same trip, and this
-server publishes vehicle positions alone. Pointed at the demo, it loads the
+[onebusaway-docker](https://github.com/OneBusAway/onebusaway-docker) runs, uses
+a vehicle position only to place the vehicle of a trip update for the same
+trip, as of OneBusAway 2.7.2. Pointed at the positions feed alone, it loads the
 schedule and lists the running trips, but `vehicles-for-agency/DEMO.json` stays
-empty. Use Maglev to see the demo in OneBusAway.
+empty. Give it the demo's trip updates feed, `/gtfs-rt/trip-updates` on the
+same server, as well, in the same source: `TRIP_UPDATES_URL` beside
+`VEHICLE_POSITIONS_URL`, with `AGENCY_ID=DEMO`. It shows a vehicle while the
+server knows how late it is.
 
 For a deployed server rather than this demo, see
 [Connecting the feed to OneBusAway](deployment.md#11-connecting-the-feed-to-onebusaway).
