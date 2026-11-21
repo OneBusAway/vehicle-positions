@@ -131,9 +131,11 @@ var schemaStructs = map[string]string{
 	"ReportOutcomes":       "reportOutcomes",
 	"FeedOutcomes":         "feedOutcomes",
 
-	// A service report's trips run from frequencies.txt.
+	// A service report's trips run from frequencies.txt, and the gaps
+	// between their vehicles.
 	"ServiceReportFrequencies":     "tripFrequencies",
 	"ServiceReportFrequencyWindow": "frequencyWindow",
+	"ServiceReportGaps":            "directionGaps",
 
 	// Rider mode (#94).
 	"RiderRegisterResponse": "riderRegisterResponse",

@@ -66,6 +66,16 @@ func TestPassedAt(t *testing.T) {
 	}
 }
 
+// TestLeftStopAt: a run has left a stop 30 m past it, or at the end of the
+// shape when the stop is nearer the end than that.
+func TestLeftStopAt(t *testing.T) {
+	t1 := *mustTrip(t, reportFixtureIndex(t), "T1")
+	t1.StopTimes = slices.Clone(t1.StopTimes)
+	assert.InDelta(t, 530, leftStopAt(&t1, 1), 0.001)
+	t1.StopTimes[1].AlongShape = t1.Shape.Length - 10
+	assert.InDelta(t, t1.Shape.Length, leftStopAt(&t1, 1), 0.001)
+}
+
 func TestJudgedStops(t *testing.T) {
 	stops := func(timepoints ...bool) []rider.StopTimeInfo {
 		out := make([]rider.StopTimeInfo, 0, len(timepoints))

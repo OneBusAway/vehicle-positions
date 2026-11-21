@@ -21,7 +21,9 @@ import (
 //
 // 1: a trip in frequencies.txt counts the runs its windows schedule, by the
 // hour each is due, and none of its stops is judged.
-const dayTotalsVersion = 1
+// 2: the gaps between vehicles on a route's frequencies.txt trips, by
+// direction and hour, and the day's gaps by tenths of their scheduled gap.
+const dayTotalsVersion = 2
 
 // dayTotals is one service day as the Analytics page adds it up over a
 // period: each route's counts by the hour its trips leave in, and when the
@@ -39,6 +41,9 @@ type dayTotals struct {
 	// ArrivalsLeftOut is the trips that ran but have no report at their last
 	// stop.
 	ArrivalsLeftOut int `json:"arrivals_left_out"`
+	// GapRatios counts the gaps judged between vehicles by which tenth of
+	// their scheduled gap each was, listing only the tenths with any.
+	GapRatios []gapRatioCount `json:"gap_ratios"`
 }
 
 // routeDayTotals is one route with service on the day, in the schedule's
@@ -48,6 +53,9 @@ type routeDayTotals struct {
 	ShortName string       `json:"short_name"`
 	LongName  string       `json:"long_name"`
 	Hours     []hourTotals `json:"hours"`
+	// Gaps is the gaps between vehicles on the route's frequencies.txt trips,
+	// a direction at a time, as the day's report gives them.
+	Gaps []directionGapTotals `json:"gaps"`
 }
 
 // hourTotals is a route's trips that leave in one hour of the service day,
@@ -61,6 +69,28 @@ type hourTotals struct {
 	Early     int `json:"early"`
 	Late      int `json:"late"`
 	Unknown   int `json:"unknown"`
+}
+
+// directionGapTotals is one direction of a route's frequencies.txt service,
+// its gaps by the hour the later vehicle passed in.
+type directionGapTotals struct {
+	DirectionID *int            `json:"direction_id"`
+	Headsign    string          `json:"headsign"`
+	Hours       []gapHourTotals `json:"hours"`
+}
+
+// gapHourTotals is a direction's gaps whose later vehicle passed in one hour
+// of the service day, which can pass 23 after midnight.
+type gapHourTotals struct {
+	Hour int `json:"hour"`
+	gapCounts
+}
+
+// gapRatioCount is the gaps judged in one tenth of their scheduled gap, the
+// last, gapRatioTop, holding 300% and over.
+type gapRatioCount struct {
+	Tenth int `json:"tenth"`
+	Gaps  int `json:"gaps"`
 }
 
 // arrivalMinute is the trips that reached their last stop in one minute
@@ -95,12 +125,14 @@ func (d dayTotals) counts() reportCounts {
 // newDayTotals adds up rep, a day's service report worked out under s.
 func newDayTotals(rep *serviceReport, s reportSettings) dayTotals {
 	day := dayTotals{
-		Date:     rep.Date,
-		Version:  dayTotalsVersion,
-		Routes:   make([]routeDayTotals, 0, len(rep.Routes)),
-		Arrivals: make([]arrivalMinute, 0),
+		Date:      rep.Date,
+		Version:   dayTotalsVersion,
+		Routes:    make([]routeDayTotals, 0, len(rep.Routes)),
+		Arrivals:  make([]arrivalMinute, 0),
+		GapRatios: make([]gapRatioCount, 0),
 	}
 	arrivals := make(map[int]*arrivalMinute)
+	var ratios [gapRatioTop + 1]int
 	for _, route := range rep.Routes {
 		hours := make(map[int]*hourTotals)
 		inHour := func(at time.Time) *hourTotals {
@@ -155,12 +187,26 @@ func newDayTotals(rep *serviceReport, s reportSettings) dayTotals {
 				a.OnTime++
 			}
 		}
-		totals := routeDayTotals{RouteID: route.RouteID, ShortName: route.ShortName, LongName: route.LongName, Hours: make([]hourTotals, 0, len(hours))}
+		totals := routeDayTotals{
+			RouteID: route.RouteID, ShortName: route.ShortName, LongName: route.LongName,
+			Hours: make([]hourTotals, 0, len(hours)), Gaps: make([]directionGapTotals, 0, len(route.Gaps)),
+		}
 		for _, h := range hours {
 			totals.Hours = append(totals.Hours, *h)
 		}
 		slices.SortFunc(totals.Hours, func(a, b hourTotals) int { return cmp.Compare(a.Hour, b.Hour) })
+		for _, d := range route.Gaps {
+			totals.Gaps = append(totals.Gaps, directionGapTotals{DirectionID: d.DirectionID, Headsign: d.Headsign, Hours: d.hours})
+			for tenth, n := range d.ratios {
+				ratios[tenth] += n
+			}
+		}
 		day.Routes = append(day.Routes, totals)
+	}
+	for tenth, n := range ratios {
+		if n > 0 {
+			day.GapRatios = append(day.GapRatios, gapRatioCount{Tenth: tenth, Gaps: n})
+		}
 	}
 	for _, a := range arrivals {
 		day.Arrivals = append(day.Arrivals, *a)

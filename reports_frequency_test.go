@@ -76,7 +76,9 @@ func demoDayRuns(t *testing.T, ix *rider.Index) ([]TripSummary, map[int64][]Loca
 // the day's report and its kept totals are exactly what they were before
 // trips in frequencies.txt were counted by run, at c9c9b691. The route lines
 // say it readably; the digest covers every trip's times, runs and verdicts,
-// every hour of the totals and the arrival minutes.
+// every hour of the totals and the arrival minutes. The gaps between vehicles
+// came later and are measured only on trips in frequencies.txt, so the feed
+// has none, and the digest takes the totals in the shape they had then.
 func TestServiceReporter_DemoDayIsUnchanged(t *testing.T) {
 	zip, err := os.ReadFile("demo/gtfs.zip")
 	require.NoError(t, err)
@@ -103,7 +105,20 @@ func TestServiceReporter_DemoDayIsUnchanged(t *testing.T) {
 				trip.StopsOnTime, trip.StopsEarly, trip.StopsLate, trip.StopsUnknown)
 		}
 	}
-	for _, part := range []any{totals.Routes, totals.Arrivals, totals.ArrivalsLeftOut, rep.serviceEnds.Unix()} {
+	type routeTotalsThen struct {
+		RouteID   string       `json:"route_id"`
+		ShortName string       `json:"short_name"`
+		LongName  string       `json:"long_name"`
+		Hours     []hourTotals `json:"hours"`
+	}
+	then := make([]routeTotalsThen, 0, len(totals.Routes))
+	for i, route := range totals.Routes {
+		assert.Empty(t, rep.Routes[i].Gaps, route.RouteID)
+		assert.Empty(t, route.Gaps, route.RouteID)
+		then = append(then, routeTotalsThen{route.RouteID, route.ShortName, route.LongName, route.Hours})
+	}
+	assert.Empty(t, totals.GapRatios)
+	for _, part := range []any{then, totals.Arrivals, totals.ArrivalsLeftOut, rep.serviceEnds.Unix()} {
 		b, err := json.Marshal(part)
 		require.NoError(t, err)
 		digest.Write(b)

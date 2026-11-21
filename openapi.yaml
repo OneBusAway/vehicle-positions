@@ -1554,6 +1554,29 @@ paths:
         started fills the scheduled run nearest it that no earlier run
         filled, so a trip never counts more runs than scheduled.
 
+        A route's trips in frequencies.txt are measured instead by the gaps
+        between their vehicles, for each direction (`direction_id`, or the
+        headsign when the feed gives none). At each stop On time would judge
+        on any of them, except a trip's last, every run passes when it is 30 m
+        past the stop, worked out as a departure is above, and the passings
+        are put in time order whichever vehicles made them. A gap is the time
+        from one passing to the next, judged against the scheduled gap when
+        the later vehicle passed. Each trip due at the stop then adds a run
+        every headway, from the frequencies.txt row its run would have left
+        the first stop in, or the row that ended less than a headway before,
+        so two trips every 10 minutes make it every 5 minutes, rounded to
+        the second. A gap is judged only between two passings in
+        one stretch of service, the rows' windows at the stop held a headway
+        past their end, so the first passing of a stretch has no gap. A run
+        whose passing at a stop is unknown passed some time between its fixes
+        either side, its trip's start and its trip's end standing in for a
+        fix that is not there, or any time after its last fix while it is
+        still running; a gap it could fall in is unknown, not judged. A run
+        whose trail stops short of the stop and that ended within 2 minutes
+        of its last fix did not serve the stop and is not in the order. Only
+        driver trips are counted, and a timetabled trip is not measured, even
+        on a route with trips in frequencies.txt.
+
         A day before today's service date is kept in memory once its last
         scheduled arrival is an hour past, until the schedule is next
         reloaded; today is worked out again on every request.
@@ -3600,6 +3623,7 @@ components:
         - on_time_percent
         - unknown_percent
         - trips
+        - gaps
       properties:
         route_id:
           type: string
@@ -3648,6 +3672,69 @@ components:
           description: Every scheduled trip of the route that day, by first departure.
           items:
             $ref: '#/components/schemas/ScheduledTripReport'
+        gaps:
+          type: array
+          description: |
+            The gaps between vehicles on the route's trips in frequencies.txt,
+            one entry for each direction they run in that day, by
+            `direction_id` and then headsign, whether anything ran or not.
+            Empty for a route run only by timetable.
+          items:
+            $ref: '#/components/schemas/ServiceReportGaps'
+
+    ServiceReportGaps:
+      type: object
+      required:
+        - direction_id
+        - headsign
+        - gaps_judged
+        - bunched
+        - long_gaps
+        - unknown
+        - extra_wait_s
+        - scheduled_gap_s
+      properties:
+        direction_id:
+          type: [integer, 'null']
+          description: The trips' `direction_id`, null when the feed gives none.
+        headsign:
+          type: string
+          description: |
+            The headsign of the direction's first trip of the day. Where
+            `direction_id` is null it is what tells the directions apart.
+        gaps_judged:
+          type: integer
+          minimum: 0
+          description: Gaps judged against the scheduled gap, at every stop measured.
+        bunched:
+          type: integer
+          minimum: 0
+          description: Gaps judged that were under 25% of the scheduled gap.
+        long_gaps:
+          type: integer
+          minimum: 0
+          description: Gaps judged that were over 150% of the scheduled gap.
+        unknown:
+          type: integer
+          minimum: 0
+          description: |
+            Gaps between two known passings that a run whose passing was not
+            known could have fallen in, so not judged.
+        extra_wait_s:
+          type: [integer, 'null']
+          description: |
+            Excess Wait Time as TfL defines it, in seconds: the average wait
+            of a rider who turned up at random, sum(h^2) / 2 sum(h) over the
+            gaps judged, less the same over their scheduled gaps. Below zero
+            when the vehicles came more often than scheduled. A vehicle
+            without the app reads as a gap, so it is high when some runs were
+            not reported. Null when no gap was judged.
+        scheduled_gap_s:
+          type: [integer, 'null']
+          description: |
+            The scheduled gap, in seconds, of the most gaps judged, the
+            shortest of those as common, such as 600 for every 10 minutes.
+            Null when no gap was judged.
 
     ScheduledTripReport:
       type: object

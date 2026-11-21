@@ -115,6 +115,9 @@ type routeReport struct {
 	OnTimePercent  *float64     `json:"on_time_percent"`
 	UnknownPercent *float64     `json:"unknown_percent"`
 	Trips          []tripReport `json:"trips"`
+	// Gaps is the gaps between vehicles on the route's frequencies.txt trips,
+	// a direction at a time; empty for a route run only by timetable.
+	Gaps []directionGaps `json:"gaps"`
 }
 
 // tripReport is one scheduled trip of a route, run or not. A trip run more
@@ -524,7 +527,8 @@ func (r *serviceReporter) compute(ctx context.Context, ix *rider.Index, day time
 }
 
 // buildServiceReport is a day's report from the driver trips that ran its
-// scheduled trips and the trail of each, both keyed by GTFS trip id.
+// scheduled trips and the trail of each, both keyed by GTFS trip id, a trip's
+// trails in the order of its runs.
 func buildServiceReport(ix *rider.Index, day time.Time, runs map[string][]TripSummary, trails map[string][][]LocationPoint, s reportSettings) (*serviceReport, error) {
 	date := day.Format(gtfsDateLayout)
 	dayStart, err := rider.ServiceDayStart(date, ix.Timezone())
@@ -579,6 +583,7 @@ func buildServiceReport(ix *rider.Index, day time.Time, runs map[string][]TripSu
 		}
 		row.StopsOnTime, row.StopsEarly, row.StopsLate, row.StopsUnknown = counts.onTime, counts.early, counts.late, counts.unknown
 		row.OnTimePercent, row.UnknownPercent = counts.onTimePercent(), counts.unknownPercent()
+		row.Gaps = routeGaps(rep, scheduled, dayStart, runs, trails, s)
 		rep.Routes = append(rep.Routes, row)
 	}
 	return rep, nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"testing"
 	"time"
@@ -85,6 +86,67 @@ func TestServiceReporter_ReadsTheFixtureDayFromTheStore(t *testing.T) {
 
 	ix := reportFixtureIndex(t)
 	trips, trails := reportFixtureTrips(t, ix)
+	storeReportDay(t, store, trips, trails)
+
+	memory := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return ix }, testReportSettings)
+	want, err := memory.report(ctx, "2026-09-02")
+	require.NoError(t, err)
+	fromStore := newServiceReporter(store, func() *rider.Index { return ix }, testReportSettings)
+	got, err := fromStore.report(ctx, "2026-09-02")
+	require.NoError(t, err)
+
+	require.NotZero(t, want.Routes[1].TripsRun)
+	assertSameReport(t, want, got)
+
+	// The day is long settled, so its totals were kept, and read back the
+	// same through service_day_totals.
+	fromStore.saving.Wait()
+	kept, err := store.ListServiceDays(ctx, reportDay, reportDay)
+	require.NoError(t, err)
+	require.Len(t, kept, 1)
+	assert.Equal(t, newDayTotals(want, testReportSettings), kept[0].Totals)
+}
+
+// TestServiceReporter_ReadsTheHeadwayGapsFromTheStore: route 5's gaps are
+// the same worked out from the database, where a trip's end time and its
+// trail come from their own tables, as from memory, and so are the gap
+// totals kept through service_day_totals.
+func TestServiceReporter_ReadsTheHeadwayGapsFromTheStore(t *testing.T) {
+	store := newTestStore(t)
+	clearTripTestData(t, store)
+	t.Cleanup(func() { clearTripTestData(t, store) })
+	ctx := context.Background()
+
+	ix := gapFixtureIndex(t)
+	trips, trails := gapFixtureTrips(t, ix)
+	storeReportDay(t, store, trips, trails)
+
+	memory := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return ix }, testReportSettings)
+	want, err := memory.report(ctx, "2026-09-02")
+	require.NoError(t, err)
+	fromStore := newServiceReporter(store, func() *rider.Index { return ix }, testReportSettings)
+	got, err := fromStore.report(ctx, "2026-09-02")
+	require.NoError(t, err)
+
+	assert.Contains(t, routeGapsJSON(t, reportRoute(t, got, "R5")), `"gaps_judged":13`)
+	assertSameReport(t, want, got)
+
+	fromStore.saving.Wait()
+	kept, err := store.ListServiceDays(ctx, reportDay, reportDay)
+	require.NoError(t, err)
+	require.Len(t, kept, 1)
+	assert.Equal(t, newDayTotals(want, testReportSettings), kept[0].Totals)
+	encoded, err := json.Marshal(kept[0].Totals)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"gap_ratios":[{"tenth":2,"gaps":5}`)
+}
+
+// storeReportDay stores trips with their points, each received a second
+// after the phone took it. A trip that has no end time ends a minute after
+// its last point, or an hour after it started when it has none.
+func storeReportDay(t *testing.T, store *Store, trips []TripSummary, trails map[int64][]LocationPoint) {
+	t.Helper()
+	ctx := context.Background()
 	users := make(map[string]int64)
 	for _, tr := range trips {
 		if _, ok := users[tr.VehicleID]; !ok {
@@ -92,7 +154,10 @@ func TestServiceReporter_ReadsTheFixtureDayFromTheStore(t *testing.T) {
 		}
 		points := trails[tr.ID]
 		end := tr.StartTime.Add(time.Hour)
-		if len(points) > 0 {
+		switch {
+		case tr.EndTime != nil:
+			end = *tr.EndTime
+		case len(points) > 0:
 			end = time.Unix(points[len(points)-1].Timestamp, 0).Add(time.Minute)
 		}
 		id := insertReportTrip(t, store, users[tr.VehicleID], tr.VehicleID, tr.RouteID, tr.GtfsTripID, tr.StartTime, &end)
@@ -110,16 +175,13 @@ func TestServiceReporter_ReadsTheFixtureDayFromTheStore(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, stored, len(points), "trip %s's trail", tr.GtfsTripID)
 	}
+}
 
-	memory := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return ix }, testReportSettings)
-	want, err := memory.report(ctx, "2026-09-02")
-	require.NoError(t, err)
-	fromStore := newServiceReporter(store, func() *rider.Index { return ix }, testReportSettings)
-	got, err := fromStore.report(ctx, "2026-09-02")
-	require.NoError(t, err)
-
+// assertSameReport holds a report worked out from the database to the one
+// worked out from memory, route by route.
+func assertSameReport(t *testing.T, want, got *serviceReport) {
+	t.Helper()
 	require.Len(t, got.Routes, len(want.Routes))
-	require.NotZero(t, want.Routes[1].TripsRun)
 	for i := range want.Routes {
 		wantRoute, gotRoute := want.Routes[i], got.Routes[i]
 		require.Len(t, gotRoute.Trips, len(wantRoute.Trips))
@@ -134,12 +196,4 @@ func TestServiceReporter_ReadsTheFixtureDayFromTheStore(t *testing.T) {
 		}
 		assert.Equal(t, wantRoute, gotRoute, "route %s", wantRoute.RouteID)
 	}
-
-	// The day is long settled, so its totals were kept, and read back the
-	// same through service_day_totals.
-	fromStore.saving.Wait()
-	kept, err := store.ListServiceDays(ctx, reportDay, reportDay)
-	require.NoError(t, err)
-	require.Len(t, kept, 1)
-	assert.Equal(t, newDayTotals(want, testReportSettings), kept[0].Totals)
 }
