@@ -16,6 +16,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -106,14 +107,12 @@ func runExportCommand(args []string, stdout, stderr io.Writer) int {
 	if *out == "" {
 		*out = lang + ".csv"
 	}
-	f, err := os.Create(*out)
-	if err != nil {
-		fmt.Fprintln(stderr, "l10n:", err)
-		return 2
-	}
-	err = exportSheet(*root, *xliff, *matches, lang, f)
-	if cerr := f.Close(); err == nil {
-		err = cerr
+	// The sheet is built whole before the file is touched, so a failed export
+	// leaves a sheet already there as it was.
+	var sheet bytes.Buffer
+	err := exportSheet(*root, *xliff, *matches, lang, &sheet, stderr)
+	if err == nil {
+		err = os.WriteFile(*out, sheet.Bytes(), 0o644)
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "l10n:", err)

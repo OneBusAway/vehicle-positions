@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -35,6 +36,10 @@ type sheetRow struct {
 	current, translation string
 	line                 int // its line in a sheet read back
 }
+
+// byteOrderMark starts a sheet: the export writes one, and a spreadsheet
+// saving "CSV UTF-8" does too.
+const byteOrderMark = "\ufeff"
 
 func (r sheetRow) fields() []string {
 	return []string{r.android, r.ios, r.form, r.screen, r.english, r.note, r.placeholders, r.glossary, r.onebusaway, r.current, r.translation}
@@ -167,14 +172,20 @@ func (p *project) shared(groups []*iosString) map[string]*iosString {
 	return out
 }
 
-// agree reports whether every form of is matches the Android string's, in
-// English and in the language.
+// agree reports whether every form of is that the Android string's rows
+// carry matches the Android string's, in English and in the language. A
+// plural form the language's rules don't list, such as a zero variation, has
+// a row of its own and doesn't count.
 func (p *project) agree(s androidString, is *iosString) bool {
 	_, plain := s.version.forms[""]
+	paths := p.androidPaths(s)
 	for _, u := range is.units {
 		path := u.path()
 		if (plain && path != "") || (!plain && !strings.HasPrefix(path, "plural.")) {
 			return false
+		}
+		if !slices.Contains(paths, path) {
+			continue
 		}
 		english := englishOf(s, path)
 		if comparable(android, english) != comparable(ios, u.source) || !sameTypes(placeholders(android, english), placeholders(ios, u.source)) {
@@ -310,8 +321,8 @@ func (p *project) describe(r *sheetRow, format, path string, matches matchIndex)
 }
 
 // rows is the language's sheet: the Android strings in their file's order,
-// each with the iOS string it shares a row with, then the iOS strings of
-// their own.
+// each with the iOS string it shares a row with and a row for each of that
+// string's forms Android has no row for, then the iOS strings of their own.
 func (p *project) rows(matches matchIndex) []sheetRow {
 	groups := p.iosStrings()
 	shared := p.shared(groups)
@@ -322,7 +333,8 @@ func (p *project) rows(matches matchIndex) []sheetRow {
 	var rows []sheetRow
 	for _, s := range p.english {
 		is := shared[s.key]
-		for _, path := range p.androidPaths(s) {
+		paths := p.androidPaths(s)
+		for _, path := range paths {
 			r := sheetRow{android: s.key, form: formName(path), screen: screenOf(s.key), english: englishOf(s, path), note: s.note}
 			if v, ok := p.current[s.key]; ok {
 				r.current = v.forms[path].value
@@ -337,21 +349,39 @@ func (p *project) rows(matches matchIndex) []sheetRow {
 			p.describe(&r, android, path, matches)
 			rows = append(rows, r)
 		}
+		if is != nil {
+			for _, u := range is.units {
+				if !slices.Contains(paths, u.path()) {
+					rows = append(rows, p.iosRow(u, matches))
+				}
+			}
+		}
 	}
 	for _, is := range groups {
 		if withAndroid[is] {
 			continue
 		}
 		for _, u := range is.units {
-			r := sheetRow{ios: u.id, form: formName(u.path()), english: u.source, note: u.note, current: u.current()}
-			p.describe(&r, ios, u.path(), matches)
-			rows = append(rows, r)
+			rows = append(rows, p.iosRow(u, matches))
 		}
 	}
 	return rows
 }
 
+// iosRow is the row of an iOS string's form that reaches iOS alone.
+func (p *project) iosRow(u *xliffUnit, matches matchIndex) sheetRow {
+	r := sheetRow{ios: u.id, form: formName(u.path()), english: u.source, note: u.note, current: u.current()}
+	p.describe(&r, ios, u.path(), matches)
+	return r
+}
+
+// writeSheet writes rows as a sheet. It starts with a byte order mark, so
+// that Excel reads the file as UTF-8 rather than in the system's legacy
+// encoding.
 func writeSheet(w io.Writer, rows []sheetRow) error {
+	if _, err := io.WriteString(w, byteOrderMark); err != nil {
+		return err
+	}
 	cw := csv.NewWriter(w)
 	if err := cw.Write(sheetColumns); err != nil {
 		return err
@@ -381,8 +411,7 @@ func readSheet(path string) ([]sheetRow, error) {
 	}
 	col := map[string]int{}
 	for i, name := range header {
-		// A spreadsheet saving "CSV UTF-8" starts the file with a byte order mark.
-		col[strings.TrimSpace(strings.TrimPrefix(name, "\ufeff"))] = i
+		col[strings.TrimSpace(strings.TrimPrefix(name, byteOrderMark))] = i
 	}
 	for _, name := range []string{"android", "ios", "form", "current", "translation"} {
 		if _, ok := col[name]; !ok {
@@ -412,15 +441,16 @@ func readSheet(path string) ([]sheetRow, error) {
 	}
 }
 
-// exportSheet writes the language's sheet to out.
-func exportSheet(root, xliffPath, matchesDir, lang string, out io.Writer) error {
+// exportSheet writes the language's sheet to out, and to warn each file under
+// matchesDir it skipped.
+func exportSheet(root, xliffPath, matchesDir, lang string, out, warn io.Writer) error {
 	p, err := loadProject(root, lang, xliffPath)
 	if err != nil {
 		return err
 	}
 	matches := matchIndex{}
 	if matchesDir != "" {
-		if matches, err = readMatches(matchesDir, lang); err != nil {
+		if matches, err = readMatches(matchesDir, lang, warn); err != nil {
 			return err
 		}
 	}
@@ -431,7 +461,8 @@ func exportSheet(root, xliffPath, matchesDir, lang string, out io.Writer) error 
 // and its XLIFF, and returns the files it changed. Each row's translation, or
 // failing that its current one, goes to the strings it names. A sheet whose
 // placeholders or plural forms fail the check is refused whole: the findings
-// come back, and nothing is written.
+// come back, and nothing is written. So is a sheet with two rows for one
+// form of a string, and when one of the files can't be written, neither is.
 func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, changed []string, err error) {
 	p, err := loadProject(root, lang, xliffPath)
 	if err != nil {
@@ -450,6 +481,14 @@ func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, ch
 	}
 	targets := map[*xliffUnit]string{}
 	firstLine := map[string]int{} // by app and key
+	rowAt := map[string]int{}     // the line of each form's row, by app, key and form
+	twice := func(r sheetRow, key, name string) error {
+		if line, ok := rowAt[key]; ok {
+			return fmt.Errorf("%s:%d: %s has a row on line %d already: keep one", sheetPath, r.line, name, line)
+		}
+		rowAt[key] = r.line
+		return nil
+	}
 	for _, r := range rows {
 		text := r.translation
 		if strings.TrimSpace(text) == "" {
@@ -463,6 +502,13 @@ func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, ch
 			path, err := p.formPath(s, r.form)
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s:%d: %s: %w", sheetPath, r.line, r.android, err)
+			}
+			name := r.android
+			if r.form != "" {
+				name += " (" + r.form + ")"
+			}
+			if err := twice(r, android+"\x00"+s.key+"\x00"+path, name); err != nil {
+				return nil, nil, err
 			}
 			if _, seen := firstLine[android+r.android]; !seen {
 				firstLine[android+r.android] = r.line
@@ -482,6 +528,9 @@ func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, ch
 				}
 				return nil, nil, fmt.Errorf("%s:%d: %s has no string %q", sheetPath, r.line, p.xliff.path, r.ios)
 			}
+			if err := twice(r, ios+"\x00"+u.id, fmt.Sprintf("iOS's %q", u.id)); err != nil {
+				return nil, nil, err
+			}
 			if _, seen := firstLine[ios+u.file+u.key()]; !seen {
 				firstLine[ios+u.file+u.key()] = r.line
 			}
@@ -497,20 +546,24 @@ func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, ch
 	if refused := p.refusals(trans, targets, sheetPath, firstLine); len(refused) > 0 {
 		return refused, nil, nil
 	}
-	path, err := p.writeAndroid(trans)
+	var files []fileWrite
+	f, err := p.androidFile(trans)
 	if err != nil {
 		return nil, nil, err
 	}
-	if path != "" {
-		changed = append(changed, path)
+	if f != nil {
+		files = append(files, *f)
 	}
 	if p.xliff != nil {
 		if body := p.xliff.withTargets(targets); string(body) != string(p.xliff.body) {
-			if err := os.WriteFile(p.xliff.path, body, 0o644); err != nil {
-				return nil, nil, err
-			}
-			changed = append(changed, p.xliff.path)
+			files = append(files, fileWrite{path: p.xliff.path, body: body})
 		}
+	}
+	if err := writeFiles(files); err != nil {
+		return nil, nil, err
+	}
+	for _, f := range files {
+		changed = append(changed, f.path)
 	}
 	return nil, changed, nil
 }
@@ -580,29 +633,94 @@ func (p *project) refusals(trans map[string]map[string]string, targets map[*xlif
 	return out
 }
 
-// writeAndroid writes the language's strings.xml and returns its path, or ""
-// when it would say what it says now, or the language has no Android string
-// at all yet.
-func (p *project) writeAndroid(trans map[string]map[string]string) (string, error) {
+// androidFile is the language's strings.xml with trans, or nil when it would
+// say what it says now, or the language has no Android string at all yet.
+func (p *project) androidFile(trans map[string]map[string]string) (*fileWrite, error) {
 	path := filepath.Join(p.root, androidRes, valuesDirFor(p.lang), "strings.xml")
 	body := stringsXML(p.english, trans, p.lang)
 	old, err := os.ReadFile(path)
 	switch {
 	case err == nil && string(old) == string(body):
-		return "", nil
+		return nil, nil
 	case errors.Is(err, os.ErrNotExist):
 		empty := true
 		for _, forms := range trans {
 			empty = empty && len(forms) == 0
 		}
 		if empty {
-			return "", nil
+			return nil, nil
 		}
 	case err != nil:
-		return "", err
+		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
+	return &fileWrite{path: path, body: body}, nil
+}
+
+// A fileWrite is a file's new body.
+type fileWrite struct {
+	path string
+	body []byte
+}
+
+// writeFiles writes every file or none. Each body goes to a temporary file
+// beside its file, and the files are renamed into place only once every one
+// is written. A file that is there must be writable, as writing it in place
+// would need, and keeps its mode.
+func writeFiles(files []fileWrite) (err error) {
+	var temps, made []string
+	defer func() {
+		if err == nil {
+			return
+		}
+		for _, t := range temps {
+			os.Remove(t)
+		}
+		for _, dir := range made {
+			os.Remove(dir)
+		}
+	}()
+	for _, f := range files {
+		dir := filepath.Dir(f.path)
+		mode := fs.FileMode(0o644)
+		info, err := os.Stat(f.path)
+		switch {
+		case err == nil:
+			mode = info.Mode().Perm()
+			w, err := os.OpenFile(f.path, os.O_WRONLY, 0)
+			if err != nil {
+				return err
+			}
+			w.Close()
+		case errors.Is(err, os.ErrNotExist):
+			if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					return err
+				}
+				made = append(made, dir)
+			}
+		default:
+			return err
+		}
+		tmp, err := os.CreateTemp(dir, "."+filepath.Base(f.path)+".*")
+		if err != nil {
+			return err
+		}
+		temps = append(temps, tmp.Name())
+		_, err = tmp.Write(f.body)
+		if cerr := tmp.Close(); err == nil {
+			err = cerr
+		}
+		if err == nil {
+			err = os.Chmod(tmp.Name(), mode)
+		}
+		if err != nil {
+			return err
+		}
 	}
-	return path, os.WriteFile(path, body, 0o644)
+	for i, f := range files {
+		if err := os.Rename(temps[i], f.path); err != nil {
+			return err
+		}
+	}
+	return nil
 }

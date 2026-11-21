@@ -1,4 +1,4 @@
-android,ios,form,screen,english,note,placeholders,glossary,onebusaway,current,translation
+﻿android,ios,form,screen,english,note,placeholders,glossary,onebusaway,current,translation
 login_title,Sign in,,login,Sign in,The sign-in screen's title.,,,साइन इन | लॉग इन,साइन इन करें,
 login_error_unreachable,Can't reach %@. Check your connection.,,login,Can't reach %1$s. Check your connection.,"The server's address, e.g. ""tracker.example.org"".",#1 (text),,,%1$s तक नहीं पहुँच सके। अपना कनेक्शन जाँचें।,
 help_link,,,help,Read more at https://onebusaway.org within 24 hours.,Where to read more.,,,,24 घंटे में https://onebusaway.org पर और पढ़ें।,
