@@ -18,10 +18,9 @@ type options struct {
 const releaseCoverage = 95.0
 
 // The rules, as findings name them. docs/translations/README.md says what each
-// means. A font coverage rule (every character of a language drawn with the
-// Android app's bundled font is in that font) joins them with the Android
-// groundwork pull request, which re-cuts the font and says which languages
-// use it.
+// means. Font coverage, that a language drawn in the Android app's bundled
+// font has every letter in it, is the Android app's FontCoverageTest, beside
+// the app's list of languages set in the system font.
 const (
 	rulePlaceholders = "placeholders"
 	rulePlurals      = "plurals"
