@@ -69,3 +69,8 @@ jobs:
         run: |
           xcodegen generate
           xcodebuild test -project VehicleTracker.xcodeproj -scheme VehicleTracker -destination "id=$UDID" | tail -60
+      # A String(localized:) added or changed without its catalog entry reaches translators late, or with no comment
+      # (#530). The script lists the strings that differ and says how to fix them.
+      - name: String Catalogs match the code
+        working-directory: ios/VehicleTracker
+        run: ./sync-string-catalogs.sh --check
