@@ -120,8 +120,9 @@ func gapTrips(t *testing.T, ix *rider.Index, first int64, runs []gapRun) ([]Trip
 
 // gapDayRuns is route 5's day. North at ST1 (every 10 minutes): A first, B
 // on the gap, C and D bunched 2 minutes apart, H 16 minutes after D (long),
-// W on GX, a timetabled trip that does not count, E and F on the gap, and G
-// 15 minutes after F at 08:05, after the window ended: 150%, not long. North at
+// W on GX, a timetabled trip with no other within 12 minutes, which is not
+// in the order, E and F on the gap, and G 15 minutes after F at 08:05, after
+// the window ended: 150%, not long. North at
 // ST2: C waits there while D overtakes it, H turned short before it and so
 // did not serve it, leaving a long gap from C to E, and F's phone was silent
 // as it left it, so the gap from E to G is unknown. I leaves at 23:58 and

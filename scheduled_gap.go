@@ -8,15 +8,30 @@ import (
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
-// stopSchedule is the headway service at one stop of a route's direction:
+// frequentSpacing is the longest spacing between two departures in a row of
+// a stop's timetable that makes frequent service there: every 12 minutes,
+// five or more an hour, TfL's line for high-frequency routes. Riders turn up
+// at random at a stop served that often, so the gap between vehicles is what
+// they wait. Served less often, they time their trips by the timetable, and
+// On time already says how well it was kept.
+const frequentSpacing = 12 * time.Minute
+
+// stopSchedule is the frequent service at one stop of a route's direction:
 // the frequencies.txt windows of each trip that serves it, shifted to when
-// that trip's runs reach the stop.
+// that trip's runs reach the stop, and its timetable where it runs every
+// frequentSpacing or more often.
 type stopSchedule struct {
 	trips [][]stopWindow
+	// timetable is a window for each two departures in a row of the
+	// timetable no more than frequentSpacing apart, and timetabled those
+	// departures, both in time order.
+	timetable  []stopWindow
+	timetabled []time.Time
 }
 
-// stopWindow is a frequencies.txt row as it reaches a stop: a run every
-// headway passing it from from up to but not including to.
+// stopWindow is a frequencies.txt row as it reaches a stop, or a frequent
+// spacing of a timetable: a run every headway passing it from from up to but
+// not including to.
 type stopWindow struct {
 	from, to time.Time
 	headway  time.Duration
@@ -41,14 +56,68 @@ func (s *stopSchedule) addTrip(rows []rider.Frequency, dayStart time.Time, offse
 	s.trips = append(s.trips, windows)
 }
 
+// setTimetable sets the stop's timetable: when the direction's timetabled
+// trips are due to leave it, in any order. Two trips due at the same time
+// are one departure, as a rider waiting there sees them. Where two
+// departures in a row are no more than frequentSpacing apart, the timetable
+// is frequent service, and their spacing is the scheduled gap of a vehicle
+// passing nearer the later of them than any other departure: from halfway
+// after the earlier up to halfway to the next. So a vehicle on time, or a
+// little early or late, is judged against the gap riders waiting for it were
+// promised, not the one after it. The first spacing of a run of them holds
+// from its first departure, and the last up to its last departure, then a
+// spacing more, as a frequencies.txt window is held past its end. Further
+// apart, the timetable is not measured by gaps.
+func (s *stopSchedule) setTimetable(departures []time.Time) {
+	times := slices.SortedFunc(slices.Values(departures), time.Time.Compare)
+	times = slices.CompactFunc(times, time.Time.Equal)
+	// frequent reports whether the spacing up to the i'th departure is.
+	frequent := func(i int) bool {
+		return i > 0 && i < len(times) && times[i].Sub(times[i-1]) <= frequentSpacing
+	}
+	halfway := func(i int) time.Time { return times[i-1].Add(times[i].Sub(times[i-1]) / 2) }
+	s.timetable = make([]stopWindow, 0, len(times))
+	s.timetabled = make([]time.Time, 0, len(times))
+	for i, at := range times {
+		if frequent(i) || frequent(i+1) {
+			s.timetabled = append(s.timetabled, at)
+		}
+		if !frequent(i) {
+			continue
+		}
+		w := stopWindow{from: times[i-1], to: at, headway: at.Sub(times[i-1])}
+		if frequent(i - 1) {
+			w.from = halfway(i)
+		}
+		if frequent(i + 1) {
+			w.to = halfway(i + 1)
+		}
+		s.timetable = append(s.timetable, w)
+	}
+}
+
+// timetabledAt reports whether a timetabled trip due to leave the stop at at
+// is part of the timetable's frequent service there. Its runs are then in
+// the order of vehicles at the stop; otherwise On time alone judges them.
+func (s *stopSchedule) timetabledAt(at time.Time) bool {
+	_, found := slices.BinarySearchFunc(s.timetabled, at, time.Time.Compare)
+	return found
+}
+
+// due are the sets of windows whose rates add at the stop: each trip's, and
+// the timetable's.
+func (s *stopSchedule) due() [][]stopWindow {
+	return append(slices.Clip(s.trips), s.timetable)
+}
+
 // stretches are the spans of scheduled service at the stop, in time order:
-// every trip's windows, each held one headway past its end so a late last
-// run still counts, joined where they meet or overlap. A gap is judged only
-// between two passings in one stretch, so the evening's first run is not a
-// gap after the morning's last.
+// every window, each held one headway past its end so a late last run still
+// counts, joined where they meet or overlap. A gap is judged only between two
+// passings in one stretch, so the evening's first run is not a gap after the
+// morning's last.
 func (s *stopSchedule) stretches() []timeSpan {
 	var spans []timeSpan
-	for _, windows := range s.trips {
+	for _, windows := range s.due() {
 		for _, w := range windows {
 			spans = append(spans, timeSpan{w.from, w.to.Add(w.headway)})
 		}
@@ -75,15 +144,17 @@ func stretchAt(stretches []timeSpan, t time.Time) int {
 }
 
 // gapAt is the scheduled gap at the stop at t, to the second: one over the
-// sum of the rates of the trips due there then, so two patterns every 10
-// minutes that share the stop make it every 5. A trip's rate is one run a
-// headway in the window that holds t or, failing that, in the window that
-// ended less than a headway before it, so a late last run is held to the gap
-// it was due at. It is zero when no trip is due, which no stretch holds, and
-// a second at the least.
+// sum of the rates of the trips and the timetable due there then, so two
+// patterns every 10 minutes that share the stop make it every 5. A trip's
+// rate is one run a headway in the window that holds t or, failing that, in
+// the window that ended less than a headway before it, so a late last run is
+// held to the gap it was due at. The timetable's is one run a spacing, the
+// spacing up to its departure nearest t, as setTimetable lays them out. It
+// is zero when nothing is due, which no stretch holds, and a second at the
+// least.
 func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 	rate := 0.0
-	for _, windows := range s.trips {
+	for _, windows := range s.due() {
 		if w, ok := windowAt(windows, t); ok {
 			rate += 1 / w.headway.Seconds()
 		}
@@ -94,10 +165,11 @@ func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 	return max(time.Second, time.Duration(math.Round(1/rate))*time.Second)
 }
 
-// windowAt is the one of a trip's windows that holds t, or else the latest
-// to end of those whose last headway does. frequencies.txt allows no overlap
-// between a trip's windows, so at most one holds t, but a short window can
-// end inside the last headway of the one before it.
+// windowAt is the one of a set's windows that holds t, or else the latest to
+// end of those whose last headway does. A set's windows never overlap:
+// frequencies.txt allows none between a trip's, and a timetable's follow one
+// another. So at most one holds t, but a short window can end inside the
+// last headway of the one before it.
 func windowAt(windows []stopWindow, t time.Time) (stopWindow, bool) {
 	for _, w := range windows {
 		if !t.Before(w.from) && t.Before(w.to) {

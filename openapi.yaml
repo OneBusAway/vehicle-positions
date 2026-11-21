@@ -1615,20 +1615,30 @@ paths:
         started fills the scheduled run nearest it that no earlier run
         filled, so a trip never counts more runs than scheduled.
 
-        A route's trips in frequencies.txt are measured instead by the gaps
-        between their vehicles, for each direction (`direction_id`, or the
-        headsign when the feed gives none). At each stop On time would judge
-        on any of them, except a trip's last, every run passes when it is 30 m
-        past the stop, worked out as a departure is above, and the passings
-        are put in time order whichever vehicles made them. A gap is the time
-        from one passing to the next, judged against the scheduled gap when
-        the later vehicle passed. Each trip due at the stop then adds a run
-        every headway, from the frequencies.txt row its run would have left
-        the first stop in, or the row that ended less than a headway before,
+        A route's frequent service is measured by the gaps between its
+        vehicles, for each direction (`direction_id`, or the headsign when
+        the feed gives none): its trips in frequencies.txt instead of On
+        time, and its timetabled trips as well as On time, at a stop where
+        the timetable runs every 12 minutes or more often. At each stop On
+        time would judge on any of the direction's trips, except a trip's
+        last, every run passes when it is 30 m past the stop, worked out as
+        a departure is above, and the passings are put in time order
+        whichever vehicles made them. A gap is the time from one passing to
+        the next, judged against the scheduled gap when the later vehicle
+        passed. Each trip in frequencies.txt due at the stop then adds a run
+        every headway, from the row its run would have left the first stop
+        in, or the row that ended less than a headway before. The timetable
+        adds a run every spacing between two departures in a row no more
+        than 12 minutes apart: the spacing up to the departure nearest the
+        passing, so a vehicle on time is judged against the gap riders
+        waiting for it were promised, not the one after it. The rates add,
         so two trips every 10 minutes make it every 5 minutes, rounded to
-        the second. A gap is judged only between two passings in
-        one stretch of service, the rows' windows at the stop held a headway
-        past their end, so the first passing of a stretch has no gap. A run
+        the second. A gap is judged only between two passings in one
+        stretch of service, the rows' windows and the timetable's frequent
+        spacings at the stop each held a headway or spacing past its end,
+        so the first passing of a stretch has no gap. A timetabled trip
+        whose departure from a stop has no other within 12 minutes of it is
+        not in the order there, and adds nothing to the scheduled gap. A run
         whose passing at a stop is unknown passed some time between its fixes
         either side, its trip's start and its trip's end standing in for a
         fix that is not there; a gap it could fall in is unknown, not judged.
@@ -1637,9 +1647,8 @@ paths:
         its start when it sent none, whether it is still running or ended
         later than that, so a trip a driver forgot to end leaves gaps unknown
         only until then. If it ended within 2 minutes of its last fix, it did
-        not serve the stop and is not in the order. Only
-        driver trips are counted, and a timetabled trip is not measured, even
-        on a route with trips in frequencies.txt.
+        not serve the stop and is not in the order. Only driver trips are
+        counted.
 
         A day before today's service date is kept in memory once its last
         scheduled arrival is an hour past, until the schedule is next
@@ -3740,10 +3749,11 @@ components:
         gaps:
           type: array
           description: |
-            The gaps between vehicles on the route's trips in frequencies.txt,
-            one entry for each direction they run in that day, by
-            `direction_id` and then headsign, whether anything ran or not.
-            Empty for a route run only by timetable.
+            The gaps between vehicles on the route's frequent service, one
+            entry for each direction that day with a trip in frequencies.txt
+            or a timetable every 12 minutes or more often at a stop measured,
+            by `direction_id` and then headsign, whether anything ran or not.
+            Empty for a route with neither.
           items:
             $ref: '#/components/schemas/ServiceReportGaps'
 

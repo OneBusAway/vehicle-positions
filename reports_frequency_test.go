@@ -77,7 +77,8 @@ func demoDayRuns(t *testing.T, ix *rider.Index) ([]TripSummary, map[int64][]Loca
 // trips in frequencies.txt were counted by run, at c9c9b691. The route lines
 // say it readably; the digest covers every trip's times, runs and verdicts,
 // every hour of the totals and the arrival minutes. The gaps between vehicles
-// came later and are measured only on trips in frequencies.txt, so the feed
+// came later and are measured only on trips in frequencies.txt and on
+// timetables every 12 minutes or more often, so the feed, every 15 minutes,
 // has none, and the digest takes the totals in the shape they had then.
 func TestServiceReporter_DemoDayIsUnchanged(t *testing.T) {
 	zip, err := os.ReadFile("demo/gtfs.zip")

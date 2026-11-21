@@ -33,8 +33,9 @@ const (
 	passingLateGrace = 90 * time.Minute
 )
 
-// directionGaps is one direction of a route's frequencies.txt service on the
-// day: the gaps between consecutive vehicles judged at its stops.
+// directionGaps is one direction of a route's frequent service on the day,
+// from frequencies.txt or a timetable: the gaps between consecutive vehicles
+// judged at its stops.
 type directionGaps struct {
 	// DirectionID is nil when the feed gives the trips none; Headsign then
 	// tells the directions apart.
@@ -153,19 +154,18 @@ func directionOf(trip *rider.TripInfo) directionKey {
 	return directionKey{id: -1, headsign: trip.Headsign}
 }
 
-// routeGaps is the gaps between vehicles on a route's frequencies.txt trips
-// on the service day starting at dayStart, one entry for each direction they
-// run in, by direction_id then headsign, and none for a route run only by
-// timetable. trips are the route's trips that day in order of departure,
-// runs the driver trips that ran each and trails the trail of each run, as
-// buildServiceReport takes them.
+// routeGaps is the gaps between vehicles on a route's frequent service on
+// the service day starting at dayStart, by direction_id then headsign: one
+// entry for each direction with a trip in frequencies.txt, or with a
+// timetable every frequentSpacing or more often at a stop it is measured at,
+// and none for a route with neither. trips are the route's trips that day in
+// order of departure, runs the driver trips that ran each and trails the
+// trail of each run, as buildServiceReport takes them.
 func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, runs map[string][]TripSummary, trails map[string][][]LocationPoint, s reportSettings) []directionGaps {
 	groups := make(map[directionKey][]*rider.TripInfo)
 	for _, trip := range trips {
-		if trip.InFrequencies() {
-			key := directionOf(trip)
-			groups[key] = append(groups[key], trip)
-		}
+		key := directionOf(trip)
+		groups[key] = append(groups[key], trip)
 	}
 	keys := slices.SortedFunc(maps.Keys(groups), func(a, b directionKey) int {
 		return cmp.Or(cmp.Compare(a.id, b.id), cmp.Compare(a.headsign, b.headsign))
@@ -173,6 +173,10 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 	out := make([]directionGaps, 0, len(keys))
 	for _, key := range keys {
 		group := groups[key]
+		stops := directionStops(group, dayStart, runs, trails, s.maxShapeDistance)
+		if !slices.ContainsFunc(group, (*rider.TripInfo).InFrequencies) && !frequentTimetable(stops) {
+			continue
+		}
 		d := directionGaps{Headsign: group[0].Headsign}
 		if key.id >= 0 {
 			id := key.id
@@ -181,7 +185,7 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 		var total gapCounts
 		hours := make(map[int]*gapHourTotals)
 		scheduled := make(map[time.Duration]int)
-		for _, stop := range directionStops(group, dayStart, runs, trails, s.maxShapeDistance) {
+		for _, stop := range stops {
 			for _, g := range stop.gaps() {
 				hour := serviceHour(rep, g.at)
 				h, ok := hours[hour]
@@ -237,20 +241,55 @@ type stopService struct {
 // directionStops gathers a direction's trips at the stops gaps are measured
 // at: those On time judges on any of them (the timepoints, or every stop when
 // the feed marks none) except a trip's last, where nobody boards. Every trip
-// that serves such a stop other than as its last counts there, its windows
-// towards the scheduled gap and its runs in the order. runs and trails are by
-// GTFS trip id, a trail for each run.
+// that serves such a stop other than as its last counts there. A trip in
+// frequencies.txt adds its windows towards the scheduled gap and its runs to
+// the order. A timetabled trip adds its departure to the stop's timetable,
+// and its runs to the order only when that departure is part of the
+// timetable's frequent service, so the order holds the vehicles the
+// scheduled gap counts. runs and trails are by GTFS trip id, a trail for
+// each run; a trip whose runs are in no stop's order is not placed.
 func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string][]TripSummary, trails map[string][][]LocationPoint, maxShapeDistance float64) map[stopKey]*stopService {
 	stops := make(map[stopKey]*stopService)
-	for _, trip := range trips {
+	tripKeys := make([][]stopKey, len(trips))
+	for j, trip := range trips {
 		keys := stopKeys(trip.StopTimes)
+		tripKeys[j] = keys
 		for _, i := range judgedStops(trip.StopTimes) {
 			if i < len(keys)-1 {
 				stops[keys[i]] = &stopService{}
 			}
 		}
 	}
-	for _, trip := range trips {
+	departures := make(map[stopKey][]time.Time)
+	for j, trip := range trips {
+		rows := trip.Frequencies()
+		keys := tripKeys[j]
+		for i, key := range keys[:len(keys)-1] {
+			if _, ok := stops[key]; !ok {
+				continue
+			}
+			if trip.InFrequencies() {
+				stops[key].schedule.addTrip(rows, dayStart, trip.StopTimes[i].Departure-trip.StopTimes[0].Departure)
+			} else {
+				departures[key] = append(departures[key], dayStart.Add(trip.StopTimes[i].Departure))
+			}
+		}
+	}
+	for key, times := range departures {
+		stops[key].schedule.setTimetable(times)
+	}
+	for j, trip := range trips {
+		keys := tripKeys[j]
+		// inOrder are the stops at which the trip's runs are in the order.
+		inOrder := make([]int, 0, len(keys))
+		for i, key := range keys[:len(keys)-1] {
+			if stop, ok := stops[key]; ok && (trip.InFrequencies() || stop.schedule.timetabledAt(dayStart.Add(trip.StopTimes[i].Departure))) {
+				inOrder = append(inOrder, i)
+			}
+		}
+		if len(inOrder) == 0 {
+			continue
+		}
 		tripRuns := runs[trip.ID]
 		// A trip whose shape was drawn through its stops is not placed, as
 		// evaluateRuns does not place it, so its runs pass every stop unknown.
@@ -260,15 +299,9 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 				fixes[k] = placeFixes(trip, trails[trip.ID][k], maxShapeDistance)
 			}
 		}
-		rows := trip.Frequencies()
-		keys := stopKeys(trip.StopTimes)
 		open := arrives(trip) - departs(trip) + passingLateGrace
-		for i, key := range keys[:len(keys)-1] {
-			stop, ok := stops[key]
-			if !ok {
-				continue
-			}
-			stop.schedule.addTrip(rows, dayStart, trip.StopTimes[i].Departure-trip.StopTimes[0].Departure)
+		for _, i := range inOrder {
+			stop := stops[keys[i]]
 			for k, run := range tripRuns {
 				if p, served := runPassing(fixes[k], leftStopAt(trip, i), run, open); served {
 					stop.passings = append(stop.passings, p)
@@ -277,6 +310,17 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 		}
 	}
 	return stops
+}
+
+// frequentTimetable reports whether any of a direction's stops has a
+// timetable every frequentSpacing or more often.
+func frequentTimetable(stops map[stopKey]*stopService) bool {
+	for _, stop := range stops {
+		if len(stop.schedule.timetable) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // stopPassing is when a run left a stop: at when known, or else some time
