@@ -69,6 +69,7 @@ import org.onebusaway.vehicletracker.ui.components.DelayedSpinner
 import org.onebusaway.vehicletracker.ui.components.EmptyState
 import org.onebusaway.vehicletracker.ui.components.ScrolledUnderDivider
 import org.onebusaway.vehicletracker.ui.components.SetupHeader
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
 import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFlow
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
@@ -256,7 +257,7 @@ fun RunsScreenContent(
                         title = if (route.shortName.isBlank()) {
                             stringResource(R.string.runs_empty_unnamed)
                         } else {
-                            stringResource(R.string.runs_empty, route.shortName)
+                            stringResource(R.string.runs_empty, isolated(route.shortName))
                         },
                         body = stringResource(R.string.runs_empty_detail),
                         action = stringResource(R.string.runs_choose_another_route),
@@ -337,7 +338,7 @@ private fun DirectionSwitch(boards: List<Board>, selected: Int, onSelect: (Int) 
                 },
             ) {
                 Text(
-                    text = stringResource(R.string.runs_direction, board.direction?.headsign.orEmpty()),
+                    text = stringResource(R.string.runs_direction, isolated(board.direction?.headsign.orEmpty())),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -361,7 +362,11 @@ private fun BoardHeader(serviceDate: String, direction: RunDirection?) {
         )
         if (direction != null) {
             Text(
-                text = stringResource(R.string.runs_row_stops, direction.firstStop, direction.lastStop),
+                text = stringResource(
+                    R.string.runs_row_stops,
+                    isolated(direction.firstStop),
+                    isolated(direction.lastStop),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -464,8 +469,8 @@ private fun RunRow(run: BoardRun, starting: Boolean, dimmed: Boolean, onRunClick
             Text(text = run.headsign, style = MaterialTheme.typography.bodyMedium, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val label = runLabelText(
                 run.label,
-                number = { stringResource(R.string.runs_row_run, it) },
-                block = { stringResource(R.string.runs_row_block, it) },
+                number = { stringResource(R.string.runs_row_run, isolated(it)) },
+                block = { stringResource(R.string.runs_row_block, isolated(it)) },
                 both = { number, block -> stringResource(R.string.runs_row_run_block, number, block) },
             )
             if (label != null) {

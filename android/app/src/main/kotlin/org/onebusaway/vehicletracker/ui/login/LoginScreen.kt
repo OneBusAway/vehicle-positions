@@ -80,6 +80,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.merge
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.AttentionBanner
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.routes.RouteBadge
 import org.onebusaway.vehicletracker.ui.routes.RouteBadgeModel
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
@@ -176,7 +177,7 @@ fun LoginScreenContent(
         Spacer(Modifier.height(8.dp))
         Text(
             text = if (state.again && state.savedEmail != null) {
-                stringResource(R.string.login_again_subtitle, state.savedEmail)
+                stringResource(R.string.login_again_subtitle, isolated(state.savedEmail))
             } else {
                 stringResource(R.string.login_subtitle)
             },
@@ -296,7 +297,7 @@ private fun TripStillOpen(route: RouteBadgeModel) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(stringResource(R.string.login_trip_open_title), style = MaterialTheme.typography.titleMedium)
             Text(
-                text = stringResource(R.string.login_trip_open_message, route.shortName),
+                text = stringResource(R.string.login_trip_open_message, isolated(route.shortName)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

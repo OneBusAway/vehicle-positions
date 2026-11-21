@@ -10,6 +10,7 @@ import androidx.compose.ui.res.stringResource
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.InkButton
 import org.onebusaway.vehicletracker.ui.components.QuietButton
+import org.onebusaway.vehicletracker.ui.isolated
 
 /**
  * Asks before [run] starts, as iOS's run board does (`TripsView.swift`). Runs a few minutes apart all fall inside the
@@ -31,11 +32,16 @@ internal fun StartRunDialog(run: BoardRun, routeName: String, vehicleId: String,
 
 /** What the run is, leaving out a route name or a headsign the feed did not give, so the sentence has no gap. */
 @Composable
-private fun startMessage(routeName: String, headsign: String, vehicleId: String): String = when {
-    routeName.isNotBlank() && headsign.isNotBlank() -> stringResource(R.string.runs_start_message, routeName, headsign, vehicleId)
-    routeName.isNotBlank() -> stringResource(R.string.runs_start_message_no_headsign, routeName, vehicleId)
-    headsign.isNotBlank() -> stringResource(R.string.runs_start_message_unnamed, headsign, vehicleId)
-    else -> stringResource(R.string.runs_start_message_vehicle, vehicleId)
+private fun startMessage(routeName: String, headsign: String, vehicleId: String): String {
+    val route = isolated(routeName)
+    val towards = isolated(headsign)
+    val vehicle = isolated(vehicleId)
+    return when {
+        routeName.isNotBlank() && headsign.isNotBlank() -> stringResource(R.string.runs_start_message, route, towards, vehicle)
+        routeName.isNotBlank() -> stringResource(R.string.runs_start_message_no_headsign, route, vehicle)
+        headsign.isNotBlank() -> stringResource(R.string.runs_start_message_unnamed, towards, vehicle)
+        else -> stringResource(R.string.runs_start_message_vehicle, vehicle)
+    }
 }
 
 /** The run [id] names, as the boards show it now: null when none is named, the runs are not loaded, or no board has it. */

@@ -59,6 +59,7 @@ import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.data.TrackingState
 import org.onebusaway.vehicletracker.ui.components.InkButton
 import org.onebusaway.vehicletracker.ui.components.QuietButton
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.map.RouteMap
 import org.onebusaway.vehicletracker.ui.map.glEsVersion
 import org.onebusaway.vehicletracker.ui.map.supportsMap
@@ -293,7 +294,8 @@ private fun endTripMessage(tracking: TrackingState): String {
     val sent = tracking.fixesSent
     return if (geometry != null && firstStop != null && geometry.routeShortName.isNotEmpty()) {
         val startsAt = formatClock(firstStop.departureAt, geometry.timezone, LocalLocale.current.platformLocale)
-        pluralStringResource(R.plurals.tracking_end_trip_dialog_message, sent, geometry.routeShortName, startsAt, sent)
+        val route = isolated(geometry.routeShortName)
+        pluralStringResource(R.plurals.tracking_end_trip_dialog_message, sent, route, startsAt, sent)
     } else {
         pluralStringResource(R.plurals.tracking_end_trip_dialog_message_no_run, sent, sent)
     }

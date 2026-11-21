@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.InkButton
 import org.onebusaway.vehicletracker.ui.components.QuietButton
+import org.onebusaway.vehicletracker.ui.isolated
 
 /** The build as the menu names it, "0.1.0 (1)", with "?" for a build that has no version name. */
 internal fun versionText(name: String?, code: Long): String = "${name ?: "?"} ($code)"
@@ -95,7 +96,7 @@ fun AccountMenuContent(
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             state.email?.let { AboutItem(it) }
             state.server?.let { AboutItem(it, R.drawable.ic_dns) }
-            AboutItem(stringResource(R.string.account_version, version), R.drawable.ic_info)
+            AboutItem(stringResource(R.string.account_version, isolated(version)), R.drawable.ic_info)
             HorizontalDivider()
             if (onHelp != null) {
                 DropdownMenuItem(

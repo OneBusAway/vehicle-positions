@@ -60,6 +60,7 @@ import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
 import org.onebusaway.vehicletracker.engine.AdherenceStatus
 import org.onebusaway.vehicletracker.engine.TripStop
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.theme.statusHero
@@ -224,7 +225,7 @@ private fun StatusLines(model: StatusCardModel, waiting: ReportsWaiting?) {
             line1Emphasis = stringResource(R.string.tracking_adherence_right_run)
             line2 = stringResource(
                 R.string.tracking_adherence_off_schedule_next,
-                model.nextStop.name,
+                isolated(model.nextStop.name),
                 formatClock(model.nextStop.arrivalAt, model.zone, LocalLocale.current.platformLocale),
             )
         }
@@ -240,7 +241,8 @@ private fun StatusLines(model: StatusCardModel, waiting: ReportsWaiting?) {
                 line1 = stringResource(R.string.tracking_adherence_from)
                 line1Emphasis = firstStop.name
                 val startsAt = formatClock(firstStop.departureAt, zone, LocalLocale.current.platformLocale)
-                line2 = model.vehicleId?.let { stringResource(R.string.tracking_adherence_run_vehicle, startsAt, it) }
+                line2 = model.vehicleId
+                    ?.let { stringResource(R.string.tracking_adherence_run_vehicle, startsAt, isolated(it)) }
                     ?: stringResource(R.string.tracking_adherence_run, startsAt)
             } else {
                 // The trip's stops have not loaded yet. Empty lines keep the card its usual height.
