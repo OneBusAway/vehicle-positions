@@ -13,7 +13,7 @@ nonisolated enum TipText {
     /// names that step.
     static var runBoardMessage: String {
         String(localized: "Then tap \(PickerText.startTrip). Riders see your vehicle from then on.",
-               comment: "Tip on 'Choose a run', under its title. The name of the button that starts the trip.")
+               comment: "Tip on 'Choose a run', under its title. The name of the start confirmation's button that starts the trip, filled in from that button, e.g. 'Then tap Start trip. Riders see your vehicle from then on.'")
     }
 
     // MARK: Tracking
@@ -37,7 +37,7 @@ nonisolated enum TipText {
 
     /// "142 reports sent". The sheet draws the number large.
     static func reportsSent(_ count: Int) -> String {
-        String(localized: "\(count) reports sent", comment: "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large.")
+        String(localized: "\(count) reports sent", comment: "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large wherever it stands in the sentence.")
     }
 
     static var ridersCouldSeeYou: String {

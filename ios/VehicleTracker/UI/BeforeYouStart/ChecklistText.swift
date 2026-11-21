@@ -9,7 +9,7 @@ nonisolated enum ChecklistText {
     }
 
     static func message(vehicle: String) -> String {
-        String(localized: "The app needs these to report vehicle \(vehicle). iOS asks about each one next.", comment: "Under the checklist's title. The vehicle's fleet number, e.g. '4317'.")
+        String(localized: "The app needs these to report vehicle \(vehicle). iOS asks about each one next.", comment: "Under the checklist's title: the vehicle's fleet number, e.g. 'The app needs these to report vehicle 4317. iOS asks about each one next.'")
     }
 
     static func title(of row: LocationChecklist.Row) -> String {
@@ -67,7 +67,7 @@ nonisolated enum ChecklistText {
     /// as TalkBack says it on Android.
     static func allowedNow(_ row: LocationChecklist.Row) -> String {
         let name = title(of: row)
-        return String(localized: "\(name), allowed.", comment: "VoiceOver: said once when iOS allows a checklist row while the checklist shows, e.g. 'Location, allowed.'")
+        return String(localized: "\(name), allowed.", comment: "VoiceOver: said once when iOS allows a checklist row while the checklist shows: the row's title, e.g. 'Location, allowed.'")
     }
 
     /// One announcement for a change on the sheet: each row that changed,
@@ -87,10 +87,10 @@ nonisolated enum ChecklistText {
     static func spoken(_ row: LocationChecklist.Row, _ state: LocationChecklist.RowState) -> String {
         let name = title(of: row), why = reason(of: row, state)
         switch state {
-        case .next: return String(localized: "\(name). \(why). Next.", comment: "VoiceOver: a checklist row that Continue asks about next: its title, then why.")
-        case .allowed: return String(localized: "\(name). \(why). Allowed.", comment: "VoiceOver: a checklist row iOS allowed: its title, then why it is needed.")
+        case .next: return String(localized: "\(name). \(why). Next.", comment: "VoiceOver: a checklist row that Continue asks about next: its title, then why the app needs it, e.g. 'Location. So the app knows where the vehicle is. Next.'")
+        case .allowed: return String(localized: "\(name). \(why). Allowed.", comment: "VoiceOver: a checklist row iOS allowed: its title, then why the app needs it, e.g. 'Precise location. So riders see the vehicle at the right stop. Allowed.'")
         case .neededInSettings, .approximate, .off, .notReached:
-            return String(localized: "\(name). \(why).", comment: "VoiceOver: a checklist row: its title, then why it is needed or what went wrong.")
+            return String(localized: "\(name). \(why).", comment: "VoiceOver: a checklist row: its title, then why the app needs it or what went wrong, e.g. 'Precise location. Only approximate was allowed.'")
         }
     }
 }

@@ -155,7 +155,8 @@ nonisolated final class TrackerClient: TrackerAPI, Sendable {
             return .unreachable(message)
         } catch {
             // A 200 that is not a token pair, such as a captive portal's page.
-            return .unreachable(error.localizedDescription)
+            // The reason is logged, so it stays in English as the ones above.
+            return .unreachable("the server's reply could not be read")
         }
     }
 

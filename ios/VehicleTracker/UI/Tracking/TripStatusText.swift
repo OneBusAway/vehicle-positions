@@ -15,11 +15,11 @@ enum TripStatusText {
     }
 
     static func minutesLate(_ minutes: Int) -> String {
-        String(localized: "\(minutes) min late", comment: "Status card answer: whole minutes behind the schedule.")
+        String(localized: "\(minutes) min late", comment: "Status card answer: whole minutes behind the schedule, e.g. '3 min late'.")
     }
 
     static func minutesEarly(_ minutes: Int) -> String {
-        String(localized: "\(minutes) min early", comment: "Status card answer: whole minutes ahead of the schedule.")
+        String(localized: "\(minutes) min early", comment: "Status card answer: whole minutes ahead of the schedule, e.g. '2 min early'.")
     }
 
     /// "On time" within a minute of the schedule, otherwise whole minutes late
@@ -46,7 +46,7 @@ enum TripStatusText {
     /// The off-route answer as VoiceOver reads it: the distance changes with
     /// every fix, so it is left out (as Android).
     static var offRouteShort: String {
-        String(localized: "Off route", comment: "The off-route answer without its distance, for VoiceOver and the stop list's vehicle row.")
+        String(localized: "Off route", comment: "The off-route answer without its distance, for VoiceOver, the stop list's vehicle row, and CarPlay's off-route banner where the distance doesn't fit.")
     }
 
     static var offSchedule: String {
@@ -84,17 +84,17 @@ enum TripStatusText {
     /// 7:18 AM, 232 metres". With no distance when none should be read.
     static func spokenNextStop(_ answer: String, name: String, time: String, distance: String?) -> String {
         if let distance {
-            return String(localized: "\(answer). Next stop \(name), \(time), \(distance)", comment: "VoiceOver: the status card in one sentence. The answer, then the next stop's name, its scheduled time and the distance to it.")
+            return String(localized: "\(answer). Next stop \(name), \(time), \(distance)", comment: "VoiceOver: the status card in one sentence. The card's answer, then the next stop's name, its scheduled time and the distance to it, e.g. 'On time. Next stop 3rd Ave & Seneca St, 7:18 AM, 232 metres'.")
         }
-        return String(localized: "\(answer). Next stop \(name), \(time)", comment: "VoiceOver: the status card in one sentence, with no distance. The answer, then the next stop's name and its scheduled time.")
+        return String(localized: "\(answer). Next stop \(name), \(time)", comment: "VoiceOver: the status card in one sentence, with no distance. The card's answer, then the next stop's name and its scheduled time, e.g. '3 min late. Next stop 3rd Ave & Seneca St, 7:18 AM'.")
     }
 
     static func spokenOffSchedule(_ answer: String, name: String, time: String) -> String {
-        String(localized: "\(answer). Off schedule, is this the right run? Next stop \(name), \(time)", comment: "VoiceOver: the status card in one sentence while off schedule. The answer, e.g. '20 min late', then the next stop's name and its scheduled time.")
+        String(localized: "\(answer). Off schedule, is this the right run? Next stop \(name), \(time)", comment: "VoiceOver: the status card in one sentence while off schedule. The card's answer, then the next stop's name and its scheduled time, e.g. '20 min late. Off schedule, is this the right run? Next stop 3rd Ave & Seneca St, 7:18 AM'.")
     }
 
     static func spokenWaiting(name: String, time: String, vehicle: String) -> String {
-        String(localized: "Waiting for GPS. From \(name), \(time) run, vehicle \(vehicle)", comment: "VoiceOver: the status card in one sentence before the first fix. The trip's first stop, the run's start time and the vehicle.")
+        String(localized: "Waiting for GPS. From \(name), \(time) run, vehicle \(vehicle)", comment: "VoiceOver: the status card in one sentence before the first fix. The trip's first stop, the run's start time in the agency's zone, then the vehicle's label or fleet number, e.g. 'Waiting for GPS. From Northgate Station, 6:58 AM run, vehicle 4317'.")
     }
 
     /// A distance in words, for VoiceOver: whole metres below a kilometre,
@@ -102,9 +102,9 @@ enum TripStatusText {
     static func spokenDistance(_ metres: Double) -> String {
         guard metres >= Formatters.metresPerKilometre else {
             let whole = Int(metres.rounded())
-            return String(localized: "\(whole) metres", comment: "VoiceOver: a distance in whole metres.")
+            return String(localized: "\(whole) metres", comment: "VoiceOver: a distance under a kilometre in whole metres, read in place of '232 m', e.g. '232 metres'.")
         }
-        return String(localized: "\(Formatters.kilometres(metres), specifier: "%.1f") kilometres", comment: "VoiceOver: a distance in kilometres, to one decimal place.")
+        return String(localized: "\(Formatters.kilometres(metres), specifier: "%.1f") kilometres", comment: "VoiceOver: a distance in kilometres to one decimal place, read in place of '1.3 km', e.g. '1.3 kilometres'.")
     }
 
     // MARK: Problems under the card
@@ -179,7 +179,7 @@ enum TripStatusText {
 
     /// The problem line as VoiceOver reads it: "No connection, Riders can't see you".
     static func spokenProblem(what: String, meaning: String) -> String {
-        String(localized: "\(what), \(meaning)", comment: "VoiceOver: the problem line in one sentence, what happened then what it means.")
+        String(localized: "\(what), \(meaning)", comment: "VoiceOver: the problem line in one sentence: what happened, then what it means or what to do, e.g. 'No connection, Riders can't see you'.")
     }
 
     static var opensSettings: String {
@@ -197,7 +197,7 @@ enum TripStatusText {
     }
 
     static var spokenSignedOut: String {
-        String(localized: "Signed out. \(signedOutMessage)", comment: "VoiceOver: the Signed out card in one announcement, when it takes the status card's place.")
+        String(localized: "Signed out. \(signedOutMessage)", comment: "VoiceOver: the Signed out card in one announcement, when it takes the status card's place. Then the card's message, 'Reports have stopped. Your trip is still open.'")
     }
 
     static var signIn: String {
@@ -213,9 +213,9 @@ enum TripStatusText {
     /// The trip bar as VoiceOver reads it: "Route 7 to Downtown Seattle, 142 reports sent".
     static func spokenTripBar(route: String, headsign: String, sent: Int) -> String {
         if route.isEmpty {
-            return String(localized: "\(headsign), \(sent) reports sent", comment: "VoiceOver: the trip bar in one sentence for a route with no short name: the headsign, then how many reports have reached the server.")
+            return String(localized: "\(headsign), \(sent) reports sent", comment: "VoiceOver: the trip bar in one sentence for a route with no short name: the headsign, then how many reports have reached the server, e.g. 'Downtown Seattle, 142 reports sent'.")
         }
-        return String(localized: "Route \(route) to \(headsign), \(sent) reports sent", comment: "VoiceOver: the trip bar in one sentence: the route's short name, the headsign, then how many reports have reached the server.")
+        return String(localized: "Route \(route) to \(headsign), \(sent) reports sent", comment: "VoiceOver: the trip bar in one sentence: the route's short name, the headsign, then how many reports have reached the server, e.g. 'Route 7 to Downtown Seattle, 142 reports sent'.")
     }
 
     static var endTrip: String {
@@ -266,27 +266,27 @@ enum TripStatusText {
     static func spokenStopRow(name: String, time: String, kind: StopRows.Kind) -> String {
         switch kind {
         case .next:
-            String(localized: "\(name), next stop, \(time)", comment: "VoiceOver: a stop list row for the next stop, with its scheduled time.")
+            String(localized: "\(name), next stop, \(time)", comment: "VoiceOver: a stop list row for the next stop: the stop's name, then its scheduled time, e.g. '3rd Ave & Seneca St, next stop, 7:18 AM'.")
         case .last:
-            String(localized: "\(name), last stop, \(time)", comment: "VoiceOver: a stop list row for the end of the line, with its scheduled time.")
+            String(localized: "\(name), last stop, \(time)", comment: "VoiceOver: a stop list row for the end of the line: the stop's name, then its scheduled time, e.g. 'Downtown Transit Center, last stop, 7:52 AM'.")
         case .passed:
-            String(localized: "\(name), passed, \(time)", comment: "VoiceOver: a stop list row for a stop the vehicle has passed, with its scheduled time.")
+            String(localized: "\(name), passed, \(time)", comment: "VoiceOver: a stop list row for a stop the vehicle has passed: the stop's name, then its scheduled time, e.g. 'Northgate Station, passed, 6:58 AM'.")
         case .upcoming:
-            String(localized: "\(name), \(time)", comment: "VoiceOver: a stop list row for a stop still ahead, with its scheduled time.")
+            String(localized: "\(name), \(time)", comment: "VoiceOver: a stop list row for a stop still ahead: the stop's name, then its scheduled time, e.g. 'Pine St & 4th Ave, 7:24 AM'.")
         }
     }
 
     /// The next stop's mark on the map: "Next stop, 3rd Ave and Seneca St".
     static func spokenNextStopMark(name: String) -> String {
-        String(localized: "Next stop, \(name)", comment: "VoiceOver: the next stop's mark on the map.")
+        String(localized: "Next stop, \(name)", comment: "VoiceOver: the next stop's mark on the map, with the stop's name, e.g. 'Next stop, 3rd Ave & Seneca St'.")
     }
 
     /// The vehicle's row in one sentence: "Vehicle 4317, 3 min late".
     static func spokenVehicleRow(name: String, status: String?) -> String {
         guard let status else {
-            return String(localized: "Vehicle \(name)", comment: "VoiceOver: the vehicle's row of the stop list before the first fix, naming the vehicle.")
+            return String(localized: "Vehicle \(name)", comment: "VoiceOver: the vehicle's row of the stop list before the first fix, and the vehicle on the map: its label or fleet number, e.g. 'Vehicle 4317'.")
         }
-        return String(localized: "Vehicle \(name), \(status)", comment: "VoiceOver: the vehicle's row of the stop list, naming the vehicle and how it is keeping to the schedule.")
+        return String(localized: "Vehicle \(name), \(status)", comment: "VoiceOver: the vehicle's row of the stop list: its label or fleet number, then the status card's answer, e.g. 'Vehicle 4317, 3 min late'.")
     }
 
     static var recenter: String {
@@ -304,12 +304,12 @@ enum TripStatusText {
     }
 
     static func endTripMessage(route: String, time: String, count: Int) -> String {
-        String(localized: "Reports stop, and route \(route)'s \(time) run is marked complete. \(count) reports were sent.", comment: "Message of the 'End this trip?' alert: the route's short name, the run's start time in the agency's zone, then how many reports reached the server.")
+        String(localized: "Reports stop, and route \(route)'s \(time) run is marked complete. \(count) reports were sent.", comment: "Message of the 'End this trip?' alert: the route's short name, the run's start time in the agency's zone, then how many reports reached the server, e.g. 'Reports stop, and route 7's 6:58 AM run is marked complete. 142 reports were sent.'")
     }
 
     /// The same, for a trip whose route has no short name.
     static func endTripMessage(count: Int) -> String {
-        String(localized: "Reports stop, and this run is marked complete. \(count) reports were sent.", comment: "Message of the 'End this trip?' alert for a route with no short name: how many reports reached the server.")
+        String(localized: "Reports stop, and this run is marked complete. \(count) reports were sent.", comment: "Message of the 'End this trip?' alert for a route with no short name: how many reports reached the server, e.g. 'Reports stop, and this run is marked complete. 142 reports were sent.'")
     }
 
     static var keepGoing: String {

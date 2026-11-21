@@ -59,16 +59,16 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private var lastActiveChrome: (isPanning: Bool, ending: Bool, guidanceSuspended: Bool)?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "carplay")
 
-    private lazy var endBarButton = CPBarButton(title: String(localized: "End")) { [weak self] _ in self?.confirmEnd() }
-    private lazy var detailsBarButton = CPBarButton(title: String(localized: "Details")) { [weak self] _ in self?.showDetails() }
+    private lazy var endBarButton = CPBarButton(title: CarPlayTemplates.end) { [weak self] _ in self?.confirmEnd() }
+    private lazy var detailsBarButton = CPBarButton(title: String(localized: "Details", comment: "CarPlay: the navigation bar button during a trip that opens the trip's details: route, run, schedule, next stop, reports and GPS.")) { [weak self] _ in self?.showDetails() }
     /// Offered in place of Details while the car's own navigation has taken
     /// guidance away: tapping it hands the car screen back to us.
-    private lazy var guidanceBarButton = CPBarButton(title: String(localized: "Guidance")) { [weak self] _ in
+    private lazy var guidanceBarButton = CPBarButton(title: String(localized: "Guidance", comment: "CarPlay: the navigation bar button, once the car's own navigation has stopped this app's, that brings back the guidance to the trip's next stop.")) { [weak self] _ in
         guard let self else { return }
         guidanceSuspendedForTripID = nil
         render()
     }
-    private lazy var donePanningBarButton = CPBarButton(title: String(localized: "Done")) { [weak self] _ in
+    private lazy var donePanningBarButton = CPBarButton(title: String(localized: "Done", comment: "CarPlay: the navigation bar button that stops moving the map by hand.")) { [weak self] _ in
         self?.mapTemplate.dismissPanningInterface(animated: true)
     }
     private lazy var activeMapButtons = CarPlayTemplates.mapButtons(
@@ -348,7 +348,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
             // rather than presenting a second one.
             if let alert = mapTemplate.currentNavigationAlert, title != banner.title {
                 offRouteBanner = (banner.alert, title)
-                alert.updateTitleVariants([title], subtitleVariants: [])
+                alert.updateTitleVariants(CarPlayTemplates.offRouteTitleVariants(title), subtitleVariants: [])
             }
             return
         }
@@ -369,7 +369,7 @@ final class CarPlayController: NSObject, CPMapTemplateDelegate {
     private func showDetails() {
         guard let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) else { return }
         if let details, interface.topTemplate === details { return }
-        let template = CPInformationTemplate(title: String(localized: "Trip"), layout: .leading,
+        let template = CPInformationTemplate(title: CarPlayTemplates.trip, layout: .leading,
                                              items: detailItems(status), actions: [])
         details = template
         interface.pushTemplate(template, animated: true, completion: nil)

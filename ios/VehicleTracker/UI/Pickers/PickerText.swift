@@ -41,7 +41,7 @@ nonisolated enum PickerText {
     }
 
     static func noVehicleMatches(_ query: String) -> String {
-        String(localized: "No vehicle matches \(query)", comment: "Empty state title when the vehicle search finds nothing; the argument is what the driver typed.")
+        String(localized: "No vehicle matches \(query)", comment: "Empty state title when the vehicle search finds nothing: what the driver typed, e.g. 'No vehicle matches 999'.")
     }
 
     static var checkFleetNumber: String {
@@ -80,7 +80,7 @@ nonisolated enum PickerText {
     /// it says more ("4317, Bus 4317").
     static func vehicleTile(id: String, label: String?) -> String {
         guard let label else { return id }
-        return String(localized: "\(id), \(label)", comment: "VoiceOver label of a vehicle tile: the fleet number, then the vehicle's label.")
+        return String(localized: "\(id), \(label)", comment: "VoiceOver label of a vehicle tile: the fleet number, then the label the agency gave the vehicle, e.g. '4317, Airport shuttle'.")
     }
 
     static var favorite: String {
@@ -88,11 +88,11 @@ nonisolated enum PickerText {
     }
 
     static func addToFavorites(_ id: String) -> String {
-        String(localized: "Add \(id) to favorites", comment: "Label of the star on a vehicle tile that is not yet a favourite; the argument is the fleet number.")
+        String(localized: "Add \(id) to favorites", comment: "VoiceOver label of the star on a vehicle tile that is not yet a favourite: the fleet number, e.g. 'Add 4317 to favorites'.")
     }
 
     static func removeFromFavorites(_ id: String) -> String {
-        String(localized: "Remove \(id) from favorites", comment: "Label of the star on a vehicle tile that is a favourite; the argument is the fleet number.")
+        String(localized: "Remove \(id) from favorites", comment: "VoiceOver label of the star on a vehicle tile that is a favourite: the fleet number, e.g. 'Remove 4317 from favorites'.")
     }
 
     // MARK: Choose a route
@@ -110,11 +110,11 @@ nonisolated enum PickerText {
     }
 
     static func allRoutes(count: Int) -> String {
-        String(localized: "All routes · \(count)", comment: "Section header over a grid of route numbers, from a feed that names none of its routes: how many there are.")
+        String(localized: "All routes · \(count)", comment: "Section header over a grid of route numbers, from a feed that names none of its routes: how many there are, e.g. 'All routes · 24'.")
     }
 
     static func noRouteMatches(_ query: String) -> String {
-        String(localized: "No route matches \(query)", comment: "Empty state title when the route search finds nothing; the argument is what the driver typed.")
+        String(localized: "No route matches \(query)", comment: "Empty state title when the route search finds nothing: what the driver typed, e.g. 'No route matches 999'.")
     }
 
     static var routeSearchHint: String {
@@ -143,7 +143,7 @@ nonisolated enum PickerText {
 
     /// The subtitle of Choose a route: the fleet number of the vehicle chosen.
     static func vehicle(_ id: String) -> String {
-        String(localized: "Vehicle \(id)", comment: "Subtitle of the route screen: the fleet number of the vehicle the driver chose.")
+        String(localized: "Vehicle \(id)", comment: "Subtitle of the route screen: the fleet number of the vehicle the driver chose, e.g. 'Vehicle 4317'.")
     }
 
     /// The number a route goes by, or its name when the feed gave no number.
@@ -152,14 +152,14 @@ nonisolated enum PickerText {
     }
 
     static func route(_ name: String) -> String {
-        String(localized: "Route \(name)", comment: "VoiceOver label of a route badge; the argument is the route's number.")
+        String(localized: "Route \(name)", comment: "VoiceOver label of a route badge: the route's number, or its name when the feed gives no number, e.g. 'Route 7'.")
     }
 
     /// A row as VoiceOver reads it: the number, then the name. A route with
     /// only one of the two is read once, not as "Route Loop, Loop".
     static func routeRow(_ route: RouteInfo) -> String {
         if route.shortName.isEmpty || route.longName.isEmpty { return Self.route(name(of: route)) }
-        return String(localized: "Route \(route.shortName), \(route.longName)", comment: "VoiceOver label of a route row: the route's number, then its name.")
+        return String(localized: "Route \(route.shortName), \(route.longName)", comment: "VoiceOver label of a route row: the route's number, then its name, e.g. 'Route 7, Rainier Beach'.")
     }
 
     // MARK: Choose a run
@@ -170,11 +170,11 @@ nonisolated enum PickerText {
 
     /// The subtitle of Choose a run: the vehicle, then the route.
     static func runsSubtitle(vehicle: String, route: String) -> String {
-        String(localized: "Vehicle \(vehicle) · Route \(route)", comment: "Subtitle of the run screen: the fleet number of the vehicle, then the route's number.")
+        String(localized: "Vehicle \(vehicle) · Route \(route)", comment: "Subtitle of the run screen: the fleet number of the vehicle, then the route's number, e.g. 'Vehicle 4317 · Route 7'.")
     }
 
     static func noRuns(route: String) -> String {
-        String(localized: "No runs on route \(route) today", comment: "Empty state title when the route has no runs today; the argument is the route's number.")
+        String(localized: "No runs on route \(route) today", comment: "Empty state title when the route has no runs today: the route's number, e.g. 'No runs on route 7 today'.")
     }
 
     static var noRunsUnnamed: String {
@@ -219,11 +219,11 @@ nonisolated enum PickerText {
 
     /// Under the date: the first stop, then the last stop, of the direction shown.
     static func stops(_ first: String, _ last: String) -> String {
-        String(localized: "\(first) → \(last)", comment: "Under the run board's date: the direction's first stop, then its last stop.")
+        String(localized: "\(first) → \(last)", comment: "Under the run board's date, and under a run in CarPlay: the direction's first stop, then its last stop, e.g. 'Northgate Station → Downtown Seattle'. The arrow points from the first to the last; turn it for a language written right to left.")
     }
 
     static var starting: String {
-        String(localized: "Starting…", comment: "VoiceOver value of the run being started.")
+        String(localized: "Starting…", comment: "VoiceOver value of the run being started, and CarPlay's navigation bar while a trip starts.")
     }
 
     // MARK: Starting a run
@@ -233,17 +233,17 @@ nonisolated enum PickerText {
     }
 
     static func startMessage(route: String, headsign: String, vehicle: String) -> String {
-        String(localized: "Route \(route) to \(headsign) on vehicle \(vehicle).", comment: "Message of the start confirmation: the route's number, the run's headsign, then the vehicle's fleet number.")
+        String(localized: "Route \(route) to \(headsign) on vehicle \(vehicle).", comment: "Message of the start confirmation: the route's number, the run's headsign, then the vehicle's fleet number, e.g. 'Route 7 to Downtown Seattle on vehicle 4317.'")
     }
 
     /// CarPlay's alert has no message line, so its longest title carries
     /// the message too; the car picks the longest that fits.
     static func startTitleWithMessage(time: String, route: String, headsign: String, vehicle: String) -> String {
-        String(localized: "Start the \(time) run? Route \(route) to \(headsign) on vehicle \(vehicle).", comment: "CarPlay's start confirmation in one line: the run's start time, the route's number, the headsign, then the vehicle's fleet number.")
+        String(localized: "Start the \(time) run? Route \(route) to \(headsign) on vehicle \(vehicle).", comment: "CarPlay's start confirmation in one line: the run's start time in the agency's zone, the route's number, the headsign, then the vehicle's fleet number, e.g. 'Start the 6:43 AM run? Route 7 to Downtown Seattle on vehicle 4317.'")
     }
 
     static var startTrip: String {
-        String(localized: "Start trip", comment: "The start confirmation's confirming button.")
+        String(localized: "Start trip", comment: "The start confirmation's confirming button, also named inside the tips and the welcome. In CarPlay, the navigation bar button that opens the lists of vehicles, routes and runs.")
     }
 
     static var cancel: String {
@@ -251,7 +251,7 @@ nonisolated enum PickerText {
     }
 
     static func notAssigned(_ vehicleID: String) -> String {
-        String(localized: "You're not assigned to vehicle \(vehicleID).", comment: "Banner when the server refused a start because the driver is not assigned to the vehicle; the argument is the fleet number.")
+        String(localized: "You're not assigned to vehicle \(vehicleID).", comment: "Banner when the server refused a start because the driver is not assigned to the vehicle: the fleet number, e.g. 'You're not assigned to vehicle 4317.'")
     }
 
     static var changeVehicle: String {
@@ -263,11 +263,11 @@ nonisolated enum PickerText {
     }
 
     static func vehicleBusy(_ vehicleID: String) -> String {
-        String(localized: "Another driver has a trip running on vehicle \(vehicleID). Pick another vehicle or ask your dispatcher.", comment: "Banner when the server refused a start because another driver has a trip running on the vehicle; the argument is the fleet number.")
+        String(localized: "Another driver has a trip running on vehicle \(vehicleID). Pick another vehicle or ask your dispatcher.", comment: "Banner when the server refused a start because another driver has a trip running on the vehicle: the fleet number, e.g. 'Another driver has a trip running on vehicle 4317. Pick another vehicle or ask your dispatcher.'")
     }
 
     static func vehicleInactive(_ vehicleID: String) -> String {
-        String(localized: "Vehicle \(vehicleID) is out of service. Pick another vehicle.", comment: "Banner when the server refused a start because the vehicle was taken out of service; the argument is the fleet number.")
+        String(localized: "Vehicle \(vehicleID) is out of service. Pick another vehicle.", comment: "Banner when the server refused a start because the vehicle was taken out of service: the fleet number, e.g. 'Vehicle 4317 is out of service. Pick another vehicle.'")
     }
 
     static var cannotReachServer: String {
@@ -283,7 +283,7 @@ nonisolated enum PickerText {
     }
 
     static var couldNotStart: String {
-        String(localized: "Couldn't start the trip.", comment: "Banner when a start failed for a reason the app does not name.")
+        String(localized: "Couldn't start the trip.", comment: "Banner when a start failed for a reason the app does not name. In CarPlay, also the short form of every refused start's alert.")
     }
 
     static var openSettings: String {

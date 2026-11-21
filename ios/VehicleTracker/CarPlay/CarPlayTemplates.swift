@@ -18,23 +18,41 @@ enum CarPlayTemplates {
     static func idleBarButtons(phase: TripSession.Phase, onStart: @escaping () -> Void) -> (leading: [CPBarButton], trailing: [CPBarButton]) {
         switch phase {
         case .signedOut:
-            return ([titleButton(String(localized: "Sign in on iPhone"))], [])
+            return ([titleButton(signInOnIPhone)], [])
         case .starting:
-            return ([titleButton(String(localized: "Starting…"))], [])
+            return ([titleButton(PickerText.starting)], [])
         default:
-            let start = CPBarButton(title: String(localized: "Start trip")) { _ in onStart() }
-            return ([titleButton(String(localized: "OBA Vehicle Tracker"))], [start])
+            let start = CPBarButton(title: PickerText.startTrip) { _ in onStart() }
+            return ([titleButton(String(localized: "OBA Vehicle Tracker", comment: "CarPlay: the navigation bar before a trip, the app's name. Keep it as it is in every language."))], [start])
         }
     }
 
     /// Navigation bar while a trip is paused: the driver can end it here, but
     /// only the phone can resume it (spec §6.2).
     static func pausedBarButtons(onEnd: @escaping () -> Void) -> (leading: [CPBarButton], trailing: [CPBarButton]) {
-        let end = CPBarButton(title: String(localized: "End")) { _ in onEnd() }
-        return ([end], [titleButton(resumeOnIPhone)])
+        let endButton = CPBarButton(title: end) { _ in onEnd() }
+        return ([endButton], [titleButton(resumeOnIPhone)])
     }
 
-    private static var resumeOnIPhone: String { String(localized: "Resume on iPhone") }
+    static var end: String {
+        String(localized: "End", comment: "CarPlay: the navigation bar button during a trip that asks whether to end it.")
+    }
+
+    static var trip: String {
+        String(localized: "Trip", comment: "CarPlay: the title of the trip's Details screen, and its row with the headsign and the run's start time, e.g. 'Downtown Seattle · 6:58 AM'.")
+    }
+
+    private static var signInOnIPhone: String {
+        String(localized: "Sign in on iPhone", comment: "CarPlay: the navigation bar while signed out, and the Details screen's Reports row once the sign-in has expired, e.g. 'Reports stopped · Sign in on iPhone'. The car can't sign in; the phone can.")
+    }
+
+    private static var resumeOnIPhone: String {
+        String(localized: "Resume on iPhone", comment: "CarPlay: the navigation bar while the trip is paused, and the Details screen's Reports row after 'Location stopped', e.g. 'Location stopped · Resume on iPhone'. The car can't resume reporting; the phone can.")
+    }
+
+    private static var ok: String {
+        String(localized: "OK", comment: "CarPlay: the button that closes an alert.")
+    }
 
     // MARK: Active trip
 
@@ -97,27 +115,28 @@ enum CarPlayTemplates {
         // which belongs under "Next stop".
         let next = adherence.map {
             TripStatusText.pair($0.nextStop.name, TripStatusText.pair(Formatters.clock($0.nextStop.arrivalAt, timezone: tz), Formatters.distance($0.distanceToNextStop)))
-        } ?? String(localized: "—")
+        } ?? "—"
         let reports: String
         if let problem = status.problem {
             reports = TripStatusText.pair(problem.what, carMeaning(problem))
         } else if status.isSignedOut {
-            reports = TripStatusText.pair(status.reports.text, String(localized: "Sign in on iPhone"))
+            reports = TripStatusText.pair(status.reports.text, signInOnIPhone)
         } else {
             reports = TripStatusText.pair(status.reports.text, TripStatusText.sent(fixesSent))
         }
         let gps: String = {
-            guard let a = adherence, a.fix.horizontalAccuracy >= 0 else { return String(localized: "—") }
-            return "±\(Int(a.fix.horizontalAccuracy.rounded())) m"
+            guard let a = adherence, a.fix.horizontalAccuracy >= 0 else { return "—" }
+            let metres = Int(a.fix.horizontalAccuracy.rounded())
+            return String(localized: "±\(metres) m", comment: "CarPlay Details, the GPS row: how far off the phone's position may be, in whole metres with the short unit, e.g. '±8 m'.")
         }()
         return [
             // A feed may give a route only one of its two names.
-            CPInformationItem(title: String(localized: "Route"), detail: [route.shortName, route.longName].filter { !$0.isEmpty }.joined(separator: " · ")),
-            CPInformationItem(title: String(localized: "Trip"), detail: "\(active.trip.headsign) · \(Formatters.clock(active.trip.stops.first?.departureAt ?? active.startedAt, timezone: tz))"),
-            CPInformationItem(title: String(localized: "Schedule"), detail: schedule),
-            CPInformationItem(title: String(localized: "Next stop"), detail: next),
+            CPInformationItem(title: String(localized: "Route", comment: "CarPlay Details: the row with the route's short name and its name, e.g. '7 · Rainier Beach'."), detail: [route.shortName, route.longName].filter { !$0.isEmpty }.joined(separator: " · ")),
+            CPInformationItem(title: trip, detail: "\(active.trip.headsign) · \(Formatters.clock(active.trip.stops.first?.departureAt ?? active.startedAt, timezone: tz))"),
+            CPInformationItem(title: String(localized: "Schedule", comment: "CarPlay Details: the row with the status card's answer, e.g. 'On time' or '3 min late'."), detail: schedule),
+            CPInformationItem(title: String(localized: "Next stop", comment: "CarPlay Details: the row with the next stop's name, its scheduled time and the distance to it, e.g. '3rd Ave & Seneca St · 7:18 AM · 232 m'."), detail: next),
             CPInformationItem(title: TripStatusText.reports, detail: reports),
-            CPInformationItem(title: String(localized: "GPS"), detail: gps),
+            CPInformationItem(title: String(localized: "GPS", comment: "CarPlay Details: the row saying how accurate the phone's position is, e.g. '±8 m'. GPS stays as it is in every language."), detail: gps),
         ]
     }
 
@@ -137,22 +156,33 @@ enum CarPlayTemplates {
         TripStatusText.offRoute(distance: Formatters.distance(adherence.projection.distanceToShape))
     }
 
+    /// The banner's titles, longest first: the car shows the first that fits,
+    /// and "Off route" alone where the distance doesn't.
+    static func offRouteTitleVariants(_ title: String) -> [String] {
+        [title, TripStatusText.offRouteShort]
+    }
+
     static func offRouteAlert(adherence: Adherence) -> CPNavigationAlert {
         // Dismissing the banner is all the OK button has to do; the controller
         // hears about that through `didDismiss`.
-        let ok = CPAlertAction(title: String(localized: "OK"), style: .default) { _ in }
+        let dismiss = CPAlertAction(title: ok, style: .default) { _ in }
         return CPNavigationAlert(
-            titleVariants: [offRouteTitle(adherence: adherence)],
+            titleVariants: offRouteTitleVariants(offRouteTitle(adherence: adherence)),
             subtitleVariants: [],
             image: UIImage(systemName: "mappin.slash"),
-            primaryAction: ok, secondaryAction: nil, duration: 0
+            primaryAction: dismiss, secondaryAction: nil, duration: 0
         )
     }
 
     // MARK: Ending the trip
 
+    /// Each alert's titles are longest first, and the car shows the first
+    /// that fits: a short one comes last for a language that runs long.
     static func endTripAlert(onEnd: @escaping () -> Void, onKeepGoing: @escaping () -> Void) -> CPAlertTemplate {
-        CPAlertTemplate(titleVariants: [TripStatusText.endTripTitle], actions: [
+        CPAlertTemplate(titleVariants: [
+            TripStatusText.endTripTitle,
+            String(localized: "End trip?", comment: "CarPlay: the short form of the 'End this trip?' alert's title, for a car screen too narrow for it."),
+        ], actions: [
             CPAlertAction(title: TripStatusText.endTrip, style: .destructive) { _ in onEnd() },
             CPAlertAction(title: TripStatusText.keepGoing, style: .cancel) { _ in onKeepGoing() },
         ])
@@ -161,7 +191,10 @@ enum CarPlayTemplates {
     /// The server did not confirm the end: the phone's three ways on.
     static func notEndedAlert(onTryAgain: @escaping () -> Void, onEndOnThisPhone: @escaping () -> Void,
                               onKeepGoing: @escaping () -> Void) -> CPAlertTemplate {
-        CPAlertTemplate(titleVariants: [TripStatusText.notEndedTitle], actions: [
+        CPAlertTemplate(titleVariants: [
+            TripStatusText.notEndedTitle,
+            String(localized: "Not ended yet", comment: "CarPlay: the short form of the 'Trip not ended yet' alert's title, for a car screen too narrow for it."),
+        ], actions: [
             CPAlertAction(title: TripStatusText.tryAgain, style: .default) { _ in onTryAgain() },
             CPAlertAction(title: TripStatusText.endOnThisPhone, style: .destructive) { _ in onEndOnThisPhone() },
             CPAlertAction(title: TripStatusText.keepGoing, style: .cancel) { _ in onKeepGoing() },
@@ -203,7 +236,7 @@ enum CarPlayTemplates {
             built.append(CPListSection(items: items, header: section.header, sectionIndexTitle: nil))
         }
         if notice {
-            let more = CPListItem(text: String(localized: "Use iPhone to see more"), detailText: nil)
+            let more = CPListItem(text: String(localized: "Use iPhone to see more", comment: "CarPlay: the last row of a list the car cut short; the rest of the list is on the phone."), detailText: nil)
             more.isEnabled = false
             built.append(CPListSection(items: [more]))
         }
@@ -287,20 +320,23 @@ enum CarPlayTemplates {
         return CPAlertTemplate(titleVariants: [
             PickerText.startTitleWithMessage(time: time, route: route, headsign: headsign, vehicle: vehicle),
             PickerText.startTitle(time: time),
+            String(localized: "Start this run?", comment: "CarPlay: the shortest form of the start confirmation's title, 'Start the 6:43 AM run?', for a car screen too narrow for the run's time."),
         ], actions: [start, cancel])
     }
 
     /// A refused start, in the phone's sentence for it and never the
-    /// server's. The car offers no fix: that is the phone's job.
+    /// server's. The car offers no fix: that is the phone's job. Where the
+    /// sentence doesn't fit, the car says only that the start failed.
     static func startRefusedAlert(_ error: any Error, vehicleID: String, onOK: @escaping () -> Void) -> CPAlertTemplate {
         if error as? TripSessionError == .locationNotAsked {
             return errorAlert(String(localized: "Allow location on iPhone", comment: "CarPlay alert when a start from the car got no answer to the location prompt, which shows only on the iPhone."), onOK: onOK)
         }
-        return errorAlert(StartRefusal(error, vehicleID: vehicleID).text, onOK: onOK)
+        let sentence = StartRefusal(error, vehicleID: vehicleID).text
+        return errorAlert(sentence, short: sentence == PickerText.couldNotStart ? nil : PickerText.couldNotStart, onOK: onOK)
     }
 
-    static func errorAlert(_ message: String, onOK: @escaping () -> Void) -> CPAlertTemplate {
-        let ok = CPAlertAction(title: String(localized: "OK"), style: .cancel) { _ in onOK() }
-        return CPAlertTemplate(titleVariants: [message], actions: [ok])
+    static func errorAlert(_ message: String, short: String? = nil, onOK: @escaping () -> Void) -> CPAlertTemplate {
+        let dismiss = CPAlertAction(title: ok, style: .cancel) { _ in onOK() }
+        return CPAlertTemplate(titleVariants: [message] + [short].compactMap { $0 }, actions: [dismiss])
     }
 }

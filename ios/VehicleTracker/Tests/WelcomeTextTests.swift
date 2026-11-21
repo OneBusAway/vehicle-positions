@@ -92,7 +92,7 @@ import UIKit
     }
 
     @Test(arguments: Choice.allCases.map(\.symbol) + Need.allCases.map(\.symbol) + [
-        "chevron.left", "figure.stand", "figure.wave", "person.fill", "checkmark", "checkmark.circle.fill",
+        "chevron.backward", "figure.stand", "figure.wave", "person.fill", "checkmark", "checkmark.circle.fill",
         "checkmark.icloud.fill", "stop.circle", "pause.circle.fill",
     ])
     func everySymbolIsInTheSystemSet(symbol: String) {

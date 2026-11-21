@@ -19,10 +19,10 @@ nonisolated struct RunLabel: Equatable {
 
 extension PickerText {
     nonisolated static func runNumber(_ number: String) -> String {
-        String(localized: "Run \(number)", comment: "A run's number on the run list (Android's runs_row_run); the argument is the feed's trip_short_name, such as 1503.")
+        String(localized: "Run \(number)", comment: "Under a run on the run list and in CarPlay: the agency's run or train number, shown as the feed gives it, e.g. 'Run 1503'. Followed by the block when there is one, as in 'Run 1503 · Block 599-20'.")
     }
 
     nonisolated static func runBlock(_ block: String) -> String {
-        String(localized: "Block \(block)", comment: "A run's block on the run list (Android's runs_row_block); the argument is the feed's block_id, such as 599-20.")
+        String(localized: "Block \(block)", comment: "Under a run on the run list and in CarPlay: the agency's block, the chain of runs one vehicle drives, shown as the feed gives it, e.g. 'Block 599-20'.")
     }
 }

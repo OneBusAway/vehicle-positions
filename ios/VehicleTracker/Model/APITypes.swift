@@ -181,9 +181,11 @@ nonisolated struct ErrorBody: Sendable, Decodable {
     var error: String
 }
 
-/// Why a request failed. Each description stands on its own as a sentence,
-/// without the enum's name: a refresh that fails passes it on as the reason
-/// it logs. No screen shows it; each says what happened in its own words.
+/// Why a request failed. The screens say each failure in their own sentence
+/// (`SignInForm`, `PickerLoad`, `StartRefusal`); the description is the
+/// app's words for any other place, in the driver's language. It never
+/// carries the server's `error` message, which is written for the API and in
+/// English, nor the system's or Swift's.
 nonisolated enum APIError: Error, Equatable, LocalizedError {
     /// The base URL fails ``ServerURLPolicy``.
     case insecureURL
@@ -195,17 +197,13 @@ nonisolated enum APIError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .insecureURL:
-            ServerURLPolicy.explanation
-        case .status(let code, let message):
-            // The server writes these for the driver ("driver already has an
-            // active trip"); only fall back to the code when it sent nothing.
-            message.isEmpty ? "Server error \(code)" : message
-        case .transport(let message):
-            "Could not reach the server: \(message)"
+            SignInText.useHTTPS
+        case .status(let code, _):
+            String(localized: "Server error \(String(code))", comment: "Shown only where no screen has its own words for a request the server turned down. The HTTP status code it answered with, shown as it is, e.g. 'Server error 502'.")
+        case .transport:
+            PickerText.cannotReachServer
         case .decoding:
-            // The underlying decoding error names Swift types, which tells a
-            // driver nothing.
-            "The server's reply could not be read."
+            String(localized: "The server's reply could not be read.", comment: "Shown only where no screen has its own words for a reply the app could not read, such as a Wi-Fi sign-in page answering in place of the server.")
         }
     }
 }

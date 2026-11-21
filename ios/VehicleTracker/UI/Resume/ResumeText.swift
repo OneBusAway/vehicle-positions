@@ -58,14 +58,14 @@ nonisolated enum ResumeText {
         if headsign.isEmpty {
             return Self.route(route)
         }
-        return String(localized: "Route \(route) to \(headsign)", comment: "VoiceOver: the Resume card's route and headsign, e.g. 'Route 7 to Downtown Seattle'.")
+        return String(localized: "Route \(route) to \(headsign)", comment: "VoiceOver: the Resume card's route: its short name or id, then the headsign, e.g. 'Route 7 to Downtown Seattle'.")
     }
 
     static func spokenStarted(minutes: Int, at time: String) -> String {
-        String(localized: "started \(minutes) minutes ago, at \(time)", comment: "VoiceOver: the Resume card's start, e.g. 'started 19 minutes ago, at 6:58 AM'.")
+        String(localized: "started \(minutes) minutes ago, at \(time)", comment: "VoiceOver: the Resume card's start, read after the card's other lines, so in lower case: whole minutes since the trip began, then the time it began, e.g. 'started 19 minutes ago, at 6:58 AM'.")
     }
 
     static func spokenStarted(hours: Int, minutes: Int, at time: String) -> String {
-        String(localized: "started \(hours) hours \(minutes) minutes ago, at \(time)", comment: "VoiceOver: the Resume card's start from an hour on, e.g. 'started 2 hours 5 minutes ago, at 6:58 AM'.")
+        String(localized: "started \(hours) hours \(minutes) minutes ago, at \(time)", comment: "VoiceOver: the Resume card's start from an hour on, read after the card's other lines, so in lower case: hours, then minutes past the hour, then the time the trip began, e.g. 'started 2 hours 5 minutes ago, at 6:58 AM'.")
     }
 }

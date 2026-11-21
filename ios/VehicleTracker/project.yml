@@ -65,6 +65,9 @@ targets:
         OBADefaultServerURL: $(DEFAULT_SERVER_URL)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # Settings shows the app's Language row even when the phone has only
+        # one language. Apple names the key only in WWDC24 session 10185.
+        UIPrefersShowingLanguageSettings: true
         NSLocationWhenInUseUsageDescription: Your position is reported to the transit agency's server while a trip is running, so riders can see where the vehicle is.
         NSLocationTemporaryUsageDescriptionDictionary:
           TripReporting: Precise location puts the vehicle on the right street on riders' maps.
@@ -82,6 +85,11 @@ targets:
       base:
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        # So Xcode fills the String Catalogs from String(localized:) as it
+        # builds and exports. A project made in Xcode has these on; XcodeGen
+        # leaves them off.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: YES
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES

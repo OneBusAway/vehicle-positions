@@ -12,7 +12,7 @@ struct AccountMenu: ToolbarContent {
     /// "Version 1.0.0 (1)", from the app's Info.plist.
     static func versionText(_ info: [String: Any]?) -> String {
         let (version, build) = versionAndBuild(info)
-        return String(localized: "Version \(version) (\(build))")
+        return String(localized: "Version \(version) (\(build))", comment: "Account menu: the app's version, then its build number in brackets, e.g. 'Version 1.0.0 (7)'.")
     }
 
     /// "1.0.0 (1)": the same build where a label already says Version, as
@@ -40,6 +40,26 @@ struct AccountMenu: ToolbarContent {
     static func groups(offersHelp: Bool) -> [ItemGroup] {
         offersHelp ? [.account, .help, .signOut] : [.account, .signOut]
     }
+
+    static var title: String {
+        String(localized: "Account", comment: "VoiceOver label of the account menu's button on each picker screen. The menu shows the driver's email, the server and the app's version.")
+    }
+
+    static var signOut: String {
+        String(localized: "Sign out", comment: "The account menu's item that signs the driver out, and the confirming button of the 'Sign out?' question it asks first.")
+    }
+
+    static var signOutTitle: String {
+        String(localized: "Sign out?", comment: "Asked before signing out, since the phone is usually going to the next driver.")
+    }
+
+    static var signOutMessage: String {
+        String(localized: "The next driver can sign in on this phone.", comment: "Under 'Sign out?'.")
+    }
+
+    static var cancel: String {
+        String(localized: "Cancel", comment: "Closes the 'Sign out?' question without signing out.")
+    }
 }
 
 /// Sign out asks first, since the phone is usually about to go to the next
@@ -63,7 +83,7 @@ private struct AccountMenuButton: View {
                         Button(HelpText.title, systemImage: "questionmark.circle") { openHelp?() }
                     }
                 case .signOut:
-                    Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    Button(AccountMenu.signOut, systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                         confirming = true
                     }
                     // A start from the car can be in flight while the phone
@@ -76,17 +96,17 @@ private struct AccountMenuButton: View {
             if session.isSigningOut {
                 ProgressView()
             } else {
-                Label("Account", systemImage: "person.crop.circle")
+                Label(AccountMenu.title, systemImage: "person.crop.circle")
             }
         }
         .disabled(session.isSigningOut)
-        .confirmationDialog("Sign out?", isPresented: $confirming, titleVisibility: .visible) {
-            Button("Sign out", role: .destructive) {
+        .confirmationDialog(AccountMenu.signOutTitle, isPresented: $confirming, titleVisibility: .visible) {
+            Button(AccountMenu.signOut, role: .destructive) {
                 Task { await session.signOut() }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(AccountMenu.cancel, role: .cancel) {}
         } message: {
-            Text("The next driver can sign in on this phone.")
+            Text(AccountMenu.signOutMessage)
         }
     }
 }
