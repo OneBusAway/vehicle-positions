@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -30,12 +31,15 @@ func valuesDirFor(lang string) string {
 // escapeAndroid writes s as a string resource's text, so that aapt, and
 // unescapeAndroid, read it back as s: XML's special characters as entities,
 // backslashes, quotes and apostrophes escaped, a leading @ or ? kept from
-// reading as a reference, and the whole quoted when its spaces would
-// otherwise be collapsed.
+// reading as a reference, direction marks and isolates as \u escapes so the
+// file shows them, and the whole quoted when its spaces would otherwise be
+// collapsed.
 func escapeAndroid(s string) string {
 	var b strings.Builder
 	for i, r := range s {
 		switch {
+		case isDirectionControl(r):
+			fmt.Fprintf(&b, `\u%04x`, r)
 		case r == '&':
 			b.WriteString("&amp;")
 		case r == '<':
@@ -86,4 +90,11 @@ func stringsXML(english []androidString, trans map[string]map[string]string, lan
 	}
 	b.WriteString("</resources>\n")
 	return []byte(b.String())
+}
+
+// isDirectionControl reports whether r is an invisible character that sets
+// the direction of the text around it. Written raw, it hides in the file, and
+// GitHub flags it as a possible "Trojan Source" attack.
+func isDirectionControl(r rune) bool {
+	return r == '\u061c' || r == '\u200e' || r == '\u200f' || (r >= '\u202a' && r <= '\u202e') || (r >= '\u2066' && r <= '\u2069')
 }

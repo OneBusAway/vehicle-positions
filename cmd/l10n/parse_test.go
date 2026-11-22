@@ -91,3 +91,17 @@ func TestUnescapeAndroid(t *testing.T) {
 		assert.Equal(t, want, unescapeAndroid(in), in)
 	}
 }
+
+// TestEscapeAndroid_DirectionControlsStayVisible: an isolate a translation
+// needs, such as around https:// where the app can't put it in as a value, is
+// written as a \u escape, not as an invisible character, and reads back the
+// same.
+func TestEscapeAndroid_DirectionControlsStayVisible(t *testing.T) {
+	in := "\u0639\u0646\u0648\u0627\u0646 \u2068https://\u2069. \u200f"
+	out := escapeAndroid(in)
+	assert.Equal(t, "\u0639\u0646\u0648\u0627\u0646 \\u2068https://\\u2069. \\u200f", out)
+	assert.Equal(t, in, unescapeAndroid(out))
+	for _, r := range out {
+		assert.False(t, isDirectionControl(r), "%U written raw", r)
+	}
+}
