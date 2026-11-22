@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">Geben Sie Ihre E-Mail-Adresse ein</string>
     <string name="login_error_missing_password">Geben Sie Ihr Passwort ein</string>
     <string name="login_error_invalid_credentials">E-Mail oder Passwort falsch. Versuchen Sie es noch einmal.</string>
-    <string name="login_error_invalid_address">Geben Sie eine Adresse wie https://tracker.example.org ein</string>
-    <string name="login_error_https_required">Verwenden Sie eine Adresse mit https://</string>
+    <string name="login_error_invalid_address">Geben Sie eine Adresse wie %1$s ein</string>
+    <string name="login_error_https_required">Verwenden Sie eine Adresse mit %1$s</string>
     <string name="login_error_check_address">Adresse prüfen</string>
     <string name="login_error_unreachable">%1$s ist nicht erreichbar. Prüfen Sie Ihre Verbindung oder die Serveradresse.</string>
     <string name="login_error_not_tracker">%1$s scheint kein Tracker-Server zu sein.</string>

@@ -29,8 +29,8 @@
     <string name="login_error_missing_email">Imeelii kee galchi</string>
     <string name="login_error_missing_password">Jecha icciitii kee galchi</string>
     <string name="login_error_invalid_credentials">Imeeliin yookaan jechi icciitii sirrii miti. Irra deebi\'ii yaali.</string>
-    <string name="login_error_invalid_address">Teessoo akka https://tracker.example.org galchi</string>
-    <string name="login_error_https_required">Teessoo https:// fayyadami</string>
+    <string name="login_error_invalid_address">Teessoo akka %1$s galchi</string>
+    <string name="login_error_https_required">Teessoo %1$s fayyadami</string>
     <string name="login_error_check_address">Teessoo ilaali</string>
     <string name="login_error_unreachable">%1$s qunnamuu hin danda\'amu. Interneetii kee yookaan teessoo sarvarii ilaali.</string>
     <string name="login_error_not_tracker">%1$s sarvarii hordoffii konkolaataa hin fakkaatu.</string>

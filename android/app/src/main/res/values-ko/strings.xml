@@ -29,8 +29,8 @@
     <string name="login_error_missing_email">이메일을 입력하세요</string>
     <string name="login_error_missing_password">비밀번호를 입력하세요</string>
     <string name="login_error_invalid_credentials">이메일 또는 비밀번호가 틀렸어요. 다시 시도하세요.</string>
-    <string name="login_error_invalid_address">https://tracker.example.org 같은 주소를 입력하세요</string>
-    <string name="login_error_https_required">https:// 주소를 사용하세요</string>
+    <string name="login_error_invalid_address">%1$s 같은 주소를 입력하세요</string>
+    <string name="login_error_https_required">%1$s 주소를 사용하세요</string>
     <string name="login_error_check_address">주소를 확인하세요</string>
     <string name="login_error_unreachable">%1$s에 연결할 수 없어요. 인터넷 연결이나 서버 주소를 확인하세요.</string>
     <string name="login_error_not_tracker">%1$s 주소는 트래커 서버가 아닌 것 같아요.</string>

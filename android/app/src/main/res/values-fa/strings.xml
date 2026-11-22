@@ -27,8 +27,8 @@
     <string name="login_error_missing_email">ایمیل خود را وارد کنید</string>
     <string name="login_error_missing_password">رمز عبور خود را وارد کنید</string>
     <string name="login_error_invalid_credentials">ایمیل یا رمز عبور اشتباه است. دوباره تلاش کنید.</string>
-    <string name="login_error_invalid_address">آدرسی مثل https://tracker.example.org وارد کنید</string>
-    <string name="login_error_https_required">از آدرسی با https:// استفاده کنید</string>
+    <string name="login_error_invalid_address">آدرسی مثل %1$s وارد کنید</string>
+    <string name="login_error_https_required">از آدرسی با %1$s استفاده کنید</string>
     <string name="login_error_check_address">آدرس را بررسی کنید</string>
     <string name="login_error_unreachable">%1$s در دسترس نیست. اتصال اینترنت یا آدرس سرور را بررسی کنید.</string>
     <string name="login_error_not_tracker">به نظر نمی‌رسد %1$s سرور ردیاب باشد.</string>
@@ -55,7 +55,7 @@
 
     <!-- The app's managed configuration -->
     <string name="restriction_server_url_title">آدرس سرور</string>
-    <string name="restriction_server_url_description">سرور ردیاب شرکت، با آدرس https://. رانندگان در آن وارد می‌شوند و نمی‌توانند آن را تغییر دهند.</string>
+    <string name="restriction_server_url_description">سرور ردیاب شرکت، با آدرس \u2068https://\u2069. رانندگان در آن وارد می‌شوند و نمی‌توانند آن را تغییر دهند.</string>
 
     <!-- The welcome -->
     <string name="welcome_skip">رد شدن</string>

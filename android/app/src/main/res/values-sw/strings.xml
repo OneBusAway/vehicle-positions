@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">Weka barua pepe yako</string>
     <string name="login_error_missing_password">Weka nenosiri lako</string>
     <string name="login_error_invalid_credentials">Barua pepe au nenosiri si sahihi. Jaribu tena.</string>
-    <string name="login_error_invalid_address">Weka anwani kama https://tracker.example.org</string>
-    <string name="login_error_https_required">Tumia anwani ya https://</string>
+    <string name="login_error_invalid_address">Weka anwani kama %1$s</string>
+    <string name="login_error_https_required">Tumia anwani ya %1$s</string>
     <string name="login_error_check_address">Angalia anwani</string>
     <string name="login_error_unreachable">Imeshindwa kufikia %1$s. Angalia mtandao wako, au anwani ya seva.</string>
     <string name="login_error_not_tracker">%1$s haionekani kuwa seva ya ufuatiliaji.</string>
