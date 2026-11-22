@@ -434,39 +434,37 @@ func TestNewDayTotals_HeadwayRunsByHour(t *testing.T) {
 	t.Fatal("R4 is not in the totals")
 }
 
-// TestReportsPage_HeadwayRouteDay: a route's day says how often a headway
-// trip runs, when, and how many of its runs ran, in place of a timetable.
+// TestReportsPage_HeadwayRouteDay: a route's day lists a headway trip's runs
+// under how often it runs, when, and how many of its runs ran, and not with
+// the timetabled trips: it has no timetable.
 func TestReportsPage_HeadwayRouteDay(t *testing.T) {
 	r, _, _ := newHeadwayReporter(t)
 	data, status := reportsView(t, r, "date=2026-09-02&route_id=R4")
 	require.Equal(t, 200, status)
 
-	trips := data["Trips"].([]reportTripRow)
-	require.Len(t, trips, 2)
-	hw, hx := trips[0], trips[1]
-	assert.Equal(t, "HW", hw.GtfsTripID)
-	assert.Equal(t, "every 10 min, 06:00 to 08:00, then every 15 min, 19:00 to 21:00, then every 30 min, 23:30 to 02:00 next day", hw.Scheduled)
-	assert.Equal(t, "7 of 25 runs", hw.RunCount)
-	assert.Len(t, hw.Runs, 7)
-	assert.Equal(t, reportDeviation{}, hw.Departure, "no timetable to leave the first stop against")
-	assert.Equal(t, reportDeviation{}, hw.Arrival)
-	assert.Equal(t, "every 20 min, 09:00 to 10:00", hx.Scheduled)
-	assert.Equal(t, "1 of 3 runs", hx.RunCount)
+	assert.Empty(t, data["Trips"], "both of its trips run from frequencies.txt")
+	assert.Equal(t, true, data["HasFrequencies"])
+	runs := data["RouteRuns"].(*reportRouteRuns)
+	require.Len(t, runs.Directions, 1)
+	assert.Equal(t, []reportHeadwayTrip{
+		{GtfsTripID: "HW", Scheduled: "every 10 min, 06:00 to 08:00, then every 15 min, 19:00 to 21:00, then every 30 min, 23:30 to 02:00 next day", RunCount: "7 of 25 runs"},
+		{GtfsTripID: "HX", Scheduled: "every 20 min, 09:00 to 10:00", RunCount: "1 of 3 runs"},
+	}, runs.Directions[0].Schedules)
+	assert.Len(t, runs.Directions[0].Runs, 8, "HW's seven runs on the day and HX's one")
 
 	tiles := data["Tiles"].(analyticsTiles)
 	assert.Equal(t, [2]int{8, 28}, [2]int{tiles.Ran, tiles.Scheduled})
 
 	html := renderReportsContent(t, data)
-	hxRow := html[strings.Index(html, ">HX<"):]
-	hxRow = hxRow[:strings.Index(hxRow, "</tr>")]
-	assert.Contains(t, hxRow, "every 20 min, 09:00 to 10:00<span class=\"sub\">1 of 3 runs</span>")
-	assert.Contains(t, hxRow, "no timetable")
-	assert.NotContains(t, hxRow, "no report", "its first and last stops are not judged, so not unknown either")
-	assert.NotContains(t, hxRow, "no stop judged")
-	assert.Contains(t, html, "A trip run from the GTFS frequencies")
+	assert.NotContains(t, html, "Scheduled trips", "no timetabled trip to list")
+	assert.NotContains(t, html, "no timetable")
+	assert.Contains(t, html, `<span style="display:block">HX runs every 20 min, 09:00 to 10:00: 1 of 3 runs</span>`)
+	assert.Contains(t, html, "A trip run from the GTFS frequencies is not judged on time; each run a driver started fills the scheduled run nearest it.")
+	assert.NotContains(t, html, "A timetabled trip is listed", "the route has none")
 
 	timetabled, _ := reportsView(t, r, "date=2026-09-02&route_id=R1")
 	assert.Nil(t, timetabled["HasFrequencies"])
+	assert.Nil(t, timetabled["RouteRuns"])
 	assert.NotContains(t, renderReportsContent(t, timetabled), "A trip run from the GTFS frequencies")
 }
 

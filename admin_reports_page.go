@@ -43,16 +43,12 @@ type reportRouteRow struct {
 	TripsURL string
 }
 
-// reportTripRow is one scheduled trip in a route's day.
+// reportTripRow is one timetabled trip in a route's day.
 type reportTripRow struct {
 	GtfsTripID string
 	Headsign   string
-	// Scheduled is when the trip leaves its first stop and reaches its last,
-	// or for a trip in frequencies.txt how often it runs and when.
+	// Scheduled is when the trip leaves its first stop and reaches its last.
 	Scheduled string
-	// RunCount is how many of a trip in frequencies.txt's runs ran, "41 of
-	// 48 runs"; "" for a trip run by timetable.
-	RunCount  string
 	Runs      []reportRunRow
 	Departure reportDeviation
 	Arrival   reportDeviation
@@ -331,11 +327,19 @@ func share(n, of int) *float64 {
 	return &p
 }
 
+// routeCounts is a route's counts on its day, with the gaps between vehicles
+// in each of its directions.
 func routeCounts(r routeReport) reportCounts {
-	return reportCounts{
+	c := reportCounts{
 		Scheduled: r.TripsScheduled, Run: r.TripsRun,
 		OnTime: r.StopsOnTime, Early: r.StopsEarly, Late: r.StopsLate, Unknown: r.StopsUnknown,
 	}
+	for _, d := range r.Gaps {
+		for _, h := range d.hours {
+			c.Gaps.addCounts(h.gapCounts)
+		}
+	}
+	return c
 }
 
 // dayCounts adds up a day's routes.
@@ -538,20 +542,31 @@ func reportsPageView(ctx context.Context, reports *serviceReporter, recent *over
 			if route.RouteID != query.RouteID {
 				continue
 			}
-			row := newReportRouteRow(ix, rep.Date, route.RouteID, route.ShortName, route.LongName, routeCounts(route))
 			counts := routeCounts(route)
+			row := newReportRouteRow(ix, rep.Date, route.RouteID, route.ShortName, route.LongName, counts)
 			data["Route"] = row
 			data["Headline"] = row.Name + " " + when
 			data["Lede"] = strings.Join(append(routeDaySentences(counts, isToday), tz), " ")
-			data["Tiles"] = newAnalyticsTiles(counts, false)
+			data["Tiles"] = newAnalyticsTiles(counts, len(route.Gaps) > 0)
+			// A trip in frequencies.txt has no timetable to list it by. Its
+			// direction is one of route.Gaps, whose card lists its runs.
 			trips := make([]reportTripRow, 0, len(route.Trips))
 			for _, trip := range route.Trips {
-				trips = append(trips, newReportTripRow(rep, trip, day))
 				if trip.Frequencies != nil {
 					data["HasFrequencies"] = true
+					continue
 				}
+				trips = append(trips, newReportTripRow(rep, trip, day))
 			}
 			data["Trips"] = trips
+			if len(route.Gaps) > 0 {
+				data["RouteRuns"] = &reportRouteRuns{
+					Directions:      newReportRunDirections(rep, route, day),
+					BunchedBelow:    percentOf(bunchedBelow),
+					LongAbove:       percentOf(longGapAbove),
+					FrequentSpacing: humanizeDuration(frequentSpacing),
+				}
+			}
 			return data, http.StatusOK, nil
 		}
 		data["NoRoute"] = true
@@ -1297,15 +1312,187 @@ func newReportTripRow(rep *serviceReport, trip tripReport, day time.Time) report
 			TrailURL: "/admin/trips/" + strconv.FormatInt(run.ID, 10),
 		})
 	}
-	if trip.Frequencies != nil {
-		row.Scheduled, row.RunCount = frequencyWords(trip.Frequencies, rep.location, day)
-		return row
-	}
 	if len(trip.Runs) > 0 {
 		row.Departure = formatDeviation(trip.DepartureDeviationS, settings)
 		row.Arrival = formatDeviation(trip.ArrivalDeviationS, settings)
 	}
 	return row
+}
+
+// reportRouteRuns are the cards of a route's day with frequent service, one
+// for each direction, and the bands their gaps are judged by: bunched under
+// BunchedBelow of the scheduled gap and long over LongAbove, both
+// percentages, with a timetable frequent where it runs every
+// FrequentSpacing or more often.
+type reportRouteRuns struct {
+	Directions      []reportRunDirection
+	BunchedBelow    string
+	LongAbove       string
+	FrequentSpacing string
+}
+
+// reportRunDirection is one direction of a route's frequent service on the
+// route's day: how often its trips in frequencies.txt run, and its runs in
+// the order they left the first stop each is measured at.
+type reportRunDirection struct {
+	// Title is "Runs to" the headsign, or "Runs in direction" the
+	// direction_id when there is none.
+	Title     string
+	Schedules []reportHeadwayTrip
+	Runs      []reportRunGapRow
+	// Last is the route's last direction, whose card says how the gaps are
+	// judged.
+	Last bool
+}
+
+// reportHeadwayTrip is a trip in frequencies.txt in its direction's card:
+// how often it runs and when, and how many of its runs ran, as
+// frequencyWords says them.
+type reportHeadwayTrip struct {
+	GtfsTripID string
+	Scheduled  string
+	RunCount   string
+}
+
+// reportRunGapRow is one run in its direction's card.
+type reportRunGapRow struct {
+	GtfsTripID string
+	// Left is when the run left the first stop it is measured at, to the
+	// second, when LeftKnown; otherwise "not known", or "did not leave" for a
+	// run that ended there.
+	Left      string
+	LeftKnown bool
+	Vehicle   string
+	Driver    string
+	TrailURL  string
+	Gap       reportRunGap
+	// BunchedAt is how many of the stops its gap was judged at it was
+	// bunched at, "1 of 2 stops", and Bunched whether any; "" when its gap
+	// was judged at none.
+	BunchedAt string
+	Bunched   bool
+}
+
+// reportRunGap is the gap before a run where it left the first stop: Text,
+// "2 min 10 s after Bus 12", and Every, the scheduled gap then, "every 10
+// min", with Tone "bunched", "long" or "". When no gap was judged there,
+// Text alone says why: "unknown" or "no gap". All are "" for a run that did
+// not leave.
+type reportRunGap struct {
+	Text  string
+	Every string
+	Tone  string
+}
+
+// routeRun is a driver trip that ran one of a route's trips.
+type routeRun struct {
+	gtfsTripID string
+	tripRun
+}
+
+// newReportRunDirections is a card for each direction of route's frequent
+// service on its day, the last marked.
+func newReportRunDirections(rep *serviceReport, route routeReport, day time.Time) []reportRunDirection {
+	trips := make(map[string]tripReport, len(route.Trips))
+	runs := make(map[int64]routeRun)
+	for _, trip := range route.Trips {
+		trips[trip.GtfsTripID] = trip
+		for _, run := range trip.Runs {
+			runs[run.ID] = routeRun{gtfsTripID: trip.GtfsTripID, tripRun: run}
+		}
+	}
+	out := make([]reportRunDirection, 0, len(route.Gaps))
+	for _, d := range route.Gaps {
+		dir := reportRunDirection{Title: runsTitle(d), Runs: make([]reportRunGapRow, 0, len(d.runs))}
+		for _, id := range d.trips {
+			if f := trips[id].Frequencies; f != nil {
+				scheduled, count := frequencyWords(f, rep.location, day)
+				dir.Schedules = append(dir.Schedules, reportHeadwayTrip{GtfsTripID: id, Scheduled: scheduled, RunCount: count})
+			}
+		}
+		for _, r := range d.runs {
+			dir.Runs = append(dir.Runs, newReportRunGapRow(rep, r, runs, day))
+		}
+		out = append(out, dir)
+	}
+	if n := len(out); n > 0 {
+		out[n-1].Last = true
+	}
+	return out
+}
+
+// runsTitle names a direction's card.
+func runsTitle(d directionGaps) string {
+	switch {
+	case d.Headsign != "":
+		return "Runs to " + d.Headsign
+	case d.DirectionID != nil:
+		return "Runs in direction " + strconv.Itoa(*d.DirectionID)
+	}
+	return "Runs"
+}
+
+// newReportRunGapRow is run r in its direction's card, the vehicles named
+// from runs, the route's runs by id.
+func newReportRunGapRow(rep *serviceReport, r runGaps, runs map[int64]routeRun, day time.Time) reportRunGapRow {
+	run := runs[r.id]
+	row := reportRunGapRow{
+		GtfsTripID: run.gtfsTripID,
+		Vehicle:    run.VehicleLabel,
+		Driver:     run.DriverName,
+		TrailURL:   "/admin/trips/" + strconv.FormatInt(r.id, 10),
+	}
+	switch {
+	case !r.served:
+		row.Left = "did not leave"
+	case r.left.IsZero():
+		row.Left, row.Gap.Text = "not known", "unknown"
+	default:
+		row.Left, row.LeftKnown = formatPassedTime(r.left, rep.location, day), true
+		row.Gap = newReportRunGap(r.gap, runs)
+	}
+	if r.judged > 0 {
+		row.BunchedAt = fmt.Sprintf("%d of %s", r.bunched, countOf(r.judged, "stop", "stops"))
+		row.Bunched = r.bunched > 0
+	}
+	return row
+}
+
+// newReportRunGap is the gap g before a run that left the first stop, nil
+// when it was the first of a stretch of service there, the run ahead named
+// from runs.
+func newReportRunGap(g *stopGap, runs map[int64]routeRun) reportRunGap {
+	switch {
+	case g == nil:
+		return reportRunGap{Text: "no gap"}
+	case g.unknown:
+		return reportRunGap{Text: "unknown"}
+	}
+	gap := reportRunGap{
+		Text:  formatGap(g.gap) + " after " + runs[g.ahead].VehicleLabel,
+		Every: "every " + formatGap(g.scheduled),
+	}
+	switch {
+	case g.bunched():
+		gap.Tone = "bunched"
+	case g.long():
+		gap.Tone = "long"
+	}
+	return gap
+}
+
+// formatGap is a gap between vehicles in minutes and seconds, "2 min 10 s",
+// the seconds left out when there are none and the minutes when there are
+// none.
+func formatGap(d time.Duration) string {
+	m, sec := int(d/time.Minute), int(d%time.Minute/time.Second)
+	switch {
+	case m == 0:
+		return fmt.Sprintf("%d s", sec)
+	case sec == 0:
+		return fmt.Sprintf("%d min", m)
+	}
+	return fmt.Sprintf("%d min %d s", m, sec)
 }
 
 // frequencyWords says how often a trip in frequencies.txt runs and when,

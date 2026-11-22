@@ -56,6 +56,29 @@ type directionGaps struct {
 	// kept totals keep them.
 	hours  []gapHourTotals
 	ratios [gapRatioTop + 1]int
+	// trips are the GTFS trips of the direction, and runs the runs measured
+	// in it, in the order they left the first stop each is measured at, the
+	// earlier id first of two at once. A run whose passing there is not known
+	// is in the order by the earliest it could have left, and one that ended
+	// before leaving it by when it started.
+	trips []string
+	runs  []runGaps
+}
+
+// runGaps is one run of a direction's frequent service as its route's day
+// lists it: when it left the first stop it is measured at, the gap there to
+// the run before it, and how many of the gaps it closed, one at each stop it
+// is measured at, were judged and how many of those bunched.
+type runGaps struct {
+	id int64
+	// left is when the run left that stop, zero when that is not known or
+	// when it ended before leaving, which served false tells apart.
+	left   time.Time
+	served bool
+	// gap is nil when the run closed none there: its passing is not known,
+	// or it was the first of a stretch of service.
+	gap             *stopGap
+	judged, bunched int
 }
 
 // gapCounts are gaps between vehicles: those judged, those of them bunched
@@ -82,15 +105,27 @@ func (c *gapCounts) add(g stopGap) {
 	h, scheduled := int64(g.gap/time.Second), int64(g.scheduled/time.Second)
 	c.Gaps++
 	switch {
-	case float64(h) < bunchedBelow*float64(scheduled):
+	case g.bunched():
 		c.Bunched++
-	case float64(h) > longGapAbove*float64(scheduled):
+	case g.long():
 		c.LongGaps++
 	}
 	c.SumGapS += h
 	c.SumGapSq += h * h
 	c.SumScheduledS += scheduled
 	c.SumScheduledSq += scheduled * scheduled
+}
+
+// bunched reports whether a gap judged is under bunchedBelow of its
+// scheduled gap, to the second.
+func (g stopGap) bunched() bool {
+	return float64(g.gap/time.Second) < bunchedBelow*float64(g.scheduled/time.Second)
+}
+
+// long reports whether a gap judged is over longGapAbove of its scheduled
+// gap, to the second.
+func (g stopGap) long() bool {
+	return float64(g.gap/time.Second) > longGapAbove*float64(g.scheduled/time.Second)
 }
 
 // extraWait is Excess Wait Time as TfL defines it, to the second: the
@@ -185,7 +220,19 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 		var total gapCounts
 		hours := make(map[int]*gapHourTotals)
 		scheduled := make(map[time.Duration]int)
-		for _, stop := range stops {
+		runs := make(map[int64]*runGaps)
+		// first is the stop each run is measured at first, and order when it
+		// left there, as the runs are listed.
+		first := make(map[int64]stopKey)
+		order := make(map[int64]time.Time)
+		for key, stop := range stops {
+			for _, l := range stop.leaving {
+				runs[l.run.ID] = &runGaps{id: l.run.ID, left: l.passing.at, served: l.served}
+				first[l.run.ID] = key
+				order[l.run.ID] = l.order()
+			}
+		}
+		for key, stop := range stops {
 			for _, g := range stop.gaps() {
 				hour := serviceHour(rep, g.at)
 				h, ok := hours[hour]
@@ -195,12 +242,31 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 				}
 				h.add(g)
 				total.add(g)
+				run := runs[g.run]
 				if !g.unknown {
 					d.ratios[gapRatioTenth(g)]++
 					scheduled[g.scheduled]++
+					run.judged++
+					if g.bunched() {
+						run.bunched++
+					}
+				}
+				if first[g.run] == key {
+					run.gap = &g
 				}
 			}
 		}
+		d.trips = make([]string, 0, len(group))
+		for _, trip := range group {
+			d.trips = append(d.trips, trip.ID)
+		}
+		d.runs = make([]runGaps, 0, len(runs))
+		for _, run := range runs {
+			d.runs = append(d.runs, *run)
+		}
+		slices.SortFunc(d.runs, func(a, b runGaps) int {
+			return cmp.Or(order[a.id].Compare(order[b.id]), cmp.Compare(a.id, b.id))
+		})
 		d.GapsJudged, d.Bunched, d.LongGaps, d.Unknown = total.Gaps, total.Bunched, total.LongGaps, total.Unknown
 		d.ExtraWaitS = total.extraWait()
 		d.ScheduledGapS = mostOften(scheduled)
@@ -232,10 +298,32 @@ func stopKeys(stops []rider.StopTimeInfo) []stopKey {
 }
 
 // stopService is one measured stop of a direction: the schedule of the trips
-// that serve it and how each of their runs passed it.
+// that serve it and how each of their runs passed it. leaving are the runs
+// measured at it first, served or not.
 type stopService struct {
 	schedule stopSchedule
 	passings []stopPassing
+	leaving  []runLeaving
+}
+
+// runLeaving is a run at the first stop it is measured at: how it passed
+// there, and served false when it ended before leaving.
+type runLeaving struct {
+	run     TripSummary
+	passing stopPassing
+	served  bool
+}
+
+// order is when the run left the stop, the earliest it could have when that
+// is not known, or when it started when it did not leave.
+func (l runLeaving) order() time.Time {
+	switch {
+	case !l.served:
+		return l.run.StartTime
+	case l.passing.at.IsZero():
+		return l.passing.from
+	}
+	return l.passing.at
 }
 
 // directionStops gathers a direction's trips at the stops gaps are measured
@@ -303,8 +391,13 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 		for _, i := range inOrder {
 			stop := stops[keys[i]]
 			for k, run := range tripRuns {
-				if p, served := runPassing(fixes[k], leftStopAt(trip, i), run, open); served {
+				p, served := runPassing(fixes[k], leftStopAt(trip, i), run, open)
+				p.run = run.ID
+				if served {
 					stop.passings = append(stop.passings, p)
+				}
+				if i == inOrder[0] {
+					stop.leaving = append(stop.leaving, runLeaving{run: run, passing: p, served: served})
 				}
 			}
 		}
@@ -323,10 +416,11 @@ func frequentTimetable(stops map[stopKey]*stopService) bool {
 	return false
 }
 
-// stopPassing is when a run left a stop: at when known, or else some time
-// from from up to to.
+// stopPassing is when the run with id run left a stop: at when known, or
+// else some time from from up to to.
 type stopPassing struct {
 	at, from, to time.Time
+	run          int64
 }
 
 // between reports whether a passing not known could fall between a and b.
@@ -380,30 +474,33 @@ type stopGap struct {
 	at             time.Time
 	gap, scheduled time.Duration
 	unknown        bool
+	// run made the later passing and ahead the earlier.
+	run, ahead int64
 }
 
 // gaps are the gaps between the known passings at the stop, ordered by time
 // whichever runs made them, so a vehicle that overtakes another is gapped
-// where it passed. The first passing of a stretch has no gap.
+// where it passed, and the earlier id first of two in the same second. The
+// first passing of a stretch has no gap.
 func (s *stopService) gaps() []stopGap {
-	known := make([]time.Time, 0, len(s.passings))
+	known := make([]stopPassing, 0, len(s.passings))
 	var unknown []stopPassing
 	for _, p := range s.passings {
 		if p.at.IsZero() {
 			unknown = append(unknown, p)
 		} else {
-			known = append(known, p.at)
+			known = append(known, p)
 		}
 	}
-	slices.SortFunc(known, time.Time.Compare)
+	slices.SortFunc(known, func(a, b stopPassing) int { return cmp.Or(a.at.Compare(b.at), cmp.Compare(a.run, b.run)) })
 	stretches := s.schedule.stretches()
 	out := make([]stopGap, 0, len(known))
 	for i := 1; i < len(known); i++ {
-		a, b := known[i-1], known[i]
+		a, b := known[i-1].at, known[i].at
 		if n := stretchAt(stretches, b); n < 0 || n != stretchAt(stretches, a) {
 			continue
 		}
-		g := stopGap{at: b}
+		g := stopGap{at: b, run: known[i].run, ahead: known[i-1].run}
 		if slices.ContainsFunc(unknown, func(p stopPassing) bool { return p.between(a, b) }) {
 			g.unknown = true
 		} else {
