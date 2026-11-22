@@ -266,13 +266,11 @@ func TestReportsPage_RouteRunsInEveryState(t *testing.T) {
 	assert.NotContains(t, south, "<table")
 }
 
-// TestReportsPage_RouteRunsWithNoStopMeasured: route 5's day (gapDayRuns)
-// with GS's only timepoint ST1, its last stop, so no stop south is measured.
-// The South card still says GS's schedule, and lists K, L, M, N and O by when
-// they started, when each left not known, each with its Replay link. North is
-// as before.
-func TestReportsPage_RouteRunsWithNoStopMeasured(t *testing.T) {
-	ix := gapFixtureIndexEdited(t, func(name string, body []byte) []byte {
+// gapFixtureIndexSouthUnmeasured is the gap fixture with GS's only timepoint
+// ST1, its last stop, so no stop south is measured.
+func gapFixtureIndexSouthUnmeasured(t *testing.T) *rider.Index {
+	t.Helper()
+	return gapFixtureIndexEdited(t, func(name string, body []byte) []byte {
 		if name != "stop_times.txt" {
 			return body
 		}
@@ -289,6 +287,15 @@ func TestReportsPage_RouteRunsWithNoStopMeasured(t *testing.T) {
 		}
 		return []byte(strings.Join(lines, "\n") + "\n")
 	})
+}
+
+// TestReportsPage_RouteRunsWithNoStopMeasured: route 5's day (gapDayRuns)
+// with no stop south measured (gapFixtureIndexSouthUnmeasured). The South
+// card still says GS's schedule, and lists K, L, M, N and O by when they
+// started, when each left not known, each with its Replay link. North is as
+// before.
+func TestReportsPage_RouteRunsWithNoStopMeasured(t *testing.T) {
+	ix := gapFixtureIndexSouthUnmeasured(t)
 	trips, trails := gapFixtureTrips(t, ix)
 	r := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return ix }, testReportSettings)
 	r.now = func() time.Time { return reportFixtureNow }
@@ -315,6 +322,39 @@ func TestReportsPage_RouteRunsWithNoStopMeasured(t *testing.T) {
 	assert.Contains(t, southHTML, `<a class="row-link" href="/admin/trips/211"><span class="muted">not known</span></a><span class="sub">GS</span></td><td class="nowrap" data-label="Vehicle">Bus K<span class="sub hide-phone">Driver K</span></td>`)
 	assert.Contains(t, southHTML, `<a class="btn btn-sm btn-plain" href="/admin/trips/211" aria-label="Replay Bus K, not known">`)
 	assert.Equal(t, 5, strings.Count(southHTML, `aria-label="Replay Bus `), "a Replay link for each run")
+}
+
+// TestReportsPage_RouteRunsWithNoStopMeasuredThatDidNotLeave: no stop south
+// measured (gapFixtureIndexSouthUnmeasured). X waited at ST3, GS's first
+// stop, and ended there a minute later, so it is listed by when it started,
+// after K, as did not leave, with no gap: as X on a measured trip is
+// (TestReportsPage_RouteRunsInEveryState).
+func TestReportsPage_RouteRunsWithNoStopMeasuredThatDidNotLeave(t *testing.T) {
+	ix := gapFixtureIndexSouthUnmeasured(t)
+	trips, trails := gapTrips(t, ix, 1, []gapRun{
+		{name: "K", tripID: "GS", legs: south(hms(7, 0, 0), hms(7, 5, 0))},
+		{name: "X", tripID: "GS", legs: func(*rider.TripInfo) []reportLeg {
+			return []reportLeg{{hms(7, 13, 0), 0}, {hms(7, 15, 0), 0}}
+		}},
+	})
+	r := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return ix }, testReportSettings)
+	r.now = func() time.Time { return reportFixtureNow }
+
+	data, _ := reportsView(t, r, "date=2026-09-02&route_id=R5")
+	runs := routeRunsOf(t, data)
+	require.Len(t, runs.Directions, 2)
+	dir := runs.Directions[1]
+	assert.Equal(t, "Runs to South", dir.Title)
+	assert.Equal(t, []string{
+		"not known GS Bus K: unknown",
+		"did not leave GS Bus X",
+	}, runLines(dir))
+	assert.Equal(t, reportRunGapRow{GtfsTripID: "GS", Left: "did not leave", Vehicle: "Bus X", Driver: "Driver X", TrailURL: "/admin/trips/2"}, dir.Runs[1])
+
+	html := renderReportsContent(t, data)
+	southHTML := html[strings.Index(html, "Runs to South"):]
+	assert.Contains(t, southHTML, `<a class="row-link" href="/admin/trips/2"><span class="muted">did not leave</span></a><span class="sub">GS</span></td><td class="nowrap" data-label="Vehicle">Bus X<span class="sub hide-phone">Driver X</span></td><td></td><td class="num right c-side nowrap" data-label="Bunched at"><span class="muted">no gap judged</span></td>`)
+	assert.Contains(t, southHTML, `<a class="btn btn-sm btn-plain" href="/admin/trips/2" aria-label="Replay Bus X, did not leave">`)
 }
 
 // TestReportsPage_EscapesRouteRuns: a headsign, a trip id, a vehicle's label
@@ -422,6 +462,15 @@ func TestRouteGaps_RunsAddUpToTheDirection(t *testing.T) {
 	}
 }
 
+// untimedST1 is the gap fixture's trip id with ST1 no timepoint.
+func untimedST1(t *testing.T, ix *rider.Index, id string) *rider.TripInfo {
+	t.Helper()
+	trip := *mustTrip(t, ix, id)
+	trip.StopTimes = slices.Clone(trip.StopTimes)
+	trip.StopTimes[0].Timepoint = false
+	return &trip
+}
+
 // TestRouteGaps_RunsOfATripWithNoStopMeasured: route 5 north with ST1 no
 // timepoint, so GN is measured at ST2 alone, and GT's only timepoint ST2, its
 // last stop, so no stop of GT is measured. GT's runs Q and S are listed all
@@ -430,12 +479,6 @@ func TestRouteGaps_RunsAddUpToTheDirection(t *testing.T) {
 // judged. P and R keep their passings, and R's gap is the one judged.
 func TestRouteGaps_RunsOfATripWithNoStopMeasured(t *testing.T) {
 	ix := gapFixtureIndex(t)
-	untimedST1 := func(id string) *rider.TripInfo {
-		trip := *mustTrip(t, ix, id)
-		trip.StopTimes = slices.Clone(trip.StopTimes)
-		trip.StopTimes[0].Timepoint = false
-		return &trip
-	}
 	runs, trails := gapTrips(t, ix, 1, []gapRun{
 		{name: "P", tripID: "GN", legs: north(hms(19, 0, 0), hms(19, 5, 0))},
 		{name: "Q", tripID: "GT", legs: north(hms(19, 8, 0), hms(19, 13, 0))},
@@ -445,7 +488,7 @@ func TestRouteGaps_RunsOfATripWithNoStopMeasured(t *testing.T) {
 	byTrip, trailsByTrip := byGTFSTrip(runs, trails)
 	rep := &serviceReport{Date: "2026-09-02", location: ix.Timezone()}
 
-	gaps := routeGaps(rep, []*rider.TripInfo{untimedST1("GN"), untimedST1("GT")}, reportDayStart, byTrip, trailsByTrip, testReportSettings)
+	gaps := routeGaps(rep, []*rider.TripInfo{untimedST1(t, ix, "GN"), untimedST1(t, ix, "GT")}, reportDayStart, byTrip, trailsByTrip, testReportSettings)
 	require.Len(t, gaps, 1)
 	d := gaps[0]
 	require.Len(t, d.runs, 4, "each run once")
@@ -457,4 +500,34 @@ func TestRouteGaps_RunsOfATripWithNoStopMeasured(t *testing.T) {
 	assert.Equal(t, 1, d.runs[2].judged)
 	assert.Equal(t, runGaps{id: 4, served: true}, d.runs[3], "S started at 19:17")
 	assert.Equal(t, 1, d.GapsJudged)
+}
+
+// TestRouteGaps_RunsOfATripWithNoStopMeasuredThatEnded: GT measured at no
+// stop, as in TestRouteGaps_RunsOfATripWithNoStopMeasured. X waited at ST1,
+// GT's first stop, and ended there a minute after its last fix, so it did
+// not serve it, as runPassing says of a run that ended before a stop. Y left
+// ST1 and ended short of ST2, GT's last stop: it left, at a time not known.
+// Z drove as X did on GT drawn through its stops, which is not placed, so
+// whether it left is not known. Each is listed by when it started.
+func TestRouteGaps_RunsOfATripWithNoStopMeasuredThatEnded(t *testing.T) {
+	ix := gapFixtureIndex(t)
+	waits := func(arrive, end time.Duration) func(*rider.TripInfo) []reportLeg {
+		return func(*rider.TripInfo) []reportLeg { return []reportLeg{{arrive, 0}, {end, 0}} }
+	}
+	runs, trails := gapTrips(t, ix, 1, []gapRun{
+		{name: "X", tripID: "GT", legs: waits(hms(19, 8, 0), hms(19, 10, 0))},
+		{name: "Y", tripID: "GT", legs: func(*rider.TripInfo) []reportLeg {
+			return []reportLeg{{hms(19, 18, 0), 0}, {hms(19, 19, 0), 0}, {hms(19, 20, 0), 300}}
+		}},
+		{name: "Z", tripID: "GT", legs: waits(hms(19, 28, 0), hms(19, 30, 0))},
+	})
+	drawn := untimedST1(t, ix, "GT")
+	drawn.ID, drawn.ShapeFromStops = "GT-drawn", true
+	runs[2].GtfsTripID = drawn.ID
+	byTrip, trailsByTrip := byGTFSTrip(runs, trails)
+	rep := &serviceReport{Date: "2026-09-02", location: ix.Timezone()}
+
+	gaps := routeGaps(rep, []*rider.TripInfo{untimedST1(t, ix, "GT"), drawn}, reportDayStart, byTrip, trailsByTrip, testReportSettings)
+	require.Len(t, gaps, 1)
+	assert.Equal(t, []runGaps{{id: 1}, {id: 2, served: true}, {id: 3, served: true}}, gaps[0].runs)
 }
