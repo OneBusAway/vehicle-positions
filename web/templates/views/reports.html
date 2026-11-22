@@ -30,19 +30,39 @@
 <div class="card"><div class="empty"><span class="step-icon">{{template "icon-lg" "route"}}</span><div class="empty-title">Nothing scheduled</div><p>Route {{.RouteID}} has no trips scheduled on this day.</p><a class="btn" href="{{.AllRoutesURL}}">All routes</a></div></div>
 {{else if .Route}}
 {{template "analytics-tiles" .}}
+{{if .Trips}}
 <section class="card" aria-labelledby="an-trips">
   <div class="card-head"><h3 id="an-trips" style="flex:1">Scheduled trips</h3><span class="sub">First and last stop against the timetable</span></div>
   <div class="table-wrap"><table class="table cards">
     <thead><tr><th>Trip</th><th>Scheduled</th><th class="hide-md">Vehicle</th><th>First stop</th><th>Last stop</th><th class="right">On time</th><th><span class="sr-only">Replay</span></th></tr></thead>
     <tbody>
       {{range .Trips}}
-      <tr><td class="nowrap">{{if .Runs}}<a class="row-link" href="{{(index .Runs 0).TrailURL}}">{{.GtfsTripID}}</a>{{else}}<span class="strong">{{.GtfsTripID}}</span>{{end}}{{with .Headsign}}<span class="sub">to {{.}}</span>{{end}}</td>{{if .RunCount}}<td data-label="Scheduled">{{.Scheduled}}<span class="sub">{{.RunCount}}</span></td>{{else}}<td class="num nowrap" data-label="Scheduled">{{.Scheduled}}</td>{{end}}<td class="nowrap{{if .Runs}} hide-md{{end}}">{{range .Runs}}<span style="display:block">{{.Vehicle}}<span class="sub hide-phone">{{.Driver}}</span></span>{{else}}<span class="pill pill-warn">Not run</span>{{end}}</td>{{if .RunCount}}<td></td><td></td><td class="num right c-side nowrap"><span class="muted">no timetable</span></td>{{else}}<td{{if .Runs}} data-label="First stop"{{end}}>{{if .Runs}}{{template "deviation" .Departure}}{{end}}</td><td{{if .Runs}} data-label="Last stop"{{end}}>{{if .Runs}}{{template "deviation" .Arrival}}{{end}}</td><td class="num right c-side nowrap">{{if .Runs}}{{if .OnTime}}{{.OnTime}}<span class="only-phone muted"> on time</span>{{else}}<span class="muted">no stop judged</span>{{end}}{{if .NoReport}}<span class="sub hide-phone">{{.NoReport}} with no report</span>{{end}}{{end}}</td>{{end}}<td class="right c-actions">{{range .Runs}}<a class="btn btn-sm btn-plain" href="{{.TrailURL}}" aria-label="Replay {{.Vehicle}} on {{$.Route.Name}}">{{template "icon-sm" "play_arrow"}}Replay</a>{{end}}</td></tr>
+      <tr><td class="nowrap">{{if .Runs}}<a class="row-link" href="{{(index .Runs 0).TrailURL}}">{{.GtfsTripID}}</a>{{else}}<span class="strong">{{.GtfsTripID}}</span>{{end}}{{with .Headsign}}<span class="sub">to {{.}}</span>{{end}}</td><td class="num nowrap" data-label="Scheduled">{{.Scheduled}}</td><td class="nowrap{{if .Runs}} hide-md{{end}}">{{range .Runs}}<span style="display:block">{{.Vehicle}}<span class="sub hide-phone">{{.Driver}}</span></span>{{else}}<span class="pill pill-warn">Not run</span>{{end}}</td><td{{if .Runs}} data-label="First stop"{{end}}>{{if .Runs}}{{template "deviation" .Departure}}{{end}}</td><td{{if .Runs}} data-label="Last stop"{{end}}>{{if .Runs}}{{template "deviation" .Arrival}}{{end}}</td><td class="num right c-side nowrap">{{if .Runs}}{{if .OnTime}}{{.OnTime}}<span class="only-phone muted"> on time</span>{{else}}<span class="muted">no stop judged</span>{{end}}{{if .NoReport}}<span class="sub hide-phone">{{.NoReport}} with no report</span>{{end}}{{end}}</td><td class="right c-actions">{{range .Runs}}<a class="btn btn-sm btn-plain" href="{{.TrailURL}}" aria-label="Replay {{.Vehicle}} on {{$.Route.Name}}">{{template "icon-sm" "play_arrow"}}Replay</a>{{end}}</td></tr>
       {{end}}
     </tbody>
   </table></div>
   {{template "analytics-rule" .}}
-  {{if .HasFrequencies}}<div class="card-foot">A trip run from the GTFS frequencies, every few minutes rather than to a timetable, is not judged on time. It counts each run its frequencies schedule, and each run a driver started fills the scheduled run nearest it.</div>{{end}}
 </section>
+{{end}}
+{{with .RouteRuns}}{{range $i, $d := .Directions}}
+<section class="card" aria-labelledby="an-runs-{{$i}}">
+  <div class="card-head"><h3 id="an-runs-{{$i}}" style="flex:1">{{.Title}}</h3><span class="sub hide-phone">In the order they left the first stop</span></div>
+  {{with .Schedules}}<p class="card-note">{{range .}}<span style="display:block">{{.GtfsTripID}} runs {{.Scheduled}}: {{.RunCount}}</span>{{end}}</p>{{end}}
+  {{if .Runs}}
+  <div class="table-wrap"><table class="table cards">
+    <thead><tr><th>Left</th><th>Vehicle</th><th>Gap before</th><th class="right">Bunched at</th><th><span class="sr-only">Replay</span></th></tr></thead>
+    <tbody>
+      {{range .Runs}}
+      <tr><td class="nowrap"><a class="row-link{{if .LeftKnown}} num{{end}}" href="{{.TrailURL}}">{{if .LeftKnown}}{{.Left}}{{else}}<span class="muted">{{.Left}}</span>{{end}}</a><span class="sub">{{.GtfsTripID}}</span></td><td class="nowrap" data-label="Vehicle">{{.Vehicle}}<span class="sub hide-phone">{{.Driver}}</span></td><td{{if .Gap.Text}} data-label="Gap before"{{end}}>{{if .Gap.Text}}{{template "run-gap" .Gap}}{{end}}</td><td class="num right c-side nowrap" data-label="Bunched at">{{if .Bunched}}<span class="tone-early">{{.BunchedAt}}</span>{{else if .BunchedAt}}{{.BunchedAt}}{{else}}<span class="muted">no gap judged</span>{{end}}</td><td class="right c-actions"><a class="btn btn-sm btn-plain" href="{{.TrailURL}}" aria-label="Replay {{.Vehicle}}, {{.Left}}">{{template "icon-sm" "play_arrow"}}Replay</a></td></tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+  <p class="card-note">No run in this direction.</p>
+  {{end}}
+  {{if .Last}}<div class="card-foot">{{with $.RouteRuns}}A run's gap is the time since the run before it left the same stop, whichever trip that was. It is bunched under {{.BunchedBelow}} of the gap scheduled then and long over {{.LongAbove}}, and unknown when a vehicle with no report within {{$.FixWindow}} of the stop could have left between them. The first run of a stretch of service, and a run outside one, has no gap. Bunched at counts the stops where the run's gap was bunched, of those it was judged at.{{if $.HasFrequencies}} A trip run from the GTFS frequencies is not judged on time; each run a driver started fills the scheduled run nearest it.{{end}}{{if $.Trips}} A timetabled trip is listed where it leaves a stop within {{.FrequentSpacing}} of another, and Scheduled trips judges it on time.{{end}}{{end}}</div>{{end}}
+</section>
+{{end}}{{end}}
 {{else}}
 {{if .Metrics}}
 <section class="card an-trend" aria-label="{{.Trend.Label}} by day">
@@ -171,6 +191,8 @@
   {{end}}
 </div>
 {{end}}
+
+{{define "run-gap"}}{{if eq .Tone "bunched"}}<span class="pill pill-early">Bunched</span> {{.Text}}{{else if eq .Tone "long"}}<span class="pill pill-late">Long</span> {{.Text}}{{else if .Every}}{{.Text}}{{else}}<span class="muted">{{.Text}}</span>{{end}}{{with .Every}}<span class="sub">{{.}}</span>{{end}}{{end}}
 
 {{define "analytics-rule"}}
 <div class="card-foot">A stop is on time when the vehicle left it from {{.OnTimeEarly}} early to {{.OnTimeLate}} late, or reached the last stop in that window. A stop with no report within {{.FixWindow}} either side of the vehicle passing it is left out.</div>

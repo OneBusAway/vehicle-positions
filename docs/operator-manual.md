@@ -783,16 +783,28 @@ The columns of **By route**:
   number usually means phones losing signal or the app being stopped. A trip
   whose schedule has no route shape has no report everywhere.
 
-Click a route to open its trips for the last day shown, by departure. Each
-shows when it was scheduled, the vehicle and driver that ran it (**Not run** if
-none), how it left the first stop and reached the last, and its own on-time
-share. Inside the on-time window a stop says **On time** with the difference
-beside it; outside it, how early or late. A trip run from the GTFS
-frequencies says how often it runs and how many of its runs ran, such as
-**every 10 min, 06:00 to 22:00** and **41 of 96 runs**, lists every run with
-its vehicle and driver, and says **no timetable** in place of the stops.
+Click a route to open its day, the last day shown. Its timetabled trips are
+listed by departure, each with when it was scheduled, the vehicle and driver
+that ran it (**Not run** if none), how it left the first stop and reached the
+last, and its own on-time share. Inside the on-time window a stop says **On
+time** with the difference beside it; outside it, how early or late.
 **Replay** opens the trip's page, with its time at every stop. **All routes**
 goes back.
+
+A route with frequent service also gets **Bunched** and **Long gaps** tiles
+and a card for each direction, such as **Runs to Downtown**, listing its runs
+in the order they left the first stop. Each run shows when it left, its
+vehicle and driver, and the gap to the run before it there, such as **2 min
+after Vehicle 12, every 10 min**, marked **Bunched** or **Long** when it was.
+**Bunched at** is how many stops the run's gap to the vehicle ahead was
+bunched at, of those it was judged at (see [Gaps between
+vehicles](#gaps-between-vehicles)). A run whose phone sent nothing near the
+first stop left at a time **not known**, and one that ended before leaving it
+**did not leave**. A trip run from the GTFS frequencies has no timetable, so
+it is listed only here: the card says how often it runs and how many of its
+runs ran, such as **every 10 min, 06:00 to 22:00: 41 of 96 runs**. A
+timetabled trip is listed in both places when it is part of the frequent
+service.
 
 **Download CSV**, on a single day, saves that day's route rows as a
 spreadsheet. Today's figures are worked out afresh at most once a minute, so

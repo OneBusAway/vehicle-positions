@@ -109,8 +109,8 @@ func TestServiceReporter_ReadsTheFixtureDayFromTheStore(t *testing.T) {
 
 // TestServiceReporter_ReadsTheHeadwayGapsFromTheStore: route 5's gaps are
 // the same worked out from the database, where a trip's end time and its
-// trail come from their own tables, as from memory, and so are the gap
-// totals kept through service_day_totals.
+// trail come from their own tables, as from memory, down to each run its
+// day lists, and so are the gap totals kept through service_day_totals.
 func TestServiceReporter_ReadsTheHeadwayGapsFromTheStore(t *testing.T) {
 	store := newTestStore(t)
 	clearTripTestData(t, store)
@@ -185,13 +185,24 @@ func assertSameReport(t *testing.T, want, got *serviceReport) {
 	for i := range want.Routes {
 		wantRoute, gotRoute := want.Routes[i], got.Routes[i]
 		require.Len(t, gotRoute.Trips, len(wantRoute.Trips))
+		// The database numbers its trips its own way; the vehicle says which
+		// run is which.
+		ids := make(map[int64]int64)
 		for j := range wantRoute.Trips {
-			// The database numbers its trips its own way; the vehicle says
-			// which run is which.
 			require.Len(t, gotRoute.Trips[j].Runs, len(wantRoute.Trips[j].Runs))
 			for k := range wantRoute.Trips[j].Runs {
 				assert.Equal(t, wantRoute.Trips[j].Runs[k].VehicleID, gotRoute.Trips[j].Runs[k].VehicleID)
+				ids[gotRoute.Trips[j].Runs[k].ID] = wantRoute.Trips[j].Runs[k].ID
 				gotRoute.Trips[j].Runs[k].ID = wantRoute.Trips[j].Runs[k].ID
+			}
+		}
+		for _, d := range gotRoute.Gaps {
+			for r := range d.runs {
+				run := &d.runs[r]
+				run.id = ids[run.id]
+				if run.gap != nil {
+					run.gap.run, run.gap.ahead = ids[run.gap.run], ids[run.gap.ahead]
+				}
 			}
 		}
 		assert.Equal(t, wantRoute, gotRoute, "route %s", wantRoute.RouteID)
