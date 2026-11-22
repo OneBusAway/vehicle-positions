@@ -7,7 +7,7 @@
 //
 //	go run ./cmd/l10n check [-root dir] [-release] [-annotate] [-summary file]
 //	go run ./cmd/l10n export [-root dir] [-xliff file] [-matches dir] [-o file] <language>
-//	go run ./cmd/l10n import [-root dir] [-xliff file] <language> <sheet.csv>
+//	go run ./cmd/l10n import [-root dir] [-xliff file] [-draft] <language> <sheet.csv>
 //
 // check exits 1 when a check fails, 0 when there are only warnings, and 2 when
 // it could not run. The l10n workflow adds -annotate, so each finding shows on
@@ -29,7 +29,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 const usage = `usage:
   l10n check [-root dir] [-release] [-annotate] [-summary file]
   l10n export [-root dir] [-xliff file] [-matches dir] [-o file] <language>
-  l10n import [-root dir] [-xliff file] <language> <sheet.csv>`
+  l10n import [-root dir] [-xliff file] [-draft] <language> <sheet.csv>`
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -130,6 +130,7 @@ func runImportCommand(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	root := fs.String("root", ".", "the repository's root")
 	xliff := fs.String("xliff", "", "the .xcloc folder, or the .xliff file, the sheet's iOS strings were exported from; it is filled in place")
+	draft := fs.Bool("draft", false, "the sheet's translations are drafts nobody fluent has read, such as a machine or AI translation: Xcode marks the iOS strings it fills in machine_translated")
 	if ok, code := parse(fs, args); !ok {
 		return code
 	}
@@ -137,7 +138,7 @@ func runImportCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	refused, changed, err := importSheet(*root, *xliff, fs.Arg(0), fs.Arg(1))
+	refused, changed, err := importSheet(*root, *xliff, fs.Arg(0), fs.Arg(1), *draft)
 	if err != nil {
 		fmt.Fprintln(stderr, "l10n:", err)
 		return 2
