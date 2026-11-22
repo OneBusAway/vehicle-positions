@@ -49,4 +49,19 @@ class BidiTextTest {
         assertFalse("without it, it shows as $bareShown", bareShown.endsWith("· 7:18 AM"))
         assertTrue(shown(set, rtl = false), shown(set, rtl = false).endsWith("· 7:18 AM"))
     }
+
+    @Test fun `a name that starts in Latin and ends in Arabic keeps the time after it in a left-to-right sentence`() {
+        val name = "Metro محطة"
+        val bare = "Next %s · %s".format(name, "7:18 AM")
+        val set = "Next %s · %s".format(bidiIsolated(name, rtl = false), "7:18 AM")
+
+        val bareShown = shown(bare, rtl = false)
+        assertFalse("without it, it shows as $bareShown", bareShown.endsWith("· 7:18 AM"))
+        assertTrue(shown(set, rtl = false), shown(set, rtl = false).endsWith("· 7:18 AM"))
+    }
+
+    @Test fun `a name that starts in Arabic and ends in Latin is set apart in a right-to-left sentence`() {
+        assertEquals("\u2068محطة Metro\u2069", bidiIsolated("محطة Metro", rtl = true))
+        assertEquals("محطة 5", bidiIsolated("محطة 5", rtl = true))
+    }
 }
