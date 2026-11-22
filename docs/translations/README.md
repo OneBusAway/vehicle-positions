@@ -61,8 +61,10 @@ says, so a language should translate them the same way in both. The check warns 
 - Keep web addresses and the glossary's `do_not_translate` terms exactly as they are.
 - Use the glossary's word for each term, and none of its forbidden ones.
 - A machine or AI draft is a start, not a translation. Say in the pull request which strings were drafted. On iOS,
-  leave Xcode's `machine_translated` state until someone fluent has read them. The language stays `draft` until a
-  fluent reviewer has read every string in context and approved the pull request.
+  each drafted string keeps Xcode's `machine_translated` state until someone fluent has read it: import a drafted
+  sheet with `-draft` (below), and the check refuses a `machine_translated` string in a `reviewed` language.
+  Android strings have no such state, so there the language's row in `status.csv` is what marks a draft. The
+  language stays `draft` until a fluent reviewer has read every string in context and approved the pull request.
 
 ## Translating in a spreadsheet
 
@@ -103,6 +105,11 @@ opens. The tool writes it from the apps and writes it back into them.
    go run ./cmd/l10n check
    ```
 
+   A machine or AI draft goes in with `-draft` (`import -draft -xliff …`): each iOS string the sheet fills in is
+   then marked in the XLIFF as a machine translation (`state-qualifier="leveraged-mt"`), which Xcode imports as
+   `machine_translated`. A fluent reviewer's sheet goes in without it, and each string it fills in is then read.
+   To mark a draft read as it is, copy it from the `current` column into `translation`.
+
    The import writes `values-hi/strings.xml` and fills in the XLIFF in the `.xcloc` folder. It never writes a
    String Catalog itself, because Apple keeps the right to change that format. Xcode may also bring the catalog up
    to date with the code as it exports and imports, which then shows as extra changes in `Localizable.xcstrings`.
@@ -111,6 +118,8 @@ What the import does:
 - It refuses a sheet whose placeholders or plural forms break the check. It names each row that does, and writes
   nothing.
 - It writes both files or neither: when one can't be written, the other is left as it was.
+- It leaves each iOS string the sheet doesn't fill in as it is, state and all, so a draft stays one until a sheet
+  without `-draft` fills it in.
 - It writes `strings.xml` in one layout, without comments. A sheet read back with no edits changes nothing once
   `values-<language>/strings.xml` is in that layout, but a file written by hand, or with comments, is laid out
   again the first time.

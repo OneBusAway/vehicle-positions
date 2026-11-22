@@ -355,6 +355,42 @@ func TestImport_AnEditToTheCurrentCellIsWrittenToo(t *testing.T) {
 	assert.Contains(t, p.read(t, androidHindi), `<string name="tracking_gps">GPS बंद</string>`)
 }
 
+// TestImport_ADraftMarksWhatTheSheetFillsIn: with -draft, the iOS strings a
+// sheet fills in get the qualifier Xcode imports as machine_translated, and
+// nothing else in the XLIFF changes.
+func TestImport_ADraftMarksWhatTheSheetFillsIn(t *testing.T) {
+	p := newSheetProject(t)
+	xliff0 := p.xliffText(t)
+	sheet := p.export(t, "hi", "-xliff", p.xliff)
+	translate(t, sheet, map[string]string{"Sign in": "साइन इन करो"})
+
+	code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff, "-draft")
+
+	require.Equal(t, 0, code, out)
+	want := strings.Replace(xliff0, `<target state="translated">साइन इन करें</target>`,
+		`<target state="translated" state-qualifier="leveraged-mt">साइन इन करो</target>`, 1)
+	assert.Equal(t, want, p.xliffText(t))
+}
+
+// TestImport_ADraftCopiedIntoTheTranslationIsRead: a reviewer marks a draft
+// read by copying it into the translation column, and a draft the sheet
+// leaves empty stays a draft.
+func TestImport_ADraftCopiedIntoTheTranslationIsRead(t *testing.T) {
+	p := newSheetProject(t)
+	signIn, sent := "साइन इन करें", "%lld रिपोर्ट भेजी गईं"
+	p.editXLIFF(t, `<target state="translated">`+signIn+`</target>`, `<target state="translated" state-qualifier="leveraged-mt">`+signIn+`</target>`)
+	p.editXLIFF(t, `<target state="translated">`+sent+`</target>`, `<target state="translated" state-qualifier="leveraged-mt">`+sent+`</target>`)
+	sheet := p.export(t, "hi", "-xliff", p.xliff)
+	translate(t, sheet, map[string]string{"Sign in": signIn})
+
+	code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+	require.Equal(t, 0, code, out)
+	xliff := p.xliffText(t)
+	assert.Contains(t, xliff, `<target state="translated">`+signIn+`</target>`)
+	assert.Contains(t, xliff, `<target state="translated" state-qualifier="leveraged-mt">`+sent+`</target>`)
+}
+
 func TestImport_ReadsASheetASpreadsheetSaved(t *testing.T) {
 	p := newSheetProject(t)
 	sheet := filepath.Join(p.dir, "hi.csv")
@@ -415,7 +451,7 @@ func TestXLIFF_TargetsReadBackAsWritten(t *testing.T) {
 			targets[u] = text
 		}
 	}
-	require.NoError(t, os.WriteFile(path, doc.withTargets(targets), 0o644))
+	require.NoError(t, os.WriteFile(path, doc.withTargets(targets, nil, false), 0o644))
 
 	read, err := readXLIFF(path)
 

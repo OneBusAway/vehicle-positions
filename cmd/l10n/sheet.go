@@ -463,7 +463,9 @@ func exportSheet(root, xliffPath, matchesDir, lang string, out, warn io.Writer) 
 // placeholders or plural forms fail the check is refused whole: the findings
 // come back, and nothing is written. So is a sheet with two rows for one
 // form of a string, and when one of the files can't be written, neither is.
-func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, changed []string, err error) {
+// With draft, the iOS strings the sheet fills in are drafts nobody fluent has
+// read, which Xcode then marks machine_translated; without it, they are read.
+func importSheet(root, xliffPath, lang, sheetPath string, draft bool) (refused []finding, changed []string, err error) {
 	p, err := loadProject(root, lang, xliffPath)
 	if err != nil {
 		return nil, nil, err
@@ -480,8 +482,9 @@ func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, ch
 		}
 	}
 	targets := map[*xliffUnit]string{}
-	firstLine := map[string]int{} // by app and key
-	rowAt := map[string]int{}     // the line of each form's row, by app, key and form
+	filled := map[*xliffUnit]bool{} // the iOS units whose row has a translation
+	firstLine := map[string]int{}   // by app and key
+	rowAt := map[string]int{}       // the line of each form's row, by app, key and form
 	twice := func(r sheetRow, key, name string) error {
 		if line, ok := rowAt[key]; ok {
 			return fmt.Errorf("%s:%d: %s has a row on line %d already: keep one", sheetPath, r.line, name, line)
@@ -539,6 +542,7 @@ func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, ch
 					text = toIOS(text, u.source)
 				}
 				targets[u] = text
+				filled[u] = strings.TrimSpace(r.translation) != ""
 			}
 		}
 	}
@@ -555,7 +559,7 @@ func importSheet(root, xliffPath, lang, sheetPath string) (refused []finding, ch
 		files = append(files, *f)
 	}
 	if p.xliff != nil {
-		if body := p.xliff.withTargets(targets); string(body) != string(p.xliff.body) {
+		if body := p.xliff.withTargets(targets, filled, draft); string(body) != string(p.xliff.body) {
 			files = append(files, fileWrite{path: p.xliff.path, body: body})
 		}
 	}

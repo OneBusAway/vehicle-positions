@@ -128,17 +128,28 @@ func readXLIFF(path string) (*xliffDoc, error) {
 }
 
 // withTargets is the file with each unit in targets given that text as its
-// target, in place of the one it has or just after its source. A unit whose
-// target already says that is left as it is.
-func (d *xliffDoc) withTargets(targets map[*xliffUnit]string) []byte {
+// target, in place of the one it has or just after its source. The target is
+// translated, and with draft also qualified leveraged-mt, which Xcode imports
+// as machine_translated and exports again the same way. A unit whose target
+// already says that text keeps it, state and all, unless the sheet filled it
+// in: then it takes this import's state, so copying a draft into the
+// translation column marks it read.
+func (d *xliffDoc) withTargets(targets map[*xliffUnit]string, filled map[*xliffUnit]bool, draft bool) []byte {
+	open := `<target state="translated">`
+	if draft {
+		open = `<target state="translated" state-qualifier="leveraged-mt">`
+	}
 	var out bytes.Buffer
 	from := 0
 	for _, u := range d.units {
 		text, ok := targets[u]
-		if !ok || (u.target != nil && *u.target == text) {
+		if !ok {
 			continue
 		}
-		element := `<target state="translated">` + escapeXMLText(text) + `</target>`
+		element := open + escapeXMLText(text) + `</target>`
+		if u.target != nil && *u.target == text && (!filled[u] || string(d.body[u.targetStart:u.targetEnd]) == element) {
+			continue
+		}
 		if u.target != nil {
 			out.Write(d.body[from:u.targetStart])
 			out.WriteString(element)
