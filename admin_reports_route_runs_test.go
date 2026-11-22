@@ -266,6 +266,57 @@ func TestReportsPage_RouteRunsInEveryState(t *testing.T) {
 	assert.NotContains(t, south, "<table")
 }
 
+// TestReportsPage_RouteRunsWithNoStopMeasured: route 5's day (gapDayRuns)
+// with GS's only timepoint ST1, its last stop, so no stop south is measured.
+// The South card still says GS's schedule, and lists K, L, M, N and O by when
+// they started, when each left not known, each with its Replay link. North is
+// as before.
+func TestReportsPage_RouteRunsWithNoStopMeasured(t *testing.T) {
+	ix := gapFixtureIndexEdited(t, func(name string, body []byte) []byte {
+		if name != "stop_times.txt" {
+			return body
+		}
+		lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+		for i, line := range lines {
+			switch {
+			case i == 0:
+				lines[i] = line + ",timepoint"
+			case strings.HasPrefix(line, "GS,") && !strings.Contains(line, ",ST1,"):
+				lines[i] = line + ",0"
+			default:
+				lines[i] = line + ",1"
+			}
+		}
+		return []byte(strings.Join(lines, "\n") + "\n")
+	})
+	trips, trails := gapFixtureTrips(t, ix)
+	r := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return ix }, testReportSettings)
+	r.now = func() time.Time { return reportFixtureNow }
+
+	data, _ := reportsView(t, r, "date=2026-09-02&route_id=R5")
+	runs := routeRunsOf(t, data)
+	require.Len(t, runs.Directions, 2)
+	assert.Len(t, runs.Directions[0].Runs, 10, "north as before")
+	south := runs.Directions[1]
+	assert.Equal(t, "Runs to South", south.Title)
+	assert.Equal(t, []reportHeadwayTrip{{GtfsTripID: "GS", Scheduled: "every 15 min, 07:00 to 08:00", RunCount: "4 of 4 runs"}}, south.Schedules)
+	assert.Equal(t, []string{
+		"not known GS Bus K: unknown",
+		"not known GS Bus L: unknown",
+		"not known GS Bus M: unknown",
+		"not known GS Bus N: unknown",
+		"not known GS Bus O: unknown",
+	}, runLines(south))
+
+	html := renderReportsContent(t, data)
+	southHTML := html[strings.Index(html, "Runs to South"):]
+	assert.Contains(t, southHTML, `GS runs every 15 min, 07:00 to 08:00: 4 of 4 runs`)
+	assert.NotContains(t, southHTML, "No run in this direction.")
+	assert.Contains(t, southHTML, `<a class="row-link" href="/admin/trips/211"><span class="muted">not known</span></a><span class="sub">GS</span></td><td class="nowrap" data-label="Vehicle">Bus K<span class="sub hide-phone">Driver K</span></td>`)
+	assert.Contains(t, southHTML, `<a class="btn btn-sm btn-plain" href="/admin/trips/211" aria-label="Replay Bus K, not known">`)
+	assert.Equal(t, 5, strings.Count(southHTML, `aria-label="Replay Bus `), "a Replay link for each run")
+}
+
 // TestReportsPage_EscapesRouteRuns: a headsign, a trip id, a vehicle's label
 // and a driver's name come from the agency's feed and its admins; none
 // reaches the page as markup.
@@ -369,4 +420,41 @@ func TestRouteGaps_RunsAddUpToTheDirection(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRouteGaps_RunsOfATripWithNoStopMeasured: route 5 north with ST1 no
+// timepoint, so GN is measured at ST2 alone, and GT's only timepoint ST2, its
+// last stop, so no stop of GT is measured. GT's runs Q and S are listed all
+// the same, by when they started, between GN's P and R, which are listed by
+// when they left ST2: when each left not known, with no gap and nothing
+// judged. P and R keep their passings, and R's gap is the one judged.
+func TestRouteGaps_RunsOfATripWithNoStopMeasured(t *testing.T) {
+	ix := gapFixtureIndex(t)
+	untimedST1 := func(id string) *rider.TripInfo {
+		trip := *mustTrip(t, ix, id)
+		trip.StopTimes = slices.Clone(trip.StopTimes)
+		trip.StopTimes[0].Timepoint = false
+		return &trip
+	}
+	runs, trails := gapTrips(t, ix, 1, []gapRun{
+		{name: "P", tripID: "GN", legs: north(hms(19, 0, 0), hms(19, 5, 0))},
+		{name: "Q", tripID: "GT", legs: north(hms(19, 8, 0), hms(19, 13, 0))},
+		{name: "R", tripID: "GN", legs: north(hms(19, 10, 0), hms(19, 15, 0))},
+		{name: "S", tripID: "GT", legs: north(hms(19, 18, 0), hms(19, 23, 0))},
+	})
+	byTrip, trailsByTrip := byGTFSTrip(runs, trails)
+	rep := &serviceReport{Date: "2026-09-02", location: ix.Timezone()}
+
+	gaps := routeGaps(rep, []*rider.TripInfo{untimedST1("GN"), untimedST1("GT")}, reportDayStart, byTrip, trailsByTrip, testReportSettings)
+	require.Len(t, gaps, 1)
+	d := gaps[0]
+	require.Len(t, d.runs, 4, "each run once")
+	assert.Equal(t, int64(1), d.runs[0].id)
+	assert.Equal(t, "19:05:06", serviceClock(d.runs[0].left.Sub(reportDayStart)), "P left ST2")
+	assert.Equal(t, runGaps{id: 2, served: true}, d.runs[1], "Q started at 19:07")
+	assert.Equal(t, int64(3), d.runs[2].id)
+	assert.Equal(t, "19:15:06", serviceClock(d.runs[2].left.Sub(reportDayStart)), "R left ST2")
+	assert.Equal(t, 1, d.runs[2].judged)
+	assert.Equal(t, runGaps{id: 4, served: true}, d.runs[3], "S started at 19:17")
+	assert.Equal(t, 1, d.GapsJudged)
 }

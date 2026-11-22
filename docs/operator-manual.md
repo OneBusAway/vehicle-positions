@@ -800,7 +800,10 @@ after Vehicle 12, every 10 min**, marked **Bunched** or **Long** when it was.
 bunched at, of those it was judged at (see [Gaps between
 vehicles](#gaps-between-vehicles)). A run whose phone sent nothing near the
 first stop left at a time **not known**, and one that ended before leaving it
-**did not leave**. A trip run from the GTFS frequencies has no timetable, so
+**did not leave**. When gaps are measured at none of the stops of a trip run
+from the GTFS frequencies, as when its only timepoint is its last stop, its
+runs are listed by when they started, each left at a time **not known**.
+A trip run from the GTFS frequencies has no timetable, so
 it is listed only here: the card says how often it runs and how many of its
 runs ran, such as **every 10 min, 06:00 to 22:00: 41 of 96 runs**. A
 timetabled trip is listed in both places when it is part of the frequent
