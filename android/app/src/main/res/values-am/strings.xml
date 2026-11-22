@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">ኢሜይልዎን ያስገቡ</string>
     <string name="login_error_missing_password">የይለፍ ቃልዎን ያስገቡ</string>
     <string name="login_error_invalid_credentials">ኢሜይል ወይም የይለፍ ቃል ተሳስቷል። እንደገና ይሞክሩ።</string>
-    <string name="login_error_invalid_address">እንደ https://tracker.example.org ያለ አድራሻ ያስገቡ</string>
-    <string name="login_error_https_required">በhttps:// የሚጀምር አድራሻ ይጠቀሙ</string>
+    <string name="login_error_invalid_address">እንደ %1$s ያለ አድራሻ ያስገቡ</string>
+    <string name="login_error_https_required">በ%1$s የሚጀምር አድራሻ ይጠቀሙ</string>
     <string name="login_error_check_address">አድራሻውን ያረጋግጡ</string>
     <string name="login_error_unreachable">ከ%1$s ጋር መገናኘት አልተቻለም። ግንኙነትዎን ወይም የሰርቨሩን አድራሻ ያረጋግጡ።</string>
     <string name="login_error_not_tracker">%1$s የመከታተያ ሰርቨር አይመስልም።</string>

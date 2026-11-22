@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">Введіть свою електронну адресу</string>
     <string name="login_error_missing_password">Введіть свій пароль</string>
     <string name="login_error_invalid_credentials">Неправильна електронна адреса або пароль. Спробуйте ще раз.</string>
-    <string name="login_error_invalid_address">Введіть адресу на зразок https://tracker.example.org</string>
-    <string name="login_error_https_required">Потрібна адреса з https://</string>
+    <string name="login_error_invalid_address">Введіть адресу на зразок %1$s</string>
+    <string name="login_error_https_required">Потрібна адреса з %1$s</string>
     <string name="login_error_check_address">Перевірте адресу</string>
     <string name="login_error_unreachable">Не вдається зв’язатися з %1$s. Перевірте з’єднання або адресу сервера.</string>
     <string name="login_error_not_tracker">Схоже, %1$s — не сервер трекера.</string>

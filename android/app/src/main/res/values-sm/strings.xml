@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">Tusi lau imeli</string>
     <string name="login_error_missing_password">Tusi lau ʻupu faʻalilolilo</string>
     <string name="login_error_invalid_credentials">E sese le imeli poʻo le ʻupu faʻalilolilo. Toe taumafai.</string>
-    <string name="login_error_invalid_address">Tusi se tuatusi e pei ʻo https://tracker.example.org</string>
-    <string name="login_error_https_required">Faʻaaogā se tuatusi https://</string>
+    <string name="login_error_invalid_address">Tusi se tuatusi e pei ʻo %1$s</string>
+    <string name="login_error_https_required">Faʻaaogā se tuatusi %1$s</string>
     <string name="login_error_check_address">Siaki le tuatusi</string>
     <string name="login_error_unreachable">E lē mafai ona oʻo atu i %1$s. Siaki lau fesoʻotaʻiga, poʻo le tuatusi o le server.</string>
     <string name="login_error_not_tracker">ʻO %1$s e foliga mai e lē o se server mo lenei app.</string>

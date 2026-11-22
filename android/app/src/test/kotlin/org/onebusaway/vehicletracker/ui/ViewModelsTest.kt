@@ -60,6 +60,7 @@ import org.onebusaway.vehicletracker.ui.login.LoginField
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
 import org.onebusaway.vehicletracker.ui.login.LoginViewModel
 import org.onebusaway.vehicletracker.ui.login.bannerOf
+import org.onebusaway.vehicletracker.ui.login.fieldErrorAddress
 import org.onebusaway.vehicletracker.ui.login.fieldErrorRes
 import org.onebusaway.vehicletracker.ui.login.serverAddressOf
 import org.onebusaway.vehicletracker.ui.login.serverLabel
@@ -955,6 +956,14 @@ class ViewModelsTest {
         assertNull(bannerOf(LoginError.InvalidAddress))
         assertNull(bannerOf(LoginError.MissingField(LoginField.EMAIL)))
         assertNull(bannerOf(null))
+    }
+
+    @Test fun `a server field error that names an address gets it as its value`() {
+        val example = "https://tracker.example.org"
+        assertEquals(example, fieldErrorAddress(R.string.login_error_invalid_address, example))
+        assertEquals("https://", fieldErrorAddress(R.string.login_error_https_required, example))
+        assertNull(fieldErrorAddress(R.string.login_error_missing_server, example))
+        assertNull(fieldErrorAddress(R.string.login_error_check_address, example))
     }
 
     // --- Launch: where the app lands, and whether a stored trip is still being reported ---

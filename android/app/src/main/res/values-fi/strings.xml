@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">Anna sähköpostisi</string>
     <string name="login_error_missing_password">Anna salasanasi</string>
     <string name="login_error_invalid_credentials">Väärä sähköposti tai salasana. Yritä uudelleen.</string>
-    <string name="login_error_invalid_address">Anna osoite muodossa https://tracker.example.org</string>
-    <string name="login_error_https_required">Käytä https://-osoitetta</string>
+    <string name="login_error_invalid_address">Anna osoite muodossa %1$s</string>
+    <string name="login_error_https_required">Käytä %1$s-osoitetta</string>
     <string name="login_error_check_address">Tarkista osoite</string>
     <string name="login_error_unreachable">Ei yhteyttä palvelimeen %1$s. Tarkista yhteytesi tai palvelimen osoite.</string>
     <string name="login_error_not_tracker">%1$s ei näytä olevan seurantapalvelin.</string>

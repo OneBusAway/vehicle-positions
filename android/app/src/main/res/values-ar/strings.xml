@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">أدخل بريدك الإلكتروني</string>
     <string name="login_error_missing_password">أدخل كلمة المرور</string>
     <string name="login_error_invalid_credentials">البريد الإلكتروني أو كلمة المرور غير صحيحة. حاول مرة أخرى.</string>
-    <string name="login_error_invalid_address">أدخل عنوانًا مثل https://tracker.example.org</string>
-    <string name="login_error_https_required">استخدم عنوانًا يبدأ بـ https://</string>
+    <string name="login_error_invalid_address">أدخل عنوانًا مثل %1$s</string>
+    <string name="login_error_https_required">استخدم عنوانًا يبدأ بـ %1$s</string>
     <string name="login_error_check_address">تحقق من العنوان</string>
     <string name="login_error_unreachable">تعذّر الوصول إلى %1$s. تحقق من اتصالك أو من عنوان الخادم.</string>
     <string name="login_error_not_tracker">يبدو أن %1$s ليس خادم تتبع.</string>
@@ -56,7 +56,7 @@
 
     <!-- The app's managed configuration -->
     <string name="restriction_server_url_title">عنوان الخادم</string>
-    <string name="restriction_server_url_description">خادم التتبع لدى جهة العمل، وهو عنوان يبدأ بـ https://. يسجّل السائقون الدخول إليه ولا يمكنهم تغييره.</string>
+    <string name="restriction_server_url_description">خادم التتبع لدى جهة العمل، وهو عنوان يبدأ بـ \u2068https://\u2069. يسجّل السائقون الدخول إليه ولا يمكنهم تغييره.</string>
 
     <!-- The welcome -->
     <string name="welcome_skip">تخطٍّ</string>

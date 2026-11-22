@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">请输入邮箱</string>
     <string name="login_error_missing_password">请输入密码</string>
     <string name="login_error_invalid_credentials">邮箱或密码错误，请重试。</string>
-    <string name="login_error_invalid_address">请输入类似 https://tracker.example.org 的地址</string>
-    <string name="login_error_https_required">请使用 https:// 地址</string>
+    <string name="login_error_invalid_address">请输入类似 %1$s 的地址</string>
+    <string name="login_error_https_required">请使用 %1$s 地址</string>
     <string name="login_error_check_address">请检查地址</string>
     <string name="login_error_unreachable">无法连接 %1$s。请检查网络连接或服务器地址。</string>
     <string name="login_error_not_tracker">%1$s 似乎不是车辆追踪服务器。</string>

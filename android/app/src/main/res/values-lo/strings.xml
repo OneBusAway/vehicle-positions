@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">ໃສ່ອີເມວຂອງທ່ານ</string>
     <string name="login_error_missing_password">ໃສ່ລະຫັດຜ່ານຂອງທ່ານ</string>
     <string name="login_error_invalid_credentials">ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ. ລອງໃໝ່.</string>
-    <string name="login_error_invalid_address">ໃສ່ທີ່ຢູ່ແບບ https://tracker.example.org</string>
-    <string name="login_error_https_required">ໃຊ້ທີ່ຢູ່ແບບ https://</string>
+    <string name="login_error_invalid_address">ໃສ່ທີ່ຢູ່ແບບ %1$s</string>
+    <string name="login_error_https_required">ໃຊ້ທີ່ຢູ່ແບບ %1$s</string>
     <string name="login_error_check_address">ກວດເບິ່ງທີ່ຢູ່</string>
     <string name="login_error_unreachable">ເຊື່ອມຕໍ່ຫາ %1$s ບໍ່ໄດ້. ກວດເບິ່ງການເຊື່ອມຕໍ່ ຫຼື ທີ່ຢູ່ເຊີບເວີ.</string>
     <string name="login_error_not_tracker">%1$s ເບິ່ງຄືວ່າບໍ່ແມ່ນເຊີບເວີຕິດຕາມລົດ.</string>

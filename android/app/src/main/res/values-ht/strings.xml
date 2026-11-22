@@ -32,8 +32,8 @@
     <string name="login_error_missing_email">Antre imèl ou</string>
     <string name="login_error_missing_password">Antre modpas ou</string>
     <string name="login_error_invalid_credentials">Imèl la oswa modpas la pa bon. Eseye ankò.</string>
-    <string name="login_error_invalid_address">Antre yon adrès tankou https://tracker.example.org</string>
-    <string name="login_error_https_required">Sèvi ak yon adrès https://</string>
+    <string name="login_error_invalid_address">Antre yon adrès tankou %1$s</string>
+    <string name="login_error_https_required">Sèvi ak yon adrès %1$s</string>
     <string name="login_error_check_address">Tcheke adrès la</string>
     <string name="login_error_unreachable">Nou pa ka jwenn %1$s. Tcheke entènèt ou, oswa adrès sèvè a.</string>
     <string name="login_error_not_tracker">%1$s pa sanble yon sèvè swivi.</string>

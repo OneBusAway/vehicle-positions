@@ -32,8 +32,8 @@
     <string name="login_error_missing_email">Geli iimaylkaaga</string>
     <string name="login_error_missing_password">Geli furahaaga sirta</string>
     <string name="login_error_invalid_credentials">Iimaylka ama furaha sirta waa khalad. Isku day mar kale.</string>
-    <string name="login_error_invalid_address">Geli cinwaan sida https://tracker.example.org</string>
-    <string name="login_error_https_required">Isticmaal cinwaan https:// ah</string>
+    <string name="login_error_invalid_address">Geli cinwaan sida %1$s</string>
+    <string name="login_error_https_required">Isticmaal cinwaan %1$s ah</string>
     <string name="login_error_check_address">Hubi cinwaanka</string>
     <string name="login_error_unreachable">%1$s lama heli karo. Hubi internetkaaga, ama cinwaanka server-ka.</string>
     <string name="login_error_not_tracker">%1$s uma eka server raad-raac ah.</string>

@@ -27,8 +27,8 @@
     <string name="login_error_missing_email">ኢመይልኩም ኣእትዉ</string>
     <string name="login_error_missing_password">መሕለፊ ቃልኩም ኣእትዉ</string>
     <string name="login_error_invalid_credentials">ኢመይል ወይ መሕለፊ ቃል ጌጋ እዩ። ደጊምኩም ፈትኑ።</string>
-    <string name="login_error_invalid_address">ከም https://tracker.example.org ዝበለ ኣድራሻ ኣእትዉ</string>
-    <string name="login_error_https_required">https:// ዘለዎ ኣድራሻ ተጠቐሙ</string>
+    <string name="login_error_invalid_address">ከም %1$s ዝበለ ኣድራሻ ኣእትዉ</string>
+    <string name="login_error_https_required">%1$s ዘለዎ ኣድራሻ ተጠቐሙ</string>
     <string name="login_error_check_address">ኣድራሻ ኣረጋግጹ</string>
     <string name="login_error_unreachable">ናብ %1$s ምብጻሕ ኣይተኻእለን። ርክብኩም ወይ ኣድራሻ ሰርቨር ኣረጋግጹ።</string>
     <string name="login_error_not_tracker">%1$s ናይ ምክትታል ሰርቨር ኣይመስልን።</string>

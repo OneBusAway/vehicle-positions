@@ -21,10 +21,10 @@
     <string name="login_error_missing_email">Enter your email</string>
     <string name="login_error_missing_password">Enter your password</string>
     <string name="login_error_invalid_credentials">Wrong email or password. Try again.</string>
-    <!-- Under the server field when what was typed can't be an address. The example shows only while the field is empty, so this repeats it. -->
-    <string name="login_error_invalid_address">Enter an address like https://tracker.example.org</string>
-    <!-- Under the server field for a plain http:// address, which the phone won't send. -->
-    <string name="login_error_https_required">Use an https:// address</string>
+    <!-- Under the server field when what was typed can't be an address. The example shows only while the field is empty, so this repeats it. The example address, https://tracker.example.org, put in as a value so it keeps its order in a right-to-left sentence. -->
+    <string name="login_error_invalid_address">Enter an address like %1$s</string>
+    <!-- Under the server field for a plain http:// address, which the phone won't send. The value is https://, put in as a value so its colon and slashes stay with it in a right-to-left sentence. -->
+    <string name="login_error_https_required">Use an %1$s address</string>
     <!-- Under the server field when nothing answered at that address, or what answered isn't a tracker server, beside the banner below. -->
     <string name="login_error_check_address">Check the address</string>
     <!-- The server's address as typed, e.g. "tracker.example.org". -->
@@ -63,6 +63,7 @@
 
     <!-- The app's managed configuration, as an agency's device management console shows it. -->
     <string name="restriction_server_url_title">Server address</string>
+    <!-- In a right-to-left language, write https:// between \u2068 and \u2069, so its colon and slashes stay with it: the console shows this text as it is, so the app can't put the address in as a value. -->
     <string name="restriction_server_url_description">The agency\'s tracker server, an https:// address. Drivers sign in to it and can\'t change it.</string>
 
     <!-- The welcome: three short screens a driver sees once, after the first sign-in on this phone and before choosing a vehicle. -->

@@ -31,8 +31,8 @@
     <string name="login_error_missing_email">Wpisz swój e-mail</string>
     <string name="login_error_missing_password">Wpisz swoje hasło</string>
     <string name="login_error_invalid_credentials">Błędny e-mail lub hasło. Spróbuj ponownie.</string>
-    <string name="login_error_invalid_address">Wpisz adres, np. https://tracker.example.org</string>
-    <string name="login_error_https_required">Użyj adresu https://</string>
+    <string name="login_error_invalid_address">Wpisz adres, np. %1$s</string>
+    <string name="login_error_https_required">Użyj adresu %1$s</string>
     <string name="login_error_check_address">Sprawdź adres</string>
     <string name="login_error_unreachable">Brak łączności z %1$s. Sprawdź połączenie lub adres serwera.</string>
     <string name="login_error_not_tracker">%1$s nie wygląda na serwer śledzenia pojazdów.</string>

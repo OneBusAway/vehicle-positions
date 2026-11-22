@@ -29,8 +29,8 @@
     <string name="login_error_missing_email">請輸入電子郵件</string>
     <string name="login_error_missing_password">請輸入密碼</string>
     <string name="login_error_invalid_credentials">電子郵件或密碼錯誤，請再試一次。</string>
-    <string name="login_error_invalid_address">請輸入像 https://tracker.example.org 這樣的網址</string>
-    <string name="login_error_https_required">請使用 https:// 開頭的網址</string>
+    <string name="login_error_invalid_address">請輸入像 %1$s 這樣的網址</string>
+    <string name="login_error_https_required">請使用 %1$s 開頭的網址</string>
     <string name="login_error_check_address">請檢查網址</string>
     <string name="login_error_unreachable">無法連上 %1$s。請檢查網路連線或伺服器網址。</string>
     <string name="login_error_not_tracker">%1$s 看起來不是車輛追蹤伺服器。</string>

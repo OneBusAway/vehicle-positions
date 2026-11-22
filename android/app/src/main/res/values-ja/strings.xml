@@ -29,8 +29,8 @@
     <string name="login_error_missing_email">メールアドレスを入力してください</string>
     <string name="login_error_missing_password">パスワードを入力してください</string>
     <string name="login_error_invalid_credentials">メールアドレスまたはパスワードが違います。もう一度お試しください。</string>
-    <string name="login_error_invalid_address">https://tracker.example.org のようなアドレスを入力してください</string>
-    <string name="login_error_https_required">https:// で始まるアドレスを使用してください</string>
+    <string name="login_error_invalid_address">%1$s のようなアドレスを入力してください</string>
+    <string name="login_error_https_required">%1$s で始まるアドレスを使用してください</string>
     <string name="login_error_check_address">アドレスを確認してください</string>
     <string name="login_error_unreachable">%1$s に接続できません。通信状況かサーバーアドレスを確認してください。</string>
     <string name="login_error_not_tracker">%1$s はトラッカーサーバーではないようです。</string>

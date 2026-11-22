@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">Nhập email của bạn</string>
     <string name="login_error_missing_password">Nhập mật khẩu của bạn</string>
     <string name="login_error_invalid_credentials">Sai email hoặc mật khẩu. Hãy thử lại.</string>
-    <string name="login_error_invalid_address">Nhập địa chỉ dạng https://tracker.example.org</string>
-    <string name="login_error_https_required">Dùng địa chỉ https://</string>
+    <string name="login_error_invalid_address">Nhập địa chỉ dạng %1$s</string>
+    <string name="login_error_https_required">Dùng địa chỉ %1$s</string>
     <string name="login_error_check_address">Kiểm tra lại địa chỉ</string>
     <string name="login_error_unreachable">Không kết nối được với %1$s. Hãy kiểm tra kết nối mạng hoặc địa chỉ máy chủ.</string>
     <string name="login_error_not_tracker">%1$s có vẻ không phải máy chủ theo dõi xe.</string>

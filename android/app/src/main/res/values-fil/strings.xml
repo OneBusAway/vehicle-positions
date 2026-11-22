@@ -28,8 +28,8 @@
     <string name="login_error_missing_email">Ilagay ang email mo</string>
     <string name="login_error_missing_password">Ilagay ang password mo</string>
     <string name="login_error_invalid_credentials">Mali ang email o password. Subukan ulit.</string>
-    <string name="login_error_invalid_address">Maglagay ng address na tulad ng https://tracker.example.org</string>
-    <string name="login_error_https_required">Gumamit ng https:// na address</string>
+    <string name="login_error_invalid_address">Maglagay ng address na tulad ng %1$s</string>
+    <string name="login_error_https_required">Gumamit ng %1$s na address</string>
     <string name="login_error_check_address">I-check ang address</string>
     <string name="login_error_unreachable">Hindi maabot ang %1$s. I-check ang koneksyon mo, o ang address ng server.</string>
     <string name="login_error_not_tracker">Mukhang hindi tracker server ang %1$s.</string>

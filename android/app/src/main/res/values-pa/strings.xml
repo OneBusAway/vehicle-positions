@@ -27,8 +27,8 @@
     <string name="login_error_missing_email">ਆਪਣੀ ਈਮੇਲ ਪਾਓ</string>
     <string name="login_error_missing_password">ਆਪਣਾ ਪਾਸਵਰਡ ਪਾਓ</string>
     <string name="login_error_invalid_credentials">ਈਮੇਲ ਜਾਂ ਪਾਸਵਰਡ ਗਲਤ ਹੈ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
-    <string name="login_error_invalid_address">https://tracker.example.org ਵਰਗਾ ਪਤਾ ਪਾਓ</string>
-    <string name="login_error_https_required">https:// ਵਾਲਾ ਪਤਾ ਵਰਤੋ</string>
+    <string name="login_error_invalid_address">%1$s ਵਰਗਾ ਪਤਾ ਪਾਓ</string>
+    <string name="login_error_https_required">%1$s ਵਾਲਾ ਪਤਾ ਵਰਤੋ</string>
     <string name="login_error_check_address">ਪਤਾ ਚੈੱਕ ਕਰੋ</string>
     <string name="login_error_unreachable">%1$s ਤੱਕ ਪਹੁੰਚ ਨਹੀਂ ਹੋ ਰਹੀ। ਆਪਣਾ ਕਨੈਕਸ਼ਨ ਜਾਂ ਸਰਵਰ ਦਾ ਪਤਾ ਚੈੱਕ ਕਰੋ।</string>
     <string name="login_error_not_tracker">%1$s ਟਰੈਕਰ ਸਰਵਰ ਨਹੀਂ ਲੱਗਦਾ।</string>

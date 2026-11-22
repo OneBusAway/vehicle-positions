@@ -24,8 +24,8 @@
     <string name="login_error_missing_email">अपना ईमेल डालें</string>
     <string name="login_error_missing_password">अपना पासवर्ड डालें</string>
     <string name="login_error_invalid_credentials">ईमेल या पासवर्ड गलत है। फिर से कोशिश करें।</string>
-    <string name="login_error_invalid_address">https://tracker.example.org जैसा पता डालें</string>
-    <string name="login_error_https_required">https:// वाला पता डालें</string>
+    <string name="login_error_invalid_address">%1$s जैसा पता डालें</string>
+    <string name="login_error_https_required">%1$s वाला पता डालें</string>
     <string name="login_error_check_address">पता जाँचें</string>
     <string name="login_error_unreachable">%1$s तक नहीं पहुँच पा रहे। अपना कनेक्शन या सर्वर का पता जाँचें।</string>
     <string name="login_error_not_tracker">%1$s ट्रैकर सर्वर नहीं लगता।</string>

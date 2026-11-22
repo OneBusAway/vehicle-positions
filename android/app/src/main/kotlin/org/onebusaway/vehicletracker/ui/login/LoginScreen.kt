@@ -196,7 +196,10 @@ fun LoginScreenContent(
                     state = server,
                     label = stringResource(R.string.login_server_url_label),
                     placeholder = stringResource(R.string.login_server_placeholder),
-                    error = fieldErrorRes(error, LoginField.SERVER)?.let { stringResource(it) },
+                    error = fieldErrorRes(error, LoginField.SERVER)?.let { res ->
+                        val address = fieldErrorAddress(res, example = stringResource(R.string.login_server_placeholder))
+                        if (address == null) stringResource(res) else stringResource(res, isolated(address))
+                    },
                     note = if (state.managedServerInvalid) stringResource(R.string.login_server_managed_invalid) else null,
                     enabled = enabled,
                     keyboardOptions = KeyboardOptions(
@@ -482,6 +485,17 @@ internal fun fieldErrorRes(error: LoginError?, field: LoginField): Int? = when {
     error is LoginError.HttpsRequired && field == LoginField.SERVER -> R.string.login_error_https_required
     error is LoginError.Unreachable && field == LoginField.SERVER -> R.string.login_error_check_address
     error is LoginError.NotATrackerServer && field == LoginField.SERVER -> R.string.login_error_check_address
+    else -> null
+}
+
+/**
+ * The address a field's error puts in its sentence as its one value, or null when it names none: the [example] for an
+ * address that can't be read, and the scheme for a plain http:// one. Passed in, not written in the sentence, so
+ * [isolated] can keep its colon and slashes with it in a right-to-left language.
+ */
+internal fun fieldErrorAddress(@StringRes error: Int, example: String): String? = when (error) {
+    R.string.login_error_invalid_address -> example
+    R.string.login_error_https_required -> "https://"
     else -> null
 }
 

@@ -30,8 +30,8 @@
     <string name="login_error_missing_email">សូមបញ្ចូលអ៊ីមែលរបស់អ្នក</string>
     <string name="login_error_missing_password">សូមបញ្ចូលពាក្យសម្ងាត់របស់អ្នក</string>
     <string name="login_error_invalid_credentials">អ៊ីមែល ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ។ សូមព្យាយាមម្ដងទៀត។</string>
-    <string name="login_error_invalid_address">សូមបញ្ចូលអាសយដ្ឋានដូចជា https://tracker.example.org</string>
-    <string name="login_error_https_required">សូមប្រើអាសយដ្ឋាន https://</string>
+    <string name="login_error_invalid_address">សូមបញ្ចូលអាសយដ្ឋានដូចជា %1$s</string>
+    <string name="login_error_https_required">សូមប្រើអាសយដ្ឋាន %1$s</string>
     <string name="login_error_check_address">សូមពិនិត្យអាសយដ្ឋាន</string>
     <string name="login_error_unreachable">មិនអាចភ្ជាប់ទៅ %1$s បានទេ។ សូមពិនិត្យការតភ្ជាប់ ឬអាសយដ្ឋានម៉ាស៊ីនមេ។</string>
     <string name="login_error_not_tracker">%1$s មើលទៅមិនមែនជាម៉ាស៊ីនមេតាមដានទេ។</string>
