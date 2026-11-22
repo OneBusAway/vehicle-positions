@@ -55,8 +55,9 @@ type clearedAlert struct {
 //
 // After a restart the watcher has seen nothing yet: it finds a quiet vehicle
 // again ALERT_QUIET_AFTER after the start, one not moving once it has had
-// ALERT_STOPPED_AFTER of new reports, and one off route only once it has come
-// back near its route and left it. So the alerts the last run left open are
+// ALERT_STOPPED_AFTER of new reports, one bunched once it has been found so
+// over ALERT_BUNCHED_AFTER of new reports, and one off route only once it has
+// come back near its route and left it. So the alerts the last run left open are
 // kept open until settle after the start. One that is listed again by then
 // keeps its row, and the others are cleared at the start: each went while the
 // server was down, or the watcher cannot see it again, and the start is the
@@ -111,7 +112,7 @@ func startAlertJobs(store AlertHistoryStore, alerts *alertWatcher, index func() 
 // thresholds, and a minute more for the reports that show it, which come
 // about every 10 seconds, and the check that finds it.
 func alertHistorySettle(settings alertSettings) time.Duration {
-	return max(settings.quietAfter, settings.stoppedAfter, settings.offRouteAfter) + time.Minute
+	return max(settings.quietAfter, settings.stoppedAfter, settings.offRouteAfter, settings.bunchedAfter) + time.Minute
 }
 
 // newAlertRecorder starts the recorder: alerts are read from source every

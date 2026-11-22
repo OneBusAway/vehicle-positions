@@ -116,20 +116,23 @@ The thresholds behind the admin UI's **Alerts** page and
 | `ALERT_OFF_ROUTE_DISTANCE` | `RIDER_MAX_SHAPE_DISTANCE` (`60`) | Optional | Metres from the trip's shape, beyond the fix's reported accuracy, at which a report counts as off route. The default is the distance at which the driver apps already show the driver as off route. A fix whose accuracy reaches across this distance counts neither way, so one poor fix neither raises the alert nor clears it. Trips with no shape in the GTFS feed, or a shape drawn through their stops, are never judged. Must be positive; zero, negative, `NaN`, `Inf` or unparseable warns and defaults. |
 | `ALERT_OFF_ROUTE_AFTER` | `5m` | Optional | How long a vehicle's reports may stay off route, counted to its latest report, before it shows as off route. Going round a blocked street takes a minute or two. Reports count only once the vehicle has been near its route on that trip, so a trip started at a depot or a layover spot away from the route is not off route on the way there. Must be positive; zero, negative or unparseable warns and defaults. |
 | `ALERT_NOT_STARTED_AFTER` | `5m` | Optional | How long after it was due to leave a block's next trip may go unstarted before the vehicle that ran the block's latest trip shows as not started. The default matches `REPORT_ON_TIME_LATE`: a trip that leaves later than that is late. Only a block a vehicle has run a trip on today counts, and only in a feed whose `trips.txt` gives a `block_id`; headway trips never do. Must be positive; zero, negative or unparseable warns and defaults. |
+| `ALERT_BUNCHED_AFTER` | `3m` | Optional | How long a vehicle may run under 25% of the scheduled gap behind the vehicle ahead of it, counted over their reports, before it shows as bunched. A vehicle that closes up on one standing at a stop is passing it, and three minutes outlasts a stop. Only frequent service is judged, as **Analytics** measures gaps: trips run from `frequencies.txt`, and a timetable every 12 minutes or more often at the stop. Must be positive; zero, negative or unparseable warns and defaults. |
 
 The server keeps what the alerts need in memory, from the reports it accepts.
 After a restart it counts a quiet vehicle from the restart, and a vehicle that
 is not moving from its first report since. A vehicle that was off route when the
 server restarted shows as off route again only after it has come back near its
-route and left it. The not-started alert reads the trips started in the last
-day from the database instead, so a restart does not reset it.
+route and left it. A vehicle that was bunched shows as bunched again once it
+has been found so over `ALERT_BUNCHED_AFTER` of reports since. The not-started
+alert reads the trips started in the last day from the database instead, so a
+restart does not reset it.
 
 Each alert is also kept in the database, from when it was raised to when it
 cleared, whether or not the webhook below is on, and the **Alerts** page lists
 the cleared ones. An alert open when the server restarted keeps its record if
 it shows again within a minute of the longest of `ALERT_QUIET_AFTER`,
-`ALERT_STOPPED_AFTER` and `ALERT_OFF_ROUTE_AFTER`, and is otherwise recorded as
-cleared at the restart. `LOCATION_RETENTION_PERIOD` deletes the cleared ones
+`ALERT_STOPPED_AFTER`, `ALERT_OFF_ROUTE_AFTER` and `ALERT_BUNCHED_AFTER`, and is
+otherwise recorded as cleared at the restart. `LOCATION_RETENTION_PERIOD` deletes the cleared ones
 with the points they were worked out from.
 
 ### Alert webhook
@@ -157,6 +160,8 @@ alert:
 `event` is `raised` or `cleared`, and `kind` is one of the alert kinds of
 `GET /api/v1/admin/alerts`. For a `not_started` alert, the route and GTFS trip
 are the trip not started, and `trip_id` and `link` are the vehicle's last trip.
+For a `bunched` alert, `text` names the vehicle ahead and how far behind it the
+vehicle was running when the alert was raised.
 `route_short_name` is empty when the GTFS feed gives the route none, and `link`
 is left out without `PUBLIC_URL`. `text` is one sentence, with the time in the
 GTFS feed's timezone, for a chat service to show as it is, as Slack does.

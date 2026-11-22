@@ -569,7 +569,7 @@ func overviewAttentionList(alerts []alertEntry, settings alertSettings, ix *ride
 			item.Title = "Trip " + row.GtfsTripID + " has not started"
 			item.URL = row.TripURL
 		}
-		// A detail newAlertRow writes starts with an ASCII capital.
+		// A detail newAlertRow writes starts with an ASCII capital or digit.
 		if row.Route.Name != "" && row.Detail != "" {
 			item.Detail = "Route " + row.Route.Name + ", " + strings.ToLower(row.Detail[:1]) + row.Detail[1:]
 		}

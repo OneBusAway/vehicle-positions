@@ -310,6 +310,10 @@ func (t *Tracker) ActiveVehicles() []*VehicleState {
 				a := *v.ScheduledArrival
 				copy.ScheduledArrival = &a
 			}
+			if v.alongShape != nil {
+				a := *v.alongShape
+				copy.alongShape = &a
+			}
 			active = append(active, &copy)
 		}
 	}

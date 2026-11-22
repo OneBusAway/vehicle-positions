@@ -36,8 +36,8 @@ vehicles on one CPU and 1 GB is in [`docs/load-test.md`](docs/load-test.md).
 The server also ships a server-rendered admin web UI at `/admin` — sign in,
 dashboard, live fleet map with per-trip trails, vehicle CRUD (with CSV export
 of location history), user CRUD, vehicle assignments, and trip history. It
-also has Alerts (vehicles gone quiet, not moving or off their route, and a
-block's next trip not started), Reports, feed health, feed API keys, and a
+also has Alerts (vehicles gone quiet, not moving, off their route or bunched
+behind the vehicle ahead, and a block's next trip not started), Reports, feed health, feed API keys, and a
 Driver setup page with the setup link and its QR code. It's built into the
 same binary and enabled by default; set `ADMIN_UI_ENABLED=false` to disable it
 entirely (the route returns 404).

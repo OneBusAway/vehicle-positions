@@ -81,6 +81,7 @@ var alertKinds = []struct{ kind, title, icon string }{
 	{alertNotMoving, "Not moving", "stop_circle"},
 	{alertOffRoute, "Off route", "wrong_location"},
 	{alertNotStarted, "Not started", "pending_actions"},
+	{alertBunched, "Bunched", "layers"},
 }
 
 // newAlertRow is a's row, with the off-route distance from settings, the
@@ -112,6 +113,8 @@ func newAlertRow(a alertEntry, settings alertSettings, ix *rider.Index, loc *tim
 		routeID = a.NextTrip.RouteID
 		row.GtfsTripID = a.NextTrip.GtfsTripID
 		row.TripURL = tripsPageURL("", a.Trip.VehicleID, "", 1)
+	case alertBunched:
+		row.Detail = aheadWords(a.Ahead)
 	default:
 		row.Detail = fmt.Sprintf("Under %.0f m in %s", stoppedRadius, duration)
 	}
@@ -250,7 +253,7 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	kind := query.Get("kind")
 	if _, ok := alertKindTitle(kind); kind != "" && !ok {
-		http.Error(w, "kind must be quiet, not_moving, off_route or not_started", http.StatusBadRequest)
+		http.Error(w, "kind must be quiet, not_moving, off_route, not_started or bunched", http.StatusBadRequest)
 		return
 	}
 	page := adminPageNumber(query)
@@ -331,6 +334,7 @@ func (ui *adminUI) alertsPage(w http.ResponseWriter, r *http.Request) {
 		"OffRouteDistance": fmt.Sprintf("%.0f m", ui.alerts.settings.offRouteDistance),
 		"OffRouteAfter":    humanizeDuration(ui.alerts.settings.offRouteAfter),
 		"NotStartedAfter":  humanizeDuration(ui.alerts.settings.notStartedAfter),
+		"BunchedAfter":     humanizeDuration(ui.alerts.settings.bunchedAfter),
 		"Webhook":          newWebhookView(webhook, loc, now),
 	}, alerts)
 }

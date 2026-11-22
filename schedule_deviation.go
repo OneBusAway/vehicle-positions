@@ -76,16 +76,22 @@ func scheduleDeviation(trip *rider.TripInfo, dayStart time.Time, along float64, 
 // known, and when the trip does not run on the start_date given: there is no
 // timetable to be early or late against.
 func runDayStart(ix *rider.Index, trip *rider.TripInfo, loc *LocationReport) (time.Time, bool) {
-	date := loc.StartDate
-	if date == "" {
-		// A trip start that is not known, the zero time, matches no run.
-		var ok bool
-		if date, ok = runServiceDate(ix, trip, loc.TripStartedAt); !ok {
-			return time.Time{}, false
-		}
-	} else if !ix.ActiveOn(trip, date) {
+	date, ok := runDate(ix, trip, loc.StartDate, loc.TripStartedAt)
+	if !ok {
 		return time.Time{}, false
 	}
 	dayStart, err := rider.ServiceDayStart(date, ix.Timezone())
 	return dayStart, err == nil
+}
+
+// runDate is the service date of a run of trip that started at startedAt:
+// startDate, the start_date its reports name it by, or when they gave none,
+// the day runServiceDate matches the start to. ok is false when neither is
+// known, and when the trip does not run on startDate.
+func runDate(ix *rider.Index, trip *rider.TripInfo, startDate string, startedAt time.Time) (string, bool) {
+	if startDate == "" {
+		// A trip start that is not known, the zero time, matches no run.
+		return runServiceDate(ix, trip, startedAt)
+	}
+	return startDate, ix.ActiveOn(trip, startDate)
 }

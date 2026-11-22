@@ -120,6 +120,7 @@ var schemaStructs = map[string]string{
 	"LocationHistoryEntry": "locationEntry",
 	"AlertList":            "alertListResponse",
 	"Alert":                "alertEntry",
+	"AlertAhead":           "alertAhead",
 	"ServiceReport":        "serviceReport",
 	"RouteServiceReport":   "routeReport",
 	"ScheduledTripReport":  "tripReport",

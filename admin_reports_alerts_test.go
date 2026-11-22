@@ -70,10 +70,11 @@ func TestNewAnalyticsAlerts_CountsEachDayByKind(t *testing.T) {
 		counts []int
 		raised int
 	}{
-		// In the order of alertKinds: quiet, not moving, off route, not started.
-		{"Tue 1 Sep", []int{2, 0, 0, 0}, 2},
-		{"Wed 2 Sep", []int{0, 0, 1, 0}, 1},
-		{"Thu 3 Sep", []int{0, 2, 0, 0}, 2},
+		// In the order of alertKinds: quiet, not moving, off route, not
+		// started, bunched.
+		{"Tue 1 Sep", []int{2, 0, 0, 0, 0}, 2},
+		{"Wed 2 Sep", []int{0, 0, 1, 0, 0}, 1},
+		{"Thu 3 Sep", []int{0, 2, 0, 0, 0}, 2},
 	} {
 		assert.Equal(t, want.day, got.Days[i].Day)
 		assert.Equal(t, want.counts, got.Days[i].Counts, want.day)
@@ -91,6 +92,7 @@ func TestNewAnalyticsAlerts_CountsEachDayByKind(t *testing.T) {
 		{"Not moving", "/admin/alerts?kind=not_moving#cleared", 2, []string{"1 Sep|0 raised", "2 Sep|0 raised", "3 Sep|2 raised"}},
 		{"Off route", "/admin/alerts?kind=off_route#cleared", 1, []string{"1 Sep|0 raised", "2 Sep|1 raised", "3 Sep|0 raised"}},
 		{"Not started", "/admin/alerts?kind=not_started#cleared", 0, []string{"1 Sep|0 raised", "2 Sep|0 raised", "3 Sep|0 raised"}},
+		{"Bunched", "/admin/alerts?kind=bunched#cleared", 0, []string{"1 Sep|0 raised", "2 Sep|0 raised", "3 Sep|0 raised"}},
 	} {
 		kind := got.Kinds[i]
 		assert.Equal(t, want.title, kind.Title)
@@ -218,7 +220,7 @@ func TestNewAnalyticsAlerts_EmptyPeriod(t *testing.T) {
 	assert.NotNil(t, got.Routes)
 	assert.Empty(t, got.Routes)
 	require.Len(t, got.Days, 3)
-	assert.Equal(t, []int{0, 0, 0, 0}, got.Days[0].Counts)
+	assert.Equal(t, []int{0, 0, 0, 0, 0}, got.Days[0].Counts)
 	require.Len(t, got.Kinds, len(alertKinds))
 	for _, kind := range got.Kinds {
 		assert.Zero(t, kind.Raised)

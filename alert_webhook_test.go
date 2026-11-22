@@ -415,6 +415,10 @@ func TestAlertWebhook_Text(t *testing.T) {
 	routeOnly.Trip.RouteID = ""
 	unknownRoute := webhookAlert(alertQuiet)
 	unknownRoute.Trip.RouteID = "R9"
+	bunched := webhookAlert(alertBunched)
+	bunched.Ahead = &alertAhead{VehicleID: "bus-12", VehicleLabel: "Bus 12", SpacingS: 75, ScheduledGapS: 600}
+	bunchedBehindUnlabelled := webhookAlert(alertBunched)
+	bunchedBehindUnlabelled.Ahead = &alertAhead{VehicleID: "bus-12", SpacingS: 45, ScheduledGapS: 300}
 
 	tests := []struct {
 		name  string
@@ -431,6 +435,9 @@ func TestAlertWebhook_Text(t *testing.T) {
 		{"off route cleared", alertCleared, webhookAlert(alertOffRoute), false, "Cleared: Bus 7 on route 1, off route since 01:02."},
 		{"not started raised", alertRaised, notStarted, false, "Bus 7 has not started its next trip: route 2, block B1, due at 01:02."},
 		{"not started cleared", alertCleared, notStarted, false, "Cleared: Bus 7, next trip not started: route 2, block B1, due at 01:02."},
+		{"bunched raised", alertRaised, bunched, false, "Bus 7 on route 1 is bunched: 1 min behind Bus 12, every 10 min, since 01:02."},
+		{"bunched cleared", alertCleared, bunched, false, "Cleared: Bus 7 on route 1, bunched since 01:02."},
+		{"bunched behind a vehicle with no label", alertRaised, bunchedBehindUnlabelled, false, "Bus 7 on route 1 is bunched: 45s behind bus-12, every 5 min, since 01:02."},
 		{"no label", alertRaised, unlabelled, false, "bus-7 on route 1 has gone quiet: no report since 01:02."},
 		{"no route", alertRaised, routeOnly, false, "Bus 7 has gone quiet: no report since 01:02."},
 		{"route not in the schedule", alertRaised, unknownRoute, false, "Bus 7 on route R9 has gone quiet: no report since 01:02."},

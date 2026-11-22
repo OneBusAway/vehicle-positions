@@ -275,6 +275,8 @@ func TestAlertHistorySettle(t *testing.T) {
 	assert.Equal(t, 21*time.Minute, alertHistorySettle(settings))
 	settings.quietAfter = 30 * time.Minute
 	assert.Equal(t, 31*time.Minute, alertHistorySettle(settings))
+	settings.bunchedAfter = 40 * time.Minute
+	assert.Equal(t, 41*time.Minute, alertHistorySettle(settings), "a bunched vehicle is found again only after ALERT_BUNCHED_AFTER")
 }
 
 // lockedTripLister is a TripLister the recorder and the webhook can both read

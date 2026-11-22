@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 func TestTracker_Update(t *testing.T) {
@@ -336,6 +338,30 @@ func TestTracker_ActiveVehicles_ReturnsDeepCopies(t *testing.T) {
 
 	require.NotNil(t, fresh[0].Accuracy)
 	assert.Equal(t, 30.0, *fresh[0].Accuracy)
+}
+
+// TestTracker_ActiveVehicles_CopiesThePlaceAlongTheShape: the bunched alert
+// reads each vehicle's place from these copies, and a copy changed must not
+// move the vehicle's next projection hint.
+func TestTracker_ActiveVehicles_CopiesThePlaceAlongTheShape(t *testing.T) {
+	ix := plainFixtureIndex(t)
+	tracker := NewTracker(5 * time.Minute)
+	defer tracker.Stop()
+	tracker.SetTripLocator(newTripLocator(func() *rider.Index { return ix }, rider.DefaultThresholds().MaxShapeDistance))
+	pos := alongT1(300, 0)
+	require.True(t, tracker.UpdateAuthorized(&LocationReport{VehicleID: "bus-1", TripID: "T1", Latitude: pos.Lat, Longitude: pos.Lon, Timestamp: time.Now().Unix()}, time.Time{}))
+
+	active := tracker.ActiveVehicles()
+	require.Len(t, active, 1)
+	require.NotNil(t, active[0].alongShape)
+	placed := *active[0].alongShape
+	require.InDelta(t, 300, placed, 2)
+	*active[0].alongShape = 900
+
+	fresh := tracker.ActiveVehicles()
+	require.Len(t, fresh, 1)
+	require.NotNil(t, fresh[0].alongShape)
+	assert.Equal(t, placed, *fresh[0].alongShape)
 }
 
 func TestTracker_UpdateStoresTripFields(t *testing.T) {

@@ -226,7 +226,7 @@ func scheduleOf(catalog *gtfsCatalog) *rider.Index {
 // listed, at zero when none is open, so a query for a kind finds 0 rather than
 // no data; a kind not in that list still counts under its own name.
 func alertCounts(open []alertEntry) []metricSample {
-	counts := map[string]uint64{alertQuiet: 0, alertNotMoving: 0, alertOffRoute: 0, alertNotStarted: 0}
+	counts := map[string]uint64{alertQuiet: 0, alertNotMoving: 0, alertOffRoute: 0, alertNotStarted: 0, alertBunched: 0}
 	for _, a := range open {
 		counts[a.Kind]++
 	}

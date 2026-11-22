@@ -47,6 +47,7 @@ func TestAlertsPage_Rows(t *testing.T) {
 		`data-filter="not_moving" aria-pressed="false">Not moving <span class="n">1</span>`,
 		`data-filter="off_route" aria-pressed="false">Off route <span class="n">0</span>`,
 		`data-filter="not_started" aria-pressed="false">Not started <span class="n">0</span>`,
+		`data-filter="bunched" aria-pressed="false">Bunched <span class="n">0</span>`,
 	} {
 		assert.Contains(t, body, chip)
 	}
@@ -107,11 +108,11 @@ func TestNewAlertRow_RouteFromTheSchedule(t *testing.T) {
 // has no chip, title or icon for would show as a row with an empty pill.
 func TestAlertKinds_EveryKindHasAChip(t *testing.T) {
 	ix := (*rider.Index)(nil)
-	for _, kind := range []string{alertQuiet, alertNotMoving, alertOffRoute, alertNotStarted} {
-		row := newAlertRow(alertEntry{Kind: kind, Trip: alertTrip("bus-1", alertT0), NextTrip: &alertNextTrip{}}, testAlertSettings, ix, time.UTC)
+	for _, kind := range []string{alertQuiet, alertNotMoving, alertOffRoute, alertNotStarted, alertBunched} {
+		row := newAlertRow(alertEntry{Kind: kind, Trip: alertTrip("bus-1", alertT0), NextTrip: &alertNextTrip{}, Ahead: &alertAhead{}}, testAlertSettings, ix, time.UTC)
 		require.NotEmpty(t, row.Title, kind)
 		assert.NotEmpty(t, row.Icon, kind)
 		assert.NotEmpty(t, row.Detail, kind)
 	}
-	assert.Len(t, alertKinds, 4)
+	assert.Len(t, alertKinds, 5)
 }

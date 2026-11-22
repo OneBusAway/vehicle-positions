@@ -57,10 +57,12 @@
   function agoText(s) { return s < 2 ? "just now" : ageText(s) + " ago"; }
   function isQuiet(v) { return ageOf(v) > QUIET; }
   // Open alerts by vehicle, from the alerts endpoint. Going quiet is seen here from the report's age; the others only the server knows.
-  var alertBy = {}, KIND = { not_moving: "Not moving", off_route: "Off route", not_started: "Not started" };
+  var alertBy = {}, KIND = { not_moving: "Not moving", off_route: "Off route", not_started: "Not started", bunched: "Bunched" };
   function alertOf(v) { var a = alertBy[v.vehicle_id]; return a && KIND[a.kind] ? a : null; }
   function needs(v) { return isQuiet(v) || !!alertOf(v); }
   function alertText(a) { return KIND[a.kind] + " " + ageText(a.duration_seconds); }
+  // A bunched vehicle's gap to the vehicle ahead, against how often its stop is served: "1 min behind 12, every 10 min".
+  function gapText(a) { return ageText(a.spacing_s) + " behind " + (a.vehicle_label || a.vehicle_id) + ", every " + ageText(a.scheduled_gap_s); }
   function compass(b) { return ["North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"][Math.round((((b % 360) + 360) % 360) / 45) % 8]; }
   function headsign(v) { return heads[v.gtfs_trip_id] || ""; }
   function speed(v) { return Math.round(v.speed * 3.6) + " km/h"; }
@@ -424,10 +426,11 @@
 
     var dl = h("dl", "kv"); dl.style.margin = "14px 0 16px";
     card.kv = {};
-    ["Stop", "Schedule", "Driver", "Trip", "Speed", "Heading"].forEach(function (k) {
+    ["Stop", "Schedule", "Gap", "Driver", "Trip", "Speed", "Heading"].forEach(function (k) {
       var w = h("div"), dt = w.appendChild(h("dt", "", k)); card.kv[k] = w.appendChild(h("dd")); dl.appendChild(w);
       if (k === "Stop") { card.stopRow = w; card.stopWord = dt; w.style.gridColumn = "1 / -1"; card.kv.Stop.style.minHeight = "1lh"; }
       if (k === "Schedule") { card.schedRow = w; w.style.gridColumn = "1 / -1"; }
+      if (k === "Gap") { card.gapRow = w; w.style.gridColumn = "1 / -1"; }
     });
     host.appendChild(dl);
 
@@ -481,6 +484,10 @@
     card.schedRow.hidden = !sched;
     card.kv.Schedule.textContent = sched ? sched.text : "";
     card.kv.Schedule.className = sched ? sched.tone : "";
+    // Only a bunched alert names the vehicle ahead; a quiet vehicle has no alert here.
+    var ahead = al && al.ahead;
+    card.gapRow.hidden = !ahead;
+    card.kv.Gap.textContent = ahead ? gapText(ahead) : "";
     followShown();
   }
 

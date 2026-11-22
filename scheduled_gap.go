@@ -42,6 +42,35 @@ type timeSpan struct {
 	from, to time.Time
 }
 
+// scheduleStops lays out the frequent service at each stop in schedules from
+// a direction's trips on the service day starting at dayStart, keys being
+// each trip's stopKeys. Every trip that serves a stop other than as its last,
+// where nobody boards, counts there: a trip in frequencies.txt adds its
+// windows, shifted to when its runs reach the stop, and a timetabled trip its
+// departure to the stop's timetable. Analytics lays out the stops it measures
+// gaps at this way, and the bunched alert the stop a vehicle is heading to,
+// so the two agree on how often a stop is served.
+func scheduleStops(schedules map[stopKey]*stopSchedule, trips []*rider.TripInfo, keys [][]stopKey, dayStart time.Time) {
+	departures := make(map[stopKey][]time.Time)
+	for j, trip := range trips {
+		rows := trip.Frequencies()
+		for i, key := range keys[j][:len(keys[j])-1] {
+			s, ok := schedules[key]
+			if !ok {
+				continue
+			}
+			if trip.InFrequencies() {
+				s.addTrip(rows, dayStart, trip.StopTimes[i].Departure-trip.StopTimes[0].Departure)
+			} else {
+				departures[key] = append(departures[key], dayStart.Add(trip.StopTimes[i].Departure))
+			}
+		}
+	}
+	for key, times := range departures {
+		schedules[key].setTimetable(times)
+	}
+}
+
 // addTrip adds a trip's frequencies.txt rows on the service day starting at
 // dayStart, its runs reaching the stop offset after leaving the first. A row
 // with no headway is a single run, which sets no gap between vehicles.
