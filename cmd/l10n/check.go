@@ -250,8 +250,10 @@ func checkPlurals(r *report, u *unit, lang string, v *version) {
 	}
 }
 
-// checkConsistency warns where the two apps translate the same English
-// differently. Both say the same thing, so they should say it the same way.
+// checkConsistency warns where an iOS string's translation is none of those
+// Android gives the same English. Both apps say the same thing, so they should
+// say it the same way; where Android words one English apart on different
+// screens, an iOS key for one of those screens may take any of them.
 func checkConsistency(r *report, androidUnits, iosUnits []*unit) {
 	type side struct {
 		u    *unit
@@ -266,10 +268,11 @@ func checkConsistency(r *report, androidUnits, iosUnits []*unit) {
 		}
 		return out
 	}
-	byEnglish := map[string]side{}
+	byEnglish := map[string][]side{}
 	for _, u := range androidUnits {
 		for _, s := range shared(u) {
-			byEnglish[s.path+"\x00"+comparable(android, u.source.forms[s.path].value)] = s
+			key := s.path + "\x00" + comparable(android, u.source.forms[s.path].value)
+			byEnglish[key] = append(byEnglish[key], s)
 		}
 	}
 	for _, u := range iosUnits {
@@ -277,20 +280,29 @@ func checkConsistency(r *report, androidUnits, iosUnits []*unit) {
 			continue
 		}
 		for _, s := range shared(u) {
-			a, ok := byEnglish[s.path+"\x00"+comparable(ios, u.source.forms[s.path].value)]
-			if !ok {
-				continue
-			}
+			candidates := byEnglish[s.path+"\x00"+comparable(ios, u.source.forms[s.path].value)]
 			for _, lang := range sortedLangs(u.trans) {
-				av, ok := a.u.trans[lang]
-				if !ok {
+				ifm, iok := u.trans[lang].forms[s.path]
+				if !iok {
 					continue
 				}
-				af, aok := av.forms[a.path]
-				ifm, iok := u.trans[lang].forms[s.path]
-				if aok && iok && comparable(android, af.value) != comparable(ios, ifm.value) {
+				var said []string
+				matched := false
+				for _, a := range candidates {
+					av, ok := a.u.trans[lang]
+					if !ok {
+						continue
+					}
+					af, ok := av.forms[a.path]
+					if !ok {
+						continue
+					}
+					matched = matched || comparable(android, af.value) == comparable(ios, ifm.value)
+					said = append(said, fmt.Sprintf("%s says %q", a.u.key, af.value))
+				}
+				if len(said) > 0 && !matched {
 					r.add(u.finding(warning, ruleConsistency, lang, u.trans[lang],
-						fmt.Sprintf("Android's %s says %q, iOS says %q", a.u.key, af.value, ifm.value)))
+						fmt.Sprintf("Android's %s, iOS says %q", strings.Join(said, ", "), ifm.value)))
 				}
 			}
 		}
