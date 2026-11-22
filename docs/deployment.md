@@ -1513,3 +1513,50 @@ Location** on. That is all the app needs to keep reporting with the screen off:
 it holds a background location session for the length of the trip. Without
 precise location every fix is too coarse to report.
 
+## 15. Languages on drivers' phones
+
+Both driver apps are in English and in every language listed in
+[`translations/status.csv`](translations/status.csv). Each language but English
+is a `draft` there until someone fluent has read all of it; then it is
+`reviewed`, with the reviewer's name and the date. Drivers act on this text
+while driving, so have a draft checked before your drivers use it.
+
+**Which language a phone shows.** Each app shows the first of the phone's
+languages that it has, and English when it has none of them. A phone set to
+Spanish therefore shows the Spanish draft without anyone choosing it. A driver
+can set the app alone to another language:
+
+- **Android:** the **Language** row on the first welcome screen, which a driver
+  sees once after their first sign-in on the phone, and at the top of **Help**.
+  On Android 13 and newer it lists the app's languages and sets the app to the
+  one picked. On Android 8 to 12 the app can only follow the phone, so the row
+  opens the phone's language settings.
+- **iPhone:** the app's page in the Settings app, under **Apps**, has a
+  **Language** row. The app itself has no Language row.
+
+**Checking a draft.** For each language your drivers' phones are set to, have
+fluent staff check the draft before those drivers use the app. Until then, set
+the app to English on those phones; on Android 8 to 12 that means the whole
+phone. The [translators' guide](translations/README.md#translating-in-a-spreadsheet)
+has the details:
+
+1. Write the language's sheet: one CSV file with each string's English, a note
+   on where it shows, and the draft in the `current` column. On a Mac with
+   Xcode, export the iOS strings first (step 1 there), then from the
+   repository's root run:
+
+   ```bash
+   go run ./cmd/l10n export -xliff /tmp/l10n/es.xcloc es
+   ```
+
+   Without `-xliff`, `es.csv` has the Android strings alone. That covers an
+   Android fleet, but the language can be marked `reviewed` only once both
+   apps' strings have been read.
+2. The reviewer reads the sheet with a test phone set to the language beside
+   them, since the sheet has no screenshots yet. A string that is right is
+   copied from `current` into `translation`, which marks it read; one that is
+   wrong gets the correction there.
+3. Import the sheet and run the check (step 4 there), and build your apps from
+   the result (sections 12 and 14) to give your drivers the corrections. Mark
+   the language `reviewed` in `status.csv` and send it all as a pull request,
+   so every agency gets the checked language.
