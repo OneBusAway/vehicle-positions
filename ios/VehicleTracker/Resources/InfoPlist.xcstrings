@@ -11,6 +11,12 @@
             "value" : "ጉዞ እየሄደ ሳለ ተሳፋሪዎች መኪናው የት እንዳለ እንዲያዩ ቦታዎ ለትራንስፖርት ድርጅቱ ሰርቨር ሪፖርት ይደረጋል።"
           }
         },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "يُرسل موقعك إلى خادم جهة العمل ما دامت الرحلة جارية، ليرى الركاب مكان المركبة."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "machine_translated",
@@ -27,6 +33,12 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Tu ubicación se envía al servidor de la empresa de transporte mientras hay un viaje en curso, para que los pasajeros puedan ver dónde está el vehículo."
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "تا وقتی سفری در جریان است، موقعیت شما به سرور شرکت حمل‌ونقل گزارش می‌شود تا مسافران ببینند خودرو کجاست."
           }
         },
         "fi" : {
@@ -179,6 +191,12 @@
             "value" : "ትክክለኛ አካባቢ መኪናው በተሳፋሪዎች ካርታ ላይ በትክክለኛው መንገድ እንዲታይ ያደርጋል።"
           }
         },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "الموقع الدقيق يضع المركبة في الشارع الصحيح على خرائط الركاب."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "machine_translated",
@@ -195,6 +213,12 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "La ubicación precisa muestra el vehículo en la calle correcta en el mapa de los pasajeros."
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "با مکان دقیق، خودرو روی نقشه مسافران در خیابان درست دیده می‌شود."
           }
         },
         "fi" : {
