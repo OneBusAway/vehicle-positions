@@ -42,6 +42,25 @@ import Testing
         }
     }
 
+    /// Sign-in's https line in Arabic. Written in the sentence, as it was,
+    /// the slashes of https:// land on the far side of "https" and .local's
+    /// dot after "local"; put in as values, each keeps its order.
+    @Test func theHTTPSLineKeepsItsAddressesInOrderInArabic() throws {
+        let written = "استخدم https://. لا يُسمح بـ http:// العادي إلا مع localhost أو 127.0.0.1 أو مضيف .local."
+        #expect(left(of: "//", in: written, rightToLeft: true) < left(of: "https", in: written, rightToLeft: true))
+        #expect(left(of: "local.", in: written, rightToLeft: true) < left(of: ".local", in: written, rightToLeft: true))
+
+        let arabic = try #require(Bundle.main.path(forResource: "ar", ofType: "lproj").flatMap(Bundle.init(path:)))
+        let line = SignInText.useHTTPS(in: arabic)
+        #expect(line != SignInText.useHTTPS, "the Arabic line, not the English")
+        #expect(left(of: "https", in: line, rightToLeft: true) < left(of: "//", in: line, rightToLeft: true))
+        #expect(left(of: ".local", in: line, rightToLeft: true) < left(of: "local\u{2069}", in: line, rightToLeft: true))
+    }
+
+    @Test func theHTTPSLineReadsAsItDidInEnglish() {
+        #expect(SignInText.useHTTPS == "Use https://. Plain http:// is allowed only for localhost, 127.0.0.1 or a .local host.")
+    }
+
     @Test func anIsolatedNameLooksTheSameInEnglish() {
         let plain = "Next " + "12 Mile Rd"
         let isolated = "Next " + "12 Mile Rd".bidiIsolated
