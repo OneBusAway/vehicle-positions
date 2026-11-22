@@ -5,6 +5,12 @@
       "comment" : "Why the app asks for location: iOS shows it under the location prompt before the first trip, and on the app's Location page in Settings.",
       "extractionState" : "extracted_with_value",
       "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ጉዞ እየሄደ ሳለ ተሳፋሪዎች መኪናው የት እንዳለ እንዲያዩ ቦታዎ ለትራንስፖርት ድርጅቱ ሰርቨር ሪፖርት ይደረጋል።"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "machine_translated",
@@ -59,10 +65,40 @@
             "value" : "Mentre un viaggio è in corso, la tua posizione viene inviata al server dell'azienda di trasporto, così i passeggeri possono vedere dove si trova il veicolo."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "運行中は現在地を交通事業者のサーバーに送信し、乗客が車両の位置を確認できるようにします。"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ទីតាំងរបស់អ្នកត្រូវបានផ្ញើទៅម៉ាស៊ីនមេរបស់ក្រុមហ៊ុនដឹកជញ្ជូន ក្នុងពេលកំពុងធ្វើដំណើរ ដើម្បីឱ្យអ្នកដំណើរអាចមើលឃើញថាយានយន្តនៅទីណា។"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "운행 중에는 현재 위치가 운수 회사 서버로 전송되어 승객이 차량 위치를 볼 수 있어요."
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ຕຳແໜ່ງຂອງທ່ານຈະຖືກລາຍງານໄປຫາເຊີບເວີຂອງບໍລິສັດຂົນສົ່ງ ໃນຂະນະທີ່ການເດີນທາງກຳລັງດຳເນີນຢູ່, ເພື່ອໃຫ້ຜູ້ໂດຍສານເຫັນວ່າລົດຢູ່ໃສ."
+          }
+        },
         "om" : {
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Yeroo imalli deemaa jiru, bakki kee sarvarii dhaabbata geejjibaatti ni gabaafama, akka imaltoonni bakka konkolaataan jiru arguu danda'aniif."
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਟ੍ਰਿਪ ਚੱਲਦੇ ਸਮੇਂ ਤੁਹਾਡਾ ਟਿਕਾਣਾ ਟਰਾਂਸਪੋਰਟ ਏਜੰਸੀ ਦੇ ਸਰਵਰ ਨੂੰ ਭੇਜਿਆ ਜਾਂਦਾ ਹੈ, ਤਾਂ ਜੋ ਸਵਾਰੀਆਂ ਦੇਖ ਸਕਣ ਕਿ ਗੱਡੀ ਕਿੱਥੇ ਹੈ।"
           }
         },
         "pl" : {
@@ -75,6 +111,12 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Sua posição é enviada ao servidor da empresa de transporte enquanto uma viagem está em andamento, para os passageiros verem onde o veículo está."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Во время поездки ваше местоположение отправляется на сервер перевозчика, чтобы пассажиры видели, где находится машина."
           }
         },
         "sm" : {
@@ -95,10 +137,34 @@
             "value" : "Mahali ulipo huripotiwa kwa seva ya shirika la usafiri wakati safari inaendelea, ili abiria waweze kuona gari liko wapi."
           }
         },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ጉዕዞ እናተኻየደ ከሎ፣ ተጓዓዝቲ መኪና ኣበይ ከም ዘላ ምእንቲ ክርእዩ፣ ቦታኹም ከም ጸብጻብ ናብ ሰርቨር ትካል መጓዓዝያ ይስደድ።"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Під час поїздки ваше місцезнаходження надсилається на сервер перевізника, щоб пасажири бачили, де перебуває транспортний засіб."
+          }
+        },
         "vi" : {
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Vị trí của bạn được gửi đến máy chủ của đơn vị vận hành trong khi hành trình đang chạy, để hành khách thấy được xe đang ở đâu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "行程进行时，你的位置会上报到运营单位的服务器，让乘客能看到车辆在哪里。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "行程進行中時，你的位置會回報到營運單位的伺服器，讓乘客看得到車輛在哪裡。"
           }
         }
       }
@@ -107,6 +173,12 @@
       "comment" : "Why the app asks for Precise Location: iOS shows it under its prompt to turn Precise Location on for this trip, when only approximate location is allowed. The key is the purpose the app names in code (NSLocationTemporaryUsageDescriptionDictionary).",
       "extractionState" : "manual",
       "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ትክክለኛ አካባቢ መኪናው በተሳፋሪዎች ካርታ ላይ በትክክለኛው መንገድ እንዲታይ ያደርጋል።"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "machine_translated",
@@ -161,10 +233,40 @@
             "value" : "La posizione precisa mostra il veicolo sulla strada giusta nelle mappe dei passeggeri."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "正確な位置情報を使うと、乗客の地図で車両が正しい道路に表示されます。"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ទីតាំងជាក់លាក់ ធ្វើឱ្យយានយន្តបង្ហាញនៅលើផ្លូវត្រឹមត្រូវ នៅលើផែនទីរបស់អ្នកដំណើរ។"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "정확한 위치를 사용하면 승객 지도에서 차량이 맞는 도로에 표시돼요."
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ສະຖານທີ່ແນ່ນອນເຮັດໃຫ້ລົດສະແດງຢູ່ຖະໜົນທີ່ຖືກຕ້ອງໃນແຜນທີ່ຂອງຜູ້ໂດຍສານ."
+          }
+        },
         "om" : {
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Bakki sirriin konkolaataa kaartaa imaltootaa irratti karaa sirrii irra kaa'a."
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਸਹੀ ਟਿਕਾਣੇ ਨਾਲ ਸਵਾਰੀਆਂ ਦੇ ਮੈਪ ਉੱਤੇ ਗੱਡੀ ਸਹੀ ਸੜਕ 'ਤੇ ਦਿਸਦੀ ਹੈ।"
           }
         },
         "pl" : {
@@ -177,6 +279,12 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "O local exato mostra o veículo na rua certa no mapa dos passageiros."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Точное местоположение показывает машину на нужной улице на картах пассажиров."
           }
         },
         "sm" : {
@@ -197,10 +305,34 @@
             "value" : "Mahali sahihi huonyesha gari kwenye barabara sahihi katika ramani za abiria."
           }
         },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ልክዕ ቦታ ንመኪና ኣብ ካርታ ተጓዓዝቲ ኣብ ቅኑዕ ጎደና የቐምጣ።"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Точне місцезнаходження показує транспортний засіб на правильній вулиці на картах пасажирів."
+          }
+        },
         "vi" : {
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "Vị trí chính xác giúp xe hiện ở đúng con đường trên bản đồ của hành khách."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "精确位置能让车辆显示在乘客地图上的正确街道上。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "精確位置能讓車輛在乘客地圖上顯示於正確的街道。"
           }
         }
       }
