@@ -243,7 +243,7 @@ fun LoginScreenContent(
                 }
                 AttentionBanner(
                     icon = banner.icon,
-                    text = if (named != null) stringResource(banner.text, serverLabel(named)) else stringResource(banner.text),
+                    text = if (named != null) stringResource(banner.text, isolated(serverLabel(named))) else stringResource(banner.text),
                 )
             }
             Spacer(Modifier.height(8.dp))

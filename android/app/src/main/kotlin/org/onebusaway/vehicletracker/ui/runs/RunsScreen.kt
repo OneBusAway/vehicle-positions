@@ -294,7 +294,7 @@ private fun Departures(
         val banner = startBannerOf(state.error)
         AttentionBanner(
             icon = banner.icon,
-            text = stringResource(banner.text, vehicleId),
+            text = stringResource(banner.text, isolated(vehicleId)),
             action = banner.action?.let { stringResource(it.label) },
             onAction = when (banner.action) {
                 BannerAction.CHANGE_BUS -> onChangeBus
