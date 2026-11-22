@@ -3983,7 +3983,7 @@ components:
           format: int64
           description: The trip's id, as in `GET /api/v1/admin/trips/{id}`.
         vehicle_id:
-          type: string
+          $ref: '#/components/schemas/VehicleID'
         vehicle_label:
           type: string
         driver_name:
