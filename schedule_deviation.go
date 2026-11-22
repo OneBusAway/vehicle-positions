@@ -6,6 +6,15 @@ import (
 	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
+// maxScheduleDeviation is the furthest from its timetable, late or early, a
+// driver vehicle is taken to be on the run it is measured against. Further off
+// than that it is on another run: most often the phone sent a start_date from
+// an earlier day, which the trip also runs on, and the deviation comes out in
+// days. It is the 90 minutes the rest of the server lets a run be late
+// (RIDER_SCHEDULE_LATE's default, rider's runningLateGrace, passingLateGrace),
+// held on the early side too, where a start_date from a later day lands.
+const maxScheduleDeviation = 90 * time.Minute
+
 // scheduleDeviation is how far from its timetable a driver vehicle was at `at`,
 // when a report placed it along metres into trip's shape, on the service day
 // that starts at dayStart: positive late, as GTFS-RT counts a delay. It is the
@@ -23,8 +32,10 @@ import (
 // times are only the pattern of its runs; for a trip whose shape was drawn
 // through its stops, where no place is good enough to judge; before the
 // vehicle has left its first stop, the moment evaluateRuns counts as departing
-// it, so a driver waiting to leave is not counted early; and once it is past
-// its last stop, where tripLocator names no stop either.
+// it, so a driver waiting to leave is not counted early; once it is past its
+// last stop, where tripLocator names no stop either; when the stop it is at or
+// heading to has no time, not even one filled in between timed stops; and when
+// it is further than maxScheduleDeviation from the timetable.
 func scheduleDeviation(trip *rider.TripInfo, dayStart time.Time, along float64, at time.Time) (time.Duration, bool) {
 	if trip.InFrequencies() || trip.ShapeFromStops || len(trip.StopTimes) == 0 {
 		return 0, false
@@ -33,20 +44,29 @@ func scheduleDeviation(trip *rider.TripInfo, dayStart time.Time, along float64, 
 		return 0, false
 	}
 	stop, ok := rider.NextStop(trip, along-stoppedAtDistance)
-	if !ok {
+	// The GTFS parser fills a stop's blank times in between the timed stops
+	// either side. With no timed stop after it, where stop_times.txt leaves
+	// even the last stop blank, it leaves them at 0, before the trip's first
+	// departure.
+	if !ok || stop.Arrival < trip.StopTimes[0].Departure {
 		return 0, false
 	}
+	var deviation time.Duration
 	if stop.AlongShape-along <= stoppedAtDistance {
 		arrival, departure := dayStart.Add(stop.Arrival), dayStart.Add(stop.Departure)
 		switch {
 		case at.Before(arrival):
-			return at.Sub(arrival), true
+			deviation = at.Sub(arrival)
 		case at.After(departure):
-			return at.Sub(departure), true
+			deviation = at.Sub(departure)
 		}
-		return 0, true
+	} else {
+		deviation = at.Sub(dayStart.Add(rider.ScheduledOffsetAt(trip, along)))
 	}
-	return at.Sub(dayStart.Add(rider.ScheduledOffsetAt(trip, along))), true
+	if deviation.Abs() > maxScheduleDeviation {
+		return 0, false
+	}
+	return deviation, true
 }
 
 // runDayStart is when the service day of the run loc's vehicle is on began:

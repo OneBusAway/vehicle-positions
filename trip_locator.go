@@ -46,6 +46,9 @@ type tripPlace struct {
 	// deviation is how far from its timetable the report put the vehicle
 	// (scheduleDeviation), positive late; nil when that is not known.
 	deviation *time.Duration
+	// scheduledArrival is when the timetable has the trip reach stopID on the
+	// run deviation was measured against; nil whenever deviation is.
+	scheduledArrival *time.Time
 }
 
 // locate places a report on its trip, projecting it from hint, where the
@@ -63,8 +66,9 @@ type tripPlace struct {
 // the hint carries forward, so a detour does not cost the vehicle its pass.
 //
 // A placed report also says how far from its timetable it put the vehicle
-// (scheduleDeviation), against the run runDayStart finds. An unplaced one says
-// nothing: a vehicle off its route is not early or late on it.
+// (scheduleDeviation), against the run runDayStart finds, and when that run is
+// due at the stop. An unplaced one says nothing: a vehicle off its route is
+// not early or late on it.
 func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 	unplaced := tripPlace{alongShape: hint}
 	ix := l.index()
@@ -92,13 +96,17 @@ func (l *tripLocator) locate(loc *LocationReport, hint *float64) tripPlace {
 	along := stopSearchPosition(trip.Shape, pos, proj.AlongShape)
 	// Looking from stoppedAtDistance back keeps a stop the vehicle has pulled
 	// up just past as the one it is at, not the one after it.
-	if stop, ok := rider.NextStop(trip, along-stoppedAtDistance); ok {
+	stop, named := rider.NextStop(trip, along-stoppedAtDistance)
+	if named {
 		place.stopID, place.stopSequence = stop.StopID, stop.Sequence
 		place.stoppedAt = stop.AlongShape-along <= stoppedAtDistance
 	}
 	if dayStart, ok := runDayStart(ix, trip, loc); ok {
+		// scheduleDeviation judges the vehicle by the same stop, so it is
+		// named whenever the deviation is known.
 		if d, ok := scheduleDeviation(trip, dayStart, along, time.Unix(loc.Timestamp, 0)); ok {
-			place.deviation = &d
+			arrival := dayStart.Add(stop.Arrival)
+			place.deviation, place.scheduledArrival = &d, &arrival
 		}
 	}
 	return place

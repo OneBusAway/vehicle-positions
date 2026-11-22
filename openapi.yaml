@@ -749,10 +749,15 @@ paths:
         the same `vehicle.id`, the report's timestamp capped as the positions
         feed caps it, `delay` in seconds (positive late), and one
         `stop_time_update` for the stop the positions feed names, with the
-        same delay on its `arrival`. A vehicle is left out, rather than
-        published as on time, when its delay is not known: no `trip_id`, a
-        trip in `frequencies.txt`, off its route, not yet left its first stop
-        or past its last. Rider-derived trips are never included.
+        same delay on its `arrival` and an arrival `time`, the stop's time in
+        the timetable plus the delay. For a stop whose times `stop_times.txt`
+        leaves blank, the timetable's time is the one interpolated between the
+        timed stops either side. A vehicle is left out, rather than published
+        as on time, when its delay is not known: no `trip_id`, a trip in
+        `frequencies.txt`, off its route, not yet left its first stop or past
+        its last, or more than 90 minutes early or late, which puts it on
+        another run than the one it names. Rider-derived trips are never
+        included.
 
         Defaults to protobuf; pass `?format=json` for the protojson-encoded
         form for debugging.
@@ -2827,8 +2832,12 @@ components:
             on the trip page. Null when the report did not say: no GTFS trip,
             a trip in frequencies.txt or whose shape was drawn through its
             stops, off route, before the vehicle has left its first stop or
-            past its last, no run of the trip to judge against, and a vehicle
-            restored at startup until it next reports.
+            past its last, a stop left without a time because no timed stop
+            follows it, no run of the trip to judge against, more than 90
+            minutes early or late against it, which puts the vehicle on
+            another run, and a vehicle restored at startup until it next
+            reports. The trip updates feed publishes the same figure as its
+            `delay`.
         reported_at:
           type: integer
           format: int64

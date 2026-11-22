@@ -40,23 +40,30 @@ func buildTripUpdates(vehicles []*VehicleState) *gtfsrt.FeedMessage {
 			continue
 		}
 		// In whole seconds, rounded as the admin live answer rounds it.
-		delay := proto.Int32(int32(v.ScheduleDeviation.Round(time.Second) / time.Second))
+		delay := v.ScheduleDeviation.Round(time.Second)
+		seconds := proto.Int32(int32(delay / time.Second))
 		entities = append(entities, &gtfsrt.FeedEntity{
 			Id: proto.String(v.VehicleID),
 			TripUpdate: &gtfsrt.TripUpdate{
 				Trip:      driverTrip(v),
 				Vehicle:   vehicleDescriptor(v),
 				Timestamp: proto.Uint64(ts),
-				Delay:     delay,
+				Delay:     seconds,
 				// The validator requires one stop_time_update (E041). It is
 				// the stop the positions feed names, the one the vehicle is at
 				// or heading to, and carries the same delay, since a stop's
-				// delay takes precedence over the trip's. SCHEDULED is the
-				// default, set so the validator does not warn W009.
+				// delay takes precedence over the trip's. Its time is the
+				// stop's scheduled arrival plus that delay: a delay alone
+				// needs a time in stop_times.txt to be added to, and a stop
+				// between timepoints often has none there (E046). SCHEDULED is
+				// the default, set so the validator does not warn W009.
 				StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{{
-					StopSequence:         proto.Uint32(uint32(v.StopSequence)),
-					StopId:               proto.String(v.StopID),
-					Arrival:              &gtfsrt.TripUpdate_StopTimeEvent{Delay: delay},
+					StopSequence: proto.Uint32(uint32(v.StopSequence)),
+					StopId:       proto.String(v.StopID),
+					Arrival: &gtfsrt.TripUpdate_StopTimeEvent{
+						Delay: seconds,
+						Time:  proto.Int64(v.ScheduledArrival.Add(delay).Round(time.Second).Unix()),
+					},
 					ScheduleRelationship: gtfsrt.TripUpdate_StopTimeUpdate_SCHEDULED.Enum(),
 				}},
 			},
@@ -71,7 +78,8 @@ func buildTripUpdates(vehicles []*VehicleState) *gtfsrt.FeedMessage {
 //   - a trip_id: a route-only report names no trip to be late on;
 //   - a trip run by timetable: a trip in frequencies.txt has stop times that
 //     are only the pattern of its runs, so no timetable to be late against;
-//   - a stop to carry the delay in the stop_time_update the validator
+//   - a stop, and when the timetable has the vehicle reach it, to carry the
+//     delay and the arrival time in the stop_time_update the validator
 //     requires.
 //
 // The tracker already leaves ScheduleDeviation nil without each of these.
@@ -79,5 +87,5 @@ func buildTripUpdates(vehicles []*VehicleState) *gtfsrt.FeedMessage {
 // a later change to how deviations are measured, for the admin map say, must
 // not undo.
 func measuredTrip(v *VehicleState) bool {
-	return v.ScheduleDeviation != nil && v.TripID != "" && !v.FrequencyBased && v.StopID != ""
+	return v.ScheduleDeviation != nil && v.TripID != "" && !v.FrequencyBased && v.StopID != "" && v.ScheduledArrival != nil
 }

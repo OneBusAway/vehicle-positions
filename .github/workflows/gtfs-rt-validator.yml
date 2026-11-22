@@ -83,12 +83,14 @@ jobs:
       # One run per directory TestWriteFeedSnapshots writes: the validator
       # compares each snapshot with the one before it, so two feeds cannot
       # share a run, and combined/ is both feeds in one message, the only way
-      # it runs its cross-feed rules (E047).
+      # it runs its cross-feed rules (E047). gtfs.zip is the GTFS feed the
+      # test measured them against: rider/testdata/fixture.zip with a trip
+      # timed around the time it ran.
       - name: Run the validator
         run: |
           sha256sum "$VALIDATOR_JAR"
           for feed in vehicle-positions trip-updates combined; do
-            java -jar "$VALIDATOR_JAR" -gtfs rider/testdata/fixture.zip -gtfsRealtimePath "$FEED_SNAPSHOT_DIR/$feed" -sort name
+            java -jar "$VALIDATOR_JAR" -gtfs "$FEED_SNAPSHOT_DIR/gtfs.zip" -gtfsRealtimePath "$FEED_SNAPSHOT_DIR/$feed" -sort name
           done
 
       - name: Fail on validator errors

@@ -64,6 +64,8 @@ func TestScheduleDeviation(t *testing.T) {
 	t7 := mustTrip(t, dwellFixtureIndex(t), "T7")
 	headway := mustTrip(t, frequencyFixtureIndex(t), "T1")
 	require.True(t, headway.InFrequencies())
+	untimed := untimedFixtureIndex(t)
+	tb, te, tz := mustTrip(t, untimed, "TB"), mustTrip(t, untimed, "TE"), mustTrip(t, untimed, "TZ")
 	day := deviationDayStart(t, ix)
 
 	// T6 leaves ST2, 500 m along, at 12:05 and reaches ST3, 1001 m along, at
@@ -92,6 +94,24 @@ func TestScheduleDeviation(t *testing.T) {
 		{"past the last stop", t6, t6.Shape.Length + stoppedAtDistance + 1, clock(day, 12, 21, 0), nil},
 		{"a trip run by headway", headway, between, clock(day, 12, 13, 30), nil},
 		{"a shape drawn through the stops", t4, 300, clock(day, 10, 5, 0), nil},
+		// Further off than maxScheduleDeviation, either way, the vehicle is
+		// on some other run.
+		{"90 minutes late", t6, between, clock(day, 13, 37, 30), dur(90 * time.Minute)},
+		{"over 90 minutes late", t6, between, clock(day, 13, 37, 31), nil},
+		{"90 minutes early", t6, between, clock(day, 10, 37, 30), dur(-90 * time.Minute)},
+		{"over 90 minutes early", t6, between, clock(day, 10, 37, 29), nil},
+		{"at a stop, over 90 minutes late", t7, 510, clock(day, 13, 37, 1), nil},
+		{"at a stop, over 90 minutes early", t7, 510, clock(day, 10, 34, 59), nil},
+		// TB's ST2 is untimed: the parser puts it at 12:04:59.7, 500 m of the
+		// 1001 from ST1 (12:00) to ST3 (12:10).
+		{"heading to an untimed stop", tb, 250, clock(day, 12, 4, 0), dur(90*time.Second + 150*time.Millisecond)},
+		{"at an untimed stop", tb, 500, clock(day, 12, 6, 0), dur(60*time.Second + 300*time.Millisecond)},
+		// TE has no timed stop after ST1, so the parser leaves ST2 and ST3 at
+		// 0. Measured against that, the vehicle would be 58 minutes late here
+		// and 12 hours late between them.
+		{"heading to a stop no time was found for", te, 40, clock(day, 12, 0, 30), nil},
+		{"between stops no time was found for", te, between, clock(day, 12, 13, 30), nil},
+		{"heading to a stop due the minute the trip leaves", tz, 100, clock(day, 12, 0, 30), dur(30 * time.Second)},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -117,9 +137,16 @@ func deviationReport(t6 *rider.TripInfo, vehicleID, startDate string, along floa
 // deviation, nil when none.
 func heldDeviation(t *testing.T, tracker *Tracker, vehicleID string) *time.Duration {
 	t.Helper()
+	return heldVehicle(t, tracker, vehicleID).ScheduleDeviation
+}
+
+// heldVehicle is what tracker holds for vehicleID, as ActiveVehicles hands it
+// out.
+func heldVehicle(t *testing.T, tracker *Tracker, vehicleID string) *VehicleState {
+	t.Helper()
 	for _, v := range tracker.ActiveVehicles() {
 		if v.VehicleID == vehicleID {
-			return v.ScheduleDeviation
+			return v
 		}
 	}
 	require.FailNow(t, "vehicle not in the tracker", vehicleID)
@@ -127,36 +154,43 @@ func heldDeviation(t *testing.T, tracker *Tracker, vehicleID string) *time.Durat
 }
 
 // TestTracker_ScheduleDeviationMovesWithEachReport: each accepted report sets
-// the vehicle's deviation from where it put the vehicle, before anything asks
-// for it, so the live answer never has to read the trail; and a report that
-// says nothing clears it rather than leaving the last one standing.
+// the vehicle's deviation, and when its run is due at the stop it names, from
+// where it put the vehicle, before anything asks for them, so neither the live
+// answer nor the trip updates feed has to read the trail; and a report that
+// says nothing clears both rather than leaving the last ones standing.
 func TestTracker_ScheduleDeviationMovesWithEachReport(t *testing.T) {
 	ix := locatorFixtureIndex(t)
 	t6 := mustTrip(t, ix, "T6")
 	day := deviationDayStart(t, ix)
 	tracker := newPlacingTracker(t, ix)
-	report := func(loc *LocationReport) *time.Duration {
+	report := func(loc *LocationReport) *VehicleState {
 		t.Helper()
 		require.True(t, tracker.UpdateAuthorized(loc, time.Now()))
-		return heldDeviation(t, tracker, loc.VehicleID)
+		return heldVehicle(t, tracker, loc.VehicleID)
 	}
 
 	got := report(deviationReport(t6, "bus-1", deviationServiceDate, 750.5, clock(day, 12, 13, 30)))
-	require.NotNil(t, got)
-	assert.InDelta(t, (6 * time.Minute).Seconds(), got.Seconds(), 0.5)
+	require.NotNil(t, got.ScheduleDeviation)
+	assert.InDelta(t, (6 * time.Minute).Seconds(), got.ScheduleDeviation.Seconds(), 0.5)
+	require.NotNil(t, got.ScheduledArrival)
+	assert.Equal(t, clock(day, 12, 10, 0), *got.ScheduledArrival, "T6 is due at ST3 at 12:10")
 	// ActiveVehicles hands out a copy: changing it changes nothing held.
-	*got = 0
-	assert.InDelta(t, (6 * time.Minute).Seconds(), heldDeviation(t, tracker, "bus-1").Seconds(), 0.5)
+	*got.ScheduleDeviation, *got.ScheduledArrival = 0, time.Time{}
+	held := heldVehicle(t, tracker, "bus-1")
+	assert.InDelta(t, (6 * time.Minute).Seconds(), held.ScheduleDeviation.Seconds(), 0.5)
+	assert.Equal(t, clock(day, 12, 10, 0), *held.ScheduledArrival)
 
 	// Three quarters of the way from ST2 (12:05) to ST3 (12:10) is 12:08:45.
 	got = report(deviationReport(t6, "bus-1", deviationServiceDate, 875.75, clock(day, 12, 14, 15)))
-	require.NotNil(t, got)
-	assert.InDelta(t, (5*time.Minute + 30*time.Second).Seconds(), got.Seconds(), 0.5)
+	require.NotNil(t, got.ScheduleDeviation)
+	assert.InDelta(t, (5*time.Minute + 30*time.Second).Seconds(), got.ScheduleDeviation.Seconds(), 0.5)
 
 	offRoute := deviationReport(t6, "bus-1", deviationServiceDate, 1300, clock(day, 12, 17, 0))
 	pos := rider.OffsetMetres(t6.Shape.PointAt(1300), 0, 500)
 	offRoute.Latitude, offRoute.Longitude = pos.Lat, pos.Lon
-	assert.Nil(t, report(offRoute), "a vehicle off its route is not early or late on it")
+	got = report(offRoute)
+	assert.Nil(t, got.ScheduleDeviation, "a vehicle off its route is not early or late on it")
+	assert.Nil(t, got.ScheduledArrival)
 }
 
 func TestTracker_ScheduleDeviationRun(t *testing.T) {

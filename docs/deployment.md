@@ -1003,14 +1003,19 @@ against the timetable's time for that point. It carries the trip as the
 positions feed describes it, the same `vehicle.id`, which is how the Java
 server pairs the two, `delay` in seconds (positive late), and one
 `stop_time_update` for the stop the vehicle is at or heading to, with the same
-delay. The Java server adds that delay to the timetable for the trip's later
-stops. A vehicle whose delay is not known is left out rather than sent as on
-time, so the Java server does not show it at that moment: a trip in
-`frequencies.txt`, which has no timetable to be late against; a driver who gave
-only the route; a vehicle off its route, not yet left its first stop or past
-its last; a vehicle the server restored at startup, until its next report; and
-every rider-reported trip. Maglev reads the positions feed alone and needs none
-of this.
+delay and an arrival `time`: the stop's time in the timetable plus the delay.
+A stop between timepoints whose times `stop_times.txt` leaves blank gets the
+time the server interpolates for it between the timed stops either side, so a
+consumer always has a time, not a delay with nothing to add it to. The Java
+server adds the delay to the timetable for the trip's later stops. A vehicle
+whose delay is not known is left out rather than sent as on time, so the Java
+server does not show it at that moment: a trip in `frequencies.txt`, which has
+no timetable to be late against; a driver who gave only the route; a vehicle
+off its route, not yet left its first stop or past its last; a vehicle the
+server restored at startup, until its next report; every rider-reported trip;
+and a vehicle more than 90 minutes early or late, which is on another run
+than the one it names, most often because the phone sent another day's
+`start_date`. Maglev reads the positions feed alone and needs none of this.
 
 If you set `FEED_AUTH_ENABLED=true`, every consumer must send its key in an
 `X-API-Key` header, OneBusAway included, on both feeds; onebusaway-docker sends

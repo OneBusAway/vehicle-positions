@@ -46,10 +46,18 @@ type VehicleState struct {
 	// the report was accepted so that nothing reads the trail to answer it.
 	// nil when that report did not say: no trip, a trip in frequencies.txt or
 	// whose shape was drawn through its stops, off route, not yet left its
-	// first stop or past its last, no run of the trip to judge against, and a
-	// vehicle seeded at startup until it next reports. Only driver reports
-	// reach the tracker, so a rider-derived vehicle never has one.
+	// first stop or past its last, a stop with no time and no timed stop
+	// after it, no run of the trip to judge against, further from it than
+	// maxScheduleDeviation, and a vehicle seeded at startup until it next
+	// reports. Only driver reports reach the tracker, so a rider-derived
+	// vehicle never has one.
 	ScheduleDeviation *time.Duration
+	// ScheduledArrival is when the timetable has the vehicle's trip reach
+	// StopID on the run ScheduleDeviation was measured against: the stop's
+	// arrival_time, or for a stop whose times stop_times.txt left blank, the
+	// time the GTFS parser filled in between the timed stops either side. nil
+	// whenever ScheduleDeviation is.
+	ScheduledArrival *time.Time
 	// alongShape is how far along its trip's shape the vehicle was last
 	// placed, in metres: the projection hint for its next report on that trip.
 	// It is nil until the vehicle has been placed on its current trip.
@@ -254,6 +262,7 @@ func (t *Tracker) update(loc *LocationReport, place tripPlace) {
 		FrequencyBased:    frequencyBased,
 		StartTimeDate:     startTimeDate,
 		ScheduleDeviation: place.deviation,
+		ScheduledArrival:  place.scheduledArrival,
 		alongShape:        place.alongShape,
 		// Not carried over from the vehicle's previous report: a driver app
 		// is to send it with every report while the driver has one set, so a
@@ -296,6 +305,10 @@ func (t *Tracker) ActiveVehicles() []*VehicleState {
 			if v.ScheduleDeviation != nil {
 				d := *v.ScheduleDeviation
 				copy.ScheduleDeviation = &d
+			}
+			if v.ScheduledArrival != nil {
+				a := *v.ScheduledArrival
+				copy.ScheduledArrival = &a
 			}
 			active = append(active, &copy)
 		}
