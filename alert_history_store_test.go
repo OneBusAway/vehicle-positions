@@ -89,6 +89,35 @@ func TestStore_RaiseAlert_NotStartedNamesTheTripNotStarted(t *testing.T) {
 	assert.Equal(t, "R2", listed[0].RouteID)
 }
 
+// TestStore_RaiseAlert_Bunched: a bunched alert needs no schema of its own.
+// Its row is the vehicle behind's trip, and the Alerts page lists it by its
+// kind.
+func TestStore_RaiseAlert_Bunched(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	trip := startAlertTrip(t, store)
+	a := newAlert(alertBunched, historyTime, trip, historyTime.Add(4*time.Minute))
+	a.Ahead = &alertAhead{VehicleID: "bus-trip-2", VehicleLabel: "Bus 2", SpacingS: 60, ScheduledGapS: 600}
+
+	id, err := store.RaiseAlert(ctx, a)
+	require.NoError(t, err)
+	require.NoError(t, store.ClearAlert(ctx, id, historyTime.Add(10*time.Minute)))
+
+	listed, err := store.ListClearedAlerts(ctx, alertBunched, 10, 0)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assert.Equal(t, alertBunched, listed[0].Kind)
+	assert.Equal(t, "bus-trip-1", listed[0].VehicleID)
+	assert.Equal(t, trip.ID, listed[0].TripID)
+	assert.Equal(t, "T1", listed[0].GtfsTripID)
+	assert.Equal(t, "R1", listed[0].RouteID)
+	assert.Equal(t, historyTime, listed[0].RaisedAt.UTC())
+
+	others, err := store.ListClearedAlerts(ctx, alertQuiet, 10, 0)
+	require.NoError(t, err)
+	assert.Empty(t, others)
+}
+
 func TestStore_RaiseAlert_KeepsTheOpenRow(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()

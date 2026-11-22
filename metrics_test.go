@@ -417,6 +417,7 @@ func TestMetrics_Output(t *testing.T) {
 		`vehicle_positions_gtfs_loaded_timestamp_seconds`: strconv.FormatInt(loadedAt.Unix(), 10),
 		`vehicle_positions_gtfs_routes`:                   strconv.Itoa(ix.Stats().Routes),
 		`vehicle_positions_gtfs_trips`:                    strconv.Itoa(ix.Stats().Trips),
+		`vehicle_positions_alerts{kind="bunched"}`:        "0",
 		`vehicle_positions_alerts{kind="not_moving"}`:     "1",
 		`vehicle_positions_alerts{kind="not_started"}`:    "0",
 		`vehicle_positions_alerts{kind="off_route"}`:      "0",

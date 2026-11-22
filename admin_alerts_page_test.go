@@ -60,7 +60,7 @@ func TestAlertsPage_Empty(t *testing.T) {
 	body := w.Body.String()
 	assert.Contains(t, body, `<h2 class="h1">No alerts are open</h2>`)
 	assert.Contains(t, body, `<div class="empty-title">All clear</div>`)
-	assert.Contains(t, body, "No vehicle on a running trip has gone quiet, left its route or stopped moving, and no block's next trip is late to start.")
+	assert.Contains(t, body, "No vehicle on a running trip has gone quiet, left its route, stopped moving or bunched behind the one ahead, and no block's next trip is late to start.")
 	assert.NotContains(t, body, "Longest open first.")
 	assert.Contains(t, body, "sent no report for over 3 min, or have moved under 50 m in 10 min")
 	assert.NotRegexp(t, alertBadge, body, "no alerts, no badge")

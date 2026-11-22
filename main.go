@@ -414,10 +414,12 @@ func main() {
 	reports.retention = retention
 	warmer := startReportWarmer(reports, reportWarmInterval)
 	defer warmer.Stop()
-	// The alerts judge off route against the same schedule.
+	// The alerts judge off route against the same schedule, and bunching from
+	// where the tracker has placed each vehicle on its trip.
 	alerts := newAlertWatcher(store, alertSettingsFromEnv(riderCfg.Thresholds.MaxShapeDistance))
 	alerts.watchRoutes(schedule.Index)
 	alerts.watchBlocks(store)
+	alerts.watchBunching(tracker.ActiveVehicles)
 	stopAlerts := startAlertJobs(store, alerts, schedule.Index, webhookCfg, defaultAlertWebhookTiming())
 	defer stopAlerts()
 	if webhookCfg != nil {

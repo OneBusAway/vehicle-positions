@@ -149,7 +149,7 @@ func TestAlertsPage_UnknownKind(t *testing.T) {
 	w := requestAdminPage(t, mux, "/admin/alerts?kind=late")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "kind must be quiet, not_moving, off_route or not_started")
+	assert.Contains(t, w.Body.String(), "kind must be quiet, not_moving, off_route, not_started or bunched")
 	assert.Zero(t, cleared.limit, "nothing is read for a kind there is not")
 }
 

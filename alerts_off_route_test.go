@@ -440,7 +440,7 @@ func TestAlertSettingsFromEnv(t *testing.T) {
 	const maxShapeDistance = 75.0
 
 	t.Run("defaults", func(t *testing.T) {
-		for _, key := range []string{"ALERT_QUIET_AFTER", "ALERT_STOPPED_AFTER", "ALERT_OFF_ROUTE_DISTANCE", "ALERT_OFF_ROUTE_AFTER"} {
+		for _, key := range []string{"ALERT_QUIET_AFTER", "ALERT_STOPPED_AFTER", "ALERT_OFF_ROUTE_DISTANCE", "ALERT_OFF_ROUTE_AFTER", "ALERT_NOT_STARTED_AFTER", "ALERT_BUNCHED_AFTER"} {
 			t.Setenv(key, "")
 		}
 		assert.Equal(t, alertSettings{
@@ -449,6 +449,7 @@ func TestAlertSettingsFromEnv(t *testing.T) {
 			offRouteDistance: maxShapeDistance,
 			offRouteAfter:    defaultAlertOffRouteAfter,
 			notStartedAfter:  defaultAlertNotStartedAfter,
+			bunchedAfter:     defaultAlertBunchedAfter,
 		}, alertSettingsFromEnv(maxShapeDistance))
 	})
 
@@ -628,5 +629,5 @@ func TestOpenAPI_AlertKinds(t *testing.T) {
 	spec := loadOpenAPISpec(t)
 	schemas := spec.document["components"].(map[string]any)["schemas"].(map[string]any)
 	kind := schemas["Alert"].(map[string]any)["properties"].(map[string]any)["kind"].(map[string]any)
-	assert.ElementsMatch(t, []any{alertQuiet, alertNotMoving, alertOffRoute, alertNotStarted}, kind["enum"])
+	assert.ElementsMatch(t, []any{alertQuiet, alertNotMoving, alertOffRoute, alertNotStarted, alertBunched}, kind["enum"])
 }

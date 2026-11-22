@@ -18,12 +18,15 @@ import (
 // drops off the map. Going round a blocked street takes a minute or two, so a
 // vehicle off its route for five is not doing that. A trip that leaves five
 // minutes after it was due is late by the Reports page's default on-time
-// window (REPORT_ON_TIME_LATE).
+// window (REPORT_ON_TIME_LATE). A vehicle that closes up on the one ahead
+// while that one stands at a stop is passing it, not bunched, and three
+// minutes outlasts a stop.
 const (
 	defaultAlertQuietAfter      = 3 * time.Minute
 	defaultAlertStoppedAfter    = 10 * time.Minute
 	defaultAlertOffRouteAfter   = 5 * time.Minute
 	defaultAlertNotStartedAfter = 5 * time.Minute
+	defaultAlertBunchedAfter    = 3 * time.Minute
 )
 
 // notStartedLookback is how far back list reads the trips started, to find
@@ -54,6 +57,7 @@ const (
 	alertNotMoving  = "not_moving"
 	alertOffRoute   = "off_route"
 	alertNotStarted = "not_started"
+	alertBunched    = "bunched"
 )
 
 // alertSettings are the thresholds, read by alertSettingsFromEnv.
@@ -75,11 +79,14 @@ type alertSettings struct {
 	// a block may go unstarted before the vehicle working the block is late
 	// to start it.
 	notStartedAfter time.Duration
+	// bunchedAfter is how long a vehicle may run bunched behind the vehicle
+	// ahead of it, counted over their reports, before it is bunched.
+	bunchedAfter time.Duration
 }
 
 // alertSettingsFromEnv reads the thresholds from ALERT_QUIET_AFTER,
-// ALERT_STOPPED_AFTER, ALERT_OFF_ROUTE_DISTANCE, ALERT_OFF_ROUTE_AFTER and
-// ALERT_NOT_STARTED_AFTER. The
+// ALERT_STOPPED_AFTER, ALERT_OFF_ROUTE_DISTANCE, ALERT_OFF_ROUTE_AFTER,
+// ALERT_NOT_STARTED_AFTER and ALERT_BUNCHED_AFTER. The
 // off-route distance defaults to maxShapeDistance, RIDER_MAX_SHAPE_DISTANCE,
 // which is where the driver apps already tell the driver they are off route.
 func alertSettingsFromEnv(maxShapeDistance float64) alertSettings {
@@ -89,18 +96,21 @@ func alertSettingsFromEnv(maxShapeDistance float64) alertSettings {
 		offRouteDistance: envPositiveFloatOrDefault("ALERT_OFF_ROUTE_DISTANCE", maxShapeDistance),
 		offRouteAfter:    envPositiveDurationOrDefault("ALERT_OFF_ROUTE_AFTER", defaultAlertOffRouteAfter),
 		notStartedAfter:  envPositiveDurationOrDefault("ALERT_NOT_STARTED_AFTER", defaultAlertNotStartedAfter),
+		bunchedAfter:     envPositiveDurationOrDefault("ALERT_BUNCHED_AFTER", defaultAlertBunchedAfter),
 	}
 }
 
 // alertEntry is one alert: a vehicle on an active trip that has gone quiet, is
-// off route or is not moving, or a vehicle working a block that has not
-// started the block's next trip, since when, and the trip.
+// off route, is not moving or is bunched behind the vehicle ahead of it, or a
+// vehicle working a block that has not started the block's next trip, since
+// when, and the trip.
 type alertEntry struct {
 	Kind string `json:"kind"`
 	// Since is the vehicle's last report for a quiet alert, its first report
 	// off route for an off-route one, when it came within stoppedRadius of
-	// where it is now for a not-moving one, and when the next trip was due to
-	// leave for a not-started one.
+	// where it is now for a not-moving one, when the next trip was due to
+	// leave for a not-started one, and when it was first found bunched for a
+	// bunched one.
 	Since           time.Time `json:"since"`
 	DurationSeconds int64     `json:"duration_seconds"`
 	// Trip is the trip running, or for a not-started alert the trip the
@@ -108,6 +118,9 @@ type alertEntry struct {
 	Trip TripSummary `json:"trip"`
 	// NextTrip is the trip a not-started alert is about, nil for the others.
 	NextTrip *alertNextTrip `json:"next_trip,omitempty"`
+	// Ahead is the vehicle a bunched alert's vehicle is running behind, nil
+	// for the others.
+	Ahead *alertAhead `json:"ahead,omitempty"`
 }
 
 // alertNextTrip is the scheduled trip a vehicle working a block has not
@@ -116,6 +129,16 @@ type alertNextTrip struct {
 	GtfsTripID string `json:"gtfs_trip_id"`
 	RouteID    string `json:"route_id"`
 	BlockID    string `json:"block_id"`
+}
+
+// alertAhead is the vehicle ahead of a bunched vehicle, as of the latest
+// reports, with how far behind it the bunched vehicle is running and the
+// scheduled gap at the stop it is at or heading to, both in whole seconds.
+type alertAhead struct {
+	VehicleID     string `json:"vehicle_id"`
+	VehicleLabel  string `json:"vehicle_label"`
+	SpacingS      int    `json:"spacing_s"`
+	ScheduledGapS int    `json:"scheduled_gap_s"`
 }
 
 type alertListResponse struct {
@@ -181,6 +204,16 @@ type alertWatcher struct {
 	schedule func() *rider.Index
 	// started lists the trips started lately, nil until watchBlocks.
 	started TripsStartedBetweenLister
+	// vehicles is where the vehicles' places on their trips come from, the
+	// tracker's, nil until watchBunching.
+	vehicles func() []*VehicleState
+	// bunched holds each vehicle found bunched at every look since its spell
+	// began, as of the latest look. A vehicle not found bunched at a look
+	// loses it.
+	bunched map[string]bunchedSpell
+	// stops lays out the scheduled gap at the stops the bunched alert judges
+	// vehicles at.
+	stops stopSchedules
 	// webhook posts the alerts to ALERT_WEBHOOK_URL, for the Alerts page to
 	// show how its posts went. It is nil when the setting is unset, and set
 	// once by startAlertJobs before any request comes.
@@ -214,6 +247,23 @@ func (w *alertWatcher) watchBlocks(started TripsStartedBetweenLister) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.started = started
+}
+
+// watchBunching makes the watcher look for vehicles bunched behind the one
+// ahead of them, from where vehicles, the tracker's, places each vehicle on
+// its trip and the schedule watchRoutes gives. Until then it does not.
+func (w *alertWatcher) watchBunching(vehicles func() []*VehicleState) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.vehicles = vehicles
+}
+
+// bunchedSpell is a vehicle on its trip tripID found bunched at every look
+// since since, the time of the first, as of its latest look.
+type bunchedSpell struct {
+	tripID int64
+	since  time.Time
+	latest vehicleSpacing
 }
 
 // report adds a report the server accepted at at to what the alerts know of
@@ -358,6 +408,7 @@ func judgeDistance(distance, accuracy, limit float64) shapeSide {
 func (w *alertWatcher) alerts(active []TripSummary, now time.Time) []alertEntry {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.lookForBunching(active, now)
 
 	onTrip := make(map[string]struct{}, len(active))
 	alerts := make([]alertEntry, 0)
@@ -382,6 +433,30 @@ func (w *alertWatcher) alerts(active []TripSummary, now time.Time) []alertEntry 
 	return alerts
 }
 
+// lookForBunching takes a look at which vehicles on active are bunched at
+// now, with w.mu held. A spell goes on while every look finds its vehicle
+// bunched, behind whichever vehicle is ahead, and starts again when the
+// vehicle moves on to another trip. A vehicle not found bunched, its trip
+// ended or not judged at all, loses its spell. The tracker is read under
+// w.mu, a copy of a few hundred vehicles, so two looks at once cannot leave
+// the spells as the older of them found them.
+func (w *alertWatcher) lookForBunching(active []TripSummary, now time.Time) {
+	var found map[string]vehicleSpacing
+	if w.vehicles != nil && w.schedule != nil {
+		found = w.stops.bunched(w.schedule(), active, w.vehicles(), now, w.settings.quietAfter)
+	}
+	spells := make(map[string]bunchedSpell, len(found))
+	for vehicleID, spacing := range found {
+		spell, ok := w.bunched[vehicleID]
+		if !ok || spell.tripID != spacing.tripID {
+			spell = bunchedSpell{tripID: spacing.tripID, since: spacing.at}
+		}
+		spell.latest = spacing
+		spells[vehicleID] = spell
+	}
+	w.bunched = spells
+}
+
 // sortAlerts puts alerts longest-running first.
 func sortAlerts(alerts []alertEntry) {
 	sort.Slice(alerts, func(i, j int) bool {
@@ -397,6 +472,8 @@ func sortAlerts(alerts []alertEntry) {
 // report to go on, the last position says nothing about now. Off route comes
 // before not moving, so a vehicle standing still away from its route keeps
 // the one alert rather than changing kind when it has stood long enough.
+// Bunched comes last: a vehicle that is quiet, off route or not moving has
+// that to see to first.
 func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bool) {
 	samples := w.history[trip.VehicleID]
 	// Samples from before the trip started belong to the vehicle's last trip.
@@ -441,7 +518,26 @@ func (w *alertWatcher) alertFor(trip TripSummary, now time.Time) (alertEntry, bo
 	if onTrip[len(onTrip)-1].at.Sub(since) >= w.settings.stoppedAfter {
 		return newAlert(alertNotMoving, since, trip, now), true
 	}
-	return alertEntry{}, false
+	return w.bunchedAlert(trip, now)
+}
+
+// bunchedAlert is trip's bunched alert at now, once its vehicle's spell has
+// lasted bunchedAfter. As for a stop, only reported time counts: the spell
+// lasts from its first look to its latest, each timed by the reports it
+// was measured from.
+func (w *alertWatcher) bunchedAlert(trip TripSummary, now time.Time) (alertEntry, bool) {
+	spell, ok := w.bunched[trip.VehicleID]
+	if !ok || spell.latest.at.Sub(spell.since) < w.settings.bunchedAfter {
+		return alertEntry{}, false
+	}
+	alert := newAlert(alertBunched, spell.since, trip, now)
+	alert.Ahead = &alertAhead{
+		VehicleID:     spell.latest.ahead.VehicleID,
+		VehicleLabel:  spell.latest.ahead.VehicleLabel,
+		SpacingS:      max(0, int(spell.latest.spacing/time.Second)),
+		ScheduledGapS: int(spell.latest.scheduled / time.Second),
+	}
+	return alert, true
 }
 
 func newAlert(kind string, since time.Time, trip TripSummary, now time.Time) alertEntry {

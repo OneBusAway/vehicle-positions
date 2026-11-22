@@ -1535,12 +1535,12 @@ paths:
   /api/v1/admin/alerts:
     get:
       tags: [admin]
-      summary: Vehicles that have gone quiet, are off route, are not moving or have not started a block's next trip
+      summary: Vehicles that have gone quiet, are off route, are not moving, are bunched or have not started a block's next trip
       description: |
         The same list the admin UI's Alerts page shows, worked out on request
-        from the active trips, the trips started in the last day, and the
-        reports the server has accepted since it started. Requires the `admin`
-        role.
+        from the active trips, the trips started in the last day, the reports
+        the server has accepted since it started, and where the latest of them
+        put each vehicle on its trip. Requires the `admin` role.
 
         - `quiet`: the vehicle has sent no report for longer than
           `ALERT_QUIET_AFTER` (3m by default). Before its first report on the
@@ -1567,10 +1567,25 @@ paths:
           Only a block a vehicle has run a trip on counts, so a block no
           vehicle with the app is working never raises one, nor does a trip
           with no `block_id` or a headway trip.
+        - `bunched`: the vehicle has run less than 25% of the scheduled gap
+          behind the vehicle ahead of it for `ALERT_BUNCHED_AFTER` (3m by
+          default), counted over their reports. The vehicle ahead is the
+          nearest one on the same route, direction and shape that also stops
+          there. The spacing is the running time the vehicle's timetable gives
+          from its place to the vehicle ahead's, plus how much later it
+          reported. The scheduled gap is the one the service report's `gaps`
+          judge by, at the stop the vehicle is at or heading to, so only
+          trips run from `frequencies.txt`, and timetabled trips due there
+          as part of a timetable every 12 minutes or more often, are judged.
+          A vehicle off its route, not yet past its first stop, heading to
+          or past its last stop, or quiet is not judged, nor is one with no
+          driver vehicle ahead: Rider mode's vehicles are not counted.
+          `ahead` names the vehicle ahead.
 
         A trip has at most one alert: a quiet vehicle is not also reported as
-        off route or not moving, and an off-route one is not also reported as
-        not moving. An ended trip has none. The list is ordered
+        off route, not moving or bunched, an off-route one is not also
+        reported as not moving or bunched, and a vehicle not moving is not also
+        reported as bunched. An ended trip has none. The list is ordered
         longest-running first. Nothing is sent anywhere: a client polls this
         endpoint.
       responses:
@@ -3630,7 +3645,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [quiet, off_route, not_moving, not_started]
+          enum: [quiet, off_route, not_moving, not_started, bunched]
         since:
           type: string
           format: date-time
@@ -3639,7 +3654,9 @@ components:
             the server's start, when it has not reported since). For
             `off_route`, its first report off route. For `not_moving`, when it
             came within 50 m of where it is now. For `not_started`, when the
-            next trip was due to leave.
+            next trip was due to leave. For `bunched`, the later of the two
+            vehicles' reports when it was first found bunched; a look that
+            does not find it bunched starts it again.
         duration_seconds:
           type: integer
           format: int64
@@ -3649,6 +3666,8 @@ components:
           $ref: '#/components/schemas/TripSummary'
         next_trip:
           $ref: '#/components/schemas/AlertNextTrip'
+        ahead:
+          $ref: '#/components/schemas/AlertAhead'
 
     AlertNextTrip:
       type: object
@@ -3663,6 +3682,31 @@ components:
           type: string
         block_id:
           type: string
+
+    AlertAhead:
+      type: object
+      description: |
+        The vehicle a `bunched` alert's vehicle is running behind, as of their
+        latest reports. Only `bunched` alerts have one.
+      required: [vehicle_id, vehicle_label, spacing_s, scheduled_gap_s]
+      properties:
+        vehicle_id:
+          $ref: '#/components/schemas/VehicleID'
+        vehicle_label:
+          type: string
+        spacing_s:
+          type: integer
+          minimum: 0
+          description: |
+            How far behind the vehicle ahead the alert's vehicle is running,
+            in whole seconds, 0 when level with it.
+        scheduled_gap_s:
+          type: integer
+          minimum: 1
+          description: |
+            The scheduled gap at the stop the alert's vehicle is at or heading
+            to, in whole seconds: the `every N min` the spacing is judged
+            against.
 
     ServiceReport:
       type: object

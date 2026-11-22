@@ -117,10 +117,18 @@ func (c *gapCounts) add(g stopGap) {
 	c.SumScheduledSq += scheduled * scheduled
 }
 
-// bunched reports whether a gap judged is under bunchedBelow of its
-// scheduled gap, to the second.
+// isBunched reports whether a gap of h seconds between two vehicles is
+// bunched against a scheduled gap of scheduled seconds. The live map's
+// bunched alert judges by it too, so it and Analytics call the same gaps
+// bunched.
+func isBunched(h, scheduled int64) bool {
+	return float64(h) < bunchedBelow*float64(scheduled)
+}
+
+// bunched reports whether a gap judged is bunched, by isBunched to the
+// second.
 func (g stopGap) bunched() bool {
-	return float64(g.gap/time.Second) < bunchedBelow*float64(g.scheduled/time.Second)
+	return isBunched(int64(g.gap/time.Second), int64(g.scheduled/time.Second))
 }
 
 // long reports whether a gap judged is over longGapAbove of its scheduled
@@ -343,14 +351,13 @@ func (l runLeaving) order() time.Time {
 
 // directionStops gathers a direction's trips at the stops gaps are measured
 // at: those On time judges on any of them (the timepoints, or every stop when
-// the feed marks none) except a trip's last, where nobody boards. Every trip
-// that serves such a stop other than as its last counts there. A trip in
-// frequencies.txt adds its windows towards the scheduled gap and its runs to
-// the order. A timetabled trip adds its departure to the stop's timetable,
-// and its runs to the order only when that departure is part of the
-// timetable's frequent service, so the order holds the vehicles the
-// scheduled gap counts. runs and trails are by GTFS trip id, a trail for
-// each run; a trip whose runs are in no stop's order is not placed.
+// the feed marks none) except a trip's last, where nobody boards. Each stop's
+// scheduled gap comes from scheduleStops. A trip in frequencies.txt adds its
+// runs to the order. A timetabled trip adds its runs to the order only when
+// its departure is part of the timetable's frequent service, so the order
+// holds the vehicles the scheduled gap counts. runs and trails are by GTFS
+// trip id, a trail for each run; a trip whose runs are in no stop's order is
+// not placed.
 func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string][]TripSummary, trails map[string][][]LocationPoint, maxShapeDistance float64) map[stopKey]*stopService {
 	stops := make(map[stopKey]*stopService)
 	tripKeys := make([][]stopKey, len(trips))
@@ -363,24 +370,11 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 			}
 		}
 	}
-	departures := make(map[stopKey][]time.Time)
-	for j, trip := range trips {
-		rows := trip.Frequencies()
-		keys := tripKeys[j]
-		for i, key := range keys[:len(keys)-1] {
-			if _, ok := stops[key]; !ok {
-				continue
-			}
-			if trip.InFrequencies() {
-				stops[key].schedule.addTrip(rows, dayStart, trip.StopTimes[i].Departure-trip.StopTimes[0].Departure)
-			} else {
-				departures[key] = append(departures[key], dayStart.Add(trip.StopTimes[i].Departure))
-			}
-		}
+	schedules := make(map[stopKey]*stopSchedule, len(stops))
+	for key, stop := range stops {
+		schedules[key] = &stop.schedule
 	}
-	for key, times := range departures {
-		stops[key].schedule.setTimetable(times)
-	}
+	scheduleStops(schedules, trips, tripKeys, dayStart)
 	for j, trip := range trips {
 		keys := tripKeys[j]
 		// inOrder are the stops at which the trip's runs are in the order.

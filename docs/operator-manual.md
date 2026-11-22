@@ -503,7 +503,7 @@ on it.
   when the phone does not say) and a small tag with its route's short name. A
   vehicle that needs a look has an amber edge and is drawn on top: one that
   has gone quiet is grey, and one with an open alert (**Not moving**, **Off
-  route**, **Not started**) keeps its colour. Vehicles glide between updates,
+  route**, **Not started**, **Bunched**) keeps its colour. Vehicles glide between updates,
   and a ring leaves a vehicle when its new report arrives (only while 80 or
   fewer are on the map). With more than 60 vehicles, zoomed out, each vehicle
   that needs no look is a small dot; zoom in and they are markers again.
@@ -521,7 +521,9 @@ on it.
   (just the name on a trip run from the GTFS frequencies, which has no
   timetable), how far it is from its timetable where it is now
   (**Schedule**: **6:10 late**, **1:05 early**, or **On time** with the
-  difference beside it, by the same on-time window as **Analytics**), its
+  difference beside it, by the same on-time window as **Analytics**), for a
+  bunched vehicle how far behind the vehicle ahead it is running (**Gap**:
+  **1 min behind 12, every 10 min**), its
   driver, GTFS trip, speed and heading, with **Follow** (keep it in view),
   **Open trip** and **Vehicle**. **Schedule** is left out until the vehicle
   has left its first stop, while it is off its route, past its last stop, or
@@ -546,7 +548,7 @@ on it.
 
 ### Alerts
 
-**Alerts** lists the vehicles that need a look. There are four kinds:
+**Alerts** lists the vehicles that need a look. There are five kinds:
 
 - **Gone quiet**: the vehicle has sent no report for over 3 minutes. The phone
   may have lost signal or been switched off, or the app may have stopped. At 5
@@ -574,10 +576,25 @@ on it.
   is still due. Only a block a vehicle has run a trip on today is watched, so
   blocks nobody with the app is driving never show here, and neither does a
   feed whose trips have no `block_id`.
+- **Bunched**: the vehicle has been running under 25% of the scheduled gap
+  behind the vehicle ahead of it for 3 minutes: on a route every 10 minutes,
+  under 2.5 minutes behind. Riders at the stops ahead get two vehicles at once
+  and then a long wait. Only frequent service is checked, the same service
+  **Analytics** measures gaps on (see
+  [Gaps between vehicles](#gaps-between-vehicles)), with the same scheduled
+  gap: trips run from your GTFS frequencies, and a timetable every 12 minutes
+  or more often at the stop the vehicle is heading to. The vehicle ahead is
+  the nearest one on the same route, going the same way along the same shape
+  in your GTFS feed, that stops there too. The
+  alert goes on the vehicle behind, the one to hold back. A vehicle that has
+  not left its first stop, is heading to its last, is off its route or has
+  gone quiet is not checked, and a vehicle without the app is never the one
+  ahead.
 
 Each row names the vehicle, driver, route and GTFS trip, and says how long:
 **No report for 7 min**, **Under 50 m in 12 min**, **Over 60 m from its route
-for 6 min** or **Next on block 12, due 7 min ago**, and when the alert opened.
+for 6 min**, **Next on block 12, due 7 min ago** or **1 min behind 12, every
+10 min**, and when the alert opened.
 The longest-running alert is at the top. The buttons above the list each name
 a kind and how many alerts of it are open; pick one to show only those. A kind
 with none open says so, and **All** shows every alert again.
@@ -596,8 +613,14 @@ For a vehicle that has not started its next trip, the row shows the trip it
 should be on, with the vehicle and driver of the block's last trip. Call the
 driver. **Trip** opens all of that vehicle's trips, since none is running.
 
-An alert clears by itself when the vehicle reports again, moves on or comes
-back to its route, and when its trip ends. Once an alert clears it moves to
+For a bunched vehicle, the row names the vehicle ahead and how often the stop
+is served. Holding the vehicle at a stop for a minute or two lets the gap open
+up again, and the alert clears once it has. On a timetabled route the vehicle
+ahead may be the one running late: its card on **Live map** says so under
+**Schedule**.
+
+An alert clears by itself when the vehicle reports again, moves on, comes
+back to its route or drops back from the vehicle ahead, and when its trip ends. Once an alert clears it moves to
 **Cleared**, below the open ones, newest first, with when it was raised, when
 it cleared and how long it lasted. Pick a kind above that list to see only
 those, and **Next** for older ones. A position the phone is unsure of (a poor
@@ -608,8 +631,9 @@ Unless your server posts them to a chat channel (see
 [Alerts on your phone](#alerts-on-your-phone)), keep the page open during
 service. Your server
 administrator can change these times and the 60 m (`ALERT_QUIET_AFTER`,
-`ALERT_STOPPED_AFTER`, `ALERT_OFF_ROUTE_AFTER`, `ALERT_NOT_STARTED_AFTER` and
-`ALERT_OFF_ROUTE_DISTANCE`, see [`configuration.md`](configuration.md)). After
+`ALERT_STOPPED_AFTER`, `ALERT_OFF_ROUTE_AFTER`, `ALERT_NOT_STARTED_AFTER`,
+`ALERT_BUNCHED_AFTER` and `ALERT_OFF_ROUTE_DISTANCE`, see
+[`configuration.md`](configuration.md)). After
 the server restarts, a vehicle is counted as quiet from the restart.
 
 #### Alerts on your phone

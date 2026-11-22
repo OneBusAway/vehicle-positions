@@ -408,6 +408,8 @@ func alertText(event string, a alertEntry, vehicle, route, at string, settings a
 		return fmt.Sprintf("%s has gone quiet: no report since %s.", subject, at)
 	case alertOffRoute:
 		return fmt.Sprintf("%s is off route: over %.0f m from it since %s.", subject, settings.offRouteDistance, at)
+	case alertBunched:
+		return fmt.Sprintf("%s is bunched: %s, since %s.", subject, aheadWords(a.Ahead), at)
 	default:
 		return fmt.Sprintf("%s is not moving: under %.0f m since %s.", subject, stoppedRadius, at)
 	}
@@ -420,9 +422,20 @@ func alertPhrase(kind string) string {
 		return "gone quiet"
 	case alertOffRoute:
 		return "off route"
+	case alertBunched:
+		return "bunched"
 	default:
 		return "not moving"
 	}
+}
+
+// aheadWords says how far behind the vehicle ahead a bunched vehicle is
+// running, against how often the stop is served: "1 min behind Bus 12, every
+// 10 min". The Alerts page and the webhook both say it so.
+func aheadWords(a *alertAhead) string {
+	return fmt.Sprintf("%s behind %s, every %s",
+		humanizeDuration(time.Duration(a.SpacingS)*time.Second), cmp.Or(a.VehicleLabel, a.VehicleID),
+		humanizeDuration(time.Duration(a.ScheduledGapS)*time.Second))
 }
 
 // enqueue adds ev to the queue without waiting, so a slow receiver never holds
