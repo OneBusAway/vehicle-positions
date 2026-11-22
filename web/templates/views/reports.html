@@ -106,7 +106,7 @@
         {{end}}
       </tbody>
     </table></div>
-    <div class="card-foot">A gap is the time between two vehicles leaving a stop, at the stops On time would judge, and counts in the hour the later one left. It is bunched under {{.BunchedBelow}} of the scheduled gap and long over {{.LongAbove}}, and unknown when a vehicle with no report within {{$.FixWindow}} of the stop could have left between them. Extra wait is how much longer than scheduled a rider who turned up at random waited, on average. Trips run is the whole route's: a vehicle without the app reads as a long gap.</div>
+    <div class="card-foot">A gap is the time between two vehicles leaving a stop, at the stops On time would judge, and counts in the hour the later one left. It is bunched under {{.BunchedBelow}} of the scheduled gap and long over {{.LongAbove}}, and unknown when a vehicle with no report within {{$.FixWindow}} of the stop could have left between them. Extra wait is how much longer than scheduled a rider who turned up at random waited, on average. Trips run counts all of the route's trips, measured here or not: a vehicle without the app reads as a long gap.</div>
   </section>
   <section class="card" aria-labelledby="an-gap-hours">
     <div class="card-head"><h3 id="an-gap-hours" style="flex:1">Bunched and long gaps by hour of day</h3><span class="legend"><span><i class="seg-early"></i>Bunched</span><span><i class="seg-late"></i>Long</span></span></div>
