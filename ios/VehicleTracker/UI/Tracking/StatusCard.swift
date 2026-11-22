@@ -26,7 +26,7 @@ struct StatusCard: View {
                     .minimumScaleFactor(0.6)
                     .contentTransition(.numericText())
                     .animation(.smooth(duration: 0.25), value: card.answer)
-                (Text(card.label) + Text(verbatim: " ") + Text(card.emphasis).fontWeight(.semibold))
+                (Text(card.label) + Text(verbatim: " ") + Text(card.emphasis.bidiIsolated).fontWeight(.semibold))
                     .font(.title3)
                     .lineLimit(2)
                 Text(card.line2)

@@ -83,7 +83,7 @@ private struct AccountMenuButton: View {
                         Button(HelpText.title, systemImage: "questionmark.circle") { openHelp?() }
                     }
                 case .signOut:
-                    Button(AccountMenu.signOut, systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    Button(AccountMenu.signOut, systemImage: "rectangle.portrait.and.arrow.forward", role: .destructive) {
                         confirming = true
                     }
                     // A start from the car can be in flight while the phone

@@ -225,6 +225,11 @@ nonisolated enum PickerText {
         String(localized: "Direction", comment: "VoiceOver title of the direction switch over the run board.")
     }
 
+    /// A run on CarPlay's run list: its start time, then its headsign.
+    static func departure(_ time: String, _ headsign: String) -> String {
+        String(localized: "runs.departure", defaultValue: "\(time) → \(headsign)", comment: "CarPlay: a run on the run list: its start time in the agency's zone, then its headsign, e.g. '6:43 AM → Downtown Seattle'. The arrow points from the time to the headsign; turn it for a language written right to left.")
+    }
+
     /// Under the date: the first stop, then the last stop, of the direction shown.
     static func stops(_ first: String, _ last: String) -> String {
         String(localized: "\(first) → \(last)", comment: "Under the run board's date, and under a run in CarPlay: the direction's first stop, then its last stop, e.g. 'Northgate Station → Downtown Seattle'. The arrow points from the first to the last; turn it for a language written right to left.")

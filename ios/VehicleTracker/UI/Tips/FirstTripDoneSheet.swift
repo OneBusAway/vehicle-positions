@@ -65,11 +65,17 @@ struct FirstTripDoneSheet: View {
         var text = AttributedString(TipText.reportsSent(sent))
         text.font = .body
         text.foregroundColor = .secondary
-        if let number = text.range(of: String(sent)) {
+        if let number = Self.countRange(sent, in: text) {
             text[number].font = .system(size: countSize, weight: .semibold).monospacedDigit()
             text[number].foregroundColor = .accent
         }
         return text
+    }
+
+    /// Where the count stands in the sentence, in the digits the sentence
+    /// wrote it in: Egypt's Arabic writes 142 as ١٤٢ and Persian as ۱۴۲.
+    nonisolated static func countRange(_ count: Int, in text: AttributedString, locale: Locale = .current) -> Range<AttributedString.Index>? {
+        text.range(of: String(format: "%lld", locale: locale, count))
     }
 }
 

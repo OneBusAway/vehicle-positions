@@ -301,7 +301,7 @@ enum CarPlayTemplates {
             if trip.id == highlighted?.id {
                 detail = TripStatusText.pair(trip.startsAt <= now ? PickerText.now : PickerText.next, detail)
             }
-            let item = CPListItem(text: "\(Formatters.clock(trip.startsAt, timezone: page.timezone)) → \(trip.headsign)", detailText: detail)
+            let item = CPListItem(text: PickerText.departure(Formatters.clock(trip.startsAt, timezone: page.timezone), trip.headsign), detailText: detail)
             item.handler = { _, done in
                 onSelect(trip)
                 done()

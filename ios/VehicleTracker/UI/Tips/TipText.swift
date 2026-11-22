@@ -36,8 +36,8 @@ nonisolated enum TipText {
     }
 
     /// "142 reports sent". The sheet draws the number large.
-    static func reportsSent(_ count: Int) -> String {
-        String(localized: "\(count) reports sent", comment: "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large wherever it stands in the sentence.")
+    static func reportsSent(_ count: Int, locale: Locale = .current) -> String {
+        String(localized: "\(count) reports sent", locale: locale, comment: "First trip done: how many reports the trip sent, e.g. '142 reports sent'. The number is drawn large wherever it stands in the sentence.")
     }
 
     static var ridersCouldSeeYou: String {
