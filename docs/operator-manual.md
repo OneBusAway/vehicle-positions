@@ -826,7 +826,8 @@ vehicles](#gaps-between-vehicles)). A run whose phone sent nothing near the
 first stop left at a time **not known**, and one that ended before leaving it
 **did not leave**. When gaps are measured at none of the stops of a trip run
 from the GTFS frequencies, as when its only timepoint is its last stop, its
-runs are listed by when they started, each left at a time **not known**.
+runs are listed by when they started, each left at a time **not known**, or
+**did not leave** when it ended before leaving the trip's first stop.
 A trip run from the GTFS frequencies has no timetable, so
 it is listed only here: the card says how often it runs and how many of its
 runs ran, such as **every 10 min, 06:00 to 22:00: 41 of 96 runs**. A

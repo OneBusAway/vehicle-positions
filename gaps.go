@@ -73,7 +73,9 @@ type directionGaps struct {
 type runGaps struct {
 	id int64
 	// left is when the run left that stop, zero when that is not known or
-	// when it ended before leaving, which served false tells apart.
+	// when it ended before leaving, which served false tells apart. A run
+	// measured at no stop has no left, and served false when it ended before
+	// leaving its trip's first stop.
 	left   time.Time
 	served bool
 	// gap is nil when the run closed none there: its passing is not known,
@@ -243,14 +245,15 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 		}
 		// A trip in frequencies.txt none of whose stops is measured, as when
 		// its only timepoint is its last stop, is in no stop's order. Its runs
-		// are listed all the same, by when they started.
+		// are listed all the same, by when they started, and one that ended
+		// before leaving the trip's first stop as not served.
 		for _, trip := range group {
 			if !trip.InFrequencies() {
 				continue
 			}
-			for _, run := range runs[trip.ID] {
+			for k, run := range runs[trip.ID] {
 				if _, ok := listed[run.ID]; !ok {
-					listed[run.ID] = &runGaps{id: run.ID, served: true}
+					listed[run.ID] = &runGaps{id: run.ID, served: !endedBeforeLeaving(trip, run, trails[trip.ID][k], s.maxShapeDistance)}
 					order[run.ID] = run.StartTime
 				}
 			}
@@ -412,6 +415,21 @@ func directionStops(trips []*rider.TripInfo, dayStart time.Time, runs map[string
 		}
 	}
 	return stops
+}
+
+// endedBeforeLeaving reports whether run, of trip, ended before leaving the
+// trip's first stop, as runPassing tells a run that did not serve a stop: its
+// trail ends short of leaving it, and it ended within reportFixWindow of its
+// last fix. A trip whose shape was drawn through its stops is not placed, as
+// directionStops does not place it, so none of its runs is known to have.
+func endedBeforeLeaving(trip *rider.TripInfo, run TripSummary, trail []LocationPoint, maxShapeDistance float64) bool {
+	if trip.ShapeFromStops {
+		return false
+	}
+	// open only bounds when a run that served the stop could have left it,
+	// so it does not change whether the run served it.
+	_, served := runPassing(placeFixes(trip, trail, maxShapeDistance), leftStopAt(trip, 0), run, 0)
+	return !served
 }
 
 // frequentTimetable reports whether any of a direction's stops has a
