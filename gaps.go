@@ -57,10 +57,11 @@ type directionGaps struct {
 	hours  []gapHourTotals
 	ratios [gapRatioTop + 1]int
 	// trips are the GTFS trips of the direction, and runs the runs measured
-	// in it, in the order they left the first stop each is measured at, the
-	// earlier id first of two at once. A run whose passing there is not known
-	// is in the order by the earliest it could have left, and one that ended
-	// before leaving it by when it started.
+	// in it and every other run of its trips in frequencies.txt, in the order
+	// they left the first stop each is measured at, the earlier id first of
+	// two at once. A run whose passing there is not known is in the order by
+	// the earliest it could have left, and one that ended before leaving it,
+	// or that is measured at no stop, by when it started.
 	trips []string
 	runs  []runGaps
 }
@@ -220,16 +221,30 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 		var total gapCounts
 		hours := make(map[int]*gapHourTotals)
 		scheduled := make(map[time.Duration]int)
-		runs := make(map[int64]*runGaps)
+		listed := make(map[int64]*runGaps)
 		// first is the stop each run is measured at first, and order when it
 		// left there, as the runs are listed.
 		first := make(map[int64]stopKey)
 		order := make(map[int64]time.Time)
 		for key, stop := range stops {
 			for _, l := range stop.leaving {
-				runs[l.run.ID] = &runGaps{id: l.run.ID, left: l.passing.at, served: l.served}
+				listed[l.run.ID] = &runGaps{id: l.run.ID, left: l.passing.at, served: l.served}
 				first[l.run.ID] = key
 				order[l.run.ID] = l.order()
+			}
+		}
+		// A trip in frequencies.txt none of whose stops is measured, as when
+		// its only timepoint is its last stop, is in no stop's order. Its runs
+		// are listed all the same, by when they started.
+		for _, trip := range group {
+			if !trip.InFrequencies() {
+				continue
+			}
+			for _, run := range runs[trip.ID] {
+				if _, ok := listed[run.ID]; !ok {
+					listed[run.ID] = &runGaps{id: run.ID, served: true}
+					order[run.ID] = run.StartTime
+				}
 			}
 		}
 		for key, stop := range stops {
@@ -242,7 +257,7 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 				}
 				h.add(g)
 				total.add(g)
-				run := runs[g.run]
+				run := listed[g.run]
 				if !g.unknown {
 					d.ratios[gapRatioTenth(g)]++
 					scheduled[g.scheduled]++
@@ -260,8 +275,8 @@ func routeGaps(rep *serviceReport, trips []*rider.TripInfo, dayStart time.Time, 
 		for _, trip := range group {
 			d.trips = append(d.trips, trip.ID)
 		}
-		d.runs = make([]runGaps, 0, len(runs))
-		for _, run := range runs {
+		d.runs = make([]runGaps, 0, len(listed))
+		for _, run := range listed {
 			d.runs = append(d.runs, *run)
 		}
 		slices.SortFunc(d.runs, func(a, b runGaps) int {

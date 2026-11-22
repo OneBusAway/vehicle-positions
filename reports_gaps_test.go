@@ -24,16 +24,23 @@ import (
 // north at 07:35.
 func gapFixtureIndex(t *testing.T) *rider.Index {
 	t.Helper()
+	return gapFixtureIndexEdited(t, nil)
+}
+
+// gapFixtureIndexEdited is gapFixtureIndex with each member of its feed then
+// passed through edit when it is set.
+func gapFixtureIndexEdited(t *testing.T, edit func(name string, body []byte) []byte) *rider.Index {
+	t.Helper()
 	zip := reportFixtureZip(t, func(name string, body []byte) []byte {
 		switch name {
 		case "routes.txt":
-			return append(body, "R5,A,5,Every ten,3,5,,\n"...)
+			body = append(body, "R5,A,5,Every ten,3,5,,\n"...)
 		case "shapes.txt":
-			return append(body, "S1R,47.609000,-122.330000,1,0.000000\nS1R,47.604500,-122.330000,2,501.000000\nS1R,47.600000,-122.330000,3,1001.000000\n"...)
+			body = append(body, "S1R,47.609000,-122.330000,1,0.000000\nS1R,47.604500,-122.330000,2,501.000000\nS1R,47.600000,-122.330000,3,1001.000000\n"...)
 		case "trips.txt":
-			return append(body, "R5,WEEKDAY,GN,S1,North,0\nR5,WEEKDAY,GT,S1,North,0\nR5,WEEKDAY,GS,S1R,South,1\nR5,WEEKDAY,GX,S1,North,0\n"...)
+			body = append(body, "R5,WEEKDAY,GN,S1,North,0\nR5,WEEKDAY,GT,S1,North,0\nR5,WEEKDAY,GS,S1R,South,1\nR5,WEEKDAY,GX,S1,North,0\n"...)
 		case "stop_times.txt":
-			return append(body, strings.Join([]string{
+			body = append(body, strings.Join([]string{
 				"GN,06:00:00,06:00:00,ST1,1,0.000000",
 				"GN,06:05:00,06:05:00,ST2,2,500.000000",
 				"GN,06:10:00,06:10:00,ST3,3,1001.000000",
@@ -46,6 +53,9 @@ func gapFixtureIndex(t *testing.T) *rider.Index {
 				"GX,07:40:00,07:40:00,ST2,2,500.000000",
 				"GX,07:45:00,07:45:00,ST3,3,1001.000000",
 			}, "\n")+"\n"...)
+		}
+		if edit != nil {
+			return edit(name, body)
 		}
 		return body
 	}, fixtureMember{"frequencies.txt", "trip_id,start_time,end_time,headway_secs,exact_times\n" +
