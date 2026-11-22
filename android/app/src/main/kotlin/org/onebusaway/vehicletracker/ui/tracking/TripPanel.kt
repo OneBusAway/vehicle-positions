@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.OccupancyStatus
 import org.onebusaway.vehicletracker.engine.TripGeometry
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.map.MARKER_INK
 import org.onebusaway.vehicletracker.ui.map.NEXT_STOP_FILL
 import org.onebusaway.vehicletracker.ui.map.STOP_FILL
@@ -141,7 +142,7 @@ internal fun TripPanel(
                 FactRow(
                     icon = R.drawable.ic_directions_bus,
                     label = stringResource(R.string.tracking_fact_run),
-                    value = state.activeTrip?.vehicleId?.let { stringResource(R.string.tracking_fact_run_vehicle, startsAt, it) } ?: startsAt,
+                    value = state.activeTrip?.vehicleId?.let { stringResource(R.string.tracking_fact_run_vehicle, startsAt, isolated(it)) } ?: startsAt,
                 )
             }
             FactRow(

@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Persian (Iran), a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    "Vehicle" is خودرو, the general word, for whatever the agency runs; "run" is سرویس (a timetabled departure,
+    as in سرویس ساعت ۶:۴۳); "trip" is سفر; "report" is گزارش; "dispatcher" is مرکز کنترل; "block" is بلوک;
+    "agency" is شرکت; "route" is مسیر; "stop" is ایستگاه; "schedule" is برنامه زمانی; "sign in" is ورود and
+    "sign out" خروج از حساب; "diagnostics" is اطلاعات عیب‌یابی. The address is the polite شما. A noun after a
+    number stays singular, as Persian has it. Placeholders get no direction marks: the app wraps names and numbers.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">ورود</string>
+    <string name="login_subtitle">از حساب راننده خود در این شرکت استفاده کنید.</string>
+    <string name="login_server_url_label">آدرس سرور</string>
+    <string name="login_email_label">ایمیل</string>
+    <string name="login_password_label">رمز عبور</string>
+    <string name="login_show_password">نمایش رمز عبور</string>
+    <string name="login_hide_password">پنهان کردن رمز عبور</string>
+    <string name="login_server">سرور</string>
+    <string name="login_change_server">تغییر</string>
+    <string name="login_button">ورود</string>
+    <string name="login_signing_in">در حال ورود</string>
+    <string name="login_error_missing_server">آدرس سرور را وارد کنید</string>
+    <string name="login_error_missing_email">ایمیل خود را وارد کنید</string>
+    <string name="login_error_missing_password">رمز عبور خود را وارد کنید</string>
+    <string name="login_error_invalid_credentials">ایمیل یا رمز عبور اشتباه است. دوباره تلاش کنید.</string>
+    <string name="login_error_invalid_address">آدرسی مثل https://tracker.example.org وارد کنید</string>
+    <string name="login_error_https_required">از آدرسی با https:// استفاده کنید</string>
+    <string name="login_error_check_address">آدرس را بررسی کنید</string>
+    <string name="login_error_unreachable">%1$s در دسترس نیست. اتصال اینترنت یا آدرس سرور را بررسی کنید.</string>
+    <string name="login_error_not_tracker">به نظر نمی‌رسد %1$s سرور ردیاب باشد.</string>
+    <string name="login_error_too_many_tries">تعداد تلاش‌ها زیاد بود. یک دقیقه صبر کنید و دوباره تلاش کنید.</string>
+    <string name="login_error_server">ورود انجام نشد. دوباره تلاش کنید.</string>
+    <string name="login_again_title">دوباره وارد شوید</string>
+    <string name="login_again_subtitle">به‌عنوان %1$s</string>
+    <string name="login_again_button">ورود و ادامه گزارش‌دهی</string>
+    <string name="login_trip_open_title">سفر شما هنوز باز است</string>
+    <string name="login_trip_open_message">وقتی از حساب خارج شدید، گزارش‌ها متوقف شدند. برای ادامه گزارش‌دهی در مسیر %1$s وارد شوید.</string>
+    <string name="login_server_managed">شرکت شما آن را تنظیم کرده است.</string>
+    <string name="login_server_managed_invalid">تنظیم سرور شرکت شما آدرس معتبری نیست، پس آن را اینجا وارد کنید.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">از %1$s استفاده شود؟</string>
+    <string name="server_setup_confirm_message">فقط اگر شرکت شما این لینک را برایتان فرستاده، ادامه دهید.</string>
+    <string name="server_setup_use">استفاده از این سرور</string>
+    <string name="server_setup_cancel">لغو</string>
+    <string name="server_setup_refused_signed_in">این گوشی در سرور %1$s وارد شده است. از لینک استفاده نشد.</string>
+    <string name="server_setup_refused_trip_open">یک سفر در این گوشی باز است. از لینک استفاده نشد.</string>
+    <string name="server_setup_refused_managed">سرور این گوشی را شرکت شما تنظیم می‌کند.</string>
+    <string name="server_setup_invalid">این لینک آدرس سروری ندارد که برنامه بتواند از آن استفاده کند.</string>
+    <string name="server_setup_ok">تأیید</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">آدرس سرور</string>
+    <string name="restriction_server_url_description">سرور ردیاب شرکت، با آدرس https://. رانندگان در آن وارد می‌شوند و نمی‌توانند آن را تغییر دهند.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">رد شدن</string>
+    <string name="welcome_next">بعدی</string>
+    <string name="welcome_continue">ادامه</string>
+    <string name="welcome_step">مرحله %1$d از %2$d</string>
+    <string name="welcome_riders_title">مسافران آمدن شما را می‌بینند</string>
+    <string name="welcome_riders_body">سفر را شروع کنید تا مسافران خودروی شما را روی نقشه‌شان ببینند. وقتی کارتان تمام شد، سفر را پایان دهید.</string>
+    <string name="welcome_riders_picture">سه مسافر در ایستگاه می‌بینند که خودروی شما دارد می‌آید.</string>
+    <string name="welcome_pieces_title">خودرو، مسیر، سرویس</string>
+    <string name="welcome_pieces_body">این‌ها را انتخاب کنید، بعد برای شروع روی سرویس خود بزنید. وقتی کارتان تمام شد، سفر را پایان دهید.</string>
+    <string name="welcome_pieces_vehicle_hint">شماره روی خودرو</string>
+    <string name="welcome_pieces_route_hint">شماره روی تابلو</string>
+    <string name="welcome_pieces_run_hint">با یک ضربه، سفر شروع می‌شود</string>
+    <string name="welcome_pieces_live">مسافران شما را می‌بینند</string>
+    <string name="welcome_pieces_finish">وقتی کارتان تمام شد</string>
+    <string name="welcome_habits_title">گزارش‌دهی را فعال نگه دارید</string>
+    <string name="welcome_habits_body">در هر سفر این ۳ کار را انجام دهید.</string>
+    <string name="welcome_habits_location">دسترسی به مکان را همیشه مجاز کنید</string>
+    <string name="welcome_habits_location_why">تا گزارش‌دهی بتواند خودکار دوباره شروع شود</string>
+    <string name="welcome_habits_charge">گوشی را به شارژر وصل نگه دارید</string>
+    <string name="welcome_habits_charge_why">هنگام شارژ، صفحه روشن می‌ماند</string>
+    <string name="welcome_habits_open">برنامه را باز بگذارید</string>
+    <string name="welcome_habits_open_why">در طول سفر آن را با کشیدن انگشت نبندید</string>
+    <string name="welcome_habits_if_stops">اگر گزارش‌دهی متوقف شد</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">روی سرویس خود بزنید</string>
+    <string name="tip_run_board_text">بعد روی «%1$s» بزنید. از آن به بعد مسافران خودروی شما را می‌بینند.</string>
+    <string name="tip_sent_count_title">گزارش‌های ارسال‌شده</string>
+    <string name="tip_sent_count_text">تا وقتی مسافران شما را می‌بینند، این عدد بالا می‌رود. آنتن ندارید؟ به رانندگی ادامه دهید. گزارش‌ها ذخیره می‌شوند و بعداً ارسال می‌شوند.</string>
+    <string name="tip_got_it">متوجه شدم</string>
+    <string name="first_trip_done_title">اولین سفر انجام شد</string>
+    <!-- The count is shown beside these words in large digits, so they need none of their own; Persian's "one" is 0 and 1, and both read right. -->
+    <plurals name="first_trip_done_reports" tools:ignore="ImpliedQuantity">
+        <item quantity="one">گزارش ارسال شد</item>
+        <item quantity="other">گزارش ارسال شد</item>
+    </plurals>
+    <string name="first_trip_done_text">مسافران خودروی شما را می‌دیدند.</string>
+    <string name="first_trip_done_ok">تأیید</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">زبان: %1$s</string>
+    <string name="language_row_phone_note">برای کل گوشی، در تنظیمات آن تعیین می‌شود</string>
+    <string name="language_list_title">زبان</string>
+    <string name="language_list_cancel">لغو</string>
+
+    <!-- Help -->
+    <string name="help_title">راهنما</string>
+    <string name="help_welcome_again">دیدن دوباره خوش‌آمدگویی</string>
+    <string name="help_welcome_again_detail">۳ صفحه کوتاه</string>
+    <string name="help_section_status">روی کارت وضعیت</string>
+    <string name="help_status_on_time">طبق برنامه زمانی حرکت می‌کنید.</string>
+    <string name="help_status_late">عقب‌تر از برنامه زمانی.</string>
+    <string name="help_status_early">جلوتر از برنامه زمانی. ممکن است مسافران جا بمانند.</string>
+    <string name="help_status_off_schedule">خیلی دور از برنامه زمانی. بررسی کنید سرویس درست را انتخاب کرده باشید.</string>
+    <string name="help_status_off_route">خارج از مسیر روی نقشه.</string>
+    <string name="help_status_waiting_for_gps">گوشی دارد موقعیتش را پیدا می‌کند.</string>
+    <string name="help_status_no_schedule">این سرویس زمان‌بندی ندارد. مسافران باز هم شما را می‌بینند.</string>
+    <string name="help_waiting">بدون اتصال ذخیره شده‌اند. وقتی اتصال برگردد، ارسال می‌شوند.</string>
+    <string name="help_waiting_never">هنگام ورود دیگری ذخیره شده‌اند، برای همین با این ورود ارسال نمی‌شوند.</string>
+    <string name="help_section_problems">زیر کارت، و در اعلان‌ها</string>
+    <string name="help_problem_no_network">به رانندگی ادامه دهید. گزارش‌ها ذخیره می‌شوند و بعداً ارسال می‌شوند.</string>
+    <string name="help_problem_no_gps">تا برگشتن آن، مسافران آخرین موقعیت شما را می‌بینند.</string>
+    <string name="help_problem_clock_skew">در تنظیمات گوشی، زمان خودکار را روشن کنید.</string>
+    <string name="help_problem_reports_refused">سرور گزارش‌های این خودرو را نمی‌پذیرد. از مرکز کنترل بپرسید.</string>
+    <string name="help_problem_signed_out">گزارش‌ها متوقف شده‌اند. برای ادامه وارد شوید. سفر شما هنوز باز است.</string>
+    <string name="help_problem_reports_paused">یک اعلان. برای ادامه گزارش‌دهی، برنامه را باز کنید.</string>
+    <string name="help_section_about">درباره برنامه</string>
+    <string name="help_version">نسخه</string>
+    <string name="help_server">سرور</string>
+    <string name="help_share">اشتراک‌گذاری اطلاعات عیب‌یابی</string>
+    <string name="help_share_detail">نسخه برنامه، مدل گوشی، سرور، مجوزهای برنامه و مشکلات اخیرش را می‌فرستد؛ این مشکلات فقط تا وقتی برنامه در حال اجراست نگه داشته می‌شوند. هیچ موقعیت، اطلاعات ورود یا ایمیلی فرستاده نمی‌شود.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">بازگشت</string>
+    <string name="setup_trip_so_far">سفر تا اینجا</string>
+    <string name="setup_bus">خودرو</string>
+    <string name="setup_route">مسیر %1$s</string>
+    <string name="setup_step_route">مسیر</string>
+    <string name="setup_step_run">سرویس</string>
+    <string name="setup_clear_search">پاک کردن جستجو</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">حساب</string>
+    <string name="account_version">نسخه %1$s</string>
+    <string name="account_sign_out">خروج از حساب</string>
+    <string name="account_sign_out_title">از حساب خارج می‌شوید؟</string>
+    <string name="account_sign_out_message">راننده بعدی می‌تواند با این گوشی وارد شود.</string>
+    <string name="account_sign_out_cancel">لغو</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">خودروی خود را انتخاب کنید</string>
+    <string name="vehicles_empty">هیچ خودرویی به شما اختصاص داده نشده است</string>
+    <string name="vehicles_empty_detail">از مرکز کنترل بخواهید یک خودرو به شما اختصاص دهد، بعد دوباره بررسی کنید.</string>
+    <string name="vehicles_check_again">بررسی دوباره</string>
+    <string name="vehicles_error_message">بارگیری خودروهای شما انجام نشد</string>
+    <string name="vehicles_error_detail">اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.</string>
+    <string name="vehicles_retry_button">تلاش مجدد</string>
+    <string name="vehicles_search_label">شماره خودرو</string>
+    <string name="vehicles_search_no_matches">هیچ خودرویی با %1$s پیدا نشد</string>
+    <string name="vehicles_search_no_matches_detail">شماره ناوگان را روی خودرو بررسی کنید.</string>
+    <string name="vehicles_section_favorites">موارد دلخواه</string>
+    <string name="vehicles_section_recent">اخیر</string>
+    <string name="vehicles_section_all">همه خودروها</string>
+    <string name="vehicles_section_matches">نتایج</string>
+    <string name="vehicles_tile_favorite">دلخواه</string>
+    <string name="vehicles_favorite_description">افزودن %1$s به موارد دلخواه</string>
+    <string name="vehicles_unfavorite_description">حذف %1$s از موارد دلخواه</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">یک مسیر انتخاب کنید</string>
+    <string name="routes_search_label">شماره یا نام مسیر</string>
+    <string name="routes_section_recent">اخیر</string>
+    <string name="routes_section_all">همه مسیرها</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="one">همه مسیرها · %1$d</item>
+        <item quantity="other">همه مسیرها · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">نتایج</string>
+    <string name="routes_search_no_matches">هیچ مسیری با %1$s پیدا نشد</string>
+    <string name="routes_search_no_matches_detail">با شماره روی تابلو، یا بخشی از نام جستجو کنید.</string>
+    <string name="routes_empty">برنامه زمانی هیچ مسیری ندارد</string>
+    <string name="routes_empty_detail">از مدیر سیستم شرکت خود بخواهید برنامه زمانی را بررسی کند.</string>
+    <string name="routes_check_again">بررسی دوباره</string>
+    <string name="routes_error_message">بارگیری مسیرها انجام نشد</string>
+    <string name="routes_error_detail">اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.</string>
+    <string name="routes_no_schedule">هنوز هیچ برنامه زمانی روی این سرور نیست</string>
+    <string name="routes_no_schedule_detail">قبل از شروع سفرها، یک اپراتور باید آن را بارگذاری کند. به مدیر سیستم شرکت خود خبر دهید.</string>
+    <string name="routes_retry_button">تلاش مجدد</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">یک سرویس انتخاب کنید</string>
+    <string name="runs_empty">امروز در مسیر %1$s سرویسی نیست</string>
+    <string name="runs_empty_unnamed">امروز در این مسیر سرویسی نیست</string>
+    <string name="runs_empty_detail">مسیر دیگری انتخاب کنید، یا فردا دوباره بررسی کنید.</string>
+    <string name="runs_choose_another_route">انتخاب مسیر دیگر</string>
+    <string name="runs_badge_now">الان</string>
+    <string name="runs_badge_next">بعدی</string>
+    <string name="runs_direction">به سمت %1$s</string>
+    <string name="runs_row_stops">%1$s ← %2$s</string>
+    <string name="runs_row_run">سرویس %1$s</string>
+    <string name="runs_row_block">بلوک %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">در حال شروع…</string>
+    <string name="runs_start_title">سرویس ساعت %1$s شروع شود؟</string>
+    <string name="runs_start_message">مسیر %1$s به سمت %2$s، با خودروی %3$s.</string>
+    <string name="runs_start_message_no_headsign">مسیر %1$s، با خودروی %2$s.</string>
+    <string name="runs_start_message_unnamed">به سمت %1$s، با خودروی %2$s.</string>
+    <string name="runs_start_message_vehicle">با خودروی %1$s.</string>
+    <string name="runs_start_confirm">شروع سفر</string>
+    <string name="runs_start_cancel">لغو</string>
+    <string name="runs_error_message">بارگیری سرویس‌ها انجام نشد</string>
+    <string name="runs_error_detail">اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.</string>
+    <string name="runs_retry_button">تلاش مجدد</string>
+    <string name="runs_error_not_assigned">خودروی %1$s به شما اختصاص داده نشده است.</string>
+    <string name="runs_change_bus">تغییر خودرو</string>
+    <string name="runs_error_trip_active">شما یک سفر در جریان دارید. قبل از شروع سفر دیگر، آن را پایان دهید.</string>
+    <string name="runs_error_vehicle_busy">راننده دیگری با خودروی %1$s در سفر است. خودروی دیگری انتخاب کنید یا از مرکز کنترل بپرسید.</string>
+    <string name="runs_error_vehicle_inactive">خودروی %1$s غیرفعال است. خودروی دیگری انتخاب کنید.</string>
+    <string name="runs_error_previous_trip_not_ended">سفر قبلی شما هنوز پایان نیافته است. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.</string>
+    <string name="runs_error_network">سرور در دسترس نیست. اتصال اینترنت را بررسی کنید.</string>
+    <string name="runs_error_no_geometry">این سرویس مسیر یا ایستگاهی برای دنبال کردن ندارد. سرویس دیگری انتخاب کنید.</string>
+    <string name="runs_error_trip_not_active">برنامه زمانی وارد روز جدید شده است.</string>
+    <string name="runs_reload_button">بارگیری دوباره</string>
+    <string name="runs_error_other">سفر شروع نشد.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="one">%1$d ارسال‌شده</item>
+        <item quantity="other">%1$d ارسال‌شده</item>
+    </plurals>
+    <string name="tracking_bar_click_label">نمایش جزئیات سفر</string>
+    <string name="tracking_end_trip_button">پایان سفر</string>
+    <string name="tracking_end_trip_ending">در حال پایان…</string>
+    <string name="tracking_occupancy_question">خودرو چقدر پر است؟</string>
+    <string name="tracking_occupancy_many_seats">صندلی خالی</string>
+    <string name="tracking_occupancy_few_seats">صندلی کم</string>
+    <string name="tracking_occupancy_standing">ایستاده</string>
+    <string name="tracking_occupancy_full">پر</string>
+    <string name="tracking_occupancy_clear">پاک کردن</string>
+    <string name="tracking_fact_run">سرویس</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">گزارش‌ها</string>
+    <string name="tracking_reports_reporting">در حال ارسال</string>
+    <string name="tracking_reports_not_reporting">ارسال نمی‌شود</string>
+    <string name="tracking_reports_no_gps">بدون GPS</string>
+    <string name="tracking_reports_stopped">گزارش‌ها متوقف شدند</string>
+    <string name="tracking_fact_street_map">نقشه خیابان‌ها</string>
+    <string name="tracking_street_map_ready">آماده</string>
+    <string name="tracking_street_map_downloading">در حال دانلود · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">هنوز دانلود نشده</string>
+    <string name="tracking_street_map_no_space">فضای کافی نیست</string>
+    <string name="tracking_street_map_unusable">قابل استفاده نیست</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="one">%1$d ایستگاه رد شده</item>
+        <item quantity="other">%1$d ایستگاه رد شده</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">باز</string>
+    <string name="tracking_stops_passed_collapsed">بسته</string>
+    <string name="tracking_end_trip_dialog_title">این سفر پایان یابد؟</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="one">گزارش‌ها متوقف می‌شوند و سرویس ساعت %2$s مسیر %1$s تمام‌شده ثبت می‌شود. %3$d گزارش ارسال شد.</item>
+        <item quantity="other">گزارش‌ها متوقف می‌شوند و سرویس ساعت %2$s مسیر %1$s تمام‌شده ثبت می‌شود. %3$d گزارش ارسال شد.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="one">گزارش‌ها متوقف می‌شوند و این سرویس تمام‌شده ثبت می‌شود. %1$d گزارش ارسال شد.</item>
+        <item quantity="other">گزارش‌ها متوقف می‌شوند و این سرویس تمام‌شده ثبت می‌شود. %1$d گزارش ارسال شد.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">پایان سفر</string>
+    <string name="tracking_end_trip_dialog_cancel">ادامه می‌دهم</string>
+    <string name="tracking_end_trip_error_title">سفر هنوز پایان نیافته</string>
+    <string name="tracking_end_trip_error_message">سرور پایان سفر را تأیید نکرد. آنتن گوشی را بررسی کنید و دوباره تلاش کنید، یا همین حالا ارسال گزارش را در این گوشی متوقف کنید.</string>
+    <string name="tracking_end_trip_error_retry">تلاش مجدد</string>
+    <string name="tracking_end_trip_error_end_locally">پایان در این گوشی</string>
+    <string name="tracking_reauth_button">ورود</string>
+    <string name="tracking_problem_no_network">اینترنت قطع است</string>
+    <string name="tracking_problem_no_network_detail">مسافران شما را نمی‌بینند</string>
+    <string name="tracking_problem_no_gps">سیگنال GPS نیست</string>
+    <string name="tracking_problem_no_gps_detail">موقعیت به‌روز نمی‌شود</string>
+    <string name="tracking_problem_clock_skew">ساعت گوشی اشتباه است</string>
+    <string name="tracking_problem_clock_skew_detail">زمان خودکار را روشن کنید</string>
+    <string name="tracking_problem_reports_refused">گزارش‌ها پذیرفته نمی‌شوند</string>
+    <string name="tracking_problem_reports_refused_detail">از مرکز کنترل بپرسید</string>
+    <plurals name="tracking_waiting">
+        <item quantity="one">%1$,d گزارش در انتظار اتصال</item>
+        <item quantity="other">%1$,d گزارش در انتظار اتصال</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="one">%1$,d گزارش ارسال نمی‌شود</item>
+        <item quantity="other">%1$,d گزارش ارسال نمی‌شود</item>
+    </plurals>
+    <string name="tracking_signed_out_title">از حساب خارج شدید</string>
+    <string name="tracking_signed_out_message">گزارش‌ها متوقف شده‌اند. سفر شما هنوز باز است.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">به‌موقع</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="one">%1$d دقیقه تأخیر</item>
+        <item quantity="other">%1$d دقیقه تأخیر</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="one">%1$d دقیقه زودتر</item>
+        <item quantity="other">%1$d دقیقه زودتر</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">خارج از برنامه</string>
+    <string name="tracking_adherence_right_run">این سرویس درست است؟</string>
+    <string name="tracking_adherence_off_schedule_next">بعدی: %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">خارج از مسیر · %1$s</string>
+    <string name="tracking_adherence_off_route_short">خارج از مسیر</string>
+    <string name="tracking_adherence_next_stop">بعدی</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d متر</string>
+    <string name="tracking_adherence_distance_km">%1$.1f کیلومتر</string>
+    <string name="tracking_adherence_waiting_for_gps">در انتظار GPS</string>
+    <string name="tracking_adherence_from">مبدأ</string>
+    <string name="tracking_adherence_run">سرویس ساعت %1$s</string>
+    <string name="tracking_adherence_run_vehicle">سرویس ساعت %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">بدون برنامه زمانی</string>
+    <string name="tracking_adherence_no_schedule_riders">مسافران باز هم شما را می‌بینند</string>
+    <string name="tracking_adherence_no_schedule_detail">این سرویس زمان‌بندی ندارد</string>
+    <string name="tracking_map_recenter">بازگشت به خودرو</string>
+    <string name="tracking_map_downloading">در حال دانلود نقشه، %1$d%%</string>
+    <string name="tracking_map_no_space">فضای کافی برای نقشه نیست</string>
+    <string name="tracking_map_retrying">نقشه هنوز دانلود نشده، دوباره تلاش می‌شود</string>
+    <string name="tracking_map_retry_on_open">نقشه دانلود نشد، دفعه بعد که برنامه باز شود دوباره تلاش می‌شود</string>
+    <string name="tracking_map_unusable">فایل نقشه قابل استفاده نیست، به شرکت خود خبر دهید</string>
+    <string name="tracking_map_needs_https">لینک نقشه باید https باشد، به شرکت خود خبر دهید</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">سفر را ادامه می‌دهید؟</string>
+    <string name="resume_message">برنامه وسط این سفر بسته شد. تا وقتی انتخاب نکنید، گزارش‌ها متوقف می‌مانند.</string>
+    <string name="resume_route">مسیر %1$s</string>
+    <string name="resume_run">سرویس ساعت %1$s</string>
+    <string name="resume_bus">خودروی %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="one">%1$d دقیقه پیش، ساعت %2$s شروع شد</item>
+        <item quantity="other">%1$d دقیقه پیش، ساعت %2$s شروع شد</item>
+    </plurals>
+    <string name="resume_started_hours_ago">%1$d ساعت و %2$d دقیقه پیش، ساعت %3$s شروع شد</string>
+    <string name="resume_button">ادامه سفر</string>
+    <string name="resume_end_trip_button">پایان سفر</string>
+    <string name="resume_ending">در حال پایان سفر</string>
+    <string name="resume_loading">در حال بارگیری سفر شما</string>
+    <string name="resume_end_failed">سرور پایان سفر را تأیید نکرد. دوباره تلاش کنید، یا آن را فقط در این گوشی پایان دهید.</string>
+    <string name="resume_end_failed_back">سفر را پایان ندهید</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">گزارش‌دهی سفر</string>
+    <string name="tracking_notification_title">مسیر %1$s · %2$s</string>
+    <string name="tracking_notification_next">بعدی: %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">از حساب خارج شدید. برای ورود، برنامه را باز کنید.</string>
+    <string name="tracking_notification_reports_refused">گزارش‌ها پذیرفته نمی‌شوند. از مرکز کنترل بپرسید.</string>
+    <string name="tracking_notification_resume_title">گزارش‌دهی موقتاً متوقف شد</string>
+    <string name="tracking_notification_resume_text">برای ادامه گزارش‌دهی، برنامه را باز کنید.</string>
+    <string name="tracking_notification_attention_channel_name">سفر به شما نیاز دارد</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">قبل از شروع</string>
+    <string name="preflight_message">برنامه برای گزارش‌دهی خودروی %1$s به این‌ها نیاز دارد. Android در ادامه درباره هر کدام می‌پرسد.</string>
+    <string name="preflight_location">مکان</string>
+    <string name="preflight_location_why">تا برنامه بداند خودرو کجاست</string>
+    <string name="preflight_precise">مکان دقیق</string>
+    <string name="preflight_precise_why">تا مسافران خودرو را در ایستگاه درست ببینند</string>
+    <string name="preflight_background">همیشه</string>
+    <string name="preflight_background_why">تا اگر Android برنامه را بست، گزارش‌دهی بتواند خودکار دوباره شروع شود</string>
+    <string name="preflight_notifications">اعلان‌ها</string>
+    <string name="preflight_notifications_why">تا ببینید گزارش‌دهی روشن است</string>
+    <string name="preflight_battery">باتری</string>
+    <string name="preflight_battery_why">تا Android وسط سفر گزارش‌ها را متوقف نکند</string>
+    <string name="preflight_location_services">خدمات مکان</string>
+    <string name="preflight_location_services_why">مکان باید برای کل گوشی روشن باشد</string>
+    <string name="preflight_allowed">مجاز</string>
+    <string name="preflight_skipped">رد شد</string>
+    <string name="preflight_next">بعدی</string>
+    <string name="preflight_row_state">%1$s، %2$s</string>
+    <string name="preflight_skipped_why">اجازه داده نشد. گزارش‌دهی باز هم کار می‌کند.</string>
+    <string name="preflight_location_needed">برای گزارش‌دهی، مکان لازم است</string>
+    <string name="preflight_approximate">فقط مکان تقریبی مجاز شد</string>
+    <string name="preflight_try_again">تلاش مجدد</string>
+    <string name="preflight_open_settings">باز کردن تنظیمات</string>
+    <string name="preflight_continue">ادامه</string>
+</resources>

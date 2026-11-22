@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Arabic, a draft not yet read by a fluent reviewer (#495). The notes on each string are in values/strings.xml.
+    Modern Standard Arabic as phone apps write it: the driver is addressed with the masculine imperative (اختر، انقر)
+    and buttons use the verbal noun, as Arabic Android does (تسجيل الدخول، إعادة المحاولة، إلغاء، التالي).
+    "Vehicle" is مركبة, never a word for bus; "route" is خط; "run" is دورة; "trip" is رحلة; "stop" is محطة;
+    "block" is بلوك (a loan word, to check with drivers); "report" is تقرير, and "reporting" is الإرسال;
+    "dispatcher" is غرفة العمليات; "agency" is جهة العمل; "riders" is الركاب; the timetable is الجدول.
+    "min" and "h" are د and س; the literal 3s are written ٣.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The app's name, which stays as it is in every language (glossary). -->
+    <string name="app_name">Vehicle Tracker</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">تسجيل الدخول</string>
+    <string name="login_subtitle">استخدم حساب السائق الخاص بك لدى جهة العمل هذه.</string>
+    <string name="login_server_url_label">عنوان الخادم</string>
+    <string name="login_email_label">البريد الإلكتروني</string>
+    <string name="login_password_label">كلمة المرور</string>
+    <string name="login_show_password">إظهار كلمة المرور</string>
+    <string name="login_hide_password">إخفاء كلمة المرور</string>
+    <string name="login_server">الخادم</string>
+    <string name="login_change_server">تغيير</string>
+    <string name="login_button">تسجيل الدخول</string>
+    <string name="login_signing_in">جارٍ تسجيل الدخول</string>
+    <string name="login_error_missing_server">أدخل عنوان الخادم</string>
+    <string name="login_error_missing_email">أدخل بريدك الإلكتروني</string>
+    <string name="login_error_missing_password">أدخل كلمة المرور</string>
+    <string name="login_error_invalid_credentials">البريد الإلكتروني أو كلمة المرور غير صحيحة. حاول مرة أخرى.</string>
+    <string name="login_error_invalid_address">أدخل عنوانًا مثل https://tracker.example.org</string>
+    <string name="login_error_https_required">استخدم عنوانًا يبدأ بـ https://</string>
+    <string name="login_error_check_address">تحقق من العنوان</string>
+    <string name="login_error_unreachable">تعذّر الوصول إلى %1$s. تحقق من اتصالك أو من عنوان الخادم.</string>
+    <string name="login_error_not_tracker">يبدو أن %1$s ليس خادم تتبع.</string>
+    <string name="login_error_too_many_tries">محاولات كثيرة جدًا. انتظر دقيقة، ثم حاول مرة أخرى.</string>
+    <string name="login_error_server">تعذّر تسجيل الدخول. حاول مرة أخرى.</string>
+    <string name="login_again_title">تسجيل الدخول مرة أخرى</string>
+    <string name="login_again_subtitle">باسم %1$s</string>
+    <string name="login_again_button">تسجيل الدخول ومواصلة الإرسال</string>
+    <string name="login_trip_open_title">رحلتك لا تزال مفتوحة</string>
+    <string name="login_trip_open_message">توقف إرسال التقارير عند انتهاء جلستك. سجّل الدخول لمواصلة الإرسال على الخط %1$s.</string>
+    <string name="login_server_managed">تضبطه جهة عملك.</string>
+    <string name="login_server_managed_invalid">إعداد الخادم من جهة عملك ليس عنوانًا صالحًا، لذا اكتبه هنا.</string>
+
+    <!-- A setup link from the agency -->
+    <string name="server_setup_confirm_title">هل تريد استخدام %1$s؟</string>
+    <string name="server_setup_confirm_message">تابع فقط إذا أرسلت لك جهة عملك هذا الرابط.</string>
+    <string name="server_setup_use">استخدام هذا الخادم</string>
+    <string name="server_setup_cancel">إلغاء</string>
+    <string name="server_setup_refused_signed_in">تم تسجيل الدخول إلى %1$s على هذا الهاتف. لم يُستخدم الرابط.</string>
+    <string name="server_setup_refused_trip_open">توجد رحلة مفتوحة على هذا الهاتف. لم يُستخدم الرابط.</string>
+    <string name="server_setup_refused_managed">جهة عملك هي التي تضبط الخادم على هذا الهاتف.</string>
+    <string name="server_setup_invalid">لا يحتوي هذا الرابط على عنوان خادم يمكن للتطبيق استخدامه.</string>
+    <string name="server_setup_ok">حسنًا</string>
+
+    <!-- The app's managed configuration -->
+    <string name="restriction_server_url_title">عنوان الخادم</string>
+    <string name="restriction_server_url_description">خادم التتبع لدى جهة العمل، وهو عنوان يبدأ بـ https://. يسجّل السائقون الدخول إليه ولا يمكنهم تغييره.</string>
+
+    <!-- The welcome -->
+    <string name="welcome_skip">تخطٍّ</string>
+    <string name="welcome_next">التالي</string>
+    <string name="welcome_continue">متابعة</string>
+    <string name="welcome_step">الخطوة %1$d من %2$d</string>
+    <string name="welcome_riders_title">الركاب يرونك قادمًا</string>
+    <string name="welcome_riders_body">ابدأ رحلة ليرى الركاب مركبتك على خرائطهم. أنهِها عند الانتهاء.</string>
+    <string name="welcome_riders_picture">ثلاثة ركاب في محطة يرون مركبتك قادمة.</string>
+    <string name="welcome_pieces_title">المركبة، الخط، الدورة</string>
+    <string name="welcome_pieces_body">اخترها، ثم انقر على دورتك للبدء. أنهِ الرحلة عند الانتهاء.</string>
+    <string name="welcome_pieces_vehicle_hint">الرقم المكتوب على المركبة</string>
+    <string name="welcome_pieces_route_hint">الرقم المكتوب على اللافتة</string>
+    <string name="welcome_pieces_run_hint">نقرة واحدة تبدأ الرحلة</string>
+    <string name="welcome_pieces_live">الركاب يرونك</string>
+    <string name="welcome_pieces_finish">عند الانتهاء</string>
+    <string name="welcome_habits_title">حافظ على استمرار الإرسال</string>
+    <string name="welcome_habits_body">٣ أمور افعلها في كل رحلة.</string>
+    <string name="welcome_habits_location">اسمح بالوصول إلى الموقع الجغرافي طوال الوقت</string>
+    <string name="welcome_habits_location_why">ليعود الإرسال تلقائيًا</string>
+    <string name="welcome_habits_charge">أبقِ الهاتف على الشاحن</string>
+    <string name="welcome_habits_charge_why">تبقى الشاشة مضاءة أثناء الشحن</string>
+    <string name="welcome_habits_open">اترك التطبيق مفتوحًا</string>
+    <string name="welcome_habits_open_why">لا تُغلقه بالسحب أثناء الرحلة</string>
+    <string name="welcome_habits_if_stops">إذا توقف الإرسال</string>
+
+    <!-- Tips -->
+    <string name="tip_run_board_title">انقر على دورتك</string>
+    <string name="tip_run_board_text">ثم انقر على %1$s. وبعدها يرى الركاب مركبتك.</string>
+    <string name="tip_sent_count_title">التقارير المُرسلة</string>
+    <string name="tip_sent_count_text">يزداد هذا الرقم ما دام الركاب يرونك. لا توجد إشارة؟ تابع القيادة. تُحفظ التقارير وتُرسل لاحقًا.</string>
+    <string name="tip_got_it">حسنًا</string>
+    <string name="first_trip_done_title">اكتملت رحلتك الأولى</string>
+    <!-- The count is shown beside these words in large digits, so each form is the noun as Arabic writes it after that count. -->
+    <plurals name="first_trip_done_reports">
+        <item quantity="zero">تقرير مُرسل</item>
+        <item quantity="one">تقرير مُرسل</item>
+        <item quantity="two">تقريران مُرسلان</item>
+        <item quantity="few">تقارير مُرسلة</item>
+        <item quantity="many">تقريرًا مُرسلًا</item>
+        <item quantity="other">تقرير مُرسل</item>
+    </plurals>
+    <string name="first_trip_done_text">كان بإمكان الركاب رؤية مركبتك.</string>
+    <string name="first_trip_done_ok">حسنًا</string>
+
+    <!-- The Language row and list -->
+    <string name="language_row">اللغة: %1$s</string>
+    <string name="language_row_phone_note">تُضبط للهاتف كله من إعداداته</string>
+    <string name="language_list_title">اللغة</string>
+    <string name="language_list_cancel">إلغاء</string>
+
+    <!-- Help -->
+    <string name="help_title">المساعدة</string>
+    <string name="help_welcome_again">عرض شاشات الترحيب مرة أخرى</string>
+    <string name="help_welcome_again_detail">٣ شاشات قصيرة</string>
+    <string name="help_section_status">على بطاقة الحالة</string>
+    <string name="help_status_on_time">أنت تسير وفق الجدول.</string>
+    <string name="help_status_late">متأخر عن الجدول.</string>
+    <string name="help_status_early">مبكر عن الجدول. قد لا يلحق بك الركاب.</string>
+    <string name="help_status_off_schedule">بعيد جدًا عن الجدول. تأكد من أنك اخترت الدورة الصحيحة.</string>
+    <string name="help_status_off_route">بعيد عن مسار الخط على الخريطة.</string>
+    <string name="help_status_waiting_for_gps">الهاتف يحدد موقعه.</string>
+    <string name="help_status_no_schedule">لا توجد أوقات لهذه الدورة. ومع ذلك يراك الركاب.</string>
+    <string name="help_waiting">حُفظت أثناء انقطاع الاتصال، وتُرسل فور عودته.</string>
+    <string name="help_waiting_never">حُفظت بتسجيل دخول آخر، لذا لا يمكن إرسالها بتسجيل الدخول هذا.</string>
+    <string name="help_section_problems">أسفل البطاقة وفي الإشعارات</string>
+    <string name="help_problem_no_network">تابع القيادة. تُحفظ التقارير وتُرسل لاحقًا.</string>
+    <string name="help_problem_no_gps">يرى الركاب آخر موقع لك حتى تعود الإشارة.</string>
+    <string name="help_problem_clock_skew">فعّل ضبط الوقت تلقائيًا في إعدادات الهاتف.</string>
+    <string name="help_problem_reports_refused">الخادم لا يقبل تقارير هذه المركبة. اسأل غرفة العمليات.</string>
+    <string name="help_problem_signed_out">توقف إرسال التقارير. سجّل الدخول للمتابعة. رحلتك لا تزال مفتوحة.</string>
+    <string name="help_problem_reports_paused">إشعار. افتح التطبيق لمواصلة الإرسال.</string>
+    <string name="help_section_about">حول التطبيق</string>
+    <string name="help_version">الإصدار</string>
+    <string name="help_server">الخادم</string>
+    <string name="help_share">مشاركة بيانات التشخيص</string>
+    <string name="help_share_detail">يُرسل إصدار التطبيق وطراز الهاتف والخادم والأذونات الممنوحة للتطبيق ومشكلاته الأخيرة التي يحتفظ بها فقط أثناء تشغيله. لا يتضمن أي مواقع أو بيانات تسجيل الدخول أو بريد إلكتروني.</string>
+
+    <!-- The top of the route and run steps -->
+    <string name="setup_navigate_up">التنقل إلى أعلى</string>
+    <string name="setup_trip_so_far">الرحلة حتى الآن</string>
+    <string name="setup_bus">المركبة</string>
+    <string name="setup_route">الخط %1$s</string>
+    <string name="setup_step_route">الخط</string>
+    <string name="setup_step_run">الدورة</string>
+    <string name="setup_clear_search">محو البحث</string>
+
+    <!-- The account menu -->
+    <string name="account_menu">الحساب</string>
+    <string name="account_version">الإصدار %1$s</string>
+    <string name="account_sign_out">تسجيل الخروج</string>
+    <string name="account_sign_out_title">هل تريد تسجيل الخروج؟</string>
+    <string name="account_sign_out_message">يمكن للسائق التالي تسجيل الدخول على هذا الهاتف.</string>
+    <string name="account_sign_out_cancel">إلغاء</string>
+
+    <!-- Vehicle selection screen -->
+    <string name="vehicles_title">اختر مركبتك</string>
+    <string name="vehicles_empty">لا توجد مركبات مخصّصة لك</string>
+    <string name="vehicles_empty_detail">اطلب من غرفة العمليات تخصيص مركبة لك، ثم تحقق مرة أخرى.</string>
+    <string name="vehicles_check_again">التحقق مرة أخرى</string>
+    <string name="vehicles_error_message">تعذّر تحميل مركباتك</string>
+    <string name="vehicles_error_detail">تحقق من اتصالك وحاول مرة أخرى.</string>
+    <string name="vehicles_retry_button">إعادة المحاولة</string>
+    <string name="vehicles_search_label">رقم المركبة</string>
+    <string name="vehicles_search_no_matches">لا توجد مركبة تطابق %1$s</string>
+    <string name="vehicles_search_no_matches_detail">تحقق من رقم الأسطول المكتوب على المركبة.</string>
+    <string name="vehicles_section_favorites">المفضّلة</string>
+    <string name="vehicles_section_recent">الأخيرة</string>
+    <string name="vehicles_section_all">كل المركبات</string>
+    <string name="vehicles_section_matches">النتائج</string>
+    <string name="vehicles_tile_favorite">مفضّلة</string>
+    <string name="vehicles_favorite_description">إضافة %1$s إلى المفضّلة</string>
+    <string name="vehicles_unfavorite_description">إزالة %1$s من المفضّلة</string>
+
+    <!-- Route picker -->
+    <string name="routes_title">اختر الخط</string>
+    <string name="routes_search_label">رقم الخط أو اسمه</string>
+    <string name="routes_section_recent">الأخيرة</string>
+    <string name="routes_section_all">كل الخطوط</string>
+    <plurals name="routes_section_all_count">
+        <item quantity="zero">كل الخطوط · %1$d</item>
+        <item quantity="one">كل الخطوط · %1$d</item>
+        <item quantity="two">كل الخطوط · %1$d</item>
+        <item quantity="few">كل الخطوط · %1$d</item>
+        <item quantity="many">كل الخطوط · %1$d</item>
+        <item quantity="other">كل الخطوط · %1$d</item>
+    </plurals>
+    <string name="routes_section_matches">النتائج</string>
+    <string name="routes_search_no_matches">لا يوجد خط يطابق %1$s</string>
+    <string name="routes_search_no_matches_detail">ابحث بالرقم المكتوب على اللافتة أو بجزء من الاسم.</string>
+    <string name="routes_empty">لا توجد خطوط في الجدول</string>
+    <string name="routes_empty_detail">اطلب من مسؤول جهة عملك التحقق من الجدول.</string>
+    <string name="routes_check_again">التحقق مرة أخرى</string>
+    <string name="routes_error_message">تعذّر تحميل الخطوط</string>
+    <string name="routes_error_detail">تحقق من اتصالك وحاول مرة أخرى.</string>
+    <string name="routes_no_schedule">لا يوجد جدول على هذا الخادم بعد</string>
+    <string name="routes_no_schedule_detail">يجب تحميل جدول قبل أن تبدأ أي رحلة. أبلغ مسؤول جهة عملك.</string>
+    <string name="routes_retry_button">إعادة المحاولة</string>
+
+    <!-- Run picker -->
+    <string name="runs_title">اختر الدورة</string>
+    <string name="runs_empty">لا توجد دورات على الخط %1$s اليوم</string>
+    <string name="runs_empty_unnamed">لا توجد دورات على هذا الخط اليوم</string>
+    <string name="runs_empty_detail">اختر خطًا آخر، أو تحقق مرة أخرى غدًا.</string>
+    <string name="runs_choose_another_route">اختيار خط آخر</string>
+    <string name="runs_badge_now">الآن</string>
+    <string name="runs_badge_next">التالية</string>
+    <string name="runs_direction">إلى %1$s</string>
+    <!-- The left arrow, so that read right to left it points from the first stop to the last. -->
+    <string name="runs_row_stops">%1$s ← %2$s</string>
+    <string name="runs_row_run">الدورة %1$s</string>
+    <string name="runs_row_block">البلوك %1$s</string>
+    <string name="runs_row_run_block">%1$s · %2$s</string>
+    <string name="runs_starting">جارٍ البدء…</string>
+    <string name="runs_start_title">هل تريد بدء دورة %1$s؟</string>
+    <string name="runs_start_message">الخط %1$s إلى %2$s بالمركبة %3$s.</string>
+    <string name="runs_start_message_no_headsign">الخط %1$s بالمركبة %2$s.</string>
+    <string name="runs_start_message_unnamed">إلى %1$s بالمركبة %2$s.</string>
+    <string name="runs_start_message_vehicle">بالمركبة %1$s.</string>
+    <string name="runs_start_confirm">بدء الرحلة</string>
+    <string name="runs_start_cancel">إلغاء</string>
+    <string name="runs_error_message">تعذّر تحميل الدورات</string>
+    <string name="runs_error_detail">تحقق من اتصالك وحاول مرة أخرى.</string>
+    <string name="runs_retry_button">إعادة المحاولة</string>
+    <string name="runs_error_not_assigned">المركبة %1$s ليست مخصّصة لك.</string>
+    <string name="runs_change_bus">تغيير المركبة</string>
+    <string name="runs_error_trip_active">لديك رحلة جارية بالفعل. أنهِها قبل بدء رحلة أخرى.</string>
+    <string name="runs_error_vehicle_busy">لدى سائق آخر رحلة جارية على المركبة %1$s. اختر مركبة أخرى أو اسأل غرفة العمليات.</string>
+    <string name="runs_error_vehicle_inactive">المركبة %1$s خارج الخدمة. اختر مركبة أخرى.</string>
+    <string name="runs_error_previous_trip_not_ended">تعذّر إنهاء رحلتك السابقة حتى الآن. تحقق من اتصالك وحاول مرة أخرى.</string>
+    <string name="runs_error_network">تعذّر الوصول إلى الخادم. تحقق من اتصالك.</string>
+    <string name="runs_error_no_geometry">لا يوجد لهذه الدورة مسار أو محطات لاتباعها. اختر دورة أخرى.</string>
+    <string name="runs_error_trip_not_active">انتقل الجدول إلى يوم جديد.</string>
+    <string name="runs_reload_button">إعادة التحميل</string>
+    <string name="runs_error_other">تعذّر بدء الرحلة.</string>
+
+    <!-- Tracking screen -->
+    <plurals name="tracking_bar_sent">
+        <item quantity="zero">أُرسل %1$d</item>
+        <item quantity="one">أُرسل %1$d</item>
+        <item quantity="two">أُرسل %1$d</item>
+        <item quantity="few">أُرسل %1$d</item>
+        <item quantity="many">أُرسل %1$d</item>
+        <item quantity="other">أُرسل %1$d</item>
+    </plurals>
+    <string name="tracking_bar_click_label">عرض تفاصيل الرحلة</string>
+    <string name="tracking_end_trip_button">إنهاء الرحلة</string>
+    <string name="tracking_end_trip_ending">جارٍ الإنهاء…</string>
+    <string name="tracking_occupancy_question">ما مدى امتلاء المركبة؟</string>
+    <string name="tracking_occupancy_many_seats">مقاعد متاحة</string>
+    <string name="tracking_occupancy_few_seats">مقاعد قليلة</string>
+    <string name="tracking_occupancy_standing">وقوف فقط</string>
+    <string name="tracking_occupancy_full">ممتلئة</string>
+    <string name="tracking_occupancy_clear">محو</string>
+    <string name="tracking_fact_run">الدورة</string>
+    <string name="tracking_fact_run_vehicle">%1$s · %2$s</string>
+    <string name="tracking_fact_reports">التقارير</string>
+    <string name="tracking_reports_reporting">جارٍ الإرسال</string>
+    <string name="tracking_reports_not_reporting">لا يتم الإرسال</string>
+    <string name="tracking_reports_no_gps">لا يوجد GPS</string>
+    <string name="tracking_reports_stopped">توقف الإرسال</string>
+    <string name="tracking_fact_street_map">خريطة الشوارع</string>
+    <string name="tracking_street_map_ready">جاهزة</string>
+    <string name="tracking_street_map_downloading">جارٍ التنزيل · %1$d%%</string>
+    <string name="tracking_street_map_not_downloaded">لم يتم تنزيلها بعد</string>
+    <string name="tracking_street_map_no_space">لا توجد مساحة كافية</string>
+    <string name="tracking_street_map_unusable">غير صالحة للاستخدام</string>
+    <plurals name="tracking_stops_passed">
+        <item quantity="zero">لا توجد محطات سابقة</item>
+        <item quantity="one">محطة سابقة واحدة</item>
+        <item quantity="two">محطتان سابقتان</item>
+        <item quantity="few">%1$d محطات سابقة</item>
+        <item quantity="many">%1$d محطة سابقة</item>
+        <item quantity="other">%1$d محطة سابقة</item>
+    </plurals>
+    <string name="tracking_stops_passed_expanded">موسّع</string>
+    <string name="tracking_stops_passed_collapsed">مصغّر</string>
+    <string name="tracking_end_trip_dialog_title">هل تريد إنهاء هذه الرحلة؟</string>
+    <plurals name="tracking_end_trip_dialog_message">
+        <item quantity="zero">سيتوقف إرسال التقارير، وستُعتبر دورة %2$s على الخط %1$s مكتملة. لم يُرسل أي تقرير.</item>
+        <item quantity="one">سيتوقف إرسال التقارير، وستُعتبر دورة %2$s على الخط %1$s مكتملة. تم إرسال تقرير واحد.</item>
+        <item quantity="two">سيتوقف إرسال التقارير، وستُعتبر دورة %2$s على الخط %1$s مكتملة. تم إرسال تقريرين.</item>
+        <item quantity="few">سيتوقف إرسال التقارير، وستُعتبر دورة %2$s على الخط %1$s مكتملة. تم إرسال %3$d تقارير.</item>
+        <item quantity="many">سيتوقف إرسال التقارير، وستُعتبر دورة %2$s على الخط %1$s مكتملة. تم إرسال %3$d تقريرًا.</item>
+        <item quantity="other">سيتوقف إرسال التقارير، وستُعتبر دورة %2$s على الخط %1$s مكتملة. تم إرسال %3$d تقرير.</item>
+    </plurals>
+    <plurals name="tracking_end_trip_dialog_message_no_run">
+        <item quantity="zero">سيتوقف إرسال التقارير، وستُعتبر هذه الدورة مكتملة. لم يُرسل أي تقرير.</item>
+        <item quantity="one">سيتوقف إرسال التقارير، وستُعتبر هذه الدورة مكتملة. تم إرسال تقرير واحد.</item>
+        <item quantity="two">سيتوقف إرسال التقارير، وستُعتبر هذه الدورة مكتملة. تم إرسال تقريرين.</item>
+        <item quantity="few">سيتوقف إرسال التقارير، وستُعتبر هذه الدورة مكتملة. تم إرسال %1$d تقارير.</item>
+        <item quantity="many">سيتوقف إرسال التقارير، وستُعتبر هذه الدورة مكتملة. تم إرسال %1$d تقريرًا.</item>
+        <item quantity="other">سيتوقف إرسال التقارير، وستُعتبر هذه الدورة مكتملة. تم إرسال %1$d تقرير.</item>
+    </plurals>
+    <string name="tracking_end_trip_dialog_confirm">إنهاء الرحلة</string>
+    <string name="tracking_end_trip_dialog_cancel">متابعة الرحلة</string>
+    <string name="tracking_end_trip_error_title">لم تنتهِ الرحلة بعد</string>
+    <string name="tracking_end_trip_error_message">لم يؤكد الخادم إنهاء الرحلة. تحقق من الإشارة وحاول مرة أخرى، أو أوقف الإرسال من هذا الهاتف الآن.</string>
+    <string name="tracking_end_trip_error_retry">إعادة المحاولة</string>
+    <string name="tracking_end_trip_error_end_locally">الإنهاء على هذا الهاتف</string>
+    <string name="tracking_reauth_button">تسجيل الدخول</string>
+    <string name="tracking_problem_no_network">لا يوجد اتصال</string>
+    <string name="tracking_problem_no_network_detail">لا يمكن للركاب رؤيتك</string>
+    <string name="tracking_problem_no_gps">لا توجد إشارة GPS</string>
+    <string name="tracking_problem_no_gps_detail">الموقع متوقف مؤقتًا</string>
+    <string name="tracking_problem_clock_skew">ساعة الهاتف غير صحيحة</string>
+    <string name="tracking_problem_clock_skew_detail">اضبط الوقت تلقائيًا</string>
+    <string name="tracking_problem_reports_refused">التقارير مرفوضة</string>
+    <string name="tracking_problem_reports_refused_detail">اسأل غرفة العمليات</string>
+    <plurals name="tracking_waiting">
+        <item quantity="zero">لا توجد تقارير بانتظار الاتصال</item>
+        <item quantity="one">تقرير واحد بانتظار الاتصال</item>
+        <item quantity="two">تقريران بانتظار الاتصال</item>
+        <item quantity="few">%1$,d تقارير بانتظار الاتصال</item>
+        <item quantity="many">%1$,d تقريرًا بانتظار الاتصال</item>
+        <item quantity="other">%1$,d تقرير بانتظار الاتصال</item>
+    </plurals>
+    <plurals name="tracking_waiting_never">
+        <item quantity="zero">لا توجد تقارير لا يمكن إرسالها</item>
+        <item quantity="one">تقرير واحد لا يمكن إرساله</item>
+        <item quantity="two">تقريران لا يمكن إرسالهما</item>
+        <item quantity="few">%1$,d تقارير لا يمكن إرسالها</item>
+        <item quantity="many">%1$,d تقريرًا لا يمكن إرسالها</item>
+        <item quantity="other">%1$,d تقرير لا يمكن إرسالها</item>
+    </plurals>
+    <string name="tracking_signed_out_title">تم تسجيل الخروج</string>
+    <string name="tracking_signed_out_message">توقف إرسال التقارير. رحلتك لا تزال مفتوحة.</string>
+
+    <!-- Status card -->
+    <string name="tracking_adherence_on_time">في الموعد</string>
+    <plurals name="tracking_adherence_minutes_late">
+        <item quantity="zero">متأخر %1$d د</item>
+        <item quantity="one">متأخر %1$d د</item>
+        <item quantity="two">متأخر %1$d د</item>
+        <item quantity="few">متأخر %1$d د</item>
+        <item quantity="many">متأخر %1$d د</item>
+        <item quantity="other">متأخر %1$d د</item>
+    </plurals>
+    <plurals name="tracking_adherence_minutes_early">
+        <item quantity="zero">مبكر %1$d د</item>
+        <item quantity="one">مبكر %1$d د</item>
+        <item quantity="two">مبكر %1$d د</item>
+        <item quantity="few">مبكر %1$d د</item>
+        <item quantity="many">مبكر %1$d د</item>
+        <item quantity="other">مبكر %1$d د</item>
+    </plurals>
+    <string name="tracking_adherence_off_schedule">خارج الجدول</string>
+    <string name="tracking_adherence_right_run">هل هذه هي الدورة الصحيحة؟</string>
+    <string name="tracking_adherence_off_schedule_next">التالية %1$s · %2$s</string>
+    <string name="tracking_adherence_off_route">خارج المسار · %1$s</string>
+    <string name="tracking_adherence_off_route_short">خارج المسار</string>
+    <string name="tracking_adherence_next_stop">التالية</string>
+    <string name="tracking_adherence_next_stop_detail">%1$s · %2$s</string>
+    <string name="tracking_adherence_distance_m">%1$d م</string>
+    <string name="tracking_adherence_distance_km">%1$.1f كم</string>
+    <string name="tracking_adherence_waiting_for_gps">بانتظار GPS</string>
+    <string name="tracking_adherence_from">من</string>
+    <string name="tracking_adherence_run">دورة %1$s</string>
+    <string name="tracking_adherence_run_vehicle">دورة %1$s · %2$s</string>
+    <string name="tracking_adherence_no_schedule">لا يوجد جدول</string>
+    <string name="tracking_adherence_no_schedule_riders">ما زال الركاب يرونك</string>
+    <string name="tracking_adherence_no_schedule_detail">لا توجد أوقات لهذه الدورة</string>
+    <string name="tracking_map_recenter">إعادة التوسيط</string>
+    <string name="tracking_map_downloading">جارٍ تنزيل الخريطة، %1$d%%</string>
+    <string name="tracking_map_no_space">لا توجد مساحة كافية للخريطة</string>
+    <string name="tracking_map_retrying">لم يتم تنزيل الخريطة بعد، وستتم إعادة المحاولة</string>
+    <string name="tracking_map_retry_on_open">لم يتم تنزيل الخريطة، وستتم إعادة المحاولة عند فتح التطبيق في المرة القادمة</string>
+    <string name="tracking_map_unusable">ملف الخريطة غير صالح للاستخدام، أبلغ جهة عملك</string>
+    <string name="tracking_map_needs_https">يجب أن يستخدم رابط الخريطة https، أبلغ جهة عملك</string>
+
+    <!-- Resume prompt -->
+    <string name="resume_title">هل تريد استئناف رحلتك؟</string>
+    <string name="resume_message">أُغلق التطبيق أثناء هذه الرحلة. إرسال التقارير متوقف مؤقتًا حتى تختار.</string>
+    <string name="resume_route">الخط %1$s</string>
+    <string name="resume_run">دورة %1$s</string>
+    <string name="resume_bus">المركبة %1$s</string>
+    <plurals name="resume_started_minutes_ago">
+        <item quantity="zero">بدأت قبل %1$d د، الساعة %2$s</item>
+        <item quantity="one">بدأت قبل %1$d د، الساعة %2$s</item>
+        <item quantity="two">بدأت قبل %1$d د، الساعة %2$s</item>
+        <item quantity="few">بدأت قبل %1$d د، الساعة %2$s</item>
+        <item quantity="many">بدأت قبل %1$d د، الساعة %2$s</item>
+        <item quantity="other">بدأت قبل %1$d د، الساعة %2$s</item>
+    </plurals>
+    <string name="resume_started_hours_ago">بدأت قبل %1$d س و%2$d د، الساعة %3$s</string>
+    <string name="resume_button">استئناف الرحلة</string>
+    <string name="resume_end_trip_button">إنهاء الرحلة</string>
+    <string name="resume_ending">جارٍ إنهاء الرحلة</string>
+    <string name="resume_loading">جارٍ تحميل رحلتك</string>
+    <string name="resume_end_failed">لم يؤكد الخادم انتهاء الرحلة. حاول مرة أخرى، أو أنهِها على هذا الهاتف فقط.</string>
+    <string name="resume_end_failed_back">لا تُنهِ الرحلة</string>
+
+    <!-- The tracking notification -->
+    <string name="tracking_notification_channel_name">إرسال تقارير الرحلة</string>
+    <string name="tracking_notification_title">الخط %1$s · %2$s</string>
+    <string name="tracking_notification_next">التالية %1$s · %2$s · %3$s</string>
+    <string name="tracking_notification_signed_out">تم تسجيل الخروج. افتح التطبيق لتسجيل الدخول.</string>
+    <string name="tracking_notification_reports_refused">التقارير مرفوضة. اسأل غرفة العمليات.</string>
+    <string name="tracking_notification_resume_title">التقارير متوقفة مؤقتًا</string>
+    <string name="tracking_notification_resume_text">افتح التطبيق لمواصلة الإرسال.</string>
+    <string name="tracking_notification_attention_channel_name">الرحلة تحتاج إليك</string>
+
+    <!-- The checklist before a trip -->
+    <string name="preflight_title">قبل أن تبدأ</string>
+    <string name="preflight_message">يحتاج التطبيق إلى ما يلي لإرسال تقارير المركبة %1$s. سيسألك Android عن كل منها بعد ذلك.</string>
+    <string name="preflight_location">الموقع الجغرافي</string>
+    <string name="preflight_location_why">ليعرف التطبيق مكان المركبة</string>
+    <string name="preflight_precise">الموقع الدقيق</string>
+    <string name="preflight_precise_why">ليرى الركاب المركبة عند المحطة الصحيحة</string>
+    <string name="preflight_background">طوال الوقت</string>
+    <string name="preflight_background_why">ليعود الإرسال تلقائيًا إذا أغلق Android التطبيق</string>
+    <string name="preflight_notifications">الإشعارات</string>
+    <string name="preflight_notifications_why">لترى أن الإرسال يعمل</string>
+    <string name="preflight_battery">البطارية</string>
+    <string name="preflight_battery_why">كي لا يوقف Android الإرسال في منتصف الرحلة</string>
+    <string name="preflight_location_services">خدمات الموقع الجغرافي</string>
+    <string name="preflight_location_services_why">يجب تفعيل الموقع الجغرافي للهاتف بأكمله</string>
+    <string name="preflight_allowed">مسموح به</string>
+    <string name="preflight_skipped">تم التخطي</string>
+    <string name="preflight_next">التالي</string>
+    <string name="preflight_row_state">%1$s، %2$s</string>
+    <string name="preflight_skipped_why">غير مسموح به. الإرسال يعمل مع ذلك.</string>
+    <string name="preflight_location_needed">الموقع الجغرافي مطلوب للإرسال</string>
+    <string name="preflight_approximate">تم السماح بالموقع التقريبي فقط</string>
+    <string name="preflight_try_again">إعادة المحاولة</string>
+    <string name="preflight_open_settings">فتح الإعدادات</string>
+    <string name="preflight_continue">متابعة</string>
+</resources>

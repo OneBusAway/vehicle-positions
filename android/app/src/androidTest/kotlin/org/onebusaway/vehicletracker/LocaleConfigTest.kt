@@ -21,6 +21,7 @@ class LocaleConfigTest {
         "hi",
         "de", "es", "fi", "fil", "fr", "ht", "it", "om", "pl", "pt-BR", "sm", "so", "sw", "vi",
         "am", "ja", "km", "ko", "lo", "pa", "ru", "ti", "uk", "zh-Hans", "zh-Hant",
+        "ar", "fa",
     )
 
     @Test

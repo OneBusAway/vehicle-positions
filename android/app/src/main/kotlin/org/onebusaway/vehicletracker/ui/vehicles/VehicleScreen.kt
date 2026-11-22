@@ -45,6 +45,7 @@ import org.onebusaway.vehicletracker.ui.components.EmptyState
 import org.onebusaway.vehicletracker.ui.components.FirstStepHeader
 import org.onebusaway.vehicletracker.ui.components.ScrolledUnderDivider
 import org.onebusaway.vehicletracker.ui.components.SearchField
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import org.onebusaway.vehicletracker.ui.theme.fleetNumber
 
@@ -181,7 +182,7 @@ private fun LazyGridScope.loaded(
         fullWidth("empty") {
             EmptyState(
                 icon = R.drawable.ic_search_off,
-                title = stringResource(R.string.vehicles_search_no_matches, state.query),
+                title = stringResource(R.string.vehicles_search_no_matches, isolated(state.query)),
                 body = stringResource(R.string.vehicles_search_no_matches_detail),
             )
         }

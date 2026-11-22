@@ -48,6 +48,7 @@ import org.onebusaway.vehicletracker.ui.components.EmptyState
 import org.onebusaway.vehicletracker.ui.components.ScrolledUnderDivider
 import org.onebusaway.vehicletracker.ui.components.SearchField
 import org.onebusaway.vehicletracker.ui.components.SetupHeader
+import org.onebusaway.vehicletracker.ui.isolated
 
 private const val GRID_COLUMNS = 4
 private val BadgeGap = 10.dp
@@ -192,7 +193,7 @@ private fun LazyGridScope.loaded(
         fullWidth("empty") {
             EmptyState(
                 icon = R.drawable.ic_search_off,
-                title = stringResource(R.string.routes_search_no_matches, state.query),
+                title = stringResource(R.string.routes_search_no_matches, isolated(state.query)),
                 body = stringResource(R.string.routes_search_no_matches_detail),
             )
         }

@@ -11,6 +11,7 @@ import org.onebusaway.vehicletracker.data.ServerSetup
 import org.onebusaway.vehicletracker.data.ServerSetupLink.Decision
 import org.onebusaway.vehicletracker.ui.components.InkButton
 import org.onebusaway.vehicletracker.ui.components.QuietButton
+import org.onebusaway.vehicletracker.ui.isolated
 
 /** The dialog a setup link leads to, over whichever screen is showing: a link can arrive on any of them. */
 @Composable
@@ -25,14 +26,14 @@ fun ServerSetupDialog(decision: Decision, onConfirm: (server: String) -> Unit, o
     when (decision) {
         is Decision.Confirm -> AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text(stringResource(R.string.server_setup_confirm_title, decision.host)) },
+            title = { Text(stringResource(R.string.server_setup_confirm_title, isolated(decision.host))) },
             text = { Text(stringResource(R.string.server_setup_confirm_message)) },
             confirmButton = { InkButton(stringResource(R.string.server_setup_use), onClick = { onConfirm(decision.server) }) },
             dismissButton = { QuietButton(stringResource(R.string.server_setup_cancel), onClick = onDismiss) },
         )
         is Decision.RefusedSignedIn -> NotUsed(
             if (decision.host != null) {
-                stringResource(R.string.server_setup_refused_signed_in, decision.host)
+                stringResource(R.string.server_setup_refused_signed_in, isolated(decision.host))
             } else {
                 stringResource(R.string.server_setup_refused_trip_open)
             },

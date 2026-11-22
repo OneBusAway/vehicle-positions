@@ -60,6 +60,7 @@ android {
             "am", "ja", "km", "ko", "lo", "pa", "ru", "ti", "uk", "b+zh+Hans", "b+zh+Hant",
             // The app's Chinese goes by script; libraries name their Chinese by region, kept here to match it.
             "zh-rCN", "zh-rHK", "zh-rTW",
+            "ar", "fa",
         )
     }
 

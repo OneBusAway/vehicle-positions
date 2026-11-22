@@ -58,6 +58,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.SetupBackButton
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 
@@ -104,7 +105,7 @@ internal fun PreflightContent(
                     modifier = Modifier.padding(start = 24.dp, top = 8.dp, end = 24.dp).semantics { heading() },
                 )
                 Text(
-                    text = stringResource(R.string.preflight_message, vehicleId),
+                    text = stringResource(R.string.preflight_message, isolated(vehicleId)),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 24.dp, top = 8.dp, end = 24.dp, bottom = 20.dp),

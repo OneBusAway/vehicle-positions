@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.view.View
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -16,6 +17,7 @@ import org.onebusaway.vehicletracker.MainActivity
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.ReportsWaiting
 import org.onebusaway.vehicletracker.data.TrackingProblem
+import org.onebusaway.vehicletracker.ui.bidiIsolated
 import org.onebusaway.vehicletracker.ui.tracking.formatClock
 import org.onebusaway.vehicletracker.ui.tracking.waitingWords
 import java.util.Locale
@@ -74,6 +76,9 @@ class TrackingNotification(private val context: Context) {
 
     /** The language the app shows, which the notification's times are written in. */
     private fun appLocale(): Locale = context.resources.configuration.locales[0]
+
+    /** Whether the notification's text reads right to left, in the language the app is shown in. */
+    private fun rtl(): Boolean = context.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
 
     private fun contentIntent(): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -169,7 +174,8 @@ class TrackingNotification(private val context: Context) {
             NotificationStatus.WaitingForGps -> context.getString(R.string.tracking_adherence_waiting_for_gps)
             NotificationStatus.NoSchedule -> context.getString(R.string.tracking_adherence_no_schedule)
         }
-        return text.route?.let { context.getString(R.string.tracking_notification_title, it, status) } ?: status
+        val route = text.route ?: return status
+        return context.getString(R.string.tracking_notification_title, bidiIsolated(route, rtl()), status)
     }
 
     private fun line(text: NotificationText): String {
@@ -187,7 +193,7 @@ class TrackingNotification(private val context: Context) {
             val stop = text.nextStop
             val zone = text.zone
             if (stop != null && zone != null) {
-                context.getString(R.string.tracking_notification_next, stop.name, formatClock(stop.arrivalAt, zone, appLocale()), reporting)
+                context.getString(R.string.tracking_notification_next, bidiIsolated(stop.name, rtl()), formatClock(stop.arrivalAt, zone, appLocale()), reporting)
             } else {
                 reporting
             }

@@ -58,6 +58,7 @@ import kotlinx.coroutines.delay
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.AttentionBanner
 import org.onebusaway.vehicletracker.ui.components.SPINNER_DELAY_MS
+import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.routes.RouteBadge
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.tripTitle
@@ -220,7 +221,7 @@ private fun TripCard(card: ResumeCard, now: () -> Long) {
             )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = card.headsign ?: stringResource(R.string.resume_route, card.route.shortName),
+                    text = card.headsign ?: stringResource(R.string.resume_route, isolated(card.route.shortName)),
                     style = MaterialTheme.typography.tripTitle,
                 )
                 card.runStartsAt?.let { startsAt ->
@@ -233,7 +234,7 @@ private fun TripCard(card: ResumeCard, now: () -> Long) {
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Fact(R.drawable.ic_directions_bus) { Text(stringResource(R.string.resume_bus, card.vehicleId), style = MaterialTheme.typography.bodyLarge) }
+        Fact(R.drawable.ic_directions_bus) { Text(stringResource(R.string.resume_bus, isolated(card.vehicleId)), style = MaterialTheme.typography.bodyLarge) }
         Fact(R.drawable.ic_schedule_outline) { StartedAgo(card.startedAt, card.zone, now) }
     }
 }
