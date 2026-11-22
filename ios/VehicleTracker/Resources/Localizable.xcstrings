@@ -12247,6 +12247,174 @@
         }
       }
     },
+    "checklist.next" : {
+      "comment" : "At the end of the checklist row that Continue asks iOS about next.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ቀጣይ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Als Nächstes"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Next"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Siguiente"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Seuraava"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Susunod"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Suivant"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "अगला"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Pwochen"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "A seguire"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "次に確認"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "បន្ទាប់"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "다음"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ຕໍ່ໄປ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Itti aanu"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਅਗਲਾ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Następne"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "A seguir"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Далее"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Sosoʻo"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Xiga"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Inayofuata"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ዝቕጽል"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Далі"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tiếp theo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一项"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一項"
+          }
+        }
+      }
+    },
     "Choose a route" : {
       "comment" : "Title of the second picker screen, the schedule's routes.",
       "localizations" : {
@@ -22068,328 +22236,6 @@
         }
       }
     },
-    "Matches" : {
-      "comment" : "Section header over the vehicles or routes that match what the driver typed.",
-      "localizations" : {
-        "am" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "የተገኙ"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Treffer"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Resultados"
-          }
-        },
-        "fi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Hakutulokset"
-          }
-        },
-        "fil" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Mga tugma"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Résultats"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "खोज में मिले"
-          }
-        },
-        "ht" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Rezilta"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Risultati"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "検索結果"
-          }
-        },
-        "km" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "លទ្ធផលស្វែងរក"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "검색 결과"
-          }
-        },
-        "lo" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ຜົນການຄົ້ນຫາ"
-          }
-        },
-        "om" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Kan argaman"
-          }
-        },
-        "pa" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ਖੋਜ ਵਿੱਚ ਮਿਲੇ"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Wyniki"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Resultados"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Найдено"
-          }
-        },
-        "sm" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Mea na maua"
-          }
-        },
-        "so" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Natiijooyinka"
-          }
-        },
-        "sw" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Matokeo"
-          }
-        },
-        "ti" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ዝተረኽቡ"
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Знайдено"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Kết quả"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "匹配结果"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "搜尋結果"
-          }
-        }
-      }
-    },
-    "Next" : {
-      "comment" : "At the end of the checklist row that Continue asks iOS about next.\nStatus card line 1, before the next stop's name.\nTag on the next run to start, when none is under way.\nWelcome: the button to the next of its three screens.",
-      "localizations" : {
-        "am" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ቀጣይ"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Als Nächstes"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Siguiente"
-          }
-        },
-        "fi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Seuraava"
-          }
-        },
-        "fil" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Susunod"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Suivant"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "अगला"
-          }
-        },
-        "ht" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Pwochen"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "A seguire"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "次に確認"
-          }
-        },
-        "km" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "បន្ទាប់"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "다음"
-          }
-        },
-        "lo" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ຕໍ່ໄປ"
-          }
-        },
-        "om" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Itti aanu"
-          }
-        },
-        "pa" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ਅਗਲਾ"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Następne"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "A seguir"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Далее"
-          }
-        },
-        "sm" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Sosoʻo"
-          }
-        },
-        "so" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Xiga"
-          }
-        },
-        "sw" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Inayofuata"
-          }
-        },
-        "ti" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ዝቕጽል"
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Далі"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Tiếp theo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "下一项"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "下一項"
-          }
-        }
-      }
-    },
     "Next %@ · %@" : {
       "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
       "localizations" : {
@@ -28832,167 +28678,6 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "將地圖重新置中到車輛位置"
-          }
-        }
-      }
-    },
-    "Recent" : {
-      "comment" : "Section header over the vehicles or routes the driver used last.",
-      "localizations" : {
-        "am" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "የቅርብ ጊዜ"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Zuletzt verwendet"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Recientes"
-          }
-        },
-        "fi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Viimeisimmät"
-          }
-        },
-        "fil" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Kamakailan"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Récentes"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "हाल के"
-          }
-        },
-        "ht" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Resan"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Recenti"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "最近使用"
-          }
-        },
-        "km" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ថ្មីៗ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "최근"
-          }
-        },
-        "lo" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ໃຊ້ຫຼ້າສຸດ"
-          }
-        },
-        "om" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Dhiyoo kana"
-          }
-        },
-        "pa" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ਹਾਲੀਆ"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Ostatnie"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Recentes"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Недавние"
-          }
-        },
-        "sm" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Talu ai nei"
-          }
-        },
-        "so" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Dhowaan"
-          }
-        },
-        "sw" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Hivi karibuni"
-          }
-        },
-        "ti" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ናይ ቀረባ ግዜ"
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Нещодавні"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Gần đây"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "最近"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "最近使用"
           }
         }
       }
@@ -35501,6 +35186,342 @@
         }
       }
     },
+    "routes.matches" : {
+      "comment" : "Section header over the routes that match what the driver typed.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "የተገኙ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Treffer"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Matches"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Resultados"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Hakutulokset"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Mga tugma"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Résultats"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "खोज में मिले"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Rezilta"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Risultati"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "検索結果"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "លទ្ធផលស្វែងរក"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "검색 결과"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ຜົນການຄົ້ນຫາ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kan argaman"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਖੋਜ ਵਿੱਚ ਮਿਲੇ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Wyniki"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Resultados"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Найдено"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Mea na maua"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Natiijooyinka"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Matokeo"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ዝተረኽቡ"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Знайдено"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kết quả"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "匹配结果"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "搜尋結果"
+          }
+        }
+      }
+    },
+    "routes.recent" : {
+      "comment" : "Section header over the routes the driver used last, on the phone and in CarPlay.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "የቅርብ ጊዜ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Zuletzt verwendet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Recent"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Recientes"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Viimeisimmät"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kamakailan"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Récentes"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "हाल के"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Resan"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Recenti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "最近使用"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ថ្មីៗ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "최근"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ໃຊ້ຫຼ້າສຸດ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Dhiyoo kana"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਹਾਲੀਆ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ostatnie"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Recentes"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Недавние"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Talu ai nei"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Dhowaan"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Hivi karibuni"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ናይ ቀረባ ግዜ"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Нещодавні"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Gần đây"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "最近"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "最近使用"
+          }
+        }
+      }
+    },
     "Run" : {
       "comment" : "Trip sheet row label: the run's start time and the vehicle follow it.",
       "localizations" : {
@@ -35819,6 +35840,174 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "班次 %@"
+          }
+        }
+      }
+    },
+    "runs.next" : {
+      "comment" : "Tag on the next run to start, when none is under way.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ቀጣይ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Nächster"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Next"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Próxima"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Seuraava"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Susunod"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Suivante"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "अगला"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Pwochen"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Prossima"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "次"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "បន្ទាប់"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "다음"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ຕໍ່ໄປ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Itti aanu"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਅਗਲਾ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Następny"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Próxima"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Следующий"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Sosoʻo"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Xiga"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Inayofuata"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ዝቕጽል"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Наступний"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tiếp theo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一班"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一班"
           }
         }
       }
@@ -44300,6 +44489,174 @@
         }
       }
     },
+    "status.next" : {
+      "comment" : "Status card line 1, before the next stop's name.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ቀጣይ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Nächster Halt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Next"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Próxima"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Seuraava"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Susunod"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Prochain"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "अगला"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Pwochen"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Prossima"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "次は"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ចំណតបន្ទាប់"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "다음"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ຕໍ່ໄປ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Itti aanu"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਅਗਲਾ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Następny"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Próxima"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Следующая"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Sosoʻo"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Xiga"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kijacho"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ዝቕጽል"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Наступна"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tiếp theo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一站"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一站"
+          }
+        }
+      }
+    },
     "Step %lld of %lld" : {
       "comment" : "VoiceOver: the welcome's progress line: the screen's number, then how many screens there are, e.g. 'Step 1 of 3'.",
       "localizations" : {
@@ -51402,6 +51759,342 @@
         }
       }
     },
+    "vehicles.matches" : {
+      "comment" : "Section header over the vehicles that match what the driver typed.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "የተገኙ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Treffer"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Matches"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Resultados"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Hakutulokset"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Mga tugma"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Résultats"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "खोज में मिलीं"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Rezilta"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Risultati"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "検索結果"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "លទ្ធផលស្វែងរក"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "검색 결과"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ຜົນການຄົ້ນຫາ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kan argaman"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਖੋਜ ਵਿੱਚ ਮਿਲੀਆਂ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Wyniki"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Resultados"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Найдено"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Mea na maua"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Natiijooyinka"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Matokeo"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ዝተረኽቡ"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Знайдено"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kết quả"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "匹配结果"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "搜尋結果"
+          }
+        }
+      }
+    },
+    "vehicles.recent" : {
+      "comment" : "Section header over the vehicles the driver used last.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "የቅርብ ጊዜ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Zuletzt verwendet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Recent"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Recientes"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Viimeisimmät"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kamakailan"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Récents"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "हाल की"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Resan"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Recenti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "最近使用"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ថ្មីៗ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "최근"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ໃຊ້ຫຼ້າສຸດ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Dhiyoo kana"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਹਾਲੀਆ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ostatnie"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Recentes"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Недавние"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Talu ai nei"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Dhowaan"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Hivi karibuni"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ናይ ቀረባ ግዜ"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Нещодавні"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Gần đây"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "最近"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "最近使用"
+          }
+        }
+      }
+    },
     "Version" : {
       "comment" : "Help, About: the label beside the app's version, e.g. '1.0.0 (1)'.",
       "localizations" : {
@@ -52054,6 +52747,174 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "等待 GPS 訊號。起點 %1$@，%2$@ 班次，車輛 %3$@"
+          }
+        }
+      }
+    },
+    "welcome.next" : {
+      "comment" : "Welcome: the button to the next of its three screens.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ቀጣይ"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Weiter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Next"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Siguiente"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Seuraava"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Susunod"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Suivant"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "आगे"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Pwochen"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Avanti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "次へ"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "បន្ទាប់"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "다음"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ຕໍ່ໄປ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Itti aanu"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਅੱਗੇ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Dalej"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Próxima"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Далее"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Sosoʻo ai"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Xiga"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Inayofuata"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ዝቕጽል"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Далі"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tiếp theo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一步"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "下一步"
           }
         }
       }

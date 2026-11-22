@@ -19,24 +19,32 @@ nonisolated enum PickerText {
         String(localized: "Favorites", comment: "Section header over the vehicles the driver starred.")
     }
 
-    static var recent: String {
-        String(localized: "Recent", comment: "Section header over the vehicles or routes the driver used last.")
+    static var recentVehicles: String {
+        String(localized: "vehicles.recent", defaultValue: "Recent", comment: "Section header over the vehicles the driver used last.")
+    }
+
+    static var recentRoutes: String {
+        String(localized: "routes.recent", defaultValue: "Recent", comment: "Section header over the routes the driver used last, on the phone and in CarPlay.")
     }
 
     static var allVehicles: String {
         String(localized: "All vehicles", comment: "Section header over the rest of the driver's assigned vehicles.")
     }
 
-    static var matches: String {
-        String(localized: "Matches", comment: "Section header over the vehicles or routes that match what the driver typed.")
+    static var matchingVehicles: String {
+        String(localized: "vehicles.matches", defaultValue: "Matches", comment: "Section header over the vehicles that match what the driver typed.")
+    }
+
+    static var matchingRoutes: String {
+        String(localized: "routes.matches", defaultValue: "Matches", comment: "Section header over the routes that match what the driver typed.")
     }
 
     static func section(_ section: VehicleSection) -> String {
         switch section {
         case .favorites: favorites
-        case .recent: recent
+        case .recent: recentVehicles
         case .all: allVehicles
-        case .matches: matches
+        case .matches: matchingVehicles
         }
     }
 
@@ -205,7 +213,7 @@ nonisolated enum PickerText {
     }
 
     static var next: String {
-        String(localized: "Next", comment: "Tag on the next run to start, when none is under way.")
+        String(localized: "runs.next", defaultValue: "Next", comment: "Tag on the next run to start, when none is under way.")
     }
 
     /// A segment of the direction switch: where most runs that way are headed.

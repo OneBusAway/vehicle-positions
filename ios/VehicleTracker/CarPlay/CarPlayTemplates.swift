@@ -282,7 +282,7 @@ enum CarPlayTemplates {
         let list = RouteList.of(routes, query: "", recentIDs: recentIDs)
         var sections: [(header: String?, items: [CPListItem])] = []
         if !list.recent.isEmpty {
-            sections.append((PickerText.recent, list.recent.map(item)))
+            sections.append((PickerText.recentRoutes, list.recent.map(item)))
         }
         sections.append((PickerText.allRoutes, list.visible.map(item)))
         return sections

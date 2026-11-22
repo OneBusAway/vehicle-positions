@@ -58,7 +58,7 @@ enum TripStatusText {
     }
 
     static var next: String {
-        String(localized: "Next", comment: "Status card line 1, before the next stop's name.")
+        String(localized: "status.next", defaultValue: "Next", comment: "Status card line 1, before the next stop's name.")
     }
 
     static var from: String {
