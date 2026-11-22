@@ -537,7 +537,12 @@ func importSheet(root, xliffPath, lang, sheetPath string, draft bool) (refused [
 			if _, seen := firstLine[ios+u.file+u.key()]; !seen {
 				firstLine[ios+u.file+u.key()] = r.line
 			}
-			if text != "" {
+			// A row both apps share shows Android's translation as its current
+			// text. Left empty, it says nothing new for iOS, whose string may be
+			// worded apart since the sheet was written (the check warns where
+			// it is): that string stays as it is, text and state (#552).
+			fromAndroid := r.android != "" && strings.TrimSpace(r.translation) == ""
+			if text != "" && !(fromAndroid && u.target != nil) {
 				if r.android != "" {
 					text = toIOS(text, u.source)
 				}

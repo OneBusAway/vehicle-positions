@@ -391,6 +391,27 @@ func TestImport_ADraftCopiedIntoTheTranslationIsRead(t *testing.T) {
 	assert.Contains(t, xliff, `<target state="translated" state-qualifier="leveraged-mt">`+sent+`</target>`)
 }
 
+// TestImport_AnUnfilledSharedRowLeavesTheIOSDraft: a row both apps share
+// shows Android's translation as its current text. Left empty, it doesn't
+// change the iOS string, even a draft since worded apart from Android: that
+// keeps its text and its state (#552).
+func TestImport_AnUnfilledSharedRowLeavesTheIOSDraft(t *testing.T) {
+	p := newSheetProject(t)
+	sheet := p.export(t, "hi", "-xliff", p.xliff)
+	shared := false
+	for _, row := range readRows(t, sheet) {
+		shared = shared || (cell(row, "android") == "login_title" && cell(row, "ios") == "Sign in")
+	}
+	require.True(t, shared, "Sign in has one row for both apps")
+	draft := `<target state="translated" state-qualifier="leveraged-mt">साइन इन करो</target>`
+	p.editXLIFF(t, `<target state="translated">साइन इन करें</target>`, draft)
+
+	code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, p.xliffText(t), draft)
+}
+
 func TestImport_ReadsASheetASpreadsheetSaved(t *testing.T) {
 	p := newSheetProject(t)
 	sheet := filepath.Join(p.dir, "hi.csv")
