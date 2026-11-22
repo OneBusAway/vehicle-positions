@@ -5,8 +5,9 @@ import "strings"
 // cardinalCategories is each language's plural categories, from CLDR 48's
 // common/supplemental/plurals.xml (cardinal rules), for English and the
 // languages the translation proposal (#495) names. Android picks a <plurals>
-// item, and iOS a plural variation, by these. Add a language's row when it is
-// added to status.csv.
+// item by these, and iOS a plural variation by these too, except where
+// xcodeCategories gives it fewer (pluralCategoriesFor). Add a language's row
+// when it is added to status.csv.
 var cardinalCategories = map[string][]string{
 	"am":  {"one", "other"},
 	"ar":  {"zero", "one", "two", "few", "many", "other"},
