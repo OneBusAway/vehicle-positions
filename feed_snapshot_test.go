@@ -29,9 +29,17 @@ const (
 
 // TestWriteFeedSnapshots writes both GTFS-RT feeds to FEED_SNAPSHOT_DIR once
 // per round of reports, for MobilityData's gtfs-realtime-validator to check
-// against rider/testdata/fixture.zip (.github/workflows/gtfs-rt-validator.yml,
-// and docs/development.md for a local run). It is skipped unless
-// FEED_SNAPSHOT_DIR is set, because the rounds are rateInterval apart.
+// against the GTFS feed it writes beside them, gtfs.zip
+// (.github/workflows/gtfs-rt-validator.yml, and docs/development.md for a
+// local run). It is skipped unless FEED_SNAPSHOT_DIR is set, because the
+// rounds are rateInterval apart.
+//
+// gtfs.zip is rider/testdata/fixture.zip with TB added, timed around now
+// (nowFixture), which bus-101 drives. The fixture's own trips would have it
+// hours off its timetable at most times of day, and the trip updates feed
+// leaves out a vehicle that far off (maxScheduleDeviation). TB leaves ST2's
+// times blank, so bus-101's stop_time_update is at a stop with no time in the
+// GTFS feed, the case E046 is about.
 //
 // Each feed gets its own directory, because the validator compares each
 // snapshot with the one before it. A third, combined, holds both feeds'
@@ -55,15 +63,11 @@ func TestWriteFeedSnapshots(t *testing.T) {
 		require.NoError(t, os.Mkdir(filepath.Join(dir, feed), 0o755))
 	}
 
-	ix := loadFixtureIndex(t)
-	t1, ok := ix.Trip("T1")
-	require.True(t, ok)
-	t3, ok := ix.Trip("T3")
-	require.True(t, ok)
-	startDate := ix.ServiceDate(time.Now())
-	// The trip updates feed needs a run of T3 to measure bus-101 against, and
-	// the fixture runs it on weekdays only.
-	t3Date := latestRunDate(t, ix, t3, time.Now())
+	gtfsFeed, startDate := nowFixture(t, time.Now())
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "gtfs.zip"), gtfsFeed, 0o644))
+	ix, err := rider.IndexFromBytes(gtfsFeed, "gtfs.zip", time.Now())
+	require.NoError(t, err)
+	t1, tb, t3 := mustTrip(t, ix, "T1"), mustTrip(t, ix, "TB"), mustTrip(t, ix, "T3")
 
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
@@ -132,17 +136,17 @@ func TestWriteFeedSnapshots(t *testing.T) {
 		along := float64(round) * step
 
 		// A step along already, so bus-101 has left its first stop and has a
-		// delay in every round.
-		onTrip := t3.Shape.PointAt(along + step)
+		// delay in every round. It is heading to ST2 in all of them.
+		onTrip := tb.Shape.PointAt(along + step)
 		onRoute := t1.Shape.PointAt(t1.Shape.Length/2 + along)
 		parked := t3.Shape.PointAt(t3.Shape.Length / 2)
 		// A driver on a trip who says how full the vehicle is, a driver who
 		// knows only the route, and a vehicle that is not in service and sends
 		// no bearing or speed.
 		postLocation(LocationReport{
-			VehicleID: "bus-101", TripID: t3.ID, RouteID: t3.RouteID, StartDate: t3Date,
+			VehicleID: "bus-101", TripID: tb.ID, RouteID: tb.RouteID, StartDate: startDate,
 			Latitude: onTrip.Lat, Longitude: onTrip.Lon,
-			Bearing: float64ptr(t3.Shape.BearingAt(along + step)), Speed: float64ptr(feedSnapshotSpeed),
+			Bearing: float64ptr(tb.Shape.BearingAt(along + step)), Speed: float64ptr(feedSnapshotSpeed),
 			Timestamp: now.Unix(), OccupancyStatus: stringptr("FEW_SEATS_AVAILABLE"),
 		})
 		postLocation(LocationReport{
@@ -182,11 +186,24 @@ func TestWriteFeedSnapshots(t *testing.T) {
 			"a snapshot missing an entity would pass the validator while checking less")
 		require.Len(t, tripUpdates.GetEntity(), 1,
 			"only bus-101 has a measured delay; without it the validator checks no trip update")
-		require.Equal(t, "bus-101", tripUpdates.GetEntity()[0].GetTripUpdate().GetVehicle().GetId())
+		tripUpdate := tripUpdates.GetEntity()[0].GetTripUpdate()
+		require.Equal(t, "bus-101", tripUpdate.GetVehicle().GetId())
+		require.Equal(t, "ST2", tripUpdate.GetStopTimeUpdate()[0].GetStopId(),
+			"without bus-101 heading to ST2 the validator never sees a stop_time_update at an untimed stop")
 
+		// Both feeds give an entity its vehicle's id, and ids must be unique
+		// within a message, so the trip updates go into it under ids of their
+		// own.
 		combined := proto.Clone(positions).(*gtfsrt.FeedMessage)
-		combined.Entity = append(combined.Entity, tripUpdates.GetEntity()...)
+		for _, e := range tripUpdates.GetEntity() {
+			e = proto.Clone(e).(*gtfsrt.FeedEntity)
+			e.Id = proto.String("trip-update:" + e.GetId())
+			combined.Entity = append(combined.Entity, e)
+		}
 		combined.Header.Timestamp = proto.Uint64(max(positions.GetHeader().GetTimestamp(), tripUpdates.GetHeader().GetTimestamp()))
+		for _, feed := range []*gtfsrt.FeedMessage{positions, tripUpdates, combined} {
+			requireUniqueEntityIDs(t, feed)
+		}
 		combinedBody, err := proto.Marshal(combined)
 		require.NoError(t, err)
 
@@ -218,15 +235,13 @@ func fetchSnapshot(t *testing.T, srv *httptest.Server, path string) ([]byte, *gt
 	return body, &feed
 }
 
-// latestRunDate is the latest service date, on or before from's, that ix runs
-// trip on.
-func latestRunDate(t *testing.T, ix *rider.Index, trip *rider.TripInfo, from time.Time) string {
+// requireUniqueEntityIDs fails the test when two of feed's entities share an
+// id, which GTFS-RT forbids within one message.
+func requireUniqueEntityIDs(t *testing.T, feed *gtfsrt.FeedMessage) {
 	t.Helper()
-	for day := range 7 {
-		if date := ix.ServiceDate(from.AddDate(0, 0, -day)); ix.ActiveOn(trip, date) {
-			return date
-		}
+	seen := make(map[string]bool, len(feed.GetEntity()))
+	for _, e := range feed.GetEntity() {
+		require.False(t, seen[e.GetId()], "entity id %q appears twice in one message", e.GetId())
+		seen[e.GetId()] = true
 	}
-	require.FailNow(t, "the trip runs on no day of the week before", "%s, %s", trip.ID, from)
-	return ""
 }

@@ -174,14 +174,18 @@ against both feeds on every pull request that touches Go code
 need JDK 17, Maven and `jq`; no database or Docker.
 
 1. Write the feed snapshots. `TestWriteFeedSnapshots` runs the server's real
-   routes in-process with the test feed `rider/testdata/fixture.zip` loaded:
-   three drivers report, a rider's trip is published, and both feeds are
-   fetched four times, five seconds apart. Each feed goes in its own
+   routes in-process with the test feed `rider/testdata/fixture.zip` loaded,
+   plus one trip timed around the time the test runs, so the driver on it is
+   minutes off the timetable rather than the hours the fixture's own trips
+   would give; its middle stop has no times, as between timepoints in many
+   real feeds. Three drivers report, a rider's trip is published, and both
+   feeds are fetched four times, five seconds apart. Each feed goes in its own
    directory, `vehicle-positions/` and `trip-updates/`, because the validator
    compares each snapshot with the one before it; `combined/` holds both in one
    message, the only form on which the validator runs its cross-feed rules,
    such as E047 (a trip paired with a different `vehicle.id` in each feed).
-   The directory must be empty or not exist:
+   The GTFS feed they were measured against is written beside them as
+   `gtfs.zip`. The directory must be empty or not exist:
 
    ```bash
    FEED_SNAPSHOT_DIR=/tmp/feed-snapshots go test -run '^TestWriteFeedSnapshots$' -count=1 .
@@ -205,7 +209,7 @@ need JDK 17, Maven and `jq`; no database or Docker.
    ```bash
    for feed in vehicle-positions trip-updates combined; do
      java -jar /tmp/gtfs-realtime-validator/gtfs-realtime-validator-lib/target/gtfs-realtime-validator-lib-1.0.0-SNAPSHOT-withAllDependencies.jar \
-       -gtfs rider/testdata/fixture.zip -gtfsRealtimePath /tmp/feed-snapshots/$feed -sort name
+       -gtfs /tmp/feed-snapshots/gtfs.zip -gtfsRealtimePath /tmp/feed-snapshots/$feed -sort name
    done
    ```
 
