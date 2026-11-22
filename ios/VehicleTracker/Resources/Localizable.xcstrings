@@ -54305,175 +54305,181 @@
         }
       }
     },
-    "Use https://. Plain http:// is allowed only for localhost, 127.0.0.1 or a .local host." : {
-      "comment" : "Under the server field when the address is plain http to a host the app won't send a password to.",
+    "Use %@. Plain %@ is allowed only for localhost, 127.0.0.1 or a %@ host." : {
+      "comment" : "Under the server field when the address is plain http to a host the app won't send a password to. The values are https://, http:// and .local, as they are.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "https:// ይጠቀሙ። ተራ http:// የሚፈቀደው localhost፣ 127.0.0.1 ወይም .local ለሆነ አድራሻ ብቻ ነው።"
+            "value" : "%1$@ ይጠቀሙ። ተራ %2$@ የሚፈቀደው localhost፣ 127.0.0.1 ወይም %3$@ ለሆነ አድራሻ ብቻ ነው።"
           }
         },
         "ar" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "استخدم https://. لا يُسمح بـ http:// العادي إلا مع localhost أو 127.0.0.1 أو مضيف .local."
+            "value" : "استخدم %1$@. لا يُسمح بـ %2$@ العادي إلا مع localhost أو 127.0.0.1 أو مضيف %3$@."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Verwenden Sie https://. Einfaches http:// ist nur für localhost, 127.0.0.1 oder einen .local-Host erlaubt."
+            "value" : "Verwenden Sie %1$@. Einfaches %2$@ ist nur für localhost, 127.0.0.1 oder einen %3$@-Host erlaubt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Use %1$@. Plain %2$@ is allowed only for localhost, 127.0.0.1 or a %3$@ host."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Usa https://. Solo se permite http:// para localhost, 127.0.0.1 o un host .local."
+            "value" : "Usa %1$@. Solo se permite %2$@ para localhost, 127.0.0.1 o un host %3$@."
           }
         },
         "fa" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "از https:// استفاده کنید. http:// ساده فقط برای localhost، 127.0.0.1 یا یک میزبان .local مجاز است."
+            "value" : "از %1$@ استفاده کنید. %2$@ ساده فقط برای localhost، 127.0.0.1 یا یک میزبان %3$@ مجاز است."
           }
         },
         "fi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Käytä https://-osoitetta. Pelkkä http:// on sallittu vain, kun osoite on localhost, 127.0.0.1 tai .local-päätteinen."
+            "value" : "Käytä %1$@-osoitetta. Pelkkä %2$@ on sallittu vain, kun osoite on localhost, 127.0.0.1 tai %3$@-päätteinen."
           }
         },
         "fil" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Gumamit ng https://. Sa localhost, 127.0.0.1 o isang .local na host lang pinapayagan ang http://."
+            "value" : "Gumamit ng %1$@. Sa localhost, 127.0.0.1 o isang %3$@ na host lang pinapayagan ang %2$@."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Utilisez https://. Le simple http:// n’est autorisé que pour localhost, 127.0.0.1 ou un hôte .local."
+            "value" : "Utilisez %1$@. Le simple %2$@ n’est autorisé que pour localhost, 127.0.0.1 ou un hôte %3$@."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "https:// इस्तेमाल करें। सादा http:// सिर्फ़ localhost, 127.0.0.1 या .local होस्ट के लिए चलता है।"
+            "value" : "%1$@ इस्तेमाल करें। सादा %2$@ सिर्फ़ localhost, 127.0.0.1 या %3$@ होस्ट के लिए चलता है।"
           }
         },
         "ht" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Sèvi ak https://. Ou ka sèvi ak http:// sèlman pou localhost, 127.0.0.1 oswa yon adrès .local."
+            "value" : "Sèvi ak %1$@. Ou ka sèvi ak %2$@ sèlman pou localhost, 127.0.0.1 oswa yon adrès %3$@."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Usa https://. Il semplice http:// è consentito solo per localhost, 127.0.0.1 o un host .local."
+            "value" : "Usa %1$@. Il semplice %2$@ è consentito solo per localhost, 127.0.0.1 o un host %3$@."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "https:// を使用してください。http:// は localhost、127.0.0.1、.local のホストでのみ使用できます。"
+            "value" : "%1$@ を使用してください。%2$@ は localhost、127.0.0.1、%3$@ のホストでのみ使用できます。"
           }
         },
         "km" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "សូមប្រើ https://។ http:// ធម្មតាត្រូវបានអនុញ្ញាតតែសម្រាប់ localhost, 127.0.0.1 ឬម៉ាស៊ីន .local ប៉ុណ្ណោះ។"
+            "value" : "សូមប្រើ %1$@។ %2$@ ធម្មតាត្រូវបានអនុញ្ញាតតែសម្រាប់ localhost, 127.0.0.1 ឬម៉ាស៊ីន %3$@ ប៉ុណ្ណោះ។"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "https:// 주소를 사용하세요. http:// 주소는 localhost, 127.0.0.1 또는 .local 호스트에서만 쓸 수 있어요."
+            "value" : "%1$@ 주소를 사용하세요. %2$@ 주소는 localhost, 127.0.0.1 또는 %3$@ 호스트에서만 쓸 수 있어요."
           }
         },
         "lo" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ໃຊ້ https://. ອະນຸຍາດ http:// ທຳມະດາສະເພາະ localhost, 127.0.0.1 ຫຼື ໂຮສ .local ເທົ່ານັ້ນ."
+            "value" : "ໃຊ້ %1$@. ອະນຸຍາດ %2$@ ທຳມະດາສະເພາະ localhost, 127.0.0.1 ຫຼື ໂຮສ %3$@ ເທົ່ານັ້ນ."
           }
         },
         "om" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Teessoo https:// fayyadami. Teessoon http:// localhost, 127.0.0.1 yookaan teessoo .local qofaaf hayyamama."
+            "value" : "Teessoo %1$@ fayyadami. Teessoon %2$@ localhost, 127.0.0.1 yookaan teessoo %3$@ qofaaf hayyamama."
           }
         },
         "pa" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "https:// ਵਾਲਾ ਪਤਾ ਵਰਤੋ। ਸਾਦੇ http:// ਦੀ ਇਜਾਜ਼ਤ ਸਿਰਫ਼ localhost, 127.0.0.1 ਜਾਂ .local ਹੋਸਟ ਲਈ ਹੈ।"
+            "value" : "%1$@ ਵਾਲਾ ਪਤਾ ਵਰਤੋ। ਸਾਦੇ %2$@ ਦੀ ਇਜਾਜ਼ਤ ਸਿਰਫ਼ localhost, 127.0.0.1 ਜਾਂ %3$@ ਹੋਸਟ ਲਈ ਹੈ।"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Użyj https://. Zwykły http:// jest dozwolony tylko dla localhost, 127.0.0.1 lub hosta .local."
+            "value" : "Użyj %1$@. Zwykły %2$@ jest dozwolony tylko dla localhost, 127.0.0.1 lub hosta %3$@."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Use https://. O http:// só é permitido para localhost, 127.0.0.1 ou um host .local."
+            "value" : "Use %1$@. O %2$@ só é permitido para localhost, 127.0.0.1 ou um host %3$@."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Используйте https://. Обычный http:// разрешён только для localhost, 127.0.0.1 или хоста .local."
+            "value" : "Используйте %1$@. Обычный %2$@ разрешён только для localhost, 127.0.0.1 или хоста %3$@."
           }
         },
         "sm" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Faʻaaogā https://. E faʻatagaina le http:// naʻo mo localhost, 127.0.0.1 poʻo se host .local."
+            "value" : "Faʻaaogā %1$@. E faʻatagaina le %2$@ naʻo mo localhost, 127.0.0.1 poʻo se host %3$@."
           }
         },
         "so" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Isticmaal cinwaan https:// ah. Cinwaan http:// ah waxaa loo oggol yahay localhost, 127.0.0.1 ama cinwaan .local ah oo keliya."
+            "value" : "Isticmaal cinwaan %1$@ ah. Cinwaan %2$@ ah waxaa loo oggol yahay localhost, 127.0.0.1 ama cinwaan %3$@ ah oo keliya."
           }
         },
         "sw" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Tumia https://. http:// ya kawaida inaruhusiwa kwa localhost, 127.0.0.1 au seva ya .local pekee."
+            "value" : "Tumia %1$@. %2$@ ya kawaida inaruhusiwa kwa localhost, 127.0.0.1 au seva ya %3$@ pekee."
           }
         },
         "ti" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "https:// ተጠቐሙ። ንቡር http:// ዝፍቀድ ንlocalhost፣ 127.0.0.1 ወይ .local ዝኾነ ኣድራሻ ጥራይ እዩ።"
+            "value" : "%1$@ ተጠቐሙ። ንቡር %2$@ ዝፍቀድ ንlocalhost፣ 127.0.0.1 ወይ %3$@ ዝኾነ ኣድራሻ ጥራይ እዩ።"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Використовуйте https://. Звичайний http:// дозволено лише для localhost, 127.0.0.1 або хоста .local."
+            "value" : "Використовуйте %1$@. Звичайний %2$@ дозволено лише для localhost, 127.0.0.1 або хоста %3$@."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Dùng https://. Chỉ được dùng http:// thường cho localhost, 127.0.0.1 hoặc máy chủ .local."
+            "value" : "Dùng %1$@. Chỉ được dùng %2$@ thường cho localhost, 127.0.0.1 hoặc máy chủ %3$@."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "请使用 https://。普通 http:// 仅允许用于 localhost、127.0.0.1 或 .local 主机。"
+            "value" : "请使用 %1$@。普通 %2$@ 仅允许用于 localhost、127.0.0.1 或 %3$@ 主机。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "請使用 https://。一般的 http:// 只能用於 localhost、127.0.0.1 或 .local 主機。"
+            "value" : "請使用 %1$@。一般的 %2$@ 只能用於 localhost、127.0.0.1 或 %3$@ 主機。"
           }
         }
       }

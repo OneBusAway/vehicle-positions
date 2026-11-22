@@ -125,6 +125,14 @@ nonisolated enum SignInText {
     }
 
     static var useHTTPS: String {
-        String(localized: "Use https://. Plain http:// is allowed only for localhost, 127.0.0.1 or a .local host.", comment: "Under the server field when the address is plain http to a host the app won't send a password to.")
+        useHTTPS(in: .main)
+    }
+
+    /// In `bundle`'s language. https://, http:// and .local go in as values,
+    /// so String(localized:) sets each apart and its dots, colons and slashes
+    /// stay with it in a right-to-left sentence.
+    static func useHTTPS(in bundle: Bundle) -> String {
+        let https = "https://", http = "http://", local = ".local"
+        return String(localized: "Use \(https). Plain \(http) is allowed only for localhost, 127.0.0.1 or a \(local) host.", bundle: bundle, comment: "Under the server field when the address is plain http to a host the app won't send a password to. The values are https://, http:// and .local, as they are.")
     }
 }
