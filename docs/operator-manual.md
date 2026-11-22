@@ -722,7 +722,8 @@ a timetable but there were gaps between vehicles, as on a schedule run wholly
 from GTFS frequencies, the headline is about the gaps instead, such as **6% of
 gaps were bunched and 18% were long over the last 7 days**, and the line under
 it names the route bunched most often, when one is above the rest (see
-[Gaps between vehicles](#gaps-between-vehicles)).
+[Gaps between vehicles](#gaps-between-vehicles)). Frequent timetabled service
+is judged on time as well as by its gaps, so it keeps the On time headline.
 
 It opens on the seven days that end yesterday. **Day** shows one day,
 **7 days** a week and **28 days** four weeks. The date box picks the last day
@@ -734,7 +735,8 @@ Over 7 or 28 days:
 
 - Five figures cross the top: **On time**, **Trips run**, **Early**, **Late**
   and **Stops with no report**, and **Bunched** and **Long gaps** after them
-  when your schedule runs a route from its GTFS frequencies. Click one to draw
+  when a route has frequent service, from its GTFS frequencies or a
+  timetable every 12 minutes or more often at a stop. Click one to draw
   it day by day in the chart under them. With **Compare with the 7 days
   before** (or the 28 days before) on, the period before is drawn behind as a
   dashed line and each figure says how many points it moved.
@@ -744,12 +746,11 @@ Over 7 or 28 days:
   stacked on it. On time is the space above.
 - **How early and how late** counts trips by the minute they reached their
   last stop against the timetable, with the on-time window shaded.
-- **Gaps between vehicles** and its two charts follow, when your schedule
-  runs a route from its GTFS frequencies.
+- **Gaps between vehicles** and its two charts follow, when a route has
+  frequent service.
 
 A single day has tiles in place of the figures and their chart: four, and
-**Bunched** and **Long gaps** too on a day with a route run from its GTFS
-frequencies.
+**Bunched** and **Long gaps** too on a day with frequent service.
 **Show these numbers as a table** under each chart opens the same numbers as a
 table.
 
@@ -818,18 +819,39 @@ out again once after an upgrade that changes what Analytics counts.
 
 #### Gaps between vehicles
 
-A rider on a route run from GTFS frequencies doesn't time their trip by a
-timetable, so what they notice is how long they wait for the next vehicle.
-Analytics measures that as the gaps between vehicles, for each route and
-direction run that way.
+A rider on a route run from GTFS frequencies has no timetable to time their
+trip by, and one at a stop served every few minutes doesn't need one, so what
+they notice is how long they wait for the next vehicle. Analytics measures
+that as the gaps between vehicles, for each route and direction with frequent
+service: trips your schedule runs from its GTFS frequencies, however often
+they run, and a timetable every 12 minutes or more often at a stop.
+
+A timetable runs that often where two departures in a row are no more than 12
+minutes apart, and two trips due at the same time are one departure, as a
+rider sees them. Five or more an hour is the line Transport for London draws
+for high-frequency bus routes: riders turn up at random at a stop served that
+often. Served less often, they time their trips by the timetable, and **On
+time** already says how well it was kept. A timetabled trip is still judged on
+time, whether it is measured here or not, while a trip run from GTFS
+frequencies is measured only here.
 
 - A **gap** is the time between two vehicles leaving a stop, whichever
   vehicles they were, so a vehicle that overtakes another counts where it
   passed. Gaps are measured at the stops **On time** would judge, except a
   trip's last stop, and count in the hour the later vehicle left.
-- The **scheduled gap** is what the frequencies promise at that stop then.
-  Trips of the route and direction that share a stop add up there: two
-  patterns every 10 minutes through one stop make every 5 minutes at it.
+- The **scheduled gap** is what the schedule promises at that stop then. For
+  trips run from GTFS frequencies it is the headway they set. For a
+  timetable it is the spacing between two departures in a row, which applies
+  from halfway after the earlier departure to halfway to the next, so a
+  vehicle is judged against the spacing up to the departure nearest when it
+  left. With departures at 08:00, 08:08 and 08:20, a vehicle leaving at 08:13
+  is judged against 8 minutes and one leaving at 08:15 against 12. That way a
+  vehicle on time, or a little early or late, is judged against the gap the
+  riders waiting for it were promised.
+- All the trips of the route and direction at a stop add up there: two
+  patterns every 10 minutes through one stop make every 5 minutes at it, and
+  so does a timetable every 10 minutes beside trips run from GTFS frequencies
+  every 10 minutes.
 - A gap is **bunched** under 25% of the scheduled gap and a **long gap** over
   150%: on a route every 10 minutes, under 2.5 minutes and over 15.
 - **Extra wait** is how much longer than the schedule promises a rider who
@@ -838,13 +860,16 @@ direction run that way.
 - A gap is **unknown**, and not judged, when a vehicle whose phone sent
   nothing within 2 minutes either side of the stop could have left between
   the two. The first vehicle after a break in service has no gap, so the
-  evening's first vehicle is not a long gap after the morning's last.
+  evening's first vehicle is not a long gap after the morning's last. On a
+  timetable, a spacing of more than 12 minutes is a break in service.
 
 Only drivers' trips count, not Rider mode, and only vehicles running the app
 are seen. Two of them close together are bunched whatever else ran, but a
 vehicle without the app looks like a long gap. So each row shows the route's
 **Trips run** beside its gaps: when many runs are missing, many long gaps and
-a high extra wait may be vehicles the page could not see.
+a high extra wait may be vehicles the page could not see. **Trips run** counts
+all of the route's trips, measured here or not: both directions, and the trips
+outside its frequent service, such as an evening every 20 minutes.
 
 The section has a row for each route and direction, with **Gaps judged** (and
 how many were unknown), **Bunched**, **Long gaps**, **Extra wait (min)** and
@@ -856,8 +881,10 @@ the whole route's **Trips run**. Under it:
 - **How even the gaps were** counts gaps by each tenth of their scheduled gap,
   from under 10% to 300% and over, with the bunched and long bands shaded.
 
-A timetabled trip is not measured here, even on a route that also has trips
-run from GTFS frequencies.
+A timetabled trip whose departure from a stop has no other within 12 minutes
+of it, such as an early trip half an hour before the rest, is left out of the
+gaps at that stop: it adds nothing to the scheduled gap, and its vehicle is
+not counted in any gap there. **On time** still judges it.
 
 ### The feed itself
 
