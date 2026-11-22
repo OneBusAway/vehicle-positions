@@ -3691,7 +3691,7 @@ components:
       required: [vehicle_id, vehicle_label, spacing_s, scheduled_gap_s]
       properties:
         vehicle_id:
-          type: string
+          $ref: '#/components/schemas/VehicleID'
         vehicle_label:
           type: string
         spacing_s:
