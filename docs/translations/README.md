@@ -1,7 +1,7 @@
 # Translating the driver apps
 
 This folder holds what the Android and iOS driver apps' translations are checked against. The plan they follow is
-proposal #495; until the maintainer has agreed to it, the apps ship in English only, and the workflow here may change.
+proposal #495, and the workflow here may change.
 
 ## Where the strings live
 

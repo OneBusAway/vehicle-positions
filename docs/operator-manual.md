@@ -373,6 +373,10 @@ takes about ten minutes. Before you start, make sure the driver has an account
    [`deployment.md` §12](deployment.md#12-distributing-the-android-app).
 2. Have the driver's email address and password ready, and know which route
    and run they will be driving.
+3. If the driver's phone is not in English, ask your IT contact whether its
+   language has been checked: the app follows the phone, and each language but
+   English is a draft until a fluent speaker has read it
+   ([`deployment.md` §15](deployment.md#15-languages-on-drivers-phones)).
 
 **On the driver's phone:**
 
