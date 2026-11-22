@@ -197,10 +197,11 @@ class ScreenFlowTest {
             .assertIsDisplayed()
 
         state = LoginUiState(error = LoginError.InvalidAddress)
-        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_invalid_address)))
+        loginField(R.string.login_server_url_label)
+            .assert(hasError(getString(R.string.login_error_invalid_address, getString(R.string.login_server_placeholder))))
 
         state = LoginUiState(error = LoginError.HttpsRequired)
-        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_https_required)))
+        loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_https_required, "https://")))
 
         state = LoginUiState(error = LoginError.NotATrackerServer("https://example.com/"))
         loginField(R.string.login_server_url_label).assert(hasError(getString(R.string.login_error_check_address)))
