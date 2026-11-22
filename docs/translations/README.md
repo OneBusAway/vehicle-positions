@@ -177,5 +177,6 @@ Errors:
 
 Warnings:
 
-- **`consistency`**: the two apps translate the same English differently.
+- **`consistency`**: an iOS translation matches none of Android's translations of the same English. Android may
+  word one English differently on different screens, and iOS may take any of those wordings.
 - **`note`**: an English string takes a value but has no note saying what it is.

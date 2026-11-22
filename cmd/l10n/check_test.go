@@ -277,6 +277,13 @@ func TestCheck_Rules(t *testing.T) {
 		{"the two apps translating the same English differently",
 			[]edit{replace(iosCatalog, `"value" : "साइन इन करें"`, `"value" : "लॉग इन करें"`)}, options{},
 			warning, "consistency", "Sign in", "hi", iosCatalog},
+		{"an iOS translation none of the Android strings with its English says",
+			[]edit{
+				replace(androidSource, `<string name="login_title">Sign in</string>`, "<string name=\"login_title\">Sign in</string>\n    <string name=\"account_sign_in\">Sign in</string>"),
+				replace(androidHindi, `<string name="login_title">साइन इन करें</string>`, "<string name=\"login_title\">साइन इन करें</string>\n    <string name=\"account_sign_in\">लॉग इन करें</string>"),
+				replace(iosCatalog, `"value" : "साइन इन करें"`, `"value" : "लॉगिन करें"`),
+			}, options{},
+			warning, "consistency", "Sign in", "hi", iosCatalog},
 		{"the same English across a \\u escape, translated differently",
 			[]edit{
 				replace(androidSource, ">Sign in<", `>Sign in\u2026<`),
@@ -311,6 +318,17 @@ func TestCheck_Rules(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCheck_AnIOSKeyMayTakeAnyAndroidWordingOfItsEnglish: where Android
+// words one English apart on different screens, an iOS key for one of those
+// screens may take that screen's wording, not only the last one.
+func TestCheck_AnIOSKeyMayTakeAnyAndroidWordingOfItsEnglish(t *testing.T) {
+	r := checked(t, fixture(t,
+		replace(androidSource, `<string name="login_title">Sign in</string>`, "<string name=\"login_title\">Sign in</string>\n    <string name=\"account_sign_in\">Sign in</string>"),
+		replace(androidHindi, `<string name="login_title">साइन इन करें</string>`, "<string name=\"login_title\">साइन इन करें</string>\n    <string name=\"account_sign_in\">लॉग इन करें</string>"),
+	), options{})
+	assert.Empty(t, matching(r, warning, "consistency", "Sign in", "hi"), allFindings(r))
 }
 
 // lineOf is the line of the fixture file f points at.

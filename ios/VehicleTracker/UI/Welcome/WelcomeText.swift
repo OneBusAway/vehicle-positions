@@ -14,7 +14,7 @@ nonisolated enum WelcomeText {
     }
 
     static var next: String {
-        String(localized: "Next", comment: "Welcome: the button to the next of its three screens.")
+        String(localized: "welcome.next", defaultValue: "Next", comment: "Welcome: the button to the next of its three screens.")
     }
 
     static var `continue`: String {

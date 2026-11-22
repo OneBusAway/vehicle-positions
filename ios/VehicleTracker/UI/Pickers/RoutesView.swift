@@ -58,11 +58,11 @@ struct RoutesView: View {
     private func rows(_ model: RouteListModel) -> some View {
         List {
             if !model.recent.isEmpty {
-                Section(PickerText.recent) {
+                Section(PickerText.recentRoutes) {
                     ForEach(PlacedRoute.recent(model.recent)) { row($0.route) }
                 }
             }
-            Section(query.isEmpty ? PickerText.allRoutes : PickerText.matches) {
+            Section(query.isEmpty ? PickerText.allRoutes : PickerText.matchingRoutes) {
                 ForEach(PlacedRoute.all(model.visible)) { row($0.route) }
             }
         }
@@ -90,7 +90,7 @@ struct RoutesView: View {
                     Section {
                         badges(PlacedRoute.recent(model.recent))
                     } header: {
-                        PickerSectionHeader(title: PickerText.recent)
+                        PickerSectionHeader(title: PickerText.recentRoutes)
                     }
                 }
                 Section {
@@ -98,7 +98,7 @@ struct RoutesView: View {
                 } header: {
                     // A grid of bare numbers has no names to scan, so its
                     // label says how many there are.
-                    PickerSectionHeader(title: query.isEmpty ? PickerText.allRoutes(count: model.total) : PickerText.matches)
+                    PickerSectionHeader(title: query.isEmpty ? PickerText.allRoutes(count: model.total) : PickerText.matchingRoutes)
                 }
             }
             .padding(.horizontal, 16)

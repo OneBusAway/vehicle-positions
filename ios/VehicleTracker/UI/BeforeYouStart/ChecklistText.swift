@@ -44,7 +44,7 @@ nonisolated enum ChecklistText {
     }
 
     static var next: String {
-        String(localized: "Next", comment: "At the end of the checklist row that Continue asks iOS about next.")
+        String(localized: "checklist.next", defaultValue: "Next", comment: "At the end of the checklist row that Continue asks iOS about next.")
     }
 
     static var tryAgain: String {
