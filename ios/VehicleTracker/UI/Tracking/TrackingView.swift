@@ -101,7 +101,8 @@ private struct TrackingMap: View {
 }
 
 /// The status card with a problem line under it, or the Signed out card in
-/// their place. Reads the session itself, so each fix redraws only this.
+/// their place, and the reports waiting on the phone in the card's last
+/// line. Reads the session itself, so each fix redraws only this.
 private struct StatusArea: View {
     @Environment(TripSession.self) private var session
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -109,7 +110,9 @@ private struct StatusArea: View {
     @Binding var cardBottom: CGFloat
 
     var body: some View {
-        if let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting) {
+        let waiting = session.reportsWaiting
+        if let status = TripStatus(phase: session.phase, latest: session.latest, reporting: session.reporting,
+                                   reportsWaiting: waiting.count) {
             VStack(spacing: 8) {
                 if status.isSignedOut {
                     SignedOutCard { showingSignInAgain = true }
@@ -134,6 +137,14 @@ private struct StatusArea: View {
             // the card; the minutes moving inside one kind are not.
             .onChange(of: status.category) { old, _ in
                 AccessibilityNotification.Announcement(status.announcement(after: old)).post()
+            }
+            // Only as `ReportsWaiting.isAnnounced` says, and after whatever
+            // is being read, as Android's polite line is.
+            .onChange(of: waiting) { old, new in
+                guard new.isAnnounced(after: old) else { return }
+                var words = AttributedString(TripStatusText.reportsWaiting(new.count))
+                words.accessibilitySpeechAnnouncementPriority = .low
+                AccessibilityNotification.Announcement(words).post()
             }
         }
     }

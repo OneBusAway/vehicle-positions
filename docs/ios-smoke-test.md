@@ -424,7 +424,10 @@ In the feed, exactly one entity, with `vehicle.id` `bus-1`, `trip.trip_id`
 
 **Expected outcome:** an ink line **No connection · Riders can't see you**
 appears under the status card within about a reporting interval, and goes
-away once the server is back. The card itself keeps its last schedule answer.
+away once the server is back. The card itself keeps its last schedule answer,
+and its last line counts the reports kept on the phone in place of the next
+stop's time and distance: **1 report to send when online**, then one more about
+every 5 s. It goes back to the time and distance once they have been sent.
 The trip bar keeps showing the "n sent" count throughout, with the cloud
 symbol beside it in amber while the line shows. The count resumes climbing
 from where it left off rather than catching up: fixes captured while offline

@@ -71,6 +71,12 @@ actor OfflineFixQueue {
         Array(try read(owner).reports.prefix(max))
     }
 
+    /// When each of `owner`'s reports was taken, in seconds since 1970, oldest
+    /// kept first.
+    func timestamps(for owner: Owner) throws -> [Int64] {
+        try read(owner).reports.map(\.timestamp)
+    }
+
     /// Removes `reports`, a run `oldest` returned, once they have been sent or
     /// dropped. A full queue may have dropped some of them since; those are
     /// skipped, so no report added since is taken in their place.

@@ -1,6 +1,29 @@
 import Foundation
+import Observation
 import OSLog
 import UIKit
+
+/// The reports kept on the phone for the driver signed in, as the trip card
+/// says them: Android's `ReportsWaiting`.
+nonisolated struct ReportsWaiting: Sendable, Equatable {
+    /// Those young enough to upload: the card's number. The uploads drop
+    /// older ones rather than send them, so they are left out, and the count
+    /// and the uploads agree.
+    var count = 0
+    /// Every one kept, the ones too old to upload too, so a drop in `count`
+    /// tells whether reports left the phone or only aged out on it.
+    var kept = 0
+
+    /// Whether VoiceOver reads the count out as it goes from `old` to this:
+    /// as the line comes, and as the count drops because reports left the
+    /// phone, as the backlog uploads. Not as each report adds one while there
+    /// is no connection, nor as one ages out while the phone stays offline:
+    /// after a day of that, either would be every report. Android's
+    /// `speaksWaiting`.
+    func isAnnounced(after old: ReportsWaiting) -> Bool {
+        count > 0 && (old.count == 0 || (count < old.count && kept < old.kept))
+    }
+}
 
 /// What one `HistoryUploader.uploadIfIdle(through:)` call did with the queue.
 nonisolated enum HistoryUpload: Sendable, Equatable {
@@ -23,7 +46,12 @@ nonisolated enum HistoryUpload: Sendable, Equatable {
 /// batch stays at the front of the queue until it has gone, and two uploads
 /// at once would both send it. One object for the app, so that holds across
 /// trips too.
-@MainActor
+///
+/// It also counts them, for the trip card (`waiting`). The queue holds the
+/// reports; the count is taken from it again after each keep and each
+/// removal, as a drain starts, at each sign-in and sign-out, and as the
+/// oldest one counted grows too old to upload.
+@MainActor @Observable
 final class HistoryUploader {
     /// The most reports one upload carries; the server takes at most 500.
     static let batchSize = 500
@@ -41,6 +69,10 @@ final class HistoryUploader {
     /// upload per driver every five seconds.
     static let drainInterval: Duration = .seconds(5)
 
+    /// The reports kept for the driver signed in, as `countWaiting()` last
+    /// counted them.
+    private(set) var waiting = ReportsWaiting()
+
     private let queue: OfflineFixQueue
     /// Who is signed in, and to which server: the reports are kept and sent
     /// under them.
@@ -48,19 +80,30 @@ final class HistoryUploader {
     private let now: () -> Date
     private let backgroundTime: any BackgroundTime
     private let sleep: (Duration) async throws -> Void
+    /// The wait until the oldest report counted grows too old to upload.
+    private let sleepUntilExpiry: (Duration) async throws -> Void
     private var isUploading = false
     private var drainTask: Task<Void, Never>?
     private var drainTime = UIBackgroundTaskIdentifier.invalid
+    /// Bumped by each count, so a count that read the queue before a newer
+    /// one can't land after it.
+    private var countGeneration = 0
+    /// When the oldest report counted grows too old to upload, in seconds
+    /// since 1970, and the wait that counts again then.
+    private var countAgainAt: Int64?
+    private var expiry: Task<Void, Never>?
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "history-uploader")
 
     init(queue: OfflineFixQueue, settings: AppSettings, now: @escaping () -> Date = Date.init,
          backgroundTime: any BackgroundTime = ApplicationBackgroundTime(),
-         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+         sleepUntilExpiry: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.queue = queue
         self.settings = settings
         self.now = now
         self.backgroundTime = backgroundTime
         self.sleep = sleep
+        self.sleepUntilExpiry = sleepUntilExpiry
     }
 
     private var owner: OfflineFixQueue.Owner? {
@@ -79,7 +122,9 @@ final class HistoryUploader {
             try await queue.add(report, for: owner)
         } catch {
             log.error("could not keep a location report for history: \(String(describing: error), privacy: .public)")
+            return
         }
+        await countWaiting()
     }
 
     /// Uploads the oldest kept reports of one vehicle through `api`, unless
@@ -92,6 +137,46 @@ final class HistoryUploader {
         isUploading = true
         defer { isUploading = false }
         return await uploadOneBatch(through: api)
+    }
+
+    /// Counts the reports kept for the driver signed in into `waiting`. A
+    /// report grows too old to upload with no keep or upload to count it
+    /// out, so the count is also taken again when the oldest one counted
+    /// does, as Android's `WaitingReports` does.
+    func countWaiting() async {
+        countGeneration += 1
+        let generation = countGeneration
+        var taken: [Int64] = []
+        if let owner {
+            do {
+                taken = try await queue.timestamps(for: owner)
+            } catch {
+                log.error("could not count the kept reports: \(String(describing: error), privacy: .public)")
+                return
+            }
+        }
+        guard generation == countGeneration else { return }
+        let seconds = Int64(now().timeIntervalSince1970)
+        let young = taken.filter { !Self.isTooOld($0, at: seconds) }
+        waiting = ReportsWaiting(count: young.count, kept: taken.count)
+
+        let next = young.min().map { $0 + Self.maxAgeSeconds + 1 }
+        guard next != countAgainAt else { return }
+        countAgainAt = next
+        expiry?.cancel()
+        expiry = next.map { at in
+            Task { [weak self, sleepUntilExpiry = self.sleepUntilExpiry] in
+                do {
+                    try await sleepUntilExpiry(.seconds(at - seconds))
+                } catch {
+                    return
+                }
+                // Counted again however the clock moved meanwhile, so a wait
+                // that ends early still sets the next one.
+                self?.countAgainAt = nil
+                await self?.countWaiting()
+            }
+        }
     }
 
     /// Uploads the kept reports of the driver signed in batch after batch,
@@ -120,6 +205,9 @@ final class HistoryUploader {
     }
 
     private func uploadAll(through api: @MainActor () -> (any TrackerAPI)?) async {
+        // Whatever the uploads make of them: a drain is also how a launch,
+        // and the app coming to the front, first looks at what was kept.
+        await countWaiting()
         while let client = api() {
             switch await uploadIfIdle(through: client) {
             case .kept?, .nothingQueued?, .notSignedIn?:
@@ -162,10 +250,12 @@ final class HistoryUploader {
         guard let owner else { return .notSignedIn }
         do {
             var batch = try await queue.oldest(Self.batchSize, for: owner)
-            let expired = batch.prefix { isTooOld($0) }
+            let seconds = Int64(now().timeIntervalSince1970)
+            let expired = batch.prefix { Self.isTooOld($0.timestamp, at: seconds) }
             if !expired.isEmpty {
                 log.notice("dropping \(expired.count) kept reports older than the server takes")
                 try await queue.remove(Array(expired), for: owner)
+                await countWaiting()
                 batch = try await queue.oldest(Self.batchSize, for: owner)
             }
             // The endpoint takes one vehicle per upload.
@@ -181,6 +271,7 @@ final class HistoryUploader {
                 return .kept
             }
             try await queue.remove(reports, for: owner)
+            await countWaiting()
             return .batchSent
         } catch {
             // The upload's own failures are handled above; this is the
@@ -190,8 +281,10 @@ final class HistoryUploader {
         }
     }
 
-    /// In whole seconds, as the report's timestamp is.
-    private func isTooOld(_ report: LocationReport) -> Bool {
-        Int64(now().timeIntervalSince1970) - report.timestamp > Self.maxAgeSeconds
+    /// Whether a report taken at `timestamp` is too old to upload at `now`,
+    /// both in whole seconds, as a report's timestamp is. The uploads and the
+    /// count both go by it, so they agree.
+    private static func isTooOld(_ timestamp: Int64, at now: Int64) -> Bool {
+        now - timestamp > maxAgeSeconds
     }
 }
