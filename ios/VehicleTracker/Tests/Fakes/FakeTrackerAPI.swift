@@ -26,12 +26,18 @@ import Foundation
     /// on it, while the request is out. What it throws is the logout's error.
     nonisolated(unsafe) var whileLoggingOut: (() async throws -> Void)?
     nonisolated(unsafe) var postDelay: Duration?
+    nonisolated(unsafe) var historyError: (any Error)?
+    /// Awaited inside `postLocationHistory(_:)`, before recording the call, so
+    /// a test can act while an upload is out. What it throws is the upload's
+    /// error.
+    nonisolated(unsafe) var whileUploadingHistory: (() async throws -> Void)?
 
     private(set) nonisolated(unsafe) var logins: [(String, String)] = []
     private(set) nonisolated(unsafe) var tripRequests: [String] = []
     private(set) nonisolated(unsafe) var starts: [(String, String, String)] = []
     private(set) nonisolated(unsafe) var ends: [Int64] = []
     private(set) nonisolated(unsafe) var posted: [LocationReport] = []
+    private(set) nonisolated(unsafe) var historyUploads: [LocationHistoryRequest] = []
     /// The trip, start, end and logout calls in the order they were made, for
     /// tests where the order is the point.
     private(set) nonisolated(unsafe) var calls: [String] = []
@@ -69,6 +75,11 @@ import Foundation
         if let postDelay { try? await Task.sleep(for: postDelay) }
         posted.append(report)
         if let postError { throw postError }
+    }
+    func postLocationHistory(_ request: LocationHistoryRequest) async throws {
+        try await whileUploadingHistory?()
+        historyUploads.append(request)
+        if let historyError { throw historyError }
     }
     func logout() async throws {
         try await whileLoggingOut?()

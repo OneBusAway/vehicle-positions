@@ -16,8 +16,10 @@ nonisolated enum ReportingProblem: Sendable, Equatable {
 }
 
 /// Sends fixes to `POST /api/v1/locations`, one at a time, no more often than
-/// the server accepts, dropping what it cannot send. A copy of the Android
-/// app's `TripReporter` rules so both clients behave the same.
+/// the server accepts. A report that fails for want of a connection is kept
+/// for location history, and one batch of those goes after each report that
+/// gets through; any other the server turns down is dropped. A copy of the
+/// Android app's `TripReporter` rules so both clients behave the same.
 @MainActor @Observable
 final class LocationReporter {
     /// The server allows one report per five seconds per driver.
@@ -36,6 +38,9 @@ final class LocationReporter {
     /// Called after every send outcome, so the session can republish its
     /// reporting status without having waited for the POST.
     private let onChange: @MainActor () -> Void
+    /// Where a report that could not be sent for want of a connection is
+    /// kept, and what uploads it. Without one it is dropped.
+    private let history: HistoryUploader?
     private var lastSentAt: Date?
     private var consecutiveTimestampRejects = 0
     /// True from the moment a send is handed to its task until that task has
@@ -47,11 +52,12 @@ final class LocationReporter {
     /// `sent` is how many reports of this trip the server already accepted,
     /// before a relaunch: the count carries on from there.
     init(api: any TrackerAPI, now: @escaping () -> Date, sent: Int = 0, occupancy: OccupancyChoice = .shared,
-         onChange: @escaping @MainActor () -> Void = {}) {
+         history: HistoryUploader? = nil, onChange: @escaping @MainActor () -> Void = {}) {
         self.api = api
         self.now = now
         self.occupancy = occupancy
         fixesSent = sent
+        self.history = history
         self.onChange = onChange
     }
 
@@ -72,7 +78,8 @@ final class LocationReporter {
             return false
         }
         // A send still in flight means the network, not the throttle, is the
-        // limit; queueing behind it would only pile up stale positions.
+        // limit; queueing behind it would only pile up stale positions. If
+        // that send fails for want of a connection, its own report is kept.
         if isSending {
             return false
         }
@@ -98,7 +105,16 @@ final class LocationReporter {
         return true
     }
 
+    /// The report first, and only once the server has taken it, one batch of
+    /// those kept while there was no connection. The batch is not part of the
+    /// report: the next fix can go while it is out.
     private func send(_ report: LocationReport) async {
+        guard await post(report), let history else { return }
+        await history.uploadIfIdle(through: api)
+    }
+
+    /// Returns whether the server took `report`.
+    private func post(_ report: LocationReport) async -> Bool {
         defer {
             isSending = false
             onChange()
@@ -108,6 +124,7 @@ final class LocationReporter {
             fixesSent += 1
             consecutiveTimestampRejects = 0
             problem = .none
+            return true
         } catch let APIError.status(code, message) where code == 400 && message.contains("timestamp") {
             // Only a run of consecutive timestamp rejections blames the
             // clock; anything else in between (success or another error)
@@ -134,13 +151,19 @@ final class LocationReporter {
             }
         } catch {
             consecutiveTimestampRejects = 0
-            log.warning("dropping location report after transport failure: \(String(describing: error), privacy: .public)")
+            log.warning("location report not sent after transport failure: \(String(describing: error), privacy: .public)")
             problem = .noNetwork
+            // Too late for the realtime feed by the time it could go, but
+            // still where the vehicle was. Kept before the next report can
+            // start, so the queue keeps the order they were taken in.
+            await history?.keep(report)
         }
+        return false
     }
 
-    /// Awaits the send currently in flight, if any. For tests: nothing in the
-    /// app waits on a report.
+    /// Awaits the send currently in flight, if any, and the batch of kept
+    /// reports that follows it. For tests: nothing in the app waits on a
+    /// report.
     func waitForInFlightSend() async {
         await sendTask?.value
     }

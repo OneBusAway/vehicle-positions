@@ -154,6 +154,9 @@ final class TripSession {
     /// Read by Before you start, which asks through it before a run starts:
     /// one object, so the sheet and `start()`'s own check see the same answers.
     let locationAccess: any LocationAccess
+    /// Handed to each trip's reporter, to keep what it can't send for want of
+    /// a connection and upload it once a report gets through.
+    private let history: HistoryUploader?
     private let makeAPI: (URL, any TokenStoring) throws -> any TrackerAPI
     private let now: () -> Date
     private let sleep: (Duration) async throws -> Void
@@ -182,6 +185,7 @@ final class TripSession {
         store: any ActiveTripStoring,
         locations: any LocationSource,
         access: any LocationAccess,
+        history: HistoryUploader? = nil,
         makeAPI: @escaping (URL, any TokenStoring) throws -> any TrackerAPI,
         now: @escaping () -> Date = Date.init,
         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
@@ -191,6 +195,7 @@ final class TripSession {
         self.store = store
         self.locations = locations
         self.locationAccess = access
+        self.history = history
         self.makeAPI = makeAPI
         self.now = now
         self.sleep = sleep
@@ -624,7 +629,8 @@ final class TripSession {
         guard let api else { throw TripSessionError.notSignedIn }
         self.evaluator = evaluator
         // A fresh trip has no count kept, so it starts at 0.
-        reporter = LocationReporter(api: api, now: now, sent: store.loadSent(for: active.serverTripID)) { [weak self] in
+        reporter = LocationReporter(api: api, now: now, sent: store.loadSent(for: active.serverTripID),
+                                    history: history) { [weak self] in
             // A send finishes long after the fix that started it was handed
             // over, so its outcome has to be published when it lands.
             self?.refreshReporting()

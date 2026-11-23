@@ -48,7 +48,9 @@ nonisolated func isSameServer(_ a: String, _ b: String) -> Bool {
     serverKey(a) == serverKey(b)
 }
 
-private nonisolated func serverKey(_ address: String) -> String {
+/// The server `address` names, as `isSameServer` compares it: host and port,
+/// and the path without the slashes round it.
+nonisolated func serverKey(_ address: String) -> String {
     guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
           let scheme = url.scheme?.lowercased(), let host = url.host()?.lowercased() else { return address }
     let port = url.port ?? (scheme == "http" ? 80 : 443)

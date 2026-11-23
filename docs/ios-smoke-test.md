@@ -426,9 +426,12 @@ In the feed, exactly one entity, with `vehicle.id` `bus-1`, `trip.trip_id`
 appears under the status card within about a reporting interval, and goes
 away once the server is back. The card itself keeps its last schedule answer.
 The trip bar keeps showing the "n sent" count throughout, with the cloud
-symbol beside it in amber while the line shows. Fixes captured while offline
-are dropped, not queued (v1 behaviour), so the count resumes climbing from
-where it left off rather than catching up.
+symbol beside it in amber while the line shows. The count resumes climbing
+from where it left off rather than catching up: fixes captured while offline
+never reach the realtime feed. They are kept on the phone and uploaded for
+location history once reports go through again, so the trip's trail in the
+admin UI (Trips → the trip) has no gap for the outage. The server log shows a
+`POST /api/v1/locations/history` right after the first report that succeeds.
 
 ### Check 3b — The sign-in renews itself during a trip
 

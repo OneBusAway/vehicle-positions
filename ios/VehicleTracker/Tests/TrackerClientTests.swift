@@ -146,6 +146,36 @@ import Testing
         #expect(body["occupancy_status"] as? String == "STANDING_ROOM_ONLY")
     }
 
+    /// The history endpoint refuses a field it does not know with a 400,
+    /// which drops the whole batch: the vehicle goes once, and the occupancy
+    /// not at all.
+    @Test func aHistoryUploadNamesTheVehicleOnceAndLeavesOutTheOccupancy() async throws {
+        StubURLProtocol.reset { _ in (201, Data(#"{"saved":2,"invalid":0}"#.utf8)) }
+        let full = LocationReport(vehicleID: "bus-1", tripID: "T1", latitude: 47.6, longitude: -122.33,
+                                  bearing: 90, speed: 8, accuracy: 5, timestamp: 1_756_800_000,
+                                  routeID: "R1", startDate: "20260902", occupancyStatus: .full)
+        let bare = LocationReport(vehicleID: "bus-1", tripID: "T1", latitude: 47.61, longitude: -122.34,
+                                  bearing: nil, speed: nil, accuracy: nil, timestamp: 1_756_800_005)
+        try await client().postLocationHistory(LocationHistoryRequest(vehicleID: "bus-1", reports: [full, bare]))
+
+        let sent = try #require(StubURLProtocol.last)
+        #expect(sent.method == "POST")
+        #expect(sent.url.path == "/api/v1/locations/history")
+        #expect(sent.headers["Authorization"] == "Bearer tok")
+        #expect(sent.headers["Content-Type"] == "application/json")
+        let data = try #require(sent.body)
+        let body = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(Set(body.keys) == ["vehicle_id", "points"])
+        #expect(body["vehicle_id"] as? String == "bus-1")
+        let points = try #require(body["points"] as? [[String: Any]])
+        try #require(points.count == 2)
+        #expect(Set(points[0].keys) == ["trip_id", "route_id", "start_date", "latitude", "longitude", "bearing", "speed",
+                                        "accuracy", "timestamp"])
+        #expect(points[0]["start_date"] as? String == "20260902")
+        #expect(Set(points[1].keys) == ["trip_id", "latitude", "longitude", "timestamp"], "absent fields left out, not null")
+        #expect(points[1]["timestamp"] as? Int == 1_756_800_005)
+    }
+
     @Test func serverErrorsCarryStatusAndMessage() async throws {
         StubURLProtocol.reset { _ in (401, Data(#"{"error":"invalid token"}"#.utf8)) }
         await #expect(throws: APIError.status(401, message: "invalid token")) {
@@ -238,6 +268,22 @@ import Testing
         #expect(sent[2].headers["Authorization"] == "Bearer a2")
         #expect(try store.load() == StoredToken(token: "a2", issuedAt: now, refreshToken: "r2", expiresAt: now.addingTimeInterval(900)))
         #expect(try store.load()?.signInID == signIn)
+    }
+
+    /// A backlog upload goes through the same refresh as a live report, so a
+    /// dead zone longer than the access token's life still ends in an upload.
+    @Test func aHistoryUploadThatGetsA401IsRefreshedAndSentAgain() async throws {
+        serve(refresh: renewedReply)
+        let store = InMemoryTokenStore(signedIn)
+        let report = LocationReport(vehicleID: "bus-1", tripID: "T1", latitude: 47.6, longitude: -122.33,
+                                    bearing: nil, speed: nil, accuracy: nil, timestamp: 1_792_475_000)
+        try await refreshingClient(store).postLocationHistory(LocationHistoryRequest(vehicleID: "bus-1", reports: [report]))
+
+        let sent = requests
+        try #require(sent.map(\.url.path) == ["/api/v1/locations/history", "/api/v1/auth/refresh", "/api/v1/locations/history"])
+        #expect(sent[0].headers["Authorization"] == "Bearer a1")
+        #expect(sent[2].headers["Authorization"] == "Bearer a2")
+        #expect(sent[2].body == sent[0].body, "the same batch again")
     }
 
     /// Driver 1's logout is turned away after driver 2 has signed in. Sent

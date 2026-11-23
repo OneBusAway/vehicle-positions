@@ -308,6 +308,162 @@ import VehiclePositionsKit
     }
 }
 
+/// What the reporter keeps for location history when a report can't be sent
+/// for want of a connection, and when it sends it.
+@Suite struct LocationReporterHistoryTests {
+    let api = FakeTrackerAPI()
+    let clock = ManualClock(start: TripFixtures.at(8, 0))
+    let directory = URL.temporaryDirectory.appending(path: "Application Support \(UUID().uuidString)")
+    let defaultsName = "LocationReporterHistoryTests-\(UUID().uuidString)"
+    var ana: OfflineFixQueue.Owner { OfflineFixQueue.Owner(server: "https://transit.example.org", email: "ana@example.org")! }
+
+    /// A reporter whose uploader keeps reports in `directory`, for
+    /// ana@example.org on https://transit.example.org, as a fresh launch
+    /// would make it.
+    func reporter(queueIn directory: URL? = nil) throws -> (LocationReporter, OfflineFixQueue) {
+        let settings = AppSettings.signedIn(try #require(UserDefaults(suiteName: defaultsName)))
+        let queue = OfflineFixQueue(directory: directory ?? self.directory)
+        let history = HistoryUploader(queue: queue, settings: settings, now: { clock.now })
+        return (LocationReporter(api: api, now: { clock.now }, history: history), queue)
+    }
+
+    func cleanUp() {
+        try? FileManager.default.removeItem(at: directory)
+        UserDefaults(suiteName: defaultsName)?.removePersistentDomain(forName: defaultsName)
+    }
+
+    func fix() -> LocationFix {
+        LocationFix(latitude: 47.6, longitude: -122.33, horizontalAccuracy: 5, speed: 8, course: 90, timestamp: clock.now)
+    }
+
+    /// Sends a fix taken now, waits for it and its batch, then moves on five
+    /// seconds, so the next one is due.
+    func send(_ r: LocationReporter) async {
+        #expect(r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1", routeID: "R1", startDate: "20260902"))
+        await r.waitForInFlightSend()
+        clock.advance(5)
+    }
+
+    @Test func aReportThatCannotBeSentForWantOfAConnectionIsKept() async throws {
+        defer { cleanUp() }
+        let (r, queue) = try reporter()
+        api.postError = APIError.transport("The Internet connection appears to be offline.")
+        await send(r)
+        await send(r)
+
+        #expect(r.problem == .noNetwork)
+        #expect(r.fixesSent == 0)
+        #expect(try await queue.oldest(10, for: ana) == api.posted, "each kept as it was posted, in order")
+        #expect(api.historyUploads.isEmpty, "nothing goes until a report gets through")
+    }
+
+    /// A report the server turned down would be turned down again, and one
+    /// the rate limit held back has the next one five seconds behind it.
+    @Test(arguments: [400, 401, 403, 409, 429, 500])
+    func aReportTheServerTurnsDownIsNotKept(status: Int) async throws {
+        defer { cleanUp() }
+        let (r, queue) = try reporter()
+        api.postError = APIError.status(status, message: "refused")
+        await send(r)
+
+        #expect(api.posted.count == 1)
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+    }
+
+    /// The connection is back: the live report goes first, and the reports
+    /// kept while it was gone follow it as one batch.
+    @Test func keptReportsGoOnceTheNextReportGetsThrough() async throws {
+        defer { cleanUp() }
+        let (r, queue) = try reporter()
+        api.postError = APIError.transport("offline")
+        await send(r)
+        await send(r)
+        let kept = api.posted
+
+        var postedBeforeTheBatch: Int?
+        api.whileUploadingHistory = { postedBeforeTheBatch = api.posted.count }
+        api.postError = nil
+        await send(r)
+
+        #expect(r.fixesSent == 1)
+        #expect(r.problem == .none)
+        #expect(postedBeforeTheBatch == 3, "the live report went first")
+        #expect(api.historyUploads == [LocationHistoryRequest(vehicleID: "bus-1", reports: kept)])
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+    }
+
+    /// The batch is not part of the report: a slow one must not hold back
+    /// the live fixes behind it.
+    @Test func aLiveReportStillGoesWhileABatchIsOut() async throws {
+        defer { cleanUp() }
+        let (r, _) = try reporter()
+        api.postError = APIError.transport("offline")
+        await send(r)
+        api.postError = nil
+        let held = ManualSleep()
+        // Only the first upload is held, so a second that should never have
+        // been sent fails the test rather than hanging it.
+        api.whileUploadingHistory = { if held.asked.isEmpty { try await held.sleep(for: .zero) } }
+
+        #expect(r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"))
+        #expect(await eventually { held.asked.count == 1 })
+        clock.advance(5)
+        #expect(r.report(fix(), vehicleID: "bus-1", gtfsTripID: "T1"), "the batch out does not hold the report")
+        #expect(await eventually { r.fixesSent == 2 })
+        #expect(api.posted.count == 3)
+        #expect(api.historyUploads.isEmpty, "the first batch is still out, and the second report started none")
+
+        held.fire()
+        #expect(await eventually { api.historyUploads.count == 1 })
+    }
+
+    @Test func nothingIsUploadedWhileReportsStillFail() async throws {
+        defer { cleanUp() }
+        let (r, _) = try reporter()
+        api.postError = APIError.transport("offline")
+        await send(r)
+        api.postError = APIError.status(500, message: "failed to save location")
+        await send(r)
+        #expect(api.historyUploads.isEmpty)
+    }
+
+    /// The app is stopped with reports kept, and launched again: the next
+    /// launch's queue reads them back, and its reporter sends them.
+    @Test func keptReportsSurviveARelaunch() async throws {
+        defer { cleanUp() }
+        let (before, _) = try reporter()
+        api.postError = APIError.transport("offline")
+        await send(before)
+        await send(before)
+        let kept = api.posted
+
+        let (after, queue) = try reporter()
+        api.postError = nil
+        await send(after)
+        #expect(api.historyUploads == [LocationHistoryRequest(vehicleID: "bus-1", reports: kept)])
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+    }
+
+    /// A full disk, say: the report is lost, and the trip goes on reporting.
+    @Test func aReportThatCannotBeKeptIsLostNotTheTrip() async throws {
+        defer { cleanUp() }
+        // A file where the queue's folder should be, so nothing can be kept.
+        let blocked = directory.appending(path: "blocked")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data().write(to: blocked)
+        let (r, queue) = try reporter(queueIn: blocked)
+        api.postError = APIError.transport("offline")
+        await send(r)
+        #expect(r.problem == .noNetwork)
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+
+        api.postError = nil
+        await send(r)
+        #expect(r.problem == .none)
+        #expect(r.fixesSent == 1)
+    }
+}
+
 /// A clock the test moves by hand.
 @MainActor final class ManualClock {
     private(set) var now: Date

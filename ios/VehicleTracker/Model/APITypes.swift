@@ -121,6 +121,56 @@ nonisolated struct LocationReport: Sendable, Codable, Equatable {
     }
 }
 
+/// `POST /api/v1/locations/history`: reports the phone kept while it could
+/// not reach the server, stored for location history only.
+nonisolated struct LocationHistoryRequest: Sendable, Encodable, Equatable {
+    var vehicleID: String
+    var points: [HistoryPoint]
+
+    private enum CodingKeys: String, CodingKey {
+        case points
+        case vehicleID = "vehicle_id"
+    }
+}
+
+extension LocationHistoryRequest {
+    /// `reports`, every one of them for `vehicleID`, as one upload.
+    nonisolated init(vehicleID: String, reports: [LocationReport]) {
+        self.init(vehicleID: vehicleID, points: reports.map(HistoryPoint.init))
+    }
+}
+
+/// One report in a history upload: a `LocationReport` without the vehicle,
+/// which the upload names once, and without the occupancy, which the
+/// endpoint does not take. It refuses a field it does not know with a 400,
+/// and the whole batch would be dropped.
+nonisolated struct HistoryPoint: Sendable, Encodable, Equatable {
+    var tripID: String
+    var routeID: String?
+    var startDate: String?
+    var latitude: Double
+    var longitude: Double
+    var bearing: Double?
+    var speed: Double?
+    var accuracy: Double?
+    var timestamp: Int64
+
+    private enum CodingKeys: String, CodingKey {
+        case latitude, longitude, bearing, speed, accuracy, timestamp
+        case tripID = "trip_id"
+        case routeID = "route_id"
+        case startDate = "start_date"
+    }
+}
+
+extension HistoryPoint {
+    nonisolated init(_ report: LocationReport) {
+        self.init(tripID: report.tripID, routeID: report.routeID, startDate: report.startDate,
+                  latitude: report.latitude, longitude: report.longitude, bearing: report.bearing,
+                  speed: report.speed, accuracy: report.accuracy, timestamp: report.timestamp)
+    }
+}
+
 nonisolated struct LoginRequest: Sendable, Encodable {
     var email: String
     var password: String
