@@ -1307,7 +1307,7 @@ func newReportTripRow(rep *serviceReport, trip tripReport, day time.Time) report
 	}
 	for _, run := range trip.Runs {
 		row.Runs = append(row.Runs, reportRunRow{
-			Vehicle:  run.VehicleLabel,
+			Vehicle:  cmp.Or(run.VehicleLabel, run.VehicleID),
 			Driver:   run.DriverName,
 			TrailURL: "/admin/trips/" + strconv.FormatInt(run.ID, 10),
 		})
@@ -1438,7 +1438,7 @@ func newReportRunGapRow(rep *serviceReport, r runGaps, runs map[int64]routeRun, 
 	run := runs[r.id]
 	row := reportRunGapRow{
 		GtfsTripID: run.gtfsTripID,
-		Vehicle:    run.VehicleLabel,
+		Vehicle:    cmp.Or(run.VehicleLabel, run.VehicleID),
 		Driver:     run.DriverName,
 		TrailURL:   "/admin/trips/" + strconv.FormatInt(r.id, 10),
 	}
@@ -1468,8 +1468,9 @@ func newReportRunGap(g *stopGap, runs map[int64]routeRun) reportRunGap {
 	case g.unknown:
 		return reportRunGap{Text: "unknown"}
 	}
+	ahead := runs[g.ahead]
 	gap := reportRunGap{
-		Text:  formatGap(g.gap) + " after " + runs[g.ahead].VehicleLabel,
+		Text:  formatGap(g.gap) + " after " + cmp.Or(ahead.VehicleLabel, ahead.VehicleID),
 		Every: "every " + formatGap(g.scheduled),
 	}
 	switch {
