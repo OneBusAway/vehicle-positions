@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import UIKit
 
 /// What one `HistoryUploader.uploadIfIdle(through:)` call did with the queue.
 nonisolated enum HistoryUpload: Sendable, Equatable {
@@ -16,10 +17,12 @@ nonisolated enum HistoryUpload: Sendable, Equatable {
 
 /// Keeps the reports `LocationReporter` could not send for want of a
 /// connection, under the driver and server signed in, and uploads them to
-/// `POST /api/v1/locations/history` a batch at a time. Android's
-/// `HistoryUploader`: one upload at a time, because a batch stays at the
-/// front of the queue until it has gone, and two uploads at once would both
-/// send it. One object for the app, so that holds across trips too.
+/// `POST /api/v1/locations/history` a batch at a time: after each report
+/// that gets through, and with no trip running, in a drain. Android's
+/// `HistoryUploader` and `BacklogDrain`: one upload at a time, because a
+/// batch stays at the front of the queue until it has gone, and two uploads
+/// at once would both send it. One object for the app, so that holds across
+/// trips too.
 @MainActor
 final class HistoryUploader {
     /// The most reports one upload carries; the server takes at most 500.
@@ -34,19 +37,30 @@ final class HistoryUploader {
     /// takes a day, less a margin for the phone's clock and the time the
     /// upload takes.
     static let maxAgeSeconds: Int64 = 24 * 3600 - 600
+    /// How far apart a drain sends its batches: the server takes one history
+    /// upload per driver every five seconds.
+    static let drainInterval: Duration = .seconds(5)
 
     private let queue: OfflineFixQueue
     /// Who is signed in, and to which server: the reports are kept and sent
     /// under them.
     private let settings: AppSettings
     private let now: () -> Date
+    private let backgroundTime: any BackgroundTime
+    private let sleep: (Duration) async throws -> Void
     private var isUploading = false
+    private var drainTask: Task<Void, Never>?
+    private var drainTime = UIBackgroundTaskIdentifier.invalid
     private let log = Logger(subsystem: "org.onebusaway.vehicletracker", category: "history-uploader")
 
-    init(queue: OfflineFixQueue, settings: AppSettings, now: @escaping () -> Date = Date.init) {
+    init(queue: OfflineFixQueue, settings: AppSettings, now: @escaping () -> Date = Date.init,
+         backgroundTime: any BackgroundTime = ApplicationBackgroundTime(),
+         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.queue = queue
         self.settings = settings
         self.now = now
+        self.backgroundTime = backgroundTime
+        self.sleep = sleep
     }
 
     private var owner: OfflineFixQueue.Owner? {
@@ -78,6 +92,70 @@ final class HistoryUploader {
         isUploading = true
         defer { isUploading = false }
         return await uploadOneBatch(through: api)
+    }
+
+    /// Uploads the kept reports of the driver signed in batch after batch,
+    /// `drainInterval` apart, with no trip needed: the server takes them
+    /// after the trip has ended. Each batch goes through what `api` returns
+    /// then, and nil stops the drain. It also stops once nothing is left, or
+    /// at a batch that fails for now, which waits for the next drain or the
+    /// next report that gets through. A call while a drain runs is left to
+    /// that drain.
+    ///
+    /// Under background time, so a drain started as the driver ends a trip
+    /// and locks the phone can finish. If iOS takes the time back first, the
+    /// drain stops, and a batch it had out stays kept.
+    func drain(through api: @escaping @MainActor () -> (any TrackerAPI)?) {
+        guard drainTask == nil else { return }
+        drainTime = backgroundTime.begin("Send kept reports") { [weak self] in
+            self?.log.notice("out of background time while sending kept reports; the rest wait for the next drain")
+            self?.drainTask?.cancel()
+            self?.endDrainTime()
+        }
+        drainTask = Task { [weak self] in
+            await self?.uploadAll(through: api)
+            self?.drainTask = nil
+            self?.endDrainTime()
+        }
+    }
+
+    private func uploadAll(through api: @MainActor () -> (any TrackerAPI)?) async {
+        while let client = api() {
+            switch await uploadIfIdle(through: client) {
+            case .kept?, .nothingQueued?, .notSignedIn?:
+                return
+            case .batchSent?, nil:
+                // nil: another upload is out, so this one tries after it.
+                break
+            }
+            do {
+                try await sleep(Self.drainInterval)
+            } catch {
+                return
+            }
+        }
+    }
+
+    /// Ended once: from the expiry, or when the drain stops.
+    private func endDrainTime() {
+        guard drainTime != .invalid else { return }
+        backgroundTime.end(drainTime)
+        drainTime = .invalid
+    }
+
+    /// Drops the reports kept for any other driver or server than the one
+    /// signed in: only the sign-in a report was kept under can send it, and
+    /// this one has replaced theirs. Android's rule at sign-in. A sign-out
+    /// keeps them, so a driver who signs out and back in still sends theirs.
+    /// A file that can't be removed is left: it is kept under its own owner,
+    /// so it can never go as this driver's.
+    func dropReportsKeptForOthers() async {
+        guard let owner else { return }
+        do {
+            try await queue.removeAll(except: owner)
+        } catch {
+            log.error("could not drop the reports kept for another sign-in: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private func uploadOneBatch(through api: any TrackerAPI) async -> HistoryUpload {

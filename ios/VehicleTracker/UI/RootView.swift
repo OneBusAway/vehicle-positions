@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(TripSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
     /// Kept from the first phase change on, so an end in flight can stay on
     /// the screen it came from.
     @State private var screen: RootScreen?
@@ -37,6 +38,10 @@ struct RootView: View {
         // Skip, or Continue on the welcome's last screen.
         .onChange(of: welcomeSeen) { _, seen in
             screen = RootScreen.next(phase: session.phase, showing: shown, welcomeSeen: seen)
+        }
+        // Initial too: a launch can come up already in front.
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active { session.sendKeptReports() }
         }
         // The trip started, or ended, on the server (DESIGN-iOS §2.7).
         .sensoryFeedback(.success, trigger: session.phase) { old, new in

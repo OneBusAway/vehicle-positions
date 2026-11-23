@@ -224,3 +224,221 @@ import VehiclePositionsKit
         #expect(session.reporting == .connected)
     }
 }
+
+/// A drain: the backlog sent batch after batch with no trip running.
+@Suite struct BacklogDrainTests {
+    let api = FakeTrackerAPI()
+    let clock = ManualClock(start: TripFixtures.at(8, 0))
+    let background = FakeBackgroundTime()
+    /// The wait between two batches, fired by hand.
+    let interval = ManualSleep()
+    let directory = URL.temporaryDirectory.appending(path: "Application Support \(UUID().uuidString)")
+    let defaultsName = "BacklogDrainTests-\(UUID().uuidString)"
+
+    /// Signed in as ana@example.org to https://transit.example.org.
+    func uploader() throws -> (HistoryUploader, OfflineFixQueue, AppSettings) {
+        let settings = AppSettings.signedIn(try #require(UserDefaults(suiteName: defaultsName)))
+        let queue = OfflineFixQueue(directory: directory)
+        let history = HistoryUploader(queue: queue, settings: settings, now: { clock.now },
+                                      backgroundTime: background, sleep: interval.sleep(for:))
+        return (history, queue, settings)
+    }
+
+    func cleanUp() {
+        try? FileManager.default.removeItem(at: directory)
+        UserDefaults(suiteName: defaultsName)?.removePersistentDomain(forName: defaultsName)
+    }
+
+    func report(_ ago: Int64) -> LocationReport {
+        LocationReport(vehicleID: "bus-1", tripID: "T1", latitude: 47.6, longitude: -122.33,
+                       bearing: 90, speed: 8, accuracy: 5, timestamp: Int64(clock.now.timeIntervalSince1970) - ago)
+    }
+
+    var ana: OfflineFixQueue.Owner { OfflineFixQueue.Owner(server: "https://transit.example.org", email: "ana@example.org")! }
+    var ben: OfflineFixQueue.Owner { OfflineFixQueue.Owner(server: "https://transit.example.org", email: "ben@example.org")! }
+
+    func keep(_ count: Int, for owner: OfflineFixQueue.Owner, in queue: OfflineFixQueue) async throws {
+        for ago in (1...count).reversed() {
+            try await queue.add(report(Int64(ago)), for: owner)
+        }
+    }
+
+    /// The server takes one upload every five seconds, so the drain waits
+    /// that long between batches, and stops once nothing is left.
+    @Test func aDrainSendsBatchAfterBatchFiveSecondsApartUntilNothingIsLeft() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        try await keep(600, for: ana, in: queue)
+
+        history.drain { api }
+        #expect(await eventually { interval.asked.count == 1 })
+        #expect(api.historyUploads.map(\.points.count) == [500], "the second batch waits")
+        #expect(interval.asked == [HistoryUploader.drainInterval])
+        #expect(HistoryUploader.drainInterval == .seconds(5))
+
+        interval.fire()
+        #expect(await eventually { interval.asked.count == 2 })
+        #expect(api.historyUploads.map(\.points.count) == [500, 100])
+        #expect(background.running == 1, "still draining")
+
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+        #expect(background.begun.count == 1)
+        #expect(api.historyUploads.count == 2)
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+    }
+
+    /// No connection yet: the batch stays, and the drain stops rather than
+    /// try again every five seconds. The next one sends it.
+    @Test func aDrainStopsAtABatchThatFailsForNowAndTheNextSendsIt() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        try await keep(2, for: ana, in: queue)
+        api.historyError = APIError.transport("offline")
+
+        history.drain { api }
+        #expect(await eventually { background.running == 0 })
+        #expect(api.historyUploads.count == 1)
+        #expect(interval.asked.isEmpty)
+        #expect(try await queue.oldest(10, for: ana).count == 2)
+
+        api.historyError = nil
+        history.drain { api }
+        #expect(await eventually { interval.asked.count == 1 })
+        #expect(api.historyUploads.count == 2)
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+        #expect(background.begun.count == 2)
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+    }
+
+    @Test func aDrainSendsNothingWithNobodySignedIn() async throws {
+        defer { cleanUp() }
+        let (history, queue, settings) = try uploader()
+        try await keep(2, for: ana, in: queue)
+        settings.email = ""
+
+        history.drain { api }
+        #expect(await eventually { background.running == 0 })
+        #expect(api.historyUploads.isEmpty)
+        #expect(interval.asked.isEmpty)
+    }
+
+    /// Each batch goes through what the caller hands over then: none, as
+    /// when the driver has signed out or a trip has started, stops it.
+    @Test func aDrainStopsOnceItIsHandedNoServer() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        try await keep(600, for: ana, in: queue)
+        let handed = Handed(api)
+
+        history.drain { handed.api }
+        #expect(await eventually { interval.asked.count == 1 })
+        handed.api = nil
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+        #expect(api.historyUploads.count == 1)
+        #expect(try await queue.oldest(.max, for: ana).count == 100)
+    }
+
+    @Test func oneDrainAtATimeAndANewOneOnceItIsOver() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        try await keep(2, for: ana, in: queue)
+
+        history.drain { api }
+        #expect(await eventually { interval.asked.count == 1 })
+        history.drain { api }
+        #expect(background.begun.count == 1, "left to the drain that runs")
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+        #expect(api.historyUploads.count == 1)
+
+        try await keep(1, for: ana, in: queue)
+        history.drain { api }
+        #expect(await eventually { api.historyUploads.count == 2 })
+        #expect(background.begun.count == 2)
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+    }
+
+    /// A batch from a trip's last report may still be out when the drain
+    /// starts: the drain tries again after the interval rather than giving
+    /// up or sending that batch a second time.
+    @Test func aDrainWaitsForAnUploadAlreadyOut() async throws {
+        defer { cleanUp() }
+        let (history, _, _) = try uploader()
+        await history.keep(report(20))
+        let held = ManualSleep()
+        api.whileUploadingHistory = { if held.asked.isEmpty { try await held.sleep(for: .zero) } }
+        let tripsUpload = Task { await history.uploadIfIdle(through: api) }
+        #expect(await eventually { held.asked.count == 1 })
+        await history.keep(report(10))
+
+        history.drain { api }
+        #expect(await eventually { interval.asked.count == 1 })
+        #expect(api.historyUploads.isEmpty, "nothing sent beside the batch out")
+
+        held.fire()
+        #expect(await tripsUpload.value == .batchSent)
+        interval.fire()
+        #expect(await eventually { interval.asked.count == 2 })
+        #expect(api.historyUploads.map(\.points.count) == [1, 1])
+        #expect(api.historyUploads.map(\.points.first?.timestamp) == [report(20).timestamp, report(10).timestamp])
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+    }
+
+    /// iOS takes the background time back with a batch out: the drain stops,
+    /// the batch stays for the next one, and the time is ended once, in
+    /// time.
+    @Test func runningOutOfBackgroundTimeStopsTheDrainAndKeepsTheBatchOut() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        try await keep(2, for: ana, in: queue)
+        let held = ManualSleep()
+        api.whileUploadingHistory = { if held.asked.isEmpty { try await held.sleep(for: .zero) } }
+
+        history.drain { api }
+        #expect(await eventually { held.asked.count == 1 })
+        background.expire()
+        #expect(background.running == 0, "ended before the expiry returns")
+        #expect(await eventually { interval.asked.isEmpty && api.historyUploads.isEmpty && background.ended.count == 1 })
+        #expect(try await queue.oldest(10, for: ana).count == 2)
+
+        // The drain has stopped, so the next can start.
+        history.drain { api }
+        #expect(await eventually { api.historyUploads.map(\.points.count) == [2] })
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+        #expect(background.ended.map(\.rawValue) == [1, 2], "each time ended once")
+    }
+
+    @Test func dropsOnlyTheReportsKeptForOtherSignIns() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        try await keep(2, for: ana, in: queue)
+        try await keep(3, for: ben, in: queue)
+
+        await history.dropReportsKeptForOthers()
+        #expect(try await queue.oldest(10, for: ana).count == 2)
+        #expect(try await queue.oldest(10, for: ben).isEmpty)
+        #expect(try await OfflineFixQueue(directory: directory).oldest(10, for: ben).isEmpty, "and off disk")
+    }
+
+    @Test func withNobodySignedInNothingIsDropped() async throws {
+        defer { cleanUp() }
+        let (history, queue, settings) = try uploader()
+        try await keep(2, for: ben, in: queue)
+        settings.email = ""
+
+        await history.dropReportsKeptForOthers()
+        #expect(try await OfflineFixQueue(directory: directory).oldest(10, for: ben).count == 2)
+    }
+}
+
+/// What a drain is handed for each batch, changed by a test while it runs.
+@MainActor private final class Handed {
+    var api: (any TrackerAPI)?
+    init(_ api: any TrackerAPI) { self.api = api }
+}
