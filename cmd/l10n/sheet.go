@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // A translation sheet is one language's strings from both apps as a CSV file,
@@ -498,6 +499,9 @@ func importSheet(root, xliffPath, lang, sheetPath string, draft bool) (refused [
 		if strings.TrimSpace(text) == "" {
 			text = r.current
 		}
+		if err := writable(text); err != nil {
+			return nil, nil, fmt.Errorf("%s:%d: %w", sheetPath, r.line, err)
+		}
 		if r.android != "" {
 			s, ok := p.byName[r.android]
 			if !ok {
@@ -576,6 +580,27 @@ func importSheet(root, xliffPath, lang, sheetPath string, draft bool) (refused [
 		changed = append(changed, f.path)
 	}
 	return nil, changed, nil
+}
+
+// writable says why text can't go into strings.xml or the XLIFF as it is: it
+// has bytes that are not UTF-8, as a sheet a spreadsheet saved in another
+// encoding does, or a character XML can't hold, such as the vertical tab that
+// text copied from Word can carry for a line break. nil when it can.
+func writable(text string) error {
+	if !utf8.ValidString(text) {
+		return errors.New("the text is not UTF-8: save the sheet as CSV UTF-8")
+	}
+	for _, r := range text {
+		if !isXMLChar(r) {
+			return fmt.Errorf("the text has %U, which strings.xml and the XLIFF can't hold", r)
+		}
+	}
+	return nil
+}
+
+// isXMLChar reports whether XML 1.0 allows r in a document.
+func isXMLChar(r rune) bool {
+	return r == '\t' || r == '\n' || r == '\r' || r >= 0x20 && r <= 0xd7ff || r >= 0xe000 && r <= 0xfffd || r >= 0x10000 && r <= 0x10ffff
 }
 
 // formPath is the form a row's form column names on Android.
