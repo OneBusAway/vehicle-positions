@@ -94,7 +94,8 @@ The bar across the top is on every page:
 - The circle with your initials opens a small menu with **Light or dark**,
   which switches the pages' colours, and **Sign out**. On a phone both are on
   **More**. In a browser too old for that menu, the circle opens **More**
-  instead.
+  instead. If you are signed in as a viewer, **Viewer** sits beside the circle
+  ([Read-only accounts](#read-only-accounts)).
 
 ---
 
@@ -210,17 +211,19 @@ contact; it is a database query, not a button.
 ## 5. Drivers and admins
 
 **Drivers and users** lists every account under a headline that counts them,
-such as **11 drivers and 1 admin**. Its columns are **Name** (with the email
+such as **11 drivers and 1 admin**, or **11 drivers, 1 admin and 2 viewers**
+once there are viewers. Its columns are **Name** (with the email
 under it), **Role**, **Status**, **May drive** (how many vehicles are
 assigned) and **Actions**. Search by name or email, or show one role, with the
 controls above the list.
 
-There are exactly two roles:
+There are three roles:
 
 | Role | Can do |
 |---|---|
 | **Driver** | Sign in to the Android app, see their assigned vehicles, start and end trips, report locations. Cannot open `/admin` at all. |
 | **Admin** | Everything in the admin web UI: vehicles, users, assignments, map, trips, CSV export. |
+| **Viewer** | Open every page of the admin web UI and change nothing. Cannot drive. See [Read-only accounts](#read-only-accounts). |
 
 ### Create an account
 
@@ -228,8 +231,8 @@ There are exactly two roles:
 2. Fill in **Name**, **Email** and **Password**. The password must be at least
    8 characters, or you get **password must be at least 8 characters**. The
    maximum is 72 bytes (**password must be at most 72 bytes**).
-3. Choose **Role** — **Driver** or **Admin**. New accounts default to
-   **Driver**.
+3. Choose **Role** — **Driver**, **Admin** or **Viewer**. New accounts
+   default to **Driver**.
 4. Click **Create user**. A duplicate address gives **email already exists**.
 
 Give the driver their email address and password in person or by whatever
@@ -253,13 +256,48 @@ them back.
 as blocking new sign-ins. A phone or browser that signed in earlier is refused
 on its next request, so this is the right response when a phone was stolen or
 a driver was dismissed. Changing someone's **Role** takes effect at once too:
-an admin changed to a driver loses the admin UI straight away.
+an admin changed to a driver loses the admin UI straight away, and one changed
+to a viewer can no longer change anything.
 
 Changing someone's password is different: it only applies from the next
 sign-in. A session that is already open keeps working until it expires, which
 is 15 minutes for the app unless your IT contact has changed it, and can be up
 to 24 hours for the admin UI in a browser. To lock someone out right now,
 deactivate the account; a new password alone does not do it.
+
+### Read-only accounts
+
+A **Viewer** signs in at `/admin` as an admin does and sees every page: the map,
+alerts, trips, Analytics, the vehicles and accounts, API keys and the Audit
+log. It cannot change anything. The pages leave out every button that would,
+such as **New vehicle**, **Deactivate**, **End trip**, **Import drivers** and
+**Create key**; **Edit** reads **View**, and a vehicle's or an account's page
+shows its fields greyed out with no **Save changes**. **Viewer** sits beside
+the initials in the top bar. A change sent anyway, from a tab left open since
+the account was an admin's or from a script, is refused with **Your account
+can look but not change** and nothing is saved. Through the admin API a
+viewer's token reads what an admin's does and gets
+`403 admin access required` for any change.
+
+Make one for anyone who only needs to watch: a supervisor, a planner, someone
+from the city. Three things to know:
+
+- A viewer cannot drive. The app signs it in, but the server refuses the
+  vehicle list and every trip and report it sends.
+- A viewer sees what an admin sees of where drivers have been: the trip trails
+  and each vehicle's **Reports** download (see
+  [section 11](#11-data-retention-and-privacy)). Hand the role out as carefully
+  as an admin's.
+- On the **Audit log** a viewer sees who made each change but not the address
+  it came from.
+
+A viewer can't be given a vehicle: its page has no **Vehicles this driver may
+pick**, and the admin API refuses with **a viewer can't drive, so no vehicles
+can be assigned to one**. Making an account a viewer takes away the vehicles
+it had in the same change, and is refused with **end this account's running
+trip before making it a viewer** while it is on a trip: end the trip on
+**Trips** first. The role change and each vehicle taken away are recorded on
+the Audit log, as is changing the account back.
 
 ### The last-admin protection
 
@@ -268,8 +306,8 @@ active admin account is left:
 
 - Deactivating it is refused with **cannot deactivate the last active admin**
   (shown as a plain error page — use your browser's Back button).
-- Changing its **Role** from **Admin** to **Driver** is refused with **cannot
-  demote the last active admin**, shown on the form.
+- Changing its **Role** from **Admin** to **Driver** or **Viewer** is refused
+  with **cannot demote the last active admin**, shown on the form.
 
 Create the second admin first, then make the change. Keeping at least two admin
 accounts is good practice anyway.
@@ -322,6 +360,7 @@ from its old value to its new one or an account from **Active** to
   password itself.
 - A CSV import adds a row for each vehicle or account it writes and each
   vehicle it assigns. A save that changed nothing adds no row.
+- A viewer sees this page too, without the addresses.
 
 Each row is saved together with the change it records. If the row cannot be
 saved, the change is not made either and you see an error, so a change that
@@ -340,7 +379,8 @@ it, every row shows the proxy's address.
 ## 6. Assigning vehicles to drivers
 
 A driver can only start a trip on a vehicle assigned to them. Assignments live
-on the user's edit page.
+on the user's edit page. A viewer's page has none, since a viewer can't drive
+([Read-only accounts](#read-only-accounts)).
 
 1. **Drivers and users** → **Edit** on the driver's row.
 2. Scroll to **Vehicles this driver may pick**. It shows what they have now,
@@ -391,7 +431,7 @@ the page shows which of the three steps you are on.
 An existing vehicle takes the file's label and agency tag. An existing driver
 gets only the new name and the listed vehicles added: an import never changes a
 password or a role, never removes an assignment, never activates or deactivates
-anything, and refuses a line whose email belongs to an admin.
+anything, and refuses a line whose email belongs to an admin or a viewer.
 
 ---
 
@@ -1201,12 +1241,12 @@ itself. For every change made in the admin or its API, the
 email, the address they connected from, and the fields it changed.
 
 Taken together this is a **per-driver movement history**, and it should be
-treated like one. Anyone with an admin account can see any vehicle's positions:
-the **Live map**, the trip trails, and the **CSV** export on the vehicle list.
-Drivers can see none of it — the app has no history screen, and driver accounts
-cannot open `/admin`. So the real access control here is how many admin
-accounts you hand out. Keep the number small, and deactivate accounts when
-people change jobs.
+treated like one. Anyone with an admin or viewer account can see any vehicle's
+positions: the **Live map**, the trip trails, and the **CSV** export on the
+vehicle list. Drivers can see none of it — the app has no history screen, and
+driver accounts cannot open `/admin`. So the real access control here is how
+many admin and viewer accounts you hand out. Keep the number small, and
+deactivate accounts when people change jobs.
 
 **How long it is kept.** Location history is kept **forever** unless your agency
 turns on retention. Turning it on is a server setting
@@ -1236,7 +1276,7 @@ location points are.
 | One vehicle missing from the feed and the map, others fine | That phone has stopped reporting for longer than the staleness threshold: no signal, app closed, trip never started, phone battery dead, or Android killed the app in the background. | Ask the driver what the line under the status card says. **No connection** is a coverage problem and clears itself. If the app is not on the tracking screen at all, the trip was never started or was ended. If it keeps dying when the screen locks, the background-location permission is not **"Allow all the time"**: redo step 6 of section 7. After the phone restarts or the app updates, reporting starts again by itself once the driver unlocks the phone, but only with **"Allow all the time"** and for a trip started less than 12 hours ago; otherwise a **Reports paused** notification asks the driver to open the app and tap **Resume trip**. A phone that was force-stopped, by the driver or by an aggressive battery saver (some Xiaomi, Samsung and Huawei phones), reports nothing until the driver opens the app, which also shows **Resume trip**: see the battery note in the [README's section 3.2](../README.md#32-android-driver-app-kotlin) and [dontkillmyapp.com](https://dontkillmyapp.com) for that phone's settings. |
 | Feed completely empty during service hours | Nothing is reporting, or the server lost its database. | Check **Overview**: if the top bar says **0 reporting** and **On a trip now** is 0, it is the phones, so start with two or three drivers. If **On a trip now** is healthy but nothing is in the feed, contact IT: see the monitoring checks in [`deployment.md` §9](deployment.md#9-monitoring). |
 | Driver phone shows **Signed out** | The sign-in could not be renewed: the account was deactivated or deleted, or its password changed, the phone went a week without using the app, or the driver signed out on another phone. | Have the driver tap **Sign in** on that card and sign in again. If you have since deactivated the account, sign-in is refused, which is the intended outcome. |
-| A driver or admin cannot sign in and insists the password is right | The account is deactivated. Deactivation is deliberately indistinguishable from a wrong password on the sign-in screen. | **Drivers and users** → **Show deactivated** → find the row → if **Status** reads **Deactivated**, click **Activate**. |
+| A driver, admin or viewer cannot sign in and insists the password is right | The account is deactivated. Deactivation is deliberately indistinguishable from a wrong password on the sign-in screen. | **Drivers and users** → **Show deactivated** → find the row → if **Status** reads **Deactivated**, click **Activate**. |
 | Someone you deactivated is still reporting, or their phone still works | Deactivating cuts off open sessions at once, so either the account is not deactivated or the phone is signed in with another account. | Confirm the row shows **Deactivated** on **Drivers and users**. Then find the vehicle's trip on **Trips** and read its **Driver** column to see which account is reporting. |
 | Driver phone shows **Phone clock is wrong** | The phone's clock is wrong, so the server is rejecting its reports. | On the phone, turn on automatic date and time in Android settings, then restart the app. The line under the status card goes away once reports are accepted again. |
 | Vehicles show on your **Live map** but not in OneBusAway | The server and OneBusAway are using different GTFS schedules. Drivers pick their route and run from the server's schedule, so the ids they send are that schedule's, and OBA can only match ids from its own. | Ask your IT contact to check that the server's `GTFS_STATIC_URL` and OneBusAway use the same GTFS static feed, and that OBA is pointed at the feed address. |

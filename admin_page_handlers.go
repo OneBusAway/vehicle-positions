@@ -159,9 +159,10 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 // static assets — that's the caller's responsibility (main's handler
 // construction), keeping this function focused on admin routes only.
 func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
-	// Every page behind the guard answers a bare error with the error page.
+	// Every page behind the guard answers a bare error with the error page,
+	// and so does the guard when it refuses a viewer's form post.
 	guard := requireAdminPage(ui.jwtSecret, ui.tokenChecker, ui.cfg.trustProxy)
-	protect := func(next http.Handler) http.Handler { return guard(ui.errorPages(next)) }
+	protect := func(next http.Handler) http.Handler { return ui.errorPages(guard(next)) }
 
 	mux.HandleFunc("GET /admin/login", ui.loginPage)
 	mux.HandleFunc("POST /admin/login", ui.loginSubmit)
@@ -294,7 +295,7 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	// Successful authentication: legitimate logins aren't counted toward the
 	// brute-force budget (mirrors handleLogin in auth.go).
 	ui.loginLimiter.RecordSuccess(clientIP(r, ui.cfg.trustProxy), email)
-	if user.Role != roleAdmin {
+	if !adminUIRole(user.Role) {
 		ui.renderLogin(w, http.StatusForbidden, "Admin access required.", email, next)
 		return
 	}
@@ -657,7 +658,10 @@ func (d vehicleFormData) IsActive() bool { return d.Active != nil && *d.Active }
 
 func (ui *adminUI) renderVehicleForm(w http.ResponseWriter, r *http.Request, status int, data vehicleFormData) {
 	title := "New vehicle"
-	if data.IsEdit {
+	switch {
+	case data.IsEdit && isViewer(r):
+		title = "Vehicle"
+	case data.IsEdit:
 		title = "Edit vehicle"
 	}
 	ui.renderAdmin(w, r, status, "vehicle_form.html", map[string]interface{}{
@@ -834,12 +838,16 @@ type roleLink struct {
 }
 
 // usersHeadline is the Drivers and users page's headline, from the counts of
-// active accounts.
-func usersHeadline(drivers, admins int) string {
+// active accounts. Viewers are named only when there are some, since most
+// servers have none.
+func usersHeadline(drivers, admins, viewers int) string {
 	if drivers == 0 {
 		return "No drivers yet"
 	}
-	return countOf(drivers, "driver", "drivers") + " and " + countOf(admins, "admin", "admins")
+	if viewers == 0 {
+		return countOf(drivers, "driver", "drivers") + " and " + countOf(admins, "admin", "admins")
+	}
+	return countOf(drivers, "driver", "drivers") + ", " + countOf(admins, "admin", "admins") + " and " + countOf(viewers, "viewer", "viewers")
 }
 
 // usersPageURL builds an /admin/users link preserving the current filter
@@ -879,7 +887,7 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 	}
 	role := query.Get("role")
 	if !validUserRoleFilter(role) {
-		http.Error(w, "role must be driver or admin", http.StatusBadRequest)
+		http.Error(w, "role must be driver, admin or viewer", http.StatusBadRequest)
 		return
 	}
 	page := adminPageNumber(query)
@@ -907,6 +915,12 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 	admins, err := ui.stats.CountActiveUsersByRole(ctx, roleAdmin)
 	if err != nil {
 		slog.Error("users: count active admins", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	viewers, err := ui.stats.CountActiveUsersByRole(ctx, roleViewer)
+	if err != nil {
+		slog.Error("users: count active viewers", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -941,8 +955,8 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 
 	// Each choice of role flips only the role, so a search in progress
 	// survives it, and starts over at page 1.
-	roles := make([]roleLink, 0, 3)
-	for _, choice := range []struct{ role, label string }{{"", "Everyone"}, {roleDriver, "Drivers"}, {roleAdmin, "Admins"}} {
+	roles := make([]roleLink, 0, 4)
+	for _, choice := range []struct{ role, label string }{{"", "Everyone"}, {roleDriver, "Drivers"}, {roleAdmin, "Admins"}, {roleViewer, "Viewers"}} {
 		f := filter
 		f.Role = choice.role
 		roles = append(roles, roleLink{Label: choice.label, URL: usersPageURL(f, 1), Current: filter.Role == choice.role})
@@ -956,7 +970,7 @@ func (ui *adminUI) usersPage(w http.ResponseWriter, r *http.Request) {
 	ui.renderAdmin(w, r, http.StatusOK, "users.html", map[string]interface{}{
 		"Title":           "Drivers and users",
 		"Page":            "users",
-		"Headline":        usersHeadline(drivers, admins),
+		"Headline":        usersHeadline(drivers, admins, viewers),
 		"Users":           rows,
 		"Role":            filter.Role,
 		"Roles":           roles,
@@ -1012,7 +1026,10 @@ func (d userFormData) IsActive() bool { return d.Active != nil && *d.Active }
 
 func (ui *adminUI) renderUserForm(w http.ResponseWriter, r *http.Request, status int, data userFormData) {
 	title := "New user"
-	if data.IsEdit {
+	switch {
+	case data.IsEdit && isViewer(r):
+		title = "Account"
+	case data.IsEdit:
 		title = "Edit user"
 	}
 	ui.renderAdmin(w, r, status, "user_form.html", map[string]interface{}{
@@ -1067,7 +1084,7 @@ func (ui *adminUI) userCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validUserRole(role) {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "role must be driver or admin", ErrorField: "role"})
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "role must be driver, admin or viewer", ErrorField: "role"})
 		return
 	}
 
@@ -1208,7 +1225,7 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validUserRole(role) {
-		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role", "role must be driver or admin")
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "role", "role must be driver, admin or viewer")
 		return
 	}
 	if password != "" {
@@ -1252,6 +1269,10 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrDuplicateEmail) {
 			ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "email", "email already exists")
+			return
+		}
+		if errors.Is(err, ErrViewerWithTrip) {
+			ui.renderUserEditError(w, r, http.StatusConflict, id, name, email, role, "role", ErrViewerWithTrip.Error())
 			return
 		}
 		slog.Error("user update: update user", "user_id", id, "error", err)
@@ -1367,6 +1388,10 @@ func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 			}
 			if errors.Is(err, ErrVehicleInactive) {
 				http.Error(w, "vehicle is inactive", http.StatusConflict)
+				return
+			}
+			if errors.Is(err, ErrAssignToViewer) {
+				http.Error(w, ErrAssignToViewer.Error(), http.StatusConflict)
 				return
 			}
 			if !errors.Is(err, ErrAssignmentExists) {

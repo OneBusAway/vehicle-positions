@@ -5,12 +5,12 @@
     <div class="page-head-main">
       <a class="back" href="/admin/users">{{template "icon-sm" "arrow_back"}}Drivers and users</a>
       <h2 class="h1">{{if not .IsEdit}}New user{{else if .Name}}{{.Name}}{{else}}Edit user{{end}}</h2>
-      <p class="lede">{{if .IsEdit}}Update this account, its password, or the vehicles the driver may pick.{{else}}Add a driver for the app, or an admin for this site.{{end}}</p>
+      <p class="lede">{{if and .IsEdit $.Shell.ReadOnly}}This account, and the vehicles it may pick if it drives.{{else if .IsEdit}}Update this account, its password, or the vehicles the driver may pick.{{else}}Add a driver for the app, or an admin or a viewer for this site.{{end}}</p>
     </div>
     {{if .Active}}
     <div class="page-actions">
       {{if and .IsActive (eq .Role "driver")}}<a class="btn btn-tonal" href="/admin/driver-setup?user={{.ID}}">{{template "icon" "qr_code_2"}}Setup sheet</a>{{end}}
-      {{if .IsActive}}
+      {{if $.Shell.ReadOnly}}{{else if .IsActive}}
       <form method="post" action="/admin/users/{{.ID}}/deactivate" data-confirm="Deactivate this account?" data-confirm-text="{{.Name}} is signed out everywhere and cannot sign in again until you turn the account back on." data-confirm-ok="Deactivate"><button class="btn btn-outline" type="submit">Deactivate</button></form>
       {{else}}
       <form method="post" action="/admin/users/{{.ID}}/activate"><button class="btn btn-tonal" type="submit">Activate</button></form>
@@ -19,44 +19,54 @@
     {{end}}
   </div>
   <div class="split">
-    <form class="card form-card" method="post" action="{{if .IsEdit}}/admin/users/{{.ID}}{{else}}/admin/users{{end}}">
+    {{if $.Shell.ReadOnly}}<div class="card form-card">{{template "viewer-note"}}{{else}}<form class="card form-card" method="post" action="{{if .IsEdit}}/admin/users/{{.ID}}{{else}}/admin/users{{end}}">{{end}}
       {{if .Error}}<div class="banner banner-error" role="alert">{{template "icon" "error"}}<div><b style="font-weight:500">The account was not saved.</b> {{if .ErrorField}}Fix the field marked below.{{else}}{{.Error}}{{end}}</div></div>{{end}}
       <div class="field">
         <label class="label" for="name">Name</label>
-        <input class="input" id="name" name="name" type="text" required value="{{.Name}}" autocomplete="name"{{if eq .ErrorField "name"}} aria-invalid="true" aria-describedby="name-err"{{end}}>
+        <input class="input" id="name" name="name" type="text"{{if $.Shell.ReadOnly}} readonly{{else}} required{{end}} value="{{.Name}}" autocomplete="name"{{if eq .ErrorField "name"}} aria-invalid="true" aria-describedby="name-err"{{end}}>
         {{if eq .ErrorField "name"}}<div class="field-error" id="name-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
       </div>
       <div class="field">
         <label class="label" for="email">Email</label>
-        <input class="input" id="email" name="email" type="email" required value="{{.Email}}" autocomplete="email"{{if eq .ErrorField "email"}} aria-invalid="true" aria-describedby="email-err email-help"{{else}} aria-describedby="email-help"{{end}}>
+        <input class="input" id="email" name="email" type="email"{{if $.Shell.ReadOnly}} readonly{{else}} required{{end}} value="{{.Email}}" autocomplete="email"{{if eq .ErrorField "email"}} aria-invalid="true" aria-describedby="email-err email-help"{{else}} aria-describedby="email-help"{{end}}>
         {{if eq .ErrorField "email"}}<div class="field-error" id="email-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
         <div class="help" id="email-help">A driver signs in to the app with this address.</div>
       </div>
+      {{if not $.Shell.ReadOnly}}
       <div class="field">
         <label class="label" for="password">{{if .IsEdit}}New password <span class="muted" style="font-weight:400">(leave blank to keep the current one)</span>{{else}}Password{{end}}</label>
         <input class="input" id="password" name="password" type="password"{{if not .IsEdit}} required{{end}} autocomplete="new-password"{{if eq .ErrorField "password"}} aria-invalid="true" aria-describedby="password-err password-help"{{else}} aria-describedby="password-help"{{end}}>
         {{if eq .ErrorField "password"}}<div class="field-error" id="password-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
         <div class="help" id="password-help">At least {{$.MinPasswordLength}} characters.{{if .IsEdit}} A session that is already open keeps working until it expires. To lock someone out now, deactivate the account.{{end}}</div>
       </div>
+      {{end}}
       <div class="field">
         <label class="label" for="role">Role</label>
-        <select class="select" id="role" name="role"{{if eq .ErrorField "role"}} aria-invalid="true" aria-describedby="role-err"{{end}}>
+        {{if $.Shell.ReadOnly}}
+        <input class="input" id="role" type="text" readonly value="{{if eq .Role "admin"}}Admin{{else if eq .Role "viewer"}}Viewer{{else}}Driver{{end}}" aria-describedby="role-help">
+        {{else}}
+        <select class="select" id="role" name="role"{{if eq .ErrorField "role"}} aria-invalid="true" aria-describedby="role-err role-help"{{else}} aria-describedby="role-help"{{end}}>
           <option value="driver"{{if eq .Role "driver"}} selected{{end}}>Driver</option>
           <option value="admin"{{if eq .Role "admin"}} selected{{end}}>Admin</option>
+          <option value="viewer"{{if eq .Role "viewer"}} selected{{end}}>Viewer</option>
         </select>
+        {{end}}
         {{if eq .ErrorField "role"}}<div class="field-error" id="role-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
+        <div class="help" id="role-help">A driver signs in to the app. An admin signs in here and can change anything; a viewer signs in here and can only look.</div>
       </div>
+      {{if $.Shell.ReadOnly}}</div>{{else}}
       <div class="form-actions"><a class="btn" href="/admin/users">Cancel</a><button class="btn btn-primary" type="submit">{{if .IsEdit}}Save changes{{else}}Create user{{end}}</button></div>
-    </form>
-    {{if .IsEdit}}
+    </form>{{end}}
+    {{/* A viewer can't drive, so its page has no vehicles, unless it still holds some: a change to viewer that failed, shown again. */}}
+    {{if and .IsEdit (or (ne .Role "viewer") .Assignments)}}
     <section class="card" aria-labelledby="may-drive">
       <div class="card-head"><h3 id="may-drive">Vehicles this driver may pick</h3><span class="sub">{{len .Assignments}} assigned</span></div>
       {{range .Assignments}}
-      <div class="line-row assigned">{{template "icon" "directions_bus"}}<span style="min-width:0"><span class="clip" style="font-weight:500">{{.Name}}</span><span class="muted" style="font-size:12px">{{.VehicleID}}</span></span><form method="post" action="/admin/users/{{$.Form.ID}}/vehicles/{{.VehicleID}}/remove" data-confirm="Remove this vehicle?" data-confirm-text="The driver will no longer see {{.Name}} in the app." data-confirm-ok="Remove"><button class="btn btn-sm btn-plain" type="submit">Remove</button></form></div>
+      <div class="line-row assigned">{{template "icon" "directions_bus"}}<span style="min-width:0"><span class="clip" style="font-weight:500">{{.Name}}</span><span class="muted" style="font-size:12px">{{.VehicleID}}</span></span>{{if not $.Shell.ReadOnly}}<form method="post" action="/admin/users/{{$.Form.ID}}/vehicles/{{.VehicleID}}/remove" data-confirm="Remove this vehicle?" data-confirm-text="The driver will no longer see {{.Name}} in the app." data-confirm-ok="Remove"><button class="btn btn-sm btn-plain" type="submit">Remove</button></form>{{end}}</div>
       {{else}}
       <div class="line-row assigned"><span></span><span class="muted">No vehicles assigned. The driver has nothing to pick in the app.</span></div>
       {{end}}
-      {{if .AvailableVehicles}}
+      {{if or $.Shell.ReadOnly (eq .Role "viewer")}}{{else if .AvailableVehicles}}
       <form class="card-foot assign" method="post" action="/admin/users/{{.ID}}/vehicles">
         <select class="select input-sm" name="vehicle_id" aria-label="Vehicle to assign" style="flex:1">
           {{range .AvailableVehicles}}<option value="{{.ID}}">{{if .Label}}{{.Label}}{{else}}{{.ID}}{{end}}</option>

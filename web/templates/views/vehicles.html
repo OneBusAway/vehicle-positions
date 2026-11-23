@@ -4,10 +4,12 @@
     <h2 class="h1">{{.Headline}}</h2>
     <p class="lede">Every vehicle a driver can pick. A vehicle shows on the map while its driver is on a trip.</p>
   </div>
+  {{if not .Shell.ReadOnly}}
   <div class="page-actions">
     <a class="btn btn-outline" href="/admin/import/vehicles">{{template "icon" "upload_file"}}Import from CSV</a>
     <a class="btn btn-primary" href="/admin/vehicles/new">{{template "icon" "add"}}New vehicle</a>
   </div>
+  {{end}}
 </div>
 <section class="card">
   {{/* No page param: a new search starts over at page 1. include_inactive rides along so the search survives the toggle. */}}
@@ -32,10 +34,10 @@
           <td class="num nowrap c-side">{{if eq .Report.State "live"}}<span class="age"><span class="dot"></span>{{.Report.Text}}</span>{{else if eq .Report.State "quiet"}}<span class="age tone-warn" style="font-weight:500"><span class="dot dot-quiet"></span>{{.Report.Text}}</span>{{else}}<span class="muted">{{.Report.Text}}</span>{{end}}</td>
           <td class="nowrap{{if not .Driver}} hide-phone{{end}}"{{if .Driver}} data-label="Driver"{{end}}>{{if .Driver}}{{.Driver}}{{else}}<span class="muted">none</span>{{end}}</td>
           <td class="c-actions"><div class="actions">
-            <a class="btn btn-sm btn-plain" href="/admin/vehicles/{{.ID}}/edit">Edit</a>
+            <a class="btn btn-sm btn-plain" href="/admin/vehicles/{{.ID}}/edit">{{if $.Shell.ReadOnly}}View{{else}}Edit{{end}}</a>
             {{/* limit=1000 is the endpoint's maximum; without it the export silently caps at the default 100 points. */}}
             <a class="btn btn-sm btn-plain hide-md" href="/api/v1/admin/vehicles/{{.ID}}/locations?format=csv&amp;limit=1000" title="Up to 1000 reports from the last 24 hours, as a CSV file">{{template "icon-sm" "download"}}Reports</a>
-            {{if .Active}}
+            {{if $.Shell.ReadOnly}}{{else if .Active}}
             <form class="hide-md" method="post" action="/admin/vehicles/{{.ID}}/deactivate" data-confirm="Deactivate this vehicle?" data-confirm-text="{{.Name}} leaves the map at once and drivers can no longer pick it. You can turn it back on." data-confirm-ok="Deactivate"><button class="btn btn-sm btn-plain" style="min-width:96px" type="submit">Deactivate</button></form>
             {{else}}
             <form method="post" action="/admin/vehicles/{{.ID}}/activate"><button class="btn btn-sm" style="min-width:96px" type="submit">Activate</button></form>
@@ -49,7 +51,11 @@
   {{else if or .Filtered .IncludeInactive (gt .PageNum 1)}}
   <div class="empty"><span class="step-icon">{{template "icon-lg" "search"}}</span><div class="empty-title">No vehicle matches</div><p>Nothing saved fits this search.</p><a class="btn" href="/admin/vehicles">Clear the search</a></div>
   {{else}}
+  {{if .Shell.ReadOnly}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "directions_bus"}}</span><div class="empty-title">No vehicles yet</div><p>A driver picks a vehicle when they start a trip. An admin adds them here.</p></div>
+  {{else}}
   <div class="empty"><span class="step-icon">{{template "icon-lg" "directions_bus"}}</span><div class="empty-title">Add your first vehicle</div><p>A driver picks a vehicle when they start a trip. Add them one at a time, or import a list from a CSV file.</p><a class="btn btn-primary" href="/admin/vehicles/new">{{template "icon" "add"}}New vehicle</a></div>
+  {{end}}
   {{end}}
   {{template "pagination" .}}
 </section>

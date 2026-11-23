@@ -16,12 +16,14 @@
 </div>
 {{end}}
 <section class="card">
+  {{if not .Shell.ReadOnly}}
   <form class="card-head filters" method="post" action="/admin/api-keys">
     <label class="label" for="name">New key for</label>
     <input class="input input-sm" id="name" name="name" type="text" required placeholder="Who will use it" value="{{.Name}}" style="max-width:280px"{{if .Error}} aria-invalid="true" aria-describedby="name-err"{{end}}>
     <button class="btn btn-sm btn-tonal" type="submit">{{template "icon-sm" "add"}}Create key</button>
     {{if .Error}}<div class="field-error" id="name-err" style="flex-basis:100%">{{template "icon-sm" "error"}}<span role="alert">{{.Error}}</span></div>{{end}}
   </form>
+  {{end}}
   {{if .Keys}}
   <div class="table-wrap">
     <table class="table cards">
@@ -33,14 +35,14 @@
           <td class="num nowrap" data-label="Created">{{.Created}}</td>
           <td class="num nowrap" data-label="Last used">{{if eq .LastUsed "never"}}<span class="muted">never</span>{{else}}{{.LastUsed}}{{end}}</td>
           <td class="c-side">{{if .Active}}<span class="muted">Active</span>{{else}}<span class="pill plain">Deactivated</span>{{end}}</td>
-          <td class="right">{{if .Active}}<form method="post" action="/admin/api-keys/{{.ID}}/deactivate" data-confirm="Deactivate this key?" data-confirm-text="Anything using the key for {{.Name}} stops getting the feed. It cannot be turned back on." data-confirm-ok="Deactivate"><button class="btn btn-sm btn-plain" type="submit">Deactivate</button></form>{{end}}</td>
+          <td class="right">{{if and .Active (not $.Shell.ReadOnly)}}<form method="post" action="/admin/api-keys/{{.ID}}/deactivate" data-confirm="Deactivate this key?" data-confirm-text="Anything using the key for {{.Name}} stops getting the feed. It cannot be turned back on." data-confirm-ok="Deactivate"><button class="btn btn-sm btn-plain" type="submit">Deactivate</button></form>{{end}}</td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
   {{else}}
-  <div class="empty"><span class="step-icon">{{template "icon-lg" "key"}}</span><div class="empty-title">No API keys yet</div><p>Create one for each system that reads the feed, so each can be turned off by itself.</p></div>
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "key"}}</span><div class="empty-title">No API keys yet</div><p>{{if .Shell.ReadOnly}}An admin creates one for each system that reads the feed, so each can be turned off by itself.{{else}}Create one for each system that reads the feed, so each can be turned off by itself.{{end}}</p></div>
   {{end}}
   {{template "pagination" .}}
 </section>

@@ -25,11 +25,21 @@ type errorPage struct {
 
 // newErrorPage is the page for status, or false when the status has none and
 // the response is left as it is. Only what an admin page answers today has
-// one: a page or record that is not there, and a failure of the server.
+// one: a page or record that is not there, a change a viewer may not make,
+// and a failure of the server.
 func newErrorPage(status int, r *http.Request) (errorPage, bool) {
 	// A GET changes nothing and can be asked again with a link.
 	read := r.Method == http.MethodGet || r.Method == http.MethodHead
 	switch status {
+	case http.StatusForbidden:
+		// requireAdminPage's refusal of a viewer's form post, the only 403
+		// an admin page writes.
+		return errorPage{
+			Status: status,
+			Title:  "Your account can look but not change",
+			Text:   "You are signed in as a viewer, so nothing was changed. An admin can make the change.",
+			Back:   true,
+		}, true
 	case http.StatusNotFound:
 		return errorPage{
 			Status: status,

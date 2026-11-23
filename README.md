@@ -99,8 +99,9 @@ upgrading with a stale or unreachable `GTFS_STATIC_URL` must fix it.
 
 The schedule is served as the **driver GTFS catalog**: three read-only
 endpoints the driver apps use to pick a trip and draw its route. They take a
-driver or admin bearer token (the admin UI's session cookie also works, as on
-every `requireAuth` route). Only routes with at least one trip that has a shape
+driver, admin or viewer bearer token (the admin UI's session cookie also works,
+as on every `requireAuth` route), since the admin's map and search read them
+too. Only routes with at least one trip that has a shape
 appear in the catalog, because the index skips shapeless trips — a route
 missing from the picker means its trips have no `shape_id`.
 
@@ -147,8 +148,8 @@ These settings also appear, alongside every other variable the server reads, in
 
 Rider mode shares `JWT_SECRET` with the rest of the API, but rider tokens carry
 `role: "rider"` and are accepted only on the rider routes — a rider token is
-rejected (`403`) on the driver and admin APIs, and a driver or admin token is
-rejected on the rider API.
+rejected (`403`) on the driver and admin APIs, and a driver, admin or viewer
+token is rejected on the rider API.
 
 The API (spec §4.4). Every route except registration requires a rider token in
 `Authorization: Bearer …`; bodies are JSON, capped at 64 KiB, and unknown
@@ -167,7 +168,8 @@ Two admin endpoints report on the subsystem: `GET /api/v1/admin/rider/status`
 `rides.publishable` counts the runs of trips being published, one per
 estimate, not rides, so several riders on one bus count once) and
 `GET /api/v1/admin/rider/rides?status=active|ended` (recent rides, newest
-first). Both require an admin token, like every other `/api/v1/admin/*` route.
+first). Both take an admin or viewer token, like every other read under
+`/api/v1/admin/`.
 
 The published feed carries both halves. `GET /gtfs-rt/vehicle-positions` takes
 a `source` parameter — `driver`, `rider`, or `all` (the default) — so a
@@ -329,6 +331,23 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |`POST /api/v1/admin/trips/{id}/end` |POST  |End any driver's active trip (admin)                |
 |`GET /api/v1/admin/status`          |GET   |System health, active vehicles, feed stats          |
 
+**Viewer accounts**
+
+An account has one of three roles: `driver`, `admin` or `viewer`. A viewer
+signs in to the admin UI and sees every page, and its token reads every
+`GET` route under `/api/v1/admin/`, as an admin's does. Every other method is
+refused with `403 admin access required`, on the pages and in the API alike:
+`requireAdmin` and the admin UI's `requireAdminPage` let a viewer through for
+`GET` and `HEAD` only (`adminGateAllows` in `auth.go`), so a route added later
+needs nothing of its own. The driver API (`POST /api/v1/locations`,
+`/api/v1/locations/history`, `/api/v1/trips/*`, `GET /api/v1/vehicles` and
+`GET /api/v1/map`) refuses a viewer with `403`, as it does a rider, so a
+viewer can't hold a vehicle either: `POST /api/v1/admin/assignments` refuses
+one with `409`, and making an account a viewer unassigns its vehicles in the
+same transaction, refused with `409` while it has a trip running. On the Audit
+log page a viewer sees who made each change but not the address it came
+from.
+
 **Paged admin lists**
 
 `GET /api/v1/admin/vehicles` and `GET /api/v1/admin/users` return one page at a
@@ -413,7 +432,7 @@ Response codes:
 - `201 Created` — location accepted and persisted.
 - `400 Bad Request` — invalid JSON or payload validation failure.
 - `401 Unauthorized` — missing, malformed, or expired bearer token.
-- `403 Forbidden` — valid token whose role cannot use the driver API (e.g. a rider token),
+- `403 Forbidden` — valid token whose role cannot use the driver API (a rider or viewer token),
   a driver not assigned to `vehicle_id` (including a `vehicle_id` that does not exist),
   or a vehicle an admin has deactivated. The server never creates a vehicle from a report.
 - `409 Conflict` — the driver has no active trip on `vehicle_id` (start one with

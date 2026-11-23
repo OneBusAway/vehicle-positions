@@ -23,11 +23,12 @@ type contextKey string
 const claimsKey contextKey = "claims"
 
 // The role vocabulary. A JWT's "role" claim, a stored user's role column and
-// every role check in the server all draw on these three names, so a role
+// every role check in the server all draw on these four names, so a role
 // cannot be spelled one way in one place and another elsewhere.
 const (
 	roleDriver = "driver"
 	roleAdmin  = "admin"
+	roleViewer = "viewer"
 	roleRider  = "rider"
 )
 
@@ -35,7 +36,27 @@ const (
 // offers, and the ones the staff API admits. A rider is deliberately not one
 // of them — a rider token is signed with the same secret and would otherwise
 // validate on staff routes.
-var staffRoles = []string{roleDriver, roleAdmin}
+var staffRoles = []string{roleDriver, roleAdmin, roleViewer}
+
+// driverAPIRoles are the staff roles the driver API admits: the drivers it is
+// for, and admins, as it always has. A viewer can sign in to the admin but
+// must not start a trip or report a position, so it is refused at the door.
+var driverAPIRoles = []string{roleDriver, roleAdmin}
+
+// adminGateAllows is the one rule requireAdmin and requireAdminPage share: an
+// admin may do anything, and a viewer may only read. GET and HEAD are the
+// only methods an admin route serves without changing anything, so a viewer
+// is refused every other method on every admin route, including one added
+// later, without the route having to say so.
+func adminGateAllows(role, method string) bool {
+	switch role {
+	case roleAdmin:
+		return true
+	case roleViewer:
+		return method == http.MethodGet || method == http.MethodHead
+	}
+	return false
+}
 
 // contextWithClaims stores validated JWT claims on the context. Shared by
 // requireAuth and requireAdminPage so both middlewares wire claims the same
@@ -269,7 +290,8 @@ func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
 	return token.SignedString(secret)
 }
 
-// requireAdmin is middleware that restricts access to admin-role users.
+// requireAdmin is middleware that restricts access to admin-role users, and
+// lets a viewer read (adminGateAllows).
 // It must be chained after requireAuth, which sets JWT claims on the context.
 // It names the admin as the actor of any change the request makes, for the
 // audit log, with the address read through trustProxy as clientIP reads it.
@@ -283,11 +305,12 @@ func requireAdmin(trustProxy bool) func(http.Handler) http.Handler {
 				return
 			}
 
-			role, ok := claims["role"].(string)
-			if !ok || role != roleAdmin {
+			role, _ := claims["role"].(string)
+			if !adminGateAllows(role, r.Method) {
 				slog.Warn("requireAdmin: access denied",
 					"sub", claims["sub"],
 					"role", claims["role"],
+					"method", r.Method,
 					"path", r.URL.Path,
 				)
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin access required"})
@@ -409,6 +432,12 @@ func checkJTIRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChe
 // rejected for the rest of its lifetime.
 func requireAuth(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
 	return requireRoles(secret, checker, true, staffRoles...)
+}
+
+// requireDriverAPI is requireAuth for the driver app's own routes, which a
+// viewer is refused with the 403 a rider token gets.
+func requireDriverAPI(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
+	return requireRoles(secret, checker, true, driverAPIRoles...)
 }
 
 // requireRoles returns middleware that validates the Bearer JWT and admits

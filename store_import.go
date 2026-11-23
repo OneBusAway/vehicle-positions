@@ -222,7 +222,7 @@ func (s *Store) PlanDriverImport(ctx context.Context, rows []driverImportRow) ([
 // no account is new. A driver's account is an update when the name differs or
 // a listed vehicle isn't assigned yet: an import only adds assignments, and
 // never changes an email, a password, a role or the active flag. An admin's
-// account is an error, so the import can't touch one.
+// or a viewer's account is an error, so the import can't touch one.
 func planDrivers(ctx context.Context, q *db.Queries, rows []driverImportRow) ([]importOutcome, []driverPlan, error) {
 	outcomes := make([]importOutcome, len(rows))
 	plans := make([]driverPlan, len(rows))
@@ -234,6 +234,9 @@ func planDrivers(ctx context.Context, q *db.Queries, rows []driverImportRow) ([]
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:
 			return nil, nil, fmt.Errorf("find account for line %d: %w", row.Line, err)
+		case u.Role == roleViewer:
+			outcomes[i] = importOutcome{Status: importError, Reason: "this email belongs to a viewer account"}
+			continue
 		case u.Role != roleDriver:
 			outcomes[i] = importOutcome{Status: importError, Reason: "this email belongs to an admin account"}
 			continue

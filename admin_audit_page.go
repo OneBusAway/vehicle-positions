@@ -80,7 +80,9 @@ type auditRow struct {
 	// itself; WhoURL lists every change they made, "" for the server.
 	Who    string
 	WhoURL string
-	IP     string
+	// IP is the address the change came from: "" for the server's own, and
+	// on a viewer's page.
+	IP string
 	// What is the change in words, and Object the object it was made to,
 	// with ObjectURL listing that object's history.
 	What      string
@@ -302,9 +304,17 @@ func (ui *adminUI) auditPage(w http.ResponseWriter, r *http.Request) {
 
 	loc := pageLocation(ui.reports.index())
 	now := time.Now()
+	// A viewer sees who made each change but not the address they made it
+	// from, which says where an admin was. It is left out of the page, not
+	// just hidden.
+	viewer := isViewer(r)
 	rows := make([]auditRow, 0, len(entries))
 	for _, e := range entries {
-		rows = append(rows, newAuditRow(e, loc, now))
+		row := newAuditRow(e, loc, now)
+		if viewer {
+			row.IP = ""
+		}
+		rows = append(rows, row)
 	}
 
 	// A chip shows every change to its kind of object, so it drops the

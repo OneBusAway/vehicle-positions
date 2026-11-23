@@ -5,12 +5,12 @@
     <div class="page-head-main">
       <a class="back" href="/admin/vehicles">{{template "icon-sm" "arrow_back"}}Vehicles</a>
       <h2 class="h1">{{if .IsEdit}}{{.Name}}{{else}}New vehicle{{end}}</h2>
-      <p class="lede">{{if .IsEdit}}Update this vehicle's label and agency tag.{{else}}Register a vehicle so a driver can pick it.{{end}}</p>
+      <p class="lede">{{if and .IsEdit $.Shell.ReadOnly}}The vehicle as drivers and the feed know it.{{else if .IsEdit}}Update this vehicle's label and agency tag.{{else}}Register a vehicle so a driver can pick it.{{end}}</p>
     </div>
     {{if .Active}}
     <div class="page-actions">
       <a class="btn btn-outline" href="/api/v1/admin/vehicles/{{.ID}}/locations?format=csv&amp;limit=1000" title="Up to 1000 reports from the last 24 hours, as a CSV file">{{template "icon" "download"}}Reports</a>
-      {{if .IsActive}}
+      {{if $.Shell.ReadOnly}}{{else if .IsActive}}
       <form method="post" action="/admin/vehicles/{{.ID}}/deactivate" data-confirm="Deactivate this vehicle?" data-confirm-text="{{.Name}} leaves the map at once and drivers can no longer pick it. You can turn it back on." data-confirm-ok="Deactivate"><button class="btn btn-outline" type="submit">Deactivate</button></form>
       {{else}}
       <form method="post" action="/admin/vehicles/{{.ID}}/activate"><button class="btn btn-tonal" type="submit">Activate</button></form>
@@ -18,26 +18,27 @@
     </div>
     {{end}}
   </div>
-  <form class="card form-card" method="post" action="{{if .IsEdit}}/admin/vehicles/{{.ID}}{{else}}/admin/vehicles{{end}}">
+  {{if $.Shell.ReadOnly}}<div class="card form-card">{{template "viewer-note"}}{{else}}<form class="card form-card" method="post" action="{{if .IsEdit}}/admin/vehicles/{{.ID}}{{else}}/admin/vehicles{{end}}">{{end}}
     {{if .Error}}<div class="banner banner-error" role="alert">{{template "icon" "error"}}<div><b style="font-weight:500">The vehicle was not saved.</b> {{if eq .ErrorField "id"}}Fix the vehicle ID below.{{else}}{{.Error}}{{end}}</div></div>{{end}}
     <div class="field">
       <label class="label" for="id">Vehicle ID</label>
-      <input class="input" id="id" name="id" type="text" value="{{.ID}}"{{if .IsEdit}} readonly{{else}} required{{end}}{{if eq .ErrorField "id"}} aria-invalid="true" aria-describedby="id-err id-help"{{else}} aria-describedby="id-help"{{end}}>
+      <input class="input" id="id" name="id" type="text" value="{{.ID}}"{{if or .IsEdit $.Shell.ReadOnly}} readonly{{else}} required{{end}}{{if eq .ErrorField "id"}} aria-invalid="true" aria-describedby="id-err id-help"{{else}} aria-describedby="id-help"{{end}}>
       {{if eq .ErrorField "id"}}<div class="field-error" id="id-err">{{template "icon-sm" "error"}}{{.Error}}</div>{{end}}
       <div class="help" id="id-help">What the feed calls this vehicle, up to {{$.MaxIDLength}} characters. It cannot be changed later.</div>
     </div>
     <div class="field">
       <label class="label" for="label">Label</label>
-      <input class="input" id="label" name="label" type="text" value="{{.Label}}" aria-describedby="label-help">
+      <input class="input" id="label" name="label" type="text" value="{{.Label}}"{{if $.Shell.ReadOnly}} readonly{{end}} aria-describedby="label-help">
       <div class="help" id="label-help">The number or name painted on the vehicle. Drivers and this site show it.</div>
     </div>
     <div class="field">
       <label class="label" for="agency_tag">Agency tag <span class="muted" style="font-weight:400">(optional)</span></label>
-      <input class="input" id="agency_tag" name="agency_tag" type="text" value="{{.AgencyTag}}" aria-describedby="agency-tag-help">
+      <input class="input" id="agency_tag" name="agency_tag" type="text" value="{{.AgencyTag}}"{{if $.Shell.ReadOnly}} readonly{{end}} aria-describedby="agency-tag-help">
       <div class="help" id="agency-tag-help">A grouping of your own, such as a depot.</div>
     </div>
+    {{if $.Shell.ReadOnly}}</div>{{else}}
     <div class="form-actions"><a class="btn" href="/admin/vehicles">Cancel</a><button class="btn btn-primary" type="submit">{{if .IsEdit}}Save changes{{else}}Create vehicle{{end}}</button></div>
-  </form>
+  </form>{{end}}
 </div>
 {{end}}
 {{end}}

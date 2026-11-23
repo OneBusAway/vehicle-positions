@@ -7,7 +7,7 @@
 </section>
 {{end}}
 <section class="card more-group">
-  <div class="card-head"><h2>{{with .Shell.Account.Name}}{{.}}, {{end}}{{.Shell.Account.Email}}</h2></div>
+  <div class="card-head"><h2>{{with .Shell.Account.Name}}{{.}}, {{end}}{{.Shell.Account.Email}}</h2>{{if .Shell.ReadOnly}}<span class="pill plain">Viewer</span>{{end}}</div>
   <button class="line-row more-row js-only" type="button" data-theme-toggle><span class="theme-mark theme-mark-lg"></span><span>Light or dark</span></button>
   <form method="post" action="/admin/logout"><button class="line-row more-row" type="submit">{{template "icon-lg" "logout"}}<span>Sign out</span></button></form>
 </section>

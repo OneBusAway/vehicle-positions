@@ -2,12 +2,14 @@
 <div class="page-head">
   <div class="page-head-main">
     <h2 class="h1">{{.Headline}}</h2>
-    <p class="lede">Drivers sign in to the app. Admins sign in here.</p>
+    <p class="lede">Drivers sign in to the app. Admins and viewers sign in here, and a viewer can look but not change anything.</p>
   </div>
+  {{if not .Shell.ReadOnly}}
   <div class="page-actions">
     <a class="btn btn-outline" href="/admin/import/drivers">{{template "icon" "upload_file"}}Import drivers</a>
     <a class="btn btn-primary" href="/admin/users/new">{{template "icon" "add"}}New user</a>
   </div>
+  {{end}}
 </div>
 <section class="card">
   {{/* No page param: a new search starts over at page 1. active and role ride along so the search survives them. */}}
@@ -28,14 +30,14 @@
         {{range .Users}}
         <tr>
           <td><div class="who"><span class="avatar{{if eq .Role "admin"}} admin{{end}}" aria-hidden="true">{{.Initials}}</span><span style="min-width:0"><a class="row-link" href="/admin/users/{{.ID}}/edit">{{.Name}}</a><span class="sub clip" style="max-width:280px">{{.Email}}</span></span></div></td>
-          <td class="c-side nowrap">{{if eq .Role "admin"}}<span class="pill plain">Admin</span>{{else}}<span class="muted">Driver</span>{{end}}</td>
+          <td class="c-side nowrap">{{if eq .Role "admin"}}<span class="pill plain">Admin</span>{{else if eq .Role "viewer"}}<span class="muted">Viewer</span>{{else}}<span class="muted">Driver</span>{{end}}</td>
           <td{{if .Active}} class="hide-phone"{{end}}>{{if .Active}}<span class="muted">Active</span>{{else}}<span class="pill plain">Deactivated</span>{{end}}</td>
           {{if eq .Role "driver"}}<td class="num nowrap" data-label="May drive">{{.MayDrive}}</td>{{else}}<td class="hide-phone"></td>{{end}}
           <td class="num nowrap" data-label="Last seen">{{if eq .LastSeen "never"}}<span class="muted">never</span>{{else}}{{.LastSeen}}{{end}}</td>
           <td class="c-actions"><div class="actions">
             {{if and .Active (eq .Role "driver")}}<a class="btn btn-sm btn-plain hide-md" href="/admin/driver-setup?user={{.ID}}">{{template "icon-sm" "qr_code_2"}}Setup sheet</a>{{end}}
-            <a class="btn btn-sm btn-plain" href="/admin/users/{{.ID}}/edit">Edit</a>
-            {{if .Active}}
+            <a class="btn btn-sm btn-plain" href="/admin/users/{{.ID}}/edit">{{if $.Shell.ReadOnly}}View{{else}}Edit{{end}}</a>
+            {{if $.Shell.ReadOnly}}{{else if .Active}}
             <form method="post" action="/admin/users/{{.ID}}/deactivate" data-confirm="Deactivate this account?" data-confirm-text="{{.Name}} is signed out everywhere and cannot sign in again until you turn the account back on." data-confirm-ok="Deactivate"><button class="btn btn-sm btn-plain" style="min-width:96px" type="submit">Deactivate</button></form>
             {{else}}
             <form method="post" action="/admin/users/{{.ID}}/activate"><button class="btn btn-sm" style="min-width:96px" type="submit">Activate</button></form>

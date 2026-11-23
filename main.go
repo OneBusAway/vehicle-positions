@@ -91,6 +91,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
+	driverMiddleware := requireDriverAPI(jwtSecret, store)
 	adminMiddleware := requireAdmin(trustProxy)
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
@@ -134,17 +135,20 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 		mux.Handle("GET /metrics", requireMetricsToken(metricsToken, trustProxy)(handleMetrics(catalog, alerts, health)))
 	}
 
-	mux.Handle("POST /api/v1/locations", countReports(authMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter))))
+	// The driver app's own routes. A viewer may read the admin but not drive,
+	// so these refuse one; everything else a viewer signs in for is behind
+	// adminMiddleware, which lets it read and refuses its writes.
+	mux.Handle("POST /api/v1/locations", countReports(driverMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter))))
 	// Built here rather than passed in like the others: it lives as long as the mux, and nothing
 	// else needs to reach it.
 	historyLimiter := NewKeyedRateLimiter(historyUploadInterval, historyUploadBurst, false)
-	mux.Handle("POST /api/v1/locations/history", countReports(authMiddleware(handlePostLocationHistory(store, historyLimiter))))
-	mux.Handle("POST /api/v1/trips/start", authMiddleware(handleStartTrip(store, catalog, tracker)))
-	mux.Handle("POST /api/v1/trips/end", authMiddleware(handleEndTrip(store, tracker)))
-	mux.Handle("GET /api/v1/vehicles", authMiddleware(handleListMyVehicles(store)))
+	mux.Handle("POST /api/v1/locations/history", countReports(driverMiddleware(handlePostLocationHistory(store, historyLimiter))))
+	mux.Handle("POST /api/v1/trips/start", driverMiddleware(handleStartTrip(store, catalog, tracker)))
+	mux.Handle("POST /api/v1/trips/end", driverMiddleware(handleEndTrip(store, tracker)))
+	mux.Handle("GET /api/v1/vehicles", driverMiddleware(handleListMyVehicles(store)))
 	// Registered whether or not a map file is configured: an unconfigured server
 	// answers with a null URL, so a 404 only ever means one older than this route.
-	mux.Handle("GET /api/v1/map", authMiddleware(handleMapConfig(mapPMTilesURL)))
+	mux.Handle("GET /api/v1/map", driverMiddleware(handleMapConfig(mapPMTilesURL)))
 
 	// Admin user management
 	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))
@@ -176,6 +180,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	// The GTFS catalog is served whether or not rider mode is on. newMux
 	// registers its routes only when given one (404 otherwise); main always
 	// passes one, because the server refuses to start without a schedule.
+	// The admin's map and search read it too, so it takes any staff role.
 	if catalog != nil {
 		registerGTFSRoutes(mux, authMiddleware, catalog)
 	}

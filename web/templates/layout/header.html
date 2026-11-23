@@ -11,9 +11,10 @@
   </a>
   <button class="icon-btn only-phone js-only" type="button" data-palette-open aria-label="Search">{{template "icon" "search"}}</button>
   <a class="icon-btn hide-phone" href="/admin/alerts" aria-label="{{.Shell.AlertsLabel}}" data-alert-link>{{template "icon" "notifications"}}<span class="count" data-alert-count{{if not .Shell.AlertCount}} hidden{{end}}>{{with .Shell.AlertCount}}{{.}}{{end}}</span></a>
+  {{if .Shell.ReadOnly}}<span class="pill plain hide-phone" title="This account can look at every page but not change anything">Viewer</span>{{end}}
   <button class="avatar" type="button" popovertarget="account" aria-label="Account">{{.Shell.Account.Initials}}</button>
   <div id="account" popover class="float account-menu">
-    <div class="account-who">{{with .Shell.Account.Name}}<div style="font-weight:500">{{.}}</div>{{end}}<div class="muted" style="font-size:13px">{{.Shell.Account.Email}}</div></div>
+    <div class="account-who">{{with .Shell.Account.Name}}<div style="font-weight:500">{{.}}</div>{{end}}<div class="muted" style="font-size:13px">{{.Shell.Account.Email}}</div>{{if .Shell.ReadOnly}}<div class="muted" style="font-size:13px;margin-top:6px">Viewer: can look at every page, can't change anything</div>{{end}}</div>
     <button class="rail-item js-only" type="button" data-theme-toggle><span class="theme-mark"></span><span>Light or dark</span></button>
     <form method="post" action="/admin/logout"><button class="rail-item" type="submit">{{template "icon" "logout"}}<span>Sign out</span></button></form>
   </div>
