@@ -20,6 +20,7 @@
   <div class="card-head"><h3 id="use-title" style="flex:1">Rides per service day</h3><span class="sub hide-phone">By the service day of the trip ridden</span></div>
   <p class="card-note">{{.Use.Summary}}</p>
   <div class="an-plot">{{template "bar-chart" .Use.Chart}}</div>
+  <details class="an-table"><summary class="card-foot">Show these numbers as a table</summary><div class="table-wrap"><table class="table table-dense"><thead><tr><th>Service day</th><th class="right">Rides</th><th class="right">Trips</th><th class="right">Points matched</th></tr></thead><tbody>{{range .Use.Days}}<tr><td>{{.Day}}</td><td class="num right">{{.Rides}}</td><td class="num right">{{.Trips}}</td><td class="num right">{{.PointsMatched}} of {{.PointsTotal}}</td></tr>{{end}}</tbody></table></div></details>
 </section>
 
 <div class="rider-grid">
@@ -65,5 +66,6 @@
   {{end}}
   {{template "pagination" .}}
 </section>
+<div class="tip" id="tip" aria-hidden="true"></div>
 {{end}}
 {{end}}

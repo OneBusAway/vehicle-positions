@@ -172,6 +172,8 @@ func TestRiderPage_OnWithNoRides(t *testing.T) {
 	assert.Contains(t, body, "No rides yet")
 	assert.Empty(t, riderRideRows(t, body))
 	assert.Contains(t, body, "Times are America/Los_Angeles time.")
+	require.Contains(t, riderPageSection(t, body, "rider-use"), `data-tip="`)
+	assert.Contains(t, body, `<div class="tip" id="tip" aria-hidden="true"></div>`, "the chart's bars have the element that shows their tips")
 
 	assert.Contains(t, getAdminPage(t, mux, "/admin/rider?status=active"), "No rides in progress.")
 	assert.Contains(t, getAdminPage(t, mux, "/admin/rider?status=ended"), "No ended rides.")

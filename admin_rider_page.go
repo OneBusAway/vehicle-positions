@@ -182,10 +182,22 @@ const riderUseDays = 28
 const riderUseChartHeight = 130
 
 // riderUseView is how much rider mode has been used: rides per service day
-// as a chart, and a line adding the days up.
+// as a chart, a line adding the days up, and a row a day for the table
+// behind the chart.
 type riderUseView struct {
 	Chart   barChartView
 	Summary string
+	Days    []riderUseDay
+}
+
+// riderUseDay is a service day's rides as the table behind the chart lists
+// them.
+type riderUseDay struct {
+	Day           string
+	Rides         int
+	Trips         int
+	PointsMatched int64
+	PointsTotal   int64
 }
 
 // riderUse adds up the rides of the last riderUseDays service days. Today is
@@ -215,6 +227,7 @@ func newRiderUse(days []RideDay, first time.Time) riderUseView {
 	}
 	var total RideDay
 	bars := make([]chartBar, 0, riderUseDays)
+	rows := make([]riderUseDay, 0, riderUseDays)
 	for i := range riderUseDays {
 		day := first.AddDate(0, 0, i)
 		d := byDate[day.Format(gtfsDateLayout)]
@@ -224,6 +237,7 @@ func newRiderUse(days []RideDay, first time.Time) riderUseView {
 				countOf(d.Rides, "ride", "rides"), countOf(d.Trips, "trip", "trips"), d.PointsMatched, d.PointsTotal)
 		}
 		bars = append(bars, bar)
+		rows = append(rows, riderUseDay{Day: day.Format("Mon 2 Jan"), Rides: d.Rides, Trips: d.Trips, PointsMatched: d.PointsMatched, PointsTotal: d.PointsTotal})
 		total.Rides += d.Rides
 		total.Trips += d.Trips
 		total.PointsMatched += d.PointsMatched
@@ -243,6 +257,7 @@ func newRiderUse(days []RideDay, first time.Time) riderUseView {
 			Peak:   "Most in a day",
 		}),
 		Summary: summary,
+		Days:    rows,
 	}
 }
 
