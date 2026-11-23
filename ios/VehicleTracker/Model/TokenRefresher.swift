@@ -49,7 +49,11 @@ actor TokenRefresher {
 
     private let tokens: any TokenStoring
     private let now: @Sendable () -> Date
-    /// The trade running now, and the sign-in it was started for.
+    /// The trade running now, and the sign-in it was started for. A task of
+    /// its own, so a caller that is cancelled (a drain iOS stops) doesn't cut
+    /// it off: the server may already have spent the refresh token, and a
+    /// pair it issued that the phone never saved would leave only the spent
+    /// one, whose next use revokes every refresh token the driver holds.
     private var inFlight: (signInID: UUID?, task: Task<Outcome, Never>)?
     /// How long an early trade that was refused or failed holds back the next
     /// early one. Drivers at a depot share one address, and with it the

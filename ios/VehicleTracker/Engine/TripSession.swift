@@ -638,10 +638,11 @@ final class TripSession {
 
     /// Sends the reports kept for want of a connection while no trip is
     /// running, as the server takes them with no trip open: when a trip
-    /// ends, after a sign-in, and each time the app comes to the front.
-    /// During a trip each report that gets through takes a batch with it, so
-    /// the drain stops once one starts.
-    func sendKeptReports() {
+    /// ends, after a sign-in, each time the app comes to the front, and when
+    /// iOS runs the background task. During a trip each report that gets
+    /// through takes a batch with it, so the drain stops once one starts.
+    @discardableResult
+    func sendKeptReports() -> Task<Void, Never>? {
         history?.drain { [weak self] in
             guard let self, reporter == nil else { return nil }
             return api
