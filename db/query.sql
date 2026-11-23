@@ -631,16 +631,22 @@ DELETE FROM feed_health_hours WHERE hour < sqlc.arg(cutoff);
 
 -- name: GetVehicleForUpdate :one
 -- Locks the vehicle for the rest of the transaction, so the fields read here
--- are the ones the change that follows replaces.
-SELECT label, agency_tag, active FROM vehicles WHERE id = $1 FOR UPDATE;
+-- are the ones the change that follows replaces. NO KEY UPDATE holds off any
+-- other change to the row as FOR UPDATE would, but lets through the KEY SHARE
+-- lock a foreign key check takes, so inserting a row that points at the
+-- vehicle does not wait for the admin's change to commit. None of the changes
+-- that follow rewrites the id.
+SELECT label, agency_tag, active FROM vehicles WHERE id = $1 FOR NO KEY UPDATE;
 
 -- name: GetUserForUpdate :one
--- Locks the user for the rest of the transaction, as LockUser does, and reads
--- the fields the change that follows replaces.
-SELECT name, email, role, active FROM users WHERE id = $1 FOR UPDATE;
+-- Locks the user for the rest of the transaction, against LockUser too, and
+-- reads the fields the change that follows replaces. NO KEY UPDATE for the
+-- reason GetVehicleForUpdate gives: a trip or assignment for the user does not
+-- wait. DeleteUser's DELETE takes the full lock when it runs.
+SELECT name, email, role, active FROM users WHERE id = $1 FOR NO KEY UPDATE;
 
 -- name: GetAPIKeyForUpdate :one
-SELECT name, active FROM api_keys WHERE id = $1 FOR UPDATE;
+SELECT name, active FROM api_keys WHERE id = $1 FOR NO KEY UPDATE;
 
 -- name: InsertAuditEntry :exec
 INSERT INTO audit_log (actor_id, actor_email, actor_ip, object_type, object_id, action, before, after)

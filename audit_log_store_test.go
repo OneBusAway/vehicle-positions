@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OneBusAway/vehicle-positions/db"
 )
 
 // The audit log tests act on vehicles named aud-*, accounts aud-*@example.org
@@ -27,6 +29,7 @@ func clearAuditFixture(t *testing.T, store *Store) {
 	t.Helper()
 	for _, stmt := range []string{
 		`DELETE FROM trips WHERE vehicle_id LIKE 'aud-%'`,
+		`DELETE FROM location_points WHERE vehicle_id LIKE 'aud-%'`,
 		`DELETE FROM user_vehicles WHERE vehicle_id LIKE 'aud-%'`,
 		`DELETE FROM users WHERE email LIKE 'aud-%@example.org'`,
 		`DELETE FROM vehicles WHERE id LIKE 'aud-%'`,
@@ -701,6 +704,142 @@ func TestStore_AuditLog_RowsCannotBeChanged(t *testing.T) {
 	rows := auditRowsAfter(t, store, last-1)
 	require.Len(t, rows, 1)
 	assert.Equal(t, testAuditActor.Email, rows[0].ActorEmail)
+}
+
+// finishesWhileHeld runs act while another transaction holds what lock
+// takes, as an admin change holds its audit read until it commits, and
+// reports whether act finished before that transaction ended. act's error is
+// checked once the hold is let go.
+func finishesWhileHeld(t *testing.T, store *Store, lock func(context.Context, *db.Queries) error, act func(context.Context) error) bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(asTestAdmin(), 30*time.Second)
+	defer cancel()
+
+	holder, err := dedicatedConn(t).Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	require.NoError(t, lock(ctx, db.New(holder)))
+	var pid int
+	require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+
+	done := make(chan error, 1)
+	go func() { done <- act(ctx) }()
+	require.Eventually(t, func() bool { return len(done) == 1 || blockedBehind(store, pid, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "neither finished nor waited for the held row")
+	finished := len(done) == 1
+
+	require.NoError(t, holder.Rollback(ctx))
+	require.NoError(t, <-done)
+	return finished
+}
+
+// The audit log's reads of the old fields, each as an admin change takes it.
+func lockVehicleForAudit(ctx context.Context, q *db.Queries, _ auditFixture) error {
+	_, err := q.GetVehicleForUpdate(ctx, "aud-v")
+	return err
+}
+
+func lockUserForAudit(ctx context.Context, q *db.Queries, fx auditFixture) error {
+	_, err := q.GetUserForUpdate(ctx, fx.userID)
+	return err
+}
+
+func lockAPIKeyForAudit(ctx context.Context, q *db.Queries, fx auditFixture) error {
+	_, err := q.GetAPIKeyForUpdate(ctx, fx.keyID)
+	return err
+}
+
+// writeWhileAuditHeld is a write made while an admin change holds its audit
+// read of an object.
+type writeWhileAuditHeld struct {
+	name string
+	lock func(ctx context.Context, q *db.Queries, fx auditFixture) error
+	act  func(ctx context.Context, store *Store, fx auditFixture) error
+}
+
+// finishes runs w on a new fixture and reports whether it finished while the
+// audit read was still held.
+func (w writeWhileAuditHeld) finishes(t *testing.T, store *Store) bool {
+	t.Helper()
+	fx := newAuditFixture(t, store)
+	return finishesWhileHeld(t, store,
+		func(ctx context.Context, q *db.Queries) error { return w.lock(ctx, q, fx) },
+		func(ctx context.Context) error { return w.act(ctx, store, fx) })
+}
+
+// TestStore_AuditLog_ReadLetsReferencesThrough inserts a row that points at a
+// vehicle or an account while an admin change holds its audit read of it. The
+// insert's foreign key takes KEY SHARE on that row, which FOR UPDATE made
+// wait for the admin's commit and FOR NO KEY UPDATE does not.
+func TestStore_AuditLog_ReadLetsReferencesThrough(t *testing.T) {
+	store := newAuditTestStore(t)
+	for _, w := range []writeWhileAuditHeld{
+		{
+			name: "an offline upload from the vehicle",
+			lock: lockVehicleForAudit,
+			act: func(ctx context.Context, s *Store, fx auditFixture) error {
+				_, err := s.SaveLocationHistory(ctx, fx.userID, "aud-v", []*LocationReport{{
+					VehicleID: "aud-v", Latitude: 47.6, Longitude: -122.3, Timestamp: time.Now().Unix(), DriverID: idText(fx.userID),
+				}})
+				return err
+			},
+		},
+		{
+			name: "a trip start by the driver",
+			lock: lockUserForAudit,
+			act: func(ctx context.Context, s *Store, fx auditFixture) error {
+				_, err := s.StartTrip(ctx, fx.userID, "aud-v", "route-1", "")
+				return err
+			},
+		},
+		{
+			name: "an assignment for the driver",
+			lock: lockUserForAudit,
+			act: func(ctx context.Context, s *Store, fx auditFixture) error {
+				_, err := s.CreateAssignment(ctx, fx.userID, "aud-v2")
+				return err
+			},
+		},
+	} {
+		t.Run(w.name, func(t *testing.T) {
+			assert.True(t, w.finishes(t, store), "waited for the admin's change to commit")
+		})
+	}
+}
+
+// TestStore_AuditLog_ReadHoldsOffASecondChange makes an admin change to an
+// object while another holds its audit read of it. The second must wait, so
+// the before it records is what the first left.
+func TestStore_AuditLog_ReadHoldsOffASecondChange(t *testing.T) {
+	store := newAuditTestStore(t)
+	for _, w := range []writeWhileAuditHeld{
+		{
+			name: "a vehicle",
+			lock: lockVehicleForAudit,
+			act: func(ctx context.Context, s *Store, _ auditFixture) error {
+				return s.UpdateVehicleInfo(ctx, "aud-v", "New", "north")
+			},
+		},
+		{
+			name: "an account",
+			lock: lockUserForAudit,
+			act: func(ctx context.Context, s *Store, fx auditFixture) error {
+				_, err := s.UpdateUser(ctx, fx.userID, "Ana B", "aud-ana@example.org", roleDriver)
+				return err
+			},
+		},
+		{
+			name: "an API key",
+			lock: lockAPIKeyForAudit,
+			act: func(ctx context.Context, s *Store, fx auditFixture) error {
+				return s.DeactivateAPIKey(ctx, fx.keyID)
+			},
+		},
+	} {
+		t.Run(w.name, func(t *testing.T) {
+			assert.False(t, w.finishes(t, store), "changed the row while another change held it")
+		})
+	}
 }
 
 // TestStore_ListAuditEntries checks the reads behind the Audit log page: the
