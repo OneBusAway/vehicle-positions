@@ -65,7 +65,7 @@ func escapeAndroid(s string) string {
 			b.WriteRune(r)
 		}
 	}
-	if strings.Join(strings.Fields(s), " ") != s {
+	if strings.Join(strings.FieldsFunc(s, isAAPTSpace), " ") != s {
 		return `"` + b.String() + `"`
 	}
 	return b.String()

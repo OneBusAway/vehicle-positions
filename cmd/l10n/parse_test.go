@@ -1,9 +1,12 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValuesDirLanguage(t *testing.T) {
@@ -87,6 +90,11 @@ func TestUnescapeAndroid(t *testing.T) {
 		`too short \u20`:      `too short \u20`,
 		`ends with \u`:        `ends with \u`,
 		`a backslash \\u2026`: `a backslash \u2026`,
+		// aapt trims and collapses ASCII's spaces alone: a no-break space,
+		// as French writes before ? and :, stays where it is.
+		"Langue\u00a0: %1$s":      "Langue\u00a0: %1$s",
+		"a \u00a0 b":              "a \u00a0 b",
+		"\u00a0at the ends\u202f": "\u00a0at the ends\u202f",
 	} {
 		assert.Equal(t, want, unescapeAndroid(in), in)
 	}
@@ -104,4 +112,51 @@ func TestEscapeAndroid_DirectionControlsStayVisible(t *testing.T) {
 	for _, r := range out {
 		assert.False(t, isDirectionControl(r), "%U written raw", r)
 	}
+}
+
+// TestEscapeAndroid_LeavesANoBreakSpaceUnquoted: aapt keeps a no-break space,
+// so a string with one is written as it is, not quoted as one whose spaces
+// would collapse, and reads back the same.
+func TestEscapeAndroid_LeavesANoBreakSpaceUnquoted(t *testing.T) {
+	in := "Langue\u00a0: %1$s"
+	assert.Equal(t, in, escapeAndroid(in))
+	assert.Equal(t, in, unescapeAndroid(escapeAndroid(in)))
+}
+
+// TestExportAndImport_KeepANoBreakSpace: the sheet shows a no-break space as
+// the app does, a sheet that says what the file says changes nothing, and an
+// edit around the space writes it back. Read as a plain space, the sheet
+// showed a plain space, so an edit dropped it.
+func TestExportAndImport_KeepANoBreakSpace(t *testing.T) {
+	const french = "android/app/src/main/res/values-fr/strings.xml"
+	const nbsp = "\u00a0" // written as it is, as values-fr writes it
+	const file = `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="started_ago">Démarré il y a %1$d` + nbsp + `min</string>
+</resources>
+`
+	p := newSheetProject(t)
+	path := filepath.Join(p.root, french)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(file), 0o644))
+
+	sheet := p.export(t, "fr")
+	var current string
+	for _, row := range readRows(t, sheet) {
+		if cell(row, "android") == "started_ago" {
+			current = cell(row, "current")
+		}
+	}
+	assert.Equal(t, "Démarré il y a %1$d"+nbsp+"min", current, "the sheet shows what the app shows")
+
+	translate(t, sheet, map[string]string{"Started %1$d min ago": "Démarré il y a %1$d" + nbsp + "min"})
+	code, out := p.importSheet(t, "fr", sheet)
+	require.Equal(t, 0, code, out)
+	assert.Equal(t, "nothing to change\n", out, "the sheet says what the file says")
+	assert.Equal(t, file, p.read(t, french))
+
+	translate(t, sheet, map[string]string{"Started %1$d min ago": "Parti il y a %1$d" + nbsp + "min"})
+	code, out = p.importSheet(t, "fr", sheet)
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, p.read(t, french), `<string name="started_ago">Parti il y a %1$d`+nbsp+`min</string>`)
 }

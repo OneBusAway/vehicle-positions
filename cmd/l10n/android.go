@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // androidRes is where the Android app keeps its resources.
@@ -205,12 +207,12 @@ func attr(t xml.StartElement, name string) string {
 // backslash escapes undone, \uXXXX included, a double-quoted string unquoted,
 // and otherwise runs of space collapsed, as aapt does.
 func unescapeAndroid(s string) string {
-	s = strings.TrimSpace(s)
+	s = strings.TrimFunc(s, isAAPTSpace)
 	quoted := len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"'
 	if quoted {
 		s = s[1 : len(s)-1]
 	} else {
-		s = strings.Join(strings.Fields(s), " ")
+		s = strings.Join(strings.FieldsFunc(s, isAAPTSpace), " ")
 	}
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -237,6 +239,13 @@ func unescapeAndroid(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// isAAPTSpace reports whether aapt trims and collapses r in a string that is
+// not quoted: ASCII's spaces alone. A no-break space, which French writes
+// before ? and :, stays where it is.
+func isAAPTSpace(r rune) bool {
+	return r < utf8.RuneSelf && unicode.IsSpace(r)
 }
 
 // relPath is path relative to root with forward slashes, as GitHub names a
