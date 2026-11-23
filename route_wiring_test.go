@@ -273,6 +273,7 @@ var adminRoutes = []struct {
 	{"GET", "/api/v1/admin/api-keys"},
 	{"POST", "/api/v1/admin/api-keys"},
 	{"DELETE", "/api/v1/admin/api-keys/1"},
+	{"GET", "/api/v1/admin/audit"},
 }
 
 // TestAdminRoutes_DriverTokenRejected verifies that every /api/v1/admin/* route

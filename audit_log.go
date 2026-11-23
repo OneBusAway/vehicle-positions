@@ -226,3 +226,21 @@ func (s *Store) ListAuditEntries(ctx context.Context, f auditFilter) ([]auditEnt
 	}
 	return entries, nil
 }
+
+// AuditLogPruneStore is the store behavior needed by the audit log's
+// retention pruner.
+type AuditLogPruneStore interface {
+	PruneAuditLog(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
+var _ AuditLogPruneStore = (*Store)(nil)
+
+// PruneAuditLog deletes the rows of the audit log written before cutoff and
+// returns the number removed.
+func (s *Store) PruneAuditLog(ctx context.Context, cutoff time.Time) (int64, error) {
+	rows, err := s.queries.DeleteAuditEntriesBefore(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
+	if err != nil {
+		return 0, fmt.Errorf("prune audit log: %w", err)
+	}
+	return rows, nil
+}

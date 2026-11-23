@@ -126,10 +126,10 @@ func auditTypeNoun(kind string) (string, bool) {
 	return "", false
 }
 
-// parseAuditFilter reads the Audit log page's filter from its query: ?type=
-// one kind of object, with ?id= one object of it, and ?actor= one admin's
-// user id. It returns a message for the 400 when the query names no such
-// filter.
+// parseAuditFilter reads the audit log's filter from a query, the Audit log
+// page's and GET /api/v1/admin/audit's alike: ?type= one kind of object, with
+// ?id= one object of it, and ?actor= one admin's user id. It returns a
+// message for the 400 when the query names no such filter.
 func parseAuditFilter(q url.Values) (auditFilter, string) {
 	f := auditFilter{ObjectType: q.Get("type"), ObjectID: q.Get("id")}
 	if _, ok := auditTypeNoun(f.ObjectType); f.ObjectType != "" && !ok {

@@ -364,8 +364,13 @@ from its old value to its new one or an account from **Active** to
 
 Each row is saved together with the change it records. If the row cannot be
 saved, the change is not made either and you see an error, so a change that
-went through always has its row. Rows cannot be edited afterwards, and they are
-kept forever: there is no setting to delete old ones yet.
+went through always has its row. Rows cannot be edited afterwards. They are
+kept forever unless your IT contact sets how long to keep them
+(`AUDIT_LOG_RETENTION_PERIOD`); then, once an hour, the rows older than that
+are deleted for good.
+
+Your IT contact can read the same list as JSON from `GET /api/v1/admin/audit`,
+with the same filters. A viewer's copy leaves out the addresses there too.
 
 It does not record sign-ins, what anyone looked at, or what drivers do in the
 app, such as starting and ending their own trips. The server's log has those.
@@ -1261,8 +1266,10 @@ README's retention notes. Three things to know before you ask for it:
 - Pick a period consistent with local law and your own driver-privacy policy.
   Ninety days is a common starting point.
 
-Trip records, accounts and the Audit log are not deleted by retention; only the
-location points are.
+Trip records, accounts and the Audit log are not deleted by this setting; only
+the location points are. The Audit log has a setting of its own,
+`AUDIT_LOG_RETENTION_PERIOD`, and is kept forever until it is set (see
+[Who changed what](#who-changed-what-the-audit-log)).
 
 ---
 

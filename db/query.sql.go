@@ -443,6 +443,20 @@ func (q *Queries) DeactivateAPIKey(ctx context.Context, id int64) (int64, error)
 	return result.RowsAffected(), nil
 }
 
+const deleteAuditEntriesBefore = `-- name: DeleteAuditEntriesBefore :execrows
+DELETE FROM audit_log WHERE at < $1
+`
+
+// AUDIT_LOG_RETENTION_PERIOD's sweep. The table's trigger refuses UPDATE
+// only, so a row is never rewritten but can be deleted once it is old enough.
+func (q *Queries) DeleteAuditEntriesBefore(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuditEntriesBefore, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteClearedAlertsBefore = `-- name: DeleteClearedAlertsBefore :execrows
 DELETE FROM alert_history WHERE cleared_at < $1
 `

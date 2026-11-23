@@ -924,6 +924,65 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/admin/audit:
+    get:
+      tags: [admin]
+      summary: List the audit log
+      description: |
+        Returns one page of the audit log newest-first: each change made to a
+        vehicle, an account, a trip or an API key through the admin UI or this
+        API, and the changes the server made itself. The filters are the Audit
+        log page's. Requires the `admin` or `viewer` role. A viewer's entries
+        leave out `actor_ip`, as a viewer's Audit log page leaves out the
+        address.
+
+        Paging is offset-based. The handler reads one row past `limit` to set
+        `has_more`, so a truncated page is distinguishable from an exact fit.
+        With `AUDIT_LOG_RETENTION_PERIOD` set to a period, entries older than
+        it are deleted hourly; by default every entry is kept.
+      parameters:
+        - in: query
+          name: type
+          required: false
+          schema:
+            type: string
+            enum: [vehicle, user, trip, api_key]
+          description: Only changes to this kind of object. Omit for every kind.
+        - in: query
+          name: id
+          required: false
+          schema:
+            type: string
+          description: |
+            Only changes to this one object: a vehicle's id, or an account's,
+            trip's or API key's number. Needs `type`; an `id` without it is a
+            `400`.
+        - in: query
+          name: actor
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Only the changes made by the admin with this user id.
+        - $ref: '#/components/parameters/ListLimitQuery'
+        - $ref: '#/components/parameters/ListOffsetQuery'
+      responses:
+        '200':
+          description: One page of the audit log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/gtfs/routes:
     get:
       tags: [gtfs]
@@ -2957,6 +3016,76 @@ components:
           type: string
           minLength: 1
           maxLength: 255
+
+    AuditLog:
+      type: object
+      required: [count, has_more, entries]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+          description: Number of entries in `entries`, after the `limit` cap is applied.
+        has_more:
+          type: boolean
+          description: True when more entries match than this page returned.
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+
+    AuditEntry:
+      type: object
+      description: |
+        One change to one object. `before` and `after` hold the object's small
+        fields, never a password or a key: a vehicle's `label`, `agency_tag`
+        and `active`; an account's `name`, `email`, `role` and `active`; an
+        API key's `name` and `active`; a trip's `status`. An account's
+        `assign_vehicle` and `unassign_vehicle` hold the `vehicle_id`.
+      required: [id, at, actor_id, actor_email, object_type, object_id, action, before, after]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Grows with each change, so it orders the entries.
+        at:
+          type: string
+          format: date-time
+          description: When the change was made, in UTC.
+        actor_id:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            The user id of the admin who made the change. Null for a change
+            the server made itself: the first admin, created from
+            `ADMIN_BOOTSTRAP_EMAIL`, or an account restored with `reset-admin`.
+            It is kept after the account is deleted.
+        actor_email:
+          type: string
+          description: |
+            The admin's email, kept with the entry so it still names them after
+            their account changes or is deleted. Empty for the server.
+        actor_ip:
+          type: string
+          description: |
+            The address the change came from, read as the sign-in rate limiter
+            reads it, so behind a proxy it is right only with
+            `TRUST_PROXY_HEADERS` set. Empty for the server. Left out of a
+            viewer's entries.
+        object_type:
+          type: string
+          enum: [vehicle, user, trip, api_key]
+        object_id:
+          type: string
+          description: The vehicle's id, or the account's, trip's or API key's number.
+        action:
+          type: string
+          enum: [create, update, activate, deactivate, delete, set_password, assign_vehicle, unassign_vehicle, end]
+        before:
+          type: [object, 'null']
+          description: The fields before the change. Null for a create, an `assign_vehicle` and a `set_password`.
+        after:
+          type: [object, 'null']
+          description: The fields after the change. Null for a delete, an `unassign_vehicle` and a `set_password`.
 
     CatalogRoutes:
       type: object
