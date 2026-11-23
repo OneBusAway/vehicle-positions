@@ -2449,6 +2449,38 @@ func (q *Queries) TouchRider(ctx context.Context, id string) error {
 	return err
 }
 
+const unassignAllUserVehicles = `-- name: UnassignAllUserVehicles :many
+WITH dropped AS (
+    DELETE FROM user_vehicles
+    WHERE user_id = $1
+    RETURNING vehicle_id, created_at
+)
+SELECT vehicle_id FROM dropped
+ORDER BY created_at DESC, vehicle_id
+`
+
+// A change to viewer's unassign. No LIMIT: every vehicle goes, and each one
+// it returns gets its own row in the audit log.
+func (q *Queries) UnassignAllUserVehicles(ctx context.Context, userID int64) ([]string, error) {
+	rows, err := q.db.Query(ctx, unassignAllUserVehicles, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var vehicle_id string
+		if err := rows.Scan(&vehicle_id); err != nil {
+			return nil, err
+		}
+		items = append(items, vehicle_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unassignUserVehicle = `-- name: UnassignUserVehicle :execrows
 DELETE FROM user_vehicles
 WHERE user_id = $1 AND vehicle_id = $2

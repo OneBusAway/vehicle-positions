@@ -340,10 +340,142 @@ func TestStore_ChangeToViewer_RefusedOnATrip(t *testing.T) {
 	assert.Equal(t, before, auditFixtureState(t, store))
 }
 
+// TestStore_ChangeToViewer_PastTheListBound: an account with more vehicles
+// than ListVehiclesByUser's bound of 1000 loses every one of them, each
+// recorded, and a trip on the vehicle past that bound still refuses the
+// change.
+func TestStore_ChangeToViewer_PastTheListBound(t *testing.T) {
+	store := newAuditTestStore(t)
+	ctx := asTestAdmin()
+	bg := context.Background()
+	// assignMany gives the account 1000 vehicles newer than its aud-v, which
+	// ListVehiclesByUser, newest first, would leave out, and returns all 1001.
+	assignMany := func(t *testing.T, userID int64) []string {
+		t.Helper()
+		_, err := store.pool.Exec(bg, `UPDATE user_vehicles SET created_at = NOW() - interval '1 hour' WHERE user_id = $1`, userID)
+		require.NoError(t, err)
+		_, err = store.pool.Exec(bg, `INSERT INTO vehicles (id, label, agency_tag) SELECT 'aud-many-' || i, '', '' FROM generate_series(1, 1000) i`)
+		require.NoError(t, err)
+		_, err = store.pool.Exec(bg, `INSERT INTO user_vehicles (user_id, vehicle_id) SELECT $1, 'aud-many-' || i FROM generate_series(1, 1000) i`, userID)
+		require.NoError(t, err)
+		ids := []string{"aud-v"}
+		for i := 1; i <= 1000; i++ {
+			ids = append(ids, fmt.Sprintf("aud-many-%d", i))
+		}
+		return ids
+	}
+	assignments := func(t *testing.T, userID int64) int {
+		t.Helper()
+		var n int
+		require.NoError(t, store.pool.QueryRow(bg, `SELECT count(*) FROM user_vehicles WHERE user_id = $1`, userID).Scan(&n))
+		return n
+	}
+
+	t.Run("every vehicle goes, each recorded", func(t *testing.T) {
+		fx := newAuditFixture(t, store)
+		all := assignMany(t, fx.userID)
+		mark := lastAuditID(t, store)
+
+		_, err := store.UpdateUser(ctx, fx.userID, "Ana", "aud-ana@example.org", roleViewer)
+		require.NoError(t, err)
+
+		assert.Zero(t, assignments(t, fx.userID))
+		rows := auditRowsAfter(t, store, mark)
+		require.Equal(t, 1+len(all), len(rows), "the role change and an unassignment for each vehicle")
+		assert.Equal(t, auditUpdate, rows[0].Action)
+		dropped := make([]string, 0, len(all))
+		for _, row := range rows[1:] {
+			require.Equal(t, auditUnassign, row.Action)
+			var before struct {
+				VehicleID string `json:"vehicle_id"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(row.Before), &before))
+			dropped = append(dropped, before.VehicleID)
+		}
+		assert.ElementsMatch(t, all, dropped)
+	})
+
+	t.Run("a trip on the vehicle past the bound refuses it", func(t *testing.T) {
+		fx := newAuditFixture(t, store)
+		assignMany(t, fx.userID)
+		_, err := store.StartTrip(bg, fx.userID, "aud-v", "route-1", "")
+		require.NoError(t, err)
+		mark := lastAuditID(t, store)
+
+		_, err = store.UpdateUser(ctx, fx.userID, "Ana", "aud-ana@example.org", roleViewer)
+		assert.ErrorIs(t, err, ErrViewerWithTrip)
+		assert.Equal(t, roleDriver, readImportedUser(t, store, fx.userID).Role)
+		assert.Equal(t, 1001, assignments(t, fx.userID))
+		assert.Empty(t, auditRowsAfter(t, store, mark))
+		assert.True(t, activeTripExists(t, store, fx.userID, "aud-v"))
+	})
+}
+
+// TestStore_ChangeToViewer_AnotherDriversTrip: a trip another driver runs on
+// one of the account's vehicles doesn't hold up the change, as it doesn't
+// hold up an unassign. The account loses the vehicle, and the other driver
+// keeps it and the trip.
+func TestStore_ChangeToViewer_AnotherDriversTrip(t *testing.T) {
+	store := newAuditTestStore(t)
+	fx := newAuditFixture(t, store)
+	bg := context.Background()
+	var bo int64
+	require.NoError(t, store.pool.QueryRow(bg,
+		`INSERT INTO users (name, email, password_hash, role) VALUES ('Bo', 'aud-bo@example.org', 'not-a-real-hash', 'driver') RETURNING id`,
+	).Scan(&bo))
+	_, err := store.pool.Exec(bg, `INSERT INTO user_vehicles (user_id, vehicle_id) VALUES ($1, 'aud-v')`, bo)
+	require.NoError(t, err)
+	_, err = store.StartTrip(bg, bo, "aud-v", "route-1", "")
+	require.NoError(t, err)
+
+	_, err = store.UpdateUser(asTestAdmin(), fx.userID, "Ana", "aud-ana@example.org", roleViewer)
+	require.NoError(t, err)
+
+	assert.Empty(t, assignedVehicles(t, store, fx.userID))
+	assert.Equal(t, []string{"aud-v"}, assignedVehicles(t, store, bo))
+	assert.True(t, activeTripExists(t, store, bo, "aud-v"))
+}
+
+// TestStore_ChangeToViewer_WaitsForAStartingTrip lands a change to viewer
+// between a trip start's assignment check and its insert. The change waits
+// for the start, then sees its trip and is refused, so the driver isn't left
+// on a running trip on a vehicle taken from them.
+func TestStore_ChangeToViewer_WaitsForAStartingTrip(t *testing.T) {
+	store := newAuditTestStore(t)
+	fx := newAuditFixture(t, store)
+	ctx, cancel := context.WithTimeout(asTestAdmin(), 30*time.Second)
+	defer cancel()
+	holder, release := holdVehicle(t, store, "aud-v")
+
+	started := make(chan error, 1)
+	go func() {
+		_, err := store.StartTrip(ctx, fx.userID, "aud-v", "route-1", "")
+		started <- err
+	}()
+	require.Eventually(t, func() bool { return blockedBehind(store, holder, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the start never got past its assignment check")
+
+	changed := make(chan error, 1)
+	go func() {
+		_, err := store.UpdateUser(ctx, fx.userID, "Ana", "aud-ana@example.org", roleViewer)
+		changed <- err
+	}()
+	require.Eventually(t, func() bool { return len(changed) == 1 || blockedBehind(store, holder, 2) == 1 },
+		5*time.Second, 10*time.Millisecond, "the change neither finished nor queued behind the start")
+	assert.Empty(t, changed, "the change finished inside the start's window")
+
+	release()
+	require.NoError(t, <-started)
+	assert.ErrorIs(t, <-changed, ErrViewerWithTrip)
+	assert.Equal(t, []string{"aud-v"}, assignedVehicles(t, store, fx.userID))
+	assert.True(t, activeTripExists(t, store, fx.userID, "aud-v"))
+}
+
 // TestStore_ChangeToViewer_RacesAnAssignment parks one side of a change to
 // viewer and an assignment for the same account on its own connection and
 // runs the other through the store. Whichever comes first, the account ends
-// up a viewer with no vehicles.
+// up a viewer with no vehicles. An import refused that way asks for a new
+// preview.
 func TestStore_ChangeToViewer_RacesAnAssignment(t *testing.T) {
 	store := newAuditTestStore(t)
 
@@ -405,5 +537,39 @@ func TestStore_ChangeToViewer_RacesAnAssignment(t *testing.T) {
 		commit()
 		require.NoError(t, <-done)
 		assert.Empty(t, assignedVehicles(t, store, fx.userID), "the assignment that committed first was dropped too")
+	})
+
+	t.Run("an import's assignment during the change waits, then asks for a new preview", func(t *testing.T) {
+		fx := newAuditFixture(t, store)
+		ctx, cancel := context.WithTimeout(asTestAdmin(), 30*time.Second)
+		defer cancel()
+		id := strconv.FormatInt(fx.userID, 10)
+		pid, commit := hold(t, ctx,
+			`UPDATE users SET role = 'viewer' WHERE id = `+id,
+			`SELECT id FROM users WHERE id = `+id+` FOR UPDATE`)
+		// Both of the import's plans read Ana as a driver, since the change
+		// isn't committed, and add aud-v2.
+		rows := []driverImportRow{{Line: 2, Email: "aud-ana@example.org", Name: "Ana", VehicleIDs: []string{"aud-v2"}}}
+		preview := newTestPreview(t)
+
+		type result struct {
+			outcomes []importOutcome
+			err      error
+		}
+		done := make(chan result, 1)
+		go func() {
+			got, err := store.ImportDrivers(ctx, preview, rows, noPassword)
+			done <- result{got, err}
+		}()
+		require.Eventually(t, func() bool { return len(done) == 1 || blockedBehind(store, pid, 1) == 1 },
+			5*time.Second, 10*time.Millisecond, "the import neither finished nor waited")
+		assert.Empty(t, done, "the import's assignment went ahead while the change to viewer was open")
+		commit()
+		got := <-done
+		require.NoError(t, got.err)
+		assert.Equal(t, []importOutcome{
+			{Status: importError, Reason: "this account was made a viewer meanwhile; preview the file again"},
+		}, got.outcomes)
+		assert.Equal(t, []string{"aud-v"}, assignedVehicles(t, store, fx.userID))
 	})
 }

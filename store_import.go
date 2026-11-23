@@ -296,6 +296,10 @@ func assignmentProblem(vehicleID string, err error) (reason string, ok bool) {
 	case errors.Is(err, ErrAssignmentExists):
 		// Another admin assigned it after the plan read the assignments.
 		return "vehicle " + vehicleID + " was assigned meanwhile; preview the file again", true
+	case errors.Is(err, ErrAssignToViewer):
+		// The plan read a driver, and an admin has made the account a viewer
+		// since.
+		return "this account was made a viewer meanwhile; preview the file again", true
 	}
 	return "", false
 }
