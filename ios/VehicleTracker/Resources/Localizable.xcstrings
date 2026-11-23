@@ -348,7 +348,7 @@
       }
     },
     "%@ · %@" : {
-      "comment" : "Two facts on one line: a stop's scheduled time then the distance to it, or the run's start time then the vehicle.",
+      "comment" : "Two facts on one line: a stop's scheduled time then the distance to it, the run's start time then the vehicle, or 'Off schedule' then the next stop and its time.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -3008,6 +3008,185 @@
         }
       }
     },
+    "%@. %@" : {
+      "comment" : "VoiceOver: the Live Activity in one sentence for a route with no short name: the headsign, then the status card's or the problem's sentence.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@። %2$@"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@। %2$@"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@。%2$@"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@។ %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@। %2$@"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@። %2$@"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@。%2$@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@。%2$@"
+          }
+        }
+      }
+    },
     "%@. %@." : {
       "comment" : "VoiceOver: a card or a row of the welcome in one sentence: its title, then the line under it, e.g. 'Choose your vehicle. The number on the vehicle.'\nVoiceOver: a checklist row: its title, then why the app needs it or what went wrong, e.g. 'Precise location. Only approximate was allowed.'",
       "localizations" : {
@@ -4844,6 +5023,179 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "comment" : "Live Activity, the compact Dynamic Island: whole minutes late or early, beside the status symbol.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld ደቂቃ"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld د"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld Min."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld دقیقه"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld मिनट"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld分"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld នាទី"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld분"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld ນາທີ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "daq %lld"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld ਮਿੰਟ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld мин"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld min"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld daq"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "dak %lld"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld ደቒቕ"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld хв"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld phút"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld 分钟"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%lld 分"
           }
         }
       }
@@ -24182,7 +24534,7 @@
       }
     },
     "Next %@ · %@" : {
-      "comment" : "Status card line 2 while off schedule: the next stop's name, then its scheduled time in the agency's zone.",
+      "comment" : "The next stop's name, then its scheduled time in the agency's zone: status card line 2 while off schedule, and the Live Activity's second line.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -29377,6 +29729,352 @@
         }
       }
     },
+    "Open the app to keep reporting." : {
+      "comment" : "Live Activity: what to do about a location problem, or about reports that have paused, which only the app can fix.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ሪፖርት መላክ ለመቀጠል መተግበሪያውን ይክፈቱ።"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "افتح التطبيق لمواصلة الإرسال."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Öffnen Sie die App, um weiter zu senden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Abre la app para seguir reportando."
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "برای ادامه گزارش‌دهی، برنامه را باز کنید."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Avaa sovellus, niin raportointi jatkuu."
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Buksan ang app para ituloy ang pag-report."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ouvrez l’application pour continuer l’envoi."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "रिपोर्ट भेजते रहने के लिए ऐप खोलें।"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Louvri aplikasyon an pou kontinye voye rapò."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Apri l'app per continuare l'invio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "送信を続けるにはアプリを開いてください。"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "សូមបើកកម្មវិធី ដើម្បីបន្តផ្ញើទីតាំង។"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "위치 전송을 계속하려면 앱을 여세요."
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ເປີດແອັບເພື່ອລາຍງານຕໍ່."
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Gabaasuu itti fufuuf appii bani."
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਰਿਪੋਰਟਾਂ ਭੇਜਦੇ ਰਹਿਣ ਲਈ ਐਪ ਖੋਲ੍ਹੋ।"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Otwórz aplikację, aby dalej wysyłać raporty."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Abra o app para continuar enviando."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Откройте приложение, чтобы продолжить отправку."
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tatala le app e faʻaauau ai ona lafo lipoti."
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Fur app-ka si warbixintu u sii socoto."
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Fungua programu ili uendelee kuripoti."
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ጸብጻብ ምስዳድ ንምቕጻል ኣፕ ክፈቱ።"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Відкрийте застосунок, щоб далі надсилати звіти."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Mở ứng dụng để tiếp tục gửi vị trí."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "打开应用即可继续上报。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "請開啟應用程式繼續回報。"
+          }
+        }
+      }
+    },
+    "Open the app to sign in." : {
+      "comment" : "Live Activity, under 'Signed out': the sign-in expired and reports have stopped until the driver signs in again.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ለመግባት መተግበሪያውን ይክፈቱ።"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "افتح التطبيق لتسجيل الدخول."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Öffnen Sie die App, um sich anzumelden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Abre la app para iniciar sesión."
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "برای ورود، برنامه را باز کنید."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kirjaudu sisään avaamalla sovellus."
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Buksan ang app para mag-sign in."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ouvrez l’application pour vous connecter."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "साइन इन करने के लिए ऐप खोलें।"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Louvri aplikasyon an pou konekte."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Apri l'app per accedere."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "アプリを開いてログインしてください。"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "សូមបើកកម្មវិធី ដើម្បីចូលគណនី។"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "앱을 열어 로그인하세요."
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ເປີດແອັບເພື່ອເຂົ້າສູ່ລະບົບ."
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Seenuuf appii bani."
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਸਾਈਨ ਇਨ ਕਰਨ ਲਈ ਐਪ ਖੋਲ੍ਹੋ।"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Otwórz aplikację, aby się zalogować."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Abra o app para entrar."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Откройте приложение, чтобы войти."
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tatala le app ma saini i totonu."
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Fur app-ka si aad u soo gasho."
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Fungua programu ili uingie."
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ንምእታው ኣፕ ክፈቱ።"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Відкрийте застосунок, щоб увійти."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Mở ứng dụng để đăng nhập."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "打开应用重新登录。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "請開啟應用程式登入。"
+          }
+        }
+      }
+    },
     "Opens Settings" : {
       "comment" : "VoiceOver hint on a problem line, or on the Language row, that opens the app's page in Settings.",
       "localizations" : {
@@ -32141,6 +32839,179 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "回報已停止。你的行程還沒結束。"
+          }
+        }
+      }
+    },
+    "Reports paused" : {
+      "comment" : "Live Activity, once the app has stopped updating it: reports are not being sent. Followed by 'Open the app to keep reporting.'",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ሪፖርት መላክ ቆሟል"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "التقارير متوقفة مؤقتًا"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Meldungen pausiert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Reportes en pausa"
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "گزارش‌دهی موقتاً متوقف شد"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Raportointi tauolla"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Naka-pause ang mga report"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Envoi en pause"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "रिपोर्ट रुकी हुई हैं"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Rapò yo an poz"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Segnalazioni in pausa"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "送信を一時停止中"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ការផ្ញើទីតាំងបានផ្អាក"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "위치 전송 일시중지됨"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ການລາຍງານຢຸດຊົ່ວຄາວ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Gabaasni yeroof dhaabbate"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਰਿਪੋਰਟਾਂ ਰੁਕੀਆਂ ਹੋਈਆਂ ਹਨ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Raporty wstrzymane"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Envio pausado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Отправка на паузе"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ʻUa taofi muamua lipoti"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Warbixinnada waa la hakiyay"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ripoti zimesitishwa"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ጸብጻባት ተቋሪጾም"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Звіти призупинено"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Đã tạm dừng gửi vị trí"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "上报已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "回報已暫停"
           }
         }
       }
@@ -37799,6 +38670,185 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Route %@ to %@. %@" : {
+      "comment" : "VoiceOver: the Live Activity in one sentence: the route's short name, the headsign, then the status card's or the problem's sentence.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "መስመር %1$@ ወደ %2$@። %3$@"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "الخط %1$@ إلى %2$@. %3$@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Linie %1$@ Richtung %2$@. %3$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Route %1$@ to %2$@. %3$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ruta %1$@ hacia %2$@. %3$@"
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "مسیر %1$@ به سمت %2$@. %3$@"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Linja %1$@, suunta %2$@. %3$@"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Route %1$@ papuntang %2$@. %3$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ligne %1$@ vers %2$@. %3$@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "रूट %1$@, %2$@ की ओर। %3$@"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Wout %1$@, direksyon %2$@. %3$@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Linea %1$@ per %2$@. %3$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "路線 %1$@、%2$@行き。%3$@"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ខ្សែ %1$@ ទៅ %2$@។ %3$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "노선 %1$@, %2$@ 방면. %3$@"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ສາຍ %1$@ ໄປ %2$@. %3$@"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Daandii %1$@ gara %2$@. %3$@"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਰੂਟ %1$@, %2$@ ਵੱਲ। %3$@"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Linia %1$@, kierunek %2$@. %3$@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Linha %1$@, sentido %2$@. %3$@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Маршрут %1$@, направление %2$@. %3$@"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Auala %1$@ agaʻi i %2$@. %3$@"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Khadka %1$@ xagga %2$@. %3$@"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Njia %1$@ kwenda %2$@. %3$@"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "መስመር %1$@ ናብ %2$@። %3$@"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Маршрут %1$@, напрямок: %2$@. %3$@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tuyến %1$@ đi %2$@. %3$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "线路 %1$@，开往 %2$@。%3$@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "路線 %1$@ 往 %2$@。%3$@"
           }
         }
       }

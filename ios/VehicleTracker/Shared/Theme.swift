@@ -3,10 +3,13 @@ import UIKit
 
 /// A schedule status in Android's colours (`StatusTone` and `StatusColors` in
 /// its `Color.kt`): `fill` behind `OnStatusFill` on a status card, `text` for
-/// the status in words on an ordinary surface.
-enum StatusTone {
+/// the status in words on an ordinary surface. Codable and nonisolated
+/// because a Live Activity's content state carries it.
+nonisolated enum StatusTone: String, Codable {
     case onTime, late, early, neutral
+}
 
+extension StatusTone {
     var fill: Color {
         switch self {
         case .onTime: .statusOnTimeFill

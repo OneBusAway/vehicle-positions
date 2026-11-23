@@ -1,0 +1,11 @@
+// The Live Activity extension's identity, from the agency's settings in
+// Agency.xcconfig (and Agency.local.xcconfig): the same team, and the app's
+// bundle id with ".widgets" on the end, since Apple requires an embedded
+// extension's id to start with its app's. Nothing to edit here.
+#include "Agency.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(inherited).widgets
+
+// The app's entitlements file carries only the CarPlay one, which the
+// extension must not be signed with.
+CODE_SIGN_ENTITLEMENTS =
