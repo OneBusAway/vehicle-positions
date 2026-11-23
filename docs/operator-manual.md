@@ -38,8 +38,9 @@ Two things are worth knowing up front:
 - A vehicle appears in the feed only while a phone is reporting for it. When
   reports stop, the vehicle drops out of the feed after the **staleness
   threshold** (5 minutes unless your IT contact changed it).
-- Positions are not stored on the phone when the network is down. Fixes taken
-  during an outage are lost, not sent later.
+- When the network is down, the phone keeps the positions it takes and sends
+  them once it can, for the trip's trail and history. Riders never see them:
+  the feed shows only where vehicles are now.
 
 ---
 
@@ -553,10 +554,20 @@ While positions kept with no connection are waiting on the phone, the card's
 last line says so in place of the next stop: **12 reports to send when
 online**. The phone keeps up to 8,640, a day at one every 10 seconds, and
 sends them in batches once reports get through again, so the gap in the trip's
-trail fills in. Positions older than a day are dropped, as the server no longer
-takes them, so the limit and the age line up. **12 reports won't send** means
-they were kept under another driver's sign-in or another server: they are never
-sent as this driver's, and the next sign-in clears them.
+trail fills in. A position more than 23 hours 50 minutes old is dropped
+instead of sent, and is no longer counted: the server takes none older than a
+day, and the 10 minutes spare allow for the phone's clock and the upload. **12
+reports won't send** means they were kept under another driver's sign-in or
+another server: they are never sent as this driver's. The next sign-in drops
+them, unless it is that same driver on that same server: then they are sent.
+
+The iPhone app shows the same **12 reports to send when online** line, keeps
+the same 8,640 at most (twelve hours at its one report every 5 seconds) and
+drops them at the same age. It keeps each driver's and server's reports apart
+and counts only those of the driver signed in, so it has no **won't send**
+line, and each sign-in drops the ones kept for any other driver or server.
+With no trip running, it sends them when a trip ends, after a sign-in and each
+time the app comes to the front.
 
 The phone renews its sign-in by itself while the app is in use. When it can't,
 a **Signed out** card takes the status card's place: "Reports have stopped. Your
@@ -1089,18 +1100,28 @@ it a new key.
 ### Feed health
 
 **Feed health** shows what became of every position report the driver phones
-sent and every fetch of the feed, minute by minute for the last hour, plus
-totals. Its headline says in a sentence whether anything is wrong. Five tiles
-give how many vehicles reported in the last full minute and the last hour's
-counts, and three charts draw the vehicles reporting, the reports and the
-fetches a minute. A vehicle counts once in each minute the server accepted a
-live report from it; a phone uploading positions it saved offline does not
-count. The counts are kept in memory:
-a server restart starts them again, and the page says when counting began. It
-reloads every minute. Your IT contact can read the report and fetch counts,
-and the vehicles reporting each minute, from `GET /api/v1/admin/health`.
+sent and every fetch of the feed, minute by minute for the last hour, hour by
+hour for the last 24 hours or 7 days, plus totals. Its headline says in a
+sentence whether anything is wrong. Five tiles give how many vehicles reported
+in the last full minute and the last hour's counts, and three charts draw the
+vehicles reporting, the reports and the fetches a minute. A vehicle counts once
+in each minute the server accepted a live report from it; a phone uploading
+positions it saved offline does not count. It reloads every minute.
 
-The **Outcomes** table:
+Below them, **Last 24 hours** draws the same three charts an hour at a time,
+and **7 days** beside it switches to the last week. **Show the last 24 hours
+hour by hour** opens a row for each hour, newest first. Each hour is saved in
+the database once it closes, and the hour in progress when the server stops,
+so a restart keeps them; a crash loses what the hour in progress had counted,
+and an hour the server was not running in shows zeros. The minutes and the
+**Since the server started** column are kept in memory only: a restart starts
+them again, and the page says when counting began. When your IT contact sets
+`LOCATION_RETENTION_PERIOD`, the saved hours older than it are deleted with the
+location history. Your IT contact can read the same counts, by the minute and
+by the hour, from `GET /api/v1/admin/health` (`?days=7` for the week).
+
+The **Outcomes** table counts each outcome over the last hour, the last 24
+hours or 7 days, and since the server started:
 
 | Row | What it means |
 |---|---|
@@ -1266,8 +1287,10 @@ README's retention notes. Three things to know before you ask for it:
 - Pick a period consistent with local law and your own driver-privacy policy.
   Ninety days is a common starting point.
 
-Trip records, accounts and the Audit log are not deleted by this setting; only
-the location points are. The Audit log has a setting of its own,
+Trip records, accounts and the Audit log are not deleted by this setting.
+Along with the location points, it deletes the alerts that cleared, the kept
+**Analytics** days and the saved **Feed health** hours once they are older
+than the same period. The Audit log has a setting of its own,
 `AUDIT_LOG_RETENTION_PERIOD`, and is kept forever until it is set (see
 [Who changed what](#who-changed-what-the-audit-log)).
 
