@@ -267,6 +267,28 @@ func TestAlertRecorder_LeftOpenWaitsForTheRaises(t *testing.T) {
 	assert.Equal(t, []historyLeftOpen{{[]int64{1}, alertT0}}, store.leftOpen)
 }
 
+func TestAlertRecorder_ARaiseThatFailedIsMadeWhenTheAlertHasGone(t *testing.T) {
+	captureWebhookLogs(t)
+	store := &fakeAlertHistory{}
+	source := &scriptedAlerts{}
+	r := startRecorder(t, store, source)
+	quiet := webhookAlert(alertQuiet)
+
+	store.failRaises(errors.New("database down"))
+	source.set(nil, quiet)
+	r.check(alertT0.Add(9 * time.Minute))
+	source.set(nil)
+	r.check(alertT0.Add(10 * time.Minute))
+	assert.Empty(t, store.leftOpen, "the failed raise may have opened its row, so the rows left open wait while it fails")
+
+	store.failRaises(nil)
+	r.check(alertT0.Add(11 * time.Minute))
+	r.check(alertT0.Add(12 * time.Minute))
+	assert.Equal(t, []alertEntry{quiet}, store.raised, "raised once, though it went before a raise went through")
+	assert.Equal(t, []historyClear{{1, alertT0.Add(11 * time.Minute)}}, store.cleared, "and cleared at that check")
+	assert.Equal(t, []historyLeftOpen{{[]int64{}, alertT0}}, store.leftOpen, "then the rows left open are settled")
+}
+
 func TestAlertHistorySettle(t *testing.T) {
 	assert.Equal(t, 11*time.Minute, alertHistorySettle(offRouteSettings), "ALERT_STOPPED_AFTER's 10 minutes and one more")
 

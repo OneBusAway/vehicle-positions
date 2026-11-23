@@ -69,11 +69,13 @@ type alertRecorder struct {
 	started  time.Time
 	settle   time.Duration
 
-	// open is each alert raised and not cleared. settled is set once the rows
-	// the last run left open are dealt with. Only the checking goroutine uses
-	// either.
-	open    map[alertKey]openAlert
-	settled bool
+	// open is each alert raised and not cleared. failedRaises is each alert
+	// whose raise failed and has not gone through since: it may have opened
+	// its row all the same. settled is set once the rows the last run left
+	// open are dealt with. Only the checking goroutine uses them.
+	open         map[alertKey]openAlert
+	failedRaises map[alertKey]alertEntry
+	settled      bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -121,14 +123,15 @@ func newAlertRecorder(store AlertHistoryStore, source alertSource, started time.
 	// A background job outlives any request, so it owns its context.
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &alertRecorder{
-		store:    store,
-		source:   source,
-		interval: interval,
-		started:  started,
-		settle:   settle,
-		open:     make(map[alertKey]openAlert),
-		ctx:      ctx,
-		cancel:   cancel,
+		store:        store,
+		source:       source,
+		interval:     interval,
+		started:      started,
+		settle:       settle,
+		open:         make(map[alertKey]openAlert),
+		failedRaises: make(map[alertKey]alertEntry),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 	r.wg.Go(r.checkEvery)
 	return r
@@ -157,7 +160,8 @@ func (r *alertRecorder) checkEvery() {
 
 // check works the alerts out at now, records as cleared at now each alert
 // open that is not listed, and raises each listed that is not open. A write
-// that fails is tried again at the next check.
+// that fails is tried again at the next check, a raise even when its alert
+// has gone by then.
 func (r *alertRecorder) check(now time.Time) {
 	ctx, cancel := context.WithTimeout(r.ctx, r.interval)
 	defer cancel()
@@ -173,6 +177,21 @@ func (r *alertRecorder) check(now time.Time) {
 	for _, a := range alerts {
 		current[keyOf(a)] = struct{}{}
 	}
+	// An alert whose raise failed and that has gone since is raised now, for
+	// the clears below to record when it went. The raise gives back the row
+	// the failed one opened, or opens one if it opened none.
+	for key, a := range r.failedRaises {
+		if _, ok := current[key]; ok {
+			continue
+		}
+		id, err := r.store.RaiseAlert(ctx, a)
+		if err != nil {
+			slog.Error("alert history: raise alert", "kind", a.Kind, "trip_id", a.Trip.ID, "error", err)
+			continue
+		}
+		delete(r.failedRaises, key)
+		r.open[key] = openAlert{id: id}
+	}
 	for key, open := range r.open {
 		if _, ok := current[key]; ok {
 			continue
@@ -185,7 +204,6 @@ func (r *alertRecorder) check(now time.Time) {
 		}
 		delete(r.open, key)
 	}
-	raiseFailed := false
 	for _, a := range alerts {
 		key := keyOf(a)
 		if open, ok := r.open[key]; ok && !open.clearFailed {
@@ -194,15 +212,16 @@ func (r *alertRecorder) check(now time.Time) {
 		id, err := r.store.RaiseAlert(ctx, a)
 		if err != nil {
 			slog.Error("alert history: raise alert", "kind", a.Kind, "trip_id", a.Trip.ID, "error", err)
-			raiseFailed = true
+			r.failedRaises[key] = a
 			continue
 		}
+		delete(r.failedRaises, key)
 		r.open[key] = openAlert{id: id}
 	}
 
 	// A raise that failed may have opened its row all the same, so the rows
-	// left open wait for a check whose raises all went through.
-	if r.settled || raiseFailed || now.Before(r.started.Add(r.settle)) {
+	// left open wait until every failed raise has gone through.
+	if r.settled || len(r.failedRaises) > 0 || now.Before(r.started.Add(r.settle)) {
 		return
 	}
 	// Not nil: an empty keep has to clear every row left open.
