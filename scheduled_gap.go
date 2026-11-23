@@ -197,20 +197,25 @@ func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 }
 
 // takenOver reports whether another set of due has taken over at t from w,
-// the window of due[i] windowAt found for t: one running at t whose run
-// began after w's last headway did, so that at most one of w's runs is due
-// after it began. A trip's window that ends as another trip's begins is then
-// held no longer, just as a trip's own next row comes before the row that
-// has just ended, so the same service gets the same gap whether a feed
-// writes it as rows of one trip or as one trip a row. Each trip's windows
-// are shifted by its own time to the stop, so where the next trip is
-// quicker to it, its first run is due there before w ends, and w counts no
-// more from that run on. A set already running as w's last headway began,
-// two patterns sharing the stop, does not take over. Nor does one that
-// began no later than w's own run did, when that run is shorter than a
-// headway, so the set running at t that began last always counts.
+// the window of due[i] windowAt found for t: one due at t whose run began
+// after the last headway of w's run did, so that at most one of w's runs is
+// due after it began. w's run is its unbroken chain of windows (since and
+// until), so a trip written as back-to-back rows and a frequent timetable,
+// laid out a window a spacing, are measured to the end of their service,
+// not of the window that holds t. A trip's window that ends as another
+// trip's begins is then held no longer, just as a trip's own next row comes
+// before the row that has just ended, so the same service gets the same gap
+// whether a feed writes it as rows of one trip or as one trip a row. Each
+// trip's windows are shifted by its own time to the stop, so where the next
+// trip is quicker to it, its first run is due there before w ends, and w
+// counts no more from that run on, through the next trip's last headway too.
+// A set already running as w's run's last headway began, two patterns
+// sharing the stop, does not take over. Nor does one that began no later
+// than w's run did, when that run is shorter than a headway, so the set due
+// at t that began last always counts.
 func takenOver(due [][]stopWindow, i int, w stopWindow, t time.Time) bool {
-	last := w.to.Add(-w.headway)
+	end := until(due[i], w)
+	last := end.to.Add(-end.headway)
 	if began := since(due[i], w); began.After(last) {
 		last = began
 	}
@@ -218,7 +223,7 @@ func takenOver(due [][]stopWindow, i int, w stopWindow, t time.Time) bool {
 		if j == i {
 			continue
 		}
-		if v, ok := holding(windows, t); ok && since(windows, v).After(last) {
+		if v, ok := windowAt(windows, t); ok && since(windows, v).After(last) {
 			return true
 		}
 	}
@@ -237,6 +242,19 @@ func since(windows []stopWindow, w stopWindow) time.Time {
 			return from
 		}
 		from = windows[i].from
+	}
+}
+
+// until is the last window of the run that w is part of: w, or the latest
+// window after it in an unbroken chain, each beginning as the one before
+// ends. A window that ends as it begins is no link, as in since.
+func until(windows []stopWindow, w stopWindow) stopWindow {
+	for {
+		i := slices.IndexFunc(windows, func(v stopWindow) bool { return v.from.Equal(w.to) && v.to.After(w.to) })
+		if i < 0 {
+			return w
+		}
+		w = windows[i]
 	}
 }
 
