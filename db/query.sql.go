@@ -1242,7 +1242,9 @@ func (q *Queries) GetVehicleForUpdate(ctx context.Context, id string) (GetVehicl
 
 const insertAuditEntry = `-- name: InsertAuditEntry :exec
 INSERT INTO audit_log (actor_id, actor_email, actor_ip, object_type, object_id, action, before, after)
-VALUES ($1, $2, $3, $4,
+VALUES ($1,
+    COALESCE((SELECT email FROM users WHERE id = $1), $2::TEXT),
+    $3, $4,
     $5, $6, $7, $8)
 `
 
@@ -1257,6 +1259,9 @@ type InsertAuditEntryParams struct {
 	After      []byte
 }
 
+// actor_email is the admin's email when the change is made. The one the
+// session carries is the one they signed in with, which an email change does
+// not end, so it stands in only for an account that is gone.
 func (q *Queries) InsertAuditEntry(ctx context.Context, arg InsertAuditEntryParams) error {
 	_, err := q.db.Exec(ctx, insertAuditEntry,
 		arg.ActorID,

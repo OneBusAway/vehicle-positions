@@ -408,3 +408,51 @@ func TestAuditLog_ThroughTheServer(t *testing.T) {
 	assert.Contains(t, body, `Added vehicle <a href="/admin/audit?id=aud-page&amp;type=vehicle">From the page</a>`)
 	assert.Contains(t, body, `Added vehicle <a href="/admin/audit?id=aud-api&amp;type=vehicle">From the API</a>`)
 }
+
+// TestAuditLog_AnAdminsNewEmail: an admin who changes their own email stays
+// signed in with the session that carries the old one, and the changes they
+// make are recorded, and listed, under the new one.
+func TestAuditLog_AnAdminsNewEmail(t *testing.T) {
+	store := newAuditTestStore(t)
+	ctx := context.Background()
+	admin, err := store.CreateUser(ctx, "Ops", "aud-ops@example.org", "a-password", roleAdmin)
+	require.NoError(t, err)
+	session, err := generateJWT(&User{ID: admin.ID, Email: admin.Email, Role: roleAdmin}, testSecret, sessionLifetime)
+	require.NoError(t, err)
+
+	tracker := NewTracker(5 * time.Minute)
+	t.Cleanup(tracker.Stop)
+	ll := NewLoginRateLimiter()
+	t.Cleanup(ll.Stop)
+	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return nil }, testReportSettings)
+	h, err := newHandler(store, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(),
+		adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute}, false, "", nil, nil, nil,
+		newAlertWatcher(store, testAlertSettings), reports, newFeedHealth(time.Now))
+	require.NoError(t, err)
+	serve := func(method, path, form string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(form))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: session})
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w
+	}
+
+	w := serve(http.MethodPost, "/admin/users/"+idText(admin.ID), "name=Ops&email=aud-ops-new%40example.org&role=admin")
+	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
+	w = serve(http.MethodPost, "/admin/vehicles", "id=aud-page&label=After")
+	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String(), "the email change left the session signed in")
+
+	actor := admin.ID
+	entries, err := store.ListAuditEntries(ctx, auditFilter{ActorID: &actor, Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, []string{"aud-page", idText(admin.ID)}, []string{entries[0].ObjectID, entries[1].ObjectID})
+	for _, e := range entries {
+		assert.Equal(t, "aud-ops-new@example.org", e.ActorEmail)
+	}
+
+	w = serve(http.MethodGet, "/admin/audit?actor="+idText(admin.ID), "")
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "Changes by aud-ops-new@example.org")
+}
