@@ -822,6 +822,62 @@ func TestImport_RefusesTwoRowsForTheSameStringAndForm(t *testing.T) {
 	}
 }
 
+// TestImport_RefusesTextTheFilesCannotHold: a row whose text has bytes that
+// are not UTF-8, or a character XML can't hold, is refused with its line, and
+// nothing is written. Written, the first came out as U+FFFD in strings.xml and
+// left the XLIFF no longer UTF-8, and the second made files that neither aapt
+// nor the tool itself can read back.
+func TestImport_RefusesTextTheFilesCannotHold(t *testing.T) {
+	tests := []struct{ name, rows, want string }{
+		{"bytes that are not UTF-8", "tracking_gps,,,,GPS d\xe9sactiv\xe9\n",
+			"hi.csv:2: the text is not UTF-8: save the sheet as CSV UTF-8"},
+		{"not UTF-8 in the current cell a row falls back to", "login_title,,,,साइन इन\ntracking_gps,,,GPS d\xe9sactiv\xe9,\n",
+			"hi.csv:3: the text is not UTF-8: save the sheet as CSV UTF-8"},
+		{"a vertical tab, as text copied from Word can carry", "tracking_gps,,,,GPS\vबंद है\n",
+			"hi.csv:2: the text has U+000B, which strings.xml and the XLIFF can't hold"},
+		{"a control character in an iOS string", ",CFBundleDisplayName,,,OBA\x01\n",
+			"hi.csv:2: the text has U+0001, which strings.xml and the XLIFF can't hold"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newSheetProject(t)
+			strings0, xliff0 := p.read(t, androidHindi), p.xliffText(t)
+			sheet := filepath.Join(p.dir, "hi.csv")
+			require.NoError(t, os.WriteFile(sheet, []byte("android,ios,form,current,translation\n"+tc.rows), 0o644))
+
+			code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+			assert.Equal(t, 2, code, out)
+			assert.Contains(t, out, tc.want)
+			assert.Equal(t, strings0, p.read(t, androidHindi))
+			assert.Equal(t, xliff0, p.xliffText(t))
+		})
+	}
+}
+
+// TestImport_RefusesASheetSavedInAnotherEncoding: a French sheet saved as
+// Excel's plain CSV, in Windows-1252, is refused. Imported, every é in it came
+// out as U+FFFD in values-fr.
+func TestImport_RefusesASheetSavedInAnotherEncoding(t *testing.T) {
+	p := newSheetProject(t)
+	sheet := p.export(t, "fr")
+	translate(t, sheet, map[string]string{"GPS is off": "GPS désactivé"})
+	body, err := os.ReadFile(sheet)
+	require.NoError(t, err)
+	var latin1 []byte
+	for _, r := range strings.TrimPrefix(string(body), byteOrderMark) {
+		require.LessOrEqual(t, r, rune(0xff), "the sheet fits in Windows-1252")
+		latin1 = append(latin1, byte(r))
+	}
+	require.NoError(t, os.WriteFile(sheet, latin1, 0o644))
+
+	code, out := p.importSheet(t, "fr", sheet)
+
+	assert.Equal(t, 2, code, out)
+	assert.Contains(t, out, "the text is not UTF-8: save the sheet as CSV UTF-8")
+	assert.NoFileExists(t, filepath.Join(p.root, "android/app/src/main/res/values-fr/strings.xml"))
+}
+
 func TestImport_RefusesAnotherAppsSpecifiers(t *testing.T) {
 	tests := []struct {
 		name  string
