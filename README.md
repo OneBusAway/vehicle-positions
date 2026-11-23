@@ -250,7 +250,7 @@ This project fills that gap by creating a lightweight, open-source vehicle track
 
 ### Non-Goals
 
-- Offline data queuing and sync (v2 — see Future Work; v1 requires an active network connection to report locations)
+- Offline data queuing and sync for the GSoC deliverable (v1 required an active network connection to report locations). Both driver apps have it now; see [v2: Offline Queuing and Sync](#v2-offline-queuing-and-sync)
 - Arrival predictions (the server publishes a Trip Updates feed, but it carries only the delay measured from each driver vehicle's position against the schedule, so that OneBusAway servers, which build their vehicles from trip updates, can show them; there is no arrival-time model, no learning from history and no dwell or traffic estimates, a separate, significantly more complex problem that can build on this data later)
 - iOS driver app for the GSoC deliverable (the target user base overwhelmingly uses Android). An iOS driver app with CarPlay was added later by the project owner; see docs/superpowers/specs/2026-09-14-ios-driver-app-carplay-design.md
 - Rider-facing features (riders consume the GTFS-RT feed through existing apps like OneBusAway; this project focuses on the data production side)
@@ -737,7 +737,7 @@ planned follow-up.
 
 The Android app is the primary data collection tool. It must be dead simple for drivers to use (many of whom may have limited smartphone experience) and reliable in sending location data to the server while the driver is on a trip.
 
-In v1, the app sends location reports directly to the server as they are captured. If the network is temporarily unavailable, the app shows a clear warning to the driver but does not queue data locally — location points captured during a network outage are dropped. This is an acceptable tradeoff for v1: the GTFS-RT feed only needs to reflect the *current* position of each vehicle, so historical points lost during a brief outage do not create gaps in the rider experience. Offline queuing and backfill is planned for v2 (see Future Work).
+The app sends location reports directly to the server as they are captured. If the network is unavailable, the app shows a clear warning to the driver and keeps each report it could not send on the phone, then uploads them in batches to `POST /api/v1/locations/history` once it can. They go to location history only, for trip playback and analytics: the GTFS-RT feed reflects only the *current* position of each vehicle. v1 dropped them; see [v2: Offline Queuing and Sync](#v2-offline-queuing-and-sync).
 
 **Core User Flow:**
 
@@ -758,8 +758,8 @@ In v1, the app sends location reports directly to the server as they are capture
 **Location Reporting:**
 
 - **Location capture:** Android `FusedLocationProviderClient` running as a foreground service with a persistent notification that names the route, its schedule status and the next stop. Location updates every 10 seconds (configurable).
-- **Direct send:** Each location fix is immediately POSTed to the server via Retrofit/OkHttp. Failed requests are logged but not retried (v1 simplification).
-- **Connection status:** The app monitors network availability and displays a clear visual indicator to the driver. When the network is unavailable, the app continues capturing GPS fixes (in case connectivity returns quickly) but does not attempt to send them.
+- **Direct send:** Each location fix is immediately POSTed to the server via Retrofit/OkHttp. One that fails for want of a connection is kept for location history; one the server refuses is logged and dropped, not retried.
+- **Connection status:** The app monitors network availability and displays a clear visual indicator to the driver. When the network is unavailable, the app goes on capturing GPS fixes and keeps the ones it cannot send, as above.
 - **Battery optimization:** The app must request exemption from battery optimization (Doze mode) during active tracking. The foreground service notification ensures Android doesn’t kill the process. GPS polling interval is configurable to balance accuracy vs. battery drain.
 
 **UI Design Principles (for driver usability):**
@@ -988,7 +988,7 @@ This timeline follows the GSoC 2026 standard coding period (May 25 – August 24
 |Scope is too large for 12 weeks                                                      |Medium    |Medium|Milestones are ordered by priority — Milestones 1–3 represent the core MVP. Admin UI (Milestone 4) and docs (Milestone 5) can be simplified if time is tight. The contributor can also request a timeline extension up to 22 weeks.|
 |GTFS-RT protobuf generation has subtle spec compliance issues                        |Low       |Medium|Validate feed output against the MobilityData GTFS-RT Validator early and often; study existing feeds from agencies like MBTA and King County Metro as reference implementations                                                   |
 |No real transit agency available for testing                                         |Low       |Low   |Build a vehicle simulator that generates realistic GPS traces along GTFS routes; use this for all testing and demos. Real-world testing with a partner agency is a stretch goal.                                                   |
-|Network conditions are worse than expected in target regions                         |Medium    |Medium|v1 accepts this limitation — locations are only reported when connected. The architecture is designed so v2 offline queuing can be added without restructuring. Clear UX communicates connection status to the driver.             |
+|Network conditions are worse than expected in target regions                         |Medium    |Medium|Both driver apps keep the positions they cannot send and upload them later for location history, so a trip's history fills in after an outage; riders see the vehicle only while it is connected. Clear UX communicates connection status to the driver.|
 
 ## 8. How This Connects to OneBusAway
 
@@ -1002,16 +1002,7 @@ The Vehicle Tracker server is intentionally built as a standalone service (not i
 
 ### v2: Offline Queuing and Sync
 
-The most important enhancement after v1 ships. In areas with intermittent connectivity, v1 drops location points when the network is unavailable. v2 adds a full offline-first architecture to the Android app:
-
-- **Local storage:** Room database as a write-ahead buffer. Every GPS fix is persisted locally before any network request is attempted.
-- **Batch sync:** When connectivity is available, a WorkManager periodic task batches unsynced points and POSTs them to a new server endpoint (`POST /api/v1/locations/batch`) that accepts arrays of timestamped points.
-- **Server-side deduplication:** Idempotent ingestion keyed on `vehicle_id + timestamp` to handle duplicate submissions from retries.
-- **Connectivity-aware sync triggers:** `ConnectivityManager` callbacks to initiate immediate sync when the network becomes available after an outage.
-- **Staleness handling:** The server accepts backfilled historical points for the database (operational analytics) but only uses the most recent point for the GTFS-RT feed.
-- **Status UX:** Yellow “offline — X points queued” indicator in addition to green/red.
-
-This is a significant engineering effort (estimated 60–80 hours) involving careful protocol design, idempotency guarantees, and extensive testing of edge cases (app killed while offline, phone rebooted with pending queue, token expiry during offline period). It was intentionally excluded from v1 to keep the GSoC scope achievable.
+Left out of v1 to keep the GSoC scope achievable, and built since in both driver apps, more simply than first planned. A report that fails for want of a connection is kept on the phone, up to 8,640 of them, and uploaded later, up to 500 at a time, to `POST /api/v1/locations/history`. The server stores those positions in location history only, for trip playback and analytics, never in the GTFS-RT feed, and takes none older than 24 hours. The driver's status card counts them ("12 reports to send when online"). Each phone keeps them under the driver and server they were taken for and never uploads them as another driver's. What drivers see is in [`docs/operator-manual.md`](docs/operator-manual.md).
 
 ### Other Future Work
 
