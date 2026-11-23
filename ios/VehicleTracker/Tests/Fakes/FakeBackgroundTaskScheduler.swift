@@ -71,7 +71,8 @@ import Testing
     }
 
     /// What iOS does as it ends the run: calls the expiry handler once and
-    /// clears it.
+    /// clears it. After `complete(success:)`, an expiry iOS called as the
+    /// run completed, landing late.
     func expire() {
         guard let expired else {
             Issue.record("iOS marks a run with no expiry handler failed")

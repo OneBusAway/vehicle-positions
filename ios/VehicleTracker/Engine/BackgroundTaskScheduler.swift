@@ -16,7 +16,8 @@ protocol BackgroundTaskScheduler {
 /// One run of a background task iOS has started: `BGTask`, or a test's.
 protocol BackgroundTaskRun: AnyObject {
     /// Has iOS call `expired` on the main actor shortly before it ends the
-    /// run, which must be completed by then.
+    /// run, which must be completed by then. It hops there from wherever
+    /// iOS calls it, so it can land after the run has completed.
     func onExpiry(_ expired: @escaping @MainActor () -> Void)
     /// Tells iOS the run is over: false if its work is not all done, after
     /// the next run has been asked for.

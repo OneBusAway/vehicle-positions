@@ -1523,8 +1523,9 @@ Refresh** on for the app too (Settings → General → Background App Refresh; L
 Power Mode pauses it). Reports a phone keeps while it has no connection are
 sent once the connection is back: with the next report that gets through, as
 the trip ends, or when the app is next opened. With Background App Refresh on,
-iOS also starts the app in the background to send them, so a trip that ends
-out of coverage is not left waiting for the driver to open the app.
+iOS may also start the app in the background to send them, at a time iOS picks
+that can be hours later. A driver who needs them sent sooner should open the
+app once back in coverage.
 
 ## 15. Languages on drivers' phones
 

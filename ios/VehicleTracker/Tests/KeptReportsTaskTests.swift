@@ -196,13 +196,97 @@ import VehiclePositionsKit
         #expect(tasks.events == ["submit", "submit", "complete(false)"])
         #expect(api.historyUploads.isEmpty)
         #expect(try await queue.oldest(10, for: ana).count == 2)
-        #expect(background.running == 0)
+        #expect(await eventually { background.running == 0 }, "ended by the drain as it stops")
         #expect(background.ended.count == 1, "the drain's own time, ended once")
 
         let next = try #require(tasks.run(id))
         #expect(await eventually { api.historyUploads.map(\.points.count) == [2] })
         interval.fire()
         #expect(await eventually { next.completions == [true] })
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+    }
+
+    /// A run hours after the trip starts with a token refresh, the access
+    /// token long expired, and iOS may end the run while the drain waits on
+    /// it. The run completes at once, not once the refresh has its answer.
+    /// The refresh is left to finish and save the new pair: the server may
+    /// already have spent r1, and presenting it again would revoke every
+    /// refresh token the driver holds.
+    @Test func iOSEndingARunDuringATokenRefreshCompletesItAtOnceAndLetsTheRefreshFinish() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        await history.keep(report(10))
+        let signIn = UUID()
+        let tokens = ScriptedTokenStore(StoredToken(token: "a1", issuedAt: clock.now.addingTimeInterval(-900),
+                                                    refreshToken: "r1", expiresAt: clock.now, signInID: signIn))
+        let refresher = TokenRefresher(tokens: tokens)
+        let refresh = ScriptedRefresh()
+        // URLSession fails a cancelled task's request instead of handing
+        // back the server's answer.
+        let present: TokenRefresher.Refresh = { refreshToken in
+            let reply = await refresh.call(refreshToken)
+            return Task.isCancelled ? .unreachable("cancelled") : reply
+        }
+        // What `TrackerClient` does with a batch the server turned away with
+        // a 401: waits on the app's one refresh, then sends the batch again,
+        // which URLSession refuses for a cancelled drain.
+        api.whileUploadingHistory = {
+            _ = await refresher.afterUnauthorized(failedToken: "a1", signInID: signIn, refresh: present)
+            try Task.checkCancellation()
+        }
+
+        let run = try #require(tasks.run(id))
+        try #require(await eventually { refresh.presented == ["r1"] })
+        run.expire()
+        #expect(run.completions == [false], "at once, with the refresh still out")
+        #expect(tasks.events == ["submit", "submit", "complete(false)"])
+        #expect(background.running == 1, "the drain keeps its time until the refresh has its answer")
+
+        refresh.answer(.issued(AuthTokens(accessToken: "a2", refreshToken: "r2", expiresIn: 900)))
+        #expect(await eventually { background.running == 0 }, "the drain stopped")
+        #expect(try tokens.load()?.refreshToken == "r2", "the refresh saved the new pair")
+        #expect(refresh.presented == ["r1"])
+        #expect(api.historyUploads.isEmpty)
+        #expect(try await queue.oldest(10, for: ana).count == 1)
+
+        api.whileUploadingHistory = nil
+        let next = try #require(tasks.run(id))
+        #expect(await eventually { api.historyUploads.map(\.points.count) == [1] })
+        interval.fire()
+        #expect(await eventually { next.completions == [true] })
+        #expect(run.completions == [false], "not completed again as its drain stopped")
+    }
+
+    /// iOS may call the expiry just as the run completes, and it lands on
+    /// the main actor after, when the app may have come to the front and
+    /// started a drain of its own. That drain is not the run's to stop, and
+    /// nor is its background time.
+    @Test func anExpiryLandingAfterTheRunLeavesALaterDrainAlone() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        await history.keep(report(10))
+        let run = try #require(tasks.run(id))
+        #expect(await eventually { interval.asked.count == 1 })
+        interval.fire()
+        try #require(await eventually { run.completions == [true] })
+
+        try await queue.add(report(5), for: ana)
+        let held = ManualSleep()
+        api.whileUploadingHistory = { if held.asked.isEmpty { try await held.sleep(for: .zero) } }
+        let front = history.drain { api }
+        try #require(await eventually { held.asked.count == 1 })
+
+        run.expire()
+        #expect(!front.isCancelled)
+        #expect(background.running == 1, "the front's drain keeps its time")
+        #expect(run.completions == [true])
+        #expect(tasks.events == ["submit", "complete(true)"])
+
+        held.fire()
+        #expect(await eventually { interval.asked.count == 2 })
+        interval.fire()
+        #expect(await eventually { background.running == 0 })
+        #expect(api.historyUploads.map(\.points.count) == [1, 1])
         #expect(try await queue.oldest(10, for: ana).isEmpty)
     }
 

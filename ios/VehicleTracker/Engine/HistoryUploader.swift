@@ -285,19 +285,32 @@ final class HistoryUploader {
 
     /// One run of the background task: a drain until nothing is left to
     /// send, or until iOS ends the run. Reports left have asked for the next
-    /// run by the time this one completes, as the drain does that as it
-    /// stops.
+    /// run by the time this one completes: the drain asks as it stops, and
+    /// an expiry before it completes the run.
     private func runBackgroundTask(_ run: any BackgroundTaskRun, drain: () -> Task<Void, Never>?) {
         // The request this run answers is no longer waiting.
         isBackgroundTaskAsked = false
-        run.onExpiry { [weak self] in
-            self?.log.notice("out of time for the background task while sending kept reports; the rest wait for its next run")
-            self?.stopDrain()
-        }
+        let completion = BackgroundRunCompletion(run)
         let draining = drain()
+        run.onExpiry { [weak self] in
+            // iOS called it as the run completed, and it landed after.
+            guard !completion.isCompleted else { return }
+            self?.log.notice("out of time for the background task while sending kept reports; the rest wait for its next run")
+            if let self, waiting.count > 0 { askForBackgroundTask() }
+            // At once, not as the drain stops: a drain waiting on a token
+            // refresh stops only once the refresh has its answer, and iOS may
+            // kill an app that hasn't completed the run by then.
+            completion.complete(success: false)
+            // This run's drain only, not one started since. Its upload out
+            // fails before its batch is removed, so the batch stays kept. A
+            // refresh it waits on is left to finish (`TokenRefresher` says
+            // why) under the drain's own background time, which the drain
+            // ends as it stops.
+            draining?.cancel()
+        }
         Task { [weak self] in
             await draining?.value
-            run.complete(success: self?.waiting.count == 0)
+            completion.complete(success: self?.waiting.count == 0)
         }
     }
 
@@ -371,5 +384,22 @@ final class HistoryUploader {
     /// count both go by it, so they agree.
     private static func isTooOld(_ timestamp: Int64, at now: Int64) -> Bool {
         now - timestamp > maxAgeSeconds
+    }
+}
+
+/// A run of the background task, completed once: as the drain it waits for
+/// stops, or as iOS ends the run, whichever comes first.
+private final class BackgroundRunCompletion {
+    private let run: any BackgroundTaskRun
+    private(set) var isCompleted = false
+
+    init(_ run: any BackgroundTaskRun) {
+        self.run = run
+    }
+
+    func complete(success: Bool) {
+        guard !isCompleted else { return }
+        isCompleted = true
+        run.complete(success: success)
     }
 }
