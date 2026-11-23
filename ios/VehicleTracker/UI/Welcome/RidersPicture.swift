@@ -202,6 +202,11 @@ private struct RidersMap: View {
                 Self.disc(&layer, at: stop, radius: 4, .mapNextStop)
             }
         }
+        // A Canvas draws from the left whatever the layout direction, while
+        // the vehicle, the riders and the badge above it are placed from the
+        // leading edge. Right to left, the map turns with them, as the route
+        // line over the welcome does; it has no words to come out backwards.
+        .flipsForRightToLeftLayoutDirection(true)
     }
 
     private static func disc(_ context: inout GraphicsContext, at centre: CGPoint, radius: CGFloat, _ color: Color) {
