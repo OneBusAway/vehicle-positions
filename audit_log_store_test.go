@@ -73,8 +73,9 @@ func newAuditFixture(t *testing.T, store *Store) auditFixture {
 	return fx
 }
 
-// testAuditActor is the admin the tests make changes as.
-var testAuditActor = auditActor{UserID: 41, Email: "aud-admin@example.org", IP: "198.51.100.7"}
+// testAuditActor is the admin the tests make changes as. No account has its
+// id, so its rows keep the email its session gives.
+var testAuditActor = auditActor{UserID: 1_000_000_041, Email: "aud-admin@example.org", IP: "198.51.100.7"}
 
 func asTestAdmin() context.Context {
 	return context.WithValue(context.Background(), auditActorKey, testAuditActor)
@@ -604,6 +605,37 @@ func TestStore_AuditLog_UnchangedSaveRecordsNothing(t *testing.T) {
 	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, fx.userID, true))
 
 	assert.Empty(t, auditRowsAfter(t, store, mark))
+}
+
+// TestStore_AuditLog_ActorEmailAsItIsNow checks a row names the admin by
+// their account's email when the change is made, not the one their session
+// signed in with, which an email change since leaves behind. The session's
+// stands in once the account is gone.
+func TestStore_AuditLog_ActorEmailAsItIsNow(t *testing.T) {
+	store := newAuditTestStore(t)
+	newAuditFixture(t, store)
+	ctx := context.Background()
+	var adminID int64
+	require.NoError(t, store.pool.QueryRow(ctx,
+		`INSERT INTO users (name, email, password_hash, role) VALUES ('Boss', 'aud-boss@example.org', 'not-a-real-hash', 'admin') RETURNING id`,
+	).Scan(&adminID))
+	// Signed in before the account's email was changed to aud-boss@example.org.
+	session := context.WithValue(ctx, auditActorKey, auditActor{UserID: adminID, Email: "aud-boss-old@example.org", IP: "192.0.2.20"})
+	mark := lastAuditID(t, store)
+
+	require.NoError(t, store.UpdateVehicleInfo(session, "aud-v", "One", "north"))
+	_, err := store.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, adminID)
+	require.NoError(t, err)
+	require.NoError(t, store.UpdateVehicleInfo(session, "aud-v", "Two", "north"))
+
+	rows := auditRowsAfter(t, store, mark)
+	require.Len(t, rows, 2)
+	for _, r := range rows {
+		require.NotNil(t, r.ActorID)
+		assert.Equal(t, adminID, *r.ActorID)
+	}
+	assert.Equal(t, "aud-boss@example.org", rows[0].ActorEmail)
+	assert.Equal(t, "aud-boss-old@example.org", rows[1].ActorEmail, "with the account gone, the session's email names it")
 }
 
 // TestStore_AuditLog_RefusedChangeRecordsNothing checks a change the store

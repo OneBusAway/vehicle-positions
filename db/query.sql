@@ -666,8 +666,13 @@ SELECT name, email, role, active FROM users WHERE id = $1 FOR NO KEY UPDATE;
 SELECT name, active FROM api_keys WHERE id = $1 FOR NO KEY UPDATE;
 
 -- name: InsertAuditEntry :exec
+-- actor_email is the admin's email when the change is made. The one the
+-- session carries is the one they signed in with, which an email change does
+-- not end, so it stands in only for an account that is gone.
 INSERT INTO audit_log (actor_id, actor_email, actor_ip, object_type, object_id, action, before, after)
-VALUES (sqlc.narg(actor_id), sqlc.arg(actor_email), sqlc.arg(actor_ip), sqlc.arg(object_type),
+VALUES (sqlc.narg(actor_id),
+    COALESCE((SELECT email FROM users WHERE id = sqlc.narg(actor_id)), sqlc.arg(actor_email)::TEXT),
+    sqlc.arg(actor_ip), sqlc.arg(object_type),
     sqlc.arg(object_id), sqlc.arg(action), sqlc.narg(before), sqlc.narg(after));
 
 -- name: ListAuditEntries :many
