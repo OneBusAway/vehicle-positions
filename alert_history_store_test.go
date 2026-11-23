@@ -41,6 +41,63 @@ func alertHistoryRows(t *testing.T, store *Store) []historyRow {
 // historyTime is a time Postgres keeps as it is, in UTC.
 var historyTime = time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
 
+// lostRaiseReply is the store, with the reply to each raise lost while lose
+// is set: the row is opened, and the caller is told the raise failed.
+type lostRaiseReply struct {
+	*Store
+	lose bool
+}
+
+func (s *lostRaiseReply) RaiseAlert(ctx context.Context, a alertEntry) (int64, error) {
+	id, err := s.Store.RaiseAlert(ctx, a)
+	if s.lose {
+		return 0, errors.New("connection reset by peer")
+	}
+	return id, err
+}
+
+// TestStore_AlertRecorder_ARaiseWhoseReplyWasLost: the row a lost raise opened
+// is cleared when its alert goes, before the rows a restart left open are
+// settled and after, rather than cleared at the start, before it was raised,
+// or left open.
+func TestStore_AlertRecorder_ARaiseWhoseReplyWasLost(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		settled bool
+		since   time.Time
+	}{
+		{"before the rows left open are settled", false, historyTime.Add(4 * time.Minute)},
+		{"after", true, historyTime.Add(12 * time.Minute)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			captureWebhookLogs(t)
+			store := newTestStore(t)
+			trip := startAlertTrip(t, store)
+			lossy := &lostRaiseReply{Store: store}
+			source := &scriptedAlerts{}
+			r := newAlertRecorder(lossy, source, historyTime, 10*time.Minute, time.Hour)
+			t.Cleanup(r.Stop)
+			if tc.settled {
+				r.check(historyTime.Add(11 * time.Minute))
+			}
+
+			lossy.lose = true
+			source.set(nil, newAlert(alertQuiet, tc.since, trip, tc.since.Add(3*time.Minute)))
+			r.check(tc.since.Add(3 * time.Minute))
+			lossy.lose = false
+			source.set(nil)
+			r.check(tc.since.Add(4 * time.Minute))
+			r.check(tc.since.Add(10 * time.Minute))
+
+			rows := alertHistoryRows(t, store)
+			require.Len(t, rows, 1, "raised again, the alert gets back the row the lost raise opened")
+			require.NotNil(t, rows[0].ClearedAt, "the row is not left open")
+			assert.Equal(t, tc.since, rows[0].RaisedAt.UTC())
+			assert.Equal(t, tc.since.Add(4*time.Minute), rows[0].ClearedAt.UTC(), "cleared at the check that found the alert gone")
+		})
+	}
+}
+
 func TestStore_AlertHistory_RoundTrip(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
