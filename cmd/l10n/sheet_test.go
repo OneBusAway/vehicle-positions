@@ -530,15 +530,168 @@ func TestStringsXML_ReadsBackAsWritten(t *testing.T) {
 }
 
 func TestValuesDirFor(t *testing.T) {
-	for _, lang := range []string{"hi", "sw", "pt-BR", "zh-Hans", "zh-Hant", "fil", "es-419"} {
+	for _, lang := range []string{"hi", "sw", "pt-BR", "zh-Hans", "zh-Hant", "fil", "fil-PH", "es-419"} {
 		dir := valuesDirFor(lang)
 		require.NotEmpty(t, dir, lang)
 		assert.Equal(t, lang, valuesDirLanguage(dir), "%s goes in %s and reads back", lang, dir)
 	}
 	assert.Equal(t, "values-pt-rBR", valuesDirFor("pt-BR"))
 	assert.Equal(t, "values-b+zh+Hans", valuesDirFor("zh-Hans"))
-	assert.Equal(t, "values-b+fil", valuesDirFor("fil"), "the older qualifier takes a two-letter language")
+	assert.Equal(t, "values-fil", valuesDirFor("fil"), "the older qualifier takes a three-letter language too, as aapt2 reads it")
 	assert.Empty(t, valuesDirFor("../hi"), "not a language")
+}
+
+// TestValuesDirFor_NamesTheAppsOwnFolders: each language the app has is
+// written to the folder it is read from, so an import never starts a second
+// folder beside it, such as values-b+fil beside values-fil.
+func TestValuesDirFor_NamesTheAppsOwnFolders(t *testing.T) {
+	dirs, err := os.ReadDir(filepath.Join("../..", androidRes))
+	require.NoError(t, err)
+	langs := 0
+	for _, d := range dirs {
+		if lang := valuesDirLanguage(d.Name()); lang != "" {
+			langs++
+			assert.Equal(t, d.Name(), valuesDirFor(lang), lang)
+		}
+	}
+	assert.Greater(t, langs, 1)
+}
+
+// TestExportAndImport_TheAppsLanguagesReadBackUnchanged: each of the app's
+// languages exports a sheet with its strings in, and that sheet imported
+// with no edits leaves its strings.xml as it is, comments and all.
+func TestExportAndImport_TheAppsLanguagesReadBackUnchanged(t *testing.T) {
+	p := sheetProject{root: t.TempDir(), dir: t.TempDir()}
+	files, err := filepath.Glob(filepath.Join("../..", androidRes, "values*", "strings.xml"))
+	require.NoError(t, err)
+	for _, file := range append(files, filepath.Join("../..", glossaryPath)) {
+		body, err := os.ReadFile(file)
+		require.NoError(t, err)
+		rel, err := filepath.Rel("../..", file)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Join(p.root, filepath.Dir(rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(p.root, rel), body, 0o644))
+	}
+	langs := 0
+	for _, file := range files {
+		lang := valuesDirLanguage(filepath.Base(filepath.Dir(file)))
+		if lang == "" {
+			continue
+		}
+		langs++
+		sheet := p.export(t, lang)
+		shown := 0
+		for _, row := range readRows(t, sheet) {
+			if cell(row, "current") != "" {
+				shown++
+			}
+		}
+		assert.NotZero(t, shown, "%s's sheet shows its strings", lang)
+
+		code, out := p.importSheet(t, lang, sheet)
+
+		require.Equal(t, 0, code, out)
+		assert.Equal(t, "nothing to change\n", out, lang)
+	}
+	assert.Greater(t, langs, 1)
+}
+
+// TestImport_KeepsWhatItDoesNotChange: an import writes the strings a sheet
+// changes or adds, each new one after the one before it in English, and
+// leaves the rest of the file as it was: its comments, blank lines and
+// attributes, how each other string is written, and the forms of a plural it
+// doesn't change.
+func TestImport_KeepsWhatItDoesNotChange(t *testing.T) {
+	nbsp := string(rune(0xa0)) // a no-break space, which aapt keeps
+	p := newSheetProject(t)
+	require.NoError(t, os.WriteFile(filepath.Join(p.root, androidHindi), []byte(`<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Hindi: notes for the next translator.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Sign-in -->
+    <string name="login_title">साइन`+nbsp+`इन करें</string>
+    <string name="login_error_unreachable">%1$s तक नहीं पहुँच सके। अपना कनेक्शन जाँचें।</string>
+
+    <!-- Help -->
+    <string name="help_link">"24 घंटे में https://onebusaway.org पर और पढ़ें।"</string>
+    <string name="tracking_gps">GPS बंद है</string>
+    <plurals name="reports_sent" tools:ignore="ImpliedQuantity">
+        <item quantity="one">%1$d`+nbsp+`रिपोर्ट भेजी गई</item>
+        <item quantity="other">%1$d रिपोर्ट भेजी गईं</item>
+    </plurals>
+</resources>
+`), 0o644))
+	sheet := p.export(t, "hi")
+	translate(t, sheet, map[string]string{
+		"GPS is off":                             "GPS बंद",
+		"Vehicle on route %1$s, heading to %2$s": "गाड़ी रूट %1$s पर, %2$s की ओर",
+		"%1$d reports sent":                      "%1$d रिपोर्टें भेजी गईं",
+		"Started %1$d min ago":                   "%1$d मिनट पहले शुरू",
+	})
+
+	code, out := p.importSheet(t, "hi", sheet)
+
+	require.Equal(t, 0, code, out)
+	assert.Equal(t, `<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Hindi: notes for the next translator.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Sign-in -->
+    <string name="login_title">साइन`+nbsp+`इन करें</string>
+    <string name="login_error_unreachable">%1$s तक नहीं पहुँच सके। अपना कनेक्शन जाँचें।</string>
+
+    <!-- Help -->
+    <string name="help_link">"24 घंटे में https://onebusaway.org पर और पढ़ें।"</string>
+    <string name="tracking_gps">GPS बंद</string>
+    <string name="vehicle_route_stop">गाड़ी रूट %1$s पर, %2$s की ओर</string>
+    <plurals name="reports_sent" tools:ignore="ImpliedQuantity">
+        <item quantity="one">%1$d`+nbsp+`रिपोर्ट भेजी गई</item>
+        <item quantity="other">%1$d रिपोर्टें भेजी गईं</item>
+    </plurals>
+    <string name="started_ago">%1$d मिनट पहले शुरू</string>
+</resources>
+`, p.read(t, androidHindi))
+}
+
+// TestEditStringsXML_TagsThatCloseThemselves: an entry written as a tag that
+// closes itself is written out to hold its text, and one of the other kind
+// than its English is written again whole. A <resources/> has no room for a
+// string, so it is an error rather than a broken file, as is a file with no
+// <resources> at all.
+func TestEditStringsXML_TagsThatCloseThemselves(t *testing.T) {
+	english := []androidString{
+		{key: "a", version: &version{forms: map[string]form{"": {}}}},
+		{key: "b", version: &version{forms: map[string]form{"plural.one": {}, "plural.other": {}}}},
+		{key: "c", version: &version{forms: map[string]form{"": {}}}},
+	}
+	trans := map[string]map[string]string{"a": {"": "A"}, "b": {"plural.one": "B1", "plural.other": "B2"}, "c": {"": "C"}}
+	old := `<resources>
+    <string name="a"/>
+    <plurals name="b" />
+    <plurals name="c">
+        <item quantity="other">C</item>
+    </plurals>
+</resources>
+`
+
+	got, err := editStringsXML([]byte(old), english, map[string]*version{}, trans, "hi")
+
+	require.NoError(t, err)
+	assert.Equal(t, `<resources>
+    <string name="a">A</string>
+    <plurals name="b">
+        <item quantity="one">B1</item>
+        <item quantity="other">B2</item>
+    </plurals>
+    <string name="c">C</string>
+</resources>
+`, string(got))
+	_, err = editStringsXML([]byte("<resources/>\n"), english, map[string]*version{}, trans, "hi")
+	assert.ErrorContains(t, err, "<resources/>")
+	_, err = editStringsXML([]byte("<!-- empty -->\n"), english, map[string]*version{}, trans, "hi")
+	assert.ErrorContains(t, err, "no <resources>")
 }
 
 func TestExport_StartsWithAByteOrderMark(t *testing.T) {
