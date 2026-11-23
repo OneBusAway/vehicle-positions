@@ -63,6 +63,24 @@ func TestStopSchedule_GapAt(t *testing.T) {
 				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(7, 30, 0))}, 0},
 			},
 			at(7, 40, 0), 10 * time.Minute},
+		{"a pattern that ran alongside still adds for a headway after it ends",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(7, 30, 0))}, 0},
+			},
+			at(7, 35, 0), 5 * time.Minute},
+		{"a trip that takes over as another's window ends is due alone",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0},
+			},
+			at(8, 5, 0), 10 * time.Minute},
+		{"and so is one that takes over a little after it ends",
+			[]trip{
+				{[]rider.Frequency{every(30*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(5*time.Minute, hms(8, 10, 0), hms(9, 0, 0))}, 0},
+			},
+			at(8, 12, 0), 5 * time.Minute},
 		{"a row that holds the time comes before one that has just ended",
 			[]trip{{[]rider.Frequency{every(30*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(5*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0}},
 			at(8, 1, 0), 5 * time.Minute},
@@ -98,6 +116,29 @@ func TestStopSchedule_GapAt(t *testing.T) {
 			}
 			assert.Equal(t, tc.want, s.gapAt(tc.at))
 		})
+	}
+}
+
+// TestStopService_GapsAcrossATakeover: service every 10 minutes written as
+// two trips, one up to 08:00 and one from then. Its 08:00 vehicle, on time
+// and 10 minutes after the 07:50, is on the gap, as it is when the feed
+// writes the two windows as rows of one trip, not long against every 5.
+func TestStopService_GapsAcrossATakeover(t *testing.T) {
+	passings := []stopPassing{{at: reportDayStart.Add(hms(7, 50, 6)), run: 1}, {at: reportDayStart.Add(hms(8, 0, 6)), run: 2}}
+	rows := []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}
+
+	oneTrip := stopService{passings: passings}
+	oneTrip.schedule.addTrip(rows, reportDayStart, 0)
+	twoTrips := stopService{passings: passings}
+	twoTrips.schedule.addTrip(rows[:1], reportDayStart, 0)
+	twoTrips.schedule.addTrip(rows[1:], reportDayStart, 0)
+
+	for name, s := range map[string]stopService{"one trip": oneTrip, "two trips": twoTrips} {
+		gaps := s.gaps()
+		if assert.Len(t, gaps, 1, name) {
+			assert.Equal(t, 10*time.Minute, gaps[0].scheduled, name)
+			assert.False(t, gaps[0].long(), name)
+		}
 	}
 }
 
@@ -224,6 +265,8 @@ func TestStopSchedule_TimetableGapAt(t *testing.T) {
 			everyFrom(15*time.Minute, hms(7, 0, 0), hms(7, 45, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 14, 0), 10 * time.Minute},
 		{"after the timetable's last spacing, the trip alone",
 			[]time.Duration{hms(7, 0, 0), hms(7, 10, 0)}, []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 20, 0), 10 * time.Minute},
+		{"a timetable that takes over as a trip's window ends is due alone",
+			everyFrom(10*time.Minute, hms(8, 0, 0), hms(8, 30, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(8, 5, 0), 10 * time.Minute},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

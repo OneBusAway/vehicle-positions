@@ -177,14 +177,16 @@ func stretchAt(stretches []timeSpan, t time.Time) int {
 // patterns every 10 minutes that share the stop make it every 5. A trip's
 // rate is one run a headway in the window that holds t or, failing that, in
 // the window that ended less than a headway before it, so a late last run is
-// held to the gap it was due at. The timetable's is one run a spacing, the
-// spacing up to its departure nearest t, as setTimetable lays them out. It
-// is zero when nothing is due, which no stretch holds, and a second at the
-// least.
+// held to the gap it was due at, unless another trip or the timetable has
+// taken over from that window (takenOver). The timetable's is one run a
+// spacing, the spacing up to its departure nearest t, as setTimetable lays
+// them out. It is zero when nothing is due, which no stretch holds, and a
+// second at the least.
 func (s *stopSchedule) gapAt(t time.Time) time.Duration {
+	due := s.due()
 	rate := 0.0
-	for _, windows := range s.due() {
-		if w, ok := windowAt(windows, t); ok {
+	for i, windows := range due {
+		if w, ok := windowAt(windows, t); ok && !takenOver(due, i, w, t) {
 			rate += 1 / w.headway.Seconds()
 		}
 	}
@@ -192,6 +194,33 @@ func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 		return 0
 	}
 	return max(time.Second, time.Duration(math.Round(1/rate))*time.Second)
+}
+
+// takenOver reports whether w, the window of due[i] windowAt found for t,
+// ended before t and another set of due has taken over from it: one not
+// running as w ended is running at t. A trip's window that ends as another
+// trip's begins is then held no longer, just as a trip's own next row comes
+// before the row that has just ended, so the same service gets the same gap
+// whether a feed writes it as rows of one trip or as one trip a row. A set
+// already running as w ended, two patterns sharing the stop, does not take
+// over.
+func takenOver(due [][]stopWindow, i int, w stopWindow, t time.Time) bool {
+	if t.Before(w.to) {
+		return false
+	}
+	for j, windows := range due {
+		if j != i && running(windows, t) && !running(windows, w.to.Add(-time.Nanosecond)) {
+			return true
+		}
+	}
+	return false
+}
+
+// running reports whether one of windows holds t.
+func running(windows []stopWindow, t time.Time) bool {
+	return slices.ContainsFunc(windows, func(w stopWindow) bool {
+		return !t.Before(w.from) && t.Before(w.to)
+	})
 }
 
 // windowAt is the one of a set's windows that holds t, or else the latest to
