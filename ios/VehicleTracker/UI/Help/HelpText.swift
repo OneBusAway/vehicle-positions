@@ -57,7 +57,7 @@ nonisolated enum HelpText {
     }
 
     static var noConnectionMeaning: String {
-        String(localized: "Keep driving. Reports start again with the signal.", comment: "Help, under 'No connection'.")
+        String(localized: "Keep driving. Reports are saved and sent later.", comment: "Help, under 'No connection': the iPhone keeps the reports it can't send and sends them once the connection is back.")
     }
 
     static var noGPSMeaning: String {

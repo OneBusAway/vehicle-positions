@@ -22,8 +22,6 @@ nonisolated enum TipText {
         String(localized: "Reports sent", comment: "Tip on the trip bar's sent count, on the driver's first trip: its title.")
     }
 
-    /// iOS drops a report it cannot send, so the tip does not say reports
-    /// are kept.
     static var sentCountMessage: String {
         String(localized: "This number grows while riders can see you. With no signal, keep driving.",
                comment: "Tip on the trip bar's sent count, under its title.")

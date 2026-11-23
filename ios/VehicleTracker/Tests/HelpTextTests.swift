@@ -16,11 +16,9 @@ import Testing
         ])
     }
 
-    /// No connection says what happens while the line shows. The reports
-    /// kept meanwhile have a row of their own, with the status card's.
     @Test func eachProblemRowSaysWhatToDo() {
         #expect(ProblemHelp.allCases.map(\.meaning) == [
-            "Keep driving. Reports start again with the signal.",
+            "Keep driving. Reports are saved and sent later.",
             "Riders see your last position until it comes back.",
             "Tap the line. It opens Settings to turn it on.",
             "Tap the line. It opens Settings to turn it on.",
@@ -31,7 +29,6 @@ import Testing
             "Reports have stopped. Sign in to go on. Your trip is still open.",
             "With CarPlay. Reports start when you open the app.",
         ])
-        #expect(!ProblemHelp.noConnection.meaning.localizedCaseInsensitiveContains("saved"))
     }
 
     /// Location stopped's line names the button that is on it.

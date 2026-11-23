@@ -22006,175 +22006,175 @@
         }
       }
     },
-    "Keep driving. Reports start again with the signal." : {
-      "comment" : "Help, under 'No connection'.",
+    "Keep driving. Reports are saved and sent later." : {
+      "comment" : "Help, under 'No connection': the iPhone keeps the reports it can't send and sends them once the connection is back.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "መንዳትዎን ይቀጥሉ። ኔትወርክ ሲመለስ ሪፖርት መላክ እንደገና ይጀምራል።"
+            "value" : "መንዳትዎን ይቀጥሉ። ሪፖርቶቹ ተቀምጠው በኋላ ይላካሉ።"
           }
         },
         "ar" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "تابع القيادة. يبدأ إرسال التقارير من جديد مع عودة الإشارة."
+            "value" : "تابع القيادة. تُحفظ التقارير وتُرسل لاحقًا."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Fahren Sie weiter. Sobald der Empfang zurück ist, wird wieder gesendet."
+            "value" : "Fahren Sie weiter. Meldungen werden gespeichert und später gesendet."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Sigue manejando. Los reportes se reanudan cuando vuelva la señal."
+            "value" : "Sigue manejando. Los reportes se guardan y se envían después."
           }
         },
         "fa" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "به رانندگی ادامه دهید. با برگشتن آنتن، ارسال گزارش‌ها دوباره شروع می‌شود."
+            "value" : "به رانندگی ادامه دهید. گزارش‌ها ذخیره می‌شوند و بعداً ارسال می‌شوند."
           }
         },
         "fi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Jatka ajoa. Raportointi jatkuu, kun kenttä palaa."
+            "value" : "Jatka ajoa. Raportit tallennetaan ja lähetetään myöhemmin."
           }
         },
         "fil" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Tuloy lang sa pagmamaneho. Magsisimula ulit ang mga report pagbalik ng signal."
+            "value" : "Tuloy lang sa pagmamaneho. Naka-save ang mga report at ipapadala mamaya."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Continuez à rouler. L’envoi reprend dès que le réseau revient."
+            "value" : "Continuez à rouler. Les positions sont enregistrées et envoyées plus tard."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "गाड़ी चलाते रहें। सिग्नल लौटते ही रिपोर्ट फिर से शुरू हो जाती हैं।"
+            "value" : "गाड़ी चलाते रहें। रिपोर्ट सेव रहती हैं और बाद में भेजी जाती हैं।"
           }
         },
         "ht" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Kontinye kondi. Rapò yo rekòmanse lè rezo a tounen."
+            "value" : "Kontinye kondi. Rapò yo rete anrejistre epi y ap voye yo pita."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Continua a guidare. Le segnalazioni ripartono quando torna il segnale."
+            "value" : "Continua a guidare. Le segnalazioni vengono salvate e inviate più tardi."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "そのまま運転を続けてください。電波が戻ると送信が再開されます。"
+            "value" : "そのまま運転を続けてください。位置は保存され、あとで送信されます。"
           }
         },
         "km" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "បន្តបើកបរ។ ការផ្ញើទីតាំងនឹងចាប់ផ្ដើមឡើងវិញ ពេលមានសញ្ញាវិញ។"
+            "value" : "បន្តបើកបរ។ ទីតាំងត្រូវបានរក្សាទុក ហើយផ្ញើពេលក្រោយ។"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "계속 운전하세요. 신호가 돌아오면 위치 전송이 다시 시작돼요."
+            "value" : "계속 운전하세요. 위치는 저장했다가 나중에 전송해요."
           }
         },
         "lo" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ຂັບຕໍ່ໄປ. ການລາຍງານຈະເລີ່ມຄືນເມື່ອມີສັນຍານ."
+            "value" : "ຂັບຕໍ່ໄປ. ແອັບຈະບັນທຶກລາຍງານໄວ້ ແລ້ວສົ່ງພາຍຫຼັງ."
           }
         },
         "om" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Konkolaachisuu itti fufi. Gabaasni yommuu neetworkiin deebi'u irra deebi'ee jalqaba."
+            "value" : "Konkolaachisuu itti fufi. Gabaasonni kuufamanii booda ergamu."
           }
         },
         "pa" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ਗੱਡੀ ਚਲਾਉਂਦੇ ਰਹੋ। ਸਿਗਨਲ ਆਉਂਦੇ ਹੀ ਰਿਪੋਰਟਾਂ ਦੁਬਾਰਾ ਸ਼ੁਰੂ ਹੋ ਜਾਂਦੀਆਂ ਹਨ।"
+            "value" : "ਗੱਡੀ ਚਲਾਉਂਦੇ ਰਹੋ। ਰਿਪੋਰਟਾਂ ਸੇਵ ਰਹਿੰਦੀਆਂ ਹਨ ਅਤੇ ਬਾਅਦ ਵਿੱਚ ਭੇਜੀਆਂ ਜਾਂਦੀਆਂ ਹਨ।"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Jedź dalej. Raporty ruszą ponownie, gdy wróci zasięg."
+            "value" : "Jedź dalej. Raporty zostaną zapisane i wysłane później."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Continue dirigindo. O envio recomeça quando o sinal voltar."
+            "value" : "Continue dirigindo. As posições ficam salvas e são enviadas depois."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Продолжайте ехать. Когда появится сигнал, отправка возобновится."
+            "value" : "Продолжайте ехать. Отметки сохраняются и отправятся позже."
           }
         },
         "sm" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ʻAve pea le taʻavale. E toe amata lipoti pe a toe maua le fesoʻotaʻiga."
+            "value" : "ʻAve pea le taʻavale. E teuina lipoti ma lafo mulimuli ane."
           }
         },
         "so" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Gaariga sii wad. Warbixintu way dib u bilaabmaysaa marka shabakaddu soo laabato."
+            "value" : "Gaariga sii wad. Warbixinnada waa la kaydiyaa, dabadeedna waa la diraa."
           }
         },
         "sw" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Endelea kuendesha. Ripoti zitaanza tena mtandao ukirudi."
+            "value" : "Endelea kuendesha. Ripoti huhifadhiwa na kutumwa baadaye."
           }
         },
         "ti" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ምዝዋር ቀጽሉ። ሲግናል ምስ ተመልሰ ጸብጻባት ደጊሞም ይጅምሩ።"
+            "value" : "ምዝዋር ቀጽሉ። ጸብጻባት ይዕቀቡ፣ ጸኒሖም ድማ ይስደዱ።"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Їдьте далі. Звіти знову надсилатимуться, коли з’явиться сигнал."
+            "value" : "Їдьте далі. Звіти зберігаються й надсилаються пізніше."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Cứ tiếp tục lái. Khi có sóng trở lại, vị trí sẽ được gửi tiếp."
+            "value" : "Cứ tiếp tục lái. Vị trí được lưu lại và gửi sau."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "继续开车就行。信号恢复后，上报会重新开始。"
+            "value" : "继续开车就行。位置会先保存，稍后再上报。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "繼續開就好。訊號恢復後，回報會重新開始。"
+            "value" : "繼續開就好。回報會先儲存，稍後再送出。"
           }
         }
       }

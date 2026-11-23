@@ -136,6 +136,17 @@ import Testing
         }
     }
 
+    /// The row for Tracking's No connection line, as the page shows it: first
+    /// under the card, as on Android, with Android's words for what happens
+    /// to the reports meanwhile.
+    @Test func theNoConnectionRowSaysReportsAreSentLater() throws {
+        let line = try #require(ProblemHelp(try status(judged(secondsLate: 0), reporting: .noNetwork)))
+        let row = try #require(HelpPage.problemEntries.first)
+        #expect(row.id == "problem-\(line)")
+        #expect(row.title == "No connection")
+        #expect(row.meaning == "Keep driving. Reports are saved and sent later.")
+    }
+
     /// Signed out outranks every line, as on Tracking.
     @Test func signedOutIsTheRowWhateverElseIsWrong() throws {
         let paused = try status(nil, reporting: .authExpired, phase: .paused(active))
