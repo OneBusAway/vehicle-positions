@@ -155,7 +155,8 @@ final class TripSession {
     /// one object, so the sheet and `start()`'s own check see the same answers.
     let locationAccess: any LocationAccess
     /// Handed to each trip's reporter, to keep what it can't send for want of
-    /// a connection and upload it once a report gets through.
+    /// a connection and upload it once a report gets through; with no trip
+    /// running, `sendKeptReports()` uploads it.
     private let history: HistoryUploader?
     private let makeAPI: (URL, any TokenStoring) throws -> any TrackerAPI
     private let now: () -> Date
@@ -276,6 +277,8 @@ final class TripSession {
             phase = .idle
             adoptStoredTrip()
         }
+        await history?.dropReportsKeptForOthers()
+        sendKeptReports()
     }
 
     /// A trip stored for another server stays open there, and would otherwise
@@ -623,6 +626,20 @@ final class TripSession {
         }
     }
 
+    // MARK: Kept reports
+
+    /// Sends the reports kept for want of a connection while no trip is
+    /// running, as the server takes them with no trip open: when a trip
+    /// ends, after a sign-in, and each time the app comes to the front.
+    /// During a trip each report that gets through takes a batch with it, so
+    /// the drain stops once one starts.
+    func sendKeptReports() {
+        history?.drain { [weak self] in
+            guard let self, reporter == nil else { return nil }
+            return api
+        }
+    }
+
     // MARK: Tracking
 
     private func beginTracking(_ active: ActiveTrip, evaluator: AdherenceEvaluator) throws {
@@ -684,6 +701,7 @@ final class TripSession {
         }
         phase = .idle
         refreshReporting()
+        sendKeptReports()
     }
 
     private func handle(_ sample: LocationSample, active: ActiveTrip) {

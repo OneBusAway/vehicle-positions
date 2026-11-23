@@ -94,6 +94,19 @@ actor OfflineFixQueue {
         self.held[owner.key] = held
     }
 
+    /// Removes every report kept for anyone but `owner`, files and all.
+    func removeAll(except owner: Owner) throws {
+        // Out of memory as well as off disk, or a driver who signs back in
+        // later would have their dropped reports read back from memory.
+        held = held.filter { $0.key == owner.key }
+        guard FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)) else { return }
+        let ownFile = file(for: owner).lastPathComponent
+        for other in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        where other.lastPathComponent != ownFile {
+            try FileManager.default.removeItem(at: other)
+        }
+    }
+
     /// Reads `owner`'s file the first time it is asked for. A line that can't
     /// be read, such as one cut short by a crash mid-append, is skipped rather
     /// than allowed to cost the rest.

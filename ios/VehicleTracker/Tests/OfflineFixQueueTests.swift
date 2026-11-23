@@ -206,4 +206,31 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: file))
         #expect(try await timestamps(queue, for: ana) == [])
     }
+
+    /// What a sign-in leaves: the reports kept for the driver and server
+    /// signing in, and nobody else's, in memory or on disk.
+    @Test func removingAllButOneOwnersReportsLeavesOnlyTheirs() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let ben = OfflineFixQueue.Owner(server: "https://transit.example.org", email: "ben@example.org")!
+        let anaElsewhere = OfflineFixQueue.Owner(server: "https://other.example.org", email: "ana@example.org")!
+        let queue = OfflineFixQueue(directory: directory)
+        try await queue.add(report(at: 1001), for: ana)
+        try await queue.add(report(at: 1002), for: ben)
+        try await queue.add(report(at: 1003), for: anaElsewhere)
+
+        try await queue.removeAll(except: ana)
+        #expect(try await timestamps(queue, for: ana) == [1001])
+        #expect(try await timestamps(queue, for: ben) == [], "not read back from memory either")
+        #expect(try await timestamps(queue, for: anaElsewhere) == [])
+        let folder = directory.appending(path: "offline-fixes").path(percentEncoded: false)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder) == ["\(ana.key).jsonl"])
+    }
+
+    @Test func removingAllButOneOwnersReportsBeforeAnyWereKeptIsFine() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let queue = OfflineFixQueue(directory: directory)
+        try await queue.removeAll(except: ana)
+        try await queue.add(report(at: 1001), for: ana)
+        #expect(try await timestamps(queue, for: ana) == [1001])
+    }
 }
