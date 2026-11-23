@@ -5787,6 +5787,599 @@
         }
       }
     },
+    "%lld reports to send when online" : {
+      "comment" : "Status card line 2 while reports saved with no connection wait on the iPhone, in place of the next stop's time and distance, and Help's example of it. The count is grouped, e.g. '1,244 reports to send when online', as the iPhone keeps up to 8,640.",
+      "localizations" : {
+        "am" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld ሪፖርት ግንኙነት ሲገኝ ይላካል"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld ሪፖርቶች ግንኙነት ሲገኝ ይላካሉ"
+                }
+              }
+            }
+          }
+        },
+        "ar" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld تقارير بانتظار الاتصال"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld تقريرًا بانتظار الاتصال"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "تقرير واحد بانتظار الاتصال"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld تقرير بانتظار الاتصال"
+                }
+              },
+              "two" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "تقريران بانتظار الاتصال"
+                }
+              },
+              "zero" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "لا توجد تقارير بانتظار الاتصال"
+                }
+              }
+            }
+          }
+        },
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld Meldung wartet auf Verbindung"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld Meldungen warten auf Verbindung"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld report to send when online"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reports to send when online"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld reporte espera conexión"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld reportes esperan conexión"
+                }
+              }
+            }
+          }
+        },
+        "fa" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld گزارش در انتظار اتصال"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld گزارش در انتظار اتصال"
+                }
+              }
+            }
+          }
+        },
+        "fi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld raportti odottaa yhteyttä"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld raporttia odottaa yhteyttä"
+                }
+              }
+            }
+          }
+        },
+        "fil" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld report na ipapadala kapag online"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld report na ipapadala kapag online"
+                }
+              }
+            }
+          }
+        },
+        "fr" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld position en attente de réseau"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld positions en attente de réseau"
+                }
+              }
+            }
+          }
+        },
+        "hi" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld रिपोर्ट नेटवर्क आने पर जाएगी"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld रिपोर्ट नेटवर्क आने पर जाएँगी"
+                }
+              }
+            }
+          }
+        },
+        "ht" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld rapò ap tann entènèt"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld rapò ap tann entènèt"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld rapò ap tann entènèt"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld rapò ap tann entènèt"
+                }
+              },
+              "two" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld rapò ap tann entènèt"
+                }
+              },
+              "zero" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld rapò ap tann entènèt"
+                }
+              }
+            }
+          }
+        },
+        "it" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld segnalazione in attesa di rete"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld segnalazioni in attesa di rete"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld件を接続後に送信"
+                }
+              }
+            }
+          }
+        },
+        "km" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "ទីតាំង %lld នឹងផ្ញើពេលមានអ៊ីនធឺណិត"
+                }
+              }
+            }
+          }
+        },
+        "ko" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "연결되면 %lld건 전송"
+                }
+              }
+            }
+          }
+        },
+        "lo" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld ລາຍງານຈະສົ່ງເມື່ອມີເນັດ"
+                }
+              }
+            }
+          }
+        },
+        "om" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "Gabaasa %lld interneetii eeggata"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "Gabaasota %lld interneetii eeggatu"
+                }
+              }
+            }
+          }
+        },
+        "pa" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld ਰਿਪੋਰਟ ਨੈੱਟਵਰਕ ਆਉਣ 'ਤੇ ਜਾਵੇਗੀ"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld ਰਿਪੋਰਟਾਂ ਨੈੱਟਵਰਕ ਆਉਣ 'ਤੇ ਜਾਣਗੀਆਂ"
+                }
+              }
+            }
+          }
+        },
+        "pl" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld raporty czekają na sieć"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld raportów czeka na sieć"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld raport czeka na sieć"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld raportu czeka na sieć"
+                }
+              }
+            }
+          }
+        },
+        "pt-BR" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld posição aguardando conexão"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld posições aguardando conexão"
+                }
+              }
+            }
+          }
+        },
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld отметки ждут связи"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld отметок ждут связи"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld отметка ждёт связи"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld отметки ждут связи"
+                }
+              }
+            }
+          }
+        },
+        "sm" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld lipoti e lafo pe a maua le fesoʻotaʻiga"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld lipoti e lafo pe a maua le fesoʻotaʻiga"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld lipoti e lafo pe a maua le fesoʻotaʻiga"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld lipoti e lafo pe a maua le fesoʻotaʻiga"
+                }
+              },
+              "two" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld lipoti e lafo pe a maua le fesoʻotaʻiga"
+                }
+              },
+              "zero" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld lipoti e lafo pe a maua le fesoʻotaʻiga"
+                }
+              }
+            }
+          }
+        },
+        "so" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld warbixin oo internet sugaysa"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld warbixinood oo internet sugaya"
+                }
+              }
+            }
+          }
+        },
+        "sw" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "Ripoti %lld inasubiri mtandao"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "Ripoti %lld zinasubiri mtandao"
+                }
+              }
+            }
+          }
+        },
+        "ti" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld ጸብጻብ ርክብ ይጽበ"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld ጸብጻባት ርክብ ይጽበዩ"
+                }
+              }
+            }
+          }
+        },
+        "uk" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld звіти чекають на з’єднання"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld звітів чекають на з’єднання"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld звіт чекає на з’єднання"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld звіту чекає на з’єднання"
+                }
+              }
+            }
+          }
+        },
+        "vi" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld vị trí chờ gửi khi có mạng"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld 条待联网后上报"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hant" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld 筆回報待連線後送出"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld sent" : {
       "comment" : "Trip bar: how many reports have reached the server, e.g. '142 sent'.",
       "localizations" : {
@@ -39044,6 +39637,179 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "下一班"
+          }
+        }
+      }
+    },
+    "Saved with no connection. They are sent once it is back." : {
+      "comment" : "Help, under a line like '3 reports to send when online': the reports were saved on the iPhone while it had no connection.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ግንኙነት በሌለበት ጊዜ ተቀምጠዋል። ግንኙነቱ ሲመለስ ይላካሉ።"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "حُفظت أثناء انقطاع الاتصال، وتُرسل فور عودته."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ohne Verbindung gespeichert und gesendet, sobald die Verbindung zurück ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Guardados sin conexión. Se envían cuando vuelva la conexión."
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "بدون اتصال ذخیره شده‌اند. وقتی اتصال برگردد، ارسال می‌شوند."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tallennettu ilman yhteyttä. Ne lähetetään, kun yhteys palaa."
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Na-save nang walang koneksyon. Ipapadala ang mga ito pagbalik ng koneksyon."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Enregistrées sans connexion. Elles sont envoyées dès que la connexion revient."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "कनेक्शन न होने पर सेव हुईं। कनेक्शन लौटते ही भेज दी जाती हैं।"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Rapò sa yo anrejistre lè pa t gen entènèt. Y ap pati depi entènèt la tounen."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Salvate senza connessione. Vengono inviate quando torna."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "接続がない間に保存されたものです。接続が戻ると送信されます。"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "បានរក្សាទុក ពេលគ្មានការតភ្ជាប់។ នឹងផ្ញើ ពេលមានការតភ្ជាប់វិញ។"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "인터넷 연결이 없을 때 저장된 위치예요. 연결되면 전송돼요."
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ບັນທຶກໄວ້ຕອນບໍ່ມີການເຊື່ອມຕໍ່. ຈະສົ່ງເມື່ອການເຊື່ອມຕໍ່ກັບມາ."
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Interneetii malee kuufaman. Yommuu interneetiin deebi'u ergamu."
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਕਨੈਕਸ਼ਨ ਨਾ ਹੋਣ 'ਤੇ ਸੇਵ ਹੋਈਆਂ। ਕਨੈਕਸ਼ਨ ਵਾਪਸ ਆਉਂਦੇ ਹੀ ਭੇਜ ਦਿੱਤੀਆਂ ਜਾਂਦੀਆਂ ਹਨ।"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Zapisane bez połączenia. Zostaną wysłane, gdy połączenie wróci."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Posições salvas sem conexão. Elas são enviadas quando a conexão voltar."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Сохранены без связи. Отправятся, когда связь вернётся."
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Na teuina aʻo leai se fesoʻotaʻiga. E lafo pe a toe maua."
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Waxaa la kaydiyay iyadoo aan internet jirin. Waa la diri doonaa marka uu soo laabto."
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Zimehifadhiwa bila mtandao. Zitatumwa mtandao ukirudi."
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ርክብ ኣብ ዘይነበረሉ እዋን ተዓቂቦም። ርክብ ምስ ተመልሰ ይስደዱ።"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Збережено без з’єднання. Їх буде надіслано, щойно воно відновиться."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Đã lưu khi không có kết nối. Sẽ được gửi khi có mạng trở lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "无网络时已保存，恢复连接后会上报。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "沒有連線時先儲存，恢復連線後就會送出。"
           }
         }
       }

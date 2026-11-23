@@ -15,7 +15,8 @@ struct TripStatus: Equatable {
 
     /// The status card: a symbol on the tone's fill, the answer, and two lines
     /// under it. Line 1 is a label ("Next") and what it introduces, in heavier
-    /// type; line 2 is a time and a distance.
+    /// type; line 2 is a time and a distance, or the reports waiting on the
+    /// phone in their place.
     struct Card: Equatable {
         var tone: StatusTone
         var symbol: String
@@ -92,6 +93,10 @@ struct TripStatus: Equatable {
     /// the status card's place, so no line shows under it.
     let problem: Problem?
     let isSignedOut: Bool
+    /// How many reports kept with no connection wait on the phone, as the
+    /// card's line 2 says it in place of its time and distance: "12 reports
+    /// to send when online". Nil while none do.
+    let reportsWaiting: String?
     let reports: Reports
     /// The tone of the ring round the vehicle on the map: neutral before the
     /// first fix, off the route, while the position is paused and while signed
@@ -131,7 +136,10 @@ struct TripStatus: Equatable {
     }
 
     /// Nil when there is no trip to describe: signed out, idle, or starting.
-    init?(phase: TripSession.Phase, latest: Adherence?, reporting: TripSession.ReportingStatus) {
+    /// `reportsWaiting` is how many reports kept with no connection are young
+    /// enough to upload (`ReportsWaiting.count`).
+    init?(phase: TripSession.Phase, latest: Adherence?, reporting: TripSession.ReportingStatus,
+          reportsWaiting: Int = 0) {
         let active: ActiveTrip
         switch phase {
         case .active(let trip), .paused(let trip), .ending(let trip): active = trip
@@ -146,7 +154,12 @@ struct TripStatus: Equatable {
         self.vehicleName = vehicleName
         runTime = active.trip.stops.first.map { Formatters.clock($0.departureAt, timezone: active.trip.timezone) }
         answer = judged.answer
-        card = judged.card
+        self.reportsWaiting = reportsWaiting > 0 ? TripStatusText.reportsWaiting(reportsWaiting) : nil
+        var card = judged.card
+        if let words = self.reportsWaiting {
+            card.line2 = words
+        }
+        self.card = card
         sentence = judged.sentence
         vehicleRowStatus = judged.vehicleRowStatus
         nextStopIndex = latest.flatMap { judged in

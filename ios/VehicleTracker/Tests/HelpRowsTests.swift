@@ -66,7 +66,7 @@ import Testing
 
     @Test func everyAnswerHasARowOfItsOwnAndEveryRowIsAnAnswer() throws {
         let rows = try everyAnswer().map { StatusHelp($0.answer) }
-        #expect(rows == StatusHelp.allCases)
+        #expect(rows + [.reportsWaiting] == StatusHelp.allCases, "and the waiting line's row after them")
     }
 
     /// The card's own symbol and words. "Off schedule" is the card's line
@@ -80,10 +80,24 @@ import Testing
             case .offSchedule: #expect(row.title == card.card.label)
             case .offRoute: #expect(row.title == card.vehicleRowStatus)
             case .onTime, .late, .early, .waitingForGPS: #expect(row.title == card.card.answer, "\(row)")
+            case .reportsWaiting: Issue.record("the waiting line is no answer")
             }
         }
         #expect(StatusHelp.late.title == "6 min late")
         #expect(StatusHelp.early.title == "3 min early")
+    }
+
+    /// The card's last line while reports wait on the phone, for 3 of them,
+    /// grey, as Android's Help shows it.
+    @Test func theWaitingRowShowsTheCardsLine() throws {
+        let card = try #require(TripStatus(phase: .active(active), latest: judged(secondsLate: 0), reporting: .noNetwork,
+                                           reportsWaiting: 3))
+        let row = StatusHelp.reportsWaiting
+        #expect(row.title == card.card.line2)
+        #expect(row.title == "3 reports to send when online")
+        #expect(row.meaning == "Saved with no connection. They are sent once it is back.")
+        #expect(row.symbol == "clock")
+        #expect(row.tone == .neutral)
     }
 
     /// Off schedule is red when the run is early, as the sample is, and blue
@@ -131,10 +145,12 @@ import Testing
 
     // MARK: The page
 
-    /// Spec §9's order: the card's answers, then the lines under it.
+    /// Spec §9's order: the card's answers and its waiting line, then the
+    /// lines under it.
     @Test func thePageRunsInTheSpecsOrder() {
         #expect(HelpPage.statusEntries.map(\.title) == [
             "On time", "6 min late", "3 min early", "Off schedule", "Off route", "Waiting for GPS",
+            "3 reports to send when online",
         ])
         #expect(HelpPage.problemEntries.map(\.title) == [
             "No connection", "No GPS signal", "Location off", "Precise Location off", "Location stopped",

@@ -278,6 +278,7 @@ final class TripSession {
             adoptStoredTrip()
         }
         await history?.dropReportsKeptForOthers()
+        await history?.countWaiting()
         sendKeptReports()
     }
 
@@ -352,6 +353,7 @@ final class TripSession {
             }
             endSessionLocally()
             settings.email = ""
+            await history?.countWaiting()
         default:
             return
         }
@@ -627,6 +629,12 @@ final class TripSession {
     }
 
     // MARK: Kept reports
+
+    /// The reports kept for want of a connection, waiting on the phone for
+    /// the driver signed in, for the trip card.
+    var reportsWaiting: ReportsWaiting {
+        history?.waiting ?? ReportsWaiting()
+    }
 
     /// Sends the reports kept for want of a connection while no trip is
     /// running, as the server takes them with no trip open: when a trip

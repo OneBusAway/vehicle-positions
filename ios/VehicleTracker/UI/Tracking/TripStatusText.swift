@@ -78,6 +78,10 @@ enum TripStatusText {
         String(localized: "\(time) run · \(vehicle)", comment: "Status card line 2 while waiting for GPS: the run's start time in the agency's zone, then the vehicle, e.g. '6:58 AM run · 4317'.")
     }
 
+    static func reportsWaiting(_ count: Int) -> String {
+        String(localized: "\(count) reports to send when online", comment: "Status card line 2 while reports saved with no connection wait on the iPhone, in place of the next stop's time and distance, and Help's example of it. The count is grouped, e.g. '1,244 reports to send when online', as the iPhone keeps up to 8,640.")
+    }
+
     // MARK: The card for VoiceOver
 
     /// The card in one sentence: "On time. Next stop 3rd Ave and Seneca St,

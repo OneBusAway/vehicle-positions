@@ -12,11 +12,12 @@ import Testing
             "Far from the timetable. Check you chose the right run.",
             "Away from the route on the map.",
             "The iPhone is finding its position.",
+            "Saved with no connection. They are sent once it is back.",
         ])
     }
 
-    /// iOS drops a report it cannot send, so No connection does not say
-    /// reports are kept, as Android's does.
+    /// No connection says what happens while the line shows. The reports
+    /// kept meanwhile have a row of their own, with the status card's.
     @Test func eachProblemRowSaysWhatToDo() {
         #expect(ProblemHelp.allCases.map(\.meaning) == [
             "Keep driving. Reports start again with the signal.",

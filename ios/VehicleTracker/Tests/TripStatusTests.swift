@@ -381,6 +381,41 @@ import Testing
         #expect(outAndLate.announcement(after: out.category) == outAndLate.sentence, "signed out already, a card change reads the card")
     }
 
+    // MARK: Reports waiting on the phone
+
+    /// The line takes line 2's place, as Android's does, so the card keeps
+    /// its height. The answer, line 1 and the sentence VoiceOver reads before
+    /// the line stay as they were.
+    @Test func reportsWaitingTakeTheTimeAndDistancesPlace() throws {
+        let none = try status(judged(secondsLate: 0), reporting: .noNetwork)
+        let some = try #require(TripStatus(phase: .active(active), latest: judged(secondsLate: 0), reporting: .noNetwork,
+                                           reportsWaiting: 12))
+        #expect(some.reportsWaiting == "12 reports to send when online")
+        #expect(some.card.line2 == "12 reports to send when online")
+        #expect(some.card.answer == none.card.answer)
+        #expect(some.card.label == none.card.label)
+        #expect(some.card.emphasis == none.card.emphasis)
+        #expect(some.card.tone == none.card.tone)
+        #expect(some.sentence == none.sentence)
+        #expect(some.category == none.category, "a count is not a change of kind")
+    }
+
+    @Test func reportsWaitingBeforeTheFirstFixTakeTheRunsPlace() throws {
+        let some = try #require(TripStatus(phase: .active(active), latest: nil, reporting: .noNetwork, reportsWaiting: 1))
+        #expect(some.card.answer == "Waiting for GPS")
+        #expect(some.card.emphasis == "Stop ST1")
+        #expect(some.card.line2 == "1 report to send when online")
+    }
+
+    @Test func noReportsWaitingLeavesTheTimeAndDistance() throws {
+        let s = try #require(TripStatus(phase: .active(active), latest: judged(secondsLate: 0), reporting: .connected,
+                                        reportsWaiting: 0))
+        #expect(s.reportsWaiting == nil)
+        #expect(s.card.line2.hasPrefix("8:05"))
+        #expect(s.card.line2.hasSuffix(" · 500 m"))
+        #expect(s == (try status(judged(secondsLate: 0))))
+    }
+
     // MARK: Counts
 
     /// Read back through the String Catalog, which carries the plural forms:
@@ -400,6 +435,9 @@ import Testing
         #expect(TripStatusText.spokenTripBar(route: "7", headsign: "Downtown Seattle", sent: 142) == "Route 7 to Downtown Seattle, 142 reports sent")
         #expect(TripStatusText.spokenTripBar(route: "", headsign: "Downtown Seattle", sent: 1) == "Downtown Seattle, 1 report sent")
         #expect(TripStatusText.spokenTripBar(route: "", headsign: "Downtown Seattle", sent: 142) == "Downtown Seattle, 142 reports sent")
+        #expect(TripStatusText.reportsWaiting(1) == "1 report to send when online")
+        #expect(TripStatusText.reportsWaiting(12) == "12 reports to send when online")
+        #expect(TripStatusText.reportsWaiting(1244) == "1,244 reports to send when online", "grouped, as Android's")
         #expect(TripStatusText.spokenDistance(1) == "1 metre")
         #expect(TripStatusText.spokenDistance(232) == "232 metres")
         #expect(TripStatusText.spokenDistance(1250) == "1.3 kilometres")

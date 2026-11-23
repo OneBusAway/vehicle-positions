@@ -46,6 +46,10 @@ nonisolated enum HelpText {
         String(localized: "The iPhone is finding its position.", comment: "Help, under 'Waiting for GPS'.")
     }
 
+    static var reportsWaitingMeaning: String {
+        String(localized: "Saved with no connection. They are sent once it is back.", comment: "Help, under a line like '3 reports to send when online': the reports were saved on the iPhone while it had no connection.")
+    }
+
     // MARK: Under the card
 
     static var problemSection: String {

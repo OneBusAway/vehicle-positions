@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The schedule answer at the top of the map: a symbol in a disc, the answer,
-/// and the next stop with its time and distance (DESIGN-iOS §4.7.1).
+/// and the next stop with its time and distance (DESIGN-iOS §4.7.1), or how
+/// many reports wait on the phone in place of the time and distance.
 struct StatusCard: View {
     let status: TripStatus
 
@@ -47,6 +48,9 @@ struct StatusCard: View {
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(status.sentence)
+        // Read after the sentence, which keeps the next stop's time and
+        // distance that the line took the place of.
+        .accessibilityValue(status.reportsWaiting ?? "")
         .accessibilityAddTraits(.updatesFrequently)
     }
 }
