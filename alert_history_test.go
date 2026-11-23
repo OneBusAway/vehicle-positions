@@ -199,7 +199,7 @@ func TestAlertRecorder_FailedWritesAreTriedAgain(t *testing.T) {
 	r.check(alertT0.Add(8 * time.Minute))
 	store.failClears(nil)
 	r.check(alertT0.Add(9 * time.Minute))
-	assert.Equal(t, []historyClear{{1, alertT0.Add(9 * time.Minute)}}, store.cleared, "a clear that failed is made at the next check")
+	assert.Equal(t, []historyClear{{1, alertT0.Add(8 * time.Minute)}}, store.cleared, "a clear that failed is made at the next check, at the time the alert went")
 }
 
 func TestAlertRecorder_RaisedAgainAfterAClearThatFailed(t *testing.T) {
@@ -285,8 +285,42 @@ func TestAlertRecorder_ARaiseThatFailedIsMadeWhenTheAlertHasGone(t *testing.T) {
 	r.check(alertT0.Add(11 * time.Minute))
 	r.check(alertT0.Add(12 * time.Minute))
 	assert.Equal(t, []alertEntry{quiet}, store.raised, "raised once, though it went before a raise went through")
-	assert.Equal(t, []historyClear{{1, alertT0.Add(11 * time.Minute)}}, store.cleared, "and cleared at that check")
+	assert.Equal(t, []historyClear{{1, alertT0.Add(10 * time.Minute)}}, store.cleared, "and cleared at the check that found it gone")
 	assert.Equal(t, []historyLeftOpen{{[]int64{}, alertT0}}, store.leftOpen, "then the rows left open are settled")
+}
+
+// TestAlertRecorder_AWriteTriedAgainRecordsWhenTheAlertWent: a raise or a
+// clear that fails while the database is down is made once it is back, and
+// the row is cleared at the check that first found the alert gone, not at the
+// check the write went through at. Cleared then, the alert's Lasted on the
+// Alerts page, and in Analytics, took in the whole outage.
+func TestAlertRecorder_AWriteTriedAgainRecordsWhenTheAlertWent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		fail func(*fakeAlertHistory, error)
+	}{
+		{"a raise", (*fakeAlertHistory).failRaises},
+		{"a clear", (*fakeAlertHistory).failClears},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			captureWebhookLogs(t)
+			store := &fakeAlertHistory{}
+			source := &scriptedAlerts{}
+			r := startRecorder(t, store, source)
+
+			tc.fail(store, errors.New("database down"))
+			source.set(nil, webhookAlert(alertQuiet))
+			r.check(alertT0.Add(6 * time.Minute))
+			source.set(nil)
+			r.check(alertT0.Add(7 * time.Minute))
+			r.check(alertT0.Add(8 * time.Minute))
+			tc.fail(store, nil)
+			r.check(alertT0.Add(30 * time.Minute))
+
+			require.Equal(t, 1, store.raisedCount())
+			assert.Equal(t, []historyClear{{1, alertT0.Add(7 * time.Minute)}}, store.cleared, "cleared when the alert went")
+		})
+	}
 }
 
 func TestAlertHistorySettle(t *testing.T) {

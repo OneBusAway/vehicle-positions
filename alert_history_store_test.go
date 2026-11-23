@@ -365,8 +365,8 @@ func TestAlertRecorder_ClearThatFailed(t *testing.T) {
 			want: []string{"09:00-09:08"},
 		},
 		{
-			name: "before it committed, the alert that stays gone clears at the next check",
-			want: []string{"09:00-09:07"},
+			name: "before it committed, the alert that stays gone is cleared when it went",
+			want: []string{"09:00-09:06"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
