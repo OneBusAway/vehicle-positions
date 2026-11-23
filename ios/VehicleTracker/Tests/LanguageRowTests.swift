@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import VehicleTracker
 
@@ -32,11 +33,17 @@ import Testing
         #expect(WelcomeStep.allCases.filter(\.hasLanguageRow) == [.riders])
     }
 
-    /// A welcome screen sliding in or fading out takes no taps, so its
-    /// Language row can't be hit before the screen is shown.
-    @Test func aWelcomeScreenTakesTapsOnlyOnceInPlace() {
-        #expect(WelcomeStepTransition.takesTaps(.identity))
-        #expect(!WelcomeStepTransition.takesTaps(.willAppear))
-        #expect(!WelcomeStepTransition.takesTaps(.didDisappear))
+    /// A welcome screen takes taps only at rest in its place. One coming in
+    /// is at `.identity` from the first frame of its move, so part of the way
+    /// along its slide it takes none; one leaving takes none at all. The
+    /// slide is Animatable, so SwiftUI carries its progress along frame by
+    /// frame with the move, and reaches 0 only once the screen is there.
+    @Test func aWelcomeScreenTakesTapsOnlyAtRestInItsPlace() {
+        #expect(WelcomeStepTransition.takesTaps(.identity, progress: 0))
+        #expect(!WelcomeStepTransition.takesTaps(.identity, progress: -0.4))
+        #expect(!WelcomeStepTransition.takesTaps(.didDisappear, progress: 0))
+        #expect(!WelcomeStepTransition.takesTaps(.didDisappear, progress: 0.6))
+        let slide: Any.Type = WelcomeStepSlide.self
+        #expect(slide is any Animatable.Type)
     }
 }
