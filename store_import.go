@@ -206,8 +206,6 @@ func (s *Store) ImportVehicles(ctx context.Context, preview importPreview, rows 
 // account (userID 0 for a new one), and the vehicles to assign.
 type driverPlan struct {
 	userID int64
-	email  string // as stored, which UpdateUser keeps
-	role   string
 	rename bool
 	assign []string
 }
@@ -245,7 +243,7 @@ func planDrivers(ctx context.Context, q *db.Queries, rows []driverImportRow) ([]
 			if err != nil {
 				return nil, nil, fmt.Errorf("list assignments of user %d: %w", u.ID, err)
 			}
-			p = driverPlan{userID: u.ID, email: u.Email, role: u.Role, rename: u.Name != row.Name}
+			p = driverPlan{userID: u.ID, rename: u.Name != row.Name}
 			for _, id := range row.VehicleIDs {
 				if !slices.ContainsFunc(assigned, func(a db.UserVehicle) bool { return a.VehicleID == id }) {
 					p.assign = append(p.assign, id)
@@ -372,10 +370,24 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 			o.UserID, o.Password = u.ID, passwords[i]
 		case importUpdate:
 			if p.rename {
-				// The stored email and role go back unchanged, so updateUser
-				// changes only the name.
-				_, err := updateUser(ctx, q, p.userID, row.Name, p.email, p.role)
+				// The plans read the account without a lock, so another admin
+				// may have changed its email or role since, and updateUser
+				// writes back what it is given. Read again under the lock, the
+				// rename changes only the name, and an account that is no
+				// longer a driver's is left alone, as the plan leaves one.
+				cur, err := q.GetUserForUpdate(ctx, p.userID)
 				if err != nil {
+					return nil, fmt.Errorf("lock user %d: %w", p.userID, err)
+				}
+				if cur.Role != roleDriver {
+					reason := "this account was made an admin meanwhile; preview the file again"
+					if cur.Role == roleViewer {
+						reason = "this account was made a viewer meanwhile; preview the file again"
+					}
+					*o = importOutcome{Status: importError, Reason: reason}
+					return outcomes, nil
+				}
+				if _, err := updateUser(ctx, q, p.userID, row.Name, cur.Email, cur.Role); err != nil {
 					return nil, fmt.Errorf("update user %d: %w", p.userID, err)
 				}
 			}
