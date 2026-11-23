@@ -471,12 +471,12 @@ through, a dark line with an amber icon joins the bottom of the card:
 
 While positions kept with no connection are waiting on the phone, the card's
 last line says so in place of the next stop: **12 reports to send when
-online**. The phone keeps up to 8,640, about 12 hours at one every 5 seconds,
-and sends them in batches once reports get through again, so the gap in the
-trip's trail fills in. Positions older than a day are dropped, as the server no
-longer takes them. **12 reports won't send** means they were kept under another
-driver's sign-in or another server: they are never sent as this driver's, and
-the next sign-in clears them.
+online**. The phone keeps up to 8,640, a day at one every 10 seconds, and
+sends them in batches once reports get through again, so the gap in the trip's
+trail fills in. Positions older than a day are dropped, as the server no longer
+takes them, so the limit and the age line up. **12 reports won't send** means
+they were kept under another driver's sign-in or another server: they are never
+sent as this driver's, and the next sign-in clears them.
 
 The phone renews its sign-in by itself while the app is in use. When it can't,
 a **Signed out** card takes the status card's place: "Reports have stopped. Your
