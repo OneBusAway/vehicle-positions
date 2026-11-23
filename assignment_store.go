@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -171,8 +172,9 @@ func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID st
 }
 
 // unassignVehicle is DeleteAssignment through q, recording the unassignment in
-// the audit log in the same transaction. DeleteAssignment and a change of an
-// account to viewer (dropAssignments) both unassign through it.
+// the audit log in the same transaction. A change of an account to viewer
+// unassigns all of its vehicles at once instead (dropAssignments), refusing
+// on the same running trip.
 func unassignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID string) error {
 	// The delete comes first: it waits for any trip start holding the
 	// assignment, so a trip that start commits is visible to the check below.
@@ -206,24 +208,38 @@ func unassignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID
 // returns ErrViewerWithTrip, so the caller rolls back, while the account has a
 // trip running on one of them.
 //
-// LockUser comes first. Its FOR UPDATE conflicts with the KEY SHARE lock an
-// assignment's insert takes on the account, so it waits for an assignment
-// being made right now to commit, and the list below then includes it; an
-// assignment made after it waits in turn, and assignVehicle then reads the
-// viewer role and refuses.
+// LockUser comes first, though updateUser has already read the account with
+// GetUserForUpdate: that read takes it FOR NO KEY UPDATE, which lets through
+// the KEY SHARE lock an assignment's insert takes, so an assignment could
+// commit beside this change, unseen by the DELETE, and leave a viewer with a
+// vehicle. LockUser's FOR UPDATE conflicts with KEY SHARE: it waits for an
+// assignment being made right now to commit, and the DELETE then removes it;
+// an assignment made after it waits in turn, and assignVehicle then reads the
+// viewer role and refuses. A trip start, which takes the account FOR KEY
+// SHARE first, queues against it the same way.
 func dropAssignments(ctx context.Context, q *db.Queries, userID int64) error {
 	if _, err := q.LockUser(ctx, userID); err != nil {
 		return fmt.Errorf("lock the account: %w", err)
 	}
-	assigned, err := q.ListVehiclesByUser(ctx, userID)
+	dropped, err := q.UnassignAllUserVehicles(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("list the account's vehicles: %w", err)
+		return fmt.Errorf("unassign the account's vehicles: %w", err)
 	}
-	for _, a := range assigned {
-		err := unassignVehicle(ctx, q, userID, a.VehicleID)
-		if errors.Is(err, ErrAssignmentInUse) {
-			return ErrViewerWithTrip
-		}
+	// unassignVehicle's rule, for every vehicle at once: refused while the
+	// account's own trip runs on one of them. An account runs one trip at a
+	// time, so that is its active trip, when it is on a vehicle dropped.
+	trip, err := q.GetActiveTripByUser(ctx, userID)
+	if err == nil && slices.Contains(dropped, trip.VehicleID) {
+		return ErrViewerWithTrip
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check active trip: %w", err)
+	}
+	for _, vehicleID := range dropped {
+		err := recordAudit(ctx, q, auditChange{
+			ObjectType: auditUser, ObjectID: strconv.FormatInt(userID, 10), Action: auditUnassign,
+			Before: assignmentAudit{VehicleID: vehicleID},
+		})
 		if err != nil {
 			return err
 		}

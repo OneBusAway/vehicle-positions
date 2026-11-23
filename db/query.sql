@@ -223,6 +223,17 @@ RETURNING user_id, vehicle_id, created_at;
 DELETE FROM user_vehicles
 WHERE user_id = $1 AND vehicle_id = $2;
 
+-- name: UnassignAllUserVehicles :many
+-- A change to viewer's unassign. No LIMIT: every vehicle goes, and each one
+-- it returns gets its own row in the audit log.
+WITH dropped AS (
+    DELETE FROM user_vehicles
+    WHERE user_id = $1
+    RETURNING vehicle_id, created_at
+)
+SELECT vehicle_id FROM dropped
+ORDER BY created_at DESC, vehicle_id;
+
 -- name: ListVehiclesByUser :many
 -- safety bound; not pagination
 SELECT user_id, vehicle_id, created_at
