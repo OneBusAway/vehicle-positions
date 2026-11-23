@@ -483,7 +483,15 @@ func TestFrequencyWords(t *testing.T) {
 		{"one run", tripFrequencies{
 			Windows:       []frequencyWindow{{Start: at(hms(6, 0, 0)), End: at(hms(6, 1, 0)), HeadwayS: 3600}},
 			RunsScheduled: 1,
-		}, "every 1 h, 06:00 to 06:01", "0 of 1 run"},
+		}, "every 60 min, 06:00 to 06:01", "0 of 1 run"},
+		{"headways to the second", tripFrequencies{
+			Windows: []frequencyWindow{
+				{Start: at(hms(6, 0, 0)), End: at(hms(7, 0, 0)), HeadwayS: 400},
+				{Start: at(hms(7, 0, 0)), End: at(hms(9, 0, 0)), HeadwayS: 450},
+				{Start: at(hms(20, 0, 0)), End: at(hms(23, 0, 0)), HeadwayS: 5400},
+			},
+			RunsScheduled: 27, RunsRun: 27,
+		}, "every 6 min 40 s, 06:00 to 07:00, then every 7 min 30 s, 07:00 to 09:00, then every 90 min, 20:00 to 23:00", "27 of 27 runs"},
 		{"a window with no headway", tripFrequencies{
 			Windows:       []frequencyWindow{{Start: at(hms(6, 0, 0)), End: at(hms(7, 0, 0))}, {Start: at(hms(23, 0, 0)), End: at(hms(25, 0, 0)), HeadwayS: 900}},
 			RunsScheduled: 9, RunsRun: 9,

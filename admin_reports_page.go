@@ -1498,7 +1498,8 @@ func formatGap(d time.Duration) string {
 
 // frequencyWords says how often a trip in frequencies.txt runs and when,
 // "every 10 min, 06:00 to 22:00", a window at a time joined by "then", and
-// how many of its runs ran, "41 of 48 runs".
+// how many of its runs ran, "41 of 48 runs". The headway is in formatGap's
+// words, as each run's scheduled gap in the same card is.
 func frequencyWords(f *tripFrequencies, loc *time.Location, day time.Time) (scheduled, runs string) {
 	windows := make([]string, 0, len(f.Windows))
 	for _, w := range f.Windows {
@@ -1508,7 +1509,7 @@ func frequencyWords(f *tripFrequencies, loc *time.Location, day time.Time) (sche
 			continue
 		}
 		windows = append(windows, fmt.Sprintf("every %s, %s to %s",
-			humanizeDuration(time.Duration(w.HeadwayS)*time.Second), from, formatScheduledTime(w.End, loc, day)))
+			formatGap(time.Duration(w.HeadwayS)*time.Second), from, formatScheduledTime(w.End, loc, day)))
 	}
 	return strings.Join(windows, ", then "), fmt.Sprintf("%d of %s", f.RunsRun, countOf(f.RunsScheduled, "run", "runs"))
 }
