@@ -1,7 +1,13 @@
--- name: UpsertVehicle :exec
+-- name: CreateVehicleIfMissing :exec
+-- Creates the row of a vehicle reporting for the first time. A vehicle that
+-- has one is only read: NOT EXISTS sees the committed row, so no insert is
+-- tried, and the report neither rewrites the row nor waits for an admin's
+-- uncommitted update of it, as ON CONFLICT DO NOTHING alone would. The
+-- ON CONFLICT is for two first reports at once.
 INSERT INTO vehicles (id)
-VALUES ($1)
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
+SELECT sqlc.arg(id)::text
+WHERE NOT EXISTS (SELECT 1 FROM vehicles WHERE id = sqlc.arg(id))
+ON CONFLICT (id) DO NOTHING;
 
 -- name: InsertLocationPoint :execrows
 -- A fix already stored (the same vehicle, driver and timestamp) is not stored

@@ -412,6 +412,23 @@ func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (i
 	return result.RowsAffected(), nil
 }
 
+const createVehicleIfMissing = `-- name: CreateVehicleIfMissing :exec
+INSERT INTO vehicles (id)
+SELECT $1::text
+WHERE NOT EXISTS (SELECT 1 FROM vehicles WHERE id = $1)
+ON CONFLICT (id) DO NOTHING
+`
+
+// Creates the row of a vehicle reporting for the first time. A vehicle that
+// has one is only read: NOT EXISTS sees the committed row, so no insert is
+// tried, and the report neither rewrites the row nor waits for an admin's
+// uncommitted update of it, as ON CONFLICT DO NOTHING alone would. The
+// ON CONFLICT is for two first reports at once.
+func (q *Queries) CreateVehicleIfMissing(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, createVehicleIfMissing, id)
+	return err
+}
+
 const deactivateAPIKey = `-- name: DeactivateAPIKey :execrows
 UPDATE api_keys
 SET active = false, updated_at = NOW()
@@ -2692,17 +2709,6 @@ func (q *Queries) UpsertRider(ctx context.Context, arg UpsertRiderParams) (Upser
 		&i.Created,
 	)
 	return i, err
-}
-
-const upsertVehicle = `-- name: UpsertVehicle :exec
-INSERT INTO vehicles (id)
-VALUES ($1)
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
-`
-
-func (q *Queries) UpsertVehicle(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, upsertVehicle, id)
-	return err
 }
 
 const vehicleExists = `-- name: VehicleExists :one

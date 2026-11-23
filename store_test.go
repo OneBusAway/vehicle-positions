@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/OneBusAway/vehicle-positions/db"
 )
 
 func testDatabaseURL(t *testing.T) string {
@@ -114,7 +116,7 @@ func TestStore_SaveLocation(t *testing.T) {
 	assert.Equal(t, "route-5", tripID)
 }
 
-func TestStore_SaveLocation_UpsertVehicle(t *testing.T) {
+func TestStore_SaveLocation_CreatesVehicleOnce(t *testing.T) {
 	store := newTestStore(t)
 	url := testDatabaseURL(t)
 	ctx := context.Background()
@@ -131,7 +133,7 @@ func TestStore_SaveLocation_UpsertVehicle(t *testing.T) {
 
 	loc := &LocationReport{VehicleID: "test-bus-2", Latitude: 1, Longitude: 2, Timestamp: 100}
 
-	// Save twice — second should update vehicle, not fail
+	// Save twice: the first creates the vehicle, the second must not fail
 	require.NoError(t, store.SaveLocation(ctx, loc))
 	require.NoError(t, store.SaveLocation(ctx, loc))
 
@@ -145,6 +147,109 @@ func TestStore_SaveLocation_UpsertVehicle(t *testing.T) {
 	err = store.pool.QueryRow(ctx, "SELECT COUNT(*) FROM location_points WHERE vehicle_id = $1", "test-bus-2").Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
+}
+
+// reportingVehicle writes a vehicle id as an admin added it an hour ago, and
+// removes it and its points before and after the test.
+func reportingVehicle(t *testing.T, store *Store, id string) {
+	t.Helper()
+	ctx := context.Background()
+	remove := func() {
+		for _, stmt := range []string{
+			"DELETE FROM location_points WHERE vehicle_id = $1",
+			"DELETE FROM vehicles WHERE id = $1",
+		} {
+			_, err := store.pool.Exec(ctx, stmt, id)
+			require.NoError(t, err)
+		}
+	}
+	remove()
+	t.Cleanup(remove)
+	_, err := store.pool.Exec(ctx, `INSERT INTO vehicles (id, label, agency_tag, created_at, updated_at)
+		VALUES ($1, 'V9', 'north', NOW() - interval '1 hour', NOW() - interval '1 hour')`, id)
+	require.NoError(t, err)
+}
+
+// TestStore_SaveLocation_LeavesTheVehicleRowAlone sends two reports from a
+// vehicle that has a row. Neither writes to it: xmin, the transaction that
+// wrote the row last, is still the admin's insert, and updated_at still says
+// when the admin last changed the vehicle. An upsert made each report a new
+// version of the row.
+func TestStore_SaveLocation_LeavesTheVehicleRowAlone(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	const id = "veh-row-alone"
+	reportingVehicle(t, store, id)
+
+	type vehicleRow struct {
+		xmin, label string
+		updatedAt   time.Time
+	}
+	read := func() vehicleRow {
+		var r vehicleRow
+		require.NoError(t, store.pool.QueryRow(ctx, "SELECT xmin::text, label, updated_at FROM vehicles WHERE id = $1", id).
+			Scan(&r.xmin, &r.label, &r.updatedAt))
+		return r
+	}
+	before := read()
+
+	now := time.Now().Unix()
+	for i := range int64(2) {
+		require.NoError(t, store.SaveLocation(ctx, &LocationReport{VehicleID: id, Latitude: 47.6, Longitude: -122.3, Timestamp: now + i}))
+	}
+
+	var points int
+	require.NoError(t, store.pool.QueryRow(ctx, "SELECT count(*) FROM location_points WHERE vehicle_id = $1", id).Scan(&points))
+	require.Equal(t, 2, points, "both reports were stored")
+	assert.Equal(t, before, read())
+}
+
+// TestStore_SaveLocation_DoesNotWaitOnTheVehicleRow sends a report while
+// another transaction holds the vehicle's row and has not committed. The
+// report's foreign key check takes KEY SHARE, which neither hold blocks; the
+// upsert this replaced locked the row to update it, so it waited for the
+// holder to commit.
+func TestStore_SaveLocation_DoesNotWaitOnTheVehicleRow(t *testing.T) {
+	store := newTestStore(t)
+	const id = "veh-row-held"
+	for _, tc := range []struct {
+		name string
+		hold func(context.Context, *db.Queries) error
+	}{
+		{"an admin's edit of the vehicle", func(ctx context.Context, q *db.Queries) error {
+			_, err := q.UpdateVehicleInfo(ctx, db.UpdateVehicleInfoParams{ID: id, Label: "V9 renamed", AgencyTag: "north"})
+			return err
+		}},
+		{"a trip start's or an assignment's check of the vehicle", func(ctx context.Context, q *db.Queries) error {
+			_, err := q.GetVehicleActiveForShare(ctx, id)
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reportingVehicle(t, store, id)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			holder, err := dedicatedConn(t).Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+			require.NoError(t, tc.hold(ctx, db.New(holder)))
+			var pid int
+			require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+
+			saved := make(chan error, 1)
+			go func() {
+				saved <- store.SaveLocation(ctx, &LocationReport{VehicleID: id, Latitude: 47.6, Longitude: -122.3, Timestamp: time.Now().Unix()})
+			}()
+			require.Eventually(t, func() bool { return len(saved) == 1 || blockedBehind(store, pid, 1) == 1 },
+				5*time.Second, 10*time.Millisecond, "the report neither finished nor waited on the held row")
+			finished := len(saved) == 1
+
+			require.NoError(t, holder.Rollback(ctx))
+			require.NoError(t, <-saved)
+			assert.True(t, finished, "the report waited for the holder to commit")
+		})
+	}
 }
 
 // onActiveTrips gives every vehicle in the table an active trip, each under a
