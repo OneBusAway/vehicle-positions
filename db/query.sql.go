@@ -670,7 +670,7 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, 
 }
 
 const getAPIKeyForUpdate = `-- name: GetAPIKeyForUpdate :one
-SELECT name, active FROM api_keys WHERE id = $1 FOR UPDATE
+SELECT name, active FROM api_keys WHERE id = $1 FOR NO KEY UPDATE
 `
 
 type GetAPIKeyForUpdateRow struct {
@@ -1134,7 +1134,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 }
 
 const getUserForUpdate = `-- name: GetUserForUpdate :one
-SELECT name, email, role, active FROM users WHERE id = $1 FOR UPDATE
+SELECT name, email, role, active FROM users WHERE id = $1 FOR NO KEY UPDATE
 `
 
 type GetUserForUpdateRow struct {
@@ -1144,8 +1144,10 @@ type GetUserForUpdateRow struct {
 	Active bool
 }
 
-// Locks the user for the rest of the transaction, as LockUser does, and reads
-// the fields the change that follows replaces.
+// Locks the user for the rest of the transaction, against LockUser too, and
+// reads the fields the change that follows replaces. NO KEY UPDATE for the
+// reason GetVehicleForUpdate gives: a trip or assignment for the user does not
+// wait. DeleteUser's DELETE takes the full lock when it runs.
 func (q *Queries) GetUserForUpdate(ctx context.Context, id int64) (GetUserForUpdateRow, error) {
 	row := q.db.QueryRow(ctx, getUserForUpdate, id)
 	var i GetUserForUpdateRow
@@ -1202,7 +1204,7 @@ func (q *Queries) GetVehicleByID(ctx context.Context, id string) (GetVehicleByID
 }
 
 const getVehicleForUpdate = `-- name: GetVehicleForUpdate :one
-SELECT label, agency_tag, active FROM vehicles WHERE id = $1 FOR UPDATE
+SELECT label, agency_tag, active FROM vehicles WHERE id = $1 FOR NO KEY UPDATE
 `
 
 type GetVehicleForUpdateRow struct {
@@ -1212,7 +1214,11 @@ type GetVehicleForUpdateRow struct {
 }
 
 // Locks the vehicle for the rest of the transaction, so the fields read here
-// are the ones the change that follows replaces.
+// are the ones the change that follows replaces. NO KEY UPDATE holds off any
+// other change to the row as FOR UPDATE would, but lets through the KEY SHARE
+// lock a foreign key check takes, so inserting a row that points at the
+// vehicle does not wait for the admin's change to commit. None of the changes
+// that follow rewrites the id.
 func (q *Queries) GetVehicleForUpdate(ctx context.Context, id string) (GetVehicleForUpdateRow, error) {
 	row := q.db.QueryRow(ctx, getVehicleForUpdate, id)
 	var i GetVehicleForUpdateRow
