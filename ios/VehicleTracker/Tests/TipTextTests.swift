@@ -13,13 +13,9 @@ import Testing
         #expect(TipText.runBoardMessage.contains(PickerText.startTrip))
     }
 
-    /// iOS drops a report it cannot send, so the tip does not say reports
-    /// are kept and sent later, as Android's does.
-    @Test func theSentCountTipDoesNotPromiseToKeepReports() {
+    @Test func theSentCountTipSaysToKeepDriving() {
         #expect(TipText.sentCountTitle == "Reports sent")
         #expect(TipText.sentCountMessage == "This number grows while riders can see you. With no signal, keep driving.")
-        #expect(!TipText.sentCountMessage.localizedCaseInsensitiveContains("saved"))
-        #expect(!TipText.sentCountMessage.localizedCaseInsensitiveContains("later"))
     }
 
     /// The count is one string, so VoiceOver reads it as one: "142 reports
