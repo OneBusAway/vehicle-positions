@@ -549,3 +549,85 @@ func TestStore_Import_OldConfirmationsDropped(t *testing.T) {
 	assert.False(t, recorded(stale.Signature))
 	assert.True(t, recorded(kept.Signature))
 }
+
+// TestStore_ImportDrivers_RenameKeepsAChangeMadeMeanwhile: the plans read an
+// account without locking it, so another admin can change it before the
+// import renames it. The rename leaves that change as it is: an account made
+// a viewer or an admin is not the import's to touch, and a new email stays.
+func TestStore_ImportDrivers_RenameKeepsAChangeMadeMeanwhile(t *testing.T) {
+	store := newAuditTestStore(t)
+	tests := []struct {
+		name   string
+		change string
+		// reason is the row's error, "" when the import goes through.
+		reason string
+		role   string
+		email  string
+	}{
+		{name: "made a viewer", change: "role = 'viewer'",
+			reason: "this account was made a viewer meanwhile; preview the file again",
+			role:   roleViewer, email: "aud-ana@example.org"},
+		{name: "made an admin", change: "role = 'admin'",
+			reason: "this account was made an admin meanwhile; preview the file again",
+			role:   roleAdmin, email: "aud-ana@example.org"},
+		{name: "given a new email", change: "email = 'aud-ana2@example.org'",
+			role: roleDriver, email: "aud-ana2@example.org"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fx := newAuditFixture(t, store)
+			ctx, cancel := context.WithTimeout(asTestAdmin(), 30*time.Second)
+			defer cancel()
+
+			// The other admin's change, made and not yet committed.
+			holder, err := dedicatedConn(t).Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+			_, err = holder.Exec(ctx, "UPDATE users SET "+tt.change+" WHERE id = $1", fx.userID)
+			require.NoError(t, err)
+			var pid int
+			require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+
+			// Both plans read Ana as the driver she was: renamed, and given aud-v2.
+			rows := []driverImportRow{{Line: 2, Email: "aud-ana@example.org", Name: "Ana Maria", VehicleIDs: []string{"aud-v2"}}}
+			type result struct {
+				outcomes []importOutcome
+				err      error
+			}
+			mark := lastAuditID(t, store)
+			done := make(chan result, 1)
+			go func() {
+				got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, noPassword)
+				done <- result{got, err}
+			}()
+			require.Eventually(t, func() bool { return len(done) == 1 || blockedBehind(store, pid, 1) == 1 },
+				5*time.Second, 10*time.Millisecond, "the import neither finished nor waited")
+			assert.Empty(t, done, "the rename went ahead while the change was open")
+			require.NoError(t, holder.Commit(ctx))
+			got := <-done
+			require.NoError(t, got.err)
+
+			u, err := store.GetUser(context.Background(), fx.userID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.role, u.Role)
+			assert.Equal(t, tt.email, u.Email)
+			written := auditRowsAfter(t, store, mark)
+			if tt.reason != "" {
+				assert.Equal(t, []importOutcome{{Status: importError, Reason: tt.reason}}, got.outcomes)
+				assert.Equal(t, "Ana", u.Name)
+				assert.Equal(t, []string{"aud-v"}, assignedVehicles(t, store, fx.userID))
+				assert.Empty(t, written)
+				return
+			}
+			require.Len(t, got.outcomes, 1)
+			assert.Equal(t, importUpdate, got.outcomes[0].Status)
+			assert.Equal(t, "Ana Maria", u.Name)
+			assert.ElementsMatch(t, []string{"aud-v", "aud-v2"}, assignedVehicles(t, store, fx.userID))
+			require.Len(t, written, 2)
+			assert.Equal(t, auditUpdate, written[0].Action)
+			assert.JSONEq(t, `{"name":"Ana","email":"aud-ana2@example.org","role":"driver","active":true}`, written[0].Before)
+			assert.JSONEq(t, `{"name":"Ana Maria","email":"aud-ana2@example.org","role":"driver","active":true}`, written[0].After)
+			assert.Equal(t, auditAssign, written[1].Action)
+		})
+	}
+}
