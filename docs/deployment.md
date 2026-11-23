@@ -1518,7 +1518,13 @@ Whichever you use, tell drivers to answer the location prompt, shown when
 their first trip starts, with **Allow While Using App** and to leave **Precise
 Location** on. That is all the app needs to keep reporting with the screen off:
 it holds a background location session for the length of the trip. Without
-precise location every fix is too coarse to report.
+precise location every fix is too coarse to report. Leave **Background App
+Refresh** on for the app too (Settings → General → Background App Refresh; Low
+Power Mode pauses it). Reports a phone keeps while it has no connection are
+sent once the connection is back: with the next report that gets through, as
+the trip ends, or when the app is next opened. With Background App Refresh on,
+iOS also starts the app in the background to send them, so a trip that ends
+out of coverage is not left waiting for the driver to open the app.
 
 ## 15. Languages on drivers' phones
 

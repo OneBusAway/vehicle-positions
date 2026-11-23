@@ -13,6 +13,7 @@ final class AppContainer {
 
     let settings: AppSettings
     let session: TripSession
+    let history: HistoryUploader
     let serverSetup: ServerSetup
     let screenAwake: ScreenAwakeCoordinator
 
@@ -20,18 +21,24 @@ final class AppContainer {
         let settings = AppSettings()
         let tokens = KeychainTokenStore()
         let refresher = TokenRefresher(tokens: tokens)
+        let history = HistoryUploader(queue: OfflineFixQueue(), settings: settings)
         self.settings = settings
-        session = TripSession(
+        self.history = history
+        let session = TripSession(
             settings: settings,
             tokens: tokens,
             store: FileActiveTripStore(),
             locations: CoreLocationSource(configuration: .automotiveNavigation),
             access: CoreLocationAccess(),
-            history: HistoryUploader(queue: OfflineFixQueue(), settings: settings),
+            history: history,
             makeAPI: { url, tokens in
                 try TrackerClient(baseURL: url, tokens: tokens, refresher: refresher)
             }
         )
+        self.session = session
+        // iOS takes a background task only before the app finishes
+        // launching, and `VehicleTrackerApp` builds this as it starts.
+        history.registerBackgroundTask { [weak session] in session?.sendKeptReports() }
         serverSetup = ServerSetup(session: session)
         screenAwake = ScreenAwakeCoordinator(power: DevicePowerSource(), idleTimer: ApplicationIdleTimer())
     }

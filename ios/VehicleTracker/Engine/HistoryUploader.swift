@@ -1,3 +1,4 @@
+import BackgroundTasks
 import Foundation
 import Observation
 import OSLog
@@ -51,6 +52,17 @@ nonisolated enum HistoryUpload: Sendable, Equatable {
 /// reports; the count is taken from it again after each keep and each
 /// removal, as a drain starts, at each sign-in and sign-out, and as the
 /// oldest one counted grows too old to upload.
+///
+/// For a phone that never comes back to the front after a trip ended
+/// without a connection, each report kept, and each drain that stops with
+/// some left, asks iOS for a background task that drains once there is a
+/// connection: Android's `BacklogUploadJob`. iOS picks the moment, often
+/// once the phone is idle, which for a driver's phone is the night after the
+/// shift, still inside the day the server takes reports for. Not a
+/// background `URLSession`: its uploads would carry the token they were made
+/// with, and an access token lasts 15 minutes, with no way to refresh it
+/// when the system sends them hours later. A drain goes through the app's
+/// own client, which refreshes it.
 @MainActor @Observable
 final class HistoryUploader {
     /// The most reports one upload carries; the server takes at most 500.
@@ -68,6 +80,9 @@ final class HistoryUploader {
     /// How far apart a drain sends its batches: the server takes one history
     /// upload per driver every five seconds.
     static let drainInterval: Duration = .seconds(5)
+    /// The background task that drains. Info.plist's
+    /// `BGTaskSchedulerPermittedIdentifiers` lists it.
+    static let backgroundTaskIdentifier = "org.onebusaway.vehicletracker.send-kept-reports"
 
     /// The reports kept for the driver signed in, as `countWaiting()` last
     /// counted them.
@@ -79,12 +94,22 @@ final class HistoryUploader {
     private let settings: AppSettings
     private let now: () -> Date
     private let backgroundTime: any BackgroundTime
+    private let backgroundTasks: any BackgroundTaskScheduler
     private let sleep: (Duration) async throws -> Void
     /// The wait until the oldest report counted grows too old to upload.
     private let sleepUntilExpiry: (Duration) async throws -> Void
     private var isUploading = false
     private var drainTask: Task<Void, Never>?
     private var drainTime = UIBackgroundTaskIdentifier.invalid
+    /// Whether iOS took the background task at launch.
+    private(set) var isBackgroundTaskRegistered = false
+    /// The background task was asked for since this launch, or since its
+    /// last run began. iOS replaces a request still waiting with a new one
+    /// for the same task, so asking again would change nothing; this keeps
+    /// a report kept every five seconds from asking each time. Set whether
+    /// or not iOS took the request: it refuses for good (Background App
+    /// Refresh off, or the simulator), not for now.
+    private var isBackgroundTaskAsked = false
     /// Bumped by each count, so a count that read the queue before a newer
     /// one can't land after it.
     private var countGeneration = 0
@@ -96,12 +121,14 @@ final class HistoryUploader {
 
     init(queue: OfflineFixQueue, settings: AppSettings, now: @escaping () -> Date = Date.init,
          backgroundTime: any BackgroundTime = ApplicationBackgroundTime(),
+         backgroundTasks: any BackgroundTaskScheduler = SystemBackgroundTaskScheduler(),
          sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          sleepUntilExpiry: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.queue = queue
         self.settings = settings
         self.now = now
         self.backgroundTime = backgroundTime
+        self.backgroundTasks = backgroundTasks
         self.sleep = sleep
         self.sleepUntilExpiry = sleepUntilExpiry
     }
@@ -124,6 +151,7 @@ final class HistoryUploader {
             log.error("could not keep a location report for history: \(String(describing: error), privacy: .public)")
             return
         }
+        askForBackgroundTask()
         await countWaiting()
     }
 
@@ -189,19 +217,24 @@ final class HistoryUploader {
     ///
     /// Under background time, so a drain started as the driver ends a trip
     /// and locks the phone can finish. If iOS takes the time back first, the
-    /// drain stops, and a batch it had out stays kept.
-    func drain(through api: @escaping @MainActor () -> (any TrackerAPI)?) {
-        guard drainTask == nil else { return }
+    /// drain stops, and a batch it had out stays kept. A drain that stops
+    /// with reports left asks for the background task. Returns the drain,
+    /// or the one already running.
+    @discardableResult
+    func drain(through api: @escaping @MainActor () -> (any TrackerAPI)?) -> Task<Void, Never> {
+        if let drainTask { return drainTask }
         drainTime = backgroundTime.begin("Send kept reports") { [weak self] in
             self?.log.notice("out of background time while sending kept reports; the rest wait for the next drain")
-            self?.drainTask?.cancel()
-            self?.endDrainTime()
+            self?.stopDrain()
         }
-        drainTask = Task { [weak self] in
+        let drain = Task { [weak self] in
             await self?.uploadAll(through: api)
             self?.drainTask = nil
             self?.endDrainTime()
+            if let self, waiting.count > 0 { askForBackgroundTask() }
         }
+        drainTask = drain
+        return drain
     }
 
     private func uploadAll(through api: @MainActor () -> (any TrackerAPI)?) async {
@@ -224,11 +257,63 @@ final class HistoryUploader {
         }
     }
 
+    /// Stops the drain running, as iOS takes its time back. The upload out
+    /// fails before its batch is removed, so the batch stays kept.
+    private func stopDrain() {
+        drainTask?.cancel()
+        endDrainTime()
+    }
+
     /// Ended once: from the expiry, or when the drain stops.
     private func endDrainTime() {
         guard drainTime != .invalid else { return }
         backgroundTime.end(drainTime)
         drainTime = .invalid
+    }
+
+    /// Has iOS run the background task with `drain`, which starts a drain or
+    /// hands over the one running. Before the app finishes launching, as iOS
+    /// requires.
+    func registerBackgroundTask(drain: @escaping @MainActor () -> Task<Void, Never>?) {
+        isBackgroundTaskRegistered = backgroundTasks.register(Self.backgroundTaskIdentifier) { [weak self] run in
+            self?.runBackgroundTask(run, drain: drain)
+        }
+        if !isBackgroundTaskRegistered {
+            log.error("iOS refused the background task \(Self.backgroundTaskIdentifier, privacy: .public): Info.plist doesn't permit it")
+        }
+    }
+
+    /// One run of the background task: a drain until nothing is left to
+    /// send, or until iOS ends the run. Reports left have asked for the next
+    /// run by the time this one completes, as the drain does that as it
+    /// stops.
+    private func runBackgroundTask(_ run: any BackgroundTaskRun, drain: () -> Task<Void, Never>?) {
+        // The request this run answers is no longer waiting.
+        isBackgroundTaskAsked = false
+        run.onExpiry { [weak self] in
+            self?.log.notice("out of time for the background task while sending kept reports; the rest wait for its next run")
+            self?.stopDrain()
+        }
+        let draining = drain()
+        Task { [weak self] in
+            await draining?.value
+            run.complete(success: self?.waiting.count == 0)
+        }
+    }
+
+    /// Asks iOS to run the background task once there is a network
+    /// connection.
+    private func askForBackgroundTask() {
+        guard !isBackgroundTaskAsked else { return }
+        isBackgroundTaskAsked = true
+        let request = BGProcessingTaskRequest(identifier: Self.backgroundTaskIdentifier)
+        request.requiresNetworkConnectivity = true
+        do {
+            try backgroundTasks.submit(request)
+            log.notice("asked for the background task that sends kept reports once there is a connection")
+        } catch {
+            log.warning("could not ask for the background task that sends kept reports: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Drops the reports kept for any other driver or server than the one
