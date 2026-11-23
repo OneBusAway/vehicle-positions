@@ -242,7 +242,7 @@ Contains the three handler factories (`handlePostLocation`, `handleGetFeed`, `ha
 
 #### 4.2.3 `store.go` — PostgreSQL Persistence
 
-Wraps a `pgxpool` connection pool. `Migrate()` runs embedded SQL migrations through `golang-migrate`'s `iofs` source and treats `migrate.ErrNoChange` as success. `SaveLocation()` executes an UPSERT on `vehicles` and an INSERT on `location_points` inside a single transaction with deferred rollback on failure. `GetRecentLocations()` queries the latest position per vehicle since a given cutoff timestamp using `DISTINCT ON (vehicle_id)` ordered by `received_at DESC`.
+Wraps a `pgxpool` connection pool. `Migrate()` runs embedded SQL migrations through `golang-migrate`'s `iofs` source and treats `migrate.ErrNoChange` as success. `SaveLocation()` inserts the vehicle's row when it has none, then the point on `location_points`, inside a single transaction with deferred rollback on failure. A vehicle that has a row is only read, never rewritten by a report. `GetRecentLocations()` queries the latest position per vehicle since a given cutoff timestamp using `DISTINCT ON (vehicle_id)` ordered by `received_at DESC`.
 
 #### 4.2.4 `tracker.go` — In-Memory Vehicle State
 
@@ -250,7 +250,7 @@ A `map[string]*VehicleState` guarded by `sync.RWMutex`. A background goroutine t
 
 #### 4.2.5 `db/` — sqlc-Generated Layer
 
-The directory contains two source files and three generated files. `query.sql` defines the named SQL queries (`UpsertVehicle`, `InsertLocationPoint`, `GetRecentLocations`), and `sqlc.yml` configures code generation (engine: PostgreSQL, sql package: `pgx/v5`, output package: `db`). Running `sqlc generate` from this directory regenerates the three output files: `db.go` (DBTX interface + `Queries` type), `models.go` (`LocationPoint` and `Vehicle` structs), and `query.sql.go` (typed Go wrappers for each query). The generated files are marked `DO NOT EDIT` — modify `query.sql` or `sqlc.yml` instead and regenerate.
+The directory contains two source files and three generated files. `query.sql` defines the named SQL queries (`CreateVehicleIfMissing`, `InsertLocationPoint`, `GetRecentLocations`), and `sqlc.yml` configures code generation (engine: PostgreSQL, sql package: `pgx/v5`, output package: `db`). Running `sqlc generate` from this directory regenerates the three output files: `db.go` (DBTX interface + `Queries` type), `models.go` (`LocationPoint` and `Vehicle` structs), and `query.sql.go` (typed Go wrappers for each query). The generated files are marked `DO NOT EDIT` — modify `query.sql` or `sqlc.yml` instead and regenerate.
 
 ---
 
@@ -265,7 +265,7 @@ When a driver application reports a vehicle position, the following sequence occ
 3. Handler wraps the body with `http.MaxBytesReader(..., 1<<20)` to enforce a 1 MiB request limit.
 4. JSON decoding uses `DisallowUnknownFields()`, rejects malformed JSON, and performs a second decode to ensure there is exactly one JSON object and no trailing data other than whitespace.
 5. `LocationReport.validate()` checks: non-empty `vehicle_id`, coordinates not both zero, latitude in `[-90, 90]`, longitude in `[-180, 180]`, positive timestamp.
-6. `store.SaveLocation()` opens a PostgreSQL transaction: `UpsertVehicle` (`INSERT ... ON CONFLICT DO UPDATE SET updated_at = NOW()`) then `InsertLocationPoint`.
+6. `store.SaveLocation()` opens a PostgreSQL transaction: `CreateVehicleIfMissing` (`INSERT ... WHERE NOT EXISTS ... ON CONFLICT DO NOTHING`) then `InsertLocationPoint`.
 7. On successful commit, `tracker.Update()` writes the new state to the in-memory map and records a fresh server-side `UpdatedAt` timestamp.
 8. The handler responds with `201 Created` and the JSON body `{"status":"ok"}`. If the database write fails, the in-memory tracker is not updated and the handler returns `500 Internal Server Error`.
 
@@ -298,7 +298,7 @@ sequenceDiagram
   else request is valid
     H->>S: SaveLocation(ctx, &loc)
     S->>S: BEGIN TRANSACTION
-    S->>S: UpsertVehicle(vehicle_id)
+    S->>S: CreateVehicleIfMissing(vehicle_id)
     S->>S: InsertLocationPoint(...)
     S->>S: COMMIT
 
@@ -511,7 +511,7 @@ Tests cover: `Update` and overwrite semantics, multi-vehicle tracking, staleness
 
 #### `store_test.go` — PostgreSQL Integration Tests
 
-Skipped automatically when `DATABASE_URL` is not set. Tests require a live PostgreSQL instance and cover: store creation and migration, `SaveLocation` happy path with verification, vehicle upsert idempotency, `GetRecentLocations()` with `DISTINCT ON` and cutoff filtering, DB constraint violations with rollback verification, numeric field round-trips, and migration idempotency.
+Skipped automatically when `DATABASE_URL` is not set. Tests require a live PostgreSQL instance and cover: store creation and migration, `SaveLocation` happy path with verification, a second report neither adding nor rewriting the vehicle row, `GetRecentLocations()` with `DISTINCT ON` and cutoff filtering, DB constraint violations with rollback verification, numeric field round-trips, and migration idempotency.
 
 At the time this document was written, `go test ./...` passes locally without a database by skipping the PostgreSQL integration tests when `DATABASE_URL` is unset.
 

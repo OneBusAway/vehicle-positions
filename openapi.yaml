@@ -2631,6 +2631,9 @@ components:
         updated_at:
           type: string
           format: date-time
+          description: |
+            When the vehicle was added or an admin last changed it. A location
+            report does not move it.
 
     CreateUserRequest:
       type: object

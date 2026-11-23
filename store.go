@@ -124,7 +124,9 @@ func (s *Store) AuthorizeLocation(ctx context.Context, loc *LocationReport) erro
 	return nil
 }
 
-// SaveLocation upserts the vehicle and inserts a location point in a single transaction.
+// SaveLocation inserts a location point, and the vehicle's row first if it has
+// none, in a single transaction. A vehicle that has a row is only read, not
+// rewritten by every report.
 func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -134,8 +136,8 @@ func (s *Store) SaveLocation(ctx context.Context, loc *LocationReport) error {
 
 	qtx := s.queries.WithTx(tx)
 
-	if err := qtx.UpsertVehicle(ctx, loc.VehicleID); err != nil {
-		return fmt.Errorf("upsert vehicle: %w", err)
+	if err := qtx.CreateVehicleIfMissing(ctx, loc.VehicleID); err != nil {
+		return fmt.Errorf("create vehicle: %w", err)
 	}
 
 	if _, err := qtx.InsertLocationPoint(ctx, db.InsertLocationPointParams{
