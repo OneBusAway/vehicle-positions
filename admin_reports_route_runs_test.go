@@ -266,6 +266,40 @@ func TestReportsPage_RouteRunsInEveryState(t *testing.T) {
 	assert.NotContains(t, south, "<table")
 }
 
+// TestReportsPage_UnlabelledVehicles: a vehicle with no label, which
+// vehicles.label allows, is named by its id on the route's day, as the rest
+// of the admin pages name it: in the run cards, in the gap after it, and in
+// Scheduled trips.
+func TestReportsPage_UnlabelledVehicles(t *testing.T) {
+	ix := gapFixtureIndex(t)
+	trips, trails := gapTrips(t, ix, 1, []gapRun{
+		{name: "A", tripID: "GN", legs: north(hms(7, 0, 0), hms(7, 5, 0))},
+		{name: "B", tripID: "GN", legs: north(hms(7, 10, 0), hms(7, 15, 0))},
+		{name: "W", tripID: "GX", legs: north(hms(7, 35, 0), hms(7, 40, 0))},
+	})
+	for i := range trips {
+		trips[i].VehicleLabel = ""
+	}
+	r := newServiceReporter(&fakeReportStore{trips: trips, trails: trails}, func() *rider.Index { return ix }, testReportSettings)
+	r.now = func() time.Time { return reportFixtureNow }
+
+	data, _ := reportsView(t, r, "date=2026-09-02&route_id=R5")
+	runs := routeRunsOf(t, data)
+	require.NotEmpty(t, runs.Directions)
+	assert.Equal(t, []string{
+		"07:00:06 GN bus-A: no gap",
+		"07:10:06 GN bus-B: 10 min after bus-A, every 10 min; bunched at 0 of 2 stops",
+	}, runLines(runs.Directions[0]))
+	scheduled := data["Trips"].([]reportTripRow)
+	require.Len(t, scheduled, 1)
+	require.Len(t, scheduled[0].Runs, 1)
+	assert.Equal(t, "bus-W", scheduled[0].Runs[0].Vehicle)
+
+	html := renderReportsContent(t, data)
+	assert.Contains(t, html, `aria-label="Replay bus-B, 07:10:06"`)
+	assert.Contains(t, html, `aria-label="Replay bus-W on `)
+}
+
 // gapFixtureIndexSouthUnmeasured is the gap fixture with GS's only timepoint
 // ST1, its last stop, so no stop south is measured.
 func gapFixtureIndexSouthUnmeasured(t *testing.T) *rider.Index {
