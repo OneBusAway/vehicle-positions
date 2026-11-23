@@ -465,9 +465,18 @@ through, a dark line with an amber icon joins the bottom of the card:
 
 | Line under the card | What is happening | What the driver should do |
 |---|---|---|
-| **No connection** · Riders can't see you | The phone cannot reach the server. Positions taken now are dropped, not queued. | Keep driving; the line goes away by itself when signal returns. |
+| **No connection** · Riders can't see you | The phone cannot reach the server. Positions taken now are kept on the phone and sent for the trip's history once it can; riders never see them. | Keep driving; the line goes away by itself when signal returns. |
 | **No GPS signal** · Position paused | The phone is not producing location fixes. | Check that location services are still on and the phone has a view of the sky. |
 | **Phone clock is wrong** · Set automatic time | The server has rejected several reports because the phone's clock is wrong. | Turn on automatic date and time in Android settings. |
+
+While positions kept with no connection are waiting on the phone, the card's
+last line says so in place of the next stop: **12 reports to send when
+online**. The phone keeps up to 8,640, about 12 hours at one every 5 seconds,
+and sends them in batches once reports get through again, so the gap in the
+trip's trail fills in. Positions older than a day are dropped, as the server no
+longer takes them. **12 reports won't send** means they were kept under another
+driver's sign-in or another server: they are never sent as this driver's, and
+the next sign-in clears them.
 
 The phone renews its sign-in by itself while the app is in use. When it can't,
 a **Signed out** card takes the status card's place: "Reports have stopped. Your
