@@ -18,6 +18,13 @@ struct WelcomeStepTransition: Transition {
     nonisolated static func shift(_ phase: TransitionPhase, isForward: Bool) -> Double {
         -phase.value * (isForward ? 1 : -1)
     }
+
+    /// Whether a screen in `phase` takes taps: only once it is in place, so
+    /// the Language row on a screen sliding in or fading out can't be hit, as
+    /// Android's is enabled only on the screen shown.
+    nonisolated static func takesTaps(_ phase: TransitionPhase) -> Bool {
+        phase.isIdentity
+    }
 }
 
 private struct WelcomeStepSlide: ViewModifier {
@@ -41,6 +48,7 @@ private struct WelcomeStepSlide: ViewModifier {
                 leaving.opacity(phase.isIdentity ? 1 : 0)
             }
             .offset(x: WelcomeStepTransition.shift(phase, isForward: isForward) * WelcomeMotion.slide * towardsTrailing)
+            .allowsHitTesting(WelcomeStepTransition.takesTaps(phase))
     }
 }
 

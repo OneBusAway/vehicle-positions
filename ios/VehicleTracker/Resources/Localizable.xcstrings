@@ -22278,6 +22278,179 @@
         }
       }
     },
+    "Language: %@" : {
+      "comment" : "The Language row, on the first welcome screen and at the top of Help. The language the app is shown in, named in that language, e.g. 'Language: English'. A tap opens the app's page in Settings, where its language is chosen.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ቋንቋ፦ %@"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "اللغة: %@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Sprache: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Idioma: %@"
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "زبان: %@"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kieli: %@"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Wika: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Langue : %@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "भाषा: %@"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Lang: %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Lingua: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "言語：%@"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ភាសា៖ %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "언어: %@"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ພາສາ: %@"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Afaan: %@"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਭਾਸ਼ਾ: %@"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Język: %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Idioma: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Язык: %@"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Gagana: %@"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Luqadda: %@"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Lugha: %@"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ቋንቋ: %@"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Мова: %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ngôn ngữ: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "语言：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "語言：%@"
+          }
+        }
+      }
+    },
     "Leave the app open" : {
       "comment" : "Welcome, screen 3: the third thing a trip needs.",
       "localizations" : {
@@ -29205,7 +29378,7 @@
       }
     },
     "Opens Settings" : {
-      "comment" : "VoiceOver hint on a problem line that opens the app's page in Settings.",
+      "comment" : "VoiceOver hint on a problem line, or on the Language row, that opens the app's page in Settings.",
       "localizations" : {
         "am" : {
           "stringUnit" : {

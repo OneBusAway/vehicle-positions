@@ -1531,8 +1531,9 @@ can set the app alone to another language:
   On Android 13 and newer it lists the app's languages and sets the app to the
   one picked. On Android 8 to 12 the app can only follow the phone, so the row
   opens the phone's language settings.
-- **iPhone:** the app's page in the Settings app, under **Apps**, has a
-  **Language** row. The app itself has no Language row.
+- **iPhone:** the **Language** row on the first welcome screen and at the top
+  of **Help** opens the app's page in the Settings app, under **Apps**, whose
+  **Language** row sets the app to another language.
 
 **Checking a draft.** For each language your drivers' phones are set to, have
 fluent staff check the draft before those drivers use the app. Until then, set

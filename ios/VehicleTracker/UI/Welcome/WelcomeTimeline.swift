@@ -25,6 +25,12 @@ nonisolated enum WelcomeStep: Int, CaseIterable {
         self == Self.allCases.last ? WelcomeText.continue : WelcomeText.next
     }
 
+    /// The first screen has the Language row under its sentence, as
+    /// Android's does, for a driver who can't read the language shown.
+    var hasLanguageRow: Bool {
+        self == Self.allCases.first
+    }
+
     /// "Step 1 of 3": the route line across the top, for VoiceOver.
     var spokenStep: String {
         WelcomeText.step(rawValue + 1, of: Self.allCases.count)
