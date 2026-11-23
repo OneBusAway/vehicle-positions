@@ -81,6 +81,114 @@ func TestStopSchedule_GapAt(t *testing.T) {
 				{[]rider.Frequency{every(5*time.Minute, hms(8, 10, 0), hms(9, 0, 0))}, 0},
 			},
 			at(8, 12, 0), 5 * time.Minute},
+		// Down the route the earlier trip reaches the stop 12 minutes after
+		// leaving the first, from 07:12 to 08:12, and the next one 10
+		// minutes after, from 08:10.
+		{"a trip quicker to the stop takes over from its first run, before the window of the one before ends",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 12 * time.Minute},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 10 * time.Minute},
+			},
+			at(8, 11, 0), 10 * time.Minute},
+		{"and holds it no longer after it ends",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 12 * time.Minute},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 10 * time.Minute},
+			},
+			at(8, 15, 0), 10 * time.Minute},
+		{"a trip that began a second less than a headway before another's window ended takes over",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 50, 1), hms(9, 0, 0))}, 0},
+			},
+			at(7, 55, 0), 10 * time.Minute},
+		{"one that began a headway before shares the stop",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 50, 0), hms(9, 0, 0))}, 0},
+			},
+			at(7, 55, 0), 5 * time.Minute},
+		{"and still adds to it for a headway after it ends",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 50, 0), hms(9, 0, 0))}, 0},
+			},
+			at(8, 5, 0), 5 * time.Minute},
+		{"as does one that began half an hour before",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 30, 0), hms(9, 0, 0))}, 0},
+			},
+			at(8, 5, 0), 5 * time.Minute},
+		{"every 5 minutes taking over 7 minutes before every 30 ends, inside the 30-minute headway",
+			[]trip{
+				{[]rider.Frequency{every(30*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 12 * time.Minute},
+				{[]rider.Frequency{every(5*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 5 * time.Minute},
+			},
+			at(8, 20, 0), 5 * time.Minute},
+		// 1 / (1/300 + 1/1800) is 257.14 seconds.
+		{"every 30 minutes beginning 7 minutes before every 5 ends, more than its headway, shares the stop",
+			[]trip{
+				{[]rider.Frequency{every(5*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 12 * time.Minute},
+				{[]rider.Frequency{every(30*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 5 * time.Minute},
+			},
+			at(8, 10, 0), 257 * time.Second},
+		{"a pattern sharing the stop throughout still adds to a trip that takes over",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 12 * time.Minute},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 10 * time.Minute},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(9, 0, 0))}, 0},
+			},
+			at(8, 11, 0), 5 * time.Minute},
+		{"a trip that takes over is taken over in turn",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 12 * time.Minute},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(8, 10, 0))}, 10 * time.Minute},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 10, 0), hms(9, 0, 0))}, 8 * time.Minute},
+			},
+			at(8, 19, 0), 10 * time.Minute},
+		{"of two runs shorter than a headway, the later takes over, so one is always due",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(8, 5, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 1, 0), hms(8, 6, 0))}, 0},
+			},
+			at(8, 2, 0), 10 * time.Minute},
+		{"two that begin together share the stop",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(8, 5, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(8, 6, 0))}, 0},
+			},
+			at(8, 2, 0), 5 * time.Minute},
+		{"a trip's next row does not take over from a pattern it has run alongside",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(7, 55, 0)), every(10*time.Minute, hms(7, 55, 0), hms(9, 0, 0))}, 0},
+			},
+			at(7, 56, 0), 5 * time.Minute},
+		{"a pattern that begins in the last headway of a trip's first row shares the stop when the trip runs on in a second",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 55, 0), hms(9, 0, 0))}, 0},
+			},
+			at(7, 58, 0), 5 * time.Minute},
+		{"as it does when the trip is written as one row",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(9, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 55, 0), hms(9, 0, 0))}, 0},
+			},
+			at(7, 58, 0), 5 * time.Minute},
+		{"a trip that takes over keeps the one before out for its own last headway",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 58, 0), hms(8, 2, 0))}, 0},
+			},
+			at(8, 3, 0), 10 * time.Minute},
+		{"a trip with a row that ends as it begins still takes over",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(8, 0, 0)), every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0},
+			},
+			at(8, 5, 0), 10 * time.Minute},
 		{"a row that holds the time comes before one that has just ended",
 			[]trip{{[]rider.Frequency{every(30*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(5*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0}},
 			at(8, 1, 0), 5 * time.Minute},
@@ -138,6 +246,41 @@ func TestStopService_GapsAcrossATakeover(t *testing.T) {
 		if assert.Len(t, gaps, 1, name) {
 			assert.Equal(t, 10*time.Minute, gaps[0].scheduled, name)
 			assert.False(t, gaps[0].long(), name)
+		}
+	}
+}
+
+// TestStopService_GapsAcrossAnOverlappingTakeover: the same service every 10
+// minutes written as two trips, the later quicker to the stop: the first
+// reaches it 12 minutes after leaving the first stop, so its window there is
+// 07:12 to 08:12, and the next 10 minutes after, from 08:10. Its 08:10
+// vehicle, on time and 8 minutes after the first trip's last, and the 08:20
+// after it, are on the gap of every 10 minutes, as with one trip, not long
+// against every 5.
+func TestStopService_GapsAcrossAnOverlappingTakeover(t *testing.T) {
+	passings := []stopPassing{
+		{at: reportDayStart.Add(hms(7, 52, 6)), run: 1},
+		{at: reportDayStart.Add(hms(8, 2, 6)), run: 2},
+		{at: reportDayStart.Add(hms(8, 10, 6)), run: 3},
+		{at: reportDayStart.Add(hms(8, 20, 6)), run: 4},
+	}
+	rows := []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}
+
+	oneTrip := stopService{passings: passings}
+	oneTrip.schedule.addTrip(rows, reportDayStart, 12*time.Minute)
+	twoTrips := stopService{passings: passings}
+	twoTrips.schedule.addTrip(rows[:1], reportDayStart, 12*time.Minute)
+	twoTrips.schedule.addTrip(rows[1:], reportDayStart, 10*time.Minute)
+
+	for name, s := range map[string]stopService{"one trip": oneTrip, "two trips": twoTrips} {
+		gaps := s.gaps()
+		if assert.Len(t, gaps, 3, name) {
+			assert.Equal(t, []time.Duration{10 * time.Minute, 8 * time.Minute, 10 * time.Minute},
+				[]time.Duration{gaps[0].gap, gaps[1].gap, gaps[2].gap}, name)
+			for _, g := range gaps {
+				assert.Equal(t, 10*time.Minute, g.scheduled, "%s at %s", name, g.at.Format(time.TimeOnly))
+				assert.False(t, g.long(), "%s at %s", name, g.at.Format(time.TimeOnly))
+			}
 		}
 	}
 }
@@ -267,6 +410,22 @@ func TestStopSchedule_TimetableGapAt(t *testing.T) {
 			[]time.Duration{hms(7, 0, 0), hms(7, 10, 0)}, []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 20, 0), 10 * time.Minute},
 		{"a timetable that takes over as a trip's window ends is due alone",
 			everyFrom(10*time.Minute, hms(8, 0, 0), hms(8, 30, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(8, 5, 0), 10 * time.Minute},
+		{"a timetable whose first departure comes before a trip's window ends takes over from it",
+			everyFrom(10*time.Minute, hms(7, 58, 0), hms(8, 28, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 59, 0), 10 * time.Minute},
+		{"and holds it no longer after it ends",
+			everyFrom(10*time.Minute, hms(7, 58, 0), hms(8, 28, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(8, 5, 0), 10 * time.Minute},
+		{"a trip that begins before a timetable's last departure takes over from its last spacing",
+			everyFrom(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 52, 0), hms(9, 0, 0))}, at(7, 56, 0), 10 * time.Minute},
+		{"and holds it no longer after its last departure",
+			everyFrom(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 52, 0), hms(9, 0, 0))}, at(8, 5, 0), 10 * time.Minute},
+		{"a trip that begins partway through a frequent timetable shares the stop",
+			everyFrom(10*time.Minute, hms(7, 0, 0), hms(9, 0, 0)), []rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(10, 0, 0))}, at(8, 2, 0), 5 * time.Minute},
+		{"and still does in the timetable's next spacing",
+			everyFrom(10*time.Minute, hms(7, 0, 0), hms(9, 0, 0)), []rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(10, 0, 0))}, at(8, 6, 0), 5 * time.Minute},
+		{"a timetable running alongside a trip does not take over as the trip's window ends",
+			everyFrom(10*time.Minute, hms(7, 0, 0), hms(8, 30, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(7, 56, 0), 5 * time.Minute},
+		{"and adds to it for a headway after it ends",
+			everyFrom(10*time.Minute, hms(7, 0, 0), hms(8, 30, 0)), []rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, at(8, 5, 0), 5 * time.Minute},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
