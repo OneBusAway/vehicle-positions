@@ -435,9 +435,9 @@ func TestAlertWebhook_Text(t *testing.T) {
 		{"off route cleared", alertCleared, webhookAlert(alertOffRoute), false, "Cleared: Bus 7 on route 1, off route since 01:02."},
 		{"not started raised", alertRaised, notStarted, false, "Bus 7 has not started its next trip: route 2, block B1, due at 01:02."},
 		{"not started cleared", alertCleared, notStarted, false, "Cleared: Bus 7, next trip not started: route 2, block B1, due at 01:02."},
-		{"bunched raised", alertRaised, bunched, false, "Bus 7 on route 1 is bunched: 1 min behind Bus 12, every 10 min, since 01:02."},
+		{"bunched raised", alertRaised, bunched, false, "Bus 7 on route 1 is bunched: 1 min 15 s behind Bus 12, every 10 min, since 01:02."},
 		{"bunched cleared", alertCleared, bunched, false, "Cleared: Bus 7 on route 1, bunched since 01:02."},
-		{"bunched behind a vehicle with no label", alertRaised, bunchedBehindUnlabelled, false, "Bus 7 on route 1 is bunched: 45s behind bus-12, every 5 min, since 01:02."},
+		{"bunched behind a vehicle with no label", alertRaised, bunchedBehindUnlabelled, false, "Bus 7 on route 1 is bunched: 45 s behind bus-12, every 5 min, since 01:02."},
 		{"no label", alertRaised, unlabelled, false, "bus-7 on route 1 has gone quiet: no report since 01:02."},
 		{"no route", alertRaised, routeOnly, false, "Bus 7 has gone quiet: no report since 01:02."},
 		{"route not in the schedule", alertRaised, unknownRoute, false, "Bus 7 on route R9 has gone quiet: no report since 01:02."},
@@ -453,6 +453,40 @@ func TestAlertWebhook_Text(t *testing.T) {
 			h := &alertWebhook{settings: offRouteSettings, schedule: func() *rider.Index { return index }}
 			assert.Equal(t, tc.text, h.event(tc.event, tc.alert).payload.Text)
 		})
+	}
+}
+
+// TestAheadWords says a bunched vehicle's gap and its stop's headway to the
+// second. In whole minutes, a vehicle 1 min 50 s behind on a route every
+// 7 min 30 s read "1 min behind, every 7 min", and one 40 s behind "40s".
+func TestAheadWords(t *testing.T) {
+	tests := []struct {
+		name  string
+		ahead alertAhead
+		want  string
+	}{
+		{"a gap and a headway to the second", alertAhead{VehicleID: "bus-12", VehicleLabel: "Bus 12", SpacingS: 110, ScheduledGapS: 450}, "1 min 50 s behind Bus 12, every 7 min 30 s"},
+		{"under a minute", alertAhead{VehicleID: "bus-12", VehicleLabel: "Bus 12", SpacingS: 40, ScheduledGapS: 300}, "40 s behind Bus 12, every 5 min"},
+		{"level with the vehicle ahead", alertAhead{VehicleID: "bus-12", VehicleLabel: "Bus 12", SpacingS: 0, ScheduledGapS: 600}, "0 s behind Bus 12, every 10 min"},
+		{"whole minutes", alertAhead{VehicleID: "bus-12", VehicleLabel: "Bus 12", SpacingS: 120, ScheduledGapS: 600}, "2 min behind Bus 12, every 10 min"},
+		{"a vehicle ahead with no label", alertAhead{VehicleID: "bus-12", SpacingS: 75, ScheduledGapS: 600}, "1 min 15 s behind bus-12, every 10 min"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, aheadWords(&tc.ahead))
+		})
+	}
+}
+
+// TestAheadWords_SaysTheGapAsTheRunRowsDo: an alert names the gap and the
+// headway in the words the Analytics run row uses for the same gap, so the
+// two pages never disagree about one pair of vehicles.
+func TestAheadWords_SaysTheGapAsTheRunRowsDo(t *testing.T) {
+	runs := map[int64]routeRun{12: {tripRun: tripRun{ID: 12, VehicleID: "bus-12", VehicleLabel: "Bus 12"}}}
+	for _, spacing := range []int{0, 40, 60, 75, 110, 149} {
+		row := newReportRunGap(&stopGap{gap: time.Duration(spacing) * time.Second, scheduled: 450 * time.Second, ahead: 12}, runs)
+		alert := aheadWords(&alertAhead{VehicleID: "bus-12", VehicleLabel: "Bus 12", SpacingS: spacing, ScheduledGapS: 450})
+		assert.Equal(t, strings.Replace(row.Text, " after ", " behind ", 1)+", "+row.Every, alert, "%d s", spacing)
 	}
 }
 

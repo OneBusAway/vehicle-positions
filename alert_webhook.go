@@ -430,12 +430,13 @@ func alertPhrase(kind string) string {
 }
 
 // aheadWords says how far behind the vehicle ahead a bunched vehicle is
-// running, against how often the stop is served: "1 min behind Bus 12, every
-// 10 min". The Alerts page and the webhook both say it so.
+// running, against how often the stop is served: "1 min 15 s behind Bus 12,
+// every 10 min". The Alerts page and the webhook both say it so, in
+// formatGap's words, as the Analytics run rows say a gap.
 func aheadWords(a *alertAhead) string {
 	return fmt.Sprintf("%s behind %s, every %s",
-		humanizeDuration(time.Duration(a.SpacingS)*time.Second), cmp.Or(a.VehicleLabel, a.VehicleID),
-		humanizeDuration(time.Duration(a.ScheduledGapS)*time.Second))
+		formatGap(time.Duration(a.SpacingS)*time.Second), cmp.Or(a.VehicleLabel, a.VehicleID),
+		formatGap(time.Duration(a.ScheduledGapS)*time.Second))
 }
 
 // enqueue adds ev to the queue without waiting, so a slow receiver never holds

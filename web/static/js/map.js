@@ -61,8 +61,10 @@
   function alertOf(v) { var a = alertBy[v.vehicle_id]; return a && KIND[a.kind] ? a : null; }
   function needs(v) { return isQuiet(v) || !!alertOf(v); }
   function alertText(a) { return KIND[a.kind] + " " + ageText(a.duration_seconds); }
-  // A bunched vehicle's gap to the vehicle ahead, against how often its stop is served: "1 min behind 12, every 10 min".
-  function gapText(a) { return ageText(a.spacing_s) + " behind " + (a.vehicle_label || a.vehicle_id) + ", every " + ageText(a.scheduled_gap_s); }
+  // A gap between vehicles to the second, as formatGap in admin_reports_page.go says it: "2 min 10 s", "40 s", "10 min".
+  function formatGap(s) { var m = Math.floor(s / 60), r = s % 60; return m === 0 ? r + " s" : r === 0 ? m + " min" : m + " min " + r + " s"; }
+  // A bunched vehicle's gap to the vehicle ahead, against how often its stop is served: "1 min 15 s behind 12, every 10 min".
+  function gapText(a) { return formatGap(a.spacing_s) + " behind " + (a.vehicle_label || a.vehicle_id) + ", every " + formatGap(a.scheduled_gap_s); }
   function compass(b) { return ["North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"][Math.round((((b % 360) + 360) % 360) / 45) % 8]; }
   function headsign(v) { return heads[v.gtfs_trip_id] || ""; }
   function speed(v) { return Math.round(v.speed * 3.6) + " km/h"; }
