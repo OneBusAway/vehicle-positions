@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -642,25 +643,29 @@ func (p *project) refusals(trans map[string]map[string]string, targets map[*xlif
 	return out
 }
 
-// androidFile is the language's strings.xml with trans, or nil when it would
-// say what it says now, or the language has no Android string at all yet.
+// androidFile is the language's strings.xml with trans written in, or nil
+// when it would say what it says now, or the language has no Android string
+// at all yet. A file there already keeps its comments and layout.
 func (p *project) androidFile(trans map[string]map[string]string) (*fileWrite, error) {
 	path := filepath.Join(p.root, androidRes, valuesDirFor(p.lang), "strings.xml")
-	body := stringsXML(p.english, trans, p.lang)
 	old, err := os.ReadFile(path)
 	switch {
-	case err == nil && string(old) == string(body):
-		return nil, nil
 	case errors.Is(err, os.ErrNotExist):
-		empty := true
 		for _, forms := range trans {
-			empty = empty && len(forms) == 0
+			if len(forms) > 0 {
+				return &fileWrite{path: path, body: stringsXML(p.english, trans, p.lang)}, nil
+			}
 		}
-		if empty {
-			return nil, nil
-		}
+		return nil, nil
 	case err != nil:
 		return nil, err
+	}
+	body, err := editStringsXML(old, p.english, p.current, trans, p.lang)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", relPath(p.root, path), err)
+	}
+	if bytes.Equal(body, old) {
+		return nil, nil
 	}
 	return &fileWrite{path: path, body: body}, nil
 }

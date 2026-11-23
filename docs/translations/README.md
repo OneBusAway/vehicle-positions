@@ -6,7 +6,7 @@ proposal #495, and the workflow here may change.
 ## Where the strings live
 
 - **Android:** `android/app/src/main/res/values/strings.xml` is the English. Each language has its own
-  `values-<language>/strings.xml` with the same names: `values-hi`, `values-pt-rBR`, `values-b+zh+Hans`.
+  `values-<language>/strings.xml` with the same names: `values-hi`, `values-fil`, `values-pt-rBR`, `values-b+zh+Hans`.
 - **iOS:** `ios/VehicleTracker/Resources/Localizable.xcstrings`, a String Catalog that holds the English and every
   language together.
 
@@ -120,9 +120,10 @@ What the import does:
 - It writes both files or neither: when one can't be written, the other is left as it was.
 - It leaves each iOS string the sheet doesn't fill in as it is, state and all, so a draft stays one until a sheet
   without `-draft` fills it in.
-- It writes `strings.xml` in one layout, without comments. A sheet read back with no edits changes nothing once
-  `values-<language>/strings.xml` is in that layout, but a file written by hand, or with comments, is laid out
-  again the first time.
+- It changes in `strings.xml` only what the sheet changes: a string with new text gets it, and one the file lacks
+  goes in after the string before it in English. The file's comments, layout and other strings stay as they are,
+  so a sheet read back with no edits changes nothing. A language with no `strings.xml` yet gets one in English
+  order, without comments.
 
 The sheet's columns:
 - **`android`**, **`ios`** and **`form`**: the string's Android name, its iOS id, and the plural form a row is
