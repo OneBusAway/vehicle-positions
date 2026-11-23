@@ -1718,7 +1718,11 @@ paths:
         passing, so a vehicle on time is judged against the gap riders
         waiting for it were promised, not the one after it. The rates add,
         so two trips every 10 minutes make it every 5 minutes, rounded to
-        the second. A gap is judged only between two passings in one
+        the second. A trip, or the timetable, that began at the stop less
+        than a headway before another's row or spacing there ended, or
+        after, takes over from its first run, and that row or spacing adds
+        nothing more, so one trip handing over to the next does not halve
+        the gap. A gap is judged only between two passings in one
         stretch of service, the rows' windows and the timetable's frequent
         spacings at the stop each held a headway or spacing past its end,
         so the first passing of a stretch has no gap. A timetabled trip
