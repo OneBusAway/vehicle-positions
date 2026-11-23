@@ -60,6 +60,13 @@ func TestRiderPage_UseByDay(t *testing.T) {
 	assert.Contains(t, use, `<div class="chart-x"><span>6 Aug</span>`)
 	assert.Contains(t, use, `<span>2 Sep</span></div>`)
 
+	assert.Contains(t, use, "Show these numbers as a table")
+	assert.Equal(t, 28, strings.Count(use, "<tr><td>"), "a row a day in the table")
+	assert.Contains(t, use, `<tr><td>Thu 6 Aug</td><td class="num right">1</td><td class="num right">1</td><td class="num right">4 of 5</td></tr>`, "the first day of the period")
+	assert.Contains(t, use, `<tr><td>Fri 7 Aug</td><td class="num right">0</td><td class="num right">0</td><td class="num right">0 of 0</td></tr>`, "a day with no ride")
+	assert.Contains(t, use, `<tr><td>Tue 1 Sep</td><td class="num right">3</td><td class="num right">2</td><td class="num right">8 of 12</td></tr>`)
+	assert.Contains(t, use, `<tr><td>Wed 2 Sep</td><td class="num right">2</td><td class="num right">2</td><td class="num right">3 of 3</td></tr>`, "today")
+
 	// Before 03:00 the service day is still yesterday's.
 	days.calls = nil
 	riderUsePage(t, days, time.Date(2026, 9, 3, 2, 0, 0, 0, la))
@@ -73,6 +80,7 @@ func TestRiderPage_UseByDayWithNoRides(t *testing.T) {
 	require.Len(t, days.calls, 1)
 	assert.Contains(t, use, "No rides in the last 28 days.")
 	assert.Equal(t, 28, strings.Count(use, `|No rides"`), "a zero for every day")
+	assert.Equal(t, 28, strings.Count(use, `<td class="num right">0 of 0</td></tr>`), "in the table too")
 	assert.NotContains(t, use, `<rect class="bar"`)
 	assert.NotContains(t, use, "Most in a day", "no peak to name")
 }
