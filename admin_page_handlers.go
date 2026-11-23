@@ -99,6 +99,7 @@ type adminUI struct {
 	assignments    assignmentManager
 	importer       CSVImporter
 	apiKeys        apiKeyPageStore
+	auditLog       AuditLogLister
 	rider          riderPageSource
 	rides          RideLister
 	rideDays       RideDayCounter
@@ -142,6 +143,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 		assignments:    store,
 		importer:       store,
 		apiKeys:        store,
+		auditLog:       store,
 		rider:          riderOff{},
 		rides:          store,
 		rideDays:       store,
@@ -158,7 +160,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 // construction), keeping this function focused on admin routes only.
 func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	// Every page behind the guard answers a bare error with the error page.
-	guard := requireAdminPage(ui.jwtSecret, ui.tokenChecker)
+	guard := requireAdminPage(ui.jwtSecret, ui.tokenChecker, ui.cfg.trustProxy)
 	protect := func(next http.Handler) http.Handler { return guard(ui.errorPages(next)) }
 
 	mux.HandleFunc("GET /admin/login", ui.loginPage)
@@ -200,6 +202,7 @@ func registerAdminUI(mux *http.ServeMux, ui *adminUI) {
 	mux.Handle("GET /admin/api-keys", protect(http.HandlerFunc(ui.apiKeysPage)))
 	mux.Handle("POST /admin/api-keys", protect(http.HandlerFunc(ui.apiKeyCreate)))
 	mux.Handle("POST /admin/api-keys/{id}/deactivate", protect(http.HandlerFunc(ui.apiKeyDeactivate)))
+	mux.Handle("GET /admin/audit", protect(http.HandlerFunc(ui.auditPage)))
 	// An address under /admin/ that is no page: signed in, the error page
 	// says so; signed out, the guard sends the visitor to sign in like any
 	// other, which tells them nothing about which pages exist.

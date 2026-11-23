@@ -147,17 +147,42 @@ func (s *Store) GetVehicle(ctx context.Context, id string) (*VehicleResponse, er
 	return &v, nil
 }
 
-// UpsertVehicle creates a new vehicle or updates an existing one.
+// UpsertVehicle creates a new vehicle or updates an existing one, and
+// reactivates it, recording which in the audit log.
 func (s *Store) UpsertVehicle(ctx context.Context, id, label, agencyTag string) (*VehicleResponse, error) {
-	row, err := s.queries.UpsertAdminVehicle(ctx, db.UpsertAdminVehicleParams{
-		ID:        id,
-		Label:     label,
-		AgencyTag: agencyTag,
+	var v VehicleResponse
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		change := auditChange{ObjectType: auditVehicle, ObjectID: id, Action: auditCreate}
+		// An insert racing another on the same id waits for it, so when this
+		// one inserts nothing the vehicle is there to lock and read.
+		inserted, err := q.CreateVehicle(ctx, db.CreateVehicleParams{ID: id, Label: label, AgencyTag: agencyTag})
+		if err != nil {
+			return fmt.Errorf("upsert vehicle: %w", err)
+		}
+		if inserted == 0 {
+			old, err := q.GetVehicleForUpdate(ctx, id)
+			if err != nil {
+				return fmt.Errorf("upsert vehicle: %w", err)
+			}
+			change.Action, change.Before = auditUpdate, vehicleAudit(old)
+		}
+		// On a vehicle just inserted this writes the same fields again; it is
+		// what returns the row either way.
+		row, err := q.UpsertAdminVehicle(ctx, db.UpsertAdminVehicleParams{
+			ID:        id,
+			Label:     label,
+			AgencyTag: agencyTag,
+		})
+		if err != nil {
+			return fmt.Errorf("upsert vehicle: %w", err)
+		}
+		change.After = vehicleAudit{Label: row.Label, AgencyTag: row.AgencyTag, Active: row.Active}
+		v = toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt)
+		return recordAudit(ctx, q, change)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("upsert vehicle: %w", err)
+		return nil, err
 	}
-	v := toVehicleResponse(row.ID, row.Label, row.AgencyTag, row.Active, row.CreatedAt, row.UpdatedAt)
 	return &v, nil
 }
 
@@ -167,7 +192,22 @@ func (s *Store) UpsertVehicle(ctx context.Context, id, label, agencyTag string) 
 // exactly one wins, and the loser can't overwrite or reactivate the row the
 // way a check-then-upsert sequence could.
 func (s *Store) CreateVehicle(ctx context.Context, id, label, agencyTag string) (bool, error) {
-	rows, err := s.queries.CreateVehicle(ctx, db.CreateVehicleParams{
+	var created bool
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		var err error
+		created, err = createVehicle(ctx, q, id, label, agencyTag)
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	return created, nil
+}
+
+// createVehicle is CreateVehicle through q, recording the new vehicle in the
+// audit log. The vehicle form and the CSV import both create through it.
+func createVehicle(ctx context.Context, q *db.Queries, id, label, agencyTag string) (bool, error) {
+	rows, err := q.CreateVehicle(ctx, db.CreateVehicleParams{
 		ID:        id,
 		Label:     label,
 		AgencyTag: agencyTag,
@@ -175,7 +215,18 @@ func (s *Store) CreateVehicle(ctx context.Context, id, label, agencyTag string) 
 	if err != nil {
 		return false, fmt.Errorf("create vehicle: %w", err)
 	}
-	return rows > 0, nil
+	if rows == 0 {
+		return false, nil
+	}
+	// A new vehicle is active: the column's default.
+	err = recordAudit(ctx, q, auditChange{
+		ObjectType: auditVehicle, ObjectID: id, Action: auditCreate,
+		After: vehicleAudit{Label: label, AgencyTag: agencyTag, Active: true},
+	})
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // DeactivateVehicle sets a vehicle's active flag to false. It delegates to
@@ -187,26 +238,62 @@ func (s *Store) DeactivateVehicle(ctx context.Context, id string) error {
 // UpdateVehicleInfo updates label/agency tag WITHOUT touching the active flag,
 // unlike UpsertVehicle which force-reactivates.
 func (s *Store) UpdateVehicleInfo(ctx context.Context, id, label, agencyTag string) error {
-	rows, err := s.queries.UpdateVehicleInfo(ctx, db.UpdateVehicleInfoParams{ID: id, Label: label, AgencyTag: agencyTag})
+	return s.inTx(ctx, func(q *db.Queries) error {
+		return updateVehicleInfo(ctx, q, id, label, agencyTag)
+	})
+}
+
+// updateVehicleInfo is UpdateVehicleInfo through q, recording what changed in
+// the audit log. The vehicle form and the CSV import both update through it.
+// It returns pgx.ErrNoRows, wrapped, when no vehicle has the id.
+func updateVehicleInfo(ctx context.Context, q *db.Queries, id, label, agencyTag string) error {
+	old, err := q.GetVehicleForUpdate(ctx, id)
+	if err != nil {
+		return fmt.Errorf("update vehicle info: %w", err)
+	}
+	rows, err := q.UpdateVehicleInfo(ctx, db.UpdateVehicleInfoParams{ID: id, Label: label, AgencyTag: agencyTag})
 	if err != nil {
 		return fmt.Errorf("update vehicle info: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("update vehicle info: %w", pgx.ErrNoRows)
 	}
-	return nil
+	return recordAudit(ctx, q, auditChange{
+		ObjectType: auditVehicle, ObjectID: id, Action: auditUpdate,
+		Before: vehicleAudit(old),
+		After:  vehicleAudit{Label: label, AgencyTag: agencyTag, Active: old.Active},
+	})
 }
 
 // SetVehicleActive flips a vehicle's active flag (deactivate/reactivate).
 func (s *Store) SetVehicleActive(ctx context.Context, id string, active bool) error {
-	rows, err := s.queries.SetVehicleActive(ctx, db.SetVehicleActiveParams{ID: id, Active: active})
-	if err != nil {
-		return fmt.Errorf("set vehicle active: %w", err)
+	return s.inTx(ctx, func(q *db.Queries) error {
+		old, err := q.GetVehicleForUpdate(ctx, id)
+		if err != nil {
+			return fmt.Errorf("set vehicle active: %w", err)
+		}
+		rows, err := q.SetVehicleActive(ctx, db.SetVehicleActiveParams{ID: id, Active: active})
+		if err != nil {
+			return fmt.Errorf("set vehicle active: %w", err)
+		}
+		if rows == 0 {
+			return fmt.Errorf("set vehicle active: %w", pgx.ErrNoRows)
+		}
+		after := vehicleAudit(old)
+		after.Active = active
+		return recordAudit(ctx, q, auditChange{
+			ObjectType: auditVehicle, ObjectID: id, Action: activeAction(active),
+			Before: vehicleAudit(old), After: after,
+		})
+	})
+}
+
+// activeAction is the audit action for setting an active flag to active.
+func activeAction(active bool) string {
+	if active {
+		return auditActivate
 	}
-	if rows == 0 {
-		return fmt.Errorf("set vehicle active: %w", pgx.ErrNoRows)
-	}
-	return nil
+	return auditDeactivate
 }
 
 // DriverVehicleLister lists the active vehicles assigned to a driver.

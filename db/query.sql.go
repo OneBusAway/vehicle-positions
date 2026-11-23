@@ -652,6 +652,22 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, 
 	return i, err
 }
 
+const getAPIKeyForUpdate = `-- name: GetAPIKeyForUpdate :one
+SELECT name, active FROM api_keys WHERE id = $1 FOR UPDATE
+`
+
+type GetAPIKeyForUpdateRow struct {
+	Name   string
+	Active bool
+}
+
+func (q *Queries) GetAPIKeyForUpdate(ctx context.Context, id int64) (GetAPIKeyForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyForUpdate, id)
+	var i GetAPIKeyForUpdateRow
+	err := row.Scan(&i.Name, &i.Active)
+	return i, err
+}
+
 const getActiveTripByUser = `-- name: GetActiveTripByUser :one
 SELECT id, user_id, vehicle_id, route_id, gtfs_trip_id, start_time, end_time, status, created_at, updated_at
 FROM trips
@@ -1100,6 +1116,31 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+const getUserForUpdate = `-- name: GetUserForUpdate :one
+SELECT name, email, role, active FROM users WHERE id = $1 FOR UPDATE
+`
+
+type GetUserForUpdateRow struct {
+	Name   string
+	Email  string
+	Role   string
+	Active bool
+}
+
+// Locks the user for the rest of the transaction, as LockUser does, and reads
+// the fields the change that follows replaces.
+func (q *Queries) GetUserForUpdate(ctx context.Context, id int64) (GetUserForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getUserForUpdate, id)
+	var i GetUserForUpdateRow
+	err := row.Scan(
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.Active,
+	)
+	return i, err
+}
+
 const getVehicleActiveForShare = `-- name: GetVehicleActiveForShare :one
 SELECT active FROM vehicles WHERE id = $1 FOR SHARE
 `
@@ -1141,6 +1182,56 @@ func (q *Queries) GetVehicleByID(ctx context.Context, id string) (GetVehicleByID
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getVehicleForUpdate = `-- name: GetVehicleForUpdate :one
+SELECT label, agency_tag, active FROM vehicles WHERE id = $1 FOR UPDATE
+`
+
+type GetVehicleForUpdateRow struct {
+	Label     string
+	AgencyTag string
+	Active    bool
+}
+
+// Locks the vehicle for the rest of the transaction, so the fields read here
+// are the ones the change that follows replaces.
+func (q *Queries) GetVehicleForUpdate(ctx context.Context, id string) (GetVehicleForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getVehicleForUpdate, id)
+	var i GetVehicleForUpdateRow
+	err := row.Scan(&i.Label, &i.AgencyTag, &i.Active)
+	return i, err
+}
+
+const insertAuditEntry = `-- name: InsertAuditEntry :exec
+INSERT INTO audit_log (actor_id, actor_email, actor_ip, object_type, object_id, action, before, after)
+VALUES ($1, $2, $3, $4,
+    $5, $6, $7, $8)
+`
+
+type InsertAuditEntryParams struct {
+	ActorID    pgtype.Int8
+	ActorEmail string
+	ActorIp    string
+	ObjectType string
+	ObjectID   string
+	Action     string
+	Before     []byte
+	After      []byte
+}
+
+func (q *Queries) InsertAuditEntry(ctx context.Context, arg InsertAuditEntryParams) error {
+	_, err := q.db.Exec(ctx, insertAuditEntry,
+		arg.ActorID,
+		arg.ActorEmail,
+		arg.ActorIp,
+		arg.ObjectType,
+		arg.ObjectID,
+		arg.Action,
+		arg.Before,
+		arg.After,
+	)
+	return err
 }
 
 const insertLocationPoint = `-- name: InsertLocationPoint :execrows
@@ -1401,6 +1492,82 @@ func (q *Queries) ListActiveVehiclesByUser(ctx context.Context, userID int64) ([
 			&i.Active,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuditEntries = `-- name: ListAuditEntries :many
+SELECT a.id, a.at, a.actor_id, a.actor_email, a.actor_ip, a.object_type, a.object_id, a.action,
+       a.before, a.after, COALESCE(u.name, '')::TEXT AS account_name
+FROM audit_log a
+LEFT JOIN users u ON a.object_type = 'user' AND u.id::TEXT = a.object_id
+WHERE ($1::TEXT IS NULL OR a.object_type = $1)
+  AND ($2::TEXT IS NULL OR a.object_id = $2)
+  AND ($3::BIGINT IS NULL OR a.actor_id = $3)
+ORDER BY a.id DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListAuditEntriesParams struct {
+	ObjectType pgtype.Text
+	ObjectID   pgtype.Text
+	ActorID    pgtype.Int8
+	RowOffset  int32
+	RowLimit   int32
+}
+
+type ListAuditEntriesRow struct {
+	ID          int64
+	At          pgtype.Timestamptz
+	ActorID     pgtype.Int8
+	ActorEmail  string
+	ActorIp     string
+	ObjectType  string
+	ObjectID    string
+	Action      string
+	Before      []byte
+	After       []byte
+	AccountName string
+}
+
+// One page of the audit log, newest first, narrowed to one kind of object, one
+// object of that kind, or the changes one admin made, by whichever are given.
+// account_name is the name the account a row is about has now: ” for a row
+// about something else, or about an account since deleted.
+func (q *Queries) ListAuditEntries(ctx context.Context, arg ListAuditEntriesParams) ([]ListAuditEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listAuditEntries,
+		arg.ObjectType,
+		arg.ObjectID,
+		arg.ActorID,
+		arg.RowOffset,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditEntriesRow
+	for rows.Next() {
+		var i ListAuditEntriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.At,
+			&i.ActorID,
+			&i.ActorEmail,
+			&i.ActorIp,
+			&i.ObjectType,
+			&i.ObjectID,
+			&i.Action,
+			&i.Before,
+			&i.After,
+			&i.AccountName,
 		); err != nil {
 			return nil, err
 		}

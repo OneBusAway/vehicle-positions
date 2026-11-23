@@ -80,6 +80,7 @@ type appStore interface {
 	AlertHistoryStore
 	ClearedAlertLister
 	AlertsRaisedLister
+	AuditLogLister
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
@@ -90,7 +91,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
-	adminMiddleware := requireAdmin()
+	adminMiddleware := requireAdmin(trustProxy)
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, jwtSecret, ttls, loginLimiter, trustProxy))

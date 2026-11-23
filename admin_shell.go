@@ -48,6 +48,7 @@ var adminNav = []navGroup{
 		{Page: "users", Label: "Drivers and users", Href: "/admin/users", Icon: "group"},
 		{Page: "driver-setup", Label: "Driver setup", Href: "/admin/driver-setup", Icon: "qr_code_2"},
 		{Page: "api-keys", Label: "API keys", Href: "/admin/api-keys", Icon: "key"},
+		{Page: "audit", Label: "Audit log", Href: "/admin/audit", Icon: "history"},
 	}},
 }
 

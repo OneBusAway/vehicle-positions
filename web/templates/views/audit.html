@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="page-head">
+  <div class="page-head-main">
+    <h2 class="h1">{{.Headline}}</h2>
+    <p class="lede">Every change made to vehicles, accounts, trips and API keys, here or through the admin API, newest first. Each is saved together with its row, so none goes unrecorded. Times are {{.Timezone}} time.</p>
+  </div>
+</div>
+<section class="card">
+  <div class="card-head filters"><div role="group" aria-label="Changes shown" style="display:flex;flex-wrap:wrap;gap:8px">{{range .Chips}}<a class="chip" href="{{.URL}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div></div>
+  {{if .Rows}}
+  <div class="table-wrap"><table class="table cards">
+    <thead><tr><th>Change</th><th>When</th><th>By</th><th>Details</th></tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td class="c-main">{{.What}} <a href="{{.ObjectURL}}">{{.Object}}</a></td>
+        <td class="c-side nowrap">{{.When}}<span class="sub">{{.Day}}</span></td>
+        <td data-label="By">{{if .WhoURL}}<a href="{{.WhoURL}}">{{.Who}}</a>{{else}}<span class="muted">{{.Who}}</span>{{end}}{{with .IP}}<span class="sub num">{{.}}</span>{{end}}</td>
+        <td>{{range .Details}}<div><span class="muted">{{.Label}}</span> {{if and .From .To}}{{.From}} &rarr; {{.To}}{{else}}{{.From}}{{.To}}{{end}}</div>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+  <div class="empty"><span class="step-icon">{{template "icon-lg" "history"}}</span><div class="empty-title">{{if or .Filtered (gt .PageNum 1)}}No changes here{{else}}No changes yet{{end}}</div><p>A change shows here as soon as it is made, with the fields it changed.</p></div>
+  {{end}}
+  {{template "pagination" .}}
+</section>
+{{end}}

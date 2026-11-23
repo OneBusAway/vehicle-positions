@@ -211,7 +211,7 @@ func TestDemotedAdmin_LosesAdminAccessAtOnce(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
-		requireAuth(testSecret, store)(requireAdmin()(next)).ServeHTTP(w, req)
+		requireAuth(testSecret, store)(requireAdmin(false)(next)).ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		assert.Equal(t, "invalid token", errorBody(t, w))
@@ -224,7 +224,7 @@ func TestDemotedAdmin_LosesAdminAccessAtOnce(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
 		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
 		w := httptest.NewRecorder()
-		requireAdminPage(testSecret, store)(next).ServeHTTP(w, req)
+		requireAdminPage(testSecret, store, false)(next).ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusSeeOther, w.Code)
 		assert.Equal(t, loginLocation(http.MethodGet, "/admin/users"), w.Header().Get("Location"))
@@ -240,7 +240,7 @@ func adminPageReached(t *testing.T, store *Store, token string) bool {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true })
 	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
-	requireAdminPage(testSecret, store)(next).ServeHTTP(httptest.NewRecorder(), req)
+	requireAdminPage(testSecret, store, false)(next).ServeHTTP(httptest.NewRecorder(), req)
 	return reached
 }
 

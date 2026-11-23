@@ -29,6 +29,19 @@ type ApiKey struct {
 	UpdatedAt  pgtype.Timestamptz
 }
 
+type AuditLog struct {
+	ID         int64
+	At         pgtype.Timestamptz
+	ActorID    pgtype.Int8
+	ActorEmail string
+	ActorIp    string
+	ObjectType string
+	ObjectID   string
+	Action     string
+	Before     []byte
+	After      []byte
+}
+
 type FeedHealthHour struct {
 	Hour                pgtype.Timestamptz
 	ReportsAccepted     int64
