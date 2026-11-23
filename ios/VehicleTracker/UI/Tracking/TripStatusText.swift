@@ -183,7 +183,7 @@ enum TripStatusText {
     }
 
     static var opensSettings: String {
-        String(localized: "Opens Settings", comment: "VoiceOver hint on a problem line that opens the app's page in Settings.")
+        String(localized: "Opens Settings", comment: "VoiceOver hint on a problem line, or on the Language row, that opens the app's page in Settings.")
     }
 
     // MARK: Signed out

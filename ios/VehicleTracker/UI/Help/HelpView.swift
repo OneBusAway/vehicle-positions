@@ -42,6 +42,9 @@ struct HelpView: View {
     var body: some View {
         List {
             Section {
+                LanguageRow()
+            }
+            Section {
                 Button { showingWelcome = true } label: { WelcomeAgainRow() }
                     .tint(.primary)
             }

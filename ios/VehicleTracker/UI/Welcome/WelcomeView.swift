@@ -137,6 +137,13 @@ struct WelcomePage: View {
             Text(picture.step.sentence)
                 .foregroundStyle(.secondary)
                 .padding(.top, 6)
+            if picture.step.hasLanguageRow {
+                LanguageRow()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 20))
+                    .padding(.top, isCompact ? 12 : 20)
+            }
             Group {
                 switch picture {
                 case .riders(let beat): RidersPicture(beat: beat, isCompact: isCompact)
