@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -255,9 +256,24 @@ type TripByIDEnder interface {
 // driver, so only admin handlers may call it. It returns ErrTripNotFound when
 // no trip has this id and ErrTripNotActive when the trip has already ended.
 func (s *Store) EndTripByID(ctx context.Context, tripID int64) (*TripSummary, error) {
-	rowsAffected, err := s.queries.EndTripByID(ctx, tripID)
+	var rowsAffected int64
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		var err error
+		rowsAffected, err = q.EndTripByID(ctx, tripID)
+		if err != nil {
+			return fmt.Errorf("end trip by id: %w", err)
+		}
+		if rowsAffected == 0 {
+			return nil
+		}
+		// The update ends only an active trip, so that is what it was.
+		return recordAudit(ctx, q, auditChange{
+			ObjectType: auditTrip, ObjectID: strconv.FormatInt(tripID, 10), Action: auditEnd,
+			Before: tripAudit{Status: "active"}, After: tripAudit{Status: "completed"},
+		})
+	})
 	if err != nil {
-		return nil, fmt.Errorf("end trip by id: %w", err)
+		return nil, err
 	}
 	if rowsAffected == 0 {
 		// Nothing active had this id: tell a missing trip from an ended one.

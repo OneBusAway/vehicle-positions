@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/OneBusAway/vehicle-positions/db"
 	"github.com/jackc/pgx/v5"
@@ -63,11 +64,21 @@ func (s *Store) UpdateAPIKeyLastUsed(ctx context.Context, id int64) error {
 // CreateAPIKey stores a new key. keyHash is the hash of the raw key; the raw
 // key itself never reaches the database.
 func (s *Store) CreateAPIKey(ctx context.Context, name, keyHash string) (*APIKey, error) {
-	row, err := s.queries.CreateAPIKey(ctx, db.CreateAPIKeyParams{Name: name, KeyHash: keyHash})
+	var key APIKey
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		row, err := q.CreateAPIKey(ctx, db.CreateAPIKeyParams{Name: name, KeyHash: keyHash})
+		if err != nil {
+			return fmt.Errorf("create api key: %w", err)
+		}
+		key = toAPIKey(row)
+		return recordAudit(ctx, q, auditChange{
+			ObjectType: auditAPIKey, ObjectID: strconv.FormatInt(row.ID, 10), Action: auditCreate,
+			After: apiKeyAudit{Name: row.Name, Active: row.Active},
+		})
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create api key: %w", err)
+		return nil, err
 	}
-	key := toAPIKey(row)
 	return &key, nil
 }
 
@@ -103,14 +114,22 @@ func (s *Store) CountActiveAPIKeys(ctx context.Context) (int, error) {
 // so last_used_at survives the revocation, which is exactly what an operator
 // investigating a key wants to see.
 func (s *Store) DeactivateAPIKey(ctx context.Context, id int64) error {
-	rows, err := s.queries.DeactivateAPIKey(ctx, id)
-	if err != nil {
-		return fmt.Errorf("deactivate api key: %w", err)
-	}
-	if rows == 0 {
-		return ErrAPIKeyNotFound
-	}
-	return nil
+	return s.inTx(ctx, func(q *db.Queries) error {
+		old, err := q.GetAPIKeyForUpdate(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrAPIKeyNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("deactivate api key: %w", err)
+		}
+		if _, err := q.DeactivateAPIKey(ctx, id); err != nil {
+			return fmt.Errorf("deactivate api key: %w", err)
+		}
+		return recordAudit(ctx, q, auditChange{
+			ObjectType: auditAPIKey, ObjectID: strconv.FormatInt(id, 10), Action: auditDeactivate,
+			Before: apiKeyAudit(old), After: apiKeyAudit{Name: old.Name, Active: false},
+		})
+	})
 }
 
 // toAPIKey maps a DB row to the API type. created_at and updated_at are NOT

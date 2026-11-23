@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
@@ -73,7 +74,8 @@ func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID st
 }
 
 // assignVehicle assigns vehicleID to userID through q, which the caller runs in
-// a transaction so checkAssignableVehicle's lock holds until it commits.
+// a transaction so checkAssignableVehicle's lock holds until it commits, and
+// records the assignment in the audit log in the same transaction.
 // CreateAssignment and the CSV import both assign through it.
 func assignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID string) (db.UserVehicle, error) {
 	if err := checkAssignableVehicle(ctx, q, vehicleID); err != nil {
@@ -85,6 +87,13 @@ func assignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID s
 	})
 	if err != nil {
 		return db.UserVehicle{}, classifyAssignmentError(err)
+	}
+	err = recordAudit(ctx, q, auditChange{
+		ObjectType: auditUser, ObjectID: strconv.FormatInt(userID, 10), Action: auditAssign,
+		After: assignmentAudit{VehicleID: vehicleID},
+	})
+	if err != nil {
+		return db.UserVehicle{}, err
 	}
 	return row, nil
 }
@@ -163,6 +172,14 @@ func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID st
 	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("check active trip: %w", err)
+	}
+
+	err = recordAudit(ctx, qtx, auditChange{
+		ObjectType: auditUser, ObjectID: strconv.FormatInt(userID, 10), Action: auditUnassign,
+		Before: assignmentAudit{VehicleID: vehicleID},
+	})
+	if err != nil {
+		return err
 	}
 
 	if err := tx.Commit(ctx); err != nil {

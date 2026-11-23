@@ -699,9 +699,10 @@ sudo systemctl reload nginx
 ### 7.3 Then, and only then, set `TRUST_PROXY_HEADERS=true`
 
 With the proxy in place, set `TRUST_PROXY_HEADERS=true` and restart the server.
-It changes two things: the admin login rate limiter buckets by the real client
-IP instead of nginx's, and the admin session cookie is marked `Secure` because
-the server can now tell the request arrived over HTTPS.
+It changes three things: the admin login rate limiter buckets by the real client
+IP instead of nginx's, the admin's **Audit log** records each change with that
+IP too, and the admin session cookie is marked `Secure` because the server can
+now tell the request arrived over HTTPS.
 
 Leave it `false` whenever the server can be reached directly. A client can send
 any `X-Forwarded-For` it likes, so trusting the header without a proxy in front

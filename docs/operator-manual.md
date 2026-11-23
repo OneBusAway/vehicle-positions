@@ -75,7 +75,8 @@ Signing in opens **Live map**, or the welcome on **Overview** while the server
 has no vehicle or no driver yet. The menu down the left side has three groups:
 **Live map**, **Alerts** and **Trips**; **Overview**, **Analytics**, **Rider
 mode** and **Feed health**; and **Vehicles**, **Drivers and users**, **Driver
-setup** and **API keys**. **Fold menu** at its foot shrinks it to icons. On a
+setup**, **API keys** and **Audit log**. **Fold menu** at its foot shrinks it
+to icons. On a
 phone the menu is a bar along the bottom, with the rest of the pages under
 **More**.
 
@@ -299,6 +300,40 @@ hours: the same limit as [any password change](#deactivate-an-account). If
 the reset is because someone else had the account and they must be out right
 now, also have your IT contact rotate the token-signing key and restart the
 server, which signs everyone out.
+
+### Who changed what: the Audit log
+
+**Audit log** lists every change made to a vehicle, an account, a trip or an
+API key, newest first, whether it was made on these pages or through the admin
+API. Each row says what was done and to what, for example **Edited vehicle**
+and the vehicle's label; when; who did it, with the address their browser or
+script connected from; and what the change did to each field, such as a label
+from its old value to its new one or an account from **Active** to
+**Deactivated**.
+
+- The chips above the list show one kind of object: **Vehicles**,
+  **Accounts**, **Trips** or **API keys**.
+- Click the object in a row to see its whole history, or an admin's email to
+  see every change they made.
+- **Server** in place of an email is a change the server made itself: the first
+  admin, created from `ADMIN_BOOTSTRAP_EMAIL`, or an account restored with
+  `reset-admin` (see [Locked out](#locked-out-no-admin-can-sign-in)).
+- A new password shows as **Set a new password for** and the account, never the
+  password itself.
+- A CSV import adds a row for each vehicle or account it writes and each
+  vehicle it assigns. A save that changed nothing adds no row.
+
+Each row is saved together with the change it records. If the row cannot be
+saved, the change is not made either and you see an error, so a change that
+went through always has its row. Rows cannot be edited afterwards, and they are
+kept forever: there is no setting to delete old ones yet.
+
+It does not record sign-ins, what anyone looked at, or what drivers do in the
+app, such as starting and ending their own trips. The server's log has those.
+
+Behind a reverse proxy the address is right only when your IT contact has set
+`TRUST_PROXY_HEADERS`, the same setting the sign-in limit relies on; without
+it, every row shows the proxy's address.
 
 ---
 
@@ -1152,7 +1187,9 @@ time the phone recorded it, the time the server received it, and the trip it
 belonged to. For every trip: the driver, the vehicle, the route id, the
 optional GTFS trip id, and the start and end times. For every account: name,
 email address, role and a scrambled form of the password — never the password
-itself.
+itself. For every change made in the admin or its API, the
+[Audit log](#who-changed-what-the-audit-log) keeps who made it, by account and
+email, the address they connected from, and the fields it changed.
 
 Taken together this is a **per-driver movement history**, and it should be
 treated like one. Anyone with an admin account can see any vehicle's positions:
@@ -1175,8 +1212,8 @@ README's retention notes. Three things to know before you ask for it:
 - Pick a period consistent with local law and your own driver-privacy policy.
   Ninety days is a common starting point.
 
-Trip records and accounts are not deleted by retention; only the location
-points are.
+Trip records, accounts and the Audit log are not deleted by retention; only the
+location points are.
 
 ---
 

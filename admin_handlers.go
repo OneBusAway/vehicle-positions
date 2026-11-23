@@ -28,6 +28,7 @@ func loadTemplates() (*embeddedTemplates, error) {
 	adminViews := []string{
 		"alerts.html",
 		"api_keys.html",
+		"audit.html",
 		"dashboard.html",
 		"driver_setup.html",
 		"health.html",

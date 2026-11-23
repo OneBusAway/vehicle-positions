@@ -628,3 +628,36 @@ SET reports_accepted = EXCLUDED.reports_accepted, reports_invalid = EXCLUDED.rep
 
 -- name: DeleteFeedHealthHoursBefore :execrows
 DELETE FROM feed_health_hours WHERE hour < sqlc.arg(cutoff);
+
+-- name: GetVehicleForUpdate :one
+-- Locks the vehicle for the rest of the transaction, so the fields read here
+-- are the ones the change that follows replaces.
+SELECT label, agency_tag, active FROM vehicles WHERE id = $1 FOR UPDATE;
+
+-- name: GetUserForUpdate :one
+-- Locks the user for the rest of the transaction, as LockUser does, and reads
+-- the fields the change that follows replaces.
+SELECT name, email, role, active FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: GetAPIKeyForUpdate :one
+SELECT name, active FROM api_keys WHERE id = $1 FOR UPDATE;
+
+-- name: InsertAuditEntry :exec
+INSERT INTO audit_log (actor_id, actor_email, actor_ip, object_type, object_id, action, before, after)
+VALUES (sqlc.narg(actor_id), sqlc.arg(actor_email), sqlc.arg(actor_ip), sqlc.arg(object_type),
+    sqlc.arg(object_id), sqlc.arg(action), sqlc.narg(before), sqlc.narg(after));
+
+-- name: ListAuditEntries :many
+-- One page of the audit log, newest first, narrowed to one kind of object, one
+-- object of that kind, or the changes one admin made, by whichever are given.
+-- account_name is the name the account a row is about has now: '' for a row
+-- about something else, or about an account since deleted.
+SELECT a.id, a.at, a.actor_id, a.actor_email, a.actor_ip, a.object_type, a.object_id, a.action,
+       a.before, a.after, COALESCE(u.name, '')::TEXT AS account_name
+FROM audit_log a
+LEFT JOIN users u ON a.object_type = 'user' AND u.id::TEXT = a.object_id
+WHERE (sqlc.narg(object_type)::TEXT IS NULL OR a.object_type = sqlc.narg(object_type))
+  AND (sqlc.narg(object_id)::TEXT IS NULL OR a.object_id = sqlc.narg(object_id))
+  AND (sqlc.narg(actor_id)::BIGINT IS NULL OR a.actor_id = sqlc.narg(actor_id))
+ORDER BY a.id DESC
+LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);

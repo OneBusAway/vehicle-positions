@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/db"
@@ -245,6 +246,12 @@ func (s *Store) SetUserPasswordAndRevokeSessions(ctx context.Context, id int64, 
 		return fmt.Errorf("delete refresh tokens for user: %w", err)
 	}
 
+	// No fields before or after: the log says a new password was set, never
+	// what it was.
+	if err := recordAudit(ctx, qtx, auditChange{ObjectType: auditUser, ObjectID: strconv.FormatInt(id, 10), Action: auditPassword}); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit password change: %w", err)
 	}
@@ -266,8 +273,10 @@ func (s *Store) SetUserActiveAndRevokeSessions(ctx context.Context, id int64, ac
 
 	qtx := s.queries.WithTx(tx)
 
-	// Locked first for the same reason as SetUserPasswordAndRevokeSessions.
-	if _, err := qtx.LockUser(ctx, id); err != nil {
+	// Locked first for the same reason as SetUserPasswordAndRevokeSessions,
+	// reading what the audit log records as before.
+	old, err := qtx.GetUserForUpdate(ctx, id)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrUserNotFound
 		}
@@ -287,6 +296,16 @@ func (s *Store) SetUserActiveAndRevokeSessions(ctx context.Context, id int64, ac
 		if err := qtx.DeleteRefreshTokensForUser(ctx, id); err != nil {
 			return fmt.Errorf("delete refresh tokens for user: %w", err)
 		}
+	}
+
+	after := userAudit(old)
+	after.Active = active
+	err = recordAudit(ctx, qtx, auditChange{
+		ObjectType: auditUser, ObjectID: strconv.FormatInt(id, 10), Action: activeAction(active),
+		Before: userAudit(old), After: after,
+	})
+	if err != nil {
+		return err
 	}
 
 	if err := tx.Commit(ctx); err != nil {

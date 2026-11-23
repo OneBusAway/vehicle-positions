@@ -271,7 +271,9 @@ func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
 
 // requireAdmin is middleware that restricts access to admin-role users.
 // It must be chained after requireAuth, which sets JWT claims on the context.
-func requireAdmin() func(http.Handler) http.Handler {
+// It names the admin as the actor of any change the request makes, for the
+// audit log, with the address read through trustProxy as clientIP reads it.
+func requireAdmin(trustProxy bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
@@ -292,7 +294,15 @@ func requireAdmin() func(http.Handler) http.Handler {
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			withActor, err := withAuditActor(r, claims, trustProxy)
+			if err != nil {
+				// requireAuth refuses a staff token whose subject is not a
+				// user id, so this is a token that bypassed it.
+				slog.Warn("requireAdmin: no actor for the audit log", "error", err, "path", r.URL.Path)
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return
+			}
+			next.ServeHTTP(w, withActor)
 		})
 	}
 }

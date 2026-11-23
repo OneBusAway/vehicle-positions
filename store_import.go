@@ -175,24 +175,24 @@ func (s *Store) ImportVehicles(ctx context.Context, preview importPreview, rows 
 	for i, row := range rows {
 		switch outcomes[i].Status {
 		case importNew:
-			// CreateVehicle and UpdateVehicleInfo are the vehicle forms'
-			// writes; neither touches the active flag.
-			n, err := q.CreateVehicle(ctx, db.CreateVehicleParams{ID: row.ID, Label: row.Label, AgencyTag: row.AgencyTag})
+			// createVehicle and updateVehicleInfo are the vehicle forms'
+			// writes, audit row and all; neither touches the active flag.
+			created, err := createVehicle(ctx, q, row.ID, row.Label, row.AgencyTag)
 			if err != nil {
 				return nil, fmt.Errorf("create vehicle %q: %w", row.ID, err)
 			}
-			if n == 0 {
+			if !created {
 				outcomes[i] = importOutcome{Status: importError, Reason: "vehicle id already exists"}
 				return outcomes, nil
 			}
 		case importUpdate:
-			n, err := q.UpdateVehicleInfo(ctx, db.UpdateVehicleInfoParams{ID: row.ID, Label: row.Label, AgencyTag: row.AgencyTag})
-			if err != nil {
-				return nil, fmt.Errorf("update vehicle %q: %w", row.ID, err)
-			}
-			if n == 0 {
+			err := updateVehicleInfo(ctx, q, row.ID, row.Label, row.AgencyTag)
+			if errors.Is(err, pgx.ErrNoRows) {
 				outcomes[i] = importOutcome{Status: importError, Reason: "vehicle not found"}
 				return outcomes, nil
+			}
+			if err != nil {
+				return nil, fmt.Errorf("update vehicle %q: %w", row.ID, err)
 			}
 		}
 	}
@@ -354,7 +354,7 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 				*o = importOutcome{Status: importError, Reason: "an account with this email was removed meanwhile; preview the file again"}
 				return outcomes, nil
 			}
-			u, err := q.CreateUser(ctx, db.CreateUserParams{Name: row.Name, Email: row.Email, PasswordHash: string(hash), Role: roleDriver})
+			u, err := createUser(ctx, q, db.CreateUserParams{Name: row.Name, Email: row.Email, PasswordHash: string(hash), Role: roleDriver})
 			if err != nil {
 				if isDuplicateEmail(err) {
 					*o = importOutcome{Status: importError, Reason: "email already exists"}
@@ -365,9 +365,9 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 			o.UserID, o.Password = u.ID, passwords[i]
 		case importUpdate:
 			if p.rename {
-				// The stored email and role go back unchanged, so UpdateUser
+				// The stored email and role go back unchanged, so updateUser
 				// changes only the name.
-				_, err := q.UpdateUser(ctx, db.UpdateUserParams{Name: row.Name, Email: p.email, Role: p.role, ID: p.userID})
+				_, err := updateUser(ctx, q, p.userID, row.Name, p.email, p.role)
 				if err != nil {
 					return nil, fmt.Errorf("update user %d: %w", p.userID, err)
 				}

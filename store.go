@@ -293,6 +293,24 @@ func rollbackTx(tx pgx.Tx) {
 	}
 }
 
+// inTx runs fn in a transaction, committing it when fn returns nil and
+// rolling it back otherwise. An admin change that needs no other setup runs
+// through it, so the change and its audit row land together or not at all.
+func (s *Store) inTx(ctx context.Context, fn func(q *db.Queries) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer rollbackTx(tx)
+	if err := fn(s.queries.WithTx(tx)); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
 // Ping checks database connectivity.
 func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)

@@ -35,7 +35,7 @@ func TestSetSessionCookieAttributes(t *testing.T) {
 
 func TestRequireAdminPage(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-	h := requireAdminPage(testSecret, newFakeRevocations())(next)
+	h := requireAdminPage(testSecret, newFakeRevocations(), false)(next)
 
 	cases := []struct {
 		name   string
@@ -111,7 +111,7 @@ func TestAdminCookiePath_RejectsRevokedToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
 	req.AddCookie(cookie)
 	w := httptest.NewRecorder()
-	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
+	requireAdminPage(testSecret, revocations, false)(next).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusSeeOther, w.Code, "a revoked session cookie must not reach an admin page")
 	assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), w.Header().Get("Location"))
@@ -131,7 +131,7 @@ func TestAdminCookiePath_CheckerErrorFailsClosed(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
+	requireAdminPage(testSecret, revocations, false)(next).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), w.Header().Get("Location"))
@@ -213,7 +213,7 @@ func TestAdminCookiePath_RejectsDeactivatedAdmin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
 	req.AddCookie(cookieFor(t, "admin"))
 	w := httptest.NewRecorder()
-	requireAdminPage(testSecret, revocations)(next).ServeHTTP(w, req)
+	requireAdminPage(testSecret, revocations, false)(next).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusSeeOther, w.Code)
 	assert.Equal(t, loginLocation(http.MethodGet, "/admin/dashboard"), w.Header().Get("Location"))

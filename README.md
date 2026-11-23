@@ -82,7 +82,8 @@ clients and up to 24 hours for the admin UI's session cookie.
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
 `X-Forwarded-Proto` — this affects the admin login rate limiter's per-IP
-bucketing and whether the session cookie is marked `Secure`. Leave it unset
+bucketing, the address the audit log records for each admin change, and
+whether the session cookie is marked `Secure`. Leave it unset
 (false) when the server is reachable directly, since trusting those headers
 from an untrusted client would let it spoof its IP.
 

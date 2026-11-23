@@ -475,7 +475,7 @@ func TestRequireAdmin_AdminAllowed(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(handler)).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin(false)(handler)).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "admin", receivedRole)
@@ -489,7 +489,7 @@ func TestRequireAdmin_DriverDenied(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
-	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin(false)(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 
@@ -503,7 +503,7 @@ func TestRequireAdmin_MissingClaims(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
 	w := httptest.NewRecorder()
 
-	requireAdmin()(dummyHandler()).ServeHTTP(w, req)
+	requireAdmin(false)(dummyHandler()).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
@@ -523,7 +523,7 @@ func TestRequireAdmin_EmptyRole(t *testing.T) {
 
 	// Over the real chain requireAuth now rejects any role outside
 	// driver/admin at the door, so the token never reaches requireAdmin.
-	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin(false)(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Equal(t, "forbidden", decodeError(t, w))
@@ -531,7 +531,7 @@ func TestRequireAdmin_EmptyRole(t *testing.T) {
 	// requireAdmin itself still denies an empty role when reached directly.
 	w = httptest.NewRecorder()
 	req = req.WithContext(contextWithClaims(req.Context(), jwt.MapClaims{"sub": "3", "role": ""}))
-	requireAdmin()(dummyHandler()).ServeHTTP(w, req)
+	requireAdmin(false)(dummyHandler()).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Equal(t, "admin access required", decodeError(t, w))
@@ -558,7 +558,7 @@ func TestRequireAdmin_InvalidRoleType(t *testing.T) {
 
 	// A non-string role reads as "" to requireAuth's role check, so the
 	// request is denied at the door before requireAdmin runs.
-	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin(false)(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Equal(t, "forbidden", decodeError(t, w))
@@ -566,7 +566,7 @@ func TestRequireAdmin_InvalidRoleType(t *testing.T) {
 	// requireAdmin itself still denies a non-string role when reached directly.
 	w = httptest.NewRecorder()
 	req = req.WithContext(contextWithClaims(req.Context(), claims))
-	requireAdmin()(dummyHandler()).ServeHTTP(w, req)
+	requireAdmin(false)(dummyHandler()).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Equal(t, "admin access required", decodeError(t, w))
@@ -576,7 +576,7 @@ func TestRequireAdmin_NoAuthHeader(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
 	w := httptest.NewRecorder()
 
-	requireAuth(testSecret, newFakeRevocations())(requireAdmin()(dummyHandler())).ServeHTTP(w, req)
+	requireAuth(testSecret, newFakeRevocations())(requireAdmin(false)(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -212,11 +213,16 @@ func (s *Store) CreateUser(ctx context.Context, name, email, password, role stri
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
-	row, err := s.queries.CreateUser(ctx, db.CreateUserParams{
-		Name:         name,
-		Email:        email,
-		PasswordHash: string(hash),
-		Role:         role,
+	var row db.CreateUserRow
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		var err error
+		row, err = createUser(ctx, q, db.CreateUserParams{
+			Name:         name,
+			Email:        email,
+			PasswordHash: string(hash),
+			Role:         role,
+		})
+		return err
 	})
 	if err != nil {
 		if isDuplicateEmail(err) {
@@ -236,24 +242,37 @@ func (s *Store) CreateUser(ctx context.Context, name, email, password, role stri
 	}, nil
 }
 
+// createUser makes an account through q and records it in the audit log. The
+// user form, the API and the CSV import all make accounts through it. A
+// duplicate email comes back as the database's error, for the caller to tell
+// apart with isDuplicateEmail.
+func createUser(ctx context.Context, q *db.Queries, params db.CreateUserParams) (db.CreateUserRow, error) {
+	row, err := q.CreateUser(ctx, params)
+	if err != nil {
+		return db.CreateUserRow{}, err
+	}
+	err = recordAudit(ctx, q, auditChange{
+		ObjectType: auditUser, ObjectID: strconv.FormatInt(row.ID, 10), Action: auditCreate,
+		After: userAudit{Name: row.Name, Email: row.Email, Role: row.Role, Active: row.Active},
+	})
+	if err != nil {
+		return db.CreateUserRow{}, err
+	}
+	return row, nil
+}
+
 // UpdateUser updates a user's name, email, and role. A role change ends every
 // token issued to the user before it, for good: changing the role back later
 // does not revive them.
 func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
-	row, err := s.queries.UpdateUser(ctx, db.UpdateUserParams{
-		Name:  name,
-		Email: email,
-		Role:  role,
-		ID:    id,
+	var row db.UpdateUserRow
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		var err error
+		row, err = updateUser(ctx, q, id, name, email, role)
+		return err
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
-		if isDuplicateEmail(err) {
-			return nil, ErrDuplicateEmail
-		}
-		return nil, fmt.Errorf("update user: %w", err)
+		return nil, err
 	}
 
 	return &UserResponse{
@@ -268,22 +287,63 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 	}, nil
 }
 
+// updateUser is UpdateUser through q, recording what changed in the audit
+// log. The user form, the API and the CSV import all update accounts through
+// it. It returns ErrUserNotFound and ErrDuplicateEmail as UpdateUser does.
+func updateUser(ctx context.Context, q *db.Queries, id int64, name, email, role string) (db.UpdateUserRow, error) {
+	old, err := q.GetUserForUpdate(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.UpdateUserRow{}, ErrUserNotFound
+	}
+	if err != nil {
+		return db.UpdateUserRow{}, fmt.Errorf("update user: %w", err)
+	}
+	row, err := q.UpdateUser(ctx, db.UpdateUserParams{
+		Name:  name,
+		Email: email,
+		Role:  role,
+		ID:    id,
+	})
+	if err != nil {
+		if isDuplicateEmail(err) {
+			return db.UpdateUserRow{}, ErrDuplicateEmail
+		}
+		return db.UpdateUserRow{}, fmt.Errorf("update user: %w", err)
+	}
+	err = recordAudit(ctx, q, auditChange{
+		ObjectType: auditUser, ObjectID: strconv.FormatInt(id, 10), Action: auditUpdate,
+		Before: userAudit(old),
+		After:  userAudit{Name: row.Name, Email: row.Email, Role: row.Role, Active: row.Active},
+	})
+	if err != nil {
+		return db.UpdateUserRow{}, err
+	}
+	return row, nil
+}
+
 // DeleteUser removes a user from the database by ID. It returns
 // ErrUserHasTrips when the user still owns trips (FK violation), and
 // ErrUserNotFound when no matching row exists.
 func (s *Store) DeleteUser(ctx context.Context, id int64) error {
-
-	rowsAffected, err := s.queries.DeleteUser(ctx, id)
-	if err != nil {
-		if isFKViolation(err) {
-			return ErrUserHasTrips
+	return s.inTx(ctx, func(q *db.Queries) error {
+		old, err := q.GetUserForUpdate(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
 		}
-		return fmt.Errorf("delete user: %w", err)
-	}
-	if rowsAffected == 0 {
-		return ErrUserNotFound
-	}
-	return nil
+		if err != nil {
+			return fmt.Errorf("delete user: %w", err)
+		}
+		if _, err := q.DeleteUser(ctx, id); err != nil {
+			if isFKViolation(err) {
+				return ErrUserHasTrips
+			}
+			return fmt.Errorf("delete user: %w", err)
+		}
+		return recordAudit(ctx, q, auditChange{
+			ObjectType: auditUser, ObjectID: strconv.FormatInt(id, 10), Action: auditDelete,
+			Before: userAudit(old),
+		})
+	})
 }
 
 // CountUsersByRole returns the total number of users with the given role.

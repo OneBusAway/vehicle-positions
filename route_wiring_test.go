@@ -172,6 +172,9 @@ func (n *noopStore) ListAPIKeysPage(_ context.Context, _, _ int) ([]APIKey, erro
 func (n *noopStore) CountActiveAPIKeys(_ context.Context) (int, error) {
 	return 0, nil
 }
+func (n *noopStore) ListAuditEntries(_ context.Context, _ auditFilter) ([]auditEntry, error) {
+	return make([]auditEntry, 0), nil
+}
 func (n *noopStore) DeactivateAPIKey(_ context.Context, _ int64) error {
 	return nil
 }
@@ -475,6 +478,7 @@ func TestAdminPageRoutes_Wiring(t *testing.T) {
 		{"GET", "/admin/api-keys"},
 		{"POST", "/admin/api-keys"},
 		{"POST", "/admin/api-keys/1/deactivate"},
+		{"GET", "/admin/audit"},
 	}
 
 	for _, tc := range tests {

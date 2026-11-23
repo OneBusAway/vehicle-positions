@@ -145,7 +145,9 @@ func adminClaimsFromCookie(r *http.Request, secret []byte, checker TokenChecker)
 
 // requireAdminPage guards HTML admin pages: unauthenticated or non-admin
 // visitors are redirected to the login page (303) rather than given JSON.
-func requireAdminPage(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
+// Like requireAdmin, it names the admin as the actor of any change the
+// request makes, for the audit log.
+func requireAdminPage(secret []byte, checker TokenChecker, trustProxy bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := adminClaimsFromCookie(r, secret, checker)
@@ -153,8 +155,15 @@ func requireAdminPage(secret []byte, checker TokenChecker) func(http.Handler) ht
 				http.Redirect(w, r, loginURL(r), http.StatusSeeOther)
 				return
 			}
-			ctx := contextWithClaims(r.Context(), claims)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			// checkRevoked has already refused a token whose subject is not
+			// a user id, so this cannot fail for a session it let through.
+			withActor, err := withAuditActor(r.WithContext(contextWithClaims(r.Context(), claims)), claims, trustProxy)
+			if err != nil {
+				slog.Warn("admin session: no actor for the audit log", "error", err, "path", r.URL.Path)
+				http.Redirect(w, r, loginURL(r), http.StatusSeeOther)
+				return
+			}
+			next.ServeHTTP(w, withActor)
 		})
 	}
 }
