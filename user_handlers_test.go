@@ -508,12 +508,12 @@ func TestHandleCreateUser_Validation(t *testing.T) {
 		{
 			name:    "invalid role",
 			body:    `{"name":"Alice","email":"a@b.com","password":"securepass","role":"superadmin"}`,
-			wantErr: "role must be 'driver' or 'admin'",
+			wantErr: "role must be 'driver', 'admin' or 'viewer'",
 		},
 		{
 			name:    "empty role",
 			body:    `{"name":"Alice","email":"a@b.com","password":"securepass","role":""}`,
-			wantErr: "role must be 'driver' or 'admin'",
+			wantErr: "role must be 'driver', 'admin' or 'viewer'",
 		},
 	}
 
@@ -711,7 +711,7 @@ func TestHandleUpdateUser_InvalidRole(t *testing.T) {
 	handler(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Equal(t, "role must be 'driver' or 'admin'", decodeErrorResponse(t, w))
+	assert.Equal(t, "role must be 'driver', 'admin' or 'viewer'", decodeErrorResponse(t, w))
 }
 
 func TestHandleUpdateUser_WrongContentType(t *testing.T) {
@@ -964,7 +964,7 @@ func TestHandleDeleteUser_UserHasTrips(t *testing.T) {
 // 255/256 pair is the boundary guard on q's length cap.
 func TestHandleListUsers_FilterParams(t *testing.T) {
 	qError := fmt.Sprintf("q must be at most %d characters", maxFieldLength)
-	const roleError = `role must be "", "driver", or "admin"`
+	const roleError = `role must be "", "driver", "admin" or "viewer"`
 
 	tests := []struct {
 		name       string

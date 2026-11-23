@@ -271,11 +271,13 @@ func (s *openAPISpec) mappings() map[string]map[string]any {
 }
 
 // registeredRoute is one mux registration found in the server's Go source,
-// together with the middleware wrapping its handler.
+// together with the middleware wrapping its handler. auth is set for both
+// staff doors, requireAuth and requireDriverAPI, and driverAPI for the second.
 type registeredRoute struct {
 	method, path string
 	source       string
 	auth         bool
+	driverAPI    bool
 	admin        bool
 	rider        bool
 	apiKey       bool
@@ -355,14 +357,16 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 			method, path, ok := strings.Cut(pattern, " ")
 			require.Truef(t, ok, "%s: route pattern %q has no HTTP method prefix", source, pattern)
 
+			driverAPI := wrappedBy(call.Args[1], scope, "requireDriverAPI")
 			routes = append(routes, registeredRoute{
-				method: method,
-				path:   path,
-				source: source,
-				auth:   wrappedBy(call.Args[1], scope, "requireAuth"),
-				admin:  wrappedBy(call.Args[1], scope, "requireAdmin"),
-				rider:  wrappedBy(call.Args[1], scope, "requireRider"),
-				apiKey: wrappedBy(call.Args[1], scope, "requireAPIKey"),
+				method:    method,
+				path:      path,
+				source:    source,
+				auth:      driverAPI || wrappedBy(call.Args[1], scope, "requireAuth"),
+				driverAPI: driverAPI,
+				admin:     wrappedBy(call.Args[1], scope, "requireAdmin"),
+				rider:     wrappedBy(call.Args[1], scope, "requireRider"),
+				apiKey:    wrappedBy(call.Args[1], scope, "requireAPIKey"),
 			})
 			return true
 		})
@@ -418,6 +422,7 @@ func apiRoutes(t *testing.T) []registeredRoute {
 			continue
 		}
 		existing.auth = existing.auth || route.auth
+		existing.driverAPI = existing.driverAPI || route.driverAPI
 		existing.admin = existing.admin || route.admin
 		existing.rider = existing.rider || route.rider
 		existing.apiKey = existing.apiKey || route.apiKey
@@ -449,7 +454,7 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 // route is classified by which of these produced the wrapper around its
 // handler, not by what the local variable happens to be called.
 var middlewareConstructors = map[string]struct{}{
-	"requireAuth": {}, "requireAdmin": {}, "requireRider": {}, "requireAPIKey": {},
+	"requireAuth": {}, "requireDriverAPI": {}, "requireAdmin": {}, "requireRider": {}, "requireAPIKey": {},
 }
 
 // middlewareScope maps the identifiers naming an auth middleware inside one
@@ -724,7 +729,8 @@ func TestOpenAPI_AuthRequirementsMatchCode(t *testing.T) {
 				"%s wraps %s in requireAuth, so the spec must document a 401 response", route.source, route)
 			// requireAuth admits only the staff roles, so a valid token with
 			// any other role — a rider token, handed out anonymously — is a
-			// 403 rather than a 401.
+			// 403 rather than a 401. requireDriverAPI refuses a viewer's the
+			// same way.
 			assert.Containsf(t, operation["responses"], "403",
 				"%s wraps %s in requireAuth, which rejects a non-staff role, so the spec must document a 403 response",
 				route.source, route)

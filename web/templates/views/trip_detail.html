@@ -18,7 +18,7 @@
   </div>
   <div class="page-actions">
     {{if eq (len .CSV) 1}}{{range .CSV}}<a class="btn btn-outline" href="{{.URL}}">{{template "icon" "download"}}Download CSV</a>{{end}}{{end}}
-    {{if .Active}}<form method="post" action="/admin/trips/{{.ID}}/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip"><button class="btn btn-outline" type="submit">End trip</button></form>{{end}}
+    {{if and .Active (not $.Shell.ReadOnly)}}<form method="post" action="/admin/trips/{{.ID}}/end" data-confirm="End this trip?" data-confirm-text="Do this only when the driver's phone cannot end it. The driver can then start a new trip." data-confirm-ok="End trip"><button class="btn btn-outline" type="submit">End trip</button></form>{{end}}
   </div>
   {{if gt (len .CSV) 1}}<p class="help" style="flex-basis:100%;margin:0">Download CSV in {{len .CSV}} parts: {{range $i, $part := .CSV}}{{if $i}}, {{end}}<a href="{{.URL}}">{{.Label}}</a>{{end}}</p>{{end}}
 </div>

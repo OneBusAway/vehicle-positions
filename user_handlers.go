@@ -58,7 +58,7 @@ func handleListUsers(store UserPager) http.HandlerFunc {
 		}
 		role := query.Get("role")
 		if !validUserRoleFilter(role) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `role must be "", "driver", or "admin"`})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `role must be "", "driver", "admin" or "viewer"`})
 			return
 		}
 
@@ -160,7 +160,7 @@ func handleCreateUser(store UserCreator) http.HandlerFunc {
 			return
 		}
 		if !validUserRole(req.Role) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver' or 'admin'"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver', 'admin' or 'viewer'"})
 			return
 		}
 
@@ -223,7 +223,7 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			return
 		}
 		if !validUserRole(req.Role) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver' or 'admin'"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'driver', 'admin' or 'viewer'"})
 			return
 		}
 		if req.Password != "" {
@@ -293,6 +293,10 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			}
 			if errors.Is(err, ErrDuplicateEmail) {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": "email already exists"})
+				return
+			}
+			if errors.Is(err, ErrViewerWithTrip) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": ErrViewerWithTrip.Error()})
 				return
 			}
 			slog.Error("failed to update user", "id", id, "error", err)

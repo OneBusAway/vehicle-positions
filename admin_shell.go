@@ -67,6 +67,10 @@ type shellData struct {
 	AlertCount int
 	fleetCounts
 	Account shellAccount
+	// ReadOnly is set for a viewer. Every page leaves out its controls that
+	// change something when it is, and the top bar says so. It is set once
+	// here, from the session, rather than by each page.
+	ReadOnly bool
 }
 
 // AlertsLabel names the links to the Alerts page for a screen reader, which
@@ -122,7 +126,17 @@ func (ui *adminUI) shell(r *http.Request, alerts []alertEntry) shellData {
 		AlertCount:  len(alerts),
 		fleetCounts: ui.fleetNow(alerts),
 		Account:     ui.account(r),
+		ReadOnly:    isViewer(r),
 	}
+}
+
+// isViewer reports whether the request was made by a viewer, from the role
+// requireAdminPage put on the context. A viewer's request can only be a read:
+// the guard has refused anything else before a page sees it.
+func isViewer(r *http.Request) bool {
+	claims, _ := r.Context().Value(claimsKey).(jwt.MapClaims)
+	role, _ := claims["role"].(string)
+	return role == roleViewer
 }
 
 // account is the signed-in admin for the account menu. The session carries

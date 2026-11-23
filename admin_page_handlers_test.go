@@ -64,6 +64,7 @@ type fakeAdminStats struct {
 	vehicles int
 	drivers  int
 	admins   int
+	viewers  int
 	trips    int
 }
 
@@ -72,8 +73,11 @@ func (f *fakeAdminStats) CountActiveVehicles(_ context.Context) (int, error) { r
 // CountActiveUsersByRole is role-aware so the last-admin guard tests only
 // pass when the handler actually queries the "admin" role.
 func (f *fakeAdminStats) CountActiveUsersByRole(_ context.Context, role string) (int, error) {
-	if role == "admin" {
+	switch role {
+	case "admin":
 		return f.admins, nil
+	case "viewer":
+		return f.viewers, nil
 	}
 	return f.drivers, nil
 }
@@ -2305,7 +2309,7 @@ func TestUsersPage_RejectsInvalidFilters(t *testing.T) {
 		query string
 		want  string
 	}{
-		{name: "unknown role", query: "?role=superuser", want: "role must be driver or admin"},
+		{name: "unknown role", query: "?role=superuser", want: "role must be driver, admin or viewer"},
 		{
 			name:  "q one past the maximum length",
 			query: "?q=" + strings.Repeat("a", maxFieldLength+1),

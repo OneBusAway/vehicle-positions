@@ -43,7 +43,12 @@ tags:
   - name: health
     description: Liveness and readiness probes.
   - name: admin
-    description: Administrative management endpoints.
+    description: |
+      Administrative management endpoints. A read takes an `admin` or a
+      `viewer` token; anything that changes something takes an `admin` token,
+      and a viewer gets `403` with `admin access required`. A viewer is
+      refused on the driver-facing routes too, which take a driver or admin
+      token.
   - name: trips
     description: Driver trip lifecycle.
   - name: vehicles
@@ -334,9 +339,9 @@ paths:
       description: |
         Returns the active vehicles the calling driver is assigned to. The
         driver identity comes from the JWT `sub` claim, so there is no path
-        or query parameter. Requires a valid bearer token but not the
-        `admin` role — this is the driver-facing counterpart to
-        `GET /api/v1/admin/vehicles`.
+        or query parameter. Requires a driver or admin bearer token; a
+        `viewer` token is refused with `403`. This is the driver-facing
+        counterpart to `GET /api/v1/admin/vehicles`.
       responses:
         '200':
           description: |
@@ -841,8 +846,8 @@ paths:
       summary: List feed API keys
       description: |
         Returns one page of keys newest-first, deactivated ones included.
-        Requires the `admin` role. The raw keys are never returned: only their
-        hashes are stored.
+        Requires the `admin` or `viewer` role. The raw keys are never
+        returned: only their hashes are stored.
 
         Paging is offset-based. The handler reads one row past `limit` to set
         `has_more`, so a truncated page is distinguishable from an exact fit.
@@ -924,9 +929,10 @@ paths:
       tags: [gtfs]
       summary: List routes in the loaded schedule
       description: |
-        Requires a driver or admin bearer token. Registered only when a GTFS
-        schedule is configured; without one the route does not exist and the
-        server answers 404.
+        Requires a driver, admin or viewer bearer token (the admin's map and
+        search read it too). Registered only when a GTFS schedule is
+        configured; without one the route does not exist and the server
+        answers 404.
       responses:
         '200':
           description: Routes.
@@ -949,7 +955,7 @@ paths:
     get:
       tags: [gtfs]
       summary: List a route's trips on a service date
-      description: Requires a driver or admin bearer token.
+      description: Requires a driver, admin or viewer bearer token.
       parameters:
         - $ref: '#/components/parameters/ServiceDateQuery'
       responses:
@@ -989,8 +995,8 @@ paths:
       description: |
         Returns everything a client needs to follow a trip: its shape, its
         stops with scheduled times, and the thresholds the server uses when
-        judging whether a vehicle is on route and on time. Requires a driver
-        or admin bearer token.
+        judging whether a vehicle is on route and on time. Requires a driver,
+        admin or viewer bearer token.
       parameters:
         - $ref: '#/components/parameters/ServiceDateQuery'
       responses:
@@ -1034,7 +1040,7 @@ paths:
       description: |
         Reports the rider engine's state: the schedule snapshot it is matching
         against, the trusted feeds it corroborates with, and current rider and
-        ride counts. Requires the `admin` role.
+        ride counts. Requires the `admin` or `viewer` role.
 
         Rider mode being off is a fact about the server, not an error — a
         disabled server answers `200` with `enabled: false` and omits the
@@ -1058,9 +1064,9 @@ paths:
       tags: [admin]
       summary: List rider rides
       description: |
-        Lists rides newest-first, filtered by status. Requires the `admin`
-        role. Like the other admin lists, one row beyond `limit` is read to
-        set `has_more`.
+        Lists rides newest-first, filtered by status. Requires the `admin` or
+        `viewer` role. Like the other admin lists, one row beyond `limit` is
+        read to set `has_more`.
       parameters:
         - in: query
           name: status
@@ -1104,7 +1110,7 @@ paths:
     get:
       tags: [admin]
       summary: System status and vehicle counts
-      description: Requires the `admin` role.
+      description: Requires the `admin` or `viewer` role.
       responses:
         '200':
           description: Current status.
@@ -1125,7 +1131,7 @@ paths:
       summary: List vehicles
       description: |
         Returns one page of vehicles newest-first, deactivated ones included.
-        Requires the `admin` role.
+        Requires the `admin` or `viewer` role.
 
         Paging is offset-based. The handler reads one row past `limit` to set
         `has_more`, so a truncated page is distinguishable from an exact fit.
@@ -1187,7 +1193,7 @@ paths:
         Returns every vehicle the tracker considers active — those that have
         reported within `STALENESS_THRESHOLD` — joined with the vehicle's
         label and, where a trip is running, that trip's route and driver.
-        Ordered by `vehicle_id`. Requires the `admin` role.
+        Ordered by `vehicle_id`. Requires the `admin` or `viewer` role.
 
         This reads the in-memory tracker rather than the locations table, so
         it reflects live state, not history. Use
@@ -1213,7 +1219,7 @@ paths:
     get:
       tags: [admin]
       summary: Get a vehicle by id
-      description: Requires the `admin` role.
+      description: Requires the `admin` or `viewer` role.
       responses:
         '200':
           description: Vehicle.
@@ -1259,7 +1265,7 @@ paths:
       summary: Export a vehicle's location history
       description: |
         Returns the GPS fixes recorded for a vehicle within a time window,
-        as JSON or as a CSV download. Requires the `admin` role.
+        as JSON or as a CSV download. Requires the `admin` or `viewer` role.
 
         The window defaults to the 24 hours ending at `to` rather than to
         all of history, so an unbounded request cannot trigger a full-table
@@ -1351,7 +1357,7 @@ paths:
       summary: List trips
       description: |
         Returns trips newest-first with the vehicle label and driver name
-        resolved. Requires the `admin` role.
+        resolved. Requires the `admin` or `viewer` role.
 
         Paging is offset-based. The handler reads one row past `limit` to set
         `has_more`, so a truncated page is distinguishable from an exact fit.
@@ -1426,7 +1432,7 @@ paths:
       summary: Get a trip by id
       description: |
         Returns one trip with its vehicle label and driver name resolved.
-        Requires the `admin` role.
+        Requires the `admin` or `viewer` role.
 
         As with the trail endpoint, a non-numeric `id` returns `404` rather
         than `400` — an unparseable id is treated as a trip that does not
@@ -1459,7 +1465,7 @@ paths:
       summary: Get a trip with its recorded trail
       description: |
         Returns the trip summary together with every location fix recorded
-        against it, oldest first. Requires the `admin` role.
+        against it, oldest first. Requires the `admin` or `viewer` role.
 
         A non-numeric `id` returns `404` rather than `400` — the handler
         treats an unparseable id as a trip that does not exist.
@@ -1540,7 +1546,7 @@ paths:
         The same list the admin UI's Alerts page shows, worked out on request
         from the active trips, the trips started in the last day, the reports
         the server has accepted since it started, and where the latest of them
-        put each vehicle on its trip. Requires the `admin` role.
+        put each vehicle on its trip. Requires the `admin` or `viewer` role.
 
         - `quiet`: the vehicle has sent no report for longer than
           `ALERT_QUIET_AFTER` (3m by default). Before its first report on the
@@ -1611,7 +1617,7 @@ paths:
         service that day, the trips the GTFS calendar and calendar_dates
         schedule, how many a driver ran, and how close to schedule they ran.
         It is worked out on request from the stored trips and location points
-        and the loaded schedule. Requires the `admin` role.
+        and the loaded schedule. Requires the `admin` or `viewer` role.
 
         A driver's trip counts as a run of its GTFS trip on the service day
         whose scheduled run is nearest to when the driver started it, within
@@ -1738,7 +1744,7 @@ paths:
         from `since`. Each hour is saved to the database when it closes, and
         the hour in progress when the server stops, so `hours` is kept
         through a restart; `LOCATION_RETENTION_PERIOD` deletes the hours older
-        than it. Requires the `admin` role.
+        than it. Requires the `admin` or `viewer` role.
 
         A report is `accepted` (2xx), `invalid` (400, 409 for a report that
         does not match the driver's running trip, 415 and any other 4xx),
@@ -1781,7 +1787,7 @@ paths:
       summary: List users
       description: |
         Returns one page of users newest-first, deactivated ones included.
-        Requires the `admin` role.
+        Requires the `admin` or `viewer` role.
 
         Paging is offset-based. The handler reads one row past `limit` to set
         `has_more`, so a truncated page is distinguishable from an exact fit.
@@ -1851,7 +1857,7 @@ paths:
     get:
       tags: [admin]
       summary: Get a user by id
-      description: Requires the `admin` role.
+      description: Requires the `admin` or `viewer` role.
       responses:
         '200':
           description: User.
@@ -1874,7 +1880,9 @@ paths:
       summary: Update a user
       description: |
         Updates name, email, role and, optionally, password or active status. Requires the `admin` role. Request
-        bodies are capped at 1 KiB.
+        bodies are capped at 1 KiB. Making an account a `viewer` unassigns
+        every vehicle assigned to it in the same change, since a viewer can't
+        drive.
       requestBody:
         required: true
         content:
@@ -1904,7 +1912,10 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Email already exists.
+          description: |
+            Email already exists, or the change makes the account a viewer while
+            it has a trip running (`end this account's running trip before making
+            it a viewer`).
           content:
             application/json:
               schema:
@@ -1984,7 +1995,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: This driver is already assigned to this vehicle, or the vehicle is inactive.
+          description: |
+            This driver is already assigned to this vehicle, the vehicle is
+            inactive, or the account is a viewer (`a viewer can't drive, so no
+            vehicles can be assigned to one`).
           content:
             application/json:
               schema:
@@ -2003,9 +2017,9 @@ paths:
       tags: [admin]
       summary: List the vehicles assigned to a driver
       description: |
-        Requires the `admin` role. The handler validates the id but does not
-        check that the user exists, so an unknown id returns `200` with an
-        empty array rather than `404`.
+        Requires the `admin` or `viewer` role. The handler validates the id
+        but does not check that the user exists, so an unknown id returns
+        `200` with an empty array rather than `404`.
       responses:
         '200':
           description: Assignments held by this driver.
@@ -2074,9 +2088,9 @@ paths:
       tags: [admin]
       summary: List the drivers assigned to a vehicle
       description: |
-        Requires the `admin` role. The handler validates the id but does not
-        check that the vehicle exists, so an unknown id returns `200` with an
-        empty array rather than `404`.
+        Requires the `admin` or `viewer` role. The handler validates the id
+        but does not check that the vehicle exists, so an unknown id returns
+        `200` with an empty array rather than `404`.
       responses:
         '200':
           description: |
@@ -2332,7 +2346,10 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Forbidden:
-      description: Caller lacks the required role.
+      description: |
+        Caller lacks the required role: a driver or rider token on an admin
+        route, a viewer token on an admin route that changes something or on a
+        driver-facing route, or a staff token on a rider route.
       content:
         application/json:
           schema:
@@ -2648,7 +2665,7 @@ components:
           $ref: '#/components/schemas/Password'
         role:
           type: string
-          enum: [driver, admin]
+          enum: [driver, admin, viewer]
 
     UpdateUserRequest:
       type: object
@@ -2664,7 +2681,7 @@ components:
           description: Stored lower-case. An email another account has in any case is a duplicate (409).
         role:
           type: string
-          enum: [driver, admin]
+          enum: [driver, admin, viewer]
         password:
           anyOf:
             - $ref: '#/components/schemas/Password'
@@ -2723,7 +2740,7 @@ components:
           description: Lower-case. Sign-in matches it in any case.
         role:
           type: string
-          enum: [driver, admin]
+          enum: [driver, admin, viewer]
         active:
           type: boolean
           description: |

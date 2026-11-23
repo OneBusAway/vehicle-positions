@@ -196,8 +196,8 @@ Only `ride_points`, where the raw rider fixes live, expires: those rows are
 deleted after `RIDER_POINT_RETENTION` (default seven days) by an hourly sweep.
 `riders` and `rides` are kept indefinitely — `rides` keeps the trip, route and
 boarding stop of every ride that device has reported. Both are readable through
-the admin API, so an operator holding admin credentials can read any device's
-ride history; deleting a rider's data means deleting those rows directly.
+the admin API, so an operator holding admin or viewer credentials can read any
+device's ride history; deleting a rider's data means deleting those rows directly.
 
 ---
 
@@ -353,8 +353,8 @@ Authentication is per endpoint, not global:
 | `/health`, `/ready`, `GET /gtfs-rt/vehicle-positions`, `GET /gtfs-rt/trip-updates` | None, unless `FEED_AUTH_ENABLED` puts both feeds behind an `X-API-Key`. |
 | `POST /api/v1/auth/login` | None, but rate limited per client. |
 | `GET /metrics` | The `METRICS_TOKEN` bearer token. Registered only when `METRICS_ENABLED` is `true`. |
-| `POST /api/v1/locations`, `/api/v1/trips/*`, `GET /api/v1/vehicles` | A driver's JWT (`authMiddleware`). |
-| `/api/v1/admin/*` — including `/api/v1/admin/rider/status` | A JWT whose user is an admin (`authMiddleware` + `adminMiddleware`). |
+| `POST /api/v1/locations`, `/api/v1/trips/*`, `GET /api/v1/vehicles`, `GET /api/v1/map` | A driver's or an admin's JWT, never a viewer's (`driverMiddleware`, `requireDriverAPI`). |
+| `/api/v1/admin/*` — including `/api/v1/admin/rider/status` | A JWT whose user is an admin, or a viewer for `GET` and `HEAD` (`authMiddleware` + `adminMiddleware`, whose rule `adminGateAllows` the admin UI's `requireAdminPage` shares). |
 | `/api/v1/rider/*` | A rider JWT, issued by `POST /api/v1/rider/register`; see §8. |
 
 ### 6.2 Location Report Payload

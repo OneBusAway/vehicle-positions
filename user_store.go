@@ -263,7 +263,8 @@ func createUser(ctx context.Context, q *db.Queries, params db.CreateUserParams) 
 
 // UpdateUser updates a user's name, email, and role. A role change ends every
 // token issued to the user before it, for good: changing the role back later
-// does not revive them.
+// does not revive them. A change to viewer also unassigns the account's
+// vehicles, and is refused with ErrViewerWithTrip while it has a trip running.
 func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role string) (*UserResponse, error) {
 	var row db.UpdateUserRow
 	err := s.inTx(ctx, func(q *db.Queries) error {
@@ -289,7 +290,8 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, name, email, role stri
 
 // updateUser is UpdateUser through q, recording what changed in the audit
 // log. The user form, the API and the CSV import all update accounts through
-// it. It returns ErrUserNotFound and ErrDuplicateEmail as UpdateUser does.
+// it. It returns ErrUserNotFound, ErrDuplicateEmail and ErrViewerWithTrip as
+// UpdateUser does.
 func updateUser(ctx context.Context, q *db.Queries, id int64, name, email, role string) (db.UpdateUserRow, error) {
 	old, err := q.GetUserForUpdate(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -317,6 +319,13 @@ func updateUser(ctx context.Context, q *db.Queries, id int64, name, email, role 
 	})
 	if err != nil {
 		return db.UpdateUserRow{}, err
+	}
+	// A viewer can't drive, so an account made one loses its vehicles in the
+	// same change.
+	if role == roleViewer && old.Role != roleViewer {
+		if err := dropAssignments(ctx, q, id); err != nil {
+			return db.UpdateUserRow{}, err
+		}
 	}
 	return row, nil
 }

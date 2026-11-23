@@ -21,6 +21,12 @@ var (
 	// a running trip on the vehicle, one the location ingest would refuse every
 	// report for.
 	ErrAssignmentInUse = errors.New("driver has an active trip on this vehicle")
+	// ErrAssignToViewer refuses a vehicle for a viewer, who the driver API
+	// turns away, so the assignment could never be used.
+	ErrAssignToViewer = errors.New("a viewer can't drive, so no vehicles can be assigned to one")
+	// ErrViewerWithTrip refuses to make an account a viewer while it has a
+	// trip running: the vehicles it drops would include the trip's.
+	ErrViewerWithTrip = errors.New("end this account's running trip before making it a viewer")
 )
 
 // AssignmentResponse is the API representation of a user-vehicle assignment.
@@ -88,6 +94,19 @@ func assignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID s
 	if err != nil {
 		return db.UserVehicle{}, classifyAssignmentError(err)
 	}
+	// The role is read after the insert, whose foreign key holds a KEY SHARE
+	// lock on the account. A change to viewer takes the account FOR UPDATE
+	// before it drops the vehicles (dropAssignments), so either this
+	// assignment commits first and is dropped with the rest, or it waits for
+	// the change and reads the viewer role here. The read takes no lock of its
+	// own, so an admin's edit of the account doesn't hold up an assignment.
+	user, err := q.GetUserByID(ctx, userID)
+	if err != nil {
+		return db.UserVehicle{}, fmt.Errorf("read the assigned account: %w", err)
+	}
+	if user.Role == roleViewer {
+		return db.UserVehicle{}, ErrAssignToViewer
+	}
 	err = recordAudit(ctx, q, auditChange{
 		ObjectType: auditUser, ObjectID: strconv.FormatInt(userID, 10), Action: auditAssign,
 		After: assignmentAudit{VehicleID: vehicleID},
@@ -146,16 +165,18 @@ func classifyAssignmentError(err error) error {
 // ErrAssignmentNotFound if no row matched, and ErrAssignmentInUse, keeping the
 // assignment, while the driver has an active trip on the vehicle.
 func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID string) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer rollbackTx(tx)
-	qtx := s.queries.WithTx(tx)
+	return s.inTx(ctx, func(q *db.Queries) error {
+		return unassignVehicle(ctx, q, userID, vehicleID)
+	})
+}
 
+// unassignVehicle is DeleteAssignment through q, recording the unassignment in
+// the audit log in the same transaction. DeleteAssignment and a change of an
+// account to viewer (dropAssignments) both unassign through it.
+func unassignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID string) error {
 	// The delete comes first: it waits for any trip start holding the
 	// assignment, so a trip that start commits is visible to the check below.
-	rowsAffected, err := qtx.UnassignUserVehicle(ctx, db.UnassignUserVehicleParams{
+	rowsAffected, err := q.UnassignUserVehicle(ctx, db.UnassignUserVehicleParams{
 		UserID:    userID,
 		VehicleID: vehicleID,
 	})
@@ -166,7 +187,7 @@ func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID st
 		return ErrAssignmentNotFound
 	}
 
-	trip, err := qtx.GetActiveTripByVehicle(ctx, vehicleID)
+	trip, err := q.GetActiveTripByVehicle(ctx, vehicleID)
 	if err == nil && trip.UserID == userID {
 		return ErrAssignmentInUse
 	}
@@ -174,16 +195,38 @@ func (s *Store) DeleteAssignment(ctx context.Context, userID int64, vehicleID st
 		return fmt.Errorf("check active trip: %w", err)
 	}
 
-	err = recordAudit(ctx, qtx, auditChange{
+	return recordAudit(ctx, q, auditChange{
 		ObjectType: auditUser, ObjectID: strconv.FormatInt(userID, 10), Action: auditUnassign,
 		Before: assignmentAudit{VehicleID: vehicleID},
 	})
-	if err != nil {
-		return err
-	}
+}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
+// dropAssignments unassigns every vehicle from userID, in the transaction
+// that makes the account a viewer, with a row in the audit log for each. It
+// returns ErrViewerWithTrip, so the caller rolls back, while the account has a
+// trip running on one of them.
+//
+// LockUser comes first. Its FOR UPDATE conflicts with the KEY SHARE lock an
+// assignment's insert takes on the account, so it waits for an assignment
+// being made right now to commit, and the list below then includes it; an
+// assignment made after it waits in turn, and assignVehicle then reads the
+// viewer role and refuses.
+func dropAssignments(ctx context.Context, q *db.Queries, userID int64) error {
+	if _, err := q.LockUser(ctx, userID); err != nil {
+		return fmt.Errorf("lock the account: %w", err)
+	}
+	assigned, err := q.ListVehiclesByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list the account's vehicles: %w", err)
+	}
+	for _, a := range assigned {
+		err := unassignVehicle(ctx, q, userID, a.VehicleID)
+		if errors.Is(err, ErrAssignmentInUse) {
+			return ErrViewerWithTrip
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

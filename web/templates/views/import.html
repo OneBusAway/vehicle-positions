@@ -105,13 +105,13 @@
     <div class="page-head-main">
       <a class="back" href="{{.Kind.ListURL}}">{{template "icon-sm" "arrow_back"}}{{.Kind.ListName}}</a>
       <h2 class="h1">{{.Kind.Title}}</h2>
-      <p class="lede">Upload a CSV file to see what it would change. Nothing is saved until you confirm.</p>
+      <p class="lede">{{if .Shell.ReadOnly}}What a CSV file for an import holds. An admin uploads it.{{else}}Upload a CSV file to see what it would change. Nothing is saved until you confirm.{{end}}</p>
     </div>
   </div>
   {{template "import-steps" .Step}}
-  <form class="card form-card" method="post" action="/admin/import/{{.Kind.Name}}" enctype="multipart/form-data">
+  {{if .Shell.ReadOnly}}<div class="card form-card">{{template "viewer-note"}}{{else}}<form class="card form-card" method="post" action="/admin/import/{{.Kind.Name}}" enctype="multipart/form-data">
     {{if .Error}}<div class="banner banner-error" role="alert">{{template "icon" "error"}}<div><b style="font-weight:500">The file was not read.</b> {{.Error}}</div></div>{{end}}
-    <label class="drop" for="file">{{template "icon-lg" "upload_file"}}<span style="font:500 16px/22px var(--font-sans)">Choose a CSV file</span><span class="muted"><span class="js-only">or drop it here. </span>Up to {{.MaxRows}} rows and {{.MaxKB}} KB, saved as CSV UTF-8.</span><input id="file" name="file" type="file" accept=".csv,text/csv" required style="margin-top:8px"></label>
+    <label class="drop" for="file">{{template "icon-lg" "upload_file"}}<span style="font:500 16px/22px var(--font-sans)">Choose a CSV file</span><span class="muted"><span class="js-only">or drop it here. </span>Up to {{.MaxRows}} rows and {{.MaxKB}} KB, saved as CSV UTF-8.</span><input id="file" name="file" type="file" accept=".csv,text/csv" required style="margin-top:8px"></label>{{end}}
     <div>
       <div class="label" style="margin-bottom:8px">The first line names the columns, in any order</div>
       <div class="table-wrap">
@@ -124,8 +124,8 @@
       </div>
     </div>
     <div class="banner">{{template "icon" "info"}}<div>{{range $i, $note := .Kind.Notes}}{{if $i}} {{end}}{{$note}}{{end}}</div></div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><a class="btn" href="/admin/import/{{.Kind.Name}}/template.csv">{{template "icon" "download"}}Download the template</a><span style="flex:1"></span><a class="btn" href="{{.Kind.ListURL}}">Cancel</a><button class="btn btn-primary" type="submit">Check the file</button></div>
-  </form>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><a class="btn" href="/admin/import/{{.Kind.Name}}/template.csv">{{template "icon" "download"}}Download the template</a>{{if not .Shell.ReadOnly}}<span style="flex:1"></span><a class="btn" href="{{.Kind.ListURL}}">Cancel</a><button class="btn btn-primary" type="submit">Check the file</button>{{end}}</div>
+  {{if .Shell.ReadOnly}}</div>{{else}}</form>{{end}}
 </div>
 {{end}}
 {{end}}

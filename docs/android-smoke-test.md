@@ -81,9 +81,9 @@ itself is covered by `HighlightedRunTest` and `ViewModelsTest`.
 ### 2. The admin user
 
 `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` from step 1 create the
-admin on the first boot of an empty database — every admin endpoint requires an
-admin-role JWT (`requireAdmin` in `auth.go`, wired in `main.go`), and account
-creation is itself admin-only, so that is the bootstrap. Log in and keep the
+admin on the first boot of an empty database — every admin endpoint that
+changes something requires an admin-role JWT (`requireAdmin` in `auth.go`,
+wired in `main.go`), account creation among them, so that is the bootstrap. Log in and keep the
 token:
 
 ```bash

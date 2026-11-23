@@ -57,14 +57,17 @@ func TestVehiclesHeadline(t *testing.T) {
 
 func TestUsersHeadline(t *testing.T) {
 	for _, tc := range []struct {
-		drivers, admins int
-		want            string
+		drivers, admins, viewers int
+		want                     string
 	}{
-		{0, 1, "No drivers yet"},
-		{1, 1, "1 driver and 1 admin"},
-		{11, 2, "11 drivers and 2 admins"},
+		{0, 1, 0, "No drivers yet"},
+		{0, 1, 2, "No drivers yet"},
+		{1, 1, 0, "1 driver and 1 admin"},
+		{11, 2, 0, "11 drivers and 2 admins"},
+		{11, 1, 1, "11 drivers, 1 admin and 1 viewer"},
+		{11, 2, 3, "11 drivers, 2 admins and 3 viewers"},
 	} {
-		assert.Equal(t, tc.want, usersHeadline(tc.drivers, tc.admins))
+		assert.Equal(t, tc.want, usersHeadline(tc.drivers, tc.admins, tc.viewers))
 	}
 }
 
@@ -262,7 +265,7 @@ func TestUserForm_MarksTheFieldThatFailed(t *testing.T) {
 		{"create, bad email", "/admin/users", with("email", "newguy@"), "email", "email is not valid"},
 		{"create, taken email", "/admin/users", with("email", "ada@test.com"), "email", "email already exists"},
 		{"create, short password", "/admin/users", with("password", "short"), "password", "password must be at least 8 characters"},
-		{"create, bad role", "/admin/users", with("role", "boss"), "role", "role must be driver or admin"},
+		{"create, bad role", "/admin/users", with("role", "boss"), "role", "role must be driver, admin or viewer"},
 		{"edit, no email", "/admin/users/1", with("email", ""), "email", "email is required"},
 		{"edit, short password", "/admin/users/1", with("password", "short"), "password", "password must be at least 8 characters"},
 		{"edit, last admin demoted", "/admin/users/1", with("email", "ada@test.com"), "role", "cannot demote the last active admin"},

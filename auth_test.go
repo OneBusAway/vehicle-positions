@@ -521,8 +521,8 @@ func TestRequireAdmin_EmptyRole(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
-	// Over the real chain requireAuth now rejects any role outside
-	// driver/admin at the door, so the token never reaches requireAdmin.
+	// Over the real chain requireAuth now rejects any role outside the
+	// staff roles at the door, so the token never reaches requireAdmin.
 	requireAuth(testSecret, newFakeRevocations())(requireAdmin(false)(dummyHandler())).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)

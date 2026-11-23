@@ -113,7 +113,7 @@ func clearSessionCookie(w http.ResponseWriter) {
 
 // adminClaimsFromCookie validates the session cookie's JWT via the shared
 // parseSessionToken path, rejects a revoked token via the shared checkRevoked
-// path, and additionally requires the admin role.
+// path, and additionally requires a role that may use the admin UI.
 //
 // This is the browser half of the revocation enforcement in requireAuth: both
 // carry the same JWT, so a token revoked through POST /api/v1/auth/logout must
@@ -137,14 +137,21 @@ func adminClaimsFromCookie(r *http.Request, secret []byte, checker TokenChecker)
 		slog.Warn("admin session: rejected revoked token", "sub", claims["sub"], "path", r.URL.Path)
 		return nil, false
 	}
-	if role, _ := claims["role"].(string); role != roleAdmin {
+	if role, _ := claims["role"].(string); !adminUIRole(role) {
 		return nil, false
 	}
 	return claims, true
 }
 
+// adminUIRole reports whether role may sign in to the admin UI: an admin, or
+// a viewer, who may read every page the admin may (adminGateAllows).
+func adminUIRole(role string) bool { return adminGateAllows(role, http.MethodGet) }
+
 // requireAdminPage guards HTML admin pages: unauthenticated or non-admin
-// visitors are redirected to the login page (303) rather than given JSON.
+// visitors are redirected to the login page (303) rather than given JSON. A
+// viewer sees every page and is refused every form post, with the same rule
+// requireAdmin applies to the JSON API (adminGateAllows); the refusal is a
+// bare 403, which errorPages turns into the page that says why.
 // Like requireAdmin, it names the admin as the actor of any change the
 // request makes, for the audit log.
 func requireAdminPage(secret []byte, checker TokenChecker, trustProxy bool) func(http.Handler) http.Handler {
@@ -153,6 +160,12 @@ func requireAdminPage(secret []byte, checker TokenChecker, trustProxy bool) func
 			claims, ok := adminClaimsFromCookie(r, secret, checker)
 			if !ok {
 				http.Redirect(w, r, loginURL(r), http.StatusSeeOther)
+				return
+			}
+			if role, _ := claims["role"].(string); !adminGateAllows(role, r.Method) {
+				slog.Warn("admin session: refused a change from a viewer",
+					"sub", claims["sub"], "method", r.Method, "path", r.URL.Path)
+				http.Error(w, "a viewer account cannot change anything", http.StatusForbidden)
 				return
 			}
 			// checkRevoked has already refused a token whose subject is not
