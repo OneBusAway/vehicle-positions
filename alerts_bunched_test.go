@@ -432,9 +432,9 @@ func TestAdminMapCardReadsTheVehicleAhead(t *testing.T) {
 	for _, want := range []string{
 		alertBunched + `: "Bunched"`,
 		"al && al." + tag(entry, "Ahead"),
-		"ageText(a." + tag(ahead, "SpacingS") + `) + " behind "`,
+		"formatGap(a." + tag(ahead, "SpacingS") + `) + " behind "`,
 		"(a." + tag(ahead, "VehicleLabel") + " || a." + tag(ahead, "VehicleID") + `) + ", every "`,
-		"ageText(a." + tag(ahead, "ScheduledGapS") + ")",
+		"formatGap(a." + tag(ahead, "ScheduledGapS") + ")",
 	} {
 		assert.True(t, strings.Contains(script, want), "map.js is missing %s", want)
 	}
@@ -462,7 +462,7 @@ func TestAlertsPage_Bunched(t *testing.T) {
 	assert.Contains(t, body, `<article class="card alert-row" data-kind="bunched">`)
 	assert.Contains(t, body, `/static/icons.svg#layers`)
 	assert.Contains(t, body, `<span class="pill pill-warn">Bunched</span>`)
-	assert.Contains(t, body, "1 min behind Bus L, every 10 min, open since "+now.Add(-4*time.Minute).UTC().Format("15:04")+"</span>")
+	assert.Contains(t, body, "1 min 15 s behind Bus L, every 10 min, open since "+now.Add(-4*time.Minute).UTC().Format("15:04")+"</span>")
 	assert.Contains(t, body, `data-filter="bunched" aria-pressed="false">Bunched <span class="n">1</span>`)
 	assert.Contains(t, body, `<a class="chip" href="/admin/alerts?kind=bunched#cleared">Bunched</a>`)
 	assert.Contains(t, body, "or have run under 25% of the scheduled gap behind the vehicle ahead for 3 min on frequent service")
@@ -494,7 +494,7 @@ func TestOverview_NamesTheVehicleAhead(t *testing.T) {
 	assert.Equal(t, overviewAttention{
 		Icon:   "layers",
 		Title:  "Bus 7: bunched",
-		Detail: "Route R1, 1 min behind Bus 12, every 10 min",
+		Detail: "Route R1, 1 min 15 s behind Bus 12, every 10 min",
 		URL:    "/admin/trips/7",
 	}, got[0])
 }
@@ -545,7 +545,7 @@ func TestAlertWebhook_Bunched(t *testing.T) {
 	assert.Equal(t, alertRaised, posts[0]["event"])
 	assert.Equal(t, alertBunched, posts[0]["kind"])
 	assert.Equal(t, "bus-F", posts[0]["vehicle_id"])
-	assert.Equal(t, "Bus F on route 5 is bunched: 1 min behind Bus L, every 10 min, since 07:20.", posts[0]["text"])
+	assert.Equal(t, "Bus F on route 5 is bunched: 1 min 15 s behind Bus L, every 10 min, since 07:20.", posts[0]["text"])
 	assert.Equal(t, alertCleared, posts[1]["event"])
 	assert.Equal(t, "Cleared: Bus F on route 5, bunched since 07:20.", posts[1]["text"])
 }
