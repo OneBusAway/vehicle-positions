@@ -12,4 +12,5 @@ nonisolated protocol TrackerAPI: Sendable {
     func startTrip(vehicleID: String, routeID: String, gtfsTripID: String) async throws -> Int64
     func endTrip(id: Int64) async throws
     func postLocation(_ report: LocationReport) async throws
+    func postLocationHistory(_ request: LocationHistoryRequest) async throws
 }
