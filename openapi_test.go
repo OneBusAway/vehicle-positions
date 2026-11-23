@@ -175,6 +175,10 @@ var schemaStructs = map[string]string{
 
 	// Where the driver app downloads its offline street map.
 	"MapConfig": "mapConfigResponse",
+
+	// The audit log.
+	"AuditLog":   "auditListResponse",
+	"AuditEntry": "auditEntryResponse",
 }
 
 // requestSchemaStructs pairs a request schema with the Go struct the handler
@@ -833,6 +837,48 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 				"%s %s must match %s in Go", constraint.location, constraint.keyword, constraint.constant)
 		})
 	}
+}
+
+// TestOpenAPI_AuditEnumsMatchCode pins the audit log's kinds of object and
+// actions in the spec to the Go they come from: auditObjectTypes, the kinds
+// parseAuditFilter accepts for ?type=, and auditActions, which gives each
+// action the log records its words on the Audit log page. A kind or an action
+// added there fails here until the spec lists it too.
+func TestOpenAPI_AuditEnumsMatchCode(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPISpec(t)
+	mappings := spec.mappings()
+
+	kinds := make([]any, 0, len(auditObjectTypes))
+	for _, k := range auditObjectTypes {
+		kinds = append(kinds, k.kind)
+	}
+	seen := make(map[string]struct{})
+	actions := make([]any, 0)
+	for _, byAction := range auditActions {
+		for action := range byAction {
+			if _, ok := seen[action]; !ok {
+				seen[action] = struct{}{}
+				actions = append(actions, action)
+			}
+		}
+	}
+
+	operation, ok := spec.operation("/api/v1/admin/audit", "GET")
+	require.True(t, ok, "GET /api/v1/admin/audit must be in the spec")
+	var typeSchema map[string]any
+	params, _ := operation["parameters"].([]any)
+	for _, p := range params {
+		if param, ok := p.(map[string]any); ok && param["name"] == "type" {
+			typeSchema, _ = param["schema"].(map[string]any)
+		}
+	}
+	require.NotNil(t, typeSchema, "GET /api/v1/admin/audit must document ?type=")
+
+	entry := "#/components/schemas/AuditEntry/properties/"
+	assert.ElementsMatch(t, kinds, typeSchema["enum"], "?type= must list the kinds parseAuditFilter accepts")
+	assert.ElementsMatch(t, kinds, mappings[entry+"object_type"]["enum"], "object_type must list auditObjectTypes")
+	assert.ElementsMatch(t, actions, mappings[entry+"action"]["enum"], "action must list the actions in auditActions")
 }
 
 // TestOpenAPI_VehicleIDSchemaIsSingleSource fails if any node other than the

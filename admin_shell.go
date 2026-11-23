@@ -131,8 +131,9 @@ func (ui *adminUI) shell(r *http.Request, alerts []alertEntry) shellData {
 }
 
 // isViewer reports whether the request was made by a viewer, from the role
-// requireAdminPage put on the context. A viewer's request can only be a read:
-// the guard has refused anything else before a page sees it.
+// requireAdminPage, or requireAuth for the API, put on the context. A
+// viewer's request can only be a read: the guard has refused anything else
+// before a page or handler sees it.
 func isViewer(r *http.Request) bool {
 	claims, _ := r.Context().Value(claimsKey).(jwt.MapClaims)
 	role, _ := claims["role"].(string)

@@ -661,3 +661,8 @@ WHERE (sqlc.narg(object_type)::TEXT IS NULL OR a.object_type = sqlc.narg(object_
   AND (sqlc.narg(actor_id)::BIGINT IS NULL OR a.actor_id = sqlc.narg(actor_id))
 ORDER BY a.id DESC
 LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
+
+-- name: DeleteAuditEntriesBefore :execrows
+-- AUDIT_LOG_RETENTION_PERIOD's sweep. The table's trigger refuses UPDATE
+-- only, so a row is never rewritten but can be deleted once it is old enough.
+DELETE FROM audit_log WHERE at < sqlc.arg(cutoff);

@@ -147,6 +147,12 @@ Deletion is permanent — there is no archive step. The README's
 [retention notes](../README.md#31-server-go) cover the privacy reasoning and
 the operator caveats in full.
 
+### Audit log retention
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AUDIT_LOG_RETENTION_PERIOD` | `0` | How long to keep rows in `audit_log`: who changed which vehicle, account, trip or API key, in the admin or its API, and from which address. `0` (the default) keeps them forever. A positive duration deletes older rows every hour, the first time an hour after startup. A negative one logs an error and keeps everything. |
+
 ### Rider mode (crowdsourced positions)
 
 Rider mode is off by default and adds nothing to the driver-reported feed when

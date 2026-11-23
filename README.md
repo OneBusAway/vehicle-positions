@@ -326,6 +326,7 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |`GET /api/v1/admin/api-keys`        |GET   |List feed API keys                                  |
 |`POST /api/v1/admin/api-keys`       |POST  |Create a feed API key (raw key shown once)          |
 |`DELETE /api/v1/admin/api-keys/{id}`|DELETE|Revoke a feed API key                               |
+|`GET /api/v1/admin/audit`           |GET   |Audit log of admin changes, newest first            |
 |`POST /api/v1/trips/start`          |POST  |Driver starts a trip (assigns vehicle to route/trip)|
 |`POST /api/v1/trips/end`            |POST  |Driver ends a trip                                  |
 |`POST /api/v1/admin/trips/{id}/end` |POST  |End any driver's active trip (admin)                |
@@ -346,7 +347,8 @@ viewer can't hold a vehicle either: `POST /api/v1/admin/assignments` refuses
 one with `409`, and making an account a viewer unassigns its vehicles in the
 same transaction, refused with `409` while it has a trip running. On the Audit
 log page a viewer sees who made each change but not the address it came
-from.
+from, and `GET /api/v1/admin/audit` leaves `actor_ip` out of a viewer's
+entries.
 
 **Paged admin lists**
 

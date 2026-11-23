@@ -127,6 +127,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("GET /api/v1/admin/alerts", authMiddleware(adminMiddleware(handleListAlerts(alerts))))
 	mux.Handle("GET /api/v1/admin/reports/service", authMiddleware(adminMiddleware(handleServiceReport(reports))))
 	mux.Handle("GET /api/v1/admin/health", authMiddleware(adminMiddleware(handleFeedHealth(health))))
+	mux.Handle("GET /api/v1/admin/audit", authMiddleware(adminMiddleware(handleListAuditEntries(store))))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -386,6 +387,11 @@ func main() {
 			slog.Info("location retention enabled",
 				"retention", retentionPeriod.String(), "interval", pruneInterval.String(), "batch_size", batchSize)
 		}
+	}
+
+	// The audit log is kept whole by default too; see startAuditLogRetention.
+	if auditPruner := startAuditLogRetention(store); auditPruner != nil {
+		defer auditPruner.Stop()
 	}
 
 	riderCfg := riderConfigFromEnv()
