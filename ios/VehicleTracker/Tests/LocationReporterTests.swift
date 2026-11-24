@@ -323,7 +323,8 @@ import VehiclePositionsKit
     func reporter(queueIn directory: URL? = nil) throws -> (LocationReporter, OfflineFixQueue) {
         let settings = AppSettings.signedIn(try #require(UserDefaults(suiteName: defaultsName)))
         let queue = OfflineFixQueue(directory: directory ?? self.directory)
-        let history = HistoryUploader(queue: queue, settings: settings, now: { clock.now })
+        let history = HistoryUploader(queue: queue, settings: settings, now: { clock.now },
+                                      backgroundTasks: FakeBackgroundTaskScheduler())
         return (LocationReporter(api: api, now: { clock.now }, history: history), queue)
     }
 

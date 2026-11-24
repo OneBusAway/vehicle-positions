@@ -13,7 +13,9 @@ import VehiclePositionsKit
     func uploader() throws -> (HistoryUploader, OfflineFixQueue, AppSettings) {
         let settings = AppSettings.signedIn(try #require(UserDefaults(suiteName: defaultsName)))
         let queue = OfflineFixQueue(directory: directory)
-        return (HistoryUploader(queue: queue, settings: settings, now: { clock.now }), queue, settings)
+        let history = HistoryUploader(queue: queue, settings: settings, now: { clock.now },
+                                      backgroundTasks: FakeBackgroundTaskScheduler())
+        return (history, queue, settings)
     }
 
     func cleanUp() {
@@ -205,7 +207,8 @@ import VehiclePositionsKit
         let queue = OfflineFixQueue(directory: directory)
         let session = TripSession(settings: settings, tokens: InMemoryTokenStore(), store: InMemoryActiveTripStore(),
                                   locations: locations, access: FakeLocationAccess(),
-                                  history: HistoryUploader(queue: queue, settings: settings, now: { clock.now }),
+                                  history: HistoryUploader(queue: queue, settings: settings, now: { clock.now },
+                                                           backgroundTasks: FakeBackgroundTaskScheduler()),
                                   makeAPI: { _, _ in api }, now: { clock.now })
         try await session.signIn(serverURL: URL(string: "https://positions.example.org")!, email: "d@test.com", password: "pw")
         try await session.start(vehicle: Vehicle(id: "bus-1", label: "Bus 1"), tripID: "T1")
@@ -240,7 +243,8 @@ import VehiclePositionsKit
         let settings = AppSettings.signedIn(try #require(UserDefaults(suiteName: defaultsName)))
         let queue = OfflineFixQueue(directory: directory)
         let history = HistoryUploader(queue: queue, settings: settings, now: { clock.now },
-                                      backgroundTime: background, sleep: interval.sleep(for:))
+                                      backgroundTime: background, backgroundTasks: FakeBackgroundTaskScheduler(),
+                                      sleep: interval.sleep(for:))
         return (history, queue, settings)
     }
 

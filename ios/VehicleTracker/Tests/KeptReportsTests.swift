@@ -29,7 +29,8 @@ import VehiclePositionsKit
     func launch() throws -> TripSession {
         let settings = AppSettings(defaults: try #require(UserDefaults(suiteName: defaultsName)))
         let history = HistoryUploader(queue: OfflineFixQueue(directory: directory), settings: settings, now: { clock.now },
-                                      backgroundTime: background, sleep: interval.sleep(for:))
+                                      backgroundTime: background, backgroundTasks: FakeBackgroundTaskScheduler(),
+                                      sleep: interval.sleep(for:))
         return TripSession(settings: settings, tokens: tokens, store: store, locations: locations,
                            access: FakeLocationAccess(), history: history, makeAPI: { _, _ in api }, now: { clock.now })
     }
@@ -328,6 +329,7 @@ import VehiclePositionsKit
         let session = TripSession(settings: settings, tokens: tokens, store: store, locations: FakeLocationSource(),
                                   access: FakeLocationAccess(),
                                   history: HistoryUploader(queue: queue, settings: settings, backgroundTime: background,
+                                                           backgroundTasks: FakeBackgroundTaskScheduler(),
                                                            sleep: interval.sleep(for:)),
                                   makeAPI: { _, _ in api })
         try #require(session.phase != .signedOut)
