@@ -49,6 +49,7 @@ import org.onebusaway.vehicletracker.engine.AdherenceEvaluator
 import org.onebusaway.vehicletracker.engine.TripFixtures
 import org.onebusaway.vehicletracker.engine.TripGeometry
 import org.onebusaway.vehicletracker.R
+import org.onebusaway.vehicletracker.service.BacklogUploadScheduler
 import org.onebusaway.vehicletracker.service.FakeBacklogUploadScheduler
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
@@ -1002,11 +1003,13 @@ class ViewModelsTest {
         tracking: TrackingRepository = TrackingRepository(),
         sessionStore: SessionStore = FakeSessionStore().apply { state.value = session },
         queue: OfflineFixQueue = FakeOfflineFixQueue(),
+        backlogScheduler: BacklogUploadScheduler = FakeBacklogUploadScheduler(),
     ) = AppNavViewModel(
         sessionStore,
         FakeTripStateStore().apply { tripState.value = trip },
         tracking,
         queue,
+        backlogScheduler,
         clock = { launchNow },
         serviceAnnounceGrace = serviceAnnounceGrace,
         driverFlags = FakeDriverFlagsStore(),
@@ -1142,6 +1145,57 @@ class ViewModelsTest {
 
         assertNull(queue.owner)
         assertEquals(listOf(queuedFix), queue.queued.toList())
+    }
+
+    // --- Launch: fixes left in the queue by an app that was force-stopped, which cancels the job for them ---
+
+    @Test fun `launch schedules the upload of the fixes left queued`() = runTest(dispatcher) {
+        val scheduler = FakeBacklogUploadScheduler()
+        appNavViewModel(queue = unownedQueue(), backlogScheduler = scheduler)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, scheduler.scheduled)
+        assertEquals("a waiting or running job is left as it is", 0, scheduler.scheduledAfresh)
+    }
+
+    @Test fun `launch with nothing queued schedules no upload`() = runTest(dispatcher) {
+        val scheduler = FakeBacklogUploadScheduler()
+        appNavViewModel(backlogScheduler = scheduler)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(0, scheduler.scheduled)
+    }
+
+    @Test fun `the first screen does not wait for the queue to be read`() = runTest(dispatcher) {
+        val read = CompletableDeferred<Unit>()
+        val slow = object : OfflineFixQueue by unownedQueue() {
+            override suspend fun oldest(max: Int): List<LocationReportDto> {
+                read.await()
+                return listOf(queuedFix)
+            }
+        }
+        val scheduler = FakeBacklogUploadScheduler()
+        val vm = appNavViewModel(queue = slow, backlogScheduler = scheduler)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("vehicles", vm.startDestination.value)
+        assertEquals(0, scheduler.scheduled)
+
+        read.complete(Unit)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, scheduler.scheduled)
+    }
+
+    @Test fun `a queue that can't be read at launch doesn't stop the app opening`() = runTest(dispatcher) {
+        val unreadable = object : OfflineFixQueue by unownedQueue() {
+            override suspend fun oldest(max: Int): List<LocationReportDto> = throw IOException("I/O error")
+        }
+        val scheduler = FakeBacklogUploadScheduler()
+        val vm = appNavViewModel(queue = unreadable, backlogScheduler = scheduler)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("vehicles", vm.startDestination.value)
+        assertEquals(0, scheduler.scheduled)
     }
 
     // --- Vehicle picker: search, favorites and recents (#36) ---

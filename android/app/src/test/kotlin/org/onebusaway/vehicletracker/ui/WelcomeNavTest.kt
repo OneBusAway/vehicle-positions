@@ -22,6 +22,7 @@ import org.onebusaway.vehicletracker.data.FakeTripStateStore
 import org.onebusaway.vehicletracker.data.IssuedTokens
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.TrackingRepository
+import org.onebusaway.vehicletracker.service.FakeBacklogUploadScheduler
 import org.onebusaway.vehicletracker.ui.welcome.WelcomeViewModel
 import java.io.IOException
 import java.time.Duration
@@ -60,6 +61,7 @@ class WelcomeNavTest {
             FakeTripStateStore().apply { tripState.value = trip },
             tracking,
             FakeOfflineFixQueue(),
+            FakeBacklogUploadScheduler(),
             clock = { now },
             serviceAnnounceGrace = Duration.ofSeconds(2),
             driverFlags = flags,

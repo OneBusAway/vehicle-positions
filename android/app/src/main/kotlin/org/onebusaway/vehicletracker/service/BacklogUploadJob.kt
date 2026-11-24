@@ -16,6 +16,7 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.data.AppLog
+import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import java.io.IOException
 import javax.inject.Inject
@@ -38,6 +39,16 @@ interface BacklogUploadScheduler {
      * starts with no wait. It also stops a job that is running, so the caller checks [HistoryUploader.jobRunning].
      */
     fun scheduleAfresh()
+}
+
+/** [BacklogUploadScheduler.schedule], when [queue] holds fixes from before, for which no job may be left. */
+suspend fun BacklogUploadScheduler.scheduleIfQueued(queue: OfflineFixQueue) {
+    try {
+        if (queue.oldest(1).isNotEmpty()) schedule()
+    } catch (e: IOException) {
+        // The next live report still uploads a batch.
+        AppLog.w(TAG, "Could not read the offline queue", e)
+    }
 }
 
 class JobBacklogUploadScheduler @Inject constructor(

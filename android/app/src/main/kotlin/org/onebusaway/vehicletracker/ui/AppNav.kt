@@ -53,6 +53,8 @@ import org.onebusaway.vehicletracker.data.TripStateStore
 import org.onebusaway.vehicletracker.data.offlineQueueAccount
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.di.ServiceAnnounceGrace
+import org.onebusaway.vehicletracker.service.BacklogUploadScheduler
+import org.onebusaway.vehicletracker.service.scheduleIfQueued
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
 import org.onebusaway.vehicletracker.ui.account.LocalOpenHelp
@@ -200,6 +202,7 @@ class AppNavViewModel @Inject constructor(
     private val tripStateStore: TripStateStore,
     private val trackingRepository: TrackingRepository,
     private val offlineQueue: OfflineFixQueue,
+    private val backlogScheduler: BacklogUploadScheduler,
     @param:EpochSecondsClock private val clock: () -> Long,
     @param:ServiceAnnounceGrace private val serviceAnnounceGrace: Duration,
     private val driverFlags: DriverFlagsStore,
@@ -217,6 +220,9 @@ class AppNavViewModel @Inject constructor(
                 activeTrip != null -> ROUTE_RESUME
                 else -> withNoTrip(session)
             }
+            // A force-stop, by the driver or by the phone's battery saver, cancels the job that was to upload the
+            // queued fixes. After the first screen is chosen, which does not wait for the queue to be read.
+            backlogScheduler.scheduleIfQueued(offlineQueue)
         }
     }
 
