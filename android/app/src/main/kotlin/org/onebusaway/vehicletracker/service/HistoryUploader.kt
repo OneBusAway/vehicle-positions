@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.onebusaway.vehicletracker.data.AppLog
+import org.onebusaway.vehicletracker.data.OFFLINE_QUEUE_CAPACITY
 import org.onebusaway.vehicletracker.data.OfflineFixQueue
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.api.LocationHistoryDto
@@ -18,8 +19,11 @@ import javax.inject.Singleton
 
 private const val TAG = "HistoryUploader"
 
-/** The most fixes one history upload carries; the server takes at most 500. */
-private const val HISTORY_BATCH = 500
+/**
+ * The most fixes one history upload carries, about 19 KB. The server takes up to 500, but a weak 2G signal can't get
+ * that many through inside the call's timeout: the batch would be kept and start over each time, and never go.
+ */
+private const val HISTORY_BATCH = 80
 
 /** Refusals a history upload would get again however often it were retried. */
 private val PERMANENT_HISTORY_REFUSALS = setOf(400, 403, 404)
@@ -91,14 +95,15 @@ class HistoryUploader @Inject constructor(
         ) {
             return HistoryUpload.NOT_SIGNED_IN
         }
-        var batch = offlineQueue.oldest(HISTORY_BATCH)
-        val expired = batch.takeWhile { tooOldToUpload(it.timestamp, nowEpochSec) }.size
-        if (expired > 0) {
-            offlineQueue.remove(batch.take(expired))
-            batch = offlineQueue.oldest(HISTORY_BATCH)
+        // The whole queue, as more fixes than a batch holds can be too old, and none of those is sent.
+        var queued = offlineQueue.oldest(OFFLINE_QUEUE_CAPACITY)
+        val expired = queued.takeWhile { tooOldToUpload(it.timestamp, nowEpochSec) }
+        if (expired.isNotEmpty()) {
+            offlineQueue.remove(expired)
+            queued = offlineQueue.oldest(HISTORY_BATCH)
         }
-        val vehicleId = batch.firstOrNull()?.vehicleId ?: return HistoryUpload.NOTHING_QUEUED
-        val points = batch.takeWhile { it.vehicleId == vehicleId }
+        val vehicleId = queued.firstOrNull()?.vehicleId ?: return HistoryUpload.NOTHING_QUEUED
+        val points = queued.take(HISTORY_BATCH).takeWhile { it.vehicleId == vehicleId }
         try {
             apiProvider.get().postLocationHistory(LocationHistoryDto(vehicleId, points.map { it.toHistoryPoint() }))
         } catch (e: HttpException) {
