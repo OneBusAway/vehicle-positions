@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -294,10 +295,6 @@ func assignmentProblem(vehicleID string, err error) (reason string, ok bool) {
 	case errors.Is(err, ErrAssignmentExists):
 		// Another admin assigned it after the plan read the assignments.
 		return "vehicle " + vehicleID + " was assigned meanwhile; preview the file again", true
-	case errors.Is(err, ErrAssignToViewer):
-		// The plan read a driver, and an admin has made the account a viewer
-		// since.
-		return "this account was made a viewer meanwhile; preview the file again", true
 	}
 	return "", false
 }
@@ -347,6 +344,13 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 	if importFailed(outcomes) {
 		return outcomes, nil
 	}
+	locked, err := lockUpdatedAccounts(ctx, q, outcomes, plans)
+	if err != nil {
+		return nil, err
+	}
+	if importFailed(outcomes) {
+		return outcomes, nil
+	}
 	for i, row := range rows {
 		o, p := &outcomes[i], plans[i]
 		switch o.Status {
@@ -370,23 +374,7 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 			o.UserID, o.Password = u.ID, passwords[i]
 		case importUpdate:
 			if p.rename {
-				// The plans read the account without a lock, so another admin
-				// may have changed its email or role since, and updateUser
-				// writes back what it is given. Read again under the lock, the
-				// rename changes only the name, and an account that is no
-				// longer a driver's is left alone, as the plan leaves one.
-				cur, err := q.GetUserForUpdate(ctx, p.userID)
-				if err != nil {
-					return nil, fmt.Errorf("lock user %d: %w", p.userID, err)
-				}
-				if cur.Role != roleDriver {
-					reason := "this account was made an admin meanwhile; preview the file again"
-					if cur.Role == roleViewer {
-						reason = "this account was made a viewer meanwhile; preview the file again"
-					}
-					*o = importOutcome{Status: importError, Reason: reason}
-					return outcomes, nil
-				}
+				cur := locked[i]
 				if _, err := updateUser(ctx, q, p.userID, row.Name, cur.Email, cur.Role); err != nil {
 					return nil, fmt.Errorf("update user %d: %w", p.userID, err)
 				}
@@ -408,6 +396,49 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 	return outcomes, nil
+}
+
+// lockUpdatedAccounts reads again, under the lock updateUser takes anyway, the
+// account of every row that updates one, before anything is written, and
+// returns them indexed by row. The plans read the accounts without a lock, so
+// another admin may have changed one since. updateUser writes back the email
+// and role it is given, so a rename passes on the ones read here and changes
+// only the name. An account that is no longer a driver's, or is gone, is left
+// alone, as the plan leaves one: its row's outcome becomes the error, and
+// nothing more is read.
+//
+// The accounts are locked in id order, not the file's, so two imports that
+// update the same drivers queue behind each other instead of deadlocking.
+func lockUpdatedAccounts(ctx context.Context, q *db.Queries, outcomes []importOutcome, plans []driverPlan) ([]db.GetUserForUpdateRow, error) {
+	updates := make([]int, 0, len(outcomes))
+	for i, o := range outcomes {
+		if o.Status == importUpdate {
+			updates = append(updates, i)
+		}
+	}
+	slices.SortFunc(updates, func(a, b int) int { return cmp.Compare(plans[a].userID, plans[b].userID) })
+
+	locked := make([]db.GetUserForUpdateRow, len(outcomes))
+	for _, i := range updates {
+		cur, err := q.GetUserForUpdate(ctx, plans[i].userID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			outcomes[i] = importOutcome{Status: importError, Reason: "an account with this email was removed meanwhile; preview the file again"}
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("lock user %d: %w", plans[i].userID, err)
+		}
+		if cur.Role != roleDriver {
+			reason := "this account was made an admin meanwhile; preview the file again"
+			if cur.Role == roleViewer {
+				reason = "this account was made a viewer meanwhile; preview the file again"
+			}
+			outcomes[i] = importOutcome{Status: importError, Reason: reason}
+			return nil, nil
+		}
+		locked[i] = cur
+	}
+	return locked, nil
 }
 
 // hashPasswords bcrypt-hashes each password at the cost every other password

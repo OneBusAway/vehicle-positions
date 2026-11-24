@@ -631,3 +631,147 @@ func TestStore_ImportDrivers_RenameKeepsAChangeMadeMeanwhile(t *testing.T) {
 		})
 	}
 }
+
+// TestStore_ImportDrivers_UpdateRefusesAnAccountChangedMeanwhile: a row that
+// only adds a vehicle reads the account again under the lock, as a rename
+// does, so an account made an admin while the import ran gets no vehicle. An
+// account removed meanwhile fails its row, rename or not, rather than the
+// whole import.
+func TestStore_ImportDrivers_UpdateRefusesAnAccountChangedMeanwhile(t *testing.T) {
+	store := newAuditTestStore(t)
+	const removed = "an account with this email was removed meanwhile; preview the file again"
+	tests := []struct {
+		name   string
+		change string
+		// rowName is the file's name for Ana: "Ana" only adds aud-v2.
+		rowName string
+		reason  string
+	}{
+		{name: "made an admin, a row that only adds a vehicle", change: "UPDATE users SET role = 'admin' WHERE id = $1",
+			rowName: "Ana", reason: "this account was made an admin meanwhile; preview the file again"},
+		{name: "removed, a row that only adds a vehicle", change: "DELETE FROM users WHERE id = $1",
+			rowName: "Ana", reason: removed},
+		{name: "removed, a row that renames", change: "DELETE FROM users WHERE id = $1",
+			rowName: "Ana Maria", reason: removed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fx := newAuditFixture(t, store)
+			ctx, cancel := context.WithTimeout(asTestAdmin(), 30*time.Second)
+			defer cancel()
+
+			// The other admin's change, made and not yet committed.
+			holder, err := dedicatedConn(t).Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+			_, err = holder.Exec(ctx, tt.change, fx.userID)
+			require.NoError(t, err)
+			var pid int
+			require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+
+			// Both plans read Ana as the driver she was, and give her aud-v2.
+			rows := []driverImportRow{{Line: 2, Email: "aud-ana@example.org", Name: tt.rowName, VehicleIDs: []string{"aud-v2"}}}
+			type result struct {
+				outcomes []importOutcome
+				err      error
+			}
+			mark := lastAuditID(t, store)
+			done := make(chan result, 1)
+			go func() {
+				got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, noPassword)
+				done <- result{got, err}
+			}()
+			require.Eventually(t, func() bool { return len(done) == 1 || blockedBehind(store, pid, 1) == 1 },
+				5*time.Second, 10*time.Millisecond, "the import neither finished nor waited")
+			assert.Empty(t, done, "the import went ahead while the change was open")
+			require.NoError(t, holder.Commit(ctx))
+			got := <-done
+			require.NoError(t, got.err)
+
+			assert.Equal(t, []importOutcome{{Status: importError, Reason: tt.reason}}, got.outcomes)
+			assert.Empty(t, auditRowsAfter(t, store, mark))
+			assigned, err := store.ListAssignmentsByVehicle(context.Background(), "aud-v2")
+			require.NoError(t, err)
+			assert.Empty(t, assigned)
+		})
+	}
+}
+
+// TestStore_ImportDrivers_OppositeOrdersQueue: an import locks the accounts it
+// updates in id order, whatever order its file lists them in, so two imports
+// that update Ana and Bo in opposite orders queue behind each other. Locked in
+// file order, each would hold one account while it waited for the other's,
+// and Postgres would abort one of them.
+func TestStore_ImportDrivers_OppositeOrdersQueue(t *testing.T) {
+	tests := []struct {
+		name string
+		// The names each import gives Ana and Bo; a row that keeps the name
+		// only adds the import's vehicle.
+		first, second [2]string
+	}{
+		{name: "rows that rename", first: [2]string{"Ana 1", "Bo 1"}, second: [2]string{"Ana 2", "Bo 2"}},
+		{name: "rows that only add a vehicle", first: [2]string{"Ana", "Bo"}, second: [2]string{"Ana", "Bo"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newImportTestStore(t)
+			addImportVehicle(t, store, "imp-v1", "V1", true)
+			addImportVehicle(t, store, "imp-v2", "V2", true)
+			ana := addImportUser(t, store, "Ana", "imp-ana@example.org", roleDriver)
+			bo := addImportUser(t, store, "Bo", "imp-bo@example.org", roleDriver)
+			require.Less(t, ana, bo, "Ana's account is the one locked first")
+			first := []driverImportRow{
+				{Line: 2, Email: "imp-bo@example.org", Name: tt.first[1], VehicleIDs: []string{"imp-v1"}},
+				{Line: 3, Email: "imp-ana@example.org", Name: tt.first[0], VehicleIDs: []string{"imp-v1"}},
+			}
+			second := []driverImportRow{
+				{Line: 2, Email: "imp-ana@example.org", Name: tt.second[0], VehicleIDs: []string{"imp-v2"}},
+				{Line: 3, Email: "imp-bo@example.org", Name: tt.second[1], VehicleIDs: []string{"imp-v2"}},
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			// Bo's row held, as a token refresh holds it (LockUser), so the
+			// first import stops at Bo holding whatever it locked before him.
+			holder, err := dedicatedConn(t).Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+			_, err = holder.Exec(ctx, "SELECT id FROM users WHERE id = $1 FOR UPDATE", bo)
+			require.NoError(t, err)
+			var pid int
+			require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+
+			type result struct {
+				outcomes []importOutcome
+				err      error
+			}
+			run := func(rows []driverImportRow) chan result {
+				done := make(chan result, 1)
+				go func() {
+					got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, noPassword)
+					done <- result{got, err}
+				}()
+				return done
+			}
+			firstDone := run(first)
+			require.Eventually(t, func() bool { return len(firstDone) == 1 || blockedBehind(store, pid, 1) == 1 },
+				5*time.Second, 10*time.Millisecond, "the first import neither finished nor waited")
+			secondDone := run(second)
+			// The second waits on an account the first holds, or on Bo too.
+			require.Eventually(t, func() bool {
+				return len(secondDone) == 1 || blockedBehind(store, pid, 1)+blockedBehind(store, pid, 2) >= 2
+			}, 5*time.Second, 10*time.Millisecond, "the second import neither finished nor waited")
+			require.NoError(t, holder.Commit(ctx))
+
+			for _, done := range []chan result{firstDone, secondDone} {
+				got := <-done
+				require.NoError(t, got.err)
+				assert.Equal(t, []importStatus{importUpdate, importUpdate}, statuses(got.outcomes))
+			}
+			assert.ElementsMatch(t, []string{"imp-v1", "imp-v2"}, assignedVehicles(t, store, ana))
+			assert.ElementsMatch(t, []string{"imp-v1", "imp-v2"}, assignedVehicles(t, store, bo))
+			assert.Equal(t, tt.second[0], readImportedUser(t, store, ana).Name, "the second import, which waited, wrote last")
+			assert.Equal(t, tt.second[1], readImportedUser(t, store, bo).Name)
+		})
+	}
+}
