@@ -654,8 +654,8 @@ type vehicleFormData struct {
 	ErrorField string
 	// Active is whether the vehicle being edited is active, which decides
 	// the Deactivate or Activate button. It is nil when that was not read (a
-	// new vehicle, or a submission that could not be parsed), and the button
-	// is then left off.
+	// new vehicle, or a submission that was refused), and the button is then
+	// left off.
 	Active *bool
 }
 
@@ -687,8 +687,8 @@ func (ui *adminUI) vehicleNewPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // vehicleCreate validates and saves a new vehicle. It reuses
-// validateVehicleID — the same helper the JSON API uses — so form and API
-// validation stay in lockstep, and reports the exact same error text on
+// validateVehicleID and validateVehicleText, the JSON API's own checks, so form
+// and API validation stay in lockstep, and reports the exact same error text on
 // failure. A 422 re-renders the form with the submitted values so the admin
 // doesn't have to retype everything.
 //
@@ -708,6 +708,10 @@ func (ui *adminUI) vehicleCreate(w http.ResponseWriter, r *http.Request) {
 
 	if err := validateVehicleID(id); err != nil {
 		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: err.Error(), ErrorField: "id"})
+		return
+	}
+	if err := validateVehicleText(label, agencyTag); err != nil {
+		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: err.Error()})
 		return
 	}
 
@@ -755,6 +759,11 @@ func (ui *adminUI) vehicleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	label := r.PostFormValue("label")
 	agencyTag := r.PostFormValue("agency_tag")
+
+	if err := validateVehicleText(label, agencyTag); err != nil {
+		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{IsEdit: true, ID: id, Label: label, AgencyTag: agencyTag, Error: err.Error()})
+		return
+	}
 
 	if err := ui.vehicleEditor.UpdateVehicleInfo(r.Context(), id, label, agencyTag); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

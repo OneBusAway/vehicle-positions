@@ -23,7 +23,7 @@ import (
 
 const (
 	// maxImportBytes caps an uploaded file. 200 rows of the longest valid
-	// vehicles fill less than half of it.
+	// vehicles in ASCII fill less than half of it.
 	maxImportBytes = 256 << 10
 	// maxImportRows caps a file's rows. Each new driver's password takes about
 	// 0.1 s to hash on one core, so a file of new drivers takes up to 20 s on a

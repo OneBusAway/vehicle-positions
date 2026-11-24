@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -39,10 +40,16 @@ func (r *upsertVehicleRequest) validate() error {
 	if err := validateVehicleID(r.ID); err != nil {
 		return err
 	}
-	if len(r.Label) > maxFieldLength {
+	return validateVehicleText(r.Label, r.AgencyTag)
+}
+
+// validateVehicleText checks the text an admin gives a vehicle, for the API,
+// the vehicle form and the CSV import alike.
+func validateVehicleText(label, agencyTag string) error {
+	if utf8.RuneCountInString(label) > maxFieldLength {
 		return fmt.Errorf("label must be at most %d characters", maxFieldLength)
 	}
-	if len(r.AgencyTag) > maxFieldLength {
+	if utf8.RuneCountInString(agencyTag) > maxFieldLength {
 		return fmt.Errorf("agency_tag must be at most %d characters", maxFieldLength)
 	}
 	return nil
