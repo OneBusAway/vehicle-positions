@@ -74,11 +74,14 @@ func (f *fakeFailedSignInStore) attempts() []int {
 	return counts
 }
 
-func (f *fakeFailedSignInStore) writing() bool {
+// tries is how many writes have been started.
+func (f *fakeFailedSignInStore) tries() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.started > 0
+	return f.started
 }
+
+func (f *fakeFailedSignInStore) writing() bool { return f.tries() > 0 }
 
 // recorderHarness is a recorder over a fake store, with its clock and its
 // sweep in the test's hands.
@@ -321,6 +324,34 @@ func TestFailedSignIns_StopIsBounded(t *testing.T) {
 	require.Eventually(t, closed(stopped), failedSignInWriteTimeout-time.Second, time.Millisecond, "Stop waited for the write")
 	assert.Empty(t, store.recorded())
 	assert.Contains(t, logs.String(), "failed sign-ins lost")
+}
+
+// TestFailedSignIns_StopDuringASweep: once Stop's deadline has passed, a sweep
+// under way tries no more writes, which would each fail and be logged, and the
+// rows it had left are said to be lost once.
+// Not safe for t.Parallel(); uses global logger.
+func TestFailedSignIns_StopDuringASweep(t *testing.T) {
+	logs := captureLogs(t)
+	store := &fakeFailedSignInStore{}
+	h := newRecorderHarness(t, store)
+	h.flushTimeout = 10 * time.Millisecond
+	for _, ip := range []string{"198.51.100.1", "198.51.100.2", "198.51.100.3"} {
+		h.NoteFailedSignIn(failingAdmin, ip, auditViaAdmin)
+		h.NoteFailedSignIn(failingAdmin, ip, auditViaAdmin)
+	}
+	h.settle(t)
+	require.Equal(t, []int{1, 1, 1}, store.attempts())
+
+	// The worker is idle until the tick, and takes these with it.
+	store.hold = make(chan struct{})
+	h.clock.advance(failedSignInWindow)
+	h.sweep <- time.Time{}
+	require.Eventually(t, func() bool { return store.tries() == 4 }, 5*time.Second, time.Millisecond)
+	h.Stop()
+
+	assert.Equal(t, 4, store.tries(), "the write in hand is the last")
+	assert.Equal(t, 1, strings.Count(logs.String(), "failed sign-ins not recorded"))
+	assert.Equal(t, 1, strings.Count(logs.String(), "failed sign-ins lost"))
 }
 
 // signInWays are the two ways in, each as a function that tries email and
