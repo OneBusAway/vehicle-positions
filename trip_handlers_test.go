@@ -337,7 +337,7 @@ func TestHandleStartTrip_RequestBodyTooLarge(t *testing.T) {
 	store := &mockTripStarter{}
 	handler := handleStartTrip(store, nil, newTestTracker(t))
 
-	largeBody := `{"vehicle_id":"` + strings.Repeat("a", 2048) + `"}`
+	largeBody := `{"vehicle_id":"` + strings.Repeat("a", 4<<10) + `"}`
 	w := tripRawRequest(t, handler, "42", []byte(largeBody))
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
@@ -402,6 +402,39 @@ func TestHandleStartTrip_GtfsTripIDTooLong(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, decodeError(t, w), "gtfs_trip_id must be at most 100 characters")
+}
+
+// TestHandleStartTrip_IDLengthIsCharacters: both ids are held to 100
+// characters, however many bytes each takes, and the longest fit in the body
+// even in the longest form JSON has for a character.
+func TestHandleStartTrip_IDLengthIsCharacters(t *testing.T) {
+	const escaped = `\ud83d\ude8c`
+	tests := []struct {
+		name  string
+		route string
+		trip  string
+		want  string
+	}{
+		{"ids as long as they may be in Devanagari", strings.Repeat("ब", 100), strings.Repeat("ब", 100), ""},
+		{"ids as long as they may be, escaped", strings.Repeat(escaped, 100), strings.Repeat(escaped, 100), ""},
+		{"a route id too long in Devanagari", strings.Repeat("ब", 101), "t1", "route_id must be at most 100 characters"},
+		{"a trip id too long in Devanagari", "r1", strings.Repeat("ब", 101), "gtfs_trip_id must be at most 100 characters"},
+		{"a trip id too long, escaped", "r1", strings.Repeat(escaped, 101), "gtfs_trip_id must be at most 100 characters"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := handleStartTrip(&mockTripStarter{trip: &TripResponse{ID: 1}}, nil, newTestTracker(t))
+			body := `{"vehicle_id":"` + strings.Repeat("v", maxVehicleIDLength) + `","route_id":"` + tt.route + `","gtfs_trip_id":"` + tt.trip + `"}`
+			w := tripRawRequest(t, handler, "42", []byte(body))
+
+			if tt.want != "" {
+				assert.Equal(t, http.StatusBadRequest, w.Code)
+				assert.Equal(t, tt.want, decodeError(t, w))
+				return
+			}
+			assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		})
+	}
 }
 
 func TestHandleStartTrip_InternalServerError(t *testing.T) {

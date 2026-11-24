@@ -61,7 +61,9 @@ func handleStartTrip(store TripStarter, catalog *gtfsCatalog, tracker *Tracker) 
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
+		// 4 KB holds the longest ids with every character escaped, up to 12
+		// bytes each.
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 
 		var req StartTripRequest
 		decoder := json.NewDecoder(r.Body)
@@ -95,12 +97,12 @@ func handleStartTrip(store TripStarter, catalog *gtfsCatalog, tracker *Tracker) 
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "vehicle_id must contain only alphanumeric characters, dots, hyphens, and underscores"})
 			return
 		}
-		if len(req.RouteID) > 100 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "route_id must be at most 100 characters"})
+		if err := validateTripField("route_id", req.RouteID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if len(req.GtfsTripID) > 100 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "gtfs_trip_id must be at most 100 characters"})
+		if err := validateTripField("gtfs_trip_id", req.GtfsTripID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 		if err := catalog.checkScheduleIDs("gtfs_trip_id", req.GtfsTripID, req.RouteID); err != nil {
