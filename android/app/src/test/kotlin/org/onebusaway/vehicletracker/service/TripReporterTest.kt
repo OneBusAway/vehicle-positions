@@ -431,6 +431,37 @@ class TripReporterTest {
         online.shutdown()
     }
 
+    // The proxy in front of the server (docs/deployment.md, section 7) answers these for it while it restarts, has
+    // crashed or is too slow. The phone is online all along, so no report fails for want of a connection.
+    @Test fun `a report the proxy answers for a server that is down is queued and uploaded once the server is back`() = runTest {
+        for (code in listOf(502, 503, 504)) {
+            val queue = FakeOfflineFixQueue()
+            val scheduler = FakeBacklogUploadScheduler()
+            val server = MockWebServer().apply { start() }
+            repeat(2) { server.enqueue(MockResponse().setResponseCode(code).setBody("<html><body>$code</body></html>")) }
+            server.enqueue(MockResponse().setResponseCode(201).setBody("""{"status":"ok"}"""))
+            server.enqueue(MockResponse().setResponseCode(201).setBody("""{"saved":2}"""))
+            val (reporter, tracking) = reporterWith(server, queue = queue, scheduler = scheduler)
+
+            reporter.report(trip, fix(ts = 1000L))
+            reporter.report(trip, fix(ts = 1010L))
+            assertEquals("HTTP $code", listOf(1000L, 1010L), queue.queued.map { it.timestamp })
+            assertEquals("HTTP $code", 2, scheduler.scheduled)
+            assertEquals("HTTP $code", 0, tracking.state.value.fixesSent)
+            assertEquals("HTTP $code: the status stays as it was", TrackingProblem.NONE, tracking.state.value.problem)
+
+            reporter.report(trip, fix(ts = 1020L))
+            assertEquals("HTTP $code", 4, server.requestCount)
+            repeat(3) { server.takeRequest() }
+            val upload = server.takeRequest()
+            assertEquals("HTTP $code", "/api/v1/locations/history", upload.path)
+            val points = Json.parseToJsonElement(upload.body.readUtf8()).jsonObject["points"]!!.jsonArray
+            assertEquals("HTTP $code", listOf(1000L, 1010L), points.map { it.jsonObject["timestamp"]!!.jsonPrimitive.content.toLong() })
+            assertEquals("HTTP $code", 0, queue.queued.size)
+            server.shutdown()
+        }
+    }
+
     // Without it the fix waits for a live report, which may be the next trip's.
     @Test fun `a queued fix schedules the backlog upload, a sent or lost one doesn't`() = runTest {
         val scheduler = FakeBacklogUploadScheduler()

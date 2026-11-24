@@ -32,6 +32,14 @@ data class LocationFix(
 private const val CLOCK_SKEW_THRESHOLD = 3
 
 /**
+ * What the proxy in front of the server (docs/deployment.md, section 7) answers when the server is down or too slow:
+ * the server never sends these on this endpoint itself. The report is kept, as one that fails for want of a
+ * connection is: the server didn't take it, or took it without the phone hearing so, and the history upload is
+ * stored once.
+ */
+private val SERVER_UNREACHABLE = setOf(502, 503, 504)
+
+/**
  * How far apart [LocationTrackingService] asks for fixes when no screen needs them faster. Each
  * of those fixes is a report, so this is also how often the server hears from the vehicle.
  */
@@ -101,8 +109,8 @@ class TripReporter @Inject constructor(
      * left with the older position. A fix that arrives meanwhile is dropped rather than queued:
      * by the time it could go it would be stale, and the next one is seconds behind it.
      *
-     * A report that goes through is followed by one batch of the fixes queued while there was no
-     * connection, unless [BacklogUploadJob] is uploading one. That upload is not part of the
+     * A report that goes through is followed by one batch of the fixes queued while the server
+     * was out of reach, unless [BacklogUploadJob] is uploading one. That upload is not part of the
      * report: a slow one would otherwise hold back the live fixes behind it, and those are
      * dropped, not queued. When the batch goes and more is queued, the job is scheduled afresh to
      * take the rest, unless it is running.
@@ -114,8 +122,8 @@ class TripReporter @Inject constructor(
         } finally {
             reportInFlight.set(false)
         }
-        // The connection works again, and this report has gone: send one batch of what queued up
-        // while it did not. At most one per report, and one at a time, keeps within the server's
+        // The server is in reach again, and this report has gone: send one batch of what queued up
+        // while it was not. At most one per report, and one at a time, keeps within the server's
         // limit on history uploads; a report that goes through while a batch is on its way starts none.
         if (!sent) return
         try {
@@ -174,6 +182,11 @@ class TripReporter @Inject constructor(
                         refreshProblem(sendProblem = TrackingProblem.CLOCK_SKEW)
                     }
                 }
+                // Not NO_NETWORK: the phone is online. The status stays as it is, as for any other server error.
+                e.code() in SERVER_UNREACHABLE -> {
+                    AppLog.w(TAG, "Queueing location report for history after HTTP ${e.code()} from the proxy", e)
+                    keepForHistory(dto)
+                }
                 else -> AppLog.w(TAG, "Dropping location report after HTTP ${e.code()}", e) // other 4xx/5xx: log-and-drop per spec, keep current status
             }
             return false
@@ -181,19 +194,27 @@ class TripReporter @Inject constructor(
             // Too late for the realtime feed by the time it could go, but it is still where the bus
             // was: kept for location history.
             AppLog.w(TAG, "Queueing location report for history after network failure", e)
-            try {
-                offlineQueue.add(dto)
-                backlogScheduler.schedule()
-            } catch (queueError: IOException) {
-                // A full disk, say. Nothing above this catches it, so it would end tracking mid-trip:
-                // losing one queued fix is the lesser loss.
-                AppLog.w(TAG, "Could not queue location report for history", queueError)
-            }
+            keepForHistory(dto)
             refreshProblem(sendProblem = TrackingProblem.NO_NETWORK)
             return false
         }
         keepSentCount(trip, sent)
         return true
+    }
+
+    /**
+     * Queues [dto] for [BacklogUploadJob], and for the batch after the next report that goes through. Called before
+     * the next report can start, so the queue keeps the order the fixes were taken in.
+     */
+    private suspend fun keepForHistory(dto: LocationReportDto) {
+        try {
+            offlineQueue.add(dto)
+            backlogScheduler.schedule()
+        } catch (queueError: IOException) {
+            // A full disk, say. Nothing above this catches it, so it would end tracking mid-trip:
+            // losing one queued fix is the lesser loss.
+            AppLog.w(TAG, "Could not queue location report for history", queueError)
+        }
     }
 
     /**
