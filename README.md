@@ -37,8 +37,10 @@ The server also ships a server-rendered admin web UI at `/admin` — sign in,
 dashboard, live fleet map with per-trip trails, vehicle CRUD (with CSV export
 of location history), user CRUD, vehicle assignments, and trip history. It
 also has Alerts (vehicles gone quiet, not moving, off their route or bunched
-behind the vehicle ahead, and a block's next trip not started), Reports, feed health, feed API keys, and a
-Driver setup page with the setup link and its QR code. It's built into the
+behind the vehicle ahead, and a block's next trip not started), Analytics, feed health, feed API keys, an
+Audit log of the changes admins make to vehicles, accounts, trips and API keys, and a
+Driver setup page with the setup link and its QR code. A viewer account sees
+every page but can't change anything (see **Viewer accounts** below). It's built into the
 same binary and enabled by default; set `ADMIN_UI_ENABLED=false` to disable it
 entirely (the route returns 404).
 
@@ -1010,8 +1012,8 @@ Left out of v1 to keep the GSoC scope achievable, and built since in both driver
 - **Driver incentives and gamification:** Track on-time performance, route adherence, and other metrics to help agencies improve service quality
 - **Passenger counting:** Integrate with Android’s camera or simple tap-counter UI to estimate ridership
 - **Multi-agency support:** Add tenant isolation so a single server instance can serve multiple transit agencies
-- **Push notifications for operators:** Alert when a vehicle goes off-route, a driver hasn’t started their scheduled trip, or a vehicle has been stationary too long
-- **iOS driver app:** For agencies where drivers use iPhones (uncommon in target markets but possible)
+- **Push notifications for operators:** Built since as alerts. The admin UI's Alerts page flags a vehicle gone quiet, not moving, off its route or bunched, and a block's next trip not started, and the server can post each alert to a Slack, Google Chat or Microsoft Teams channel, or an endpoint of your own (`ALERT_WEBHOOK_URL`, see [`docs/configuration.md`](docs/configuration.md#alert-webhook)). There is no app for dispatchers: a phone hears of an alert through the chat app
+- **iOS driver app:** Built since, with CarPlay: see [iOS driver app](#ios-driver-app-with-carplay) above
 - **Integration with The Transit Clock:** Connect the vehicle positions to The Transit Clock for more sophisticated arrival prediction
 - **OBACloud hosted offering:** Offer Vehicle Tracker as a managed service through OBACloud so agencies don’t need to run their own server
 

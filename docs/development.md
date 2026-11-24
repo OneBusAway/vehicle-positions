@@ -163,7 +163,7 @@ make test
 Notes:
 
 - most tests are unit tests and run without external services
-- DB integration tests in `store_test.go` require `DATABASE_URL` and are skipped when it is not set
+- DB integration tests, in `store_test.go` and many other `_test.go` files, require `DATABASE_URL` and are skipped when it is not set; on CI (`CI=true`) they fail instead, so they cannot pass without running
 - the `TestMigration_*UpAndDown` tests each create and drop a database of their own, so the `DATABASE_URL` login needs the `CREATEDB` privilege (the docker compose `postgres` user is a superuser, so it has it); without it they fail with `permission denied to create database` rather than skip
 
 ## Validating the Feed with gtfs-realtime-validator
