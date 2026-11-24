@@ -284,7 +284,7 @@ func TestAuditAPI_ThroughTheServer(t *testing.T) {
 	ll := NewLoginRateLimiter()
 	t.Cleanup(ll.Stop)
 	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return nil }, testReportSettings)
-	h, err := newHandler(store, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(),
+	h, err := newHandler(serverStore{store, &noopStore{}}, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(),
 		adminUIConfig{enabled: true, trustProxy: true, stalenessThreshold: 5 * time.Minute}, false, "", nil, nil, nil,
 		newAlertWatcher(store, testAlertSettings), reports, newFeedHealth(time.Now))
 	require.NoError(t, err)

@@ -26,8 +26,8 @@ const (
 )
 
 // What the audit log records, as its action column names it: the changes to
-// an object, and the sign-ins and sign-outs of an account that may use the
-// admin UI.
+// an object, and the sign-ins, failed sign-ins and sign-outs of an account
+// that may use the admin UI.
 const (
 	auditCreate     = "create"
 	auditUpdate     = "update"
@@ -40,6 +40,7 @@ const (
 	auditEnd        = "end"
 	auditSignIn     = "sign_in"
 	auditSignOut    = "sign_out"
+	auditSignInFail = "sign_in_failed"
 )
 
 // The ways an account signs in and out, as a session row's via names them:
@@ -87,7 +88,8 @@ type sessionAudit struct {
 }
 
 // auditActor is who a row is recorded against: the signed-in admin, or the
-// account signing in or out, and the address their request came from.
+// account signing in or out, and the address their request came from. UserID
+// is 0, and Email "", for a failed sign-in: no one knows who was at it.
 type auditActor struct {
 	UserID int64
 	Email  string
@@ -178,7 +180,7 @@ func recordAudit(ctx context.Context, q *db.Queries, c auditChange) error {
 		After:      after,
 	}
 	if actor, ok := ctx.Value(auditActorKey).(auditActor); ok {
-		params.ActorID = pgtype.Int8{Int64: actor.UserID, Valid: true}
+		params.ActorID = pgtype.Int8{Int64: actor.UserID, Valid: actor.UserID != 0}
 		params.ActorEmail = actor.Email
 		params.ActorIp = actor.IP
 	}
@@ -241,7 +243,8 @@ func auditJSON(fields any) ([]byte, error) {
 type auditEntry struct {
 	ID int64
 	At time.Time
-	// ActorID is nil for a change the server made itself.
+	// ActorID is nil for a change the server made itself, and for a failed
+	// sign-in, whose sender is unknown.
 	ActorID    *int64
 	ActorEmail string
 	ActorIP    string

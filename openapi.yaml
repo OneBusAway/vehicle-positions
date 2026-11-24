@@ -932,12 +932,18 @@ paths:
         Returns one page of the audit log newest-first: each change made to a
         vehicle, an account, a trip or an API key through the admin UI or this
         API, the changes the server made itself, and each sign-in and sign-out
-        of an `admin` or `viewer` account, through the admin UI or this API. A
-        driver's sign-ins are not recorded, and neither is a token renewed with
-        `POST /api/v1/auth/refresh` or a session that runs out. The filters are
-        the Audit log page's. Requires the `admin` or `viewer` role. A viewer's
-        entries leave out `actor_ip`, as a viewer's Audit log page leaves out
-        the address.
+        of an `admin` or `viewer` account, through the admin UI or this API,
+        with the sign-ins to one that failed. A driver's sign-ins are not
+        recorded, and neither is a token renewed with
+        `POST /api/v1/auth/refresh`, a session that runs out, a failed sign-in
+        to an email no account has or a `429`. The filters are the Audit log
+        page's. Requires the `admin` or `viewer` role. A viewer's entries leave
+        out `actor_ip`, as a viewer's Audit log page leaves out the address.
+
+        A failed sign-in is answered without waiting for its entry, so a wrong
+        password for an admin's account takes no longer to refuse than one for
+        an unknown email. Unlike the others, such an entry can be lost if the
+        server crashes or its database stops answering.
 
         Paging is offset-based. The handler reads one row past `limit` to set
         `has_more`, so a truncated page is distinguishable from an exact fit.
@@ -951,8 +957,8 @@ paths:
             type: string
             enum: [vehicle, user, trip, api_key, session]
           description: |
-            Only entries about this kind of object. `session` is the sign-ins
-            and sign-outs. Omit for every kind.
+            Only entries about this kind of object. `session` is the sign-ins,
+            failed sign-ins and sign-outs. Omit for every kind.
         - in: query
           name: id
           required: false
@@ -971,7 +977,8 @@ paths:
             minimum: 1
           description: |
             Only what the account with this user id did: the changes it made,
-            and its sign-ins and sign-outs.
+            and its sign-ins and sign-outs. Failed sign-ins to it are left out,
+            since who was at them is unknown.
         - $ref: '#/components/parameters/ListLimitQuery'
         - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
@@ -3048,7 +3055,8 @@ components:
     AuditEntry:
       type: object
       description: |
-        One change to one object, or one sign-in or sign-out. `before` and
+        One change to one object, one sign-in or sign-out, or failed sign-ins
+        to one account from one address. `before` and
         `after` hold the object's small fields, never a password, a key or a
         token: a vehicle's `label`, `agency_tag` and `active`; an account's
         `name`, `email`, `role` and `active`; an API key's `name` and `active`;
@@ -3056,7 +3064,11 @@ components:
         hold the `vehicle_id`. A session's `sign_in` and `sign_out` hold `via`
         in `after`: `admin` for the admin UI, or `api` for
         `POST /api/v1/auth/login` and `POST /api/v1/auth/logout`, which the
-        driver apps use too.
+        driver apps use too. A `sign_in_failed`, a wrong password or the right
+        one for a deactivated account, also holds `attempts`: 1 for the first,
+        recorded at once, and for further ones through the same way in over the
+        ten minutes after it, how many there were, recorded together when the
+        ten minutes are over. Never the email or the password typed.
       required: [id, at, actor_id, actor_email, object_type, object_id, action, before, after]
       properties:
         id:
@@ -3066,7 +3078,9 @@ components:
         at:
           type: string
           format: date-time
-          description: When the change, sign-in or sign-out was made, in UTC.
+          description: |
+            When the change, sign-in or sign-out was made, in UTC. For a
+            `sign_in_failed`, when it was recorded.
         actor_id:
           type: [integer, 'null']
           format: int64
@@ -3074,13 +3088,15 @@ components:
             The user id of the admin who made the change, or of the account
             that signed in or out. Null for a change the server made itself:
             the first admin, created from `ADMIN_BOOTSTRAP_EMAIL`, or an
-            account restored with `reset-admin`. It is kept after the account
-            is deleted.
+            account restored with `reset-admin`. Null too for a
+            `sign_in_failed`, since who was at it is unknown. It is kept after
+            the account is deleted.
         actor_email:
           type: string
           description: |
             That account's email, kept with the entry so it still names them
-            after the account changes or is deleted. Empty for the server.
+            after the account changes or is deleted. Empty for the server and
+            for a `sign_in_failed`.
         actor_ip:
           type: string
           description: |
@@ -3095,15 +3111,17 @@ components:
           type: string
           description: |
             The vehicle's id, or the account's, trip's or API key's number. A
-            session's is its account's number, the same as `actor_id`.
+            session's is its account's number: for a `sign_in_failed`, the
+            account that could not be signed in to.
         action:
           type: string
-          enum: [create, update, activate, deactivate, delete, set_password, assign_vehicle, unassign_vehicle, end, sign_in, sign_out]
+          enum: [create, update, activate, deactivate, delete, set_password, assign_vehicle, unassign_vehicle, end, sign_in, sign_out, sign_in_failed]
         before:
           type: [object, 'null']
           description: |
             The fields before the change. Null for a create, an
-            `assign_vehicle`, a `set_password`, a `sign_in` and a `sign_out`.
+            `assign_vehicle`, a `set_password`, a `sign_in`, a `sign_out` and a
+            `sign_in_failed`.
         after:
           type: [object, 'null']
           description: The fields after the change. Null for a delete, an `unassign_vehicle` and a `set_password`.

@@ -39,7 +39,7 @@ of location history), user CRUD, vehicle assignments, and trip history. It
 also has Alerts (vehicles gone quiet, not moving, off their route or bunched
 behind the vehicle ahead, and a block's next trip not started), Analytics, feed health, feed API keys, an
 Audit log of the changes admins make to vehicles, accounts, trips and API keys
-and of admins' and viewers' sign-ins and sign-outs, and a
+and of admins' and viewers' sign-ins, failed sign-ins and sign-outs, and a
 Driver setup page with the setup link and its QR code. A viewer account sees
 every page but can't change anything (see **Viewer accounts** below). It's built into the
 same binary and enabled by default; set `ADMIN_UI_ENABLED=false` to disable it
@@ -85,10 +85,10 @@ clients and up to 24 hours for the admin UI's session cookie.
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
 `X-Forwarded-Proto` — this affects the admin login rate limiter's per-IP
-bucketing, the address the audit log records for each admin change, sign-in
-and sign-out, and whether the session cookie is marked `Secure`. Leave it unset
-(false) when the server is reachable directly, since trusting those headers
-from an untrusted client would let it spoof its IP.
+bucketing, the address the audit log records for each admin change, sign-in,
+failed sign-in and sign-out, and whether the session cookie is marked `Secure`.
+Leave it unset (false) when the server is reachable directly, since trusting
+those headers from an untrusted client would let it spoof its IP.
 
 ### GTFS schedule
 

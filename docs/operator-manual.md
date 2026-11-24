@@ -356,10 +356,18 @@ or an account from **Active** to **Deactivated**.
 - Click the object in a row to see its whole history, or an email to see
   everything that account did.
 - **Sign-in by** and **Sign-out by** name the account; click the name to see
-  only its sign-ins and sign-outs. **Through** says which way: **Admin site**
-  for these pages, **API** for a script or a driver app. A session that runs
-  out by itself adds no row, and neither does an app or a script renewing its
-  sign-in.
+  only its sign-ins, failed sign-ins and sign-outs. **Through** says which way:
+  **Admin site** for these pages, **API** for a script or a driver app. A
+  session that runs out by itself adds no row, and neither does an app or a
+  script renewing its sign-in.
+- **Failed sign-in as** names an admin's or a viewer's account that someone
+  gave a wrong password for, or the right one while it is deactivated. Anyone
+  can type an email, so who it was is **Unknown**, with the address they were
+  at. The first is listed at once. More the same way from the same address are
+  counted, and the count gets a row ten minutes after the first, such as **37
+  failed sign-ins as** Ana Diaz. A driver's account, an email no account has
+  and an attempt past the sign-in limit add no row, and the email and password
+  typed are never kept.
 - **Server** in place of an email is a change the server made itself: the first
   admin, created from `ADMIN_BOOTSTRAP_EMAIL`, or an account restored with
   `reset-admin` (see [Locked out](#locked-out-no-admin-can-sign-in)).
@@ -373,17 +381,20 @@ Each row is saved together with the change it records. If the row cannot be
 saved, the change is not made either and you see an error, so a change that
 went through always has its row. Signing in and out are the same: without its
 row a sign-in is refused with **Something went wrong. Try again.**, and a
-sign-out leaves you signed in with **Couldn't sign out. Try again.** Rows
-cannot be edited afterwards. They are kept forever unless your IT contact sets
-how long to keep them (`AUDIT_LOG_RETENTION_PERIOD`); then, once an hour, the
-rows older than that are deleted for good.
+sign-out leaves you signed in with **Couldn't sign out. Try again.** Failed
+sign-ins are the exception. The answer does not wait for their rows, so a wrong
+password for a real account takes no longer to refuse than an email no account
+has, and a row can be lost if the server crashes or its database stops
+answering. Rows cannot be edited afterwards. They are kept forever unless your
+IT contact sets how long to keep them (`AUDIT_LOG_RETENTION_PERIOD`); then,
+once an hour, the rows older than that are deleted for good.
 
 Your IT contact can read the same list as JSON from `GET /api/v1/admin/audit`,
 with the same filters. A viewer's copy leaves out the addresses there too.
 
-It does not record failed sign-ins, drivers signing in and out, what anyone
-looked at, or what drivers do in the app, such as starting and ending their own
-trips. The server's log has those.
+It does not record drivers signing in and out, what anyone looked at, or what
+drivers do in the app, such as starting and ending their own trips. The
+server's log has those.
 
 Behind a reverse proxy the address is right only when your IT contact has set
 `TRUST_PROXY_HEADERS`, the same setting the sign-in limit relies on; without
@@ -1286,7 +1297,9 @@ sign-out by an admin or a viewer, the
 [Audit log](#who-changed-what-the-audit-log) keeps who it was, by account and
 email, the address they connected from, and the fields a change changed. So it
 keeps an admin's and a viewer's address each time they sign in, even if they
-change nothing. A driver's sign-ins are not kept there.
+change nothing. For a failed sign-in to one of their accounts it keeps the
+account and the address, not what was typed. A driver's sign-ins are not kept
+there.
 
 Taken together this is a **per-driver movement history**, and it should be
 treated like one. Anyone with an admin or viewer account can see any vehicle's

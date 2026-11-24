@@ -60,7 +60,7 @@ func TestHandleLogin_Success(t *testing.T) {
 		Active:       true,
 	}}
 
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "driver@test.com", "password")
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -86,7 +86,7 @@ func loginTestUser() *mockUserStore {
 // PR that departs from #62: the response gained access_token but kept token.
 // If these two ever stop agreeing, clients reading either field are broken.
 func TestHandleLogin_ReturnsBothTokenAndAccessToken(t *testing.T) {
-	handler := handleLogin(loginTestUser(), newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(loginTestUser(), newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "driver@test.com", "password")
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -106,7 +106,7 @@ func TestHandleLogin_ReturnsBothTokenAndAccessToken(t *testing.T) {
 // because the struct is exactly what a refactor dropping the field would
 // change.
 func TestLoginResponse_BackwardCompatibleJSON(t *testing.T) {
-	handler := handleLogin(loginTestUser(), newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(loginTestUser(), newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "driver@test.com", "password")
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -124,7 +124,7 @@ func TestLoginResponse_BackwardCompatibleJSON(t *testing.T) {
 
 func TestHandleLogin_ReturnsRefreshToken(t *testing.T) {
 	refreshTokens := newFakeRefreshTokens()
-	handler := handleLogin(loginTestUser(), refreshTokens, testSecret, testTTLs, nil, false)
+	handler := handleLogin(loginTestUser(), refreshTokens, &noopStore{}, testSecret, testTTLs, nil, false)
 
 	w := postLogin(handler, "driver@test.com", "password")
 	require.Equal(t, http.StatusOK, w.Code)
@@ -150,7 +150,7 @@ func TestHandleLogin_ReturnsRefreshToken(t *testing.T) {
 func TestHandleLogin_RefreshTokenStoreError(t *testing.T) {
 	refreshTokens := newFakeRefreshTokens()
 	refreshTokens.createErr = errors.New("database unavailable")
-	handler := handleLogin(loginTestUser(), refreshTokens, testSecret, testTTLs, nil, false)
+	handler := handleLogin(loginTestUser(), refreshTokens, &noopStore{}, testSecret, testTTLs, nil, false)
 
 	w := postLogin(handler, "driver@test.com", "password")
 
@@ -167,7 +167,7 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 		Active:       true,
 	}}
 
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "driver@test.com", "wrongpassword")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -189,7 +189,7 @@ func TestHandleLogin_DeactivatedUser(t *testing.T) {
 		Active:       false,
 	}}
 
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "gone@test.com", "password123")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -203,7 +203,7 @@ func TestHandleLogin_DeactivatedUser(t *testing.T) {
 func TestHandleLogin_UserNotFound(t *testing.T) {
 	store := &mockUserStore{err: ErrUserNotFound}
 
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(handler, "nobody@test.com", "password")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -211,7 +211,7 @@ func TestHandleLogin_UserNotFound(t *testing.T) {
 
 func TestHandleLogin_MissingFields(t *testing.T) {
 	store := &mockUserStore{}
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 
 	tests := []struct {
 		name     string
@@ -245,7 +245,7 @@ func TestHandleLogin_RateLimited(t *testing.T) {
 	limiter := NewLoginRateLimiter()
 	defer limiter.Stop()
 
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, limiter, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, limiter, false)
 
 	for range loginEmailLimit {
 		w := postLogin(handler, "driver@test.com", "wrongpassword")
@@ -263,7 +263,7 @@ func TestHandleLogin_RateLimited(t *testing.T) {
 
 func TestHandleLogin_InvalidJSON(t *testing.T) {
 	store := &mockUserStore{}
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 
 	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader([]byte("{bad json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -1042,7 +1042,7 @@ func TestLoginLogoutRevokeFlow(t *testing.T) {
 	}}
 	revocations := newFakeRevocations()
 
-	login := handleLogin(users, newFakeRefreshTokens(), testSecret, testTTLs, nil, false)
+	login := handleLogin(users, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(login, "driver@test.com", "password")
 	require.Equal(t, http.StatusOK, w.Code)
 	var loginResp LoginResponse
@@ -1086,7 +1086,7 @@ func TestHandleLogin_SuccessesDoNotUseIPBudget(t *testing.T) {
 	}}
 	limiter := NewLoginRateLimiter()
 	defer limiter.Stop()
-	handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, limiter, false)
+	handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, limiter, false)
 
 	for i := range 30 {
 		w := postLogin(handler, "driver@test.com", "password")

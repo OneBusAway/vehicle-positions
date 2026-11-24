@@ -82,6 +82,14 @@ type appStore interface {
 	AlertsRaisedLister
 	AuditLogLister
 	SignInRecorder
+	FailedSignInNoter
+}
+
+// serverStore is what the server runs on: the database, with the failed
+// sign-ins noted for the recorder that writes them to it in the background.
+type serverStore struct {
+	*Store
+	FailedSignInNoter
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
@@ -96,7 +104,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	adminMiddleware := requireAdmin(trustProxy)
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
-	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, jwtSecret, ttls, loginLimiter, trustProxy))
+	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, store, jwtSecret, ttls, loginLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, ttls, refreshLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store, store, trustProxy)))
 	// Outermost, so a request the auth middleware refuses is counted too.
@@ -328,6 +336,11 @@ func main() {
 	}
 	warnIfNoActiveAdmin(ctx, store)
 
+	// Deferred after the store's Close, so it runs first: the failed sign-ins
+	// still to be written need the database.
+	failedSignIns := newFailedSignInRecorder(store, time.Now, time.Tick(failedSignInSweep))
+	defer failedSignIns.Stop()
+
 	tracker := NewTracker(maxAge)
 	defer tracker.Stop()
 
@@ -467,7 +480,7 @@ func main() {
 	healthHours := startHealthHours(ctx, health, store, time.Minute)
 	defer healthHours.Stop()
 
-	handler, err := newHandler(store, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
+	handler, err := newHandler(serverStore{store, failedSignIns}, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
 		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, metricsToken, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)

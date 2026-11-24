@@ -118,7 +118,7 @@ func TestStore_UpdateUserLastSeen(t *testing.T) {
 func TestHandleLogin_RecordsLastSeen(t *testing.T) {
 	t.Run("a successful sign-in", func(t *testing.T) {
 		store := loginTestUser()
-		w := postLogin(handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false), "driver@test.com", "password")
+		w := postLogin(handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false), "driver@test.com", "password")
 		require.Equal(t, http.StatusOK, w.Code)
 		assert.Equal(t, []int64{1}, store.seen)
 	})
@@ -134,7 +134,7 @@ func TestHandleLogin_RecordsLastSeen(t *testing.T) {
 	} {
 		t.Run(tc.name+" is not recorded", func(t *testing.T) {
 			store := tc.store()
-			w := postLogin(handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false), "driver@test.com", tc.password)
+			w := postLogin(handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false), "driver@test.com", tc.password)
 			require.Equal(t, http.StatusUnauthorized, w.Code)
 			assert.Empty(t, store.seen)
 		})
@@ -144,7 +144,7 @@ func TestHandleLogin_RecordsLastSeen(t *testing.T) {
 		store := loginTestUser()
 		limiter := NewLoginRateLimiter()
 		defer limiter.Stop()
-		handler := handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, limiter, false)
+		handler := handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, limiter, false)
 		for range loginEmailLimit {
 			require.Equal(t, http.StatusUnauthorized, postLogin(handler, "driver@test.com", "nope").Code)
 		}
@@ -156,7 +156,7 @@ func TestHandleLogin_RecordsLastSeen(t *testing.T) {
 		store := loginTestUser()
 		tokens := newFakeRefreshTokens()
 		tokens.createErr = errors.New("database is down")
-		w := postLogin(handleLogin(store, tokens, testSecret, testTTLs, nil, false), "driver@test.com", "password")
+		w := postLogin(handleLogin(store, tokens, &noopStore{}, testSecret, testTTLs, nil, false), "driver@test.com", "password")
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		assert.Empty(t, store.seen)
 	})
@@ -168,7 +168,7 @@ func TestHandleLogin_SignsInWhenLastSeenFails(t *testing.T) {
 	store := loginTestUser()
 	store.seenErr = errors.New("database is down")
 
-	w := postLogin(handleLogin(store, newFakeRefreshTokens(), testSecret, testTTLs, nil, false), "driver@test.com", "password")
+	w := postLogin(handleLogin(store, newFakeRefreshTokens(), &noopStore{}, testSecret, testTTLs, nil, false), "driver@test.com", "password")
 
 	require.Equal(t, http.StatusOK, w.Code)
 	resp := decodeTokens(t, w)

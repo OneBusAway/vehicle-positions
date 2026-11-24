@@ -138,9 +138,11 @@ func recordLastSeen(ctx context.Context, recorder UserSeenRecorder, userID int64
 // handleLogin returns the JSON API login handler. limiter may be nil (e.g. in
 // tests that don't exercise rate limiting); trustProxy controls which IP
 // clientIP() reports to the limiter and to the audit log, which records the
-// logins of accounts that may use the admin UI. When present, the rate-limit
-// check runs before the store is touched.
-func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret []byte, ttls tokenTTLs, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
+// logins of accounts that may use the admin UI. failures notes the failed
+// ones for it without waiting for a write, so a wrong password for such an
+// account answers as fast as one for an unknown email. When present, the
+// rate-limit check runs before the store is touched.
+func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, failures FailedSignInNoter, secret []byte, ttls tokenTTLs, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
 
@@ -175,6 +177,7 @@ func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret 
 		err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
 		if err != nil {
 			if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+				failures.NoteFailedSignIn(user, clientIP(r, trustProxy), auditViaAPI)
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 				return
 			}
@@ -184,6 +187,7 @@ func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret 
 		}
 
 		if !user.Active {
+			failures.NoteFailedSignIn(user, clientIP(r, trustProxy), auditViaAPI)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 			return
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -49,8 +50,9 @@ var auditActions = map[string]map[string]string{
 		auditDeactivate: "Deactivated API key",
 	},
 	auditSession: {
-		auditSignIn:  "Sign-in by",
-		auditSignOut: "Sign-out by",
+		auditSignIn:     "Sign-in by",
+		auditSignOut:    "Sign-out by",
+		auditSignInFail: "Failed sign-in as",
 	},
 }
 
@@ -82,9 +84,9 @@ type auditRow struct {
 	// When and Day are on the page's clock.
 	When string
 	Day  string
-	// Who is the email of the admin, or of the account signing in or out, or
-	// "Server" for a change the server made itself; WhoURL lists everything
-	// they did, "" for the server.
+	// Who is the email of the admin, or of the account signing in or out,
+	// "Server" for a change the server made itself, or "Unknown" for a failed
+	// sign-in; WhoURL lists everything they did, "" for the last two.
 	Who    string
 	WhoURL string
 	// IP is the address the request came from: "" for the server's own, and
@@ -181,12 +183,20 @@ func newAuditRow(e auditEntry, loc *time.Location, now time.Time) auditRow {
 		row.Object = row.name
 	case e.ObjectType == auditUser || e.ObjectType == auditSession:
 		// The words before it name the kind, but for an account they can
-		// end in "for", "to", "from" or "by".
+		// end in "for", "to", "from", "by" or "as".
 		row.Object = "account " + e.ObjectID
 	}
-	if e.ActorID != nil {
+	switch {
+	case e.ActorID != nil:
 		row.Who = cmp.Or(e.ActorEmail, "account "+strconv.FormatInt(*e.ActorID, 10))
 		row.WhoURL = auditPageURL(auditFilter{ActorID: e.ActorID}, 1)
+	case e.Action == auditSignInFail:
+		// The server's own rows have no actor either, but the server never
+		// fails to sign in.
+		row.Who = "Unknown"
+		if n, _ := after["attempts"].(float64); n > 1 {
+			row.What = fmt.Sprintf("%.0f failed sign-ins as", n)
+		}
 	}
 	return row
 }
