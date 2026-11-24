@@ -53687,175 +53687,175 @@
         }
       }
     },
-    "This number grows while riders can see you. With no signal, keep driving." : {
-      "comment" : "Tip on the trip bar's sent count, under its title.",
+    "This number grows while riders can see you. No signal? Keep driving. Reports are saved and sent later." : {
+      "comment" : "Tip on the trip bar's sent count, under its title: the iPhone keeps the reports it can't send and sends them once the connection is back.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ተሳፋሪዎች እርስዎን ማየት እስከቻሉ ድረስ ይህ ቁጥር ይጨምራል። ኔትወርክ ባይኖርም መንዳትዎን ይቀጥሉ።"
+            "value" : "ተሳፋሪዎች እርስዎን ማየት እስከቻሉ ድረስ ይህ ቁጥር ይጨምራል። ኔትወርክ የለም? መንዳትዎን ይቀጥሉ። ሪፖርቶቹ ተቀምጠው በኋላ ይላካሉ።"
           }
         },
         "ar" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "يزداد هذا الرقم ما دام الركاب يرونك. عند انقطاع الإشارة، تابع القيادة."
+            "value" : "يزداد هذا الرقم ما دام الركاب يرونك. لا توجد إشارة؟ تابع القيادة. تُحفظ التقارير وتُرسل لاحقًا."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Diese Zahl steigt, solange Fahrgäste Sie sehen können. Ohne Empfang fahren Sie einfach weiter."
+            "value" : "Diese Zahl steigt, solange Fahrgäste Sie sehen können. Kein Empfang? Fahren Sie weiter. Meldungen werden gespeichert und später gesendet."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Este número sube mientras los pasajeros pueden verte. Sin señal, sigue manejando."
+            "value" : "Este número sube mientras los pasajeros pueden verte. ¿Sin señal? Sigue manejando. Los reportes se guardan y se envían después."
           }
         },
         "fa" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "تا وقتی مسافران شما را می‌بینند، این عدد بالا می‌رود. اگر آنتن ندارید، به رانندگی ادامه دهید."
+            "value" : "تا وقتی مسافران شما را می‌بینند، این عدد بالا می‌رود. آنتن ندارید؟ به رانندگی ادامه دهید. گزارش‌ها ذخیره می‌شوند و بعداً ارسال می‌شوند."
           }
         },
         "fi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Luku kasvaa niin kauan kuin matkustajat näkevät sinut. Jos kenttää ei ole, jatka ajoa."
+            "value" : "Luku kasvaa niin kauan kuin matkustajat näkevät sinut. Ei kenttää? Jatka ajoa. Raportit tallennetaan ja lähetetään myöhemmin."
           }
         },
         "fil" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Lumalaki ang numerong ito habang nakikita ka ng mga pasahero. Kung walang signal, tuloy lang sa pagmamaneho."
+            "value" : "Lumalaki ang numerong ito habang nakikita ka ng mga pasahero. Walang signal? Tuloy lang sa pagmamaneho. Naka-save ang mga report at ipapadala mamaya."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Ce nombre augmente tant que les passagers vous voient. Sans réseau, continuez à rouler."
+            "value" : "Ce nombre augmente tant que les passagers vous voient. Pas de réseau ? Continuez à rouler. Les positions sont enregistrées et envoyées plus tard."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "जब तक यात्री आपको देख सकते हैं, यह नंबर बढ़ता रहता है। सिग्नल न हो, तो गाड़ी चलाते रहें।"
+            "value" : "जब तक यात्री आपको देख सकते हैं, यह नंबर बढ़ता रहता है। सिग्नल नहीं है? गाड़ी चलाते रहें। रिपोर्ट सेव रहती हैं और बाद में भेजी जाती हैं।"
           }
         },
         "ht" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Nimewo sa a ap monte toutotan pasaje yo ka wè w. Si pa gen rezo, kontinye kondi."
+            "value" : "Nimewo sa a ap monte toutotan pasaje yo ka wè w. Pa gen rezo? Kontinye kondi. Rapò yo rete anrejistre epi y ap voye yo pita."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Questo numero cresce mentre i passeggeri ti vedono. Senza segnale, continua a guidare."
+            "value" : "Questo numero cresce mentre i passeggeri ti vedono. Niente segnale? Continua a guidare. Le segnalazioni vengono salvate e inviate più tardi."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "乗客に表示されている間、この数字が増えていきます。電波がなくても、そのまま運転を続けてください。"
+            "value" : "乗客に表示されている間、この数字が増えていきます。電波がなくても、そのまま運転を続けてください。位置は保存され、あとで送信されます。"
           }
         },
         "km" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "លេខនេះកើនឡើង ពេលអ្នកដំណើរអាចមើលឃើញអ្នក។ បើគ្មានសញ្ញា បន្តបើកបរ។"
+            "value" : "លេខនេះកើនឡើង ពេលអ្នកដំណើរអាចមើលឃើញអ្នក។ គ្មានសញ្ញា? បន្តបើកបរ។ ទីតាំងត្រូវបានរក្សាទុក ហើយផ្ញើពេលក្រោយ។"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "승객에게 차량이 보이는 동안 이 숫자가 올라가요. 신호가 없어도 계속 운전하세요."
+            "value" : "승객에게 차량이 보이는 동안 이 숫자가 올라가요. 신호가 없나요? 계속 운전하세요. 위치는 저장했다가 나중에 전송해요."
           }
         },
         "lo" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ຕົວເລກນີ້ເພີ່ມຂຶ້ນ ຕາບໃດທີ່ຜູ້ໂດຍສານເຫັນທ່ານ. ຖ້າບໍ່ມີສັນຍານ, ຂັບຕໍ່ໄປ."
+            "value" : "ຕົວເລກນີ້ເພີ່ມຂຶ້ນ ຕາບໃດທີ່ຜູ້ໂດຍສານເຫັນທ່ານ. ບໍ່ມີສັນຍານບໍ? ຂັບຕໍ່ໄປ. ແອັບຈະບັນທຶກລາຍງານໄວ້ ແລ້ວສົ່ງພາຍຫຼັງ."
           }
         },
         "om" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Hamma imaltoonni si arguu danda'anitti lakkoofsi kun ni dabala. Yoo neetworkiin hin jirre, konkolaachisuu itti fufi."
+            "value" : "Hamma imaltoonni si arguu danda'anitti lakkoofsi kun ni dabala. Neetworkiin hin jiruu? Konkolaachisuu itti fufi. Gabaasonni kuufamanii booda ergamu."
           }
         },
         "pa" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ਜਦੋਂ ਤੱਕ ਸਵਾਰੀਆਂ ਤੁਹਾਨੂੰ ਦੇਖ ਸਕਦੀਆਂ ਹਨ, ਇਹ ਨੰਬਰ ਵਧਦਾ ਰਹਿੰਦਾ ਹੈ। ਸਿਗਨਲ ਨਾ ਹੋਵੇ ਤਾਂ ਵੀ ਗੱਡੀ ਚਲਾਉਂਦੇ ਰਹੋ।"
+            "value" : "ਜਦੋਂ ਤੱਕ ਸਵਾਰੀਆਂ ਤੁਹਾਨੂੰ ਦੇਖ ਸਕਦੀਆਂ ਹਨ, ਇਹ ਨੰਬਰ ਵਧਦਾ ਰਹਿੰਦਾ ਹੈ। ਸਿਗਨਲ ਨਹੀਂ ਹੈ? ਗੱਡੀ ਚਲਾਉਂਦੇ ਰਹੋ। ਰਿਪੋਰਟਾਂ ਸੇਵ ਰਹਿੰਦੀਆਂ ਹਨ ਅਤੇ ਬਾਅਦ ਵਿੱਚ ਭੇਜੀਆਂ ਜਾਂਦੀਆਂ ਹਨ।"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Ta liczba rośnie, gdy pasażerowie cię widzą. Przy braku zasięgu jedź dalej."
+            "value" : "Ta liczba rośnie, gdy pasażerowie cię widzą. Brak zasięgu? Jedź dalej. Raporty zostaną zapisane i wysłane później."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Este número aumenta enquanto os passageiros veem você. Sem sinal, continue dirigindo."
+            "value" : "Este número aumenta enquanto os passageiros veem você. Sem sinal? Continue dirigindo. As posições ficam salvas e são enviadas depois."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Это число растёт, пока пассажиры вас видят. Если сигнала нет, продолжайте ехать."
+            "value" : "Это число растёт, пока пассажиры вас видят. Нет сигнала? Продолжайте ехать. Отметки сохраняются и отправятся позже."
           }
         },
         "sm" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "E siʻi aʻe lenei numera aʻo iloa atu ʻoe e pasese. Afai e leai se fesoʻotaʻiga, ʻave pea le taʻavale."
+            "value" : "E siʻi aʻe lenei numera aʻo iloa atu ʻoe e pasese. Leai se fesoʻotaʻiga? ʻAve pea le taʻavale. E teuina lipoti ma lafo mulimuli ane."
           }
         },
         "so" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Lambarkani wuu kordhayaa inta rakaabku ku arki karaan. Haddii aanay shabakad jirin, gaariga sii wad."
+            "value" : "Lambarkani wuu kordhayaa inta rakaabku ku arki karaan. Shabakad ma jirto? Gaariga sii wad. Warbixinnada waa la kaydiyaa, dabadeedna waa la diraa."
           }
         },
         "sw" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Nambari hii huongezeka wakati abiria wanaweza kukuona. Kukiwa hakuna mtandao, endelea kuendesha."
+            "value" : "Nambari hii huongezeka wakati abiria wanaweza kukuona. Hakuna mtandao? Endelea kuendesha. Ripoti huhifadhiwa na kutumwa baadaye."
           }
         },
         "ti" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "ተጓዓዝቲ ክርእዩኹም ከለዉ እዚ ቁጽሪ ይውስኽ። ሲግናል እንተ ዘይሃለወ፣ ምዝዋር ቀጽሉ።"
+            "value" : "ተጓዓዝቲ ክርእዩኹም ከለዉ እዚ ቁጽሪ ይውስኽ። ሲግናል የለን? ምዝዋር ቀጽሉ። ጸብጻባት ይዕቀቡ፣ ጸኒሖም ድማ ይስደዱ።"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Це число зростає, поки пасажири вас бачать. Якщо немає сигналу, їдьте далі."
+            "value" : "Це число зростає, поки пасажири вас бачать. Немає сигналу? Їдьте далі. Звіти зберігаються й надсилаються пізніше."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "Con số này tăng dần khi hành khách thấy được bạn. Khi mất sóng, cứ tiếp tục lái."
+            "value" : "Con số này tăng dần khi hành khách thấy được bạn. Mất sóng? Cứ tiếp tục lái. Vị trí được lưu lại và gửi sau."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "乘客能看到你时，这个数字会不断增加。没有信号时，继续开车就行。"
+            "value" : "乘客能看到你时，这个数字会不断增加。没信号？继续开车就行。位置会先保存，稍后再上报。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "machine_translated",
-            "value" : "乘客看得到你時，這個數字會一直增加。沒有訊號時，繼續開就好。"
+            "value" : "乘客看得到你時，這個數字會一直增加。沒有訊號？繼續開就好。回報會先儲存，稍後再送出。"
           }
         }
       }

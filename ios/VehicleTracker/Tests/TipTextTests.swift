@@ -13,9 +13,12 @@ import Testing
         #expect(TipText.runBoardMessage.contains(PickerText.startTrip))
     }
 
-    @Test func theSentCountTipSaysToKeepDriving() {
+    /// The iPhone keeps the reports it can't send and sends them later, so
+    /// the tip says so in Android's words, as Help's No connection row does.
+    @Test func theSentCountTipSaysReportsAreSavedAndSentLater() {
         #expect(TipText.sentCountTitle == "Reports sent")
-        #expect(TipText.sentCountMessage == "This number grows while riders can see you. With no signal, keep driving.")
+        #expect(TipText.sentCountMessage == "This number grows while riders can see you. No signal? Keep driving. Reports are saved and sent later.")
+        #expect(TipText.sentCountMessage.hasSuffix(HelpText.noConnectionMeaning))
     }
 
     /// The count is one string, so VoiceOver reads it as one: "142 reports
