@@ -265,23 +265,52 @@ func planDrivers(ctx context.Context, q *db.Queries, rows []driverImportRow) ([]
 			}
 		}
 
-		var problems []string
-		for _, id := range p.assign {
-			if err := checkAssignableVehicle(ctx, q, id); err != nil {
-				reason, ok := assignmentProblem(id, err)
-				if !ok {
-					return nil, nil, err
-				}
-				problems = append(problems, reason)
-			}
-		}
-		if len(problems) > 0 {
-			o = importOutcome{Status: importError, Reason: strings.Join(problems, "; ")}
-		}
 		outcomes[i] = o
 		plans[i] = p
 	}
+
+	problems, err := vehicleProblems(ctx, q, plans)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i, p := range plans {
+		var reasons []string
+		for _, id := range p.assign {
+			if reason, ok := problems[id]; ok {
+				reasons = append(reasons, reason)
+			}
+		}
+		if len(reasons) > 0 {
+			outcomes[i] = importOutcome{Status: importError, Reason: strings.Join(reasons, "; ")}
+		}
+	}
 	return outcomes, plans, nil
+}
+
+// vehicleProblems is why the vehicles plans assign can't be assigned, by id,
+// with nothing for one that can. Drivers who share a pool of vehicles list the
+// same ones on every row, so it asks about each vehicle once, not once a row.
+// In the import's transaction checkAssignableVehicle's lock keeps each one
+// active until the import commits.
+func vehicleProblems(ctx context.Context, q *db.Queries, plans []driverPlan) (map[string]string, error) {
+	var ids []string
+	for _, p := range plans {
+		ids = append(ids, p.assign...)
+	}
+	slices.Sort(ids)
+	problems := make(map[string]string)
+	for _, id := range slices.Compact(ids) {
+		err := checkAssignableVehicle(ctx, q, id)
+		if err == nil {
+			continue
+		}
+		reason, ok := assignmentProblem(id, err)
+		if !ok {
+			return nil, err
+		}
+		problems[id] = reason
+	}
+	return problems, nil
 }
 
 // assignmentProblem words a refused assignment for the row that asked for it.
@@ -382,7 +411,9 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 			o.UserID = p.userID
 		}
 		for _, id := range p.assign {
-			if _, err := assignVehicle(ctx, q, o.UserID, id); err != nil {
+			// Not assignVehicle: the plan above checked the vehicle, and the
+			// account is a driver's, new in this transaction or locked by it.
+			if _, err := insertAssignment(ctx, q, o.UserID, id); err != nil {
 				reason, ok := assignmentProblem(id, err)
 				if !ok {
 					return nil, fmt.Errorf("assign vehicle %q to user %d: %w", id, o.UserID, err)

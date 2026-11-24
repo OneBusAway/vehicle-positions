@@ -83,17 +83,13 @@ func (s *Store) CreateAssignment(ctx context.Context, userID int64, vehicleID st
 // assignVehicle assigns vehicleID to userID through q, which the caller runs in
 // a transaction so checkAssignableVehicle's lock holds until it commits, and
 // records the assignment in the audit log in the same transaction.
-// CreateAssignment and the CSV import both assign through it.
 func assignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID string) (db.UserVehicle, error) {
 	if err := checkAssignableVehicle(ctx, q, vehicleID); err != nil {
 		return db.UserVehicle{}, err
 	}
-	row, err := q.AssignUserVehicle(ctx, db.AssignUserVehicleParams{
-		UserID:    userID,
-		VehicleID: vehicleID,
-	})
+	row, err := insertAssignment(ctx, q, userID, vehicleID)
 	if err != nil {
-		return db.UserVehicle{}, classifyAssignmentError(err)
+		return db.UserVehicle{}, err
 	}
 	// The role is read after the insert, whose foreign key holds a KEY SHARE
 	// lock on the account. A change to viewer takes the account FOR UPDATE
@@ -107,6 +103,20 @@ func assignVehicle(ctx context.Context, q *db.Queries, userID int64, vehicleID s
 	}
 	if user.Role == roleViewer {
 		return db.UserVehicle{}, ErrAssignToViewer
+	}
+	return row, nil
+}
+
+// insertAssignment is assignVehicle's write: the assignment and its row in the
+// audit log. The CSV import, which checks its vehicles once for the whole file
+// and holds its accounts as drivers, assigns through it.
+func insertAssignment(ctx context.Context, q *db.Queries, userID int64, vehicleID string) (db.UserVehicle, error) {
+	row, err := q.AssignUserVehicle(ctx, db.AssignUserVehicleParams{
+		UserID:    userID,
+		VehicleID: vehicleID,
+	})
+	if err != nil {
+		return db.UserVehicle{}, classifyAssignmentError(err)
 	}
 	err = recordAudit(ctx, q, auditChange{
 		ObjectType: auditUser, ObjectID: strconv.FormatInt(userID, 10), Action: auditAssign,
