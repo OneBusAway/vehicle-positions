@@ -58,9 +58,17 @@ type LocationReport struct {
 
 const maxVehicleIDLength = 50
 
-// maxTripFieldLength matches the trips endpoint's cap on route_id and
-// gtfs_trip_id (trip_handlers.go).
+// maxTripFieldLength caps the trip and route ids in a location report and in
+// a trip start, in characters.
 const maxTripFieldLength = 100
+
+// validateTripField checks the length of id, the request's field called name.
+func validateTripField(name, id string) error {
+	if utf8.RuneCountInString(id) > maxTripFieldLength {
+		return fmt.Errorf("%s must be at most %d characters", name, maxTripFieldLength)
+	}
+	return nil
+}
 
 var vehicleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
@@ -136,11 +144,11 @@ func (r *LocationReport) validateWithin(maxAge time.Duration) error {
 	if r.Speed != nil && *r.Speed < 0 {
 		return fmt.Errorf("speed must be non-negative")
 	}
-	if len(r.TripID) > maxTripFieldLength {
-		return fmt.Errorf("trip_id must be at most %d characters", maxTripFieldLength)
+	if err := validateTripField("trip_id", r.TripID); err != nil {
+		return err
 	}
-	if len(r.RouteID) > maxTripFieldLength {
-		return fmt.Errorf("route_id must be at most %d characters", maxTripFieldLength)
+	if err := validateTripField("route_id", r.RouteID); err != nil {
+		return err
 	}
 	if r.StartDate != "" {
 		if !serviceDatePattern.MatchString(r.StartDate) {

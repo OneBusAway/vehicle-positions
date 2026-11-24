@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/OneBusAway/vehicle-positions/rider"
 	"github.com/google/uuid"
@@ -27,8 +28,8 @@ const (
 	// riderMaxBodyBytes caps a rider request body. The largest of them is a
 	// batch of riderMaxBatchSize positions, which is comfortably under this.
 	riderMaxBodyBytes = 1 << 16
-	// riderMaxFieldLen bounds the free-text identifiers a client may send, so
-	// nothing absurd reaches the database.
+	// riderMaxFieldLen bounds the free-text identifiers a client may send, in
+	// characters, so nothing absurd reaches the database.
 	riderMaxFieldLen = 100
 	// riderBatchInterval and riderBatchBurst rate-limit position reports per
 	// rider: one report every riderReportIntervalSeconds, with enough slack for
@@ -348,11 +349,11 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 		if !decodeRiderJSON(w, r, &req) {
 			return
 		}
-		if req.TripID == "" || tooLong(req.TripID) {
+		if req.TripID == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "trip_id is required"})
 			return
 		}
-		if tooLong(req.RouteID) || tooLong(req.BoardingStopID) || tooLong(req.DestinationStopID) {
+		if tooLong(req.TripID) || tooLong(req.RouteID) || tooLong(req.BoardingStopID) || tooLong(req.DestinationStopID) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "identifiers must be at most 100 characters"})
 			return
 		}
@@ -984,9 +985,9 @@ func boardedRunStart(trip *rider.TripInfo, stopID string, boardedAt time.Time) t
 	return boardedAt
 }
 
-// tooLong reports whether a client-supplied identifier exceeds what is worth
-// storing.
-func tooLong(v string) bool { return len(v) > riderMaxFieldLen }
+// tooLong reports whether a client-supplied identifier has more characters
+// than is worth storing.
+func tooLong(v string) bool { return utf8.RuneCountInString(v) > riderMaxFieldLen }
 
 // registerRiderRoutes mounts the rider API. Registration is the only route
 // open to an unauthenticated caller.

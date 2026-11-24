@@ -401,6 +401,49 @@ func TestStartRide(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
+// TestRiderIDLengthIsCharacters: a rider's ids are held to 100 characters,
+// however many bytes each takes, and one too long is not called missing.
+func TestRiderIDLengthIsCharacters(t *testing.T) {
+	const tooLong = "identifiers must be at most 100 characters"
+	longest, longer := strings.Repeat("ब", 100), strings.Repeat("ब", 101)
+	tests := []struct {
+		name string
+		body map[string]any
+		code int
+		want string
+	}{
+		{"a trip id as long as it may be", map[string]any{"trip_id": longest}, http.StatusNotFound, "unknown trip"},
+		{"a trip id too long", map[string]any{"trip_id": longer}, http.StatusBadRequest, tooLong},
+		{"a trip id too long in letters of one byte", map[string]any{"trip_id": strings.Repeat("t", 101)}, http.StatusBadRequest, tooLong},
+		{"no trip id", map[string]any{"route_id": "R1"}, http.StatusBadRequest, "trip_id is required"},
+		{"a route id too long", map[string]any{"trip_id": "T1", "route_id": longer}, http.StatusBadRequest, tooLong},
+		{"a boarding stop id as long as it may be", map[string]any{"trip_id": "T1", "boarding_stop_id": longest}, http.StatusCreated, ""},
+		{"a boarding stop id too long", map[string]any{"trip_id": "T1", "boarding_stop_id": longer}, http.StatusBadRequest, tooLong},
+		{"a destination stop id as long as it may be", map[string]any{"trip_id": "T1", "destination_stop_id": longest}, http.StatusCreated, ""},
+		{"a destination stop id too long", map[string]any{"trip_id": "T1", "destination_stop_id": longer}, http.StatusBadRequest, tooLong},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newRiderTestEnv(t)
+			_, tok := env.register(t)
+			w := env.do(t, "POST", "/api/v1/rider/rides", tok, tt.body)
+			assert.Equal(t, tt.code, w.Code, w.Body.String())
+			if tt.want != "" {
+				assert.Equal(t, tt.want, decodeError(t, w))
+			}
+		})
+	}
+
+	register := func(version string) *httptest.ResponseRecorder {
+		return newRiderTestEnv(t).do(t, "POST", "/api/v1/rider/register", "",
+			map[string]any{"installation_id": uuid.NewString(), "platform": "ios", "app_version": version})
+	}
+	assert.Equal(t, http.StatusCreated, register(longest).Code)
+	w := register(longer)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "app_id and app_version must be at most 100 characters", decodeError(t, w))
+}
+
 // TestStartRide_NoStartDateRefusesFridaysRunOnSaturday: T1 runs on weekdays at
 // 08:00. On Saturday mid-morning Friday's run ended a day ago, so a start that
 // names no start_date is refused rather than matched to that run.

@@ -401,6 +401,23 @@ func TestHandlePostLocation_Validation(t *testing.T) {
 			want:       "trip_id must be at most 100 characters",
 		},
 		{
+			name:       "route_id too long in Devanagari",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), RouteID: strings.Repeat("ब", 101)},
+			wantStatus: http.StatusBadRequest,
+			want:       "route_id must be at most 100 characters",
+		},
+		{
+			name:       "ids as long as they may be in Devanagari",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), RouteID: strings.Repeat("ब", 100), TripID: strings.Repeat("ब", 100)},
+			wantStatus: http.StatusCreated,
+		},
+		{
+			name:       "trip_id too long in Devanagari",
+			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), TripID: strings.Repeat("ब", 101)},
+			wantStatus: http.StatusBadRequest,
+			want:       "trip_id must be at most 100 characters",
+		},
+		{
 			name:       "start_date wrong shape",
 			loc:        LocationReport{VehicleID: "bus-1", Latitude: 1, Longitude: 2, Timestamp: time.Now().Unix(), RouteID: "5", StartDate: "2026-09-06"},
 			wantStatus: http.StatusBadRequest,
