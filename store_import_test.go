@@ -6,10 +6,16 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/OneBusAway/vehicle-positions/db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -774,4 +780,177 @@ func TestStore_ImportDrivers_OppositeOrdersQueue(t *testing.T) {
 			assert.Equal(t, tt.second[1], readImportedUser(t, store, bo).Name)
 		})
 	}
+}
+
+// queryCounter counts the queries a store runs, by their sqlc name.
+type queryCounter struct {
+	mu     sync.Mutex
+	counts map[string]int
+	// shared is the vehicles GetVehicleActiveForShare asked about, in order.
+	shared []string
+}
+
+func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	fields := strings.Fields(data.SQL)
+	if len(fields) < 3 || fields[0] != "--" || fields[1] != "name:" {
+		return ctx
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.counts[fields[2]]++
+	if fields[2] == "GetVehicleActiveForShare" {
+		c.shared = append(c.shared, data.Args[0].(string))
+	}
+	return ctx
+}
+
+func (c *queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+// reset forgets the queries counted so far.
+func (c *queryCounter) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.counts, c.shared = make(map[string]int), nil
+}
+
+// newCountedStore is a store of its own on the test database, with its
+// queries counted.
+func newCountedStore(t *testing.T) (*Store, *queryCounter) {
+	t.Helper()
+	cfg, err := pgxpool.ParseConfig(testDatabaseURL(t))
+	require.NoError(t, err)
+	counter := &queryCounter{counts: make(map[string]int)}
+	cfg.ConnConfig.Tracer = counter
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return &Store{pool: pool, queries: db.New(pool)}, counter
+}
+
+// TestStore_ImportDrivers_AsksAboutEachVehicleOnce: drivers who share a pool of
+// vehicles list the same ones on every row, so a plan asks about a vehicle
+// once, however many rows list it. Asked row by row, 200 drivers with 200
+// vehicles are 40,000 queries, more than the preview has time for.
+func TestStore_ImportDrivers_AsksAboutEachVehicleOnce(t *testing.T) {
+	newImportTestStore(t)
+	store, counter := newCountedStore(t)
+	ctx := context.Background()
+	pool := []string{"imp-v3", "imp-v1", "imp-v2"}
+	for _, id := range pool {
+		addImportVehicle(t, store, id, id, true)
+	}
+	bo := addImportUser(t, store, "Bo", "imp-bo@example.org", roleDriver)
+	_, err := store.CreateAssignment(ctx, bo, "imp-v1")
+	require.NoError(t, err)
+	rows := []driverImportRow{
+		{Line: 2, Email: "imp-ana@example.org", Name: "Ana", VehicleIDs: pool},
+		{Line: 3, Email: "imp-bo@example.org", Name: "Bo", VehicleIDs: pool},
+		{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: pool},
+	}
+	once := []string{"imp-v1", "imp-v2", "imp-v3"}
+
+	counter.reset()
+	plan, err := store.PlanDriverImport(ctx, rows)
+	require.NoError(t, err)
+	require.Equal(t, []importStatus{importNew, importUpdate, importNew}, statuses(plan))
+	assert.Equal(t, once, counter.shared, "once each, in id order")
+
+	counter.reset()
+	got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, func() string { return "a-password" })
+	require.NoError(t, err)
+	require.Equal(t, []importStatus{importNew, importUpdate, importNew}, statuses(got))
+	assert.Equal(t, slices.Concat(once, once), counter.shared, "once for each of the import's two plans")
+	assert.Equal(t, 8, counter.counts["AssignUserVehicle"])
+	assert.Zero(t, counter.counts["GetUserByID"], "the import's own lock has each account's role already")
+	for _, o := range got {
+		assert.ElementsMatch(t, pool, assignedVehicles(t, store, o.UserID))
+	}
+}
+
+// TestStore_ImportDrivers_SharedVehicleProblems: a vehicle that can't be
+// assigned fails every row that would assign it, and only those.
+func TestStore_ImportDrivers_SharedVehicleProblems(t *testing.T) {
+	store := newImportTestStore(t)
+	ctx := context.Background()
+	addImportVehicle(t, store, "imp-on", "On", true)
+	addImportVehicle(t, store, "imp-off", "Off", true)
+	bo := addImportUser(t, store, "Bo", "imp-bo@example.org", roleDriver)
+	_, err := store.CreateAssignment(ctx, bo, "imp-off")
+	require.NoError(t, err)
+	require.NoError(t, store.SetVehicleActive(ctx, "imp-off", false))
+	rows := []driverImportRow{
+		{Line: 2, Email: "imp-ana@example.org", Name: "Ana", VehicleIDs: []string{"imp-off", "imp-on", "imp-gone"}},
+		{Line: 3, Email: "imp-bo@example.org", Name: "Bo", VehicleIDs: []string{"imp-off", "imp-on"}},
+		{Line: 4, Email: "imp-cy@example.org", Name: "Cy", VehicleIDs: []string{"imp-gone"}},
+	}
+
+	plan, err := store.PlanDriverImport(ctx, rows)
+	require.NoError(t, err)
+	assert.Equal(t, []importOutcome{
+		{Status: importError, Reason: "vehicle imp-off is inactive; vehicle imp-gone not found"},
+		{Status: importUpdate, Changes: []string{"adds imp-on"}},
+		{Status: importError, Reason: "vehicle imp-gone not found"},
+	}, plan, "Bo has imp-off already, so his row has nothing to ask about it")
+}
+
+// TestStore_ImportDrivers_HoldsItsVehiclesActive: the import's plan is the one
+// check of its vehicles, and holds them active until the import commits, so a
+// deactivation waits rather than landing between the check and the assignment.
+func TestStore_ImportDrivers_HoldsItsVehiclesActive(t *testing.T) {
+	store := newImportTestStore(t)
+	addImportVehicle(t, store, "imp-v1", "V1", true)
+	ana := addImportUser(t, store, "Ana", "imp-ana@example.org", roleDriver)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Ana's row held, so the import stops between its plan and its writes.
+	holder, err := dedicatedConn(t).Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	_, err = holder.Exec(ctx, "SELECT id FROM users WHERE id = $1 FOR UPDATE", ana)
+	require.NoError(t, err)
+	var pid int
+	require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+
+	type result struct {
+		outcomes []importOutcome
+		err      error
+	}
+	imported := make(chan result, 1)
+	go func() {
+		rows := []driverImportRow{{Line: 2, Email: "imp-ana@example.org", Name: "Ana", VehicleIDs: []string{"imp-v1"}}}
+		got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, noPassword)
+		imported <- result{got, err}
+	}()
+	require.Eventually(t, func() bool { return len(imported) == 1 || blockedBehind(store, pid, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the import neither finished nor waited")
+	deactivated := make(chan error, 1)
+	go func() { deactivated <- store.SetVehicleActive(ctx, "imp-v1", false) }()
+	require.Eventually(t, func() bool { return len(deactivated) == 1 || blockedBehind(store, pid, 2) == 1 },
+		5*time.Second, 10*time.Millisecond, "the deactivation neither finished nor waited")
+	assert.Empty(t, deactivated, "the deactivation went ahead while the import held the vehicle")
+	require.NoError(t, holder.Commit(ctx))
+
+	got := <-imported
+	require.NoError(t, got.err)
+	assert.Equal(t, []importStatus{importUpdate}, statuses(got.outcomes))
+	require.NoError(t, <-deactivated)
+	assert.Equal(t, []string{"imp-v1"}, assignedVehicles(t, store, ana))
+}
+
+// TestStore_ImportDrivers_VehicleCheckFails: a vehicle that could not be read
+// fails the plan; it is not taken for one that can be assigned.
+func TestStore_ImportDrivers_VehicleCheckFails(t *testing.T) {
+	store := newImportTestStore(t)
+	addImportVehicle(t, store, "imp-v1", "V1", true)
+	holder, err := dedicatedConn(t).Begin(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	_, err = holder.Exec(context.Background(), "SELECT id FROM vehicles WHERE id = 'imp-v1' FOR UPDATE")
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_, err = store.PlanDriverImport(ctx, []driverImportRow{{Line: 2, Email: "imp-ana@example.org", Name: "Ana", VehicleIDs: []string{"imp-v1"}}})
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
