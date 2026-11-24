@@ -73,24 +73,15 @@ func parseDatabaseURL(databaseURL string) (*pgxpool.Config, error) {
 	}
 	config, err := pgxpool.ParseConfig(databaseURL)
 	// pgx's error repeats the whole URL, and hides only the password before the
-	// host.
+	// host. Its reason names the setting that is wrong, so the query, where a
+	// password can be too, isn't needed. An unescaped # or & in that password
+	// puts the rest of it in the fragment or under a name of its own.
 	var parseErr *pgconn.ParseConfigError
 	if errors.As(err, &parseErr) {
-		parseErr.ConnString = withoutQueryPasswords(*u)
+		u.RawQuery, u.Fragment = "", ""
+		parseErr.ConnString = u.String()
 	}
 	return config, err
-}
-
-// withoutQueryPasswords is u with any password in its query replaced.
-func withoutQueryPasswords(u url.URL) string {
-	query := u.Query()
-	for key := range query {
-		if strings.Contains(strings.ToLower(key), "password") {
-			query.Set(key, "xxxxx")
-		}
-	}
-	u.RawQuery = query.Encode()
-	return u.String()
 }
 
 // Migrate runs the database schema migrations.
