@@ -23,8 +23,8 @@ nonisolated enum TipText {
     }
 
     static var sentCountMessage: String {
-        String(localized: "This number grows while riders can see you. With no signal, keep driving.",
-               comment: "Tip on the trip bar's sent count, under its title.")
+        String(localized: "This number grows while riders can see you. No signal? Keep driving. Reports are saved and sent later.",
+               comment: "Tip on the trip bar's sent count, under its title: the iPhone keeps the reports it can't send and sends them once the connection is back.")
     }
 
     // MARK: First trip done
