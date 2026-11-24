@@ -1723,7 +1723,8 @@ paths:
         takes over from its first run, and the other adds nothing more, so
         one trip handing over to the next does not halve the gap. Service
         runs on across rows, or frequent spacings, that follow one another
-        without a break. A gap is judged only between two passings in one
+        without a break, and into a trip beginning just as it ends, which
+        then takes over. A gap is judged only between two passings in one
         stretch of service, the rows' windows and the timetable's frequent
         spacings at the stop each held a headway or spacing past its end,
         so the first passing of a stretch has no gap. A timetabled trip

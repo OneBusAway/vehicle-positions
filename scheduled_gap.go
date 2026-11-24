@@ -264,33 +264,79 @@ func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 // takenOver reports whether another set of due has taken over from w, the
 // window of due[i] that windowAt found (found has each set's index, or -1):
 // one due then whose run began after the last headway of w's run did, so
-// that at most one of w's runs is due after it began. w's run is its
-// unbroken chain of windows (runsOf), so a trip written as back-to-back rows
-// and a frequent timetable, laid out a window a spacing, are measured to the
-// end of their service, not of the window that holds the time. A trip's
-// window that ends as another trip's begins is then held no longer, just as
-// a trip's own next row comes before the row that has just ended, so the
-// same service gets the same gap whether a feed writes it as rows of one
-// trip or as one trip a row. Each trip's windows are shifted by its own time
-// to the stop, so where the next trip is quicker to it, its first run is due
-// there before w ends, and w counts no more from that run on, through the
-// next trip's last headway too. A set already running as w's run's last
-// headway began, two patterns sharing the stop, does not take over. Nor does
-// one that began no later than w's run did, when that run is shorter than a
-// headway, so the set due then that began last always counts.
+// that at most one of w's runs is due after it began, or, once w has ended,
+// began just as w ended, carrying on from it as a trip's own next row would.
+// w's run is followed to its end, and on into any other trip's or the
+// timetable's that begins just as it ends (until), so a trip written as
+// back-to-back rows or as one trip a row, and a frequent timetable, laid out
+// a window a spacing, are measured to the end of their service, not of the
+// window that holds the time. A trip's window that ends as another trip's
+// begins is then held no longer, just as a trip's own next row comes before
+// the row that has just ended, so the same service gets the same gap whether
+// a feed writes it as rows of one trip or as one trip a row. Each trip's
+// windows are shifted by its own time to the stop, so where the next trip is
+// quicker to it, its first run is due there before w ends, and w counts no
+// more from that run on, through the next trip's last headway too. A set
+// already running as the last headway of w's run began, two patterns sharing
+// the stop, does not take over. Nor does one that began no later than w's
+// run did, when that run is shorter than a headway. So a set only takes over
+// from one whose run began before its own, carrying it on or not, and the
+// set due whose run began last always counts.
 func takenOver(due [][]stopWindow, runs [][]stopRun, found []int, i int) bool {
-	run := runs[i][found[i]]
-	end := due[i][run.last]
-	last := end.to.Add(-end.headway)
-	if run.began.After(last) {
-		last = run.began
-	}
+	w, began := due[i][found[i]], runs[i][found[i]].began
 	for j, k := range found {
-		if j != i && k >= 0 && runs[j][k].began.After(last) {
+		if j == i || k < 0 {
+			continue
+		}
+		v, start := due[j][k], runs[j][k].began
+		if !start.After(began) {
+			continue
+		}
+		if start.Equal(w.to) && v.to.After(w.to) {
+			return true
+		}
+		if end := until(due, runs, j, i, found[i]); start.After(end.to.Add(-end.headway)) {
 			return true
 		}
 	}
 	return false
+}
+
+// until is the last window of the run of due[i][k], followed on from its end
+// into any run of another set but due[skip] that begins just as it ends, and
+// so on: of those, the latest to end, or of two that end together, the one
+// whose last headway began later. A window partway through another set's run
+// carries nothing on, as that run began before. due[skip] is the set asking
+// whether it takes over, and its own window beginning as the run ends is the
+// handover, not more of the run. Where two sets carry on from the same end,
+// as two patterns each written one trip a row do, each end is followed once.
+// Where a run begins just as both this run and the asking set's end, the feed
+// doesn't say which it carries on, and as rows of one trip it could be
+// either's: it carries this one on, so the asking set doesn't take over.
+func until(due [][]stopWindow, runs [][]stopRun, skip, i, k int) stopWindow {
+	end := due[i][runs[i][k].last]
+	ends := []time.Time{end.to}
+	for n := 0; n < len(ends); n++ {
+		at := ends[n]
+		for j, windows := range due {
+			if j == skip {
+				continue
+			}
+			for x, v := range windows {
+				if !v.from.Equal(at) || !v.to.After(at) || !runs[j][x].began.Equal(at) {
+					continue
+				}
+				last := windows[runs[j][x].last]
+				if !slices.ContainsFunc(ends, last.to.Equal) {
+					ends = append(ends, last.to)
+				}
+				if last.to.After(end.to) || last.to.Equal(end.to) && last.to.Add(-last.headway).After(end.to.Add(-end.headway)) {
+					end = last
+				}
+			}
+		}
+	}
+	return end
 }
 
 // holding is the index of the one of windows that holds t, or -1.
