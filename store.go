@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,7 +32,11 @@ type Store struct {
 
 // NewStore connects to PostgreSQL.
 func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	config, err := parseDatabaseURL(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("connect to database: %w", err)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
@@ -40,6 +46,42 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 	}
 
 	return &Store{pool: pool, queries: db.New(pool)}, nil
+}
+
+// errDatabaseURL repeats none of DATABASE_URL, as a URL that can't be read has
+// no part that is known not to be the password.
+var errDatabaseURL = errors.New("DATABASE_URL is not a valid URL; special characters in its user name and password must be percent-encoded, such as %2F for / and %40 for @")
+
+// parseDatabaseURL is pgxpool.ParseConfig for DATABASE_URL, with errors that
+// never show a password, as the server logs them. The key=value form is refused
+// because Migrate takes only a URL, and names whatever is before its first
+// colon, such as the start of a password, as a driver it does not know.
+func parseDatabaseURL(databaseURL string) (*pgxpool.Config, error) {
+	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
+		return nil, errors.New("DATABASE_URL must start with postgres:// or postgresql://")
+	}
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return nil, errDatabaseURL
+	}
+	// A / ? or # in the user name or password ends the host early, and what was
+	// before it can still read as a host and port: u:123/secret@host is the
+	// database secret@host on the host u. The @ is then left after the host.
+	_, rest, _ := strings.Cut(databaseURL, "://")
+	if end := strings.IndexAny(rest, "/?#"); end >= 0 && strings.Contains(rest[end:], "@") {
+		return nil, errDatabaseURL
+	}
+	config, err := pgxpool.ParseConfig(databaseURL)
+	// pgx's error repeats the whole URL, and hides only the password before the
+	// host. Its reason names the setting that is wrong, so the query, where a
+	// password can be too, isn't needed. An unescaped # or & in that password
+	// puts the rest of it in the fragment or under a name of its own.
+	var parseErr *pgconn.ParseConfigError
+	if errors.As(err, &parseErr) {
+		u.RawQuery, u.Fragment = "", ""
+		parseErr.ConnString = u.String()
+	}
+	return config, err
 }
 
 // Migrate runs the database schema migrations.
