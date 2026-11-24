@@ -35,6 +35,8 @@
     <string name="login_error_too_many_tries">Too many tries. Wait a minute, then try again.</string>
     <!-- The server answered, but not with a sign-in, such as a server error. -->
     <string name="login_error_server">Couldn\'t sign in. Try again.</string>
+    <!-- Above the button when the email and password were right, but the account is a viewer's: it can look at the agency's admin website but not drive, so the app doesn't sign it in. -->
+    <string name="login_error_viewer">This account can only view the admin site. Ask your agency\'s admin for a driver account.</string>
     <!-- Signing in again after the session ended during a trip. The email the driver signed in with last. -->
     <string name="login_again_title">Sign in again</string>
     <!-- Under it: the email the driver signed in with last, e.g. "As driver@example.org". -->
@@ -195,6 +197,10 @@
     <string name="vehicles_error_message">Couldn\'t load your vehicles</string>
     <string name="vehicles_error_detail">Check your connection and try again.</string>
     <string name="vehicles_retry_button">Try again</string>
+    <!-- In place of the list when the account signed in turns out to be a viewer's, which can look at the agency's admin website but not drive. The phone has signed it out. -->
+    <string name="vehicles_viewer_title">Not a driver account</string>
+    <!-- Under it, over a Sign in button. -->
+    <string name="vehicles_viewer_detail">This account can only view the admin site. Ask your agency\'s admin for a driver account, then sign in with it.</string>
     <string name="vehicles_search_label">Vehicle number</string>
     <!-- What the driver typed, e.g. "No vehicle matches 999". -->
     <string name="vehicles_search_no_matches">No vehicle matches %1$s</string>

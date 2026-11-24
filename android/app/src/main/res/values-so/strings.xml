@@ -39,6 +39,7 @@
     <string name="login_error_not_tracker">%1$s uma eka server raad-raac ah.</string>
     <string name="login_error_too_many_tries">Isku dayo aad u badan. Sug hal daqiiqo, kadib isku day mar kale.</string>
     <string name="login_error_server">Lama soo geli karin. Isku day mar kale.</string>
+    <string name="login_error_viewer">Akoonkan wuxuu kaliya arki karaa bogga maamulka. Ka codso maamulaha shirkaddaada akoon darawalnimo.</string>
     <string name="login_again_title">Mar kale soo gal</string>
     <string name="login_again_subtitle">%1$s ahaan</string>
     <string name="login_again_button">Soo gal oo sii wad warbixinta</string>
@@ -159,6 +160,8 @@
     <string name="vehicles_error_message">Gaadiidkaaga lama soo heli karin</string>
     <string name="vehicles_error_detail">Hubi internetkaaga oo isku day mar kale.</string>
     <string name="vehicles_retry_button">Isku day mar kale</string>
+    <string name="vehicles_viewer_title">Kani ma aha akoon darawalnimo</string>
+    <string name="vehicles_viewer_detail">Akoonkan wuxuu kaliya arki karaa bogga maamulka. Ka codso maamulaha shirkaddaada akoon darawalnimo, kadibna ku soo gal.</string>
     <string name="vehicles_search_label">Lambarka gaariga</string>
     <string name="vehicles_search_no_matches">Gaari u dhigma %1$s lama helin</string>
     <string name="vehicles_search_no_matches_detail">Hubi lambarka gaariga ku qoran.</string>

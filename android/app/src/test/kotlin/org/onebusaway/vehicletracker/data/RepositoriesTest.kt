@@ -231,6 +231,48 @@ class RepositoriesTest {
         server.shutdown()
     }
 
+    // The server signs a viewer in, for its admin site, and refuses it every driver call after.
+    @Test fun `a viewer's sign-in is refused, and nothing on the phone changes`() = runTest {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"${jwtFor("9", role = "viewer")}","refresh_token":"r9","expires_in":900}"""))
+        val url = server.url("/").toString()
+        // The last driver's session, ended, with their trip still open on another server and their fixes queued.
+        val before = Session("https://old.example.org/", null, null, email = "d@example.com")
+        val sessions = FakeSessionStore().apply { state.value = before }
+        val trip = ActiveTrip(7L, "trip-0830", "bus-1", "5", "20260804", 100L, "driver-a", "https://old.example.org/", OccupancyStatus.FULL)
+        val trips = FakeTripStateStore().apply { tripState.value = trip }
+        val queue = FakeOfflineFixQueue().apply {
+            claimFor(offlineQueueAccount("https://old.example.org/", "d@example.com"))
+            add(queuedFix("bus-1"))
+        }
+        val scheduler = FakeBacklogUploadScheduler()
+        val repo = AuthRepository(sessions, trips, ApiFactory { null }, noLogout, queue, scheduler, clock = { 0L })
+
+        val result = repo.login(url, "viewer@example.com", "pw")
+
+        assertTrue("expected ViewerAccount, got ${result.exceptionOrNull()}", result.exceptionOrNull() is ApiError.ViewerAccount)
+        assertEquals(before, sessions.session.first())
+        assertEquals(trip, trips.activeTrip.first())
+        assertEquals(1, queue.queued.size)
+        assertEquals(0, scheduler.scheduled)
+        server.shutdown()
+    }
+
+    @Test fun `a driver's and an admin's sign-in are kept`() = runTest {
+        val server = MockWebServer().apply { start() }
+        val url = server.url("/").toString()
+        val sessions = FakeSessionStore()
+        val repo = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, noLogout, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
+
+        for (role in listOf("driver", "admin")) {
+            val token = jwtFor("1", role)
+            server.enqueue(MockResponse().setBody("""{"access_token":"$token","refresh_token":"r","expires_in":900}"""))
+            assertTrue(role, repo.login(url, "$role@example.com", "pw").isSuccess)
+            assertEquals(role, token, sessions.session.first().token)
+        }
+        server.shutdown()
+    }
+
     @Test fun `trip start saves the catalog's service date, not the device's calendar date`() = runTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setResponseCode(201).setBody(
@@ -765,12 +807,32 @@ class RepositoriesTest {
 
     @Test fun `vehicle repository returns failure instead of throwing when session has no server url`() = runTest {
         val holder = ApiHolder(FakeSessionStore(), CoroutineScope(Job().apply { cancel() }), clock = { 0L })
-        val repo = VehicleRepository(TrackerApiProvider(holder::api))
+        val repo = VehicleRepository(TrackerApiProvider(holder::api), FakeSessionStore())
 
         val result = repo.myVehicles()
 
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is ApiError.Other)
+    }
+
+    // A viewer's session stored before Sign in refused them, or a driver's account made a viewer since: the driver API
+    // refuses it with the 403 a rider token gets.
+    @Test fun `the vehicle list's 403 is a viewer's only when the token says so`() = runTest {
+        val server = MockWebServer().apply { start() }
+        val url = server.url("/").toString()
+        suspend fun vehiclesAs(token: String): Throwable? {
+            val sessions = FakeSessionStore().apply { state.value = Session(url, token, 0L) }
+            return VehicleRepository(TrackerApiProvider { ApiFactory { token }.create(url) }, sessions).myVehicles().exceptionOrNull()
+        }
+
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"forbidden"}"""))
+        assertEquals(ApiError.ViewerAccount, vehiclesAs(jwtFor("9", role = "viewer")))
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"forbidden"}"""))
+        assertEquals("a driver's 403 reads as it did", ApiError.NotAssigned, vehiclesAs(jwtFor("2")))
+        server.enqueue(MockResponse().setResponseCode(500))
+        assertTrue("a viewer's other failure is not about the account", vehiclesAs(jwtFor("9", role = "viewer")) is ApiError.Other)
+        assertEquals(3, server.requestCount)
+        server.shutdown()
     }
 
     @Test fun `trip repository returns failure instead of throwing when session has no server url`() = runTest {

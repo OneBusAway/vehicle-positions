@@ -146,7 +146,7 @@ class TokenRefresherTest {
     @Test fun `a refused refresh drops the refresh token, keeps the access token, and the 401 reaches the caller`() = runTest {
         fake.refreshReply = { unauthorized("invalid or expired refresh token") }
         val holder = holder()
-        val vehicles = VehicleRepository(TrackerApiProvider(holder::api))
+        val vehicles = VehicleRepository(TrackerApiProvider(holder::api), sessions)
 
         val result = vehicles.myVehicles()
 
@@ -485,7 +485,7 @@ class TokenRefresherTest {
         try {
             val holder = holder()
             val auth = AuthRepository(sessions, FakeTripStateStore(), holder.apiFactory, TrackerApiProvider(holder::api), FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { NOW })
-            val vm = VehicleViewModel(VehicleRepository(TrackerApiProvider(holder::api)), FakeVehiclePrefsStore(), auth)
+            val vm = VehicleViewModel(VehicleRepository(TrackerApiProvider(holder::api), sessions), FakeVehiclePrefsStore(), auth)
             withTimeout(5_000) { vm.uiState.first { it !is VehiclesUiState.Loading } }
         } finally {
             Dispatchers.resetMain()

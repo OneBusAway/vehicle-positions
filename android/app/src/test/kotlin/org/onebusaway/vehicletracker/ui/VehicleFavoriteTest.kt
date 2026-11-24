@@ -37,7 +37,7 @@ class VehicleFavoriteTest {
         val sessions = FakeSessionStore()
         val api = TrackerApiProvider { error("loading the vehicles is not part of these tests") }
         val auth = AuthRepository(sessions, FakeTripStateStore(), ApiFactory { null }, api, FakeOfflineFixQueue(), FakeBacklogUploadScheduler(), clock = { 0L })
-        return VehicleViewModel(VehicleRepository(api), store, auth).also { advanceUntilIdle() }
+        return VehicleViewModel(VehicleRepository(api, sessions), store, auth).also { advanceUntilIdle() }
     }
 
     @Test fun `a star the phone can't store is dropped, not thrown`() = runTest(dispatcher) {

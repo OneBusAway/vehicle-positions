@@ -39,6 +39,7 @@
     <string name="login_error_not_tracker">%1$s pa sanble yon sèvè swivi.</string>
     <string name="login_error_too_many_tries">Twòp esè. Tann yon minit, epi eseye ankò.</string>
     <string name="login_error_server">Nou pa t ka konekte ou. Eseye ankò.</string>
+    <string name="login_error_viewer">Kont sa a ka gade sit administrasyon an sèlman. Mande administratè konpayi ou a yon kont chofè.</string>
     <string name="login_again_title">Konekte ankò</string>
     <string name="login_again_subtitle">Kòm %1$s</string>
     <string name="login_again_button">Konekte epi kontinye voye rapò</string>
@@ -158,6 +159,8 @@
     <string name="vehicles_error_message">Nou pa t ka jwenn machin ou yo</string>
     <string name="vehicles_error_detail">Tcheke entènèt ou epi eseye ankò.</string>
     <string name="vehicles_retry_button">Eseye ankò</string>
+    <string name="vehicles_viewer_title">Sa a se pa yon kont chofè</string>
+    <string name="vehicles_viewer_detail">Kont sa a ka gade sit administrasyon an sèlman. Mande administratè konpayi ou a yon kont chofè, epi konekte avè l.</string>
     <string name="vehicles_search_label">Nimewo machin</string>
     <string name="vehicles_search_no_matches">Okenn machin pa koresponn ak %1$s</string>
     <string name="vehicles_search_no_matches_detail">Tcheke nimewo ki ekri sou machin nan.</string>

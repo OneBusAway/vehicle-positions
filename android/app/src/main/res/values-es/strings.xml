@@ -35,6 +35,7 @@
     <string name="login_error_not_tracker">%1$s no parece un servidor de seguimiento.</string>
     <string name="login_error_too_many_tries">Demasiados intentos. Espera un minuto e inténtalo de nuevo.</string>
     <string name="login_error_server">No se pudo iniciar sesión. Inténtalo de nuevo.</string>
+    <string name="login_error_viewer">Esta cuenta solo puede ver el sitio de administración. Pídele al administrador de tu empresa una cuenta de conductor.</string>
     <string name="login_again_title">Vuelve a iniciar sesión</string>
     <string name="login_again_subtitle">Como %1$s</string>
     <string name="login_again_button">Iniciar sesión y seguir reportando</string>
@@ -157,6 +158,8 @@
     <string name="vehicles_error_message">No se pudieron cargar tus vehículos</string>
     <string name="vehicles_error_detail">Revisa tu conexión e inténtalo de nuevo.</string>
     <string name="vehicles_retry_button">Reintentar</string>
+    <string name="vehicles_viewer_title">Esta no es una cuenta de conductor</string>
+    <string name="vehicles_viewer_detail">Esta cuenta solo puede ver el sitio de administración. Pídele al administrador de tu empresa una cuenta de conductor y luego inicia sesión con ella.</string>
     <string name="vehicles_search_label">Número de vehículo</string>
     <string name="vehicles_search_no_matches">Ningún vehículo coincide con %1$s</string>
     <string name="vehicles_search_no_matches_detail">Revisa el número que lleva el vehículo.</string>

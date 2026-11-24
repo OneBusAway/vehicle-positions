@@ -35,6 +35,7 @@
     <string name="login_error_not_tracker">Mukhang hindi tracker server ang %1$s.</string>
     <string name="login_error_too_many_tries">Masyadong maraming pagsubok. Maghintay nang isang minuto, saka subukan ulit.</string>
     <string name="login_error_server">Hindi maka-sign in. Subukan ulit.</string>
+    <string name="login_error_viewer">Pang-view lang ng admin site ang account na ito. Humingi ng driver account sa admin ng kumpanya mo.</string>
     <string name="login_again_title">Mag-sign in ulit</string>
     <string name="login_again_subtitle">Bilang %1$s</string>
     <string name="login_again_button">Mag-sign in at ituloy ang pag-report</string>
@@ -156,6 +157,8 @@
     <string name="vehicles_error_message">Hindi ma-load ang mga sasakyan mo</string>
     <string name="vehicles_error_detail">I-check ang koneksyon mo at subukan ulit.</string>
     <string name="vehicles_retry_button">Subukan ulit</string>
+    <string name="vehicles_viewer_title">Hindi ito driver account</string>
+    <string name="vehicles_viewer_detail">Pang-view lang ng admin site ang account na ito. Humingi ng driver account sa admin ng kumpanya mo, saka mag-sign in gamit iyon.</string>
     <string name="vehicles_search_label">Numero ng sasakyan</string>
     <string name="vehicles_search_no_matches">Walang sasakyang tugma sa %1$s</string>
     <string name="vehicles_search_no_matches_detail">I-check ang numero sa sasakyan.</string>

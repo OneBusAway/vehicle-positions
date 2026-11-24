@@ -37,6 +37,7 @@
     <string name="login_error_not_tracker">%1$s ne semble pas être un serveur de suivi.</string>
     <string name="login_error_too_many_tries">Trop de tentatives. Attendez une minute, puis réessayez.</string>
     <string name="login_error_server">Connexion impossible. Réessayez.</string>
+    <string name="login_error_viewer">Ce compte peut seulement consulter le site d’administration. Demandez un compte chauffeur à l’administrateur de votre compagnie.</string>
     <string name="login_again_title">Reconnectez-vous</string>
     <string name="login_again_subtitle">En tant que %1$s</string>
     <string name="login_again_button">Se connecter et continuer l’envoi</string>
@@ -159,6 +160,8 @@
     <string name="vehicles_error_message">Impossible de charger vos véhicules</string>
     <string name="vehicles_error_detail">Vérifiez votre connexion et réessayez.</string>
     <string name="vehicles_retry_button">Réessayer</string>
+    <string name="vehicles_viewer_title">Ce n’est pas un compte chauffeur</string>
+    <string name="vehicles_viewer_detail">Ce compte peut seulement consulter le site d’administration. Demandez un compte chauffeur à l’administrateur de votre compagnie, puis connectez-vous avec celui-ci.</string>
     <string name="vehicles_search_label">Numéro du véhicule</string>
     <string name="vehicles_search_no_matches">Aucun véhicule ne correspond à %1$s</string>
     <string name="vehicles_search_no_matches_detail">Vérifiez le numéro inscrit sur le véhicule.</string>

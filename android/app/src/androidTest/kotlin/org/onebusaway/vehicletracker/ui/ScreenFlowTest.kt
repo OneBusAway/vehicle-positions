@@ -219,6 +219,12 @@ class ScreenFlowTest {
         for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
             loginField(field).assert(hasError(null))
         }
+
+        state = LoginUiState(error = LoginError.ViewerAccount)
+        compose.onNode(hasText(getString(R.string.login_error_viewer)) and announcedPolitely).assertIsDisplayed()
+        for (field in listOf(R.string.login_server_url_label, R.string.login_email_label, R.string.login_password_label)) {
+            loginField(field).assert(hasError(null))
+        }
     }
 
     @Test
@@ -1201,8 +1207,11 @@ class ScreenFlowTest {
         onToggleFavorite: (String) -> Unit = {},
         onRetry: () -> Unit = {},
         onSessionEnded: () -> Unit = {},
+        onSignIn: () -> Unit = {},
     ) {
-        compose.setContent { VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry, onSessionEnded, account = {}) }
+        compose.setContent {
+            VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry, onSessionEnded, onSignIn, account = {})
+        }
     }
 
     private fun top(node: SemanticsNodeInteraction) = node.getBoundsInRoot().top
@@ -1284,6 +1293,20 @@ class ScreenFlowTest {
         assertEquals(1, ended)
         compose.onNodeWithText(getString(R.string.vehicles_error_message)).assertDoesNotExist()
         compose.onNodeWithText(getString(R.string.vehicles_retry_button)).assertDoesNotExist()
+    }
+
+    @Test
+    fun busScreen_tellsAViewerItCantDriveAndOffersSignIn() {
+        var ended = 0
+        var signIns = 0
+        showBuses(VehiclesUiState.ViewerAccount, onSessionEnded = { ended++ }, onSignIn = { signIns++ })
+
+        compose.onNode(hasText(getString(R.string.vehicles_viewer_title)) and heading).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.vehicles_viewer_detail)).assertIsDisplayed()
+        compose.onNodeWithText(getString(R.string.vehicles_retry_button)).assertDoesNotExist()
+        assertEquals("the message stays until the driver taps", 0, ended)
+        compose.onNodeWithText(getString(R.string.login_button)).performClick()
+        assertEquals(1, signIns)
     }
 
     @Test
@@ -1772,7 +1795,7 @@ class ScreenFlowTest {
         compose.setContent {
             val account = @Composable { Text(slot) }
             when (step) {
-                "vehicles" -> VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), {}, {}, {}, {}, {}, account)
+                "vehicles" -> VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), {}, {}, {}, {}, {}, {}, account)
                 "routes" -> RoutesScreenContent(RoutesUiState.Loaded(namedRoutes, namedRoutes, emptyList(), "", grid = false), "4317", {}, {}, {}, {}, {}, {}, account)
                 else -> RunsScreenContent(board(), badge7, "4317", {}, {}, {}, {}, {}, {}, {}, {}, {}, account)
             }
@@ -1801,7 +1824,7 @@ class ScreenFlowTest {
                 composable("vehicles") { entry ->
                     // Wired as AppNav wires the bus step.
                     val open = remember(entry) { entry.ifResumed<String> { id -> navController.navigate("trip/$id") } }
-                    VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), open, {}, {}, {}, onSessionEnded = {}, account = {})
+                    VehicleScreenContent(VehiclesUiState.Loaded(buses, "", busGroups), open, {}, {}, {}, onSessionEnded = {}, onSignIn = {}, account = {})
                 }
                 composable("trip/{vehicleId}") {}
             }

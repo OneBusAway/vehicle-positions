@@ -51,6 +51,9 @@ sealed interface LoginError {
     /** The server's limit on sign-ins. Nothing in the fields is wrong. */
     data object TooManyAttempts : LoginError
 
+    /** The email and password are right, but the account can only view the admin site, so it can't drive. */
+    data object ViewerAccount : LoginError
+
     /** The server answered, but not with a sign-in, such as a 500. */
     data object ServerError : LoginError
 }
@@ -225,6 +228,7 @@ class LoginViewModel @Inject constructor(
                             error is ApiError.CleartextBlocked -> LoginError.HttpsRequired
                             error is ApiError.NotATrackerServer -> LoginError.NotATrackerServer(serverUrl)
                             error is ApiError.TooManyAttempts -> LoginError.TooManyAttempts
+                            error is ApiError.ViewerAccount -> LoginError.ViewerAccount
                             error is ApiError.Other && error.msg == "network" -> LoginError.Unreachable(serverUrl)
                             else -> LoginError.ServerError
                         },

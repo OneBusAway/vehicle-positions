@@ -34,6 +34,7 @@
     <string name="login_error_not_tracker">%1$s ਟਰੈਕਰ ਸਰਵਰ ਨਹੀਂ ਲੱਗਦਾ।</string>
     <string name="login_error_too_many_tries">ਬਹੁਤ ਵਾਰ ਕੋਸ਼ਿਸ਼ ਹੋ ਗਈ। ਇੱਕ ਮਿੰਟ ਰੁਕ ਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
     <string name="login_error_server">ਸਾਈਨ ਇਨ ਨਹੀਂ ਹੋ ਸਕਿਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
+    <string name="login_error_viewer">ਇਹ ਅਕਾਊਂਟ ਸਿਰਫ਼ ਐਡਮਿਨ ਸਾਈਟ ਦੇਖ ਸਕਦਾ ਹੈ। ਆਪਣੀ ਏਜੰਸੀ ਦੇ ਐਡਮਿਨ ਤੋਂ ਡਰਾਈਵਰ ਅਕਾਊਂਟ ਮੰਗੋ।</string>
     <string name="login_again_title">ਦੁਬਾਰਾ ਸਾਈਨ ਇਨ ਕਰੋ</string>
     <string name="login_again_subtitle">%1$s ਵਜੋਂ</string>
     <string name="login_again_button">ਸਾਈਨ ਇਨ ਕਰਕੇ ਰਿਪੋਰਟਾਂ ਭੇਜਦੇ ਰਹੋ</string>
@@ -155,6 +156,8 @@
     <string name="vehicles_error_message">ਤੁਹਾਡੀਆਂ ਗੱਡੀਆਂ ਲੋਡ ਨਹੀਂ ਹੋ ਸਕੀਆਂ</string>
     <string name="vehicles_error_detail">ਆਪਣਾ ਕਨੈਕਸ਼ਨ ਚੈੱਕ ਕਰੋ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
     <string name="vehicles_retry_button">ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ</string>
+    <string name="vehicles_viewer_title">ਇਹ ਡਰਾਈਵਰ ਅਕਾਊਂਟ ਨਹੀਂ ਹੈ</string>
+    <string name="vehicles_viewer_detail">ਇਹ ਅਕਾਊਂਟ ਸਿਰਫ਼ ਐਡਮਿਨ ਸਾਈਟ ਦੇਖ ਸਕਦਾ ਹੈ। ਆਪਣੀ ਏਜੰਸੀ ਦੇ ਐਡਮਿਨ ਤੋਂ ਡਰਾਈਵਰ ਅਕਾਊਂਟ ਮੰਗੋ, ਫਿਰ ਉਸ ਨਾਲ ਸਾਈਨ ਇਨ ਕਰੋ।</string>
     <string name="vehicles_search_label">ਗੱਡੀ ਨੰਬਰ</string>
     <string name="vehicles_search_no_matches">%1$s ਨਾਲ ਕੋਈ ਗੱਡੀ ਨਹੀਂ ਮਿਲੀ</string>
     <string name="vehicles_search_no_matches_detail">ਗੱਡੀ \'ਤੇ ਲਿਖਿਆ ਨੰਬਰ ਚੈੱਕ ਕਰੋ।</string>

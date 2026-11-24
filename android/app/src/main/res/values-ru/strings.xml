@@ -34,6 +34,7 @@
     <string name="login_error_not_tracker">Похоже, %1$s — не сервер трекера.</string>
     <string name="login_error_too_many_tries">Слишком много попыток. Подождите минуту и попробуйте ещё раз.</string>
     <string name="login_error_server">Не удалось войти. Попробуйте ещё раз.</string>
+    <string name="login_error_viewer">Этот аккаунт может только просматривать сайт администрирования. Попросите у администратора перевозчика аккаунт водителя.</string>
     <string name="login_again_title">Войдите снова</string>
     <string name="login_again_subtitle">Аккаунт: %1$s</string>
     <string name="login_again_button">Войти и продолжить отправку</string>
@@ -157,6 +158,8 @@
     <string name="vehicles_error_message">Не удалось загрузить ваши машины</string>
     <string name="vehicles_error_detail">Проверьте связь и попробуйте ещё раз.</string>
     <string name="vehicles_retry_button">Повторить</string>
+    <string name="vehicles_viewer_title">Это не аккаунт водителя</string>
+    <string name="vehicles_viewer_detail">Этот аккаунт может только просматривать сайт администрирования. Попросите у администратора перевозчика аккаунт водителя и войдите с ним.</string>
     <string name="vehicles_search_label">Номер машины</string>
     <string name="vehicles_search_no_matches">Машин по запросу %1$s не найдено</string>
     <string name="vehicles_search_no_matches_detail">Проверьте бортовой номер на машине.</string>

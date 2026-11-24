@@ -34,6 +34,7 @@
     <string name="login_error_not_tracker">به نظر نمی‌رسد %1$s سرور ردیاب باشد.</string>
     <string name="login_error_too_many_tries">تعداد تلاش‌ها زیاد بود. یک دقیقه صبر کنید و دوباره تلاش کنید.</string>
     <string name="login_error_server">ورود انجام نشد. دوباره تلاش کنید.</string>
+    <string name="login_error_viewer">این حساب فقط می‌تواند سایت مدیریت را ببیند. از مدیر سیستم شرکت خود یک حساب راننده بخواهید.</string>
     <string name="login_again_title">دوباره وارد شوید</string>
     <string name="login_again_subtitle">به‌عنوان %1$s</string>
     <string name="login_again_button">ورود و ادامه گزارش‌دهی</string>
@@ -155,6 +156,8 @@
     <string name="vehicles_error_message">بارگیری خودروهای شما انجام نشد</string>
     <string name="vehicles_error_detail">اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.</string>
     <string name="vehicles_retry_button">تلاش مجدد</string>
+    <string name="vehicles_viewer_title">این حساب راننده نیست</string>
+    <string name="vehicles_viewer_detail">این حساب فقط می‌تواند سایت مدیریت را ببیند. از مدیر سیستم شرکت خود یک حساب راننده بخواهید و سپس با آن وارد شوید.</string>
     <string name="vehicles_search_label">شماره خودرو</string>
     <string name="vehicles_search_no_matches">هیچ خودرویی با %1$s پیدا نشد</string>
     <string name="vehicles_search_no_matches_detail">شماره ناوگان را روی خودرو بررسی کنید.</string>

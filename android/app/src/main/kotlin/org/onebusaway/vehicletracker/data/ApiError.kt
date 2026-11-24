@@ -56,6 +56,13 @@ sealed class ApiError : Exception() {
      */
     object CleartextBlocked : ApiError()
 
+    /**
+     * The account is a viewer's, which the server signs in for its admin site and refuses every driver call.
+     * [AuthRepository.login] reads it in the token a sign-in hands out, and [VehicleRepository] behind the vehicle list's
+     * 403, so only those two produce this.
+     */
+    object ViewerAccount : ApiError()
+
     data class Other(val msg: String) : ApiError()
 }
 

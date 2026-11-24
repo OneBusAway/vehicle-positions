@@ -185,7 +185,7 @@ class PseudolocaleScreensTest(private val tag: String) {
                     BusGroup(BusSection.ALL, listOf(BusTile("4322", null, favorite = false))),
                 ),
             ),
-            {}, {}, {}, {}, {}, account = {},
+            {}, {}, {}, {}, {}, {}, account = {},
         )
     }
 

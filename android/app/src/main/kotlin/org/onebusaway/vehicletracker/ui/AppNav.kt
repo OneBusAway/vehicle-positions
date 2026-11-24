@@ -544,6 +544,7 @@ private fun NavGraphBuilder.vehicleStep(route: String, navController: NavControl
                 onOnlyVehicle = { vehicleId -> onlyVehicle = vehicleId },
                 // Not a tap: it fires when the reply lands, and a guard would drop it.
                 onSessionEnded = { navController.navigate(ROUTE_LOGIN, toSignIn) },
+                onSignIn = dropUnlessResumed { navController.navigate(ROUTE_LOGIN, toSignIn) },
                 // Not a tap either: it fires once the phone has forgotten the driver.
                 onSignedOut = { navController.navigate(ROUTE_LOGIN, toSignIn) },
             )

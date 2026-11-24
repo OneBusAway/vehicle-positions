@@ -36,6 +36,7 @@
     <string name="login_error_not_tracker">%1$s 주소는 트래커 서버가 아닌 것 같아요.</string>
     <string name="login_error_too_many_tries">시도 횟수가 너무 많아요. 1분 후에 다시 시도하세요.</string>
     <string name="login_error_server">로그인하지 못했어요. 다시 시도하세요.</string>
+    <string name="login_error_viewer">이 계정은 관리 사이트를 보기만 할 수 있어요. 회사 관리자에게 기사 계정을 요청하세요.</string>
     <string name="login_again_title">다시 로그인</string>
     <string name="login_again_subtitle">%1$s 계정으로</string>
     <string name="login_again_button">로그인하고 위치 전송 계속하기</string>
@@ -155,6 +156,8 @@
     <string name="vehicles_error_message">차량 목록을 불러오지 못했어요</string>
     <string name="vehicles_error_detail">인터넷 연결을 확인하고 다시 시도하세요.</string>
     <string name="vehicles_retry_button">다시 시도</string>
+    <string name="vehicles_viewer_title">기사 계정이 아니에요</string>
+    <string name="vehicles_viewer_detail">이 계정은 관리 사이트를 보기만 할 수 있어요. 회사 관리자에게 기사 계정을 요청한 뒤 그 계정으로 로그인하세요.</string>
     <string name="vehicles_search_label">차량 번호</string>
     <string name="vehicles_search_no_matches">%1$s에 해당하는 차량이 없어요</string>
     <string name="vehicles_search_no_matches_detail">차량에 적힌 번호를 확인하세요.</string>
