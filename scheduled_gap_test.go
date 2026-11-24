@@ -613,3 +613,46 @@ func TestStopSchedule_TimetabledAt(t *testing.T) {
 	assert.False(t, same.timetabledAt(reportDayStart.Add(hms(7, 35, 0))), "two trips due at the same time, alone, are one departure")
 	assert.Empty(t, same.stretches())
 }
+
+// TestRunsOf: each window's run, laid out once for every gap check: when the
+// unbroken chain of windows it is part of began, each ending as the next
+// begins, and which window is the chain's last.
+func TestRunsOf(t *testing.T) {
+	at := func(h, m int) time.Time { return reportDayStart.Add(hms(h, m, 0)) }
+	window := func(from, to time.Time) stopWindow { return stopWindow{from: from, to: to, headway: 10 * time.Minute} }
+	tests := []struct {
+		name    string
+		windows []stopWindow
+		want    []stopRun
+	}{
+		{"a window alone is a run of its own",
+			[]stopWindow{window(at(7, 0), at(8, 0))},
+			[]stopRun{{at(7, 0), 0}}},
+		{"back-to-back windows are one run, in whatever order the set has them",
+			[]stopWindow{window(at(8, 0), at(9, 0)), window(at(7, 0), at(8, 0)), window(at(9, 0), at(10, 0))},
+			[]stopRun{{at(7, 0), 2}, {at(7, 0), 2}, {at(7, 0), 2}}},
+		{"a minute between two windows ends the run",
+			[]stopWindow{window(at(7, 0), at(8, 0)), window(at(8, 1), at(9, 0))},
+			[]stopRun{{at(7, 0), 0}, {at(8, 1), 1}}},
+		{"of two windows ending as the next begins, the first in the set is the link",
+			[]stopWindow{window(at(6, 0), at(8, 0)), window(at(7, 0), at(8, 0)), window(at(8, 0), at(9, 0))},
+			[]stopRun{{at(6, 0), 2}, {at(7, 0), 2}, {at(6, 0), 2}}},
+		{"of two windows beginning as one ends, the first in the set carries it on",
+			[]stopWindow{window(at(7, 0), at(8, 0)), window(at(8, 0), at(9, 0)), window(at(8, 0), at(8, 30))},
+			[]stopRun{{at(7, 0), 1}, {at(7, 0), 1}, {at(7, 0), 2}}},
+		{"a window that ends as it begins is no link, though it is first in the set, and still has a run",
+			[]stopWindow{window(at(8, 0), at(8, 0)), window(at(7, 0), at(8, 0)), window(at(8, 0), at(9, 0))},
+			[]stopRun{{at(7, 0), 2}, {at(7, 0), 2}, {at(7, 0), 2}}},
+		{"one alone is a run of its own",
+			[]stopWindow{window(at(8, 0), at(8, 0))},
+			[]stopRun{{at(8, 0), 0}}},
+		{"no windows, no runs",
+			nil,
+			[]stopRun{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, runsOf(tc.windows))
+		})
+	}
+}

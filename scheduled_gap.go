@@ -21,15 +21,14 @@ const frequentSpacing = 12 * time.Minute
 // that trip's runs reach the stop, and its timetable where it runs every
 // frequentSpacing or more often.
 type stopSchedule struct {
-	trips [][]stopWindow
+	trips []windowSet
 	// timetable is a window for each two departures in a row of the
 	// timetable no more than frequentSpacing apart, and timetabled those
 	// departures, both in time order.
 	timetable  []stopWindow
 	timetabled []time.Time
-	// tripRuns and timetableRuns are the runs of trips' windows and the
-	// timetable's, as runsOf lays them out.
-	tripRuns      [][]stopRun
+	// timetableRuns are the runs of the timetable's windows, as runsOf lays
+	// them out.
 	timetableRuns []stopRun
 }
 
@@ -49,6 +48,13 @@ type stopWindow struct {
 type stopRun struct {
 	began time.Time
 	last  int
+}
+
+// windowSet is a set of windows whose rates add at the stop, a trip's or the
+// timetable's, with the run of each: runs[k] is the run of windows[k].
+type windowSet struct {
+	windows []stopWindow
+	runs    []stopRun
 }
 
 // runsOf lays out the run of each of a set's windows once, so takenOver can
@@ -140,8 +146,7 @@ func (s *stopSchedule) addTrip(rows []rider.Frequency, dayStart time.Time, offse
 		}
 		windows = append(windows, stopWindow{from: dayStart.Add(row.StartTime + offset), to: dayStart.Add(row.EndTime + offset), headway: row.Headway})
 	}
-	s.trips = append(s.trips, windows)
-	s.tripRuns = append(s.tripRuns, runsOf(windows))
+	s.trips = append(s.trips, windowSet{windows, runsOf(windows)})
 }
 
 // setTimetable sets the stop's timetable: when the direction's timetabled
@@ -194,9 +199,9 @@ func (s *stopSchedule) timetabledAt(at time.Time) bool {
 }
 
 // due are the sets of windows whose rates add at the stop: each trip's, and
-// the timetable's, and their runs, set for set.
-func (s *stopSchedule) due() ([][]stopWindow, [][]stopRun) {
-	return append(slices.Clip(s.trips), s.timetable), append(slices.Clip(s.tripRuns), s.timetableRuns)
+// the timetable's.
+func (s *stopSchedule) due() []windowSet {
+	return append(slices.Clip(s.trips), windowSet{s.timetable, s.timetableRuns})
 }
 
 // stretches are the spans of scheduled service at the stop, in time order:
@@ -206,9 +211,8 @@ func (s *stopSchedule) due() ([][]stopWindow, [][]stopRun) {
 // morning's last.
 func (s *stopSchedule) stretches() []timeSpan {
 	var spans []timeSpan
-	due, _ := s.due()
-	for _, windows := range due {
-		for _, w := range windows {
+	for _, set := range s.due() {
+		for _, w := range set.windows {
 			spans = append(spans, timeSpan{w.from, w.to.Add(w.headway)})
 		}
 	}
@@ -244,15 +248,15 @@ func stretchAt(stretches []timeSpan, t time.Time) int {
 // that window (takenOver). It is zero when nothing is due, which no stretch
 // holds, and a second at the least.
 func (s *stopSchedule) gapAt(t time.Time) time.Duration {
-	due, runs := s.due()
+	due := s.due()
 	found := make([]int, len(due))
-	for i, windows := range due {
-		found[i] = windowAt(windows, t)
+	for i, set := range due {
+		found[i] = windowAt(set.windows, t)
 	}
 	rate := 0.0
 	for i, k := range found {
-		if k >= 0 && !takenOver(due, runs, found, i) {
-			rate += 1 / due[i][k].headway.Seconds()
+		if k >= 0 && !takenOver(due, found, i) {
+			rate += 1 / due[i].windows[k].headway.Seconds()
 		}
 	}
 	if rate == 0 {
@@ -282,51 +286,52 @@ func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 // run did, when that run is shorter than a headway. So a set only takes over
 // from one whose run began before its own, carrying it on or not, and the
 // set due whose run began last always counts.
-func takenOver(due [][]stopWindow, runs [][]stopRun, found []int, i int) bool {
-	w, began := due[i][found[i]], runs[i][found[i]].began
+func takenOver(due []windowSet, found []int, i int) bool {
+	w, began := due[i].windows[found[i]], due[i].runs[found[i]].began
 	for j, k := range found {
 		if j == i || k < 0 {
 			continue
 		}
-		v, start := due[j][k], runs[j][k].began
+		v, start := due[j].windows[k], due[j].runs[k].began
 		if !start.After(began) {
 			continue
 		}
 		if start.Equal(w.to) && v.to.After(w.to) {
 			return true
 		}
-		if end := until(due, runs, j, i, found[i]); start.After(end.to.Add(-end.headway)) {
+		if end := until(due, j, i, found[i]); start.After(end.to.Add(-end.headway)) {
 			return true
 		}
 	}
 	return false
 }
 
-// until is the last window of the run of due[i][k], followed on from its end
-// into any run of another set but due[skip] that begins just as it ends, and
-// so on: of those, the latest to end, or of two that end together, the one
-// whose last headway began later. A window partway through another set's run
-// carries nothing on, as that run began before. due[skip] is the set asking
-// whether it takes over, and its own window beginning as the run ends is the
-// handover, not more of the run. Where two sets carry on from the same end,
-// as two patterns each written one trip a row do, each end is followed once.
-// Where a run begins just as both this run and the asking set's end, the feed
-// doesn't say which it carries on, and as rows of one trip it could be
-// either's: it carries this one on, so the asking set doesn't take over.
-func until(due [][]stopWindow, runs [][]stopRun, skip, i, k int) stopWindow {
-	end := due[i][runs[i][k].last]
+// until is the last window of the run of due[i].windows[k], followed on from
+// its end into any run of another set but due[skip] that begins just as it
+// ends, and so on: of those, the latest to end, or of two that end together,
+// the one whose last headway began later. A window partway through another
+// set's run carries nothing on, as that run began before. due[skip] is the
+// set asking whether it takes over, and its own window beginning as the run
+// ends is the handover, not more of the run. Where two sets carry on from the
+// same end, as two patterns each written one trip a row do, each end is
+// followed once. Where a run begins just as both this run and the asking
+// set's end, the feed doesn't say which it carries on, and as rows of one
+// trip it could be either's: it carries this one on, so the asking set
+// doesn't take over.
+func until(due []windowSet, skip, i, k int) stopWindow {
+	end := due[i].windows[due[i].runs[k].last]
 	ends := []time.Time{end.to}
 	for n := 0; n < len(ends); n++ {
 		at := ends[n]
-		for j, windows := range due {
+		for j, set := range due {
 			if j == skip {
 				continue
 			}
-			for x, v := range windows {
-				if !v.from.Equal(at) || !v.to.After(at) || !runs[j][x].began.Equal(at) {
+			for x, v := range set.windows {
+				if !v.from.Equal(at) || !v.to.After(at) || !set.runs[x].began.Equal(at) {
 					continue
 				}
-				last := windows[runs[j][x].last]
+				last := set.windows[set.runs[x].last]
 				if !slices.ContainsFunc(ends, last.to.Equal) {
 					ends = append(ends, last.to)
 				}
