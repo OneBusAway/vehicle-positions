@@ -71,6 +71,9 @@ data class Session(
 
     /** The signed-in driver's user id on the server, or null when there is no readable token. */
     val driverId: String? get() = token?.let(::jwtSubject)
+
+    /** Whether the account signed in is a viewer's, by [isViewerToken]. */
+    val isViewer: Boolean get() = token?.let(::isViewerToken) ?: false
 }
 
 /**
@@ -86,13 +89,25 @@ private const val MAX_EARLY_REFRESH_SEC = 60L
  * Read without checking the signature: the token came from the server, and this only decides
  * which driver a trip stored on this phone belongs to.
  */
-internal fun jwtSubject(token: String): String? = try {
+internal fun jwtSubject(token: String): String? = jwtClaim(token, "sub")
+
+/**
+ * Whether [token] is a viewer's: an account the server lets look at its admin site and refuses
+ * every driver call. Read from the `role` claim without checking the signature, as [jwtSubject]
+ * is: this only decides what the phone tells the person holding it.
+ */
+internal fun isViewerToken(token: String): Boolean = jwtClaim(token, "role") == VIEWER_ROLE
+
+/** The server's name for the admin site's read-only role. */
+private const val VIEWER_ROLE = "viewer"
+
+private fun jwtClaim(token: String, name: String): String? = try {
     token.split('.').getOrNull(1)?.let { payload ->
         val claims = Json.parseToJsonElement(String(Base64.getUrlDecoder().decode(payload), Charsets.UTF_8))
-        claims.jsonObject["sub"]?.jsonPrimitive?.contentOrNull
+        claims.jsonObject[name]?.jsonPrimitive?.contentOrNull
     }
 } catch (e: IllegalArgumentException) {
-    // Not Base64url, not JSON, or not a JSON object: no driver to read.
+    // Not Base64url, not JSON, or not a JSON object: no claim to read.
     null
 }
 

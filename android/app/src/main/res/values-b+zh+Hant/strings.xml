@@ -36,6 +36,7 @@
     <string name="login_error_not_tracker">%1$s 看起來不是車輛追蹤伺服器。</string>
     <string name="login_error_too_many_tries">嘗試次數太多。請等一分鐘後再試一次。</string>
     <string name="login_error_server">無法登入，請再試一次。</string>
+    <string name="login_error_viewer">這個帳號只能查看管理網站。請向營運單位的管理員申請駕駛帳號。</string>
     <string name="login_again_title">重新登入</string>
     <string name="login_again_subtitle">以 %1$s 身分登入</string>
     <string name="login_again_button">登入並繼續回報</string>
@@ -155,6 +156,8 @@
     <string name="vehicles_error_message">無法載入你的車輛</string>
     <string name="vehicles_error_detail">請檢查網路連線，然後再試一次。</string>
     <string name="vehicles_retry_button">重試</string>
+    <string name="vehicles_viewer_title">這不是駕駛帳號</string>
+    <string name="vehicles_viewer_detail">這個帳號只能查看管理網站。請向營運單位的管理員申請駕駛帳號，然後用它登入。</string>
     <string name="vehicles_search_label">車輛編號</string>
     <string name="vehicles_search_no_matches">沒有符合 %1$s 的車輛</string>
     <string name="vehicles_search_no_matches_detail">請確認車輛上的編號。</string>

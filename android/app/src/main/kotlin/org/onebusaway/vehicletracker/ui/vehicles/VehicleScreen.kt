@@ -55,13 +55,15 @@ private val TileGap = 12.dp
 /**
  * [onVehicleSelected] is a tap on a tile. [onOnlyVehicle] is the vehicle of a driver with one assignment, once the
  * assignments load; the caller decides whether to skip ahead with it. [onSessionEnded] is the server having ended the
- * session, and [onSignedOut] the driver having signed out.
+ * session, [onSignIn] a tap on Sign in once the phone has ended a viewer's, and [onSignedOut] the driver having signed
+ * out.
  */
 @Composable
 fun VehicleScreen(
     onVehicleSelected: (String) -> Unit,
     onOnlyVehicle: (String) -> Unit,
     onSessionEnded: () -> Unit,
+    onSignIn: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: VehicleViewModel = hiltViewModel(),
 ) {
@@ -82,6 +84,7 @@ fun VehicleScreen(
         onToggleFavorite = viewModel::onToggleFavorite,
         onRetry = viewModel::retry,
         onSessionEnded = onSessionEnded,
+        onSignIn = onSignIn,
         account = { AccountMenu(onSignedOut) },
     )
 }
@@ -99,6 +102,7 @@ fun VehicleScreenContent(
     onToggleFavorite: (String) -> Unit,
     onRetry: () -> Unit,
     onSessionEnded: () -> Unit,
+    onSignIn: () -> Unit,
     account: @Composable () -> Unit,
 ) {
     val sessionEnded = state is VehiclesUiState.SessionEnded
@@ -108,7 +112,7 @@ fun VehicleScreenContent(
     Column(Modifier.fillMaxSize()) {
         FirstStepHeader(account)
         ScrolledUnderDivider({ gridState.canScrollBackward })
-        BusGrid(state, gridState, onVehicleClick, onQueryChange, onToggleFavorite, onRetry)
+        BusGrid(state, gridState, onVehicleClick, onQueryChange, onToggleFavorite, onRetry, onSignIn)
     }
 }
 
@@ -120,6 +124,7 @@ private fun BusGrid(
     onQueryChange: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onRetry: () -> Unit,
+    onSignIn: () -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -145,6 +150,15 @@ private fun BusGrid(
                     body = stringResource(R.string.vehicles_error_detail),
                     action = stringResource(R.string.vehicles_retry_button),
                     onAction = onRetry,
+                )
+            }
+            is VehiclesUiState.ViewerAccount -> fullWidth("empty") {
+                EmptyState(
+                    icon = R.drawable.ic_account_circle,
+                    title = stringResource(R.string.vehicles_viewer_title),
+                    body = stringResource(R.string.vehicles_viewer_detail),
+                    action = stringResource(R.string.login_button),
+                    onAction = onSignIn,
                 )
             }
         }

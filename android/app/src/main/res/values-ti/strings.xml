@@ -34,6 +34,7 @@
     <string name="login_error_not_tracker">%1$s ናይ ምክትታል ሰርቨር ኣይመስልን።</string>
     <string name="login_error_too_many_tries">ብዙሕ ግዜ ፈቲንኩም። ሓደ ደቒቕ ተጸበዩ፣ ድሕሪኡ ደጊምኩም ፈትኑ።</string>
     <string name="login_error_server">ምእታው ኣይተኻእለን። ደጊምኩም ፈትኑ።</string>
+    <string name="login_error_viewer">እዚ ኣካውንት ነቲ ናይ ምምሕዳር ገጽ ምርኣይ ጥራይ እዩ ዝኽእል። ካብ ኣመሓዳሪ ትካልኩም ናይ መራሒ መኪና ኣካውንት ሕተቱ።</string>
     <string name="login_again_title">ደጊምኩም እተዉ</string>
     <string name="login_again_subtitle">ከም %1$s</string>
     <string name="login_again_button">ኣቲኹም ጸብጻብ ምስዳድ ቀጽሉ</string>
@@ -155,6 +156,8 @@
     <string name="vehicles_error_message">መካይንኩም ምጽዓን ኣይተኻእለን</string>
     <string name="vehicles_error_detail">ርክብኩም ኣረጋጊጽኩም ደጊምኩም ፈትኑ።</string>
     <string name="vehicles_retry_button">ደጊምኩም ፈትኑ</string>
+    <string name="vehicles_viewer_title">እዚ ናይ መራሒ መኪና ኣካውንት ኣይኮነን</string>
+    <string name="vehicles_viewer_detail">እዚ ኣካውንት ነቲ ናይ ምምሕዳር ገጽ ምርኣይ ጥራይ እዩ ዝኽእል። ካብ ኣመሓዳሪ ትካልኩም ናይ መራሒ መኪና ኣካውንት ሕተቱ፣ ድሕሪኡ ብእኡ እተዉ።</string>
     <string name="vehicles_search_label">ቁጽሪ መኪና</string>
     <string name="vehicles_search_no_matches">ምስ %1$s እትሰማማዕ መኪና የላን</string>
     <string name="vehicles_search_no_matches_detail">ኣብ መኪና ዘሎ ቁጽሪ ኣረጋግጹ።</string>

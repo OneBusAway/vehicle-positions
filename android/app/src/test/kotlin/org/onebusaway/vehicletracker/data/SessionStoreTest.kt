@@ -447,4 +447,22 @@ class SessionStoreTest {
         assertNull(jwtSubject("e30.WzFd.sig")) // [1]: JSON, but not an object
         assertNull(jwtSubject(noSub))
     }
+
+    @Test fun `a viewer is told by the role in the server's token`() {
+        assertTrue(isViewerToken(jwtFor("3", role = "viewer")))
+        assertFalse(isViewerToken(jwtFor("2", role = "driver")))
+        assertFalse("the driver API admits an admin", isViewerToken(jwtFor("1", role = "admin")))
+        assertTrue(Session("http://localhost/", jwtFor("3", role = "viewer"), 0L).isViewer)
+        assertFalse(Session("http://localhost/", jwtFor("2"), 0L).isViewer)
+        assertFalse(Session("http://localhost/", null, null).isViewer)
+    }
+
+    @Test fun `a token with no readable role is not a viewer's`() {
+        val noRole = "e30." + Base64.getUrlEncoder().withoutPadding().encodeToString("""{"sub":"1"}""".toByteArray()) + ".sig"
+        val roleNotText = "e30." + Base64.getUrlEncoder().withoutPadding().encodeToString("""{"role":["viewer"]}""".toByteArray()) + ".sig"
+        assertFalse(isViewerToken("jwt"))
+        assertFalse(isViewerToken("e30.!!!.sig"))
+        assertFalse(isViewerToken(noRole))
+        assertFalse(isViewerToken(roleNotText))
+    }
 }

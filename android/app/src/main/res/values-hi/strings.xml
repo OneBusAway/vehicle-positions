@@ -31,6 +31,7 @@
     <string name="login_error_not_tracker">%1$s ट्रैकर सर्वर नहीं लगता।</string>
     <string name="login_error_too_many_tries">बहुत बार कोशिश हो गई। एक मिनट रुकें, फिर से कोशिश करें।</string>
     <string name="login_error_server">साइन इन नहीं हो सका। फिर से कोशिश करें।</string>
+    <string name="login_error_viewer">यह अकाउंट सिर्फ़ एडमिन साइट देख सकता है। अपनी एजेंसी के एडमिन से ड्राइवर अकाउंट माँगें।</string>
     <string name="login_again_title">फिर से साइन इन करें</string>
     <string name="login_again_subtitle">%1$s के रूप में</string>
     <string name="login_again_button">साइन इन करें और रिपोर्ट भेजते रहें</string>
@@ -152,6 +153,8 @@
     <string name="vehicles_error_message">आपकी गाड़ियाँ लोड नहीं हो सकीं</string>
     <string name="vehicles_error_detail">अपना कनेक्शन जाँचें और फिर से कोशिश करें।</string>
     <string name="vehicles_retry_button">फिर से कोशिश करें</string>
+    <string name="vehicles_viewer_title">यह ड्राइवर अकाउंट नहीं है</string>
+    <string name="vehicles_viewer_detail">यह अकाउंट सिर्फ़ एडमिन साइट देख सकता है। अपनी एजेंसी के एडमिन से ड्राइवर अकाउंट माँगें, फिर उससे साइन इन करें।</string>
     <string name="vehicles_search_label">गाड़ी नंबर</string>
     <string name="vehicles_search_no_matches">%1$s से कोई गाड़ी नहीं मिली</string>
     <string name="vehicles_search_no_matches_detail">गाड़ी पर लिखा नंबर जाँचें।</string>

@@ -35,6 +35,7 @@
     <string name="login_error_not_tracker">ʻO %1$s e foliga mai e lē o se server mo lenei app.</string>
     <string name="login_error_too_many_tries">ʻUa tele naʻuā taumafaiga. Faʻatali se minute, ona toe taumafai lea.</string>
     <string name="login_error_server">Na lē mafai ona saini i totonu. Toe taumafai.</string>
+    <string name="login_error_viewer">E na o le vaʻai i le upega tafaʻilagi o pulega e mafai e lenei akauni. Fai i le pule o lau kamupani mo se akauni ʻavetaʻavale.</string>
     <string name="login_again_title">Toe saini i totonu</string>
     <string name="login_again_subtitle">Mo %1$s</string>
     <string name="login_again_button">Saini i totonu ma faʻaauau ona lafo lipoti</string>
@@ -154,6 +155,8 @@
     <string name="vehicles_error_message">Na lē mafai ona utaina taʻavale</string>
     <string name="vehicles_error_detail">Siaki lau fesoʻotaʻiga ona toe taumafai lea.</string>
     <string name="vehicles_retry_button">Toe taumafai</string>
+    <string name="vehicles_viewer_title">E lē o se akauni ʻavetaʻavale</string>
+    <string name="vehicles_viewer_detail">E na o le vaʻai i le upega tafaʻilagi o pulega e mafai e lenei akauni. Fai i le pule o lau kamupani mo se akauni ʻavetaʻavale, ona saini lea i totonu i ai.</string>
     <string name="vehicles_search_label">Numera o le taʻavale</string>
     <string name="vehicles_search_no_matches">E leai se taʻavale e tutusa ma %1$s</string>
     <string name="vehicles_search_no_matches_detail">Siaki le numera i luga o le taʻavale.</string>

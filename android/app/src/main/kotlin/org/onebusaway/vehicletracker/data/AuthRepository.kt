@@ -25,14 +25,22 @@ class AuthRepository @Inject constructor(
     private val backlogScheduler: BacklogUploadScheduler,
     @param:EpochSecondsClock private val clock: () -> Long,
 ) {
+    /**
+     * Signs in, unless the account is a viewer's: the server signs one in for its admin site, but refuses it every driver
+     * call. Then nothing is saved and nothing on the phone changes, and the sign-in fails with [ApiError.ViewerAccount].
+     */
     suspend fun login(serverUrl: String, email: String, password: String): Result<Unit> = try {
         val resp = apiFactory.create(serverUrl).login(LoginRequest(email, password))
-        dropTripFromAnotherServer(serverUrl)
-        dropOccupancyForAnotherDriver(jwtSubject(resp.accessToken))
-        sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
-        offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
-        scheduleBacklogUpload()
-        Result.success(Unit)
+        if (isViewerToken(resp.accessToken)) {
+            Result.failure(ApiError.ViewerAccount)
+        } else {
+            dropTripFromAnotherServer(serverUrl)
+            dropOccupancyForAnotherDriver(jwtSubject(resp.accessToken))
+            sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
+            offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
+            scheduleBacklogUpload()
+            Result.success(Unit)
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

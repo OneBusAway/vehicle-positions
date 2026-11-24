@@ -36,6 +36,7 @@
     <string name="login_error_not_tracker">%1$s sarvarii hordoffii konkolaataa hin fakkaatu.</string>
     <string name="login_error_too_many_tries">Yaaliin baay\'ee ta\'eera. Daqiiqaa tokko eegii irra deebi\'ii yaali.</string>
     <string name="login_error_server">Seenuu hin dandeenye. Irra deebi\'ii yaali.</string>
+    <string name="login_error_viewer">Herregni kun marsariitii bulchiinsaa qofa ilaaluu danda\'a. Bulchaa dhaabbata keetii herrega konkolaachisaa gaafadhu.</string>
     <string name="login_again_title">Irra deebi\'ii seeni</string>
     <string name="login_again_subtitle">%1$s ta\'uun</string>
     <string name="login_again_button">Seenii gabaasuu itti fufi</string>
@@ -156,6 +157,8 @@
     <string name="vehicles_error_message">Konkolaattota kee fe\'uu hin dandeenye</string>
     <string name="vehicles_error_detail">Interneetii kee ilaalii irra deebi\'ii yaali.</string>
     <string name="vehicles_retry_button">Irra deebi\'ii yaali</string>
+    <string name="vehicles_viewer_title">Kun herrega konkolaachisaa miti</string>
+    <string name="vehicles_viewer_detail">Herregni kun marsariitii bulchiinsaa qofa ilaaluu danda\'a. Bulchaa dhaabbata keetii herrega konkolaachisaa gaafadhu, sana booda isaan seeni.</string>
     <string name="vehicles_search_label">Lakkoofsa konkolaataa</string>
     <string name="vehicles_search_no_matches">Konkolaataan %1$s hin argamne</string>
     <string name="vehicles_search_no_matches_detail">Lakkoofsa konkolaataa irra jiru ilaali.</string>

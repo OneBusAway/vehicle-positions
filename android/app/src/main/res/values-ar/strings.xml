@@ -35,6 +35,7 @@
     <string name="login_error_not_tracker">يبدو أن %1$s ليس خادم تتبع.</string>
     <string name="login_error_too_many_tries">محاولات كثيرة جدًا. انتظر دقيقة، ثم حاول مرة أخرى.</string>
     <string name="login_error_server">تعذّر تسجيل الدخول. حاول مرة أخرى.</string>
+    <string name="login_error_viewer">يمكن لهذا الحساب عرض موقع الإدارة فقط. اطلب من مسؤول جهة عملك حساب سائق.</string>
     <string name="login_again_title">تسجيل الدخول مرة أخرى</string>
     <string name="login_again_subtitle">باسم %1$s</string>
     <string name="login_again_button">تسجيل الدخول ومواصلة الإرسال</string>
@@ -160,6 +161,8 @@
     <string name="vehicles_error_message">تعذّر تحميل مركباتك</string>
     <string name="vehicles_error_detail">تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="vehicles_retry_button">إعادة المحاولة</string>
+    <string name="vehicles_viewer_title">هذا ليس حساب سائق</string>
+    <string name="vehicles_viewer_detail">يمكن لهذا الحساب عرض موقع الإدارة فقط. اطلب من مسؤول جهة عملك حساب سائق، ثم سجّل الدخول به.</string>
     <string name="vehicles_search_label">رقم المركبة</string>
     <string name="vehicles_search_no_matches">لا توجد مركبة تطابق %1$s</string>
     <string name="vehicles_search_no_matches_detail">تحقق من رقم الأسطول المكتوب على المركبة.</string>

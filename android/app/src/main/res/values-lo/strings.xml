@@ -35,6 +35,7 @@
     <string name="login_error_not_tracker">%1$s ເບິ່ງຄືວ່າບໍ່ແມ່ນເຊີບເວີຕິດຕາມລົດ.</string>
     <string name="login_error_too_many_tries">ລອງຫຼາຍເທື່ອເກີນໄປ. ລໍຖ້າໜຶ່ງນາທີ ແລ້ວລອງໃໝ່.</string>
     <string name="login_error_server">ເຂົ້າສູ່ລະບົບບໍ່ໄດ້. ລອງໃໝ່.</string>
+    <string name="login_error_viewer">ບັນຊີນີ້ເບິ່ງໄດ້ແຕ່ເວັບໄຊຜູ້ດູແລເທົ່ານັ້ນ. ຂໍບັນຊີຄົນຂັບຈາກຜູ້ດູແລລະບົບຂອງບໍລິສັດ.</string>
     <string name="login_again_title">ເຂົ້າສູ່ລະບົບອີກຄັ້ງ</string>
     <string name="login_again_subtitle">ດ້ວຍ %1$s</string>
     <string name="login_again_button">ເຂົ້າສູ່ລະບົບ ແລະ ລາຍງານຕໍ່</string>
@@ -154,6 +155,8 @@
     <string name="vehicles_error_message">ໂຫຼດລາຍການລົດຂອງທ່ານບໍ່ໄດ້</string>
     <string name="vehicles_error_detail">ກວດເບິ່ງການເຊື່ອມຕໍ່ ແລ້ວລອງໃໝ່.</string>
     <string name="vehicles_retry_button">ລອງໃໝ່</string>
+    <string name="vehicles_viewer_title">ນີ້ບໍ່ແມ່ນບັນຊີຄົນຂັບ</string>
+    <string name="vehicles_viewer_detail">ບັນຊີນີ້ເບິ່ງໄດ້ແຕ່ເວັບໄຊຜູ້ດູແລເທົ່ານັ້ນ. ຂໍບັນຊີຄົນຂັບຈາກຜູ້ດູແລລະບົບຂອງບໍລິສັດ ແລ້ວເຂົ້າສູ່ລະບົບດ້ວຍບັນຊີນັ້ນ.</string>
     <string name="vehicles_search_label">ເລກລົດ</string>
     <string name="vehicles_search_no_matches">ບໍ່ພົບລົດທີ່ກົງກັບ %1$s</string>
     <string name="vehicles_search_no_matches_detail">ກວດເບິ່ງເລກທີ່ຢູ່ເທິງລົດ.</string>

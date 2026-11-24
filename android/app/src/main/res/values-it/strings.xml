@@ -37,6 +37,7 @@
     <string name="login_error_not_tracker">%1$s non sembra un server di tracciamento.</string>
     <string name="login_error_too_many_tries">Troppi tentativi. Aspetta un minuto, poi riprova.</string>
     <string name="login_error_server">Impossibile accedere. Riprova.</string>
+    <string name="login_error_viewer">Questo account può solo consultare il sito di amministrazione. Chiedi all\'amministratore della tua azienda un account da autista.</string>
     <string name="login_again_title">Accedi di nuovo</string>
     <string name="login_again_subtitle">Come %1$s</string>
     <string name="login_again_button">Accedi e continua l\'invio</string>
@@ -158,6 +159,8 @@
     <string name="vehicles_error_message">Impossibile caricare i tuoi veicoli</string>
     <string name="vehicles_error_detail">Controlla la connessione e riprova.</string>
     <string name="vehicles_retry_button">Riprova</string>
+    <string name="vehicles_viewer_title">Questo non è un account da autista</string>
+    <string name="vehicles_viewer_detail">Questo account può solo consultare il sito di amministrazione. Chiedi all\'amministratore della tua azienda un account da autista, poi accedi con quello.</string>
     <string name="vehicles_search_label">Numero del veicolo</string>
     <string name="vehicles_search_no_matches">Nessun veicolo corrisponde a %1$s</string>
     <string name="vehicles_search_no_matches_detail">Controlla il numero di matricola sul veicolo.</string>

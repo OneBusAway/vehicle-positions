@@ -507,5 +507,6 @@ internal fun bannerOf(error: LoginError?): LoginBanner? = when (error) {
     is LoginError.NotATrackerServer -> LoginBanner(R.drawable.ic_dns, R.string.login_error_not_tracker)
     LoginError.TooManyAttempts -> LoginBanner(R.drawable.ic_error, R.string.login_error_too_many_tries)
     LoginError.ServerError -> LoginBanner(R.drawable.ic_error, R.string.login_error_server)
+    LoginError.ViewerAccount -> LoginBanner(R.drawable.ic_account_circle, R.string.login_error_viewer)
     else -> null
 }

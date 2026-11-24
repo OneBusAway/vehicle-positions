@@ -35,6 +35,7 @@
     <string name="login_error_not_tracker">%1$s não parece ser um servidor de rastreamento.</string>
     <string name="login_error_too_many_tries">Muitas tentativas. Aguarde um minuto e tente novamente.</string>
     <string name="login_error_server">Não foi possível entrar. Tente novamente.</string>
+    <string name="login_error_viewer">Esta conta só pode ver o site de administração. Peça ao administrador da sua empresa uma conta de motorista.</string>
     <string name="login_again_title">Entrar novamente</string>
     <string name="login_again_subtitle">Como %1$s</string>
     <string name="login_again_button">Entrar e continuar enviando</string>
@@ -157,6 +158,8 @@
     <string name="vehicles_error_message">Não foi possível carregar seus veículos</string>
     <string name="vehicles_error_detail">Verifique sua conexão e tente novamente.</string>
     <string name="vehicles_retry_button">Tentar novamente</string>
+    <string name="vehicles_viewer_title">Esta não é uma conta de motorista</string>
+    <string name="vehicles_viewer_detail">Esta conta só pode ver o site de administração. Peça ao administrador da sua empresa uma conta de motorista e depois entre com ela.</string>
     <string name="vehicles_search_label">Número do veículo</string>
     <string name="vehicles_search_no_matches">Nenhum veículo encontrado para %1$s</string>
     <string name="vehicles_search_no_matches_detail">Verifique o número de frota no veículo.</string>

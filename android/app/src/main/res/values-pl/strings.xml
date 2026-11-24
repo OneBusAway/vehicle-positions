@@ -38,6 +38,7 @@
     <string name="login_error_not_tracker">%1$s nie wygląda na serwer śledzenia pojazdów.</string>
     <string name="login_error_too_many_tries">Za dużo prób. Odczekaj minutę i spróbuj ponownie.</string>
     <string name="login_error_server">Nie udało się zalogować. Spróbuj ponownie.</string>
+    <string name="login_error_viewer">To konto może tylko przeglądać stronę administracyjną. Poproś administratora przewoźnika o konto kierowcy.</string>
     <string name="login_again_title">Zaloguj się ponownie</string>
     <string name="login_again_subtitle">Jako %1$s</string>
     <string name="login_again_button">Zaloguj się, aby dalej wysyłać raporty</string>
@@ -161,6 +162,8 @@
     <string name="vehicles_error_message">Nie udało się wczytać pojazdów</string>
     <string name="vehicles_error_detail">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="vehicles_retry_button">Spróbuj ponownie</string>
+    <string name="vehicles_viewer_title">To nie jest konto kierowcy</string>
+    <string name="vehicles_viewer_detail">To konto może tylko przeglądać stronę administracyjną. Poproś administratora przewoźnika o konto kierowcy, a potem zaloguj się na nie.</string>
     <string name="vehicles_search_label">Numer pojazdu</string>
     <string name="vehicles_search_no_matches">Żaden pojazd nie pasuje do %1$s</string>
     <string name="vehicles_search_no_matches_detail">Sprawdź numer taborowy na pojeździe.</string>

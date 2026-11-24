@@ -332,6 +332,26 @@ class ViewModelsTest {
         }
     }
 
+    // The server signs a viewer in, for its admin site, and refuses it every driver call after.
+    @Test fun `a viewer's sign-in says the account can only view, and keeps nothing`() = runTest(dispatcher) {
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setBody("""{"access_token":"${jwtFor("9", role = "viewer")}","refresh_token":"r9","expires_in":900}"""))
+        val sessions = FakeSessionStore()
+        val vm = loginViewModel(sessions)
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.fill(server.url("/").toString(), "viewer@example.com", "pw")
+
+        vm.onSignIn()
+        awaitCondition(description = "sign-in failure surfaced") { vm.uiState.value.error != null }
+
+        assertEquals(LoginError.ViewerAccount, vm.uiState.value.error)
+        assertFalse(vm.uiState.value.signedIn)
+        assertFalse(vm.uiState.value.loading)
+        assertFalse("nothing is wrong with the server", vm.uiState.value.changingServer)
+        assertEquals(Session(serverUrl = null, token = null, issuedAtEpochSec = null), sessions.state.value)
+        server.shutdown()
+    }
+
     @Test fun `a 400 is not blamed on the address`() = runTest(dispatcher) {
         // The server's own answer to a bad body, so it is a tracker server, and a bug if the app ever gets this.
         val state = failedSignIn(MockResponse().setResponseCode(400).setBody("""{"error":"invalid request body"}"""))
@@ -931,6 +951,7 @@ class ViewModelsTest {
             assertNull(fieldErrorRes(null, field))
             assertNull(fieldErrorRes(LoginError.ServerError, field))
             assertNull(fieldErrorRes(LoginError.TooManyAttempts, field))
+            assertNull(fieldErrorRes(LoginError.ViewerAccount, field))
         }
         assertEquals(R.string.login_error_missing_server, fieldErrorRes(LoginError.MissingField(LoginField.SERVER), LoginField.SERVER))
         assertEquals(R.string.login_error_missing_email, fieldErrorRes(LoginError.MissingField(LoginField.EMAIL), LoginField.EMAIL))
@@ -951,6 +972,7 @@ class ViewModelsTest {
         assertEquals(R.string.login_error_server, bannerOf(LoginError.ServerError)?.text)
         assertEquals(LoginBanner(R.drawable.ic_dns, R.string.login_error_not_tracker), bannerOf(LoginError.NotATrackerServer("x")))
         assertEquals(LoginBanner(R.drawable.ic_error, R.string.login_error_too_many_tries), bannerOf(LoginError.TooManyAttempts))
+        assertEquals(LoginBanner(R.drawable.ic_account_circle, R.string.login_error_viewer), bannerOf(LoginError.ViewerAccount))
         assertNull(bannerOf(LoginError.HttpsRequired))
         assertNull(bannerOf(LoginError.InvalidCredentials))
         assertNull(bannerOf(LoginError.InvalidAddress))
@@ -1140,10 +1162,12 @@ class ViewModelsTest {
         val server = MockWebServer().apply { start() }
         server.enqueue(MockResponse().setBody(body))
         try {
+            val sessions = FakeSessionStore()
             val repo = VehicleRepository(
                 TrackerApiProvider { ApiFactory { "jwt" }.create(server.url("/").toString()) },
+                sessions,
             )
-            val vm = VehicleViewModel(repo, prefs, authOver(FakeSessionStore()))
+            val vm = VehicleViewModel(repo, prefs, authOver(sessions))
             awaitCondition(description = "vehicles loaded") { vm.uiState.value is VehiclesUiState.Loaded }
             block(vm, prefs)
         } finally {
@@ -1979,7 +2003,7 @@ class ViewModelsTest {
     )
 
     private fun busStep(provider: TrackerApiProvider, store: SessionStore): Picker {
-        val vm = VehicleViewModel(VehicleRepository(provider), FakeVehiclePrefsStore(), authOver(store))
+        val vm = VehicleViewModel(VehicleRepository(provider, store), FakeVehiclePrefsStore(), authOver(store))
         return Picker(
             "bus step", threeVehiclesJson, vm.uiState, VehiclesUiState.Loading, VehiclesUiState.Error, VehiclesUiState.SessionEnded,
             { vm.uiState.value is VehiclesUiState.Loaded }, vm::retry,
@@ -2101,6 +2125,25 @@ class ViewModelsTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(picker.name, "login", nextLaunch.startDestination.value)
+        }
+    }
+
+    // A viewer's session stored before Sign in refused viewers, or a driver's account made a viewer since.
+    @Test fun `the bus step tells a viewer it can't drive, and its tokens go`() = runTest(dispatcher) {
+        val viewer = signedIn.copy(token = jwtFor("9", role = "viewer"))
+        val store = FakeSessionStore().apply { state.value = viewer }
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"forbidden"}"""))
+        try {
+            val provider = TrackerApiProvider { ApiFactory { viewer.token }.create(server.url("/").toString()) }
+            val vm = VehicleViewModel(VehicleRepository(provider, store), FakeVehiclePrefsStore(), authOver(store))
+            awaitCondition(description = "bus step settled") { vm.uiState.value != VehiclesUiState.Loading }
+
+            assertEquals(VehiclesUiState.ViewerAccount, vm.uiState.value)
+            assertEquals("the server and the email stay for Sign in", Session(viewer.serverUrl, null, null, email = viewer.email), store.state.value)
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
         }
     }
 

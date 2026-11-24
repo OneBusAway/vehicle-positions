@@ -37,6 +37,7 @@
     <string name="login_error_not_tracker">%1$s មើលទៅមិនមែនជាម៉ាស៊ីនមេតាមដានទេ។</string>
     <string name="login_error_too_many_tries">ព្យាយាមច្រើនដងពេក។ សូមរង់ចាំមួយនាទី រួចព្យាយាមម្ដងទៀត។</string>
     <string name="login_error_server">មិនអាចចូលគណនីបានទេ។ សូមព្យាយាមម្ដងទៀត។</string>
+    <string name="login_error_viewer">គណនីនេះអាចមើលបានតែគេហទំព័រគ្រប់គ្រងប៉ុណ្ណោះ។ សុំគណនីអ្នកបើកបរពីអ្នកគ្រប់គ្រងប្រព័ន្ធនៃក្រុមហ៊ុនអ្នក។</string>
     <string name="login_again_title">ចូលគណនីម្ដងទៀត</string>
     <string name="login_again_subtitle">ក្នុងនាម %1$s</string>
     <string name="login_again_button">ចូលគណនី ហើយបន្តផ្ញើទីតាំង</string>
@@ -156,6 +157,8 @@
     <string name="vehicles_error_message">មិនអាចផ្ទុកយានយន្តរបស់អ្នកបានទេ</string>
     <string name="vehicles_error_detail">សូមពិនិត្យការតភ្ជាប់ ហើយព្យាយាមម្ដងទៀត។</string>
     <string name="vehicles_retry_button">ព្យាយាមម្ដងទៀត</string>
+    <string name="vehicles_viewer_title">នេះមិនមែនជាគណនីអ្នកបើកបរទេ</string>
+    <string name="vehicles_viewer_detail">គណនីនេះអាចមើលបានតែគេហទំព័រគ្រប់គ្រងប៉ុណ្ណោះ។ សុំគណនីអ្នកបើកបរពីអ្នកគ្រប់គ្រងប្រព័ន្ធនៃក្រុមហ៊ុនអ្នក រួចចូលគណនីដោយប្រើគណនីនោះ។</string>
     <string name="vehicles_search_label">លេខយានយន្ត</string>
     <string name="vehicles_search_no_matches">គ្មានយានយន្តត្រូវនឹង %1$s ទេ</string>
     <string name="vehicles_search_no_matches_detail">សូមពិនិត្យលេខនៅលើយានយន្ត។</string>

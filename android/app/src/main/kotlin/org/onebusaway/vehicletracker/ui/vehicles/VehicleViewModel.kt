@@ -57,6 +57,12 @@ sealed interface VehiclesUiState {
 
     /** The server has ended the session and the tokens are gone, so the screen opens Sign in. */
     data object SessionEnded : VehiclesUiState
+
+    /**
+     * The account is a viewer's, which can't drive. Its tokens are gone, as Sign in would never have kept them, and the
+     * screen says why before the driver goes to Sign in.
+     */
+    data object ViewerAccount : VehiclesUiState
 }
 
 @HiltViewModel
@@ -88,6 +94,7 @@ class VehicleViewModel @Inject constructor(
                 )
             }
             result.exceptionOrNull() is ApiError.Unauthorized -> VehiclesUiState.SessionEnded
+            result.exceptionOrNull() is ApiError.ViewerAccount -> VehiclesUiState.ViewerAccount
             else -> VehiclesUiState.Error
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, VehiclesUiState.Loading)
@@ -118,8 +125,9 @@ class VehicleViewModel @Inject constructor(
         viewModelScope.launch {
             val result = vehicleRepository.myVehicles()
             // The client has already tried a refresh. The tokens go before the state changes, so nothing can read a dead
-            // one once the session shows as ended.
-            if (result.exceptionOrNull() is ApiError.Unauthorized) authRepository.endSessionLocally()
+            // one once the session shows as ended. A viewer's go the same way: they can't drive.
+            val error = result.exceptionOrNull()
+            if (error is ApiError.Unauthorized || error is ApiError.ViewerAccount) authRepository.endSessionLocally()
             loadResult.value = result
         }
     }

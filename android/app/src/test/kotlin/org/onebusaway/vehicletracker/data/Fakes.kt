@@ -93,11 +93,11 @@ class FakeSessionStore : SessionStore {
     }
 }
 
-/** A token shaped like the server's JWT, carrying [sub]; the phone never checks its signature. */
-fun jwtFor(sub: String): String {
+/** A token shaped like the server's JWT, carrying [sub] and [role]; the phone never checks its signature. */
+fun jwtFor(sub: String, role: String = "driver"): String {
     val encoder = Base64.getUrlEncoder().withoutPadding()
     fun part(json: String) = encoder.encodeToString(json.toByteArray())
-    return part("""{"alg":"HS256","typ":"JWT"}""") + "." + part("""{"sub":"$sub","exp":4102444800}""") + ".signature"
+    return part("""{"alg":"HS256","typ":"JWT"}""") + "." + part("""{"sub":"$sub","role":"$role","exp":4102444800}""") + ".signature"
 }
 
 fun signedInAs(sub: String) = FakeSessionStore().apply { state.value = Session("http://localhost/", jwtFor(sub), 0L) }

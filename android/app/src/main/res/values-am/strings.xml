@@ -35,6 +35,7 @@
     <string name="login_error_not_tracker">%1$s የመከታተያ ሰርቨር አይመስልም።</string>
     <string name="login_error_too_many_tries">በጣም ብዙ ሙከራ። አንድ ደቂቃ ቆይተው እንደገና ይሞክሩ።</string>
     <string name="login_error_server">መግባት አልተቻለም። እንደገና ይሞክሩ።</string>
+    <string name="login_error_viewer">ይህ መለያ የአስተዳደር ድረ-ገጹን ማየት ብቻ ይችላል። የድርጅትዎን አስተዳዳሪ የሹፌር መለያ ይጠይቁ።</string>
     <string name="login_again_title">እንደገና ይግቡ</string>
     <string name="login_again_subtitle">እንደ %1$s</string>
     <string name="login_again_button">ገብተው ሪፖርት መላክዎን ይቀጥሉ</string>
@@ -156,6 +157,8 @@
     <string name="vehicles_error_message">መኪኖችዎን መጫን አልተቻለም</string>
     <string name="vehicles_error_detail">ግንኙነትዎን አረጋግጠው እንደገና ይሞክሩ።</string>
     <string name="vehicles_retry_button">እንደገና ይሞክሩ</string>
+    <string name="vehicles_viewer_title">ይህ የሹፌር መለያ አይደለም</string>
+    <string name="vehicles_viewer_detail">ይህ መለያ የአስተዳደር ድረ-ገጹን ማየት ብቻ ይችላል። የድርጅትዎን አስተዳዳሪ የሹፌር መለያ ይጠይቁ፣ ከዚያ በእሱ ይግቡ።</string>
     <string name="vehicles_search_label">የመኪና ቁጥር</string>
     <string name="vehicles_search_no_matches">ከ%1$s ጋር የሚዛመድ መኪና የለም</string>
     <string name="vehicles_search_no_matches_detail">መኪናው ላይ ያለውን ቁጥር ያረጋግጡ።</string>
