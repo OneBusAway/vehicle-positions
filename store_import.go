@@ -390,27 +390,39 @@ func (s *Store) ImportDrivers(ctx context.Context, preview importPreview, rows [
 	if importFailed(outcomes) {
 		return outcomes, nil
 	}
+	// The accounts are created in email order, not the file's, so two imports
+	// that create the same drivers queue behind each other instead of
+	// deadlocking on their emails.
+	creates := make([]int, 0, len(passwords))
+	for i, o := range outcomes {
+		if o.Status == importNew {
+			creates = append(creates, i)
+		}
+	}
+	slices.SortFunc(creates, func(a, b int) int { return cmp.Compare(rows[a].Email, rows[b].Email) })
+	for _, i := range creates {
+		o, row := &outcomes[i], rows[i]
+		hash, ok := hashes[i]
+		if !ok {
+			*o = importOutcome{Status: importError, Reason: "an account with this email was removed meanwhile; preview the file again"}
+			return outcomes, nil
+		}
+		u, err := createUser(ctx, q, db.CreateUserParams{Name: row.Name, Email: row.Email, PasswordHash: string(hash), Role: roleDriver})
+		if err != nil {
+			if isDuplicateEmail(err) {
+				*o = importOutcome{Status: importError, Reason: "email already exists"}
+				return outcomes, nil
+			}
+			return nil, fmt.Errorf("create user for line %d: %w", row.Line, err)
+		}
+		o.UserID, o.Password = u.ID, passwords[i]
+	}
 	for i, row := range rows {
 		o, p := &outcomes[i], plans[i]
 		switch o.Status {
 		case importUnchanged:
 			o.UserID = p.userID
 			continue
-		case importNew:
-			hash, ok := hashes[i]
-			if !ok {
-				*o = importOutcome{Status: importError, Reason: "an account with this email was removed meanwhile; preview the file again"}
-				return outcomes, nil
-			}
-			u, err := createUser(ctx, q, db.CreateUserParams{Name: row.Name, Email: row.Email, PasswordHash: string(hash), Role: roleDriver})
-			if err != nil {
-				if isDuplicateEmail(err) {
-					*o = importOutcome{Status: importError, Reason: "email already exists"}
-					return outcomes, nil
-				}
-				return nil, fmt.Errorf("create user for line %d: %w", row.Line, err)
-			}
-			o.UserID, o.Password = u.ID, passwords[i]
 		case importUpdate:
 			if p.rename {
 				cur := locked[i]

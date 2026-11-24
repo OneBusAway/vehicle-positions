@@ -969,6 +969,70 @@ func TestStore_ImportDrivers_OppositeOrdersQueue(t *testing.T) {
 	}
 }
 
+// TestStore_ImportDrivers_NewAccountsInOppositeOrdersQueue: two imports that
+// create the same drivers in opposite orders queue behind each other, and the
+// second is told the accounts exist. Created in file order, each would hold its
+// first email while it waited for the other's, and Postgres would abort one of
+// them.
+func TestStore_ImportDrivers_NewAccountsInOppositeOrdersQueue(t *testing.T) {
+	store := newImportTestStore(t)
+	addImportVehicle(t, store, "imp-v1", "V1", true)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	run := func(emails ...string) chan importResult {
+		rows := make([]driverImportRow, len(emails))
+		for i, email := range emails {
+			rows[i] = driverImportRow{Line: i + 2, Email: email, Name: email, VehicleIDs: []string{"imp-v1"}}
+		}
+		done := make(chan importResult, 1)
+		go func() {
+			made := 0
+			got, err := store.ImportDrivers(ctx, newTestPreview(t), rows, func() string {
+				made++
+				return fmt.Sprintf("password %d", made)
+			})
+			done <- importResult{got, err}
+		}()
+		return done
+	}
+	const ana, gate, zed = "imp-ana@example.org", "imp-gate@example.org", "imp-zed@example.org"
+
+	// The gate's email, which comes between the two, is being taken by someone
+	// else, so the first import stops there holding Ana's.
+	holder, err := dedicatedConn(t).Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	_, err = holder.Exec(ctx, "INSERT INTO users (name, email, password_hash, role) VALUES ('Gate', $1, 'x', 'driver')", gate)
+	require.NoError(t, err)
+	var pid int
+	require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+	first := run(ana, gate, zed)
+	require.Eventually(t, func() bool { return len(first) == 1 || blockedBehind(store, pid, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the first import neither finished nor waited")
+	second := run(zed, gate, ana)
+	// The second waits for Ana's email, or at the gate too.
+	require.Eventually(t, func() bool {
+		return len(second) == 1 || blockedBehind(store, pid, 1)+blockedBehind(store, pid, 2) >= 2
+	}, 5*time.Second, 10*time.Millisecond, "the second import neither finished nor waited")
+	require.NoError(t, holder.Rollback(ctx))
+
+	got := <-first
+	require.NoError(t, got.err)
+	assert.Equal(t, []importStatus{importNew, importNew, importNew}, statuses(got.outcomes))
+	for i, email := range []string{ana, gate, zed} {
+		u, err := store.GetUserByEmail(ctx, email)
+		require.NoError(t, err)
+		assert.Equal(t, u.ID, got.outcomes[i].UserID, "each row gets its own account, whatever order they are created in")
+		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(got.outcomes[i].Password)), "and its own password")
+		assert.Equal(t, email, u.Name)
+		assert.Equal(t, []string{"imp-v1"}, assignedVehicles(t, store, u.ID))
+	}
+	got = <-second
+	require.NoError(t, got.err)
+	assert.Equal(t, []importStatus{importNew, importNew, importError}, statuses(got.outcomes))
+	assert.Equal(t, "email already exists", got.outcomes[2].Reason)
+}
+
 // queryCounter counts the queries a store runs, by their sqlc name.
 type queryCounter struct {
 	mu     sync.Mutex
