@@ -505,7 +505,7 @@ takes about ten minutes. Before you start, make sure the driver has an account
 
    The route and trip the app reports both come from the schedule, so as long
    as OneBusAway uses the same GTFS feed (your IT contact sets this up), it can
-   place the bus on the exact scheduled trip.
+   place the vehicle on the exact scheduled trip.
 6. If the phone has not yet allowed everything the app needs, **Start trip**
    opens **Before you start**: six rows, each saying why the app needs it. Work
    through it with the driver; this is the step drivers get wrong on their
@@ -538,9 +538,9 @@ takes about ten minutes. Before you start, make sure the driver has an account
 
 **What the status card means.** The card at the top says how the trip is
 keeping to its schedule, judged against the next stop: green **On time**, blue
-**N min late**, red **N min early**, and grey while the bus is off the route, has
+**N min late**, red **N min early**, and grey while the vehicle is off the route, has
 no position yet, or has no timetable on the phone. **Off schedule · Is this the
-right run?** under the answer means the bus is so far from this run's timetable
+right run?** under the answer means the vehicle is so far from this run's timetable
 that the driver has probably picked the wrong run. When reports are not getting
 through, a dark line with an amber icon joins the bottom of the card:
 
@@ -549,6 +549,7 @@ through, a dark line with an amber icon joins the bottom of the card:
 | **No connection** · Riders can't see you | The phone cannot reach the server. Positions taken now are kept on the phone and sent for the trip's history once it can; riders never see them. | Keep driving; the line goes away by itself when signal returns. |
 | **No GPS signal** · Position paused | The phone is not producing location fixes. | Check that location services are still on and the phone has a view of the sky. |
 | **Phone clock is wrong** · Set automatic time | The server has rejected several reports because the phone's clock is wrong. | Turn on automatic date and time in Android settings. |
+| **Reports refused** · Ask your dispatcher | The server is turning the reports down, usually because the vehicle was deactivated during the trip or the trip was ended on **Trips**. Positions taken meanwhile are not kept, not even for the trip's history. | The driver will contact you. Find the trip on **Trips**. If it is still **Running** and **Vehicles**, with **Show deactivated**, marks its vehicle **Deactivated**, click **Activate** on that row: the line goes away with the next report. If the trip has ended, the driver ends it in the app too (see [Trips and trails](#trips-and-trails)) and starts the run again. |
 
 While positions kept with no connection are waiting on the phone, the card's
 last line says so in place of the next stop: **12 reports to send when
@@ -996,6 +997,12 @@ frequencies is measured only here.
   patterns every 10 minutes through one stop make every 5 minutes at it, and
   so does a timetable every 10 minutes beside trips run from GTFS frequencies
   every 10 minutes.
+- One trip taking over from another does not add to it. Where a feed gives
+  each part of the day its own trip, the next trip's headway applies from its
+  first vehicle at the stop, even where a quicker schedule has that vehicle
+  due before the earlier trip's service there ends, as long as it is less
+  than a headway before. A trip that starts sooner than that shares the stop
+  and adds up.
 - A gap is **bunched** under 25% of the scheduled gap and a **long gap** over
   150%: on a route every 10 minutes, under 2.5 minutes and over 15.
 - **Extra wait** is how much longer than the schedule promises a rider who
