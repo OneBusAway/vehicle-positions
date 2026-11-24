@@ -11,9 +11,14 @@ nonisolated enum RootScreen: Equatable {
     ///
     /// A driver who has not seen the welcome gets it before the pickers, and
     /// only there: a trip running or paused always shows first.
-    static func next(phase: TripSession.Phase, showing: RootScreen, welcomeSeen: Bool) -> RootScreen {
+    ///
+    /// `viewerSignedOut` is the session's: a viewer's session the vehicle
+    /// list ended stays on the pickers, which say why, until the driver goes
+    /// on to Sign in.
+    static func next(phase: TripSession.Phase, showing: RootScreen, welcomeSeen: Bool,
+                     viewerSignedOut: Bool = false) -> RootScreen {
         switch phase {
-        case .signedOut: .signIn
+        case .signedOut: viewerSignedOut ? .pickers : .signIn
         case .idle: welcomeSeen ? .pickers : .welcome
         // Only the car can start a run while the welcome shows. It stays up
         // until the server answers, rather than give way to the pickers for

@@ -11,6 +11,7 @@ import Foundation
     nonisolated(unsafe) var geometry = TripFixtures.t1
     nonisolated(unsafe) var startedID: Int64 = 42
     nonisolated(unsafe) var loginError: (any Error)?
+    nonisolated(unsafe) var vehiclesError: (any Error)?
     nonisolated(unsafe) var startError: (any Error)?
     nonisolated(unsafe) var endError: (any Error)?
     nonisolated(unsafe) var postError: (any Error)?
@@ -50,7 +51,10 @@ import Foundation
         if let loginError { throw loginError }
         return tokens
     }
-    func myVehicles() async throws -> [Vehicle] { vehicles }
+    func myVehicles() async throws -> [Vehicle] {
+        if let vehiclesError { throw vehiclesError }
+        return vehicles
+    }
     func routes() async throws -> [RouteInfo] { routeList }
     func trips(routeID: String) async throws -> RouteTripsPage { page }
     func trip(id: String) async throws -> TripGeometry {

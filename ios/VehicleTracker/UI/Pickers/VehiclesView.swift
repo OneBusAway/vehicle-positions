@@ -24,7 +24,11 @@ struct VehiclesView: View {
     var body: some View {
         content
             .navigationTitle(PickerText.vehiclesTitle)
-            .toolbar { AccountMenu() }
+            // A viewer's session has ended: no one is signed in to show or
+            // sign out.
+            .toolbar {
+                if !session.viewerSignedOut { AccountMenu() }
+            }
             .searchable(text: $query, prompt: PickerText.vehicleSearchPrompt)
             // One load per visit: Back finds the same tiles at the same place.
             // Pull to refresh and the two buttons load again on purpose.
@@ -43,18 +47,23 @@ struct VehiclesView: View {
     }
 
     @ViewBuilder private var content: some View {
-        switch load {
-        case .loading:
-            DelayedProgress()
-        case .failed:
-            EmptyState(symbol: "icloud.slash", title: PickerText.vehiclesLoadFailed, detail: PickerText.checkConnection,
-                       action: PickerText.tryAgain, onAction: loadAgain)
-        case .loaded(let vehicles):
-            if vehicles.isEmpty {
-                EmptyState(symbol: "bus", title: PickerText.noVehicles, detail: PickerText.askDispatcher,
-                           action: PickerText.checkAgain, onAction: loadAgain)
-            } else {
-                tiles(vehicles)
+        if session.viewerSignedOut {
+            EmptyState(symbol: "person.crop.circle.badge.xmark", title: PickerText.notADriverAccount,
+                       detail: PickerText.viewerAccountDetail, action: SignInText.signIn, onAction: session.showSignIn)
+        } else {
+            switch load {
+            case .loading:
+                DelayedProgress()
+            case .failed:
+                EmptyState(symbol: "icloud.slash", title: PickerText.vehiclesLoadFailed, detail: PickerText.checkConnection,
+                           action: PickerText.tryAgain, onAction: loadAgain)
+            case .loaded(let vehicles):
+                if vehicles.isEmpty {
+                    EmptyState(symbol: "bus", title: PickerText.noVehicles, detail: PickerText.askDispatcher,
+                               action: PickerText.checkAgain, onAction: loadAgain)
+                } else {
+                    tiles(vehicles)
+                }
             }
         }
     }

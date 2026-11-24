@@ -28,6 +28,10 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     case locationServicesOff
     /// Precise Location is off, so every fix would be dropped as too coarse.
     case preciseLocationOff
+    /// The account is a viewer's, which the server signs in for its admin
+    /// site and refuses every driver call. A sign-in keeps nothing of it, and
+    /// the vehicle list ends a viewer's session it finds on the phone.
+    case viewerAccount
 
     var errorDescription: String? {
         switch self {
@@ -47,6 +51,8 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
             String(localized: "Location Services are off on this iPhone. Turn them on in Settings > Privacy & Security > Location Services.", comment: "Refusal when Location Services are off for the whole phone.")
         case .preciseLocationOff:
             String(localized: "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street.", comment: "Refusal when the app has only approximate location.")
+        case .viewerAccount:
+            SignInText.viewerAccount
         }
     }
 
@@ -57,7 +63,7 @@ nonisolated enum TripSessionError: Error, Equatable, LocalizedError {
     var opensSettings: Bool {
         switch self {
         case .locationDenied, .locationServicesOff, .preciseLocationOff: true
-        case .notSignedIn, .unusableTrip, .busy, .previousTripNotEnded, .locationNotAsked: false
+        case .notSignedIn, .unusableTrip, .busy, .previousTripNotEnded, .locationNotAsked, .viewerAccount: false
         }
     }
 }
@@ -146,6 +152,10 @@ final class TripSession {
     /// may start or resume meanwhile: the logout is revoking the token it
     /// would report with.
     var isSigningOut: Bool { signingOutGeneration == sessionGeneration }
+    /// The vehicle list found the session to be a viewer's and ended it on
+    /// this phone. The pickers stay up to say why (`RootScreen.next`) until
+    /// the driver goes on to Sign in (`showSignIn()`).
+    private(set) var viewerSignedOut = false
     let settings: AppSettings
 
     private let tokens: any TokenStoring
@@ -266,9 +276,13 @@ final class TripSession {
 
     private func logIn(serverURL: URL, email: String, password: String) async throws {
         let api = try makeAPI(serverURL, tokens)
-        let issued = try await api.login(email: email, password: password)
+        let issued = StoredToken(try await api.login(email: email, password: password), receivedAt: now())
+        // Refused before anything on the phone changes. The viewer is not
+        // logged out either: the server would end its other sessions too.
+        // The tokens go unused and expire.
+        if issued.isViewer { throw TripSessionError.viewerAccount }
         try dropTripFromAnotherServer(than: serverURL)
-        try tokens.save(StoredToken(issued, receivedAt: now()))
+        try tokens.save(issued)
         sessionGeneration += 1
         settings.serverURLString = serverURL.absoluteString
         settings.email = email
@@ -396,16 +410,32 @@ final class TripSession {
         }
     }
 
+    /// Sign in, from the vehicle screen that told a viewer it can't drive.
+    func showSignIn() {
+        viewerSignedOut = false
+    }
+
     // MARK: Catalog
 
     // The pickers show a fixed sentence when a load fails, so each failure
     // is logged here, once, with its cause.
 
+    /// The driver API refuses a viewer with a 403, this list first. A viewer's
+    /// session can be on the phone although Sign in keeps none: one signed in
+    /// before this build, or a driver's account made a viewer since, whose
+    /// next refreshed token says so. The token tells it from any other 403,
+    /// which reads as before. Its session ends here as a 401's does, with no
+    /// logout, and ``TripSessionError/viewerAccount`` is thrown.
     func loadVehicles() async throws {
         do {
             vehicles = try await requireAPI().myVehicles()
         } catch {
             log.error("could not load the vehicles: \(String(describing: error), privacy: .public)")
+            if case APIError.status(403, _) = error, (try? tokens.load())?.isViewer == true {
+                endSessionLocally()
+                viewerSignedOut = true
+                throw TripSessionError.viewerAccount
+            }
             throw error
         }
     }

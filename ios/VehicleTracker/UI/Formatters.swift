@@ -71,14 +71,20 @@ extension TripSession {
     /// letting `RootView` fall back to `SignInView`, instead of surfacing a raw
     /// "Server error 401" alongside the form. The client has already tried a
     /// refresh, so a 401 here means the server ended the session: there is
-    /// nothing left to log out of.
+    /// nothing left to log out of. A viewer's session, which `loadVehicles()`
+    /// has ended already, needs no failure shown either: the vehicle screen
+    /// says why.
     @discardableResult
     func handleIfUnauthorized(_ error: any Error) -> Bool {
-        if case APIError.status(401, _) = error {
+        switch error {
+        case APIError.status(401, _):
             endSessionLocally()
             return true
+        case TripSessionError.viewerAccount:
+            return true
+        default:
+            return false
         }
-        return false
     }
 }
 

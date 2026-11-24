@@ -103,6 +103,7 @@ import Testing
             == .unreachable("tracker.example.org:8443"))
         #expect(failed(APIError.insecureURL).failure == .insecure)
         #expect(failed(CocoaError(.fileWriteUnknown)).failure == .serverError)
+        #expect(failed(TripSessionError.viewerAccount).failure == .viewerAccount)
     }
 
     @Test func aFailedSignInCanBeTriedAgain() {
@@ -116,6 +117,7 @@ import Testing
         #expect(failed(APIError.transport("offline")).changingServer)
         #expect(!failed(APIError.transport("offline"), isAgain: true).changingServer)
         #expect(!failed(APIError.status(401, message: "")).changingServer)
+        #expect(!failed(TripSessionError.viewerAccount).changingServer)
     }
 
     @Test func anEditClearsTheErrorButLeavesTheServerFieldOpen() {
@@ -147,6 +149,7 @@ import Testing
         case .tooManyTries: form = failed(APIError.status(429, message: ""))
         case .insecure: form = failed(APIError.insecureURL)
         case .serverError: form = failed(APIError.status(500, message: ""))
+        case .viewerAccount: form = failed(TripSessionError.viewerAccount)
         }
         #expect(form.failure == failure)
         let fields = SignInField.allCases.map { form.fieldError(for: $0) ?? "-" }.joined(separator: " | ")
@@ -166,6 +169,8 @@ import Testing
         #expect(placement(.insecure)
             == "Use https://. Plain http:// is allowed only for localhost, 127.0.0.1 or a .local host. | - | - || -")
         #expect(placement(.serverError) == "- | - | - || exclamationmark.circle.fill Couldn't sign in. Try again.")
+        #expect(placement(.viewerAccount) == "- | - | - || person.crop.circle.fill.badge.xmark "
+            + "This account can only view the admin site. Ask your agency's admin for a driver account.")
     }
 
     @Test func onlyAnEmptyFieldTakesTheFocus() {
