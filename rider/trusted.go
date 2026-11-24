@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,13 +123,21 @@ func (f *TrustedFeed) pollOne(ctx context.Context, feed *feedState) {
 
 // withoutURL is err without the address net/http and net/url put in front of
 // the reason. Health gives the feed's address beside the error, and the one in
-// it is whole, any key in its query included.
+// it is whole, any key in its query included. An address that can't be parsed,
+// the feed's own or one it redirects to, is quoted in the reason as well, so
+// the reason is then only that it can't.
 func withoutURL(err error) error {
 	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		return urlErr.Err
+	if !errors.As(err, &urlErr) {
+		return err
 	}
-	return err
+	switch {
+	case urlErr.Op == "parse":
+		return errors.New("not a valid URL")
+	case strings.HasPrefix(urlErr.Err.Error(), "failed to parse Location header"):
+		return errors.New("redirected to an address that is not a valid URL")
+	}
+	return urlErr.Err
 }
 
 // fetchResult is one conditional GET's answer: either the feed was unchanged,

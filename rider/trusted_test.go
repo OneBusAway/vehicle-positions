@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -140,13 +141,29 @@ func TestTrustedFeed_ErrorFeedDoesNotPoisonHealthyOne(t *testing.T) {
 func TestTrustedFeed_ErrorLeavesOutTheURL(t *testing.T) {
 	down := httptest.NewServer(http.NotFoundHandler())
 	down.Close()
-	f := NewTrustedFeed([]string{down.URL + "/feed?api_key=secret", "https://feed.example/%zz?api_key=secret"}, http.DefaultClient, time.Minute)
+	redirects := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", r.URL.Query().Get("to"))
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer redirects.Close()
+	redirect := func(to string) string { return redirects.URL + "/?to=" + url.QueryEscape(to) }
+	f := NewTrustedFeed([]string{
+		down.URL + "/feed?api_key=secret",
+		"https://feed.example/%zz?api_key=secret",
+		// The password's slash ends the host, so it parses as a bad port.
+		"https://agency:secret/word@feed.example/feed",
+		redirect("/%zz?api_key=secret"),
+		redirect(down.URL + "/feed?api_key=secret"),
+	}, http.DefaultClient, time.Minute)
 	f.Poll(context.Background())
 
 	h := f.Health()
-	require.Len(t, h, 2)
+	require.Len(t, h, 5)
 	assert.Contains(t, h[0].LastError, "connection refused", "what went wrong is kept")
-	assert.Contains(t, h[1].LastError, "invalid URL escape")
+	assert.Equal(t, "not a valid URL", h[1].LastError)
+	assert.Equal(t, "not a valid URL", h[2].LastError)
+	assert.Equal(t, "redirected to an address that is not a valid URL", h[3].LastError)
+	assert.Contains(t, h[4].LastError, "connection refused", "a redirect that parses says what went wrong there")
 	for _, feed := range h {
 		assert.NotContains(t, feed.LastError, "secret")
 	}
