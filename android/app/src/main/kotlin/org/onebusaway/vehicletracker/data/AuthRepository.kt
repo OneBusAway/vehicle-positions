@@ -9,8 +9,8 @@ import org.onebusaway.vehicletracker.data.api.LoginRequest
 import org.onebusaway.vehicletracker.data.api.TrackerApiProvider
 import org.onebusaway.vehicletracker.di.EpochSecondsClock
 import org.onebusaway.vehicletracker.service.BacklogUploadScheduler
+import org.onebusaway.vehicletracker.service.scheduleIfQueued
 import retrofit2.HttpException
-import java.io.IOException
 import java.net.UnknownServiceException
 import javax.inject.Inject
 
@@ -38,26 +38,15 @@ class AuthRepository @Inject constructor(
             dropOccupancyForAnotherDriver(jwtSubject(resp.accessToken))
             sessionStore.saveLogin(serverUrl, email, resp.issuedAt(clock()))
             offlineQueue.claimFor(offlineQueueAccount(serverUrl, email))
-            scheduleBacklogUpload()
+            // The fixes left in the queue now are this driver's. A backlog job that ran while nobody was signed in to
+            // them gave up and won't run again until another fix is queued, which may be the next trip's.
+            backlogScheduler.scheduleIfQueued(offlineQueue)
             Result.success(Unit)
         }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         Result.failure(mapLoginError(e))
-    }
-
-    /**
-     * The fixes left in the queue now are this driver's. A backlog job that ran while nobody was signed in to them
-     * gave up and won't run again until another fix is queued, which may be the next trip's.
-     */
-    private suspend fun scheduleBacklogUpload() {
-        try {
-            if (offlineQueue.oldest(1).isNotEmpty()) backlogScheduler.schedule()
-        } catch (e: IOException) {
-            // The sign-in has worked. The next live report still uploads a batch.
-            AppLog.w(TAG, "Could not read the offline queue", e)
-        }
     }
 
     /**
