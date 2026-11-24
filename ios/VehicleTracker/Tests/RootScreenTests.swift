@@ -43,6 +43,18 @@ import Testing
         }
     }
 
+    /// The vehicle list ended a viewer's session: the pickers stay up to say
+    /// why until the driver goes on to Sign in.
+    @Test(arguments: [true, false])
+    func aViewerSignedOutByTheVehicleListStaysOnThePickers(welcomeSeen: Bool) {
+        for showing in screens {
+            #expect(RootScreen.next(phase: .signedOut, showing: showing, welcomeSeen: welcomeSeen, viewerSignedOut: true)
+                == .pickers, "\(showing)")
+            #expect(RootScreen.next(phase: .signedOut, showing: showing, welcomeSeen: welcomeSeen, viewerSignedOut: false)
+                == .signIn, "\(showing)")
+        }
+    }
+
     /// A run started from the car while the phone shows the welcome: it
     /// stays up until the server answers, then gives way to the trip.
     @Test(arguments: [true, false])

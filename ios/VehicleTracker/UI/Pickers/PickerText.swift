@@ -80,6 +80,14 @@ nonisolated enum PickerText {
         String(localized: "Try again", comment: "Button that retries a load or a start that failed.")
     }
 
+    static var notADriverAccount: String {
+        String(localized: "Not a driver account", comment: "Empty state title in place of the vehicle list when the account signed in turns out to be a viewer's, which can look at the agency's admin website but not drive. The phone has signed it out.")
+    }
+
+    static var viewerAccountDetail: String {
+        String(localized: "This account can only view the admin site. Ask your agency's admin for a driver account, then sign in with it.", comment: "Empty state text under 'Not a driver account', over a Sign in button.")
+    }
+
     static var loading: String {
         String(localized: "Loading", comment: "What VoiceOver says while a picker's Try again is loading the list again.")
     }

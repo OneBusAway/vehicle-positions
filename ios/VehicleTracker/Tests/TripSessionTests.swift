@@ -1473,6 +1473,90 @@ import VehiclePositionsKit
         form.failed(try #require(error), server: server.absoluteString)
         #expect(form.failure == .serverError)
     }
+
+    // MARK: A viewer's account
+
+    /// The server signs a viewer in for its admin site but refuses it every
+    /// driver call, so the phone keeps nothing of the sign-in: no token, no
+    /// settings, and the trip stored for another server stays. No logout
+    /// either, which would end the viewer's other sessions.
+    @Test func aViewersSignInIsRefusedAndNothingOnThePhoneChanges() async throws {
+        try store.save(trip(on: tripServer))
+        defaults.set(tripServer.absoluteString, forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        api.tokens = AuthTokens(accessToken: fakeJWT(role: "viewer"), refreshToken: "refresh-1", expiresIn: 900)
+        let s = session()
+
+        let error = await #expect(throws: TripSessionError.self) {
+            try await s.signIn(serverURL: server, email: "v@test.com", password: "pw")
+        }
+        #expect(error == .viewerAccount)
+        #expect(api.logins.count == 1)
+        #expect(try tokens.load() == nil, "no token is saved")
+        #expect(try store.load() == trip(on: tripServer), "the trip stored for another server stays")
+        #expect(s.settings.serverURLString == tripServer.absoluteString)
+        #expect(s.settings.email == "d@test.com")
+        #expect(s.phase == .signedOut)
+        #expect(api.logouts == 0)
+
+        var form = SignInForm()
+        form.failed(try #require(error), server: server.absoluteString)
+        #expect(form.failure == .viewerAccount)
+    }
+
+    @Test(arguments: ["driver", "admin"])
+    func aDriversOrAnAdminsSignInIsKept(role: String) async throws {
+        api.tokens = AuthTokens(accessToken: fakeJWT(role: role), refreshToken: "refresh-1", expiresIn: 900)
+        let s = session()
+        try await s.signIn(serverURL: server, email: "d@test.com", password: "pw")
+        #expect(s.phase == .idle)
+        #expect(try tokens.load()?.token == fakeJWT(role: role))
+    }
+
+    /// A viewer's session already on the phone: signed in before this build,
+    /// or a driver's account made a viewer since. The vehicle list's 403
+    /// ends it on the phone with no logout, keeping the server and the email,
+    /// and the pickers stay up to say why until the driver goes on to Sign in.
+    @Test func aViewersVehicleListEndsTheSessionAndThePickersSayWhy() async throws {
+        try tokens.save(StoredToken(token: fakeJWT(role: "viewer"), issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set(server.absoluteString, forKey: "serverURL")
+        defaults.set("d@test.com", forKey: "email")
+        let s = session()
+        try #require(s.phase == .idle)
+        api.vehiclesError = APIError.status(403, message: "forbidden")
+
+        let error = await #expect(throws: TripSessionError.self) { try await s.loadVehicles() }
+        #expect(error == .viewerAccount)
+        #expect(try tokens.load() == nil)
+        #expect(s.phase == .signedOut)
+        #expect(s.viewerSignedOut)
+        #expect(s.settings.signInServerURL == server)
+        #expect(s.settings.email == "d@test.com")
+        #expect(RootScreen.next(phase: s.phase, showing: .pickers, welcomeSeen: true, viewerSignedOut: s.viewerSignedOut) == .pickers)
+        #expect(s.handleIfUnauthorized(try #require(error)), "the screens show no failure of their own")
+        await Task.yield()
+        #expect(api.logouts == 0)
+
+        s.showSignIn()
+        #expect(!s.viewerSignedOut)
+        #expect(RootScreen.next(phase: s.phase, showing: .pickers, welcomeSeen: true, viewerSignedOut: s.viewerSignedOut) == .signIn)
+    }
+
+    /// Only the token tells a viewer's 403 from any other. A driver's 403, a
+    /// token with no role, or a viewer's 500 reads as before, and the
+    /// session stays.
+    @Test(arguments: [(fakeJWT(role: "driver"), 403), ("jwt", 403), (fakeJWT(role: "viewer"), 500)])
+    func onlyAViewersTokenMakesTheVehicleListsRefusalAViewers(token: String, code: Int) async throws {
+        try tokens.save(StoredToken(token: token, issuedAt: clock.now.addingTimeInterval(-60)))
+        defaults.set(server.absoluteString, forKey: "serverURL")
+        let s = session()
+        api.vehiclesError = APIError.status(code, message: "")
+
+        await #expect(throws: APIError.status(code, message: "")) { try await s.loadVehicles() }
+        #expect(s.phase == .idle)
+        #expect(!s.viewerSignedOut)
+        #expect(try tokens.load()?.token == token)
+    }
 }
 
 /// Keeps the token in memory and notes, at each save, the trip stored then.
@@ -1548,6 +1632,7 @@ nonisolated final class UnclearableTripStore: ActiveTripStoring, @unchecked Send
         #expect(!TripSessionError.busy.opensSettings)
         #expect(!TripSessionError.previousTripNotEnded.opensSettings)
         #expect(!TripSessionError.locationNotAsked.opensSettings, "nothing in Settings is off")
+        #expect(!TripSessionError.viewerAccount.opensSettings)
     }
 
     @Test func eachLocationRefusalSaysWhatToChange() {

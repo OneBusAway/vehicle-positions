@@ -26856,6 +26856,179 @@
         }
       }
     },
+    "Not a driver account" : {
+      "comment" : "Empty state title in place of the vehicle list when the account signed in turns out to be a viewer's, which can look at the agency's admin website but not drive. The phone has signed it out.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ይህ የሹፌር መለያ አይደለም"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "هذا ليس حساب سائق"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Das ist kein Fahrerkonto"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Esta no es una cuenta de conductor"
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "این حساب راننده نیست"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tämä ei ole kuljettajatili"
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Hindi ito driver account"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ce n’est pas un compte chauffeur"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "यह ड्राइवर अकाउंट नहीं है"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Sa a se pa yon kont chofè"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Questo non è un account da autista"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "運転士アカウントではありません"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "នេះមិនមែនជាគណនីអ្នកបើកបរទេ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "기사 계정이 아니에요"
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ນີ້ບໍ່ແມ່ນບັນຊີຄົນຂັບ"
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kun herrega konkolaachisaa miti"
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਇਹ ਡਰਾਈਵਰ ਅਕਾਊਂਟ ਨਹੀਂ ਹੈ"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "To nie jest konto kierowcy"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Esta não é uma conta de motorista"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Это не аккаунт водителя"
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "E lē o se akauni ʻavetaʻavale"
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kani ma aha akoon darawalnimo"
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Hii si akaunti ya dereva"
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "እዚ ናይ መራሒ መኪና ኣካውንት ኣይኮነን"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Це не обліковий запис водія"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Đây không phải tài khoản tài xế"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "这不是司机账号"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "這不是駕駛帳號"
+          }
+        }
+      }
+    },
     "Not ended yet" : {
       "comment" : "CarPlay: the short form of the 'Trip not ended yet' alert's title, for a car screen too narrow for it.",
       "localizations" : {
@@ -52991,6 +53164,352 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "接著點「%@」。之後乘客就看得到你的車輛。"
+          }
+        }
+      }
+    },
+    "This account can only view the admin site. Ask your agency's admin for a driver account, then sign in with it." : {
+      "comment" : "Empty state text under 'Not a driver account', over a Sign in button.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ይህ መለያ የአስተዳደር ድረ-ገጹን ማየት ብቻ ይችላል። የድርጅትዎን አስተዳዳሪ የሹፌር መለያ ይጠይቁ፣ ከዚያ በእሱ ይግቡ።"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "يمكن لهذا الحساب عرض موقع الإدارة فقط. اطلب من مسؤول جهة عملك حساب سائق، ثم سجّل الدخول به."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Dieses Konto kann nur die Admin-Website ansehen. Bitten Sie den Admin Ihres Verkehrsbetriebs um ein Fahrerkonto und melden Sie sich damit an."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Esta cuenta solo puede ver el sitio de administración. Pídele al administrador de tu empresa una cuenta de conductor y luego inicia sesión con ella."
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "این حساب فقط می‌تواند سایت مدیریت را ببیند. از مدیر سیستم شرکت خود یک حساب راننده بخواهید و سپس با آن وارد شوید."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tällä tilillä voi vain katsella hallintasivustoa. Pyydä liikennöitsijäsi ylläpitäjältä kuljettajatili ja kirjaudu sisään sillä."
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Pang-view lang ng admin site ang account na ito. Humingi ng driver account sa admin ng kumpanya mo, saka mag-sign in gamit iyon."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ce compte peut seulement consulter le site d’administration. Demandez un compte chauffeur à l’administrateur de votre compagnie, puis connectez-vous avec celui-ci."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "यह अकाउंट सिर्फ़ एडमिन साइट देख सकता है। अपनी एजेंसी के एडमिन से ड्राइवर अकाउंट माँगें, फिर उससे साइन इन करें।"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kont sa a ka gade sit administrasyon an sèlman. Mande administratè konpayi ou a yon kont chofè, epi konekte avè l."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Questo account può solo consultare il sito di amministrazione. Chiedi all'amministratore della tua azienda un account da autista, poi accedi con quello."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "このアカウントは管理サイトの閲覧専用です。事業者の管理者に運転士アカウントを依頼し、そのアカウントでログインしてください。"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "គណនីនេះអាចមើលបានតែគេហទំព័រគ្រប់គ្រងប៉ុណ្ណោះ។ សុំគណនីអ្នកបើកបរពីអ្នកគ្រប់គ្រងប្រព័ន្ធនៃក្រុមហ៊ុនអ្នក រួចចូលគណនីដោយប្រើគណនីនោះ។"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "이 계정은 관리 사이트를 보기만 할 수 있어요. 회사 관리자에게 기사 계정을 요청한 뒤 그 계정으로 로그인하세요."
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ບັນຊີນີ້ເບິ່ງໄດ້ແຕ່ເວັບໄຊຜູ້ດູແລເທົ່ານັ້ນ. ຂໍບັນຊີຄົນຂັບຈາກຜູ້ດູແລລະບົບຂອງບໍລິສັດ ແລ້ວເຂົ້າສູ່ລະບົບດ້ວຍບັນຊີນັ້ນ."
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Herregni kun marsariitii bulchiinsaa qofa ilaaluu danda'a. Bulchaa dhaabbata keetii herrega konkolaachisaa gaafadhu, sana booda isaan seeni."
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਇਹ ਅਕਾਊਂਟ ਸਿਰਫ਼ ਐਡਮਿਨ ਸਾਈਟ ਦੇਖ ਸਕਦਾ ਹੈ। ਆਪਣੀ ਏਜੰਸੀ ਦੇ ਐਡਮਿਨ ਤੋਂ ਡਰਾਈਵਰ ਅਕਾਊਂਟ ਮੰਗੋ, ਫਿਰ ਉਸ ਨਾਲ ਸਾਈਨ ਇਨ ਕਰੋ।"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "To konto może tylko przeglądać stronę administracyjną. Poproś administratora przewoźnika o konto kierowcy, a potem zaloguj się na nie."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Esta conta só pode ver o site de administração. Peça ao administrador da sua empresa uma conta de motorista e depois entre com ela."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Этот аккаунт может только просматривать сайт администрирования. Попросите у администратора перевозчика аккаунт водителя и войдите с ним."
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "E na o le vaʻai i le upega tafaʻilagi o pulega e mafai e lenei akauni. Fai i le pule o lau kamupani mo se akauni ʻavetaʻavale, ona saini lea i totonu i ai."
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Akoonkan wuxuu kaliya arki karaa bogga maamulka. Ka codso maamulaha shirkaddaada akoon darawalnimo, kadibna ku soo gal."
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Akaunti hii inaweza kutazama tovuti ya usimamizi pekee. Mwombe msimamizi wa shirika lako akaunti ya dereva, kisha uingie nayo."
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "እዚ ኣካውንት ነቲ ናይ ምምሕዳር ገጽ ምርኣይ ጥራይ እዩ ዝኽእል። ካብ ኣመሓዳሪ ትካልኩም ናይ መራሒ መኪና ኣካውንት ሕተቱ፣ ድሕሪኡ ብእኡ እተዉ።"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Цей обліковий запис може лише переглядати сайт адміністрування. Попросіть в адміністратора вашого перевізника обліковий запис водія і ввійдіть із ним."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tài khoản này chỉ xem được trang quản trị. Hãy xin quản trị viên của đơn vị vận hành một tài khoản tài xế, rồi đăng nhập bằng tài khoản đó."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "此账号只能查看管理网站。请向运营单位的管理员申请司机账号，然后用它登录。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "這個帳號只能查看管理網站。請向營運單位的管理員申請駕駛帳號，然後用它登入。"
+          }
+        }
+      }
+    },
+    "This account can only view the admin site. Ask your agency's admin for a driver account." : {
+      "comment" : "Banner above the sign-in button when the email and password were right, but the account is a viewer's: it can look at the agency's admin website but not drive, so the app doesn't sign it in.",
+      "localizations" : {
+        "am" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ይህ መለያ የአስተዳደር ድረ-ገጹን ማየት ብቻ ይችላል። የድርጅትዎን አስተዳዳሪ የሹፌር መለያ ይጠይቁ።"
+          }
+        },
+        "ar" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "يمكن لهذا الحساب عرض موقع الإدارة فقط. اطلب من مسؤول جهة عملك حساب سائق."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Dieses Konto kann nur die Admin-Website ansehen. Bitten Sie den Admin Ihres Verkehrsbetriebs um ein Fahrerkonto."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Esta cuenta solo puede ver el sitio de administración. Pídele al administrador de tu empresa una cuenta de conductor."
+          }
+        },
+        "fa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "این حساب فقط می‌تواند سایت مدیریت را ببیند. از مدیر سیستم شرکت خود یک حساب راننده بخواهید."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tällä tilillä voi vain katsella hallintasivustoa. Pyydä liikennöitsijäsi ylläpitäjältä kuljettajatili."
+          }
+        },
+        "fil" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Pang-view lang ng admin site ang account na ito. Humingi ng driver account sa admin ng kumpanya mo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Ce compte peut seulement consulter le site d’administration. Demandez un compte chauffeur à l’administrateur de votre compagnie."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "यह अकाउंट सिर्फ़ एडमिन साइट देख सकता है। अपनी एजेंसी के एडमिन से ड्राइवर अकाउंट माँगें।"
+          }
+        },
+        "ht" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Kont sa a ka gade sit administrasyon an sèlman. Mande administratè konpayi ou a yon kont chofè."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Questo account può solo consultare il sito di amministrazione. Chiedi all'amministratore della tua azienda un account da autista."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "このアカウントは管理サイトの閲覧専用です。事業者の管理者に運転士アカウントを依頼してください。"
+          }
+        },
+        "km" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "គណនីនេះអាចមើលបានតែគេហទំព័រគ្រប់គ្រងប៉ុណ្ណោះ។ សុំគណនីអ្នកបើកបរពីអ្នកគ្រប់គ្រងប្រព័ន្ធនៃក្រុមហ៊ុនអ្នក។"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "이 계정은 관리 사이트를 보기만 할 수 있어요. 회사 관리자에게 기사 계정을 요청하세요."
+          }
+        },
+        "lo" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ບັນຊີນີ້ເບິ່ງໄດ້ແຕ່ເວັບໄຊຜູ້ດູແລເທົ່ານັ້ນ. ຂໍບັນຊີຄົນຂັບຈາກຜູ້ດູແລລະບົບຂອງບໍລິສັດ."
+          }
+        },
+        "om" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Herregni kun marsariitii bulchiinsaa qofa ilaaluu danda'a. Bulchaa dhaabbata keetii herrega konkolaachisaa gaafadhu."
+          }
+        },
+        "pa" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "ਇਹ ਅਕਾਊਂਟ ਸਿਰਫ਼ ਐਡਮਿਨ ਸਾਈਟ ਦੇਖ ਸਕਦਾ ਹੈ। ਆਪਣੀ ਏਜੰਸੀ ਦੇ ਐਡਮਿਨ ਤੋਂ ਡਰਾਈਵਰ ਅਕਾਊਂਟ ਮੰਗੋ।"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "To konto może tylko przeglądać stronę administracyjną. Poproś administratora przewoźnika o konto kierowcy."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Esta conta só pode ver o site de administração. Peça ao administrador da sua empresa uma conta de motorista."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Этот аккаунт может только просматривать сайт администрирования. Попросите у администратора перевозчика аккаунт водителя."
+          }
+        },
+        "sm" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "E na o le vaʻai i le upega tafaʻilagi o pulega e mafai e lenei akauni. Fai i le pule o lau kamupani mo se akauni ʻavetaʻavale."
+          }
+        },
+        "so" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Akoonkan wuxuu kaliya arki karaa bogga maamulka. Ka codso maamulaha shirkaddaada akoon darawalnimo."
+          }
+        },
+        "sw" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Akaunti hii inaweza kutazama tovuti ya usimamizi pekee. Mwombe msimamizi wa shirika lako akaunti ya dereva."
+          }
+        },
+        "ti" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "እዚ ኣካውንት ነቲ ናይ ምምሕዳር ገጽ ምርኣይ ጥራይ እዩ ዝኽእል። ካብ ኣመሓዳሪ ትካልኩም ናይ መራሒ መኪና ኣካውንት ሕተቱ።"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Цей обліковий запис може лише переглядати сайт адміністрування. Попросіть в адміністратора вашого перевізника обліковий запис водія."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Tài khoản này chỉ xem được trang quản trị. Hãy xin quản trị viên của đơn vị vận hành một tài khoản tài xế."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "此账号只能查看管理网站。请向运营单位的管理员申请司机账号。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "這個帳號只能查看管理網站。請向營運單位的管理員申請駕駛帳號。"
           }
         }
       }

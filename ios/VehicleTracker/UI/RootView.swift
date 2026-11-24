@@ -11,7 +11,8 @@ struct RootView: View {
     /// already the right screen, and a relaunch onto Resume never shows
     /// Sign in first.
     private var shown: RootScreen {
-        screen ?? RootScreen.next(phase: session.phase, showing: .signIn, welcomeSeen: welcomeSeen)
+        screen ?? RootScreen.next(phase: session.phase, showing: .signIn, welcomeSeen: welcomeSeen,
+                                  viewerSignedOut: session.viewerSignedOut)
     }
 
     private var welcomeSeen: Bool { session.settings.hasSeen(.welcome) }
@@ -33,11 +34,18 @@ struct RootView: View {
         }
         .animation(.smooth(duration: 0.35), value: shown)
         .onChange(of: session.phase, initial: true) { _, phase in
-            screen = RootScreen.next(phase: phase, showing: shown, welcomeSeen: welcomeSeen)
+            screen = RootScreen.next(phase: phase, showing: shown, welcomeSeen: welcomeSeen,
+                                     viewerSignedOut: session.viewerSignedOut)
         }
         // Skip, or Continue on the welcome's last screen.
         .onChange(of: welcomeSeen) { _, seen in
-            screen = RootScreen.next(phase: session.phase, showing: shown, welcomeSeen: seen)
+            screen = RootScreen.next(phase: session.phase, showing: shown, welcomeSeen: seen,
+                                     viewerSignedOut: session.viewerSignedOut)
+        }
+        // Sign in, on the vehicle screen that told a viewer it can't drive.
+        .onChange(of: session.viewerSignedOut) { _, viewerSignedOut in
+            screen = RootScreen.next(phase: session.phase, showing: shown, welcomeSeen: welcomeSeen,
+                                     viewerSignedOut: viewerSignedOut)
         }
         // Initial too: a launch can come up already in front.
         .onChange(of: scenePhase, initial: true) { _, phase in

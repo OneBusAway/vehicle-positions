@@ -124,6 +124,10 @@ nonisolated enum SignInText {
         String(localized: "Too many tries. Wait a minute, then try again.", comment: "Banner above the sign-in button when the server refused for too many attempts; its window is one minute.")
     }
 
+    static var viewerAccount: String {
+        String(localized: "This account can only view the admin site. Ask your agency's admin for a driver account.", comment: "Banner above the sign-in button when the email and password were right, but the account is a viewer's: it can look at the agency's admin website but not drive, so the app doesn't sign it in.")
+    }
+
     static var useHTTPS: String {
         useHTTPS(in: .main)
     }

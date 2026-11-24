@@ -17,6 +17,9 @@ nonisolated enum SignInFailure: Error, Equatable {
     case unreachable(String)
     /// A 429: the server's one-minute sign-in window is used up.
     case tooManyTries
+    /// The email and password are right, but the account can only view the
+    /// admin site, so it can't drive.
+    case viewerAccount
     /// Plain http to a host other than this phone or the local network
     /// (`ServerURLPolicy`).
     case insecure
@@ -119,6 +122,7 @@ nonisolated struct SignInForm: Equatable {
         case APIError.status(429, _): fail(.tooManyTries)
         case APIError.transport: fail(.unreachable(Self.serverLabel(server)))
         case APIError.insecureURL: fail(.insecure)
+        case TripSessionError.viewerAccount: fail(.viewerAccount)
         default: fail(.serverError)
         }
     }
@@ -167,6 +171,7 @@ nonisolated struct SignInForm: Equatable {
         case .unreachable(let server): SignInBanner(symbol: "icloud.slash.fill", text: SignInText.cannotReach(server))
         case .serverError: SignInBanner(symbol: "exclamationmark.circle.fill", text: SignInText.couldNotSignIn)
         case .tooManyTries: SignInBanner(symbol: "exclamationmark.circle.fill", text: SignInText.tooManyTries)
+        case .viewerAccount: SignInBanner(symbol: "person.crop.circle.fill.badge.xmark", text: SignInText.viewerAccount)
         case .missing, .invalidCredentials, .insecure, nil: nil
         }
     }
