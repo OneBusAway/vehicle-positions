@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	gtfsrt "github.com/OneBusAway/go-gtfs/proto"
 	"github.com/OneBusAway/vehicle-positions/rider"
@@ -653,7 +654,7 @@ func parseListPageParams(w http.ResponseWriter, r *http.Request) (limit, offset 
 // do expensive substring work on an admin endpoint, so q is capped at the
 // same maxFieldLength the write paths already enforce.
 func validateListQuery(q string) error {
-	if len(q) > maxFieldLength {
+	if utf8.RuneCountInString(q) > maxFieldLength {
 		return fmt.Errorf("q must be at most %d characters", maxFieldLength)
 	}
 	return nil

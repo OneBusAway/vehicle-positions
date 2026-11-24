@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sort"
 	"strings"
 	"testing"
@@ -644,12 +645,29 @@ func TestHandleUpsertVehicle_StoreError(t *testing.T) {
 	assert.Contains(t, resp["error"], "failed to save vehicle")
 }
 
+// TestHandleUpsertVehicle_LongestTextFits: the longest label and agency tag fit
+// in the body, even with every character in the longest form JSON has.
+func TestHandleUpsertVehicle_LongestTextFits(t *testing.T) {
+	store := newMockVehicleStore()
+	escaped := strings.Repeat(`\ud83d\ude8c`, maxFieldLength)
+	body := `{"id":"` + strings.Repeat("v", maxVehicleIDLength) + `","label":"` + escaped + `","agency_tag":"` + escaped + `"}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/vehicles", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handleUpsertVehicle(store)(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	saved, err := store.GetVehicle(context.Background(), strings.Repeat("v", maxVehicleIDLength))
+	require.NoError(t, err)
+	assert.Equal(t, strings.Repeat("🚌", maxFieldLength), saved.Label)
+	assert.Equal(t, strings.Repeat("🚌", maxFieldLength), saved.AgencyTag)
+}
+
 func TestHandleUpsertVehicle_BodyTooLarge(t *testing.T) {
 	store := newMockVehicleStore()
 	handler := handleUpsertVehicle(store)
 
-	// Create a body larger than 1KB
-	largeBody := `{"id":"bus-1","label":"` + strings.Repeat("x", 2048) + `"}`
+	largeBody := `{"id":"bus-1","label":"` + strings.Repeat("x", 8<<10) + `"}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/vehicles", strings.NewReader(largeBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -793,6 +811,18 @@ func TestHandleListVehicles_FilterParams(t *testing.T) {
 		{
 			name:       "q one past the maximum length",
 			query:      "?q=" + strings.Repeat("a", maxFieldLength+1),
+			wantStatus: http.StatusBadRequest,
+			wantError:  qError,
+		},
+		{
+			name:       "q at the maximum length in Devanagari",
+			query:      "?q=" + url.QueryEscape(strings.Repeat("ब", maxFieldLength)),
+			wantStatus: http.StatusOK,
+			wantQ:      strings.Repeat("ब", maxFieldLength),
+		},
+		{
+			name:       "q one past the maximum length in Devanagari",
+			query:      "?q=" + url.QueryEscape(strings.Repeat("ब", maxFieldLength+1)),
 			wantStatus: http.StatusBadRequest,
 			wantError:  qError,
 		},

@@ -815,6 +815,7 @@ func TestOpenAPI_ConstraintsMatchCode(t *testing.T) {
 		{vehicleIDSchemaRef, "maxLength", maxVehicleIDLength, "maxVehicleIDLength"},
 		{upsertVehicle + "/label", "maxLength", maxFieldLength, "maxFieldLength"},
 		{upsertVehicle + "/agency_tag", "maxLength", maxFieldLength, "maxFieldLength"},
+		{"#/components/schemas/CreateAPIKeyRequest/properties/name", "maxLength", maxFieldLength, "maxFieldLength"},
 		{historyLimit, "maximum", maxHistoryLimit, "maxHistoryLimit"},
 		{historyLimit, "default", defaultHistoryLimit, "defaultHistoryLimit"},
 		{tripListLimit, "maximum", maxTripListLimit, "maxTripListLimit"},
