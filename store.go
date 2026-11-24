@@ -16,6 +16,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -47,38 +48,44 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 	return &Store{pool: pool, queries: db.New(pool)}, nil
 }
 
+// errDatabaseURL repeats none of DATABASE_URL, as a URL that can't be read has
+// no part that is known not to be the password.
+var errDatabaseURL = errors.New("DATABASE_URL is not a valid URL; special characters in its user name and password must be percent-encoded, such as %2F for / and %40 for @")
+
 // parseDatabaseURL is pgxpool.ParseConfig for DATABASE_URL, with errors that
-// never show a password, as the server logs them. pgx's repeat the whole
-// string, and it hides a password in one only where it can find it: not in the
-// query, and not one that a / ? or # in it cuts short, the start of which then
-// reads as a bad port. The key=value form is refused because Migrate takes
-// only a URL, and names whatever is before its first colon, such as the start
-// of a password, as a driver it does not know.
+// never show a password, as the server logs them. The key=value form is refused
+// because Migrate takes only a URL, and names whatever is before its first
+// colon, such as the start of a password, as a driver it does not know.
 func parseDatabaseURL(databaseURL string) (*pgxpool.Config, error) {
 	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
 		return nil, errors.New("DATABASE_URL must start with postgres:// or postgresql://")
 	}
 	u, err := url.Parse(databaseURL)
 	if err != nil {
-		return nil, errors.New("DATABASE_URL is not a valid URL; special characters in its user name and password must be percent-encoded, such as %2F for /")
+		return nil, errDatabaseURL
+	}
+	// A / ? or # in the user name or password ends the host early, and what was
+	// before it can still read as a host and port: u:123/secret@host is the
+	// database secret@host on the host u. The @ is then left after the host.
+	_, rest, _ := strings.Cut(databaseURL, "://")
+	if end := strings.IndexAny(rest, "/?#"); end >= 0 && strings.Contains(rest[end:], "@") {
+		return nil, errDatabaseURL
 	}
 	config, err := pgxpool.ParseConfig(databaseURL)
-	if err == nil {
-		return config, nil
+	// pgx's error repeats the whole URL, and hides only the password before the
+	// host.
+	var parseErr *pgconn.ParseConfigError
+	if errors.As(err, &parseErr) {
+		parseErr.ConnString = withoutQueryPasswords(*u)
 	}
-	// The reason is the same without the passwords in the query. The one before
-	// the host pgx hides, now that it can find it.
-	if _, shown := pgxpool.ParseConfig(withoutQueryPasswords(*u)); shown != nil {
-		return nil, shown
-	}
-	return nil, errors.New("DATABASE_URL has a password or a setting PostgreSQL's driver can't use")
+	return config, err
 }
 
 // withoutQueryPasswords is u with any password in its query replaced.
 func withoutQueryPasswords(u url.URL) string {
 	query := u.Query()
 	for key := range query {
-		if strings.Contains(key, "password") {
+		if strings.Contains(strings.ToLower(key), "password") {
 			query.Set(key, "xxxxx")
 		}
 	}
