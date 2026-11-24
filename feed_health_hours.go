@@ -79,9 +79,7 @@ func countsOf(row healthHour) healthCounts {
 func (h *feedHealth) tally(hour int64) *hourTally {
 	if hour > h.hour.hour {
 		// Bounded however long the store is away: the oldest hour waiting
-		// gives way, as the minute ring's oldest minute does. A failed save
-		// puts its hours back in front of any that closed during it, so there
-		// can be more than one over.
+		// gives way, as the minute ring's oldest minute does.
 		if over := len(h.closed) - healthWeekHours + 1; over > 0 {
 			slog.Warn("feed health hours dropped before they were saved", "hours", over, "oldest", hourStart(h.closed[0].hour))
 			h.closed = h.closed[over:]
@@ -127,27 +125,34 @@ func (h *feedHealth) restoreHours(ctx context.Context, store healthHourStore) er
 }
 
 // saveClosedHours saves the hours that have closed, closing the hour in
-// progress first when the clock has left it. An hour the store refuses waits
-// for the next call, with the ones after it.
+// progress first when the clock has left it. Each stays in closed, where
+// hourly reads it, until the store has it. An hour the store refuses waits for
+// the next call, with the ones after it.
 func (h *feedHealth) saveClosedHours(ctx context.Context) {
-	h.mu.Lock()
-	h.tally(unixHour(h.now()))
-	closed, store := h.closed, h.store
-	if store == nil {
-		h.mu.Unlock()
-		return
-	}
-	h.closed = nil
-	h.mu.Unlock()
-
-	for i, t := range closed {
-		if err := store.SaveFeedHealthHour(ctx, t.row()); err != nil {
-			slog.Error("feed health hour save failed", "error", err, "hour", hourStart(t.hour), "waiting", len(closed)-i)
-			h.mu.Lock()
-			h.closed = append(closed[i:], h.closed...)
+	h.saving.Lock()
+	defer h.saving.Unlock()
+	for {
+		h.mu.Lock()
+		h.tally(unixHour(h.now()))
+		store, waiting := h.store, len(h.closed)
+		if store == nil || waiting == 0 {
 			h.mu.Unlock()
 			return
 		}
+		t := h.closed[0]
+		h.mu.Unlock()
+
+		if err := store.SaveFeedHealthHour(ctx, t.row()); err != nil {
+			slog.Error("feed health hour save failed", "error", err, "hour", hourStart(t.hour), "waiting", waiting)
+			return
+		}
+		h.mu.Lock()
+		// It gave way to a newer hour if one closed during the save with no
+		// room left.
+		if len(h.closed) > 0 && h.closed[0].hour == t.hour {
+			h.closed = h.closed[1:]
+		}
+		h.mu.Unlock()
 	}
 }
 

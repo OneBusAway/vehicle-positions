@@ -93,6 +93,10 @@ type feedHealth struct {
 	now   func() time.Time
 	since time.Time
 
+	// saving is held while closed hours are saved, so each is saved once. It
+	// is taken before mu, which is not held during a save.
+	saving sync.Mutex
+
 	mu     sync.Mutex
 	ring   [healthWindowMinutes]healthBucket
 	totals healthCounts
