@@ -16,7 +16,8 @@ nonisolated enum ReportingProblem: Sendable, Equatable {
 }
 
 /// Sends fixes to `POST /api/v1/locations`, one at a time, no more often than
-/// the server accepts. A report that fails for want of a connection is kept
+/// the server accepts. A report that fails for want of a connection, or that
+/// the proxy answers for a server that is down (`serverUnreachable`), is kept
 /// for location history, and one batch of those goes after each report that
 /// gets through; any other the server turns down is dropped. A copy of the
 /// Android app's `TripReporter` rules so both clients behave the same.
@@ -26,6 +27,12 @@ final class LocationReporter {
     static let minimumInterval: TimeInterval = 5
     /// Consecutive timestamp rejections before the clock is blamed.
     static let clockSkewThreshold = 3
+    /// What the proxy in front of the server (docs/deployment.md, section 7)
+    /// answers when the server is down or too slow: the server never sends
+    /// these on this endpoint itself. The report is kept, as one that fails
+    /// for want of a connection is: the server didn't take it, or took it
+    /// without the phone hearing so, and the history upload is stored once.
+    static let serverUnreachable: Set<Int> = [502, 503, 504]
 
     private(set) var fixesSent = 0
     private(set) var problem: ReportingProblem = .none
@@ -38,8 +45,8 @@ final class LocationReporter {
     /// Called after every send outcome, so the session can republish its
     /// reporting status without having waited for the POST.
     private let onChange: @MainActor () -> Void
-    /// Where a report that could not be sent for want of a connection is
-    /// kept, and what uploads it. Without one it is dropped.
+    /// Where a report that could not reach the server is kept, and what
+    /// uploads it. Without one it is dropped.
     private let history: HistoryUploader?
     private var lastSentAt: Date?
     private var consecutiveTimestampRejects = 0
@@ -145,6 +152,12 @@ final class LocationReporter {
                 // the trip, so say so rather than stay green.
                 log.warning("location report refused with HTTP \(code): \(message, privacy: .public)")
                 problem = .refused
+            case _ where Self.serverUnreachable.contains(code):
+                log.warning("location report not sent: the proxy answered HTTP \(code) for the server; keeping it for history")
+                problem = .serverError
+                // Kept before the next report can start, as below, so the
+                // queue keeps the order they were taken in.
+                await history?.keep(report)
             default:
                 log.warning("dropping location report after HTTP \(code): \(message, privacy: .public)")
                 problem = .serverError
