@@ -513,6 +513,44 @@ func TestViewer_AuditLogLeavesOutTheAddress(t *testing.T) {
 	assert.NotContains(t, viewer, viewerPagesIP)
 }
 
+// TestViewer_WelcomeHasNoAddButton: a server with no vehicle or no driver
+// opens on the welcome. A viewer sees how far along its steps are, but not
+// the button for the next one, a change it can't make; an admin sees both.
+// TestViewer_PagesHaveNoWriteControls misses the button, as its fixture has
+// vehicles and drivers and the steps link to list pages.
+func TestViewer_WelcomeHasNoAddButton(t *testing.T) {
+	for _, tc := range []struct {
+		vehicles, drivers int
+		step, current     string
+		action            string
+	}{
+		{0, 0, "Step 1 of 4", "/admin/vehicles", "Add vehicles"},
+		{1, 0, "Step 2 of 4", "/admin/users", "Add drivers"},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			_, mux := newOverviewMux(t, tc.vehicles, tc.drivers)
+			current := `<a class="step current" href="` + tc.current + `">`
+
+			admin := serveAs(t, mux, roleAdmin, http.MethodGet, "/admin/dashboard")
+			require.Equal(t, http.StatusOK, admin.Code)
+			assert.Contains(t, admin.Body.String(), current)
+			assert.Contains(t, admin.Body.String(), `<span class="btn btn-primary">`+tc.action+`</span>`)
+			assert.Contains(t, admin.Body.String(), "Four steps. A driver's phone does the rest")
+
+			viewer := serveAs(t, mux, roleViewer, http.MethodGet, "/admin/dashboard")
+			require.Equal(t, http.StatusOK, viewer.Code)
+			body := viewer.Body.String()
+			require.Contains(t, body, "Viewer: can look at every page, can't change anything")
+			require.Contains(t, body, "Get your first vehicle on the map")
+			assert.NotContains(t, body, ">"+tc.action+"<", "a viewer is not offered the change")
+			assert.Contains(t, body, `aria-label="`+tc.step+`"`)
+			assert.Contains(t, body, current, "the step to take next is still marked")
+			assert.Contains(t, body, "An admin takes these four steps. A driver's phone does the rest")
+			assert.NotContains(t, body, "Four steps.")
+		})
+	}
+}
+
 // TestUsersPage_Viewers: the Drivers and users page counts viewers, can show
 // only them, and names the role on a viewer's row.
 func TestUsersPage_Viewers(t *testing.T) {

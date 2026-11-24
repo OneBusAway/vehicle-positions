@@ -5,11 +5,11 @@
 <div style="max-width:1120px">
   <div class="steps-line welcome-line">{{template "step-line" .Line}}<span style="font-weight:500">Step {{.Line.N}} of {{.Line.Of}}</span><span style="flex:1"></span><a class="btn" href="/admin/map">Skip for now</a></div>
   <h2 class="h1 display">Get your first vehicle on the map</h2>
-  <p class="lede welcome-lede">Four steps. A driver's phone does the rest: it reports where the vehicle is, and riders see it coming.</p>
+  <p class="lede welcome-lede">{{if $.Shell.ReadOnly}}An admin takes these four steps.{{else}}Four steps.{{end}} A driver's phone does the rest: it reports where the vehicle is, and riders see it coming.</p>
   <div class="welcome-grid">
     <div class="steps rise">
       {{range .Steps}}
-      <a class="step{{if .Done}} done{{end}}{{if .Action}} current{{end}}" href="{{.URL}}"><span class="step-icon">{{template "icon-lg" .Icon}}</span><span style="min-width:0;flex:1"><span class="step-title">{{.Title}}</span><span class="muted" style="font-size:13px">{{.Text}}</span></span>{{if .Action}}<span class="btn btn-primary">{{.Action}}</span>{{else}}<span class="step-check{{if .Done}} pop{{end}}">{{template "icon-sm" "check"}}{{if .Done}}<span class="sr-only">Done</span>{{end}}</span>{{end}}</a>
+      <a class="step{{if .Done}} done{{end}}{{if .Action}} current{{end}}" href="{{.URL}}"><span class="step-icon">{{template "icon-lg" .Icon}}</span><span style="min-width:0;flex:1"><span class="step-title">{{.Title}}</span><span class="muted" style="font-size:13px">{{.Text}}</span></span>{{if and .Action (not $.Shell.ReadOnly)}}<span class="btn btn-primary">{{.Action}}</span>{{else}}<span class="step-check{{if .Done}} pop{{end}}">{{template "icon-sm" "check"}}{{if .Done}}<span class="sr-only">Done</span>{{end}}</span>{{end}}</a>
       {{end}}
     </div>
     <div class="picture pic waiting" aria-hidden="true">
