@@ -27,6 +27,10 @@ type stopSchedule struct {
 	// departures, both in time order.
 	timetable  []stopWindow
 	timetabled []time.Time
+	// tripRuns and timetableRuns are the runs of trips' windows and the
+	// timetable's, as runsOf lays them out.
+	tripRuns      [][]stopRun
+	timetableRuns []stopRun
 }
 
 // stopWindow is a frequencies.txt row as it reaches a stop, or a frequent
@@ -35,6 +39,60 @@ type stopSchedule struct {
 type stopWindow struct {
 	from, to time.Time
 	headway  time.Duration
+}
+
+// stopRun is the run of windows one of a set's windows is part of: it and
+// those before and after it in an unbroken chain, each ending as the next
+// begins, as a trip's rows and the timetable's spacings can. began is when
+// the run's first window begins, and last is the index of its last window in
+// the set.
+type stopRun struct {
+	began time.Time
+	last  int
+}
+
+// runsOf lays out the run of each of a set's windows once, so takenOver can
+// look them up for every passing it judges. Where two windows end, or begin,
+// at the same time, the first of them in the set is the link. A window that
+// ends as it begins is no link, or a run could chain to itself.
+func runsOf(windows []stopWindow) []stopRun {
+	ending := make(map[int64]int, len(windows))
+	starting := make(map[int64]int, len(windows))
+	for k, w := range windows {
+		if !w.from.Before(w.to) {
+			continue
+		}
+		if _, ok := ending[w.to.UnixNano()]; !ok {
+			ending[w.to.UnixNano()] = k
+		}
+		if _, ok := starting[w.from.UnixNano()]; !ok {
+			starting[w.from.UnixNano()] = k
+		}
+	}
+	runs := make([]stopRun, len(windows))
+	order := make([]int, len(windows))
+	for k := range order {
+		order[k] = k
+	}
+	// The window before one begins before it, so in order of start each
+	// run's start is laid out before the windows that carry it on.
+	slices.SortFunc(order, func(a, b int) int { return windows[a].from.Compare(windows[b].from) })
+	for _, k := range order {
+		runs[k].began = windows[k].from
+		if before, ok := ending[windows[k].from.UnixNano()]; ok {
+			runs[k].began = runs[before].began
+		}
+	}
+	// The window after one ends after it, so from the latest end each run's
+	// last window is laid out before the windows that lead to it.
+	slices.SortFunc(order, func(a, b int) int { return windows[b].to.Compare(windows[a].to) })
+	for _, k := range order {
+		runs[k].last = k
+		if after, ok := starting[windows[k].to.UnixNano()]; ok {
+			runs[k].last = runs[after].last
+		}
+	}
+	return runs
 }
 
 // timeSpan is from up to but not including to.
@@ -83,6 +141,7 @@ func (s *stopSchedule) addTrip(rows []rider.Frequency, dayStart time.Time, offse
 		windows = append(windows, stopWindow{from: dayStart.Add(row.StartTime + offset), to: dayStart.Add(row.EndTime + offset), headway: row.Headway})
 	}
 	s.trips = append(s.trips, windows)
+	s.tripRuns = append(s.tripRuns, runsOf(windows))
 }
 
 // setTimetable sets the stop's timetable: when the direction's timetabled
@@ -123,6 +182,7 @@ func (s *stopSchedule) setTimetable(departures []time.Time) {
 		}
 		s.timetable = append(s.timetable, w)
 	}
+	s.timetableRuns = runsOf(s.timetable)
 }
 
 // timetabledAt reports whether a timetabled trip due to leave the stop at at
@@ -134,9 +194,9 @@ func (s *stopSchedule) timetabledAt(at time.Time) bool {
 }
 
 // due are the sets of windows whose rates add at the stop: each trip's, and
-// the timetable's.
-func (s *stopSchedule) due() [][]stopWindow {
-	return append(slices.Clip(s.trips), s.timetable)
+// the timetable's, and their runs, set for set.
+func (s *stopSchedule) due() ([][]stopWindow, [][]stopRun) {
+	return append(slices.Clip(s.trips), s.timetable), append(slices.Clip(s.tripRuns), s.timetableRuns)
 }
 
 // stretches are the spans of scheduled service at the stop, in time order:
@@ -146,7 +206,8 @@ func (s *stopSchedule) due() [][]stopWindow {
 // morning's last.
 func (s *stopSchedule) stretches() []timeSpan {
 	var spans []timeSpan
-	for _, windows := range s.due() {
+	due, _ := s.due()
+	for _, windows := range due {
 		for _, w := range windows {
 			spans = append(spans, timeSpan{w.from, w.to.Add(w.headway)})
 		}
@@ -183,11 +244,15 @@ func stretchAt(stretches []timeSpan, t time.Time) int {
 // that window (takenOver). It is zero when nothing is due, which no stretch
 // holds, and a second at the least.
 func (s *stopSchedule) gapAt(t time.Time) time.Duration {
-	due := s.due()
-	rate := 0.0
+	due, runs := s.due()
+	found := make([]int, len(due))
 	for i, windows := range due {
-		if w, ok := windowAt(windows, t); ok && !takenOver(due, i, w, t) {
-			rate += 1 / w.headway.Seconds()
+		found[i] = windowAt(windows, t)
+	}
+	rate := 0.0
+	for i, k := range found {
+		if k >= 0 && !takenOver(due, runs, found, i) {
+			rate += 1 / due[i][k].headway.Seconds()
 		}
 	}
 	if rate == 0 {
@@ -196,94 +261,59 @@ func (s *stopSchedule) gapAt(t time.Time) time.Duration {
 	return max(time.Second, time.Duration(math.Round(1/rate))*time.Second)
 }
 
-// takenOver reports whether another set of due has taken over at t from w,
-// the window of due[i] windowAt found for t: one due at t whose run began
-// after the last headway of w's run did, so that at most one of w's runs is
-// due after it began. w's run is its unbroken chain of windows (since and
-// until), so a trip written as back-to-back rows and a frequent timetable,
-// laid out a window a spacing, are measured to the end of their service,
-// not of the window that holds t. A trip's window that ends as another
-// trip's begins is then held no longer, just as a trip's own next row comes
-// before the row that has just ended, so the same service gets the same gap
-// whether a feed writes it as rows of one trip or as one trip a row. Each
-// trip's windows are shifted by its own time to the stop, so where the next
-// trip is quicker to it, its first run is due there before w ends, and w
-// counts no more from that run on, through the next trip's last headway too.
-// A set already running as w's run's last headway began, two patterns
-// sharing the stop, does not take over. Nor does one that began no later
-// than w's run did, when that run is shorter than a headway, so the set due
-// at t that began last always counts.
-func takenOver(due [][]stopWindow, i int, w stopWindow, t time.Time) bool {
-	end := until(due[i], w)
+// takenOver reports whether another set of due has taken over from w, the
+// window of due[i] that windowAt found (found has each set's index, or -1):
+// one due then whose run began after the last headway of w's run did, so
+// that at most one of w's runs is due after it began. w's run is its
+// unbroken chain of windows (runsOf), so a trip written as back-to-back rows
+// and a frequent timetable, laid out a window a spacing, are measured to the
+// end of their service, not of the window that holds the time. A trip's
+// window that ends as another trip's begins is then held no longer, just as
+// a trip's own next row comes before the row that has just ended, so the
+// same service gets the same gap whether a feed writes it as rows of one
+// trip or as one trip a row. Each trip's windows are shifted by its own time
+// to the stop, so where the next trip is quicker to it, its first run is due
+// there before w ends, and w counts no more from that run on, through the
+// next trip's last headway too. A set already running as w's run's last
+// headway began, two patterns sharing the stop, does not take over. Nor does
+// one that began no later than w's run did, when that run is shorter than a
+// headway, so the set due then that began last always counts.
+func takenOver(due [][]stopWindow, runs [][]stopRun, found []int, i int) bool {
+	run := runs[i][found[i]]
+	end := due[i][run.last]
 	last := end.to.Add(-end.headway)
-	if began := since(due[i], w); began.After(last) {
-		last = began
+	if run.began.After(last) {
+		last = run.began
 	}
-	for j, windows := range due {
-		if j == i {
-			continue
-		}
-		if v, ok := windowAt(windows, t); ok && since(windows, v).After(last) {
+	for j, k := range found {
+		if j != i && k >= 0 && runs[j][k].began.After(last) {
 			return true
 		}
 	}
 	return false
 }
 
-// since is when the run of windows that w is part of began: w's start, or
-// that of the earliest window before it in an unbroken chain, each ending as
-// the next begins, as a trip's rows and the timetable's spacings can. A
-// window that ends as it begins is no link, or the walk back would not end.
-func since(windows []stopWindow, w stopWindow) time.Time {
-	from := w.from
-	for {
-		i := slices.IndexFunc(windows, func(v stopWindow) bool { return v.to.Equal(from) && v.from.Before(from) })
-		if i < 0 {
-			return from
-		}
-		from = windows[i].from
-	}
-}
-
-// until is the last window of the run that w is part of: w, or the latest
-// window after it in an unbroken chain, each beginning as the one before
-// ends. A window that ends as it begins is no link, as in since.
-func until(windows []stopWindow, w stopWindow) stopWindow {
-	for {
-		i := slices.IndexFunc(windows, func(v stopWindow) bool { return v.from.Equal(w.to) && v.to.After(w.to) })
-		if i < 0 {
-			return w
-		}
-		w = windows[i]
-	}
-}
-
-// holding is the one of windows that holds t, if any.
-func holding(windows []stopWindow, t time.Time) (stopWindow, bool) {
-	i := slices.IndexFunc(windows, func(w stopWindow) bool {
+// holding is the index of the one of windows that holds t, or -1.
+func holding(windows []stopWindow, t time.Time) int {
+	return slices.IndexFunc(windows, func(w stopWindow) bool {
 		return !t.Before(w.from) && t.Before(w.to)
 	})
-	if i < 0 {
-		return stopWindow{}, false
-	}
-	return windows[i], true
 }
 
-// windowAt is the one of a set's windows that holds t, or else the latest to
-// end of those whose last headway does. A set's windows never overlap:
-// frequencies.txt allows none between a trip's, and a timetable's follow one
-// another. So at most one holds t, but a short window can end inside the
-// last headway of the one before it.
-func windowAt(windows []stopWindow, t time.Time) (stopWindow, bool) {
-	if w, ok := holding(windows, t); ok {
-		return w, true
+// windowAt is the index of the one of a set's windows that holds t, or else
+// of the latest to end of those whose last headway does, or -1. A set's
+// windows never overlap: frequencies.txt allows none between a trip's, and a
+// timetable's follow one another. So at most one holds t, but a short window
+// can end inside the last headway of the one before it.
+func windowAt(windows []stopWindow, t time.Time) int {
+	if k := holding(windows, t); k >= 0 {
+		return k
 	}
-	var last stopWindow
-	found := false
-	for _, w := range windows {
-		if !t.Before(w.to) && t.Before(w.to.Add(w.headway)) && (!found || w.to.After(last.to)) {
-			last, found = w, true
+	found := -1
+	for k, w := range windows {
+		if !t.Before(w.to) && t.Before(w.to.Add(w.headway)) && (found < 0 || w.to.After(windows[found].to)) {
+			found = k
 		}
 	}
-	return last, found
+	return found
 }
