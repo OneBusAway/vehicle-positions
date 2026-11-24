@@ -236,7 +236,7 @@ func BuildIndex(static *gtfs.Static, source string, loadedAt time.Time) (*Index,
 	if skippedShapeless > 0 || skippedNoStopTimes > 0 {
 		// A skipped trip is one no driver can pick, so this is worth an
 		// operator's attention, not just a line in the INFO stream.
-		slog.Warn("rider: skipped unusable GTFS trips", "source", source,
+		slog.Warn("rider: skipped unusable GTFS trips", "source", ShownGTFSSource(source),
 			"no_usable_shape", skippedShapeless, "no_stop_times", skippedNoStopTimes, "indexed", ix.stats.Trips)
 	}
 	return ix, nil

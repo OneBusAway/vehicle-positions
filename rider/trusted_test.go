@@ -169,6 +169,26 @@ func TestTrustedFeed_ErrorLeavesOutTheURL(t *testing.T) {
 	}
 }
 
+// A poll is logged every time it fails, so an address with its key in it would
+// be too. What is logged still says which feed failed and why.
+func TestTrustedFeed_LogLeavesOutTheURL(t *testing.T) {
+	feeds := append(failingFeeds(t),
+		failingFeed{"no scheme", "secret:secret@feed.example/feed", "not a valid URL", "unsupported protocol scheme"})
+	for _, feed := range feeds {
+		t.Run(feed.name, func(t *testing.T) {
+			logs := captureLogs(t)
+			f := NewTrustedFeed([]string{feed.address}, http.DefaultClient, time.Minute)
+			f.Poll(context.Background())
+
+			assert.Contains(t, logs.String(), "trusted feed poll failed")
+			assert.Contains(t, logs.String(), feed.shown)
+			assert.Contains(t, logs.String(), feed.reason)
+			assert.NotContains(t, logs.String(), "secret")
+			assert.NotContains(t, f.Health()[0].LastError, "secret")
+		})
+	}
+}
+
 func TestTrustedFeed_Unconfigured(t *testing.T) {
 	f := NewTrustedFeed(nil, http.DefaultClient, time.Minute)
 	assert.False(t, f.Configured())

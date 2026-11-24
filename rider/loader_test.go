@@ -78,6 +78,49 @@ func TestLoadIndex_RejectsFeedWithNoUsableTrips(t *testing.T) {
 	assert.Same(t, first, r.Current(), "an empty schedule never replaces a populated one")
 }
 
+// The startup and the refresh log what LoadIndex returns, so its errors name
+// the feed only as it is shown.
+func TestLoadIndex_ErrorLeavesOutTheURL(t *testing.T) {
+	files := fixtureFiles(fixtureTimezone, 1)
+	for i := range files {
+		if files[i].name == "stop_times.txt" {
+			files[i].body = "trip_id,arrival_time,departure_time,stop_id,stop_sequence,shape_dist_traveled\n"
+		}
+	}
+	noTrips := zipFixtureFiles(t, files)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/no-trips.zip" {
+			_, _ = w.Write(noTrips)
+			return
+		}
+		_, _ = w.Write([]byte("not a zip"))
+	}))
+	defer srv.Close()
+
+	feeds := append(failingFeeds(t),
+		failingFeed{"no usable trips", withCredentials(srv.URL + "/no-trips.zip"), srv.URL + "/no-trips.zip", "no usable trips"},
+		failingFeed{"not a zip", withCredentials(srv.URL + "/bad.zip"), srv.URL + "/bad.zip", "not a valid zip file"},
+		// Read as a path, being neither http:// nor https://.
+		failingFeed{"upper case scheme", "HTTPS://secret:secret@feed.example/gtfs.zip?api_key=secret", "https://feed.example/gtfs.zip", "no such file"},
+	)
+	for _, feed := range feeds {
+		t.Run(feed.name, func(t *testing.T) {
+			_, err := LoadIndex(context.Background(), feed.address, http.DefaultClient, fixtureLoadedAt)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), feed.shown)
+			assert.Contains(t, err.Error(), feed.reason)
+			assert.NotContains(t, err.Error(), "secret")
+		})
+	}
+}
+
+func TestLoadIndex_ErrorNamesTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.zip")
+	_, err := LoadIndex(context.Background(), path, nil, fixtureLoadedAt)
+	assert.ErrorIs(t, err, os.ErrNotExist)
+	assert.EqualError(t, err, `rider: read GTFS file "`+path+`": no such file or directory`)
+}
+
 func TestRefresher_SwapsOnSuccessKeepsOnFailure(t *testing.T) {
 	first := fixtureIndex(t)
 	var calls atomic.Int32

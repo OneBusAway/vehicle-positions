@@ -128,29 +128,3 @@ func TestRiderStatus_LeavesOutFeedCredentials(t *testing.T) {
 		}
 	}
 }
-
-func TestShownFeedURL(t *testing.T) {
-	for _, tc := range []struct{ name, url, want string }{
-		{"nothing to leave out", "https://feed.example/vehicles.pb", "https://feed.example/vehicles.pb"},
-		{"a key in the query", "https://feed.example/vehicles.pb?api_key=k", "https://feed.example/vehicles.pb"},
-		{"an empty query", "https://feed.example/vehicles.pb?", "https://feed.example/vehicles.pb"},
-		{"a user name and password", "https://u:p@feed.example/vehicles.pb", "https://feed.example/vehicles.pb"},
-		{"a key as the user name", "https://k@feed.example/vehicles.pb", "https://feed.example/vehicles.pb"},
-		{"a fragment", "https://feed.example/vehicles.pb#k", "https://feed.example/vehicles.pb"},
-		{"upper case scheme", "HTTPS://feed.example/vehicles.pb?api_key=k", "https://feed.example/vehicles.pb"},
-		{"no scheme", "k@feed.example/vehicles.pb", "not a valid URL"},
-		{"no slashes after the scheme", "https:k@feed.example/vehicles.pb", "not a valid URL"},
-		{"not a URL", "https://feed.example/%zz?api_key=k", "not a valid URL"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, shownFeedURL(tc.url))
-		})
-	}
-}
-
-func TestShownGTFSSource(t *testing.T) {
-	assert.Equal(t, "https://gtfs.example/feed.zip", shownGTFSSource("https://u:p@gtfs.example/feed.zip?key=k"))
-	assert.Equal(t, "http://gtfs.example/feed.zip", shownGTFSSource("http://gtfs.example/feed.zip?key=k"))
-	// A local path is shown as it is, even one that would not parse as a URL.
-	assert.Equal(t, "/srv/gtfs/100% feed?.zip", shownGTFSSource("/srv/gtfs/100% feed?.zip"))
-}

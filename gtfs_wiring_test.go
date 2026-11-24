@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -103,6 +104,60 @@ func TestNewGTFSRuntime_IgnoresCacheOfAnotherSource(t *testing.T) {
 	_, err = newGTFSRuntime(context.Background(), "does/not/exist.zip", time.Hour, cache)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the cached copy is of https://old.example/gtfs.zip")
+}
+
+// An agency that has just been given a new key has a cached copy of the same
+// feed under its old one, and neither key belongs in the startup log.
+func TestNewGTFSRuntime_IgnoresCacheOfAnotherKey(t *testing.T) {
+	body, err := os.ReadFile("rider/testdata/fixture.zip")
+	require.NoError(t, err)
+	down := httptest.NewServer(http.NotFoundHandler())
+	defer down.Close()
+	source := down.URL + "/gtfs.zip?api_key="
+	cache := &fakeGTFSCache{feed: &CachedGTFSFeed{Source: source + "old-secret", Body: body}}
+
+	_, err = newGTFSRuntime(context.Background(), source+"new-secret", time.Hour, cache)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "the cached copy is of "+down.URL+"/gtfs.zip, but its address differs in a part that is not shown")
+	assert.NotContains(t, err.Error(), "secret")
+
+	cache.feed.Source = "https://agency:old-secret@old.example/gtfs.zip?api_key=old-secret"
+	_, err = newGTFSRuntime(context.Background(), source+"new-secret", time.Hour, cache)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "the cached copy is of https://old.example/gtfs.zip, not "+down.URL+"/gtfs.zip")
+	assert.NotContains(t, err.Error(), "secret")
+}
+
+// The schedule is logged by the address it is shown by, whether it loads or
+// the server starts on the cached copy.
+func TestNewGTFSRuntime_LogLeavesOutCredentials(t *testing.T) {
+	body, err := os.ReadFile("rider/testdata/fixture.zip")
+	require.NoError(t, err)
+	var down atomic.Bool
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if down.Load() {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write(body)
+	}))
+	defer feed.Close()
+	source := strings.Replace(feed.URL, "://", "://secret:secret@", 1) + "/gtfs.zip?api_key=secret#secret"
+	cache := &fakeGTFSCache{}
+	logs := captureLogs(t)
+
+	rt, err := newGTFSRuntime(context.Background(), source, time.Hour, cache)
+	require.NoError(t, err)
+	rt.Stop()
+	assert.Contains(t, logs.String(), `msg="gtfs: loaded schedule" source=`+feed.URL+"/gtfs.zip ")
+
+	down.Store(true)
+	rt, err = newGTFSRuntime(context.Background(), source, time.Hour, cache)
+	require.NoError(t, err)
+	rt.Stop()
+	assert.Contains(t, logs.String(), `starting on the cached copy" source=`+feed.URL+"/gtfs.zip ")
+	assert.Contains(t, logs.String(), "status 404")
+	assert.NotContains(t, logs.String(), "secret")
 }
 
 func TestNewGTFSRuntime_FailsWithNoCachedCopy(t *testing.T) {

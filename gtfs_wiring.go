@@ -70,11 +70,11 @@ func newGTFSRuntime(ctx context.Context, source string, refresh time.Duration, c
 			return nil, fmt.Errorf("%w (and no cached copy to fall back on: %v)", err, cacheErr)
 		}
 		slog.Warn("gtfs: could not load the schedule, starting on the cached copy",
-			"source", source, "cached_at", cached.Stats().LoadedAt, "error", err)
+			"source", rider.ShownGTFSSource(source), "cached_at", cached.Stats().LoadedAt, "error", err)
 		index = cached
 	}
 	stats := index.Stats()
-	slog.Info("gtfs: loaded schedule", "source", source, "routes", stats.Routes, "trips", stats.Trips,
+	slog.Info("gtfs: loaded schedule", "source", rider.ShownGTFSSource(source), "routes", stats.Routes, "trips", stats.Trips,
 		"shapes", stats.Shapes, "stop_shapes", stats.StopShapes, "timezone", index.Timezone().String())
 
 	refresher := rider.NewRefresher(index, load)
@@ -101,7 +101,11 @@ func loadCachedGTFS(ctx context.Context, cache gtfsFeedCache, source string) (*r
 		return nil, err
 	}
 	if feed.Source != source {
-		return nil, fmt.Errorf("the cached copy is of %s, not %s", feed.Source, source)
+		cached, configured := rider.ShownGTFSSource(feed.Source), rider.ShownGTFSSource(source)
+		if cached == configured {
+			return nil, fmt.Errorf("the cached copy is of %s, but its address differs in a part that is not shown, such as a key", cached)
+		}
+		return nil, fmt.Errorf("the cached copy is of %s, not %s", cached, configured)
 	}
 	return rider.IndexFromBytes(feed.Body, source, feed.FetchedAt)
 }

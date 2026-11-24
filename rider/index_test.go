@@ -425,6 +425,18 @@ func TestBuildIndex_ShortNameAndBlockID(t *testing.T) {
 	}
 }
 
+func TestBuildIndex_LogLeavesOutTheURL(t *testing.T) {
+	logs := captureLogs(t)
+	static := fixtureStatic(t, fixtureTimezone)
+	static.Trips[0].StopTimes = nil
+	_, err := BuildIndex(static, withCredentials("https://gtfs.example/feed.zip"), fixtureLoadedAt)
+	require.NoError(t, err)
+
+	assert.Contains(t, logs.String(), "skipped unusable GTFS trips")
+	assert.Contains(t, logs.String(), "source=https://gtfs.example/feed.zip ")
+	assert.NotContains(t, logs.String(), "secret")
+}
+
 func TestBuildIndex_FrequencyBased(t *testing.T) {
 	files := append(fixtureFiles(fixtureTimezone, 1), fixtureFile{"frequencies.txt",
 		"trip_id,start_time,end_time,headway_secs,exact_times\n" +
