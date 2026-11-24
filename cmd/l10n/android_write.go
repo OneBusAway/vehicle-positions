@@ -17,6 +17,25 @@ var (
 	anyTag      = regexp.MustCompile(`^[a-z]{2,3}(?:-[A-Za-z0-9]+)*$`)
 )
 
+// canonicalTag is tag in the case BCP 47 writes it: the language in lower
+// case, a four-letter script in title case and a two-letter region in
+// capitals, as in pt-BR and zh-Hans. Tags are case-insensitive, so pt-br is
+// the same language, but the app's folders, the glossary's columns, String
+// Catalogs and Xcode's .xliff files all name it in this case. A subtag after
+// a singleton, such as x for private use, is neither a script nor a region.
+func canonicalTag(tag string) string {
+	subtags := strings.Split(strings.ToLower(tag), "-")
+	for i := 1; i < len(subtags) && len(subtags[i]) > 1; i++ {
+		switch s := subtags[i]; len(s) {
+		case 2:
+			subtags[i] = strings.ToUpper(s)
+		case 4:
+			subtags[i] = strings.ToUpper(s[:1]) + s[1:]
+		}
+	}
+	return strings.Join(subtags, "-")
+}
+
 // valuesDirFor is the folder a language's strings go in: values-hi,
 // values-fil, values-pt-rBR, or values-b+zh+Hans for a tag Android's older
 // qualifiers can't write. The older qualifiers take a two- or three-letter

@@ -103,7 +103,7 @@ func runExportCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	lang := fs.Arg(0)
+	lang := canonicalTag(fs.Arg(0))
 	if *out == "" {
 		*out = lang + ".csv"
 	}
@@ -138,7 +138,7 @@ func runImportCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	refused, changed, err := importSheet(*root, *xliff, fs.Arg(0), fs.Arg(1), *draft)
+	refused, changed, err := importSheet(*root, *xliff, canonicalTag(fs.Arg(0)), fs.Arg(1), *draft)
 	if err != nil {
 		fmt.Fprintln(stderr, "l10n:", err)
 		return 2
