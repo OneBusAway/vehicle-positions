@@ -1100,12 +1100,13 @@ func (f *fakeUserStore) CountActiveUsersByRole(_ context.Context, role string) (
 
 // fakeAssignmentStore is an in-memory double implementing
 // AssignmentCreator/Deleter/ListerByUser, keyed by user ID then vehicle ID.
-// missingVehicle lets a test mark specific vehicle IDs as nonexistent, so
-// CreateAssignment can exercise the same ErrVehicleNotFoundFK path the real
-// store reports on an FK violation.
+// missingVehicle and missingUser let a test mark specific IDs as nonexistent,
+// so CreateAssignment can exercise the same ErrVehicleNotFoundFK and
+// ErrUserNotFoundFK paths the real store reports on an FK violation.
 type fakeAssignmentStore struct {
 	byUser         map[int64]map[string]bool
 	missingVehicle map[string]bool
+	missingUser    map[int64]bool
 	deleteErr      error // returned by DeleteAssignment in place of deleting
 
 	// listCalls counts ListAssignmentsByUser calls, so the users page's
@@ -1115,16 +1116,20 @@ type fakeAssignmentStore struct {
 }
 
 func newFakeAssignmentStore() *fakeAssignmentStore {
-	return &fakeAssignmentStore{byUser: map[int64]map[string]bool{}, missingVehicle: map[string]bool{}}
+	return &fakeAssignmentStore{byUser: map[int64]map[string]bool{}, missingVehicle: map[string]bool{}, missingUser: map[int64]bool{}}
 }
 
 // CreateAssignment mirrors the real store's constraint behavior: a
 // duplicate (userID, vehicleID) pair reports ErrAssignmentExists (the real
-// store's unique-violation mapping) and a vehicleID marked missing reports
-// ErrVehicleNotFoundFK (the real store's FK-violation mapping).
+// store's unique-violation mapping), and a vehicleID or userID marked missing
+// reports ErrVehicleNotFoundFK or ErrUserNotFoundFK (the real store's
+// FK-violation mapping).
 func (f *fakeAssignmentStore) CreateAssignment(_ context.Context, userID int64, vehicleID string) (*AssignmentResponse, error) {
 	if f.missingVehicle[vehicleID] {
 		return nil, ErrVehicleNotFoundFK
+	}
+	if f.missingUser[userID] {
+		return nil, ErrUserNotFoundFK
 	}
 	if f.byUser[userID] == nil {
 		f.byUser[userID] = map[string]bool{}
@@ -1716,6 +1721,24 @@ func TestUserAssignVehicle_UnknownVehicle(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.False(t, assignments.byUser[1]["ghost-bus"])
+}
+
+// TestUserAssignVehicle_DeletedAccount verifies that assigning a vehicle to an
+// account deleted since its page was loaded 404s rather than surfacing a raw
+// 500.
+func TestUserAssignVehicle_DeletedAccount(t *testing.T) {
+	ui := newTestAdminUI(t)
+	assignments := newFakeAssignmentStore()
+	assignments.missingUser[7] = true
+	wireFakeUserStore(ui, newFakeUserStore(), assignments)
+	wireFakeVehicleStore(ui, newFakeVehicleStore(VehicleResponse{ID: "bus-1", Active: true}))
+	mux := http.NewServeMux()
+	registerAdminUI(mux, ui)
+
+	w := postAdminForm(t, mux, "/admin/users/7/vehicles", url.Values{"vehicle_id": {"bus-1"}}.Encode())
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Empty(t, assignments.byUser[7])
 }
 
 // TestTripsPageRendersRealTrips verifies the trips table renders a seeded
