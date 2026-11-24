@@ -151,15 +151,15 @@ func TestFeedHealthHours_HoursWaitingToBeSavedAreBounded(t *testing.T) {
 	assert.Equal(t, unixHour(healthTestStart)+4, h.closed[0].hour, "the oldest go first")
 }
 
-func TestFeedHealthHours_HoursPutBackByAFailedSaveAreBounded(t *testing.T) {
+func TestFeedHealthHours_HoursKeptByAFailedSaveAreBounded(t *testing.T) {
 	clock := newHealthTestClock(healthTestStart)
 	store := newFakeHourStore()
 	store.failSaves(errors.New("connection refused"))
 	h := newStoredFeedHealth(t, clock, store)
 	ctx := context.Background()
 
-	// The save fails each time, with every hour put back, for longer than the
-	// cap holds.
+	// The save fails each time, with every hour kept, for longer than the cap
+	// holds.
 	for range healthWeekHours + 30 {
 		h.record(healthReports, http.StatusCreated)
 		clock.advance(time.Hour)
@@ -328,6 +328,106 @@ func TestFeedHealthHours_ClosedHoursNotYetSavedAreListed(t *testing.T) {
 	assert.Empty(t, store.saved())
 	assert.Equal(t, reportOutcomes{Accepted: 1}, hours[healthDayHours-2].Reports, "the closed hour shows before it is saved")
 	assert.Equal(t, healthHour{Hour: healthTestHour.Add(time.Hour)}, hours[healthDayHours-1])
+}
+
+// heldHourStore is a fakeHourStore whose saves wait for release. saving gets
+// each hour as its save starts.
+type heldHourStore struct {
+	*fakeHourStore
+	saving  chan time.Time
+	release chan struct{}
+}
+
+func newHeldHourStore() *heldHourStore {
+	return &heldHourStore{fakeHourStore: newFakeHourStore(), saving: make(chan time.Time, 1), release: make(chan struct{})}
+}
+
+func (s *heldHourStore) SaveFeedHealthHour(ctx context.Context, hour healthHour) error {
+	s.saving <- hour.Hour
+	<-s.release
+	return s.fakeHourStore.SaveFeedHealthHour(ctx, hour)
+}
+
+// TestFeedHealthHours_AnHourBeingSavedIsListed: an hour is in memory until the
+// store has it, so a slow save doesn't show it as zeros.
+func TestFeedHealthHours_AnHourBeingSavedIsListed(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	store := newHeldHourStore()
+	h := newStoredFeedHealth(t, clock, store)
+	ctx := context.Background()
+
+	for range 2 {
+		h.record(healthReports, http.StatusCreated)
+		clock.advance(time.Hour)
+	}
+	saved := make(chan struct{})
+	go func() { h.saveClosedHours(ctx); close(saved) }()
+	listed := func() []reportOutcomes {
+		hours, err := h.hourly(ctx, 1)
+		require.NoError(t, err)
+		return []reportOutcomes{hours[healthDayHours-3].Reports, hours[healthDayHours-2].Reports}
+	}
+	both := []reportOutcomes{{Accepted: 1}, {Accepted: 1}}
+
+	for _, hour := range []time.Time{healthTestHour, healthTestHour.Add(time.Hour)} {
+		require.Equal(t, hour, <-store.saving)
+		assert.Equal(t, both, listed(), "while %s is saved", hour)
+		store.release <- struct{}{}
+	}
+	<-saved
+	assert.Equal(t, both, listed(), "once both are saved")
+	assert.Len(t, store.saved(), 2, "each hour is saved once")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	assert.Empty(t, h.closed, "a saved hour leaves memory")
+}
+
+// TestFeedHealthHours_SavesWaitForEachOther: a second save waits for the first
+// and finds its hour gone, rather than saving it again.
+func TestFeedHealthHours_SavesWaitForEachOther(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	store := newHeldHourStore()
+	h := newStoredFeedHealth(t, clock, store)
+	h.record(healthReports, http.StatusCreated)
+	clock.advance(time.Hour)
+
+	var wg sync.WaitGroup
+	wg.Go(func() { h.saveClosedHours(context.Background()) })
+	require.Equal(t, healthTestHour, <-store.saving)
+	wg.Go(func() { h.saveClosedHours(context.Background()) })
+	assert.Never(t, func() bool { return len(store.saving) > 0 }, 50*time.Millisecond, time.Millisecond, "the hour is being saved already")
+	close(store.release)
+	wg.Wait()
+	assert.Len(t, store.saved(), 1)
+}
+
+// TestFeedHealthHours_AnHourThatGaveWayDuringItsSave: hours that close during a
+// save with no room left push the one being saved out, and saving it then
+// takes no other hour with it.
+func TestFeedHealthHours_AnHourThatGaveWayDuringItsSave(t *testing.T) {
+	clock := newHealthTestClock(healthTestStart)
+	store := newHeldHourStore()
+	h := newStoredFeedHealth(t, clock, store)
+
+	for range healthWeekHours {
+		h.record(healthReports, http.StatusCreated)
+		clock.advance(time.Hour)
+	}
+	saved := make(chan struct{})
+	go func() { h.saveClosedHours(context.Background()); close(saved) }()
+	require.Equal(t, healthTestHour, <-store.saving)
+	h.record(healthReports, http.StatusCreated)
+	clock.advance(time.Hour)
+	h.record(healthReports, http.StatusCreated)
+	store.release <- struct{}{}
+
+	require.Equal(t, healthTestHour.Add(time.Hour), <-store.saving, "the next hour is still there to save")
+	close(store.release)
+	for range healthWeekHours - 1 {
+		<-store.saving
+	}
+	<-saved
+	assert.Len(t, store.saved(), healthWeekHours+1, "every hour is saved, the one that gave way too")
 }
 
 func TestFeedHealthHours_AStoreErrorIsReturned(t *testing.T) {
