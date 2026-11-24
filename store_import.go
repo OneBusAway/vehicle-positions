@@ -158,6 +158,10 @@ func wasValue(v string) string {
 // transaction. Every row was validated before the call, and a vehicle row has
 // no reason to fail that only the database knows, so a row error here means
 // another admin changed the same vehicle meanwhile, and nothing is written.
+//
+// The vehicles are written in id order, not the file's, so two imports of the
+// same vehicles queue behind each other instead of deadlocking. A driver import
+// locks its vehicles in that order too (vehicleProblems).
 func (s *Store) ImportVehicles(ctx context.Context, preview importPreview, rows []vehicleImportRow) ([]importOutcome, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -173,7 +177,13 @@ func (s *Store) ImportVehicles(ctx context.Context, preview importPreview, rows 
 	if err != nil {
 		return nil, err
 	}
-	for i, row := range rows {
+	order := make([]int, len(rows))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(rows[a].ID, rows[b].ID) })
+	for _, i := range order {
+		row := rows[i]
 		switch outcomes[i].Status {
 		case importNew:
 			// createVehicle and updateVehicleInfo are the vehicle forms'

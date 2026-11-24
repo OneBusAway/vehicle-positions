@@ -170,11 +170,11 @@ func TestStore_ImportVehicles_AllOrNothing(t *testing.T) {
 	rows := []vehicleImportRow{
 		{Line: 2, ID: "imp-a", Label: "A"},
 		{Line: 3, ID: "imp-old", Label: "Changed"},
-		{Line: 4, ID: "imp-last", Label: "Last"},
+		{Line: 4, ID: "imp-z-last", Label: "Last"},
 	}
 
 	t.Run("the last write fails", func(t *testing.T) {
-		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-last'", `RAISE EXCEPTION 'test failure';`)
+		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-z-last'", `RAISE EXCEPTION 'test failure';`)
 		_, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
 		require.Error(t, err)
 		vehicles, _, _ := countImportRows(t, store)
@@ -187,7 +187,7 @@ func TestStore_ImportVehicles_AllOrNothing(t *testing.T) {
 	t.Run("the last vehicle was created meanwhile", func(t *testing.T) {
 		// The insert skips the row, as ON CONFLICT DO NOTHING does when
 		// another admin created the id after the plan read it.
-		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-last'", `RETURN NULL;`)
+		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'imp-z-last'", `RETURN NULL;`)
 		got, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
 		require.NoError(t, err)
 		assert.Equal(t, importOutcome{Status: importError, Reason: "vehicle id already exists"}, got[2])
@@ -206,6 +206,193 @@ func TestStore_ImportVehicles_AllOrNothing(t *testing.T) {
 		vehicles, _, _ := countImportRows(t, store)
 		assert.Equal(t, 1, vehicles, "the vehicle before it isn't created")
 	})
+}
+
+// TestStore_ImportVehicles_WritesInIDOrder: an import writes its vehicles in id
+// order, which the audit log shows, and answers in the file's. Ids that differ
+// only in case are two vehicles.
+func TestStore_ImportVehicles_WritesInIDOrder(t *testing.T) {
+	store := newImportTestStore(t)
+	ctx := context.Background()
+	addImportVehicle(t, store, "imp-off", "Off", false)
+	addImportVehicle(t, store, "imp-Bus", "Upper", true)
+	addImportVehicle(t, store, "imp-same", "Same", true)
+	rows := []vehicleImportRow{
+		{Line: 2, ID: "imp-off", Label: "Off 2", AgencyTag: "north"},
+		{Line: 3, ID: "imp-bus", Label: "Lower"},
+		{Line: 4, ID: "imp-same", Label: "Same"},
+		{Line: 5, ID: "imp-Bus", Label: "Upper 2"},
+		{Line: 6, ID: "imp-a", Label: "A", AgencyTag: "south"},
+	}
+	want := []importOutcome{
+		{Status: importUpdate, Changes: []string{"label was Off", "agency tag was empty"}, Note: "stays deactivated"},
+		{Status: importNew},
+		{Status: importUnchanged},
+		{Status: importUpdate, Changes: []string{"label was Upper"}},
+		{Status: importNew},
+	}
+	mark := lastAuditID(t, store)
+
+	got, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+	for _, row := range rows {
+		v, err := store.GetVehicle(ctx, row.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{row.Label, row.AgencyTag}, []string{v.Label, v.AgencyTag}, row.ID)
+		assert.Equal(t, row.ID != "imp-off", v.Active, row.ID)
+	}
+
+	audited := auditRowsAfter(t, store, mark)
+	wantAudit := []wantAuditRow{
+		{auditVehicle, "imp-Bus", auditUpdate, `{"label":"Upper","agency_tag":"","active":true}`, `{"label":"Upper 2","agency_tag":"","active":true}`},
+		{auditVehicle, "imp-a", auditCreate, "", `{"label":"A","agency_tag":"south","active":true}`},
+		{auditVehicle, "imp-bus", auditCreate, "", `{"label":"Lower","agency_tag":"","active":true}`},
+		{auditVehicle, "imp-off", auditUpdate, `{"label":"Off","agency_tag":"","active":false}`, `{"label":"Off 2","agency_tag":"north","active":false}`},
+	}
+	require.Len(t, audited, len(wantAudit), "the unchanged vehicle has no row")
+	for i, w := range wantAudit {
+		a := audited[i]
+		assert.Equal(t, []string{w.ObjectType, w.ObjectID, w.Action}, []string{a.ObjectType, a.ObjectID, a.Action}, "row %d", i)
+		assertAuditJSON(t, w.Before, a.Before, "before")
+		assertAuditJSON(t, w.After, a.After, "after")
+	}
+}
+
+// importResult is what an import running beside another answered.
+type importResult struct {
+	outcomes []importOutcome
+	err      error
+}
+
+// TestStore_ImportVehicles_OppositeOrdersQueue: two imports that list the same
+// vehicles in opposite orders queue behind each other. Written in file order,
+// each would hold its first vehicle while it waited for the other's, and
+// Postgres would abort one of them.
+func TestStore_ImportVehicles_OppositeOrdersQueue(t *testing.T) {
+	const exists = "vehicle id already exists"
+	tests := []struct {
+		name string
+		// The vehicles that exist before the imports.
+		existing []string
+		// What the second import's rows for imp-v2, the gate and imp-v1 get,
+		// and which import's labels are left.
+		second []importStatus
+		reason string
+		label  string
+	}{
+		{"vehicles both update", []string{"imp-v1", "imp-v2"}, []importStatus{importUpdate, importUpdate, importUpdate}, "", "second"},
+		{"vehicles both create", nil, []importStatus{importNew, importUpdate, importError}, exists, "first"},
+		{"one of each", []string{"imp-v1"}, []importStatus{importError, importUpdate, importUpdate}, exists, "first"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newImportTestStore(t)
+			for _, id := range append([]string{"imp-v1-gate"}, tt.existing...) {
+				addImportVehicle(t, store, id, "old", true)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			run := func(label string, ids ...string) chan importResult {
+				rows := make([]vehicleImportRow, len(ids))
+				for i, id := range ids {
+					rows[i] = vehicleImportRow{Line: i + 2, ID: id, Label: label}
+				}
+				done := make(chan importResult, 1)
+				go func() {
+					got, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
+					done <- importResult{got, err}
+				}()
+				return done
+			}
+
+			// The gate, which comes between the two by id, is held, so the
+			// first import stops there holding imp-v1.
+			holder, release := holdVehicle(t, store, "imp-v1-gate")
+			first := run("first", "imp-v1", "imp-v1-gate", "imp-v2")
+			require.Eventually(t, func() bool { return len(first) == 1 || blockedBehind(store, holder, 1) == 1 },
+				5*time.Second, 10*time.Millisecond, "the first import neither finished nor waited")
+			second := run("second", "imp-v2", "imp-v1-gate", "imp-v1")
+			// The second waits for imp-v1, or at the gate too.
+			require.Eventually(t, func() bool {
+				return len(second) == 1 || blockedBehind(store, holder, 1)+blockedBehind(store, holder, 2) >= 2
+			}, 5*time.Second, 10*time.Millisecond, "the second import neither finished nor waited")
+			release()
+
+			got := <-first
+			require.NoError(t, got.err)
+			assert.False(t, importFailed(got.outcomes), "%+v", got.outcomes)
+			got = <-second
+			require.NoError(t, got.err)
+			assert.Equal(t, tt.second, statuses(got.outcomes))
+			for _, o := range got.outcomes {
+				if o.Status == importError {
+					assert.Equal(t, tt.reason, o.Reason)
+				}
+			}
+			for _, id := range []string{"imp-v1", "imp-v1-gate", "imp-v2"} {
+				v, err := store.GetVehicle(ctx, id)
+				require.NoError(t, err)
+				assert.Equal(t, tt.label, v.Label, id)
+			}
+		})
+	}
+}
+
+// TestStore_ImportVehicles_QueuesWithADriverImport: a driver import locks the
+// vehicles it assigns in id order, and so does a vehicle import that lists them
+// in another.
+func TestStore_ImportVehicles_QueuesWithADriverImport(t *testing.T) {
+	store := newImportTestStore(t)
+	for _, id := range []string{"imp-v1", "imp-v1-gate", "imp-v2"} {
+		addImportVehicle(t, store, id, "old", true)
+	}
+	ana := addImportUser(t, store, "Ana", "imp-ana@example.org", roleDriver)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Another confirm of its preview, not yet committed, stops the driver
+	// import as its transaction opens, before it locks a vehicle.
+	preview := newTestPreview(t)
+	confirm, err := dedicatedConn(t).Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = confirm.Rollback(context.Background()) })
+	_, err = confirm.Exec(ctx, "INSERT INTO import_confirmations (signature, expires_at) VALUES ($1, $2)", preview.Signature, preview.Expires)
+	require.NoError(t, err)
+	var confirmPID int
+	require.NoError(t, confirm.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&confirmPID))
+	drivers := make(chan importResult, 1)
+	go func() {
+		rows := []driverImportRow{{Line: 2, Email: "imp-ana@example.org", Name: "Ana", VehicleIDs: []string{"imp-v1", "imp-v2"}}}
+		got, err := store.ImportDrivers(ctx, preview, rows, noPassword)
+		drivers <- importResult{got, err}
+	}()
+	require.Eventually(t, func() bool { return len(drivers) == 1 || blockedBehind(store, confirmPID, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the driver import neither finished nor waited")
+
+	// The vehicle import stops at the gate holding one of the two vehicles,
+	// and the driver import then goes on until it wants that one.
+	holder, release := holdVehicle(t, store, "imp-v1-gate")
+	vehicles := make(chan importResult, 1)
+	go func() {
+		rows := []vehicleImportRow{{Line: 2, ID: "imp-v2", Label: "new"}, {Line: 3, ID: "imp-v1-gate", Label: "new"}, {Line: 4, ID: "imp-v1", Label: "new"}}
+		got, err := store.ImportVehicles(ctx, newTestPreview(t), rows)
+		vehicles <- importResult{got, err}
+	}()
+	require.Eventually(t, func() bool { return len(vehicles) == 1 || blockedBehind(store, holder, 1) == 1 },
+		5*time.Second, 10*time.Millisecond, "the vehicle import neither finished nor waited")
+	require.NoError(t, confirm.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(drivers) == 1 || blockedBehind(store, holder, 2) == 1 },
+		5*time.Second, 10*time.Millisecond, "the driver import neither finished nor waited")
+	release()
+
+	got := <-vehicles
+	require.NoError(t, got.err)
+	assert.Equal(t, []importStatus{importUpdate, importUpdate, importUpdate}, statuses(got.outcomes))
+	got = <-drivers
+	require.NoError(t, got.err)
+	assert.Equal(t, []importStatus{importUpdate}, statuses(got.outcomes))
+	assert.ElementsMatch(t, []string{"imp-v1", "imp-v2"}, assignedVehicles(t, store, ana))
 }
 
 func TestStore_ImportDrivers_RoundTrip(t *testing.T) {
