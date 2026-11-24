@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -992,6 +993,18 @@ func TestHandleListUsers_FilterParams(t *testing.T) {
 		{
 			name:       "q one past the maximum length",
 			query:      "?q=" + strings.Repeat("a", maxFieldLength+1),
+			wantStatus: http.StatusBadRequest,
+			wantError:  qError,
+		},
+		{
+			name:       "q at the maximum length in Devanagari",
+			query:      "?q=" + url.QueryEscape(strings.Repeat("ब", maxFieldLength)),
+			wantStatus: http.StatusOK,
+			wantQ:      strings.Repeat("ब", maxFieldLength),
+		},
+		{
+			name:       "q one past the maximum length in Devanagari",
+			query:      "?q=" + url.QueryEscape(strings.Repeat("ब", maxFieldLength+1)),
 			wantStatus: http.StatusBadRequest,
 			wantError:  qError,
 		},

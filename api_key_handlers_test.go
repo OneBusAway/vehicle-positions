@@ -109,6 +109,25 @@ func TestHandleCreateAPIKey_Validation(t *testing.T) {
 			wantError:   "name must be at most 255 characters",
 		},
 		{
+			name:        "name at the length limit in Devanagari",
+			contentType: "application/json",
+			body:        `{"name":"` + strings.Repeat("ब", maxFieldLength) + `"}`,
+			wantStatus:  http.StatusCreated,
+		},
+		{
+			name:        "name past the length limit in Devanagari",
+			contentType: "application/json",
+			body:        `{"name":"` + strings.Repeat("ब", maxFieldLength+1) + `"}`,
+			wantStatus:  http.StatusBadRequest,
+			wantError:   "name must be at most 255 characters",
+		},
+		{
+			name:        "name at the length limit in escaped characters",
+			contentType: "application/json",
+			body:        `{"name":"` + strings.Repeat(`\ud83d\ude8c`, maxFieldLength) + `"}`,
+			wantStatus:  http.StatusCreated,
+		},
+		{
 			name:        "empty name",
 			contentType: "application/json",
 			body:        `{"name":""}`,
@@ -207,7 +226,7 @@ func TestHandleCreateAPIKey_StoreError(t *testing.T) {
 }
 
 func TestHandleCreateAPIKey_OversizedBodyRejected(t *testing.T) {
-	w := createAPIKeyRequestWith(&fakeAPIKeyManager{}, "application/json", `{"name":"`+strings.Repeat("a", 2<<10)+`"}`)
+	w := createAPIKeyRequestWith(&fakeAPIKeyManager{}, "application/json", `{"name":"`+strings.Repeat("a", 4<<10)+`"}`)
 
 	require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 	assert.Equal(t, "request body too large", decodeError(t, w))

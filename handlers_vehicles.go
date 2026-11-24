@@ -141,7 +141,9 @@ func handleUpsertVehicle(store VehicleManager) http.HandlerFunc {
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<10) // 1KB
+		// 8 KB holds the longest label and agency tag with every character
+		// escaped, up to 12 bytes each.
+		r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 
 		var req upsertVehicleRequest
 		decoder := json.NewDecoder(r.Body)

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type createAPIKeyRequest struct {
@@ -21,7 +22,7 @@ func (r *createAPIKeyRequest) validate() error {
 	if r.Name == "" {
 		return errors.New("name is required")
 	}
-	if len(r.Name) > maxFieldLength {
+	if utf8.RuneCountInString(r.Name) > maxFieldLength {
 		return fmt.Errorf("name must be at most %d characters", maxFieldLength)
 	}
 	return nil
@@ -98,7 +99,9 @@ func handleCreateAPIKey(store APIKeyManager) http.HandlerFunc {
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<10) // 1KB
+		// 4 KB holds the longest name with every character escaped, up to 12
+		// bytes each.
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 
 		var req createAPIKeyRequest
 		decoder := json.NewDecoder(r.Body)

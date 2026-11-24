@@ -282,6 +282,7 @@ func TestAPIKeyCreate_NewKeyLeadsTheList(t *testing.T) {
 func TestAPIKeyCreate_Validation(t *testing.T) {
 	// Not hex digits, so the name can't be mistaken for a raw key below.
 	tooLong := strings.Repeat("n", maxFieldLength+1)
+	tooLongDevanagari := strings.Repeat("ब", maxFieldLength+1)
 
 	tests := []struct {
 		name       string
@@ -293,6 +294,7 @@ func TestAPIKeyCreate_Validation(t *testing.T) {
 		{"empty name", "name=", http.StatusUnprocessableEntity, "name is required", ""},
 		{"no name field", "", http.StatusUnprocessableEntity, "name is required", ""},
 		{"name past the length limit", "name=" + tooLong, http.StatusUnprocessableEntity, "name must be at most 255 characters", tooLong},
+		{"name past the length limit in Devanagari", "name=" + url.QueryEscape(tooLongDevanagari), http.StatusUnprocessableEntity, "name must be at most 255 characters", tooLongDevanagari},
 		{"malformed form", "name=%zz", http.StatusBadRequest, "Invalid form submission.", ""},
 	}
 
@@ -318,14 +320,19 @@ func TestAPIKeyCreate_Validation(t *testing.T) {
 // TestAPIKeyCreate_NameAtTheLengthLimit is the accepted side of the boundary
 // in TestAPIKeyCreate_Validation.
 func TestAPIKeyCreate_NameAtTheLengthLimit(t *testing.T) {
-	store := &fakeAPIKeyManager{}
-	mux := newAPIKeysMux(t, store)
+	for _, letter := range []string{"a", "ब"} {
+		t.Run(letter, func(t *testing.T) {
+			store := &fakeAPIKeyManager{}
+			mux := newAPIKeysMux(t, store)
+			name := strings.Repeat(letter, maxFieldLength)
 
-	w := postAdminForm(t, mux, "/admin/api-keys", "name="+strings.Repeat("a", maxFieldLength))
+			w := postAdminForm(t, mux, "/admin/api-keys", "name="+url.QueryEscape(name))
 
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Len(t, store.keys, 1)
-	assert.Len(t, store.keys[0].Name, maxFieldLength)
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Len(t, store.keys, 1)
+			assert.Equal(t, name, store.keys[0].Name)
+		})
+	}
 }
 
 func TestAPIKeyCreate_StoreError(t *testing.T) {
