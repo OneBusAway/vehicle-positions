@@ -604,7 +604,7 @@ func TestAdminImport_DatabaseRoundTrip(t *testing.T) {
 	store := newImportTestStore(t)
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
-	ui, err := newAdminUI(store, tracker, newAlertWatcher(store, testAlertSettings), nil, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
+	ui, err := newAdminUI(serverStore{store, &noopStore{}}, tracker, newAlertWatcher(store, testAlertSettings), nil, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
 	require.NoError(t, err)
 	t.Cleanup(ui.loginLimiter.Stop)
 	// The test session's admin isn't in the database, which the session check

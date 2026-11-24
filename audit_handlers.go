@@ -12,7 +12,7 @@ type auditEntryResponse struct {
 	ID int64     `json:"id"`
 	At time.Time `json:"at"`
 	// ActorID is null, and ActorEmail empty, for a change the server made
-	// itself.
+	// itself, which has no ActorIP either, and for a failed sign-in.
 	ActorID    *int64 `json:"actor_id"`
 	ActorEmail string `json:"actor_email"`
 	// ActorIP is left out of a viewer's response, as the Audit log page leaves

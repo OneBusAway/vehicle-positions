@@ -79,6 +79,7 @@ type adminUI struct {
 	tmpl           *embeddedTemplates
 	users          UserFetcher
 	signIns        SignInRecorder
+	failedSignIns  FailedSignInNoter
 	tracker        *Tracker
 	alerts         *alertWatcher
 	clearedAlerts  ClearedAlertLister
@@ -125,6 +126,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 		tmpl:           tmpl,
 		users:          store,
 		signIns:        store,
+		failedSignIns:  store,
 		tracker:        tracker,
 		alerts:         alerts,
 		clearedAlerts:  store,
@@ -258,7 +260,8 @@ func (ui *adminUI) loginPage(w http.ResponseWriter, r *http.Request) {
 // password, an unknown email, and a deactivated user, and the bcrypt compare
 // against dummyHash on unknown email keeps the timing side-channel closed —
 // this mirrors the JSON login handler in auth.go exactly, including checking
-// Active only after the password compare succeeds.
+// Active only after the password compare succeeds. A failure is noted for the
+// audit log without waiting for its row, to keep it closed too.
 func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		ui.renderLogin(w, http.StatusBadRequest, "Invalid form submission.", "", "")
@@ -287,10 +290,14 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			ui.failedSignIns.NoteFailedSignIn(user, clientIP(r, ui.cfg.trustProxy), auditViaAdmin)
+		}
 		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email, next)
 		return
 	}
 	if !user.Active {
+		ui.failedSignIns.NoteFailedSignIn(user, clientIP(r, ui.cfg.trustProxy), auditViaAdmin)
 		ui.renderLogin(w, http.StatusUnauthorized, "Invalid email or password.", email, next)
 		return
 	}

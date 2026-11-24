@@ -722,7 +722,7 @@ func TestLoginRefreshLogoutFlow(t *testing.T) {
 	refreshTokens.user = &UserResponse{ID: 11, Email: "driver@test.com", Role: "driver", Active: true}
 	revocations := newFakeRevocations()
 
-	login := handleLogin(users, refreshTokens, testSecret, testTTLs, nil, false)
+	login := handleLogin(users, refreshTokens, &noopStore{}, testSecret, testTTLs, nil, false)
 	w := postLogin(login, "driver@test.com", "password")
 	require.Equal(t, http.StatusOK, w.Code)
 	issued := decodeTokens(t, w)

@@ -151,7 +151,7 @@ the operator caveats in full.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AUDIT_LOG_RETENTION_PERIOD` | `0` | How long to keep rows in `audit_log`: who changed which vehicle, account, trip or API key, in the admin or its API, when admins and viewers signed in and out, and from which address. `0` (the default) keeps them forever. A positive duration deletes older rows every hour, the first time an hour after startup. A negative one logs an error and keeps everything. |
+| `AUDIT_LOG_RETENTION_PERIOD` | `0` | How long to keep rows in `audit_log`: who changed which vehicle, account, trip or API key, in the admin or its API, when admins and viewers signed in and out, which of their accounts someone failed to sign in to, and from which address. `0` (the default) keeps them forever. A positive duration deletes older rows every hour, the first time an hour after startup. A negative one logs an error and keeps everything. |
 
 ### Rider mode (crowdsourced positions)
 
@@ -708,9 +708,9 @@ sudo systemctl reload nginx
 
 With the proxy in place, set `TRUST_PROXY_HEADERS=true` and restart the server.
 It changes three things: the admin login rate limiter buckets by the real client
-IP instead of nginx's, the admin's **Audit log** records each change, sign-in
-and sign-out with that IP too, and the admin session cookie is marked `Secure`
-because the server can now tell the request arrived over HTTPS.
+IP instead of nginx's, the admin's **Audit log** records each change, sign-in,
+failed sign-in and sign-out with that IP too, and the admin session cookie is
+marked `Secure` because the server can now tell the request arrived over HTTPS.
 
 Leave it `false` whenever the server can be reached directly. A client can send
 any `X-Forwarded-For` it likes, so trusting the header without a proxy in front

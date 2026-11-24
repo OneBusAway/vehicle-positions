@@ -79,7 +79,7 @@ func TestSessions_RecordedForAccountsThatMayUseTheAdmin(t *testing.T) {
 				tokens := newFakeRefreshTokens()
 				body := strings.NewReader(`{"email":"` + user.Email + `","password":"` + sessionPassword + `"}`)
 				w := httptest.NewRecorder()
-				handleLogin(&mockUserStore{user: user}, tokens, testSecret, testTTLs, nil, address.trustProxy)(w,
+				handleLogin(&mockUserStore{user: user}, tokens, &noopStore{}, testSecret, testTTLs, nil, address.trustProxy)(w,
 					sentThroughProxy(httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", body)))
 
 				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -181,7 +181,7 @@ func TestSessions_FailWithoutTheirRow(t *testing.T) {
 			tokens := newFakeRefreshTokens()
 			tokens.createErr = errors.New("record session 9 sign_in: database unavailable")
 
-			w := postLogin(handleLogin(&mockUserStore{user: user}, tokens, testSecret, testTTLs, nil, false), user.Email, sessionPassword)
+			w := postLogin(handleLogin(&mockUserStore{user: user}, tokens, &noopStore{}, testSecret, testTTLs, nil, false), user.Email, sessionPassword)
 
 			assert.Equal(t, http.StatusInternalServerError, w.Code)
 			assert.JSONEq(t, `{"error":"internal server error"}`, w.Body.String(), "no tokens")
@@ -204,7 +204,7 @@ func TestSessions_NotRecorded(t *testing.T) {
 	} {
 		t.Run("API sign-in: "+tc.name, func(t *testing.T) {
 			tokens := newFakeRefreshTokens()
-			w := postLogin(handleLogin(&mockUserStore{user: tc.user}, tokens, testSecret, testTTLs, nil, false), tc.user.Email, tc.password)
+			w := postLogin(handleLogin(&mockUserStore{user: tc.user}, tokens, &noopStore{}, testSecret, testTTLs, nil, false), tc.user.Email, tc.password)
 			require.Equal(t, http.StatusUnauthorized, w.Code)
 			assert.Zero(t, tokens.createCalls)
 			assert.Empty(t, tokens.signIns)
@@ -397,7 +397,7 @@ func TestAuditLog_SessionsThroughTheServer(t *testing.T) {
 	ll := NewLoginRateLimiter()
 	t.Cleanup(ll.Stop)
 	reports := newServiceReporter(&fakeReportStore{}, func() *rider.Index { return nil }, testReportSettings)
-	h, err := newHandler(store, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(),
+	h, err := newHandler(serverStore{store, &noopStore{}}, tracker, nil, ll, ll, nil, testSecret, testTTLs, time.Now(),
 		adminUIConfig{enabled: true, trustProxy: true, stalenessThreshold: 5 * time.Minute}, false, "", nil, nil, nil,
 		newAlertWatcher(store, testAlertSettings), reports, newFeedHealth(time.Now))
 	require.NoError(t, err)

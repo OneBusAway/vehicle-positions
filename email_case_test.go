@@ -155,7 +155,7 @@ func TestLogin_EmailInAnotherCase(t *testing.T) {
 
 	limiter := NewLoginRateLimiter()
 	t.Cleanup(limiter.Stop)
-	h := handleLogin(store, store, testSecret, testTTLs, limiter, false)
+	h := handleLogin(store, store, &noopStore{}, testSecret, testTTLs, limiter, false)
 	for _, email := range []string{"Jane.Doe@Agency.org", "JANE.DOE@AGENCY.ORG", "jane.doe@agency.org"} {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"`+email+`","password":"jane-pass-123"}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -179,7 +179,7 @@ func TestAdminLogin_EmailInAnotherCase(t *testing.T) {
 
 	tracker := NewTracker(5 * time.Minute)
 	t.Cleanup(tracker.Stop)
-	ui, err := newAdminUI(store, tracker, newAlertWatcher(store, testAlertSettings), nil, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
+	ui, err := newAdminUI(serverStore{store, &noopStore{}}, tracker, newAlertWatcher(store, testAlertSettings), nil, newFeedHealth(time.Now), testSecret, NewLoginRateLimiter(), adminUIConfig{enabled: true, stalenessThreshold: 5 * time.Minute})
 	require.NoError(t, err)
 	t.Cleanup(ui.loginLimiter.Stop)
 	mux := http.NewServeMux()

@@ -178,6 +178,7 @@ func (n *noopStore) ListAuditEntries(_ context.Context, _ auditFilter) ([]auditE
 func (n *noopStore) RecordSignIn(_ context.Context) error {
 	return nil
 }
+func (n *noopStore) NoteFailedSignIn(_ *User, _, _ string) {}
 func (n *noopStore) DeactivateAPIKey(_ context.Context, _ int64) error {
 	return nil
 }
