@@ -12,6 +12,7 @@ import org.onebusaway.vehicletracker.data.IssuedTokens
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.issuedAt
+import org.onebusaway.vehicletracker.data.jwtSubject
 import java.io.IOException
 import java.security.GeneralSecurityException
 
@@ -25,6 +26,12 @@ private const val TAG = "TokenRefresher"
 private const val EARLY_RETRY_DELAY_SEC = 60L
 
 /**
+ * Whether [stored], the access token stored now, is of the same driver as [sent], the one a request was made with: the
+ * driver's token was renewed since, or they signed in again.
+ */
+private fun isSameDriver(stored: String, sent: String) = jwtSubject(stored) == jwtSubject(sent)
+
+/**
  * Trades the stored refresh token for a new access token, for the client [ApiFactory] builds.
  *
  * One trade at a time, starting from the stored session. The server takes a second use of a
@@ -33,7 +40,9 @@ private const val EARLY_RETRY_DELAY_SEC = 60L
  * reading the session from [sessionStore], never from a cached copy such as `ApiHolder`'s: that
  * copy can lag a save, and a lagging copy would present a token the server has already spent.
  * When the stored access token is no longer the one the caller sent, another request has
- * refreshed in the meantime, and the caller gets the new token without a call to the server.
+ * refreshed in the meantime, and the caller gets the new token without a call to the server. Only
+ * the same driver's, though, as on iOS: once another driver has signed in, the caller's request is
+ * still the driver's before, and sent with the new token it would be stored as the new driver's.
  *
  * It blocks, holding the lock across the call to the server. OkHttp calls it on its own threads,
  * where that is fine, and a request that waits is one that would otherwise have refreshed again.
@@ -71,6 +80,7 @@ class TokenRefresher(
         synchronized(lock) {
             val stored = storedSession()
             val current = stored.token ?: return currentToken
+            if (!isSameDriver(current, currentToken)) return currentToken
             // A token another request has just refreshed is not due, so it goes out as it is.
             if (!isDue(stored.refreshDueAtEpochSec)) return current
             val refreshToken = stored.refreshToken ?: return current
@@ -102,9 +112,9 @@ class TokenRefresher(
 
     /**
      * After a request sent with [failedToken] got a 401: the token to send it again with, or null
-     * when there is none and the 401 stands. A refused refresh token is dropped and the access
-     * token kept until it fails on its own, so the next 401 reaches the caller, which asks the
-     * driver to sign in.
+     * when there is none, or only another driver's, and the 401 stands. A refused refresh token is
+     * dropped and the access token kept until it fails on its own, so the next 401 reaches the
+     * caller, which asks the driver to sign in.
      *
      * @throws IOException when the server can't be reached or can't refresh right now. Both
      *   tokens are kept, so the next request tries again.
@@ -114,6 +124,7 @@ class TokenRefresher(
         synchronized(lock) {
             val stored = storedSession()
             val current = stored.token ?: return null
+            if (!isSameDriver(current, failedToken)) return null
             if (current != failedToken) return current
             val refreshToken = stored.refreshToken ?: return null
             val serverUrl = stored.serverUrl ?: return null

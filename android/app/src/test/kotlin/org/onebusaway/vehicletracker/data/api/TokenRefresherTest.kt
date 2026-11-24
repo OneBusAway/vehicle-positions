@@ -46,6 +46,7 @@ import org.onebusaway.vehicletracker.data.IssuedTokens
 import org.onebusaway.vehicletracker.data.Session
 import org.onebusaway.vehicletracker.data.SessionStore
 import org.onebusaway.vehicletracker.data.VehicleRepository
+import org.onebusaway.vehicletracker.data.jwtFor
 import org.onebusaway.vehicletracker.di.ApiHolder
 import org.onebusaway.vehicletracker.service.FakeBacklogUploadScheduler
 import org.onebusaway.vehicletracker.ui.vehicles.VehicleViewModel
@@ -141,6 +142,58 @@ class TokenRefresherTest {
         val requests = recorded()
         assertEquals(listOf("Bearer a1", "Bearer a2"), requests.map { it.getHeader("Authorization") })
         assertTrue(requests.refreshes().isEmpty())
+    }
+
+    private fun sessionOf(token: String, expiresAt: Long = NOW + 900) = Session(serverUrl, token, expiresAt - 900, "r1", expiresAt)
+
+    private suspend fun uploadHistory(holder: ApiHolder): Throwable? =
+        runCatching { holder.api().postLocationHistory(LocationHistoryDto("van-1", emptyList())) }.exceptionOrNull()
+
+    // A driver can sign out, and the next one sign in, while an upload of the first one's reports is out on a slow
+    // connection. The sign-out ended its token, so it gets a 401, and the stored token is by then the next driver's.
+    @Test fun `a 401 that lands after the next driver has signed in is not sent again as them`() = runTest {
+        sessions.state.value = sessionOf(MARIA)
+        fake.accepted = OMAR
+        fake.onUnauthorized = { sessions.state.value = sessionOf(OMAR) }
+
+        val failure = uploadHistory(holder())
+
+        assertEquals(401, (failure as? HttpException)?.code())
+        assertEquals(listOf("Bearer $MARIA"), recorded().map { it.getHeader("Authorization") })
+    }
+
+    @Test fun `a 401 that lands after the same driver has signed in again is sent again with the new token`() = runTest {
+        val again = "${MARIA}2"
+        sessions.state.value = sessionOf(MARIA)
+        fake.accepted = again
+        fake.onUnauthorized = { sessions.state.value = sessionOf(again) }
+
+        assertNull(uploadHistory(holder()))
+
+        assertEquals(listOf("Bearer $MARIA", "Bearer $again"), recorded().map { it.getHeader("Authorization") })
+    }
+
+    @Test fun `a request due an early refresh never goes with the next driver's token`() =
+        requestDueEarlyThenNextDriver(sessionOf(OMAR, expiresAt = DUE + 900))
+
+    @Test fun `a request due an early refresh never renews the next driver's token to go with it`() =
+        requestDueEarlyThenNextDriver(sessionOf(OMAR, expiresAt = DUE + 30))
+
+    /** The request is made under MARIA's token, and [next] is stored by the time it looks for a fresher one. */
+    private fun requestDueEarlyThenNextDriver(next: Session) = runTest {
+        sessions.state.value = sessionOf(MARIA, expiresAt = ISSUED_AT + 900)
+        fake.accepted = OMAR
+        val holder = holder(now = DUE)
+        holder.api() // seeds the cached copy with MARIA's, due now
+        sessions.state.value = next
+
+        val failure = uploadHistory(holder)
+
+        assertEquals(401, (failure as? HttpException)?.code())
+        val requests = recorded()
+        assertEquals(listOf("/api/v1/locations/history"), requests.map { it.path })
+        assertEquals("Bearer $MARIA", requests.single().getHeader("Authorization"))
+        assertEquals(next, sessions.state.value)
     }
 
     @Test fun `a refused refresh drops the refresh token, keeps the access token, and the 401 reaches the caller`() = runTest {
@@ -545,6 +598,9 @@ class TokenRefresherTest {
     }
 
     private companion object {
+        val MARIA = jwtFor("7")
+        val OMAR = jwtFor("8")
+
         const val ISSUED_AT = 1_785_886_200L
         const val NOW = ISSUED_AT + 600
 
