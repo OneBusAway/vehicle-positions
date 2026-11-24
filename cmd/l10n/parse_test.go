@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -159,4 +160,116 @@ func TestExportAndImport_KeepANoBreakSpace(t *testing.T) {
 	code, out = p.importSheet(t, "fr", sheet)
 	require.Equal(t, 0, code, out)
 	assert.Contains(t, p.read(t, french), `<string name="started_ago">Parti il y a %1$d`+nbsp+`min</string>`)
+}
+
+// TestCanonicalTag: a tag in any case is written as BCP 47 writes it, the
+// case the app's folders and Xcode's files are named in.
+func TestCanonicalTag(t *testing.T) {
+	for tag, want := range map[string]string{
+		"pt-BR":      "pt-BR",
+		"pt-br":      "pt-BR",
+		"PT-BR":      "pt-BR",
+		"zh-hans":    "zh-Hans",
+		"ZH-HANT":    "zh-Hant",
+		"Hi":         "hi",
+		"FIL":        "fil",
+		"es-419":     "es-419",
+		"sr-latn-rs": "sr-Latn-RS",
+		// After a singleton, a subtag is neither a script nor a region.
+		"de-ch-x-ab-test": "de-CH-x-ab-test",
+	} {
+		assert.Equal(t, want, canonicalTag(tag), tag)
+	}
+}
+
+// TestCanonicalTag_TheAppsLanguagesInAnyCaseReachTheirFolders: each language
+// the app has, typed in lower case or in capitals, goes to its own folder.
+func TestCanonicalTag_TheAppsLanguagesInAnyCaseReachTheirFolders(t *testing.T) {
+	dirs, err := os.ReadDir(filepath.Join("../..", androidRes))
+	require.NoError(t, err)
+	langs := 0
+	for _, d := range dirs {
+		lang := valuesDirLanguage(d.Name())
+		if lang == "" {
+			continue
+		}
+		langs++
+		for _, typed := range []string{strings.ToLower(lang), strings.ToUpper(lang)} {
+			assert.Equal(t, d.Name(), valuesDirFor(canonicalTag(typed)), typed)
+		}
+	}
+	assert.Greater(t, langs, 1)
+}
+
+// TestExportAndImport_ATagInLowerCase: pt-br is pt-BR. Its sheet shows
+// values-pt-rBR's strings, the glossary's pt-BR words and the iOS strings in
+// Xcode's pt-BR.xliff, and its import writes those files. Before, pt-br read
+// and wrote values-b+pt+br, so the sheet showed nothing translated, and the
+// import gave aapt two values for each string in pt-rBR, which failed the
+// build.
+func TestExportAndImport_ATagInLowerCase(t *testing.T) {
+	const ptBR = "android/app/src/main/res/values-pt-rBR/strings.xml"
+	p := newSheetProject(t,
+		replace(glossaryFile, "forbidden_hi\n", "forbidden_hi,pt-BR\n"),
+		replace(glossaryFile, ",गाड़ी,बस\n", ",गाड़ी,बस,veículo\n"),
+		func(t *testing.T, root string) {
+			path := filepath.Join(root, ptBR)
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+			require.NoError(t, os.WriteFile(path, []byte(`<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_title">Entrar</string>
+</resources>
+`), 0o644))
+		})
+	xcloc := filepath.Join(p.dir, "pt-BR.xcloc")
+	inside := filepath.Join(xcloc, "Localized Contents", "pt-BR.xliff")
+	require.NoError(t, os.MkdirAll(filepath.Dir(inside), 0o755))
+	require.NoError(t, os.Rename(p.xliff, inside))
+
+	sheet := p.export(t, "pt-br", "-xliff", xcloc)
+
+	iosRows := 0
+	for _, row := range readRows(t, sheet) {
+		switch cell(row, "android") {
+		case "login_title":
+			assert.Equal(t, "Entrar", cell(row, "current"))
+		case "vehicle_route_stop":
+			assert.Contains(t, cell(row, "glossary"), "vehicle: veículo")
+		}
+		if cell(row, "ios") != "" {
+			iosRows++
+		}
+	}
+	assert.NotZero(t, iosRows, "the sheet has pt-BR.xliff's strings")
+
+	translate(t, sheet, map[string]string{"Sign in": "Iniciar sessão"})
+	code, out := p.importSheet(t, "pt-br", sheet, "-xliff", xcloc)
+
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, p.read(t, ptBR), `<string name="login_title">Iniciar sessão</string>`)
+	assert.NoDirExists(t, filepath.Join(p.root, "android/app/src/main/res/values-b+pt+br"))
+	xliff, err := os.ReadFile(inside)
+	require.NoError(t, err)
+	assert.Contains(t, string(xliff), `<target state="translated">Iniciar sessão</target>`)
+}
+
+// TestImport_ALowerCaseScriptWritesItsOwnFolder: zh-hans goes to
+// values-b+zh+Hans. Before, it started values-b+zh+hans, which a Mac's disk
+// takes for values-b+zh+Hans but Linux, where CI builds the app, does not.
+func TestImport_ALowerCaseScriptWritesItsOwnFolder(t *testing.T) {
+	p := newSheetProject(t)
+	sheet := p.export(t, "zh-hans")
+	translate(t, sheet, map[string]string{"Sign in": "登录"})
+
+	code, out := p.importSheet(t, "zh-hans", sheet)
+
+	require.Equal(t, 0, code, out)
+	dirs, err := os.ReadDir(filepath.Join(p.root, androidRes))
+	require.NoError(t, err)
+	var names []string
+	for _, d := range dirs {
+		names = append(names, d.Name())
+	}
+	assert.Contains(t, names, "values-b+zh+Hans")
+	assert.NotContains(t, names, "values-b+zh+hans")
 }
