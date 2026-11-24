@@ -758,7 +758,7 @@ func (s *riderService) RiderStatus(ctx context.Context) (riderStatusResponse, er
 	if index := s.index(); index != nil {
 		stats := index.Stats()
 		status.GTFS = &riderGTFSStatus{
-			Source:   stats.Source,
+			Source:   shownGTFSSource(stats.Source),
 			LoadedAt: adminRiderTime(stats.LoadedAt),
 			Trips:    stats.Trips,
 			Shapes:   stats.Shapes,

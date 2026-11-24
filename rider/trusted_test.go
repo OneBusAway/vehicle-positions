@@ -135,6 +135,23 @@ func TestTrustedFeed_ErrorFeedDoesNotPoisonHealthyOne(t *testing.T) {
 	assert.NotEmpty(t, g.Health()[0].LastError)
 }
 
+// The address in the client's own errors is whole, any key in its query
+// included, and Health gives the address beside the error anyway.
+func TestTrustedFeed_ErrorLeavesOutTheURL(t *testing.T) {
+	down := httptest.NewServer(http.NotFoundHandler())
+	down.Close()
+	f := NewTrustedFeed([]string{down.URL + "/feed?api_key=secret", "https://feed.example/%zz?api_key=secret"}, http.DefaultClient, time.Minute)
+	f.Poll(context.Background())
+
+	h := f.Health()
+	require.Len(t, h, 2)
+	assert.Contains(t, h[0].LastError, "connection refused", "what went wrong is kept")
+	assert.Contains(t, h[1].LastError, "invalid URL escape")
+	for _, feed := range h {
+		assert.NotContains(t, feed.LastError, "secret")
+	}
+}
+
 func TestTrustedFeed_Unconfigured(t *testing.T) {
 	f := NewTrustedFeed(nil, http.DefaultClient, time.Minute)
 	assert.False(t, f.Configured())
