@@ -196,11 +196,14 @@ func (r *failedSignInRecorder) close(f failedSignIn, w *failedWindow) {
 	}
 }
 
-// writeEnded closes every window that has ended, and says how many failures
-// were dropped since it last did.
+// writeEnded closes every window that has ended, until Stop's deadline, and
+// says how many failures were dropped since it last did.
 func (r *failedSignInRecorder) writeEnded() {
 	now := r.now()
 	for f, w := range r.windows {
+		if r.ctx.Err() != nil {
+			break
+		}
 		if now.Sub(w.opened) >= failedSignInWindow {
 			r.close(f, w)
 		}
