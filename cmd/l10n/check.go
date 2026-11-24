@@ -26,6 +26,7 @@ const (
 	rulePlurals      = "plurals"
 	ruleNumbers      = "numbers"
 	ruleURLs         = "urls"
+	ruleEscapes      = "escapes"
 	ruleKeep         = "do-not-translate"
 	ruleForbidden    = "forbidden"
 	ruleIOSState     = "ios-state"
@@ -157,6 +158,9 @@ func checkTranslation(r *report, u *unit, lang string, glossary []term, status s
 			if !strings.Contains(f.value, link) {
 				r.add(u.finding(errorLevel, ruleURLs, lang, v, fmt.Sprintf("%s%s must stay as it is", at, link)))
 			}
+		}
+		if typed := unicodeEscape.FindAllString(f.value, -1); len(typed) > 0 {
+			r.add(u.finding(errorLevel, ruleEscapes, lang, v, fmt.Sprintf("%sthe app shows %s as typed, backslash and all", at, list(typed))))
 		}
 		for _, t := range glossary {
 			if t.keep && strings.Contains(english.value, t.term) && !strings.Contains(f.value, t.term) {

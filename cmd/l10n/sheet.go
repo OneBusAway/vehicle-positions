@@ -461,10 +461,12 @@ func exportSheet(root, xliffPath, matchesDir, lang string, out, warn io.Writer) 
 
 // importSheet writes a sheet's translations into the language's strings.xml
 // and its XLIFF, and returns the files it changed. Each row's translation, or
-// failing that its current one, goes to the strings it names. A sheet whose
-// placeholders or plural forms fail the check is refused whole: the findings
-// come back, and nothing is written. So is a sheet with two rows for one
-// form of a string, and when one of the files can't be written, neither is.
+// failing that its current one, goes to the strings it names, with any
+// direction control typed as a \u escape read as the character. A sheet whose
+// placeholders or plural forms fail the check, or whose text would show a \u
+// escape as typed, is refused whole: the findings come back, and nothing is
+// written. So is a sheet with two rows for one form of a string, and when one
+// of the files can't be written, neither is.
 // With draft, the iOS strings the sheet fills in are drafts nobody fluent has
 // read, which Xcode then marks machine_translated; without it, they are read.
 func importSheet(root, xliffPath, lang, sheetPath string, draft bool) (refused []finding, changed []string, err error) {
@@ -499,6 +501,7 @@ func importSheet(root, xliffPath, lang, sheetPath string, draft bool) (refused [
 		if strings.TrimSpace(text) == "" {
 			text = r.current
 		}
+		text = readTypedControls(text)
 		if err := writable(text); err != nil {
 			return nil, nil, fmt.Errorf("%s:%d: %w", sheetPath, r.line, err)
 		}
@@ -603,6 +606,21 @@ func isXMLChar(r rune) bool {
 	return r == '\t' || r == '\n' || r == '\r' || r >= 0x20 && r <= 0xd7ff || r >= 0xe000 && r <= 0xfffd || r >= 0x10000 && r <= 0x10ffff
 }
 
+// readTypedControls is text with each direction control typed as a \u
+// escape read as the character. They can't be seen or typed, so a note asks a
+// right-to-left translator for U+2068 and U+2069 around an address written as
+// escapes, which would otherwise reach the app as typed. Any other escape
+// stays as typed, and the check's escapes rule refuses it.
+func readTypedControls(text string) string {
+	return unicodeEscape.ReplaceAllStringFunc(text, func(escape string) string {
+		code, _ := strconv.ParseUint(escape[2:], 16, 16) // four hex digits, by unicodeEscape
+		if r := rune(code); isDirectionControl(r) {
+			return string(r)
+		}
+		return escape
+	})
+}
+
 // formPath is the form a row's form column names on Android.
 func (p *project) formPath(s androidString, form string) (string, error) {
 	if _, plain := s.version.forms[""]; plain {
@@ -617,9 +635,9 @@ func (p *project) formPath(s androidString, form string) (string, error) {
 	return "plural." + form, nil
 }
 
-// refusals is what the check finds wrong with the placeholders and plural
-// forms of the translations about to be written, each at the sheet's first
-// row for the string.
+// refusals is what the check finds wrong with the placeholders, plural forms
+// and escapes of the translations about to be written, each at the sheet's
+// first row for the string.
 func (p *project) refusals(trans map[string]map[string]string, targets map[*xliffUnit]string, sheetPath string, firstLine map[string]int) []finding {
 	r := &report{}
 	at := func(key string, fallback *version) *version {
@@ -661,7 +679,7 @@ func (p *project) refusals(trans map[string]map[string]string, targets map[*xlif
 	}
 	var out []finding
 	for _, f := range r.findings {
-		if f.severity == errorLevel && (f.rule == rulePlaceholders || f.rule == rulePlurals) {
+		if f.severity == errorLevel && (f.rule == rulePlaceholders || f.rule == rulePlurals || f.rule == ruleEscapes) {
 			out = append(out, f)
 		}
 	}

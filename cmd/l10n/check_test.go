@@ -237,6 +237,12 @@ func TestCheck_Rules(t *testing.T) {
 		{"a URL changed",
 			[]edit{replace(androidHindi, "https://onebusaway.org", "https://onebusaway.example")}, options{},
 			errorLevel, "urls", "help_link", "hi", androidHindi},
+		{"a \\u escape the app shows as typed (Android)",
+			[]edit{replace(androidHindi, ">साइन इन करें<", `>\\u2068साइन इन करें<`)}, options{},
+			errorLevel, "escapes", "login_title", "hi", androidHindi},
+		{"a \\u escape the app shows as typed (iOS)",
+			[]edit{replace(iosCatalog, `"value" : "साइन इन करें"`, `"value" : "\\u2068साइन इन करें"`)}, options{},
+			errorLevel, "escapes", "Sign in", "hi", iosCatalog},
 		{"a do-not-translate term translated",
 			[]edit{replace(androidHindi, "GPS बंद है", "जीपीएस बंद है")}, options{},
 			errorLevel, "do-not-translate", "tracking_gps", "hi", androidHindi},
@@ -375,6 +381,10 @@ func TestCheck_RulesDoNotOverreach(t *testing.T) {
 		{"an iOS placeholder given a position the English doesn't write",
 			[]edit{replace(iosCatalog, `"%@ तक नहीं`, `"%1$@ तक नहीं`)}},
 		{"a plural form without its count", []edit{replace(androidHindi, ">%1$d रिपोर्ट भेजी गई<", ">एक रिपोर्ट भेजी गई<")}},
+		{"direction isolates written as \\u escapes, which each file reads as the character", []edit{
+			replace(androidHindi, "https://onebusaway.org", "\\u2068https://onebusaway.org\\u2069"),
+			replace(iosCatalog, `"value" : "साइन इन करें"`, "\"value\" : \"\\u2068साइन इन करें\\u2069\""),
+		}},
 		{"a word with a forbidden word inside it", []edit{replace(androidSource, ">Sign in<", ">The server is busy<")}},
 		{"a catalog in a build folder", []edit{func(t *testing.T, root string) {
 			dir := filepath.Join(root, "ios", "Kit", ".build", "checkouts")
