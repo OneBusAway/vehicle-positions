@@ -1005,7 +1005,7 @@ The Vehicle Tracker server is intentionally built as a standalone service (not i
 
 ### v2: Offline Queuing and Sync
 
-Left out of v1 to keep the GSoC scope achievable, and built since in both driver apps, more simply than first planned. A report that fails for want of a connection is kept on the phone, up to 8,640 of them, and uploaded later, up to 500 at a time, to `POST /api/v1/locations/history`. The server stores those positions in location history only, for trip playback and analytics, never in the GTFS-RT feed, and takes none older than 24 hours. The driver's status card counts them ("12 reports to send when online"). Each phone keeps them under the driver and server they were taken for and never uploads them as another driver's. What drivers see is in [`docs/operator-manual.md`](docs/operator-manual.md).
+Left out of v1 to keep the GSoC scope achievable, and built since in both driver apps, more simply than first planned. A report that fails for want of a connection is kept on the phone, up to 8,640 of them, and uploaded later, up to 80 at a time so that a batch gets through on weak 2G, to `POST /api/v1/locations/history`, which takes up to 500. The server stores those positions in location history only, for trip playback and analytics, never in the GTFS-RT feed, and takes none older than 24 hours. The driver's status card counts them ("12 reports to send when online"). Each phone keeps them under the driver and server they were taken for and never uploads them as another driver's. What drivers see is in [`docs/operator-manual.md`](docs/operator-manual.md).
 
 ### Other Future Work
 
