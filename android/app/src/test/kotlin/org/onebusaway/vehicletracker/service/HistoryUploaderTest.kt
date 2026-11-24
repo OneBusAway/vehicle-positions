@@ -8,8 +8,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -67,6 +69,63 @@ class HistoryUploaderTest {
         points.forEach { assertFalse(it.jsonObject.containsKey("occupancy_status")) }
         server.shutdown()
     }
+
+    // A phone coming out of a dead zone is often on weak 2G, about 2,500 bytes a second up. A batch that can't go inside
+    // the call's ten second timeout there is kept and starts over each time, so it never goes. Eight seconds leaves room
+    // for headers, long trip ids and a live report on the same link.
+    @Test fun `a full batch fits the call's timeout on weak 2G, and the next batch takes the rest`() = runTest {
+        val server = MockWebServer().apply { start() }
+        repeat(2) { server.enqueue(MockResponse().setResponseCode(201).setBody("""{"saved":80,"invalid":0}""")) }
+        val queue = FakeOfflineFixQueue()
+        repeat(120) { queue.add(fixAsThePhoneTakesIt(timestamp = 1001L + it)) }
+        val uploader = uploaderFor(ApiFactory { "jwt" }.create(server.url("/").toString()), queue)
+
+        assertEquals(HistoryUpload.BATCH_SENT, uploader.upload(nowEpochSec = 1200L))
+
+        assertEquals(1, server.requestCount)
+        val full = server.takeRequest()
+        assertTrue("${full.bodySize} bytes", full.bodySize <= 8 * 2_500)
+        assertEquals((1001L..1080L).toList(), timestampsIn(full))
+
+        assertEquals(HistoryUpload.BATCH_SENT, uploader.upload(nowEpochSec = 1200L))
+
+        assertEquals(2, server.requestCount)
+        assertEquals((1081L..1120L).toList(), timestampsIn(server.takeRequest()))
+        assertEquals(0, queue.queued.size)
+        server.shutdown()
+    }
+
+    @Test fun `more fixes too old than a batch holds are all dropped unsent`() = runTest {
+        val now = 1_000_000L
+        val server = MockWebServer().apply { start() }
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"saved":2,"invalid":0}"""))
+        val queue = FakeOfflineFixQueue()
+        repeat(600) { queue.add(queuedFix("van-1", timestamp = now - MAX_HISTORY_AGE_SEC - 600 + it)) }
+        queue.add(queuedFix("van-1", timestamp = now - 20))
+        queue.add(queuedFix("van-1", timestamp = now - 10))
+        val uploader = uploaderFor(ApiFactory { "jwt" }.create(server.url("/").toString()), queue)
+
+        assertEquals(HistoryUpload.BATCH_SENT, uploader.upload(nowEpochSec = now))
+
+        assertEquals(1, server.requestCount)
+        assertEquals(listOf(now - 20, now - 10), timestampsIn(server.takeRequest()))
+        assertEquals(0, queue.queued.size)
+        server.shutdown()
+    }
+
+    // Android gives the bearing, speed and accuracy as floats, which are long once written as doubles.
+    private fun fixAsThePhoneTakesIt(timestamp: Long) = queuedFix("van-1", timestamp).copy(
+        tripId = "trip-0830-weekday",
+        latitude = -1.2921347,
+        longitude = 36.8219462,
+        bearing = 182.34567f.toDouble(),
+        speed = 8.513333f.toDouble(),
+        accuracy = 3.7900925f.toDouble(),
+    )
+
+    private fun timestampsIn(upload: RecordedRequest): List<Long> =
+        Json.parseToJsonElement(upload.body.readUtf8()).jsonObject.getValue("points").jsonArray
+            .map { it.jsonObject.getValue("timestamp").toString().toLong() }
 
     // What the waiting count says will send is what goes: both ask tooOldToUpload. Read at one fixed moment, so no
     // clock tick between queueing the fixes and uploading them can move one across the limit.
