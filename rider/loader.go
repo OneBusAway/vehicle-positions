@@ -2,8 +2,10 @@ package rider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -56,7 +58,7 @@ func IndexFromBytes(body []byte, source string, now time.Time) (*Index, error) {
 	// startup. On a refresh it is refused like any bad feed, so the previous
 	// index stays in force and the cached copy is not overwritten.
 	if ix.Stats().Trips == 0 {
-		return nil, fmt.Errorf("rider: GTFS from %q has no usable trips (%d in trips.txt)", source, len(static.Trips))
+		return nil, fmt.Errorf("rider: GTFS from %q has no usable trips (%d in trips.txt)", ShownGTFSSource(source), len(static.Trips))
 	}
 	return ix, nil
 }
@@ -64,7 +66,7 @@ func IndexFromBytes(body []byte, source string, now time.Time) (*Index, error) {
 func parseStatic(body []byte, source string) (*gtfs.Static, error) {
 	static, err := gtfs.ParseStatic(body, gtfs.ParseStaticOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("rider: parse GTFS from %q: %w", source, err)
+		return nil, fmt.Errorf("rider: parse GTFS from %q: %w", ShownGTFSSource(source), err)
 	}
 	return static, nil
 }
@@ -75,7 +77,13 @@ func FetchFeed(ctx context.Context, source string, client *http.Client) ([]byte,
 	if !strings.HasPrefix(source, "http://") && !strings.HasPrefix(source, "https://") {
 		body, err := os.ReadFile(source)
 		if err != nil {
-			return nil, fmt.Errorf("rider: read GTFS file: %w", err)
+			// Not wrapped whole: the error repeats the path, and a mistyped
+			// address is read as one.
+			var pathErr *fs.PathError
+			if errors.As(err, &pathErr) {
+				err = pathErr.Err
+			}
+			return nil, fmt.Errorf("rider: read GTFS file %q: %w", ShownGTFSSource(source), err)
 		}
 		return body, nil
 	}
@@ -89,20 +97,20 @@ func FetchFeed(ctx context.Context, source string, client *http.Client) ([]byte,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
 	if err != nil {
-		return nil, fmt.Errorf("rider: build GTFS request: %w", err)
+		return nil, fmt.Errorf("rider: build GTFS request: %w", withoutURL(err))
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("rider: fetch GTFS from %q: %w", source, err)
+		return nil, fmt.Errorf("rider: fetch GTFS from %q: %w", ShownGTFSSource(source), withoutURL(err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("rider: fetch GTFS from %q: status %d", source, resp.StatusCode)
+		return nil, fmt.Errorf("rider: fetch GTFS from %q: status %d", ShownGTFSSource(source), resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxFeedBytes))
 	if err != nil {
-		return nil, fmt.Errorf("rider: read GTFS from %q: %w", source, err)
+		return nil, fmt.Errorf("rider: read GTFS from %q: %w", ShownGTFSSource(source), err)
 	}
 	return body, nil
 }

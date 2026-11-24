@@ -17,6 +17,8 @@ import (
 	// Every GTFS feed names its agency's timezone, and the runtime image
 	// ships no zoneinfo, so the database is compiled in.
 	_ "time/tzdata"
+
+	"github.com/OneBusAway/vehicle-positions/rider"
 )
 
 //go:embed web/templates web/static
@@ -399,7 +401,7 @@ func main() {
 	// it when enabled. An empty source was already refused above.
 	schedule, err := newGTFSRuntime(ctx, gtfsSource, riderCfg.GTFSRefresh, store)
 	if err != nil {
-		slog.Error("failed to load GTFS", "source", gtfsSource, "error", err)
+		slog.Error("failed to load GTFS", "source", rider.ShownGTFSSource(gtfsSource), "error", err)
 		os.Exit(1)
 	}
 	defer schedule.Stop()

@@ -4,8 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/OneBusAway/vehicle-positions/rider"
@@ -43,7 +41,7 @@ type riderStatusResponse struct {
 // riderGTFSStatus describes the schedule snapshot the rider engine is matching
 // against.
 type riderGTFSStatus struct {
-	// Source is GTFS_STATIC_URL as shownGTFSSource shows it.
+	// Source is GTFS_STATIC_URL as rider.ShownGTFSSource shows it.
 	Source   string `json:"source"`
 	LoadedAt string `json:"loaded_at"` // RFC3339 UTC
 	Trips    int    `json:"trips"`
@@ -53,7 +51,7 @@ type riderGTFSStatus struct {
 
 // riderFeedStatus is one configured trusted feed's health.
 type riderFeedStatus struct {
-	// URL is the feed's address as shownFeedURL shows it.
+	// URL is the feed's address as rider.ShownFeedURL shows it.
 	URL         string `json:"url"`
 	LastSuccess string `json:"last_success"` // RFC3339 UTC, "" if never
 	LastError   string `json:"last_error"`
@@ -197,35 +195,11 @@ func riderFeedStatuses(health []rider.FeedHealth) []riderFeedStatus {
 	out := make([]riderFeedStatus, 0, len(health))
 	for _, h := range health {
 		out = append(out, riderFeedStatus{
-			URL:         shownFeedURL(h.URL),
+			URL:         rider.ShownFeedURL(h.URL),
 			LastSuccess: adminRiderTime(h.LastSuccess),
 			LastError:   h.LastError,
 			Entities:    h.Entities,
 		})
 	}
 	return out
-}
-
-// shownFeedURL is a feed's configured address as the Rider mode page and the
-// status endpoint show it: without its user name, password, query and
-// fragment, any of which can be the agency's credential for the feed. A viewer
-// reads both, and an admin need not be whoever set the server up.
-func shownFeedURL(raw string) string {
-	u, err := url.Parse(raw)
-	// With no host a mistyped address's user name is in its path.
-	if err != nil || u.Host == "" {
-		return "not a valid URL"
-	}
-	u.User, u.RawQuery, u.ForceQuery, u.Fragment = nil, "", false, ""
-	return u.String()
-}
-
-// shownGTFSSource is shownFeedURL for GTFS_STATIC_URL, which rider.FetchFeed
-// reads as a local path unless it starts with one of these schemes. A path
-// carries no credential and is shown as it is.
-func shownGTFSSource(source string) string {
-	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
-		return shownFeedURL(source)
-	}
-	return source
 }
