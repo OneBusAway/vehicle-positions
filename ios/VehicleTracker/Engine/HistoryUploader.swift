@@ -100,7 +100,6 @@ final class HistoryUploader {
     private let sleepUntilExpiry: (Duration) async throws -> Void
     private var isUploading = false
     private var drainTask: Task<Void, Never>?
-    private var drainTime = UIBackgroundTaskIdentifier.invalid
     /// Whether iOS took the background task at launch.
     private(set) var isBackgroundTaskRegistered = false
     /// The background task was asked for since this launch, or since its
@@ -213,25 +212,34 @@ final class HistoryUploader {
     /// then, and nil stops the drain. It also stops once nothing is left, or
     /// at a batch that fails for now, which waits for the next drain or the
     /// next report that gets through. A call while a drain runs is left to
-    /// that drain.
+    /// that drain, unless it has been stopped.
     ///
-    /// Under background time, so a drain started as the driver ends a trip
-    /// and locks the phone can finish. If iOS takes the time back first, the
-    /// drain stops, and a batch it had out stays kept. A drain that stops
-    /// with reports left asks for the background task. Returns the drain,
-    /// or the one already running.
+    /// Under background time of its own, so a drain started as the driver
+    /// ends a trip and locks the phone can finish. If iOS takes the time back
+    /// first, the drain stops, and a batch it had out stays kept. A drain
+    /// that stops with reports left asks for the background task. Returns
+    /// the drain, or the one already running.
     @discardableResult
     func drain(through api: @escaping @MainActor () -> (any TrackerAPI)?) -> Task<Void, Never> {
-        if let drainTask { return drainTask }
-        drainTime = backgroundTime.begin("Send kept reports") { [weak self] in
-            self?.log.notice("out of background time while sending kept reports; the rest wait for the next drain")
-            self?.stopDrain()
-        }
+        // A drain that was stopped starts no more uploads, but one waiting on
+        // a token refresh, which doesn't stop for it (`TokenRefresher` says
+        // why), runs on until the refresh has its answer, and the app may be
+        // suspended before then. A new drain starts beside it, and
+        // `uploadIfIdle` keeps the two from uploading at once.
+        if let drainTask, !drainTask.isCancelled { return drainTask }
+        let time = DrainTime(backgroundTime)
         let drain = Task { [weak self] in
             await self?.uploadAll(through: api)
-            self?.drainTask = nil
-            self?.endDrainTime()
+            time.end()
+            // A drain that was stopped may have been replaced by now.
+            if !Task.isCancelled { self?.drainTask = nil }
             if let self, waiting.count > 0 { askForBackgroundTask() }
+        }
+        time.begin { [weak self] in
+            self?.log.notice("out of background time while sending kept reports; the rest wait for the next drain")
+            // The upload out fails before its batch is removed, so the batch
+            // stays kept.
+            drain.cancel()
         }
         drainTask = drain
         return drain
@@ -255,20 +263,6 @@ final class HistoryUploader {
                 return
             }
         }
-    }
-
-    /// Stops the drain running, as iOS takes its time back. The upload out
-    /// fails before its batch is removed, so the batch stays kept.
-    private func stopDrain() {
-        drainTask?.cancel()
-        endDrainTime()
-    }
-
-    /// Ended once: from the expiry, or when the drain stops.
-    private func endDrainTime() {
-        guard drainTime != .invalid else { return }
-        backgroundTime.end(drainTime)
-        drainTime = .invalid
     }
 
     /// Has iOS run the background task with `drain`, which starts a drain or
@@ -384,6 +378,35 @@ final class HistoryUploader {
     /// count both go by it, so they agree.
     private static func isTooOld(_ timestamp: Int64, at now: Int64) -> Bool {
         now - timestamp > maxAgeSeconds
+    }
+}
+
+/// A drain's background time, ended once: as the drain stops, or as iOS
+/// takes it back, whichever comes first. Each drain has its own, so a
+/// stopped drain running on beside a new one (`drain(through:)` says when)
+/// can't end the new one's time as it stops, and iOS taking back the old
+/// one's time stops only the old one.
+private final class DrainTime {
+    private let backgroundTime: any BackgroundTime
+    private var time = UIBackgroundTaskIdentifier.invalid
+
+    init(_ backgroundTime: any BackgroundTime) {
+        self.backgroundTime = backgroundTime
+    }
+
+    /// `expired` stops the drain as iOS takes the time back, and the time is
+    /// ended then, as iOS requires.
+    func begin(expired: @escaping @MainActor () -> Void) {
+        time = backgroundTime.begin("Send kept reports") { [weak self] in
+            expired()
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard time != .invalid else { return }
+        backgroundTime.end(time)
+        time = .invalid
     }
 }
 

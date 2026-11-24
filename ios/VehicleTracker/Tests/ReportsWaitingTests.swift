@@ -43,7 +43,7 @@ import Testing
         let settings = AppSettings.signedIn(try #require(UserDefaults(suiteName: defaultsName)))
         let queue = OfflineFixQueue(directory: directory)
         let history = HistoryUploader(queue: queue, settings: settings, now: { clock.now },
-                                      sleepUntilExpiry: expiry.sleep(for:))
+                                      backgroundTasks: FakeBackgroundTaskScheduler(), sleepUntilExpiry: expiry.sleep(for:))
         return (history, queue, settings)
     }
 
@@ -225,8 +225,8 @@ import Testing
     func launch() throws -> TripSession {
         let settings = AppSettings(defaults: try #require(UserDefaults(suiteName: defaultsName)))
         let history = HistoryUploader(queue: OfflineFixQueue(directory: directory), settings: settings, now: { clock.now },
-                                      backgroundTime: background, sleep: interval.sleep(for:),
-                                      sleepUntilExpiry: expiry.sleep(for:))
+                                      backgroundTime: background, backgroundTasks: FakeBackgroundTaskScheduler(),
+                                      sleep: interval.sleep(for:), sleepUntilExpiry: expiry.sleep(for:))
         return TripSession(settings: settings, tokens: tokens, store: store, locations: locations,
                            access: FakeLocationAccess(), history: history, makeAPI: { _, _ in api }, now: { clock.now })
     }
