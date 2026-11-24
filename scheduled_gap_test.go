@@ -242,6 +242,27 @@ func TestStopSchedule_GapAt(t *testing.T) {
 				{[]rider.Frequency{every(10*time.Minute, hms(7, 55, 0), hms(8, 0, 0)), every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0},
 			},
 			at(7, 58, 0), 10 * time.Minute},
+		{"a pattern written as two rows carries nothing on from a trip's end at its second row, so a pattern beginning in the trip's last headway takes over",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0)), every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 55, 0), hms(9, 0, 0))}, 0},
+			},
+			at(7, 58, 0), 5 * time.Minute},
+		{"as it does when that pattern is one row",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(9, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 55, 0), hms(9, 0, 0))}, 0},
+			},
+			at(7, 58, 0), 5 * time.Minute},
+		{"a trip beginning as two others end carries on the one asked about, so the other doesn't take over",
+			[]trip{
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 0, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(7, 55, 0), hms(8, 0, 0))}, 0},
+				{[]rider.Frequency{every(10*time.Minute, hms(8, 0, 0), hms(9, 0, 0))}, 0},
+			},
+			at(7, 58, 0), 5 * time.Minute},
 		{"a row written to end before it begins is not carried on by a trip that began first, so one is still due",
 			[]trip{
 				{[]rider.Frequency{every(30*time.Minute, hms(8, 10, 0), hms(8, 0, 0))}, 0},

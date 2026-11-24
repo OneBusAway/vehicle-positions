@@ -303,13 +303,16 @@ func takenOver(due [][]stopWindow, runs [][]stopRun, found []int, i int) bool {
 }
 
 // until is the last window of the run of due[i][k], followed on from its end
-// into the run of any window of another set but due[skip] that begins just
-// as it ends, and so on: of those, the latest to end, or of two that end
-// together, the one whose last headway began later. due[skip] is the set
-// asking whether it takes over, and its own window beginning as the run
-// ends is the handover, not more of the run. Where two sets carry on from
-// the same end, as two patterns each written one trip a row do, each end is
-// followed once.
+// into any run of another set but due[skip] that begins just as it ends, and
+// so on: of those, the latest to end, or of two that end together, the one
+// whose last headway began later. A window partway through another set's run
+// carries nothing on, as that run began before. due[skip] is the set asking
+// whether it takes over, and its own window beginning as the run ends is the
+// handover, not more of the run. Where two sets carry on from the same end,
+// as two patterns each written one trip a row do, each end is followed once.
+// Where a run begins just as both this run and the asking set's end, the feed
+// doesn't say which it carries on, and as rows of one trip it could be
+// either's: it carries this one on, so the asking set doesn't take over.
 func until(due [][]stopWindow, runs [][]stopRun, skip, i, k int) stopWindow {
 	end := due[i][runs[i][k].last]
 	ends := []time.Time{end.to}
@@ -320,7 +323,7 @@ func until(due [][]stopWindow, runs [][]stopRun, skip, i, k int) stopWindow {
 				continue
 			}
 			for x, v := range windows {
-				if !v.from.Equal(at) || !v.to.After(at) {
+				if !v.from.Equal(at) || !v.to.After(at) || !runs[j][x].began.Equal(at) {
 					continue
 				}
 				last := windows[runs[j][x].last]
