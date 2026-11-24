@@ -282,6 +282,10 @@ func TestImport_RefusesASheetThatBreaksTheCheck(t *testing.T) {
 		{"plural forms the language needs left empty", "pl",
 			map[string]string{"%1$d report sent": "%1$d raport wysłany"},
 			[]string{"[plurals] reports_sent (pl): plural forms few, many, other missing"}},
+		{"an escape the apps would show as typed", "hi",
+			map[string]string{"Sign in": "साइन इन\\u00a0करें"},
+			[]string{"[escapes] login_title (hi): the app shows \\u00a0 as typed, backslash and all",
+				"[escapes] Sign in (hi): the app shows \\u00a0 as typed, backslash and all"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -876,6 +880,41 @@ func TestImport_RefusesASheetSavedInAnotherEncoding(t *testing.T) {
 	assert.Equal(t, 2, code, out)
 	assert.Contains(t, out, "the text is not UTF-8: save the sheet as CSV UTF-8")
 	assert.NoFileExists(t, filepath.Join(p.root, "android/app/src/main/res/values-fr/strings.xml"))
+}
+
+// TestImport_ReadsADirectionControlTypedAsAnEscape: the note on
+// restriction_server_url_description asks a right-to-left translation for
+// U+2068 and U+2069 around https://, written as \u escapes, since neither can
+// be seen or typed. Typed so in a sheet, each reaches both apps as the
+// character. Before, strings.xml got the backslash escaped, and the app showed
+// the six characters.
+func TestImport_ReadsADirectionControlTypedAsAnEscape(t *testing.T) {
+	t.Run("in an Android row", func(t *testing.T) {
+		p := newSheetProject(t)
+		sheet := p.export(t, "ar")
+		translate(t, sheet, map[string]string{
+			"Read more at https://onebusaway.org within 24 hours.": "اقرأ المزيد على \\u2068https://onebusaway.org\\u2069 خلال 24 ساعة.",
+		})
+
+		code, out := p.importSheet(t, "ar", sheet)
+
+		require.Equal(t, 0, code, out)
+		read, err := readStringsXML(p.root, filepath.Join(p.root, "android/app/src/main/res/values-ar/strings.xml"))
+		require.NoError(t, err)
+		require.Len(t, read, 1)
+		assert.Equal(t, "اقرأ المزيد على \U00002068https://onebusaway.org\U00002069 خلال 24 ساعة.", read[0].version.forms[""].value)
+	})
+	t.Run("in a row both apps share, in capitals", func(t *testing.T) {
+		p := newSheetProject(t)
+		sheet := p.export(t, "hi", "-xliff", p.xliff)
+		translate(t, sheet, map[string]string{"Sign in": "\\u200Fसाइन इन करें"})
+
+		code, out := p.importSheet(t, "hi", sheet, "-xliff", p.xliff)
+
+		require.Equal(t, 0, code, out)
+		assert.Contains(t, p.read(t, androidHindi), "<string name=\"login_title\">\\u200fसाइन इन करें</string>")
+		assert.Contains(t, p.xliffText(t), "<target state=\"translated\">\U0000200Fसाइन इन करें</target>")
+	})
 }
 
 func TestImport_RefusesAnotherAppsSpecifiers(t *testing.T) {

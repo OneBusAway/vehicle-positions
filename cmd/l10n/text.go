@@ -126,6 +126,11 @@ func numbers(format, text string) []string {
 	return digitRun.FindAllString(strings.Map(asciiDigit, withoutPlaceholders(format, text)), -1)
 }
 
+// unicodeEscape is a \u escape with its four hex digits, as strings.xml
+// writes a character. Left in a string's text as the app shows it, the app
+// shows it as typed.
+var unicodeEscape = regexp.MustCompile(`\\u[0-9A-Fa-f]{4}`)
+
 var urlPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
 
 // urls lists text's web addresses, without punctuation that ends a sentence.

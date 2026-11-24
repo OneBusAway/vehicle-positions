@@ -96,6 +96,8 @@ opens. The tool writes it from the apps and writes it back into them.
    Fill in the `translation` column. A cell left empty keeps the `current` translation. Don't change the
    `android`, `ios` or `form` columns: they say where each translation goes, and two rows for the same string
    and form are refused. In a row with an `ios` id and no `android` name, write placeholders as its English does.
+   Direction marks and isolates can't be seen or typed, so a note may ask for them as escapes, as in "write
+   https:// between `\u2068` and `\u2069`". Type them that way: the import writes each as the character, in both apps.
 
 4. Write the sheet back, let Xcode bring the iOS strings into the String Catalog, then run the check:
 
@@ -115,8 +117,8 @@ opens. The tool writes it from the apps and writes it back into them.
    to date with the code as it exports and imports, which then shows as extra changes in `Localizable.xcstrings`.
 
 What the import does:
-- It refuses a sheet whose placeholders or plural forms break the check. It names each row that does, and writes
-  nothing.
+- It refuses a sheet whose placeholders or plural forms break the check, or whose text has a `\u` escape the app
+  would show as typed. It names each row that does, and writes nothing.
 - It writes both files or neither: when one can't be written, the other is left as it was.
 - It leaves each iOS string the sheet doesn't fill in as it is, state and all, so a draft stays one until a sheet
   without `-draft` fills it in.
@@ -165,6 +167,8 @@ Errors:
   string where the English is a plural.
 - **`numbers`**: a number in the English isn't in the translation in digits.
 - **`urls`**: a web address in the English isn't in the translation unchanged.
+- **`escapes`**: the app would show a `\u` escape in a translation as typed, backslash and all, as it shows
+  `\\u2068` in `strings.xml`, where `\u2068` is the character.
 - **`do-not-translate`**: a `do_not_translate` term in the English isn't in the translation unchanged.
 - **`forbidden`**: the English uses a `forbidden_en` word such as "bus", or a translation uses a forbidden word for a
   term its English uses.
