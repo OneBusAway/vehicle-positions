@@ -491,8 +491,9 @@ WHERE id = $1;
 -- name: CountActiveAPIKeys :one
 SELECT COUNT(*) FROM api_keys WHERE active = true;
 
--- name: RevokeToken :exec
--- Idempotent: logging out twice must not error.
+-- name: RevokeToken :execrows
+-- Idempotent: logging out twice must not error, and the second adds no row,
+-- which is how the audit log records one sign-out.
 INSERT INTO revoked_tokens (jti, user_id, expires_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (jti) DO NOTHING;
@@ -677,13 +678,14 @@ VALUES (sqlc.narg(actor_id),
 
 -- name: ListAuditEntries :many
 -- One page of the audit log, newest first, narrowed to one kind of object, one
--- object of that kind, or the changes one admin made, by whichever are given.
--- account_name is the name the account a row is about has now: '' for a row
--- about something else, or about an account since deleted.
+-- object of that kind, or what one account did, by whichever are given.
+-- account_name is the name the account a row is about, or the session it
+-- records, has now: '' for a row about something else, or about an account
+-- since deleted.
 SELECT a.id, a.at, a.actor_id, a.actor_email, a.actor_ip, a.object_type, a.object_id, a.action,
        a.before, a.after, COALESCE(u.name, '')::TEXT AS account_name
 FROM audit_log a
-LEFT JOIN users u ON a.object_type = 'user' AND u.id::TEXT = a.object_id
+LEFT JOIN users u ON a.object_type IN ('user', 'session') AND u.id::TEXT = a.object_id
 WHERE (sqlc.narg(object_type)::TEXT IS NULL OR a.object_type = sqlc.narg(object_type))
   AND (sqlc.narg(object_id)::TEXT IS NULL OR a.object_id = sqlc.narg(object_id))
   AND (sqlc.narg(actor_id)::BIGINT IS NULL OR a.actor_id = sqlc.narg(actor_id))

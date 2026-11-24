@@ -1549,7 +1549,7 @@ const listAuditEntries = `-- name: ListAuditEntries :many
 SELECT a.id, a.at, a.actor_id, a.actor_email, a.actor_ip, a.object_type, a.object_id, a.action,
        a.before, a.after, COALESCE(u.name, '')::TEXT AS account_name
 FROM audit_log a
-LEFT JOIN users u ON a.object_type = 'user' AND u.id::TEXT = a.object_id
+LEFT JOIN users u ON a.object_type IN ('user', 'session') AND u.id::TEXT = a.object_id
 WHERE ($1::TEXT IS NULL OR a.object_type = $1)
   AND ($2::TEXT IS NULL OR a.object_id = $2)
   AND ($3::BIGINT IS NULL OR a.actor_id = $3)
@@ -1580,9 +1580,10 @@ type ListAuditEntriesRow struct {
 }
 
 // One page of the audit log, newest first, narrowed to one kind of object, one
-// object of that kind, or the changes one admin made, by whichever are given.
-// account_name is the name the account a row is about has now: ” for a row
-// about something else, or about an account since deleted.
+// object of that kind, or what one account did, by whichever are given.
+// account_name is the name the account a row is about, or the session it
+// records, has now: ” for a row about something else, or about an account
+// since deleted.
 func (q *Queries) ListAuditEntries(ctx context.Context, arg ListAuditEntriesParams) ([]ListAuditEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listAuditEntries,
 		arg.ObjectType,
@@ -2278,7 +2279,7 @@ func (q *Queries) RecordImportConfirmation(ctx context.Context, arg RecordImport
 	return result.RowsAffected(), nil
 }
 
-const revokeToken = `-- name: RevokeToken :exec
+const revokeToken = `-- name: RevokeToken :execrows
 INSERT INTO revoked_tokens (jti, user_id, expires_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (jti) DO NOTHING
@@ -2290,10 +2291,14 @@ type RevokeTokenParams struct {
 	ExpiresAt pgtype.Timestamptz
 }
 
-// Idempotent: logging out twice must not error.
-func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
-	_, err := q.db.Exec(ctx, revokeToken, arg.Jti, arg.UserID, arg.ExpiresAt)
-	return err
+// Idempotent: logging out twice must not error, and the second adds no row,
+// which is how the audit log records one sign-out.
+func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeToken, arg.Jti, arg.UserID, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const saveFeedHealthHour = `-- name: SaveFeedHealthHour :exec

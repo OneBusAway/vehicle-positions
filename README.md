@@ -38,7 +38,8 @@ dashboard, live fleet map with per-trip trails, vehicle CRUD (with CSV export
 of location history), user CRUD, vehicle assignments, and trip history. It
 also has Alerts (vehicles gone quiet, not moving, off their route or bunched
 behind the vehicle ahead, and a block's next trip not started), Analytics, feed health, feed API keys, an
-Audit log of the changes admins make to vehicles, accounts, trips and API keys, and a
+Audit log of the changes admins make to vehicles, accounts, trips and API keys
+and of admins' and viewers' sign-ins and sign-outs, and a
 Driver setup page with the setup link and its QR code. A viewer account sees
 every page but can't change anything (see **Viewer accounts** below). It's built into the
 same binary and enabled by default; set `ADMIN_UI_ENABLED=false` to disable it
@@ -84,8 +85,8 @@ clients and up to 24 hours for the admin UI's session cookie.
 Behind a reverse proxy (nginx, an ALB, etc.), set `TRUST_PROXY_HEADERS=true`
 so the server reads the real client IP and scheme from `X-Forwarded-For` /
 `X-Forwarded-Proto` — this affects the admin login rate limiter's per-IP
-bucketing, the address the audit log records for each admin change, and
-whether the session cookie is marked `Secure`. Leave it unset
+bucketing, the address the audit log records for each admin change, sign-in
+and sign-out, and whether the session cookie is marked `Secure`. Leave it unset
 (false) when the server is reachable directly, since trusting those headers
 from an untrusted client would let it spoof its IP.
 
@@ -328,7 +329,7 @@ The feed is served at a configurable HTTP endpoint (e.g., `GET /gtfs-rt/vehicle-
 |`GET /api/v1/admin/api-keys`        |GET   |List feed API keys                                  |
 |`POST /api/v1/admin/api-keys`       |POST  |Create a feed API key (raw key shown once)          |
 |`DELETE /api/v1/admin/api-keys/{id}`|DELETE|Revoke a feed API key                               |
-|`GET /api/v1/admin/audit`           |GET   |Audit log of admin changes, newest first            |
+|`GET /api/v1/admin/audit`           |GET   |Audit log of admin changes and sign-ins             |
 |`POST /api/v1/trips/start`          |POST  |Driver starts a trip (assigns vehicle to route/trip)|
 |`POST /api/v1/trips/end`            |POST  |Driver ends a trip                                  |
 |`POST /api/v1/admin/trips/{id}/end` |POST  |End any driver's active trip (admin)                |
@@ -348,7 +349,7 @@ needs nothing of its own. The driver API (`POST /api/v1/locations`,
 viewer can't hold a vehicle either: `POST /api/v1/admin/assignments` refuses
 one with `409`, and making an account a viewer unassigns its vehicles in the
 same transaction, refused with `409` while it has a trip running. On the Audit
-log page a viewer sees who made each change but not the address it came
+log page a viewer sees who each row is by but not the address it came
 from, and `GET /api/v1/admin/audit` leaves `actor_ip` out of a viewer's
 entries.
 

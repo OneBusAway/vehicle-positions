@@ -931,10 +931,13 @@ paths:
       description: |
         Returns one page of the audit log newest-first: each change made to a
         vehicle, an account, a trip or an API key through the admin UI or this
-        API, and the changes the server made itself. The filters are the Audit
-        log page's. Requires the `admin` or `viewer` role. A viewer's entries
-        leave out `actor_ip`, as a viewer's Audit log page leaves out the
-        address.
+        API, the changes the server made itself, and each sign-in and sign-out
+        of an `admin` or `viewer` account, through the admin UI or this API. A
+        driver's sign-ins are not recorded, and neither is a token renewed with
+        `POST /api/v1/auth/refresh` or a session that runs out. The filters are
+        the Audit log page's. Requires the `admin` or `viewer` role. A viewer's
+        entries leave out `actor_ip`, as a viewer's Audit log page leaves out
+        the address.
 
         Paging is offset-based. The handler reads one row past `limit` to set
         `has_more`, so a truncated page is distinguishable from an exact fit.
@@ -946,17 +949,19 @@ paths:
           required: false
           schema:
             type: string
-            enum: [vehicle, user, trip, api_key]
-          description: Only changes to this kind of object. Omit for every kind.
+            enum: [vehicle, user, trip, api_key, session]
+          description: |
+            Only entries about this kind of object. `session` is the sign-ins
+            and sign-outs. Omit for every kind.
         - in: query
           name: id
           required: false
           schema:
             type: string
           description: |
-            Only changes to this one object: a vehicle's id, or an account's,
-            trip's or API key's number. Needs `type`; an `id` without it is a
-            `400`.
+            Only entries about this one object: a vehicle's id, or an
+            account's, trip's or API key's number; for a `session`, its
+            account's number. Needs `type`; an `id` without it is a `400`.
         - in: query
           name: actor
           required: false
@@ -964,7 +969,9 @@ paths:
             type: integer
             format: int64
             minimum: 1
-          description: Only the changes made by the admin with this user id.
+          description: |
+            Only what the account with this user id did: the changes it made,
+            and its sign-ins and sign-outs.
         - $ref: '#/components/parameters/ListLimitQuery'
         - $ref: '#/components/parameters/ListOffsetQuery'
       responses:
@@ -3041,53 +3048,62 @@ components:
     AuditEntry:
       type: object
       description: |
-        One change to one object. `before` and `after` hold the object's small
-        fields, never a password or a key: a vehicle's `label`, `agency_tag`
-        and `active`; an account's `name`, `email`, `role` and `active`; an
-        API key's `name` and `active`; a trip's `status`. An account's
-        `assign_vehicle` and `unassign_vehicle` hold the `vehicle_id`.
+        One change to one object, or one sign-in or sign-out. `before` and
+        `after` hold the object's small fields, never a password, a key or a
+        token: a vehicle's `label`, `agency_tag` and `active`; an account's
+        `name`, `email`, `role` and `active`; an API key's `name` and `active`;
+        a trip's `status`. An account's `assign_vehicle` and `unassign_vehicle`
+        hold the `vehicle_id`. A session's `sign_in` and `sign_out` hold `via`
+        in `after`: `admin` for the admin UI, or `api` for
+        `POST /api/v1/auth/login` and `POST /api/v1/auth/logout`, which the
+        driver apps use too.
       required: [id, at, actor_id, actor_email, object_type, object_id, action, before, after]
       properties:
         id:
           type: integer
           format: int64
-          description: Grows with each change, so it orders the entries.
+          description: Grows with each entry, so it orders them.
         at:
           type: string
           format: date-time
-          description: When the change was made, in UTC.
+          description: When the change, sign-in or sign-out was made, in UTC.
         actor_id:
           type: [integer, 'null']
           format: int64
           description: |
-            The user id of the admin who made the change. Null for a change
-            the server made itself: the first admin, created from
-            `ADMIN_BOOTSTRAP_EMAIL`, or an account restored with `reset-admin`.
-            It is kept after the account is deleted.
+            The user id of the admin who made the change, or of the account
+            that signed in or out. Null for a change the server made itself:
+            the first admin, created from `ADMIN_BOOTSTRAP_EMAIL`, or an
+            account restored with `reset-admin`. It is kept after the account
+            is deleted.
         actor_email:
           type: string
           description: |
-            The admin's email, kept with the entry so it still names them after
-            their account changes or is deleted. Empty for the server.
+            That account's email, kept with the entry so it still names them
+            after the account changes or is deleted. Empty for the server.
         actor_ip:
           type: string
           description: |
-            The address the change came from, read as the sign-in rate limiter
+            The address the request came from, read as the sign-in rate limiter
             reads it, so behind a proxy it is right only with
             `TRUST_PROXY_HEADERS` set. Empty for the server. Left out of a
             viewer's entries.
         object_type:
           type: string
-          enum: [vehicle, user, trip, api_key]
+          enum: [vehicle, user, trip, api_key, session]
         object_id:
           type: string
-          description: The vehicle's id, or the account's, trip's or API key's number.
+          description: |
+            The vehicle's id, or the account's, trip's or API key's number. A
+            session's is its account's number, the same as `actor_id`.
         action:
           type: string
-          enum: [create, update, activate, deactivate, delete, set_password, assign_vehicle, unassign_vehicle, end]
+          enum: [create, update, activate, deactivate, delete, set_password, assign_vehicle, unassign_vehicle, end, sign_in, sign_out]
         before:
           type: [object, 'null']
-          description: The fields before the change. Null for a create, an `assign_vehicle` and a `set_password`.
+          description: |
+            The fields before the change. Null for a create, an
+            `assign_vehicle`, a `set_password`, a `sign_in` and a `sign_out`.
         after:
           type: [object, 'null']
           description: The fields after the change. Null for a delete, an `unassign_vehicle` and a `set_password`.

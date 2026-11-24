@@ -82,6 +82,32 @@ func TestListAuditEntries_Entries(t *testing.T) {
 	}`, w.Body.String())
 }
 
+// TestListAuditEntries_SignIn pins a sign-in's fields: the account it is by is
+// the object too, and after says which way in.
+func TestListAuditEntries_SignIn(t *testing.T) {
+	actor := int64(5)
+	log := &fakeAuditLog{entries: []auditEntry{{
+		ID: 13, At: time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC), ActorID: &actor,
+		ActorEmail: "ops@example.org", ActorIP: "203.0.113.24", AccountName: "Ops",
+		ObjectType: auditSession, ObjectID: "5", Action: auditSignIn, After: fieldsJSON(t, sessionAudit{Via: auditViaAPI}),
+	}}}
+
+	w := getAuditAPI(t, log, roleAdmin, "?type=session")
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.JSONEq(t, `{
+		"count": 1,
+		"has_more": false,
+		"entries": [{
+			"id": 13, "at": "2026-11-24T08:00:00Z",
+			"actor_id": 5, "actor_email": "ops@example.org", "actor_ip": "203.0.113.24",
+			"object_type": "session", "object_id": "5", "action": "sign_in",
+			"before": null,
+			"after": {"via": "api"}
+		}]
+	}`, w.Body.String())
+}
+
 // TestListAuditEntries_LeavesOutTheAddressForAViewer: a viewer gets every
 // entry an admin gets, without actor_ip at all, as a viewer's Audit log page
 // leaves the address out.
@@ -118,6 +144,8 @@ func TestListAuditEntries_Filters(t *testing.T) {
 	}{
 		{name: "none", query: "", want: auditFilter{Limit: defaultListLimit + 1}},
 		{name: "one kind of object", query: "?type=api_key", want: auditFilter{ObjectType: auditAPIKey, Limit: defaultListLimit + 1}},
+		{name: "the sign-ins", query: "?type=session", want: auditFilter{ObjectType: auditSession, Limit: defaultListLimit + 1}},
+		{name: "one account's sign-ins", query: "?type=session&id=5", want: auditFilter{ObjectType: auditSession, ObjectID: "5", Limit: defaultListLimit + 1}},
 		{name: "one object", query: "?type=vehicle&id=bus-1", want: auditFilter{ObjectType: auditVehicle, ObjectID: "bus-1", Limit: defaultListLimit + 1}},
 		{name: "one admin", query: "?actor=7", want: auditFilter{ActorID: &actor, Limit: defaultListLimit + 1}},
 		{name: "a page", query: "?limit=20&offset=40", want: auditFilter{Limit: 21, Offset: 40}},
@@ -144,7 +172,7 @@ func TestListAuditEntries_BadQuery(t *testing.T) {
 		query string
 		want  string
 	}{
-		{"?type=bus", "type must be vehicle, user, trip or api_key"},
+		{"?type=bus", "type must be vehicle, user, trip, api_key or session"},
 		{"?id=bus-1", "id needs a type"},
 		{"?actor=ops", "actor must be a user id"},
 		{"?actor=0", "actor must be a user id"},

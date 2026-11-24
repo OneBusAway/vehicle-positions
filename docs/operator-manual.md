@@ -344,17 +344,22 @@ server, which signs everyone out.
 ### Who changed what: the Audit log
 
 **Audit log** lists every change made to a vehicle, an account, a trip or an
-API key, newest first, whether it was made on these pages or through the admin
-API. Each row says what was done and to what, for example **Edited vehicle**
-and the vehicle's label; when; who did it, with the address their browser or
-script connected from; and what the change did to each field, such as a label
-from its old value to its new one or an account from **Active** to
-**Deactivated**.
+API key, and every sign-in and sign-out by an admin or a viewer, newest first,
+whether it was made on these pages or through the API. Each row says what was
+done and to what, for example **Edited vehicle** and the vehicle's label; when;
+who did it, with the address their browser or script connected from; and what
+the change did to each field, such as a label from its old value to its new one
+or an account from **Active** to **Deactivated**.
 
-- The chips above the list show one kind of object: **Vehicles**,
-  **Accounts**, **Trips** or **API keys**.
-- Click the object in a row to see its whole history, or an admin's email to
-  see every change they made.
+- The chips above the list show one kind of row: **Vehicles**, **Accounts**,
+  **Trips**, **API keys** or **Sign-ins**.
+- Click the object in a row to see its whole history, or an email to see
+  everything that account did.
+- **Sign-in by** and **Sign-out by** name the account; click the name to see
+  only its sign-ins and sign-outs. **Through** says which way: **Admin site**
+  for these pages, **API** for a script or a driver app. A session that runs
+  out by itself adds no row, and neither does an app or a script renewing its
+  sign-in.
 - **Server** in place of an email is a change the server made itself: the first
   admin, created from `ADMIN_BOOTSTRAP_EMAIL`, or an account restored with
   `reset-admin` (see [Locked out](#locked-out-no-admin-can-sign-in)).
@@ -366,16 +371,19 @@ from its old value to its new one or an account from **Active** to
 
 Each row is saved together with the change it records. If the row cannot be
 saved, the change is not made either and you see an error, so a change that
-went through always has its row. Rows cannot be edited afterwards. They are
-kept forever unless your IT contact sets how long to keep them
-(`AUDIT_LOG_RETENTION_PERIOD`); then, once an hour, the rows older than that
-are deleted for good.
+went through always has its row. Signing in and out are the same: without its
+row a sign-in is refused with **Something went wrong. Try again.**, and a
+sign-out leaves you signed in with **Couldn't sign out. Try again.** Rows
+cannot be edited afterwards. They are kept forever unless your IT contact sets
+how long to keep them (`AUDIT_LOG_RETENTION_PERIOD`); then, once an hour, the
+rows older than that are deleted for good.
 
 Your IT contact can read the same list as JSON from `GET /api/v1/admin/audit`,
 with the same filters. A viewer's copy leaves out the addresses there too.
 
-It does not record sign-ins, what anyone looked at, or what drivers do in the
-app, such as starting and ending their own trips. The server's log has those.
+It does not record failed sign-ins, drivers signing in and out, what anyone
+looked at, or what drivers do in the app, such as starting and ending their own
+trips. The server's log has those.
 
 Behind a reverse proxy the address is right only when your IT contact has set
 `TRUST_PROXY_HEADERS`, the same setting the sign-in limit relies on; without
@@ -1273,9 +1281,12 @@ time the phone recorded it, the time the server received it, and the trip it
 belonged to. For every trip: the driver, the vehicle, the route id, the
 optional GTFS trip id, and the start and end times. For every account: name,
 email address, role and a scrambled form of the password — never the password
-itself. For every change made in the admin or its API, the
-[Audit log](#who-changed-what-the-audit-log) keeps who made it, by account and
-email, the address they connected from, and the fields it changed.
+itself. For every change made in the admin or its API, and every sign-in and
+sign-out by an admin or a viewer, the
+[Audit log](#who-changed-what-the-audit-log) keeps who it was, by account and
+email, the address they connected from, and the fields a change changed. So it
+keeps an admin's and a viewer's address each time they sign in, even if they
+change nothing. A driver's sign-ins are not kept there.
 
 Taken together this is a **per-driver movement history**, and it should be
 treated like one. Anyone with an admin or viewer account can see any vehicle's

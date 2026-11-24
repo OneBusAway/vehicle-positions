@@ -204,7 +204,6 @@ func TestViewer_ThroughTheServer(t *testing.T) {
 		h.ServeHTTP(w, req)
 		return w
 	}
-	before := auditFixtureState(t, store)
 
 	// The admin's sign-in form.
 	req := httptest.NewRequest(http.MethodPost, "/admin/login", strings.NewReader("email=aud-vic%40example.org&password=a-password"))
@@ -213,6 +212,18 @@ func TestViewer_ThroughTheServer(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	require.Len(t, w.Result().Cookies(), 1)
 	session := w.Result().Cookies()[0]
+
+	// The JSON API's sign-in.
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"aud-vic@example.org","password":"a-password"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = serve(req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var login LoginResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&login))
+	bearer := "Bearer " + login.AccessToken
+
+	// Signed in, and the sign-ins recorded, so from here nothing should be.
+	before := auditFixtureState(t, store)
 
 	req = httptest.NewRequest(http.MethodGet, "/admin/vehicles", nil)
 	req.AddCookie(session)
@@ -228,15 +239,7 @@ func TestViewer_ThroughTheServer(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "Your account can look but not change")
 
-	// The JSON API, with the token the API's sign-in gives.
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"aud-vic@example.org","password":"a-password"}`))
-	req.Header.Set("Content-Type", "application/json")
-	w = serve(req)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var login LoginResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&login))
-	bearer := "Bearer " + login.AccessToken
-
+	// The JSON API, with the token its sign-in gave.
 	for _, tc := range []struct {
 		method, path, body string
 		want               int

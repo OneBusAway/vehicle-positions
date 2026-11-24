@@ -175,6 +175,9 @@ func (n *noopStore) CountActiveAPIKeys(_ context.Context) (int, error) {
 func (n *noopStore) ListAuditEntries(_ context.Context, _ auditFilter) ([]auditEntry, error) {
 	return make([]auditEntry, 0), nil
 }
+func (n *noopStore) RecordSignIn(_ context.Context) error {
+	return nil
+}
 func (n *noopStore) DeactivateAPIKey(_ context.Context, _ int64) error {
 	return nil
 }

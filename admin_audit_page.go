@@ -13,16 +13,17 @@ import (
 
 // auditObjectTypes are the kinds of object the Audit log page filters by, in
 // the order its chips show them, with each chip's label and the noun the
-// headline names one of them by.
+// headline names one of them by, which for a session is its account.
 var auditObjectTypes = []struct{ kind, label, noun string }{
 	{auditVehicle, "Vehicles", "vehicle"},
 	{auditUser, "Accounts", "account"},
 	{auditTrip, "Trips", "trip"},
 	{auditAPIKey, "API keys", "API key"},
+	{auditSession, "Sign-ins", "account"},
 }
 
-// auditActions are what each change is called on the page, by kind of
-// object and action. A row whose pair is missing shows the action as stored.
+// auditActions are what each row is called on the page, by kind of object
+// and action. A row whose pair is missing shows the action as stored.
 var auditActions = map[string]map[string]string{
 	auditVehicle: {
 		auditCreate:     "Added vehicle",
@@ -47,6 +48,10 @@ var auditActions = map[string]map[string]string{
 		auditCreate:     "Created API key",
 		auditDeactivate: "Deactivated API key",
 	},
+	auditSession: {
+		auditSignIn:  "Sign-in by",
+		auditSignOut: "Sign-out by",
+	},
 }
 
 // auditFieldLabels are the stored fields the page shows, in the order it
@@ -60,6 +65,7 @@ var auditFieldLabels = []struct{ field, label string }{
 	{"vehicle_id", "Vehicle"},
 	{"status", "Status"},
 	{"active", "Status"},
+	{"via", "Through"},
 }
 
 // auditDetail is one field of a row: what it was and what it became. From
@@ -71,20 +77,21 @@ type auditDetail struct {
 	To    string
 }
 
-// auditRow is one change on the Audit log page.
+// auditRow is one row on the Audit log page.
 type auditRow struct {
 	// When and Day are on the page's clock.
 	When string
 	Day  string
-	// Who is the admin's email, or "Server" for a change the server made
-	// itself; WhoURL lists every change they made, "" for the server.
+	// Who is the email of the admin, or of the account signing in or out, or
+	// "Server" for a change the server made itself; WhoURL lists everything
+	// they did, "" for the server.
 	Who    string
 	WhoURL string
-	// IP is the address the change came from: "" for the server's own, and
+	// IP is the address the request came from: "" for the server's own, and
 	// on a viewer's page.
 	IP string
-	// What is the change in words, and Object the object it was made to,
-	// with ObjectURL listing that object's history.
+	// What is the row in words, and Object the object it is about, with
+	// ObjectURL listing that object's history, or that account's sign-ins.
 	What      string
 	Object    string
 	ObjectURL string
@@ -95,7 +102,7 @@ type auditRow struct {
 }
 
 // auditPageURL is an /admin/audit link for the filter f's kind of object,
-// object and admin, at page.
+// object and actor, at page.
 func auditPageURL(f auditFilter, page int) string {
 	v := url.Values{}
 	if f.ObjectType != "" {
@@ -128,12 +135,12 @@ func auditTypeNoun(kind string) (string, bool) {
 
 // parseAuditFilter reads the audit log's filter from a query, the Audit log
 // page's and GET /api/v1/admin/audit's alike: ?type= one kind of object, with
-// ?id= one object of it, and ?actor= one admin's user id. It returns a
+// ?id= one object of it, and ?actor= one account's user id. It returns a
 // message for the 400 when the query names no such filter.
 func parseAuditFilter(q url.Values) (auditFilter, string) {
 	f := auditFilter{ObjectType: q.Get("type"), ObjectID: q.Get("id")}
 	if _, ok := auditTypeNoun(f.ObjectType); f.ObjectType != "" && !ok {
-		return auditFilter{}, "type must be vehicle, user, trip or api_key"
+		return auditFilter{}, "type must be vehicle, user, trip, api_key or session"
 	}
 	if f.ObjectID != "" && f.ObjectType == "" {
 		return auditFilter{}, "id needs a type"
@@ -172,9 +179,9 @@ func newAuditRow(e auditEntry, loc *time.Location, now time.Time) auditRow {
 	switch {
 	case row.name != "":
 		row.Object = row.name
-	case e.ObjectType == auditUser:
+	case e.ObjectType == auditUser || e.ObjectType == auditSession:
 		// The words before it name the kind, but for an account they can
-		// end in "for", "to" or "from".
+		// end in "for", "to", "from" or "by".
 		row.Object = "account " + e.ObjectID
 	}
 	if e.ActorID != nil {
@@ -252,6 +259,10 @@ func auditValue(field string, fields map[string]any) (string, bool) {
 			return "Running", true
 		case field == "status" && v == "completed":
 			return "Ended", true
+		case field == "via" && v == auditViaAdmin:
+			return "Admin site", true
+		case field == "via" && v == auditViaAPI:
+			return "API", true
 		}
 		return v, true
 	}
@@ -260,27 +271,34 @@ func auditValue(field string, fields map[string]any) (string, bool) {
 }
 
 // auditHeadline is the Audit log page's headline for the filter f, naming
-// the object or admin as the newest row shown does, when there is one.
+// the object or account as the newest row shown does, when there is one.
 func auditHeadline(f auditFilter, rows []auditRow) string {
 	switch {
 	case f.ObjectID != "":
+		history := "History of "
+		if f.ObjectType == auditSession {
+			history = "Sign-ins for "
+		}
 		if len(rows) > 0 && rows[0].name != "" {
-			return "History of " + rows[0].name
+			return history + rows[0].name
 		}
 		noun, _ := auditTypeNoun(f.ObjectType)
-		return "History of " + noun + " " + f.ObjectID
+		return history + noun + " " + f.ObjectID
 	case f.ActorID != nil:
+		who := "account " + strconv.FormatInt(*f.ActorID, 10)
 		if len(rows) > 0 {
-			return "Changes by " + rows[0].Who
+			who = rows[0].Who
 		}
-		return "Changes by account " + strconv.FormatInt(*f.ActorID, 10)
+		return "What " + who + " did"
+	case f.ObjectType == auditSession:
+		return "Who signed in"
 	}
 	return "Who changed what"
 }
 
 // auditPage renders one page of the audit log, newest first, of every kind of
-// object or of the one ?type= names, narrowed to one object by ?id= or to one
-// admin's changes by ?actor=.
+// object or of the one ?type= names, narrowed to one object by ?id= or to what
+// one account did by ?actor=.
 func (ui *adminUI) auditPage(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	filter, problem := parseAuditFilter(query)
@@ -304,9 +322,9 @@ func (ui *adminUI) auditPage(w http.ResponseWriter, r *http.Request) {
 
 	loc := pageLocation(ui.reports.index())
 	now := time.Now()
-	// A viewer sees who made each change but not the address they made it
-	// from, which says where an admin was. It is left out of the page, not
-	// just hidden.
+	// A viewer sees who each row is by but not the address they were at,
+	// which says where an admin was. It is left out of the page, not just
+	// hidden.
 	viewer := isViewer(r)
 	rows := make([]auditRow, 0, len(entries))
 	for _, e := range entries {
@@ -317,8 +335,8 @@ func (ui *adminUI) auditPage(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
-	// A chip shows every change to its kind of object, so it drops the
-	// object and admin filters.
+	// A chip shows every row about its kind of object, so it drops the
+	// object and actor filters.
 	chips := make([]statusLink, 0, len(auditObjectTypes)+1)
 	chips = append(chips, statusLink{Label: "All", URL: auditPageURL(auditFilter{}, 1), Current: filter.ObjectType == "" && filter.ActorID == nil})
 	for _, t := range auditObjectTypes {
@@ -337,7 +355,7 @@ func (ui *adminUI) auditPage(w http.ResponseWriter, r *http.Request) {
 		"Chips":    chips,
 		"Filtered": filter.ObjectType != "" || filter.ActorID != nil,
 		"Timezone": loc.String(),
-		"Shown":    newPagerCount(len(rows), "change", "changes"),
+		"Shown":    newPagerCount(len(rows), "entry", "entries"),
 		"PageNum":  page,
 		"HasMore":  hasMore,
 		"PrevURL":  auditPageURL(filter, page-1),

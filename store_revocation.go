@@ -24,7 +24,9 @@ type TokenChecker interface {
 }
 
 // RevokeToken adds a jti to the revocation list. It is idempotent, so logging
-// out twice with the same token succeeds both times.
+// out twice with the same token succeeds both times. The sign-out of an
+// account that may use the admin UI is recorded in the audit log in the same
+// transaction, once: a jti already on the list has been.
 //
 // A revocation row deliberately outlives the user it belongs to. user_id is
 // ON DELETE SET NULL rather than CASCADE so a revoked jti stays revoked on
@@ -38,15 +40,20 @@ type TokenChecker interface {
 // job (DELETE FROM revoked_tokens WHERE expires_at < NOW()) is needed as a
 // follow-up, and is the only thing that should ever remove a row.
 func (s *Store) RevokeToken(ctx context.Context, jti string, userID int64, expiresAt time.Time) error {
-	err := s.queries.RevokeToken(ctx, db.RevokeTokenParams{
-		Jti:       jti,
-		UserID:    pgtype.Int8{Int64: userID, Valid: true},
-		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+	return s.inSessionTx(ctx, func(q *db.Queries) error {
+		added, err := q.RevokeToken(ctx, db.RevokeTokenParams{
+			Jti:       jti,
+			UserID:    pgtype.Int8{Int64: userID, Valid: true},
+			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("revoke token: %w", err)
+		}
+		if added == 0 {
+			return nil
+		}
+		return recordSession(ctx, q, auditSignOut)
 	})
-	if err != nil {
-		return fmt.Errorf("revoke token: %w", err)
-	}
-	return nil
 }
 
 // IsTokenRevoked returns true if the jti has been revoked.
