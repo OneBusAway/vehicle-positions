@@ -169,16 +169,16 @@ import VehiclePositionsKit
     /// A drain that is still going when a trip starts leaves the rest to it.
     @Test func aDrainStopsOnceATripStarts() async throws {
         defer { cleanUp() }
-        try await kept(600, for: driver)
+        try await kept(150, for: driver)
         let session = try launchSignedIn()
 
         session.sendKeptReports()
         #expect(await eventually { interval.asked.count == 1 })
-        #expect(api.historyUploads.map(\.points.count) == [500])
+        #expect(api.historyUploads.map(\.points.count) == [80])
         try await session.start(vehicle: vehicle, tripID: "T1")
         #expect(await drainIsOver())
         #expect(api.historyUploads.count == 1)
-        #expect(try await left(for: driver) == 100)
+        #expect(try await left(for: driver) == 70)
     }
 
     // MARK: Whose reports a sign-in leaves

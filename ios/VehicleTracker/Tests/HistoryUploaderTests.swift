@@ -29,6 +29,16 @@ import VehiclePositionsKit
                        bearing: 90, speed: 8, accuracy: 5, timestamp: Int64(clock.now.timeIntervalSince1970) - ago)
     }
 
+    /// One with every field the history takes, and measurements as long as
+    /// Core Location's are once written out.
+    func reportAsThePhoneTakesIt(_ ago: Int64) -> LocationReport {
+        LocationReport(vehicleID: "bus-1", tripID: "trip-0830-weekday",
+                       latitude: 47.60450123456789, longitude: -122.33003456789012,
+                       bearing: Double(Float(182.34567)), speed: Double(Float(8.513333)),
+                       accuracy: Double(Float(3.7900925)), timestamp: report(ago).timestamp,
+                       routeID: "route-12", startDate: "20260902")
+    }
+
     var ana: OfflineFixQueue.Owner { OfflineFixQueue.Owner(server: "https://transit.example.org", email: "ana@example.org")! }
 
     @Test func keptReportsGoAsOneUploadForTheirVehicle() async throws {
@@ -47,19 +57,26 @@ import VehiclePositionsKit
         #expect(api.historyUploads.count == 1)
     }
 
-    /// The server takes at most 500 reports an upload.
-    @Test func anUploadCarriesTheOldest500() async throws {
+    /// A phone coming out of a dead zone is often on weak 2G, about 2,500
+    /// bytes a second up. A batch that can't go inside the client's ten
+    /// second timeout there is kept and starts over each time, so it never
+    /// goes. Eight seconds of it leave two for the headers, longer ids and a
+    /// live report sharing the link.
+    @Test func aFullBatchFitsTheTimeoutOnWeak2GAndTheNextTakesTheRest() async throws {
         defer { cleanUp() }
         let (history, queue, _) = try uploader()
-        for ago in (1...600).reversed() {
-            try await queue.add(report(Int64(ago)), for: ana)
+        for ago in (1...150).reversed() {
+            try await queue.add(reportAsThePhoneTakesIt(Int64(ago)), for: ana)
         }
 
         #expect(await history.uploadIfIdle(through: api) == .batchSent)
+        try #require(api.historyUploads.count == 1)
+        #expect(try JSONCoding.encoder.encode(api.historyUploads[0]).count <= 8 * 2_500)
+        #expect(api.historyUploads[0].points.map(\.timestamp) == (71...150).reversed().map { report(Int64($0)).timestamp })
+
         #expect(await history.uploadIfIdle(through: api) == .batchSent)
         try #require(api.historyUploads.count == 2)
-        #expect(api.historyUploads[0].points.map(\.timestamp) == (101...600).reversed().map { report(Int64($0)).timestamp })
-        #expect(api.historyUploads[1].points.count == 100)
+        #expect(api.historyUploads[1].points.map(\.timestamp) == (1...70).reversed().map { report(Int64($0)).timestamp })
         #expect(try await queue.oldest(10, for: ana).isEmpty)
     }
 
@@ -83,19 +100,19 @@ import VehiclePositionsKit
     @Test func aBatchThatFailsIsKeptAndTheOnesBeforeItStayGone() async throws {
         defer { cleanUp() }
         let (history, queue, _) = try uploader()
-        for ago in (1...600).reversed() {
+        for ago in (1...150).reversed() {
             try await queue.add(report(Int64(ago)), for: ana)
         }
         #expect(await history.uploadIfIdle(through: api) == .batchSent)
 
         api.historyError = APIError.transport("offline")
         #expect(await history.uploadIfIdle(through: api) == .kept)
-        #expect(try await queue.oldest(.max, for: ana).count == 100)
+        #expect(try await queue.oldest(.max, for: ana).count == 70)
 
         api.historyError = nil
         #expect(await history.uploadIfIdle(through: api) == .batchSent)
         try #require(api.historyUploads.count == 3)
-        #expect(api.historyUploads[2] == api.historyUploads[1], "the same 100 again")
+        #expect(api.historyUploads[2] == api.historyUploads[1], "the same 70 again")
         #expect(try await queue.oldest(10, for: ana).isEmpty)
     }
 
@@ -124,6 +141,21 @@ import VehiclePositionsKit
         #expect(await history.uploadIfIdle(through: api) == .batchSent)
         try #require(api.historyUploads.count == 1)
         #expect(api.historyUploads[0].points.map(\.timestamp) == [report(HistoryUploader.maxAgeSeconds).timestamp])
+        #expect(try await queue.oldest(10, for: ana).isEmpty)
+    }
+
+    @Test func moreTooOldReportsThanABatchHoldsAreAllDroppedUnsent() async throws {
+        defer { cleanUp() }
+        let (history, queue, _) = try uploader()
+        for over in (1...600).reversed() {
+            try await queue.add(report(HistoryUploader.maxAgeSeconds + Int64(over)), for: ana)
+        }
+        try await queue.add(report(20), for: ana)
+        try await queue.add(report(10), for: ana)
+
+        #expect(await history.uploadIfIdle(through: api) == .batchSent)
+        try #require(api.historyUploads.count == 1)
+        #expect(api.historyUploads[0].points.map(\.timestamp) == [report(20).timestamp, report(10).timestamp])
         #expect(try await queue.oldest(10, for: ana).isEmpty)
     }
 
@@ -272,17 +304,17 @@ import VehiclePositionsKit
     @Test func aDrainSendsBatchAfterBatchFiveSecondsApartUntilNothingIsLeft() async throws {
         defer { cleanUp() }
         let (history, queue, _) = try uploader()
-        try await keep(600, for: ana, in: queue)
+        try await keep(150, for: ana, in: queue)
 
         history.drain { api }
         #expect(await eventually { interval.asked.count == 1 })
-        #expect(api.historyUploads.map(\.points.count) == [500], "the second batch waits")
+        #expect(api.historyUploads.map(\.points.count) == [80], "the second batch waits")
         #expect(interval.asked == [HistoryUploader.drainInterval])
         #expect(HistoryUploader.drainInterval == .seconds(5))
 
         interval.fire()
         #expect(await eventually { interval.asked.count == 2 })
-        #expect(api.historyUploads.map(\.points.count) == [500, 100])
+        #expect(api.historyUploads.map(\.points.count) == [80, 70])
         #expect(background.running == 1, "still draining")
 
         interval.fire()
@@ -333,7 +365,7 @@ import VehiclePositionsKit
     @Test func aDrainStopsOnceItIsHandedNoServer() async throws {
         defer { cleanUp() }
         let (history, queue, _) = try uploader()
-        try await keep(600, for: ana, in: queue)
+        try await keep(150, for: ana, in: queue)
         let handed = Handed(api)
 
         history.drain { handed.api }
@@ -342,7 +374,7 @@ import VehiclePositionsKit
         interval.fire()
         #expect(await eventually { background.running == 0 })
         #expect(api.historyUploads.count == 1)
-        #expect(try await queue.oldest(.max, for: ana).count == 100)
+        #expect(try await queue.oldest(.max, for: ana).count == 70)
     }
 
     @Test func oneDrainAtATimeAndANewOneOnceItIsOver() async throws {

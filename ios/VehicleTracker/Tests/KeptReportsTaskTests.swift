@@ -171,18 +171,18 @@ import VehiclePositionsKit
     @Test func aRunSendsEverythingBatchByBatchAndCompletes() async throws {
         defer { cleanUp() }
         let (history, queue, _) = try uploader()
-        await history.keep(report(700))
-        try await keptEarlier(599, in: queue)
+        await history.keep(report(200))
+        try await keptEarlier(149, in: queue)
 
         let run = try #require(tasks.run(id))
         #expect(await eventually { interval.asked.count == 1 })
-        #expect(api.historyUploads.map(\.points.count) == [500])
+        #expect(api.historyUploads.map(\.points.count) == [80])
         #expect(run.completions.isEmpty, "the second batch waits")
         interval.fire()
         #expect(await eventually { interval.asked.count == 2 })
         interval.fire()
         #expect(await eventually { run.completions == [true] })
-        #expect(api.historyUploads.map(\.points.count) == [500, 100])
+        #expect(api.historyUploads.map(\.points.count) == [80, 70])
         #expect(try await queue.oldest(10, for: ana).isEmpty)
         #expect(tasks.submitted.count == 1, "nothing left to ask for")
         #expect(background.running == 0)
@@ -372,7 +372,7 @@ import VehiclePositionsKit
         defer { cleanUp() }
         let (history, queue, _) = try uploader()
         await history.keep(report(10))
-        try await keptEarlier(599, in: queue)
+        try await keptEarlier(149, in: queue)
         history.drain { api }
         #expect(await eventually { interval.asked.count == 1 })
 
@@ -383,7 +383,7 @@ import VehiclePositionsKit
         #expect(run.completions.isEmpty)
         interval.fire()
         #expect(await eventually { run.completions == [true] })
-        #expect(api.historyUploads.map(\.points.count) == [500, 100])
+        #expect(api.historyUploads.map(\.points.count) == [80, 70])
     }
 
     @Test func aRunWithNobodySignedInSendsNothingAndCompletes() async throws {

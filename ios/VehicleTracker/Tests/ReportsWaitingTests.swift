@@ -75,18 +75,18 @@ import Testing
         #expect(history.waiting == ReportsWaiting(count: 0, kept: 0))
     }
 
-    /// The server takes 500 an upload, so 100 of 600 are still waiting.
+    /// A batch is 80, so 70 of 150 are still waiting.
     @Test func anUploadTakesOffOneBatch() async throws {
         defer { cleanUp() }
         let (history, queue, _) = try uploader()
-        for ago in (1...600).reversed() {
+        for ago in (1...150).reversed() {
             try await queue.add(report(Int64(ago)), for: ana)
         }
         await history.countWaiting()
-        #expect(history.waiting.count == 600)
+        #expect(history.waiting.count == 150)
 
         #expect(await history.uploadIfIdle(through: api) == .batchSent)
-        #expect(history.waiting == ReportsWaiting(count: 100, kept: 100))
+        #expect(history.waiting == ReportsWaiting(count: 70, kept: 70))
     }
 
     @Test func aBatchKeptForNowStaysCounted() async throws {
