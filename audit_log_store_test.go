@@ -605,13 +605,13 @@ func TestStore_AuditLog_Imports(t *testing.T) {
 
 	t.Run("a file that fails part way leaves no row", func(t *testing.T) {
 		newAuditFixture(t, store)
-		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'aud-last'", `RAISE EXCEPTION 'test failure';`)
+		failWrites(t, store, "BEFORE INSERT", "vehicles", "NEW.id = 'aud-z-last'", `RAISE EXCEPTION 'test failure';`)
 		before := auditFixtureState(t, store)
 
 		_, err := store.ImportVehicles(ctx, newTestPreview(t), []vehicleImportRow{
 			{Line: 2, ID: "aud-new", Label: "New"},
 			{Line: 3, ID: "aud-v", Label: "Renamed", AgencyTag: "north"},
-			{Line: 4, ID: "aud-last", Label: "Last"},
+			{Line: 4, ID: "aud-z-last", Label: "Last"},
 		})
 		require.Error(t, err)
 
