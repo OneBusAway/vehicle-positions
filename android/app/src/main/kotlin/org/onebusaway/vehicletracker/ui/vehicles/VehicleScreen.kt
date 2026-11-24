@@ -110,7 +110,8 @@ fun VehicleScreenContent(
 
     val gridState = rememberLazyGridState()
     Column(Modifier.fillMaxSize()) {
-        FirstStepHeader(account)
+        // A viewer's session has ended: no one is signed in to show or sign out.
+        FirstStepHeader { if (state !is VehiclesUiState.ViewerAccount) account() }
         ScrolledUnderDivider({ gridState.canScrollBackward })
         BusGrid(state, gridState, onVehicleClick, onQueryChange, onToggleFavorite, onRetry, onSignIn)
     }

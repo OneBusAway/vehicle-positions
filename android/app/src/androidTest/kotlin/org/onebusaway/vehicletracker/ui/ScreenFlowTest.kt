@@ -1208,9 +1208,10 @@ class ScreenFlowTest {
         onRetry: () -> Unit = {},
         onSessionEnded: () -> Unit = {},
         onSignIn: () -> Unit = {},
+        account: @Composable () -> Unit = {},
     ) {
         compose.setContent {
-            VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry, onSessionEnded, onSignIn, account = {})
+            VehicleScreenContent(state, onVehicleClick, onQueryChange = {}, onToggleFavorite, onRetry, onSessionEnded, onSignIn, account)
         }
     }
 
@@ -1299,11 +1300,14 @@ class ScreenFlowTest {
     fun busScreen_tellsAViewerItCantDriveAndOffersSignIn() {
         var ended = 0
         var signIns = 0
-        showBuses(VehiclesUiState.ViewerAccount, onSessionEnded = { ended++ }, onSignIn = { signIns++ })
+        val slot = "account slot"
+        showBuses(VehiclesUiState.ViewerAccount, onSessionEnded = { ended++ }, onSignIn = { signIns++ }, account = { Text(slot) })
 
         compose.onNode(hasText(getString(R.string.vehicles_viewer_title)) and heading).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.vehicles_viewer_detail)).assertIsDisplayed()
         compose.onNodeWithText(getString(R.string.vehicles_retry_button)).assertDoesNotExist()
+        // No one is signed in any more, so there is no account menu, as on iOS.
+        compose.onNodeWithText(slot).assertDoesNotExist()
         assertEquals("the message stays until the driver taps", 0, ended)
         compose.onNodeWithText(getString(R.string.login_button)).performClick()
         assertEquals(1, signIns)
