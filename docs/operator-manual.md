@@ -283,9 +283,10 @@ viewer's token reads what an admin's does and gets
 Make one for anyone who only needs to watch: a supervisor, a planner, someone
 from the city. Three things to know:
 
-- A viewer cannot drive. The Android app won't sign it in, and says the
-  account can only view the admin site. The iOS app signs it in, but the
-  server refuses the vehicle list and every trip and report it sends.
+- A viewer cannot drive. Neither app signs it in: both say the account can
+  only view the admin site. A phone still signed in from before the account
+  became a viewer is signed out once the server refuses its vehicle list, and
+  **Choose your vehicle** says **Not a driver account**.
 - A viewer sees what an admin sees of where drivers have been: the trip trails
   and each vehicle's **Reports** download (see
   [section 11](#11-data-retention-and-privacy)). Hand the role out as carefully
@@ -476,9 +477,9 @@ takes about ten minutes. Before you start, make sure the driver has an account
      means the phone cannot reach the server: check the network and the server
      address.
    - **Couldn't sign in. Try again.** means the server answered with an error.
-   - On Android, **This account can only view the admin site.** above the
-     button means the account is a viewer, which can't drive: give the driver
-     a driver account.
+   - **This account can only view the admin site.** above the button means
+     the account is a viewer, which can't drive: give the driver a driver
+     account.
 4. Next is **Choose your vehicle**, showing exactly the vehicles you assigned
    as tiles, with the ones the driver starred under **Favorites** and the ones
    they drove last under **Recent**. If there is only one, the app skips this
