@@ -65,8 +65,11 @@ nonisolated enum HistoryUpload: Sendable, Equatable {
 /// own client, which refreshes it.
 @MainActor @Observable
 final class HistoryUploader {
-    /// The most reports one upload carries; the server takes at most 500.
-    static let batchSize = 500
+    /// The most reports one upload carries, about 20 KB. The server takes up
+    /// to 500, but a weak 2G signal can't get that many through inside
+    /// `TrackerClient`'s timeout: the batch would be kept and start over each
+    /// time, and never go.
+    static let batchSize = 80
     /// Refusals an upload would get again however often it were retried: bad
     /// data, a vehicle no longer assigned to the driver, a server without
     /// the endpoint. The batch is dropped. Anything else (no connection, a
@@ -341,18 +344,20 @@ final class HistoryUploader {
     private func uploadOneBatch(through api: any TrackerAPI) async -> HistoryUpload {
         guard let owner else { return .notSignedIn }
         do {
-            var batch = try await queue.oldest(Self.batchSize, for: owner)
+            // The whole queue, as more reports than a batch holds can be too
+            // old, and none of those is sent.
+            var queued = try await queue.oldest(.max, for: owner)
             let seconds = Int64(now().timeIntervalSince1970)
-            let expired = batch.prefix { Self.isTooOld($0.timestamp, at: seconds) }
+            let expired = queued.prefix { Self.isTooOld($0.timestamp, at: seconds) }
             if !expired.isEmpty {
                 log.notice("dropping \(expired.count) kept reports older than the server takes")
                 try await queue.remove(Array(expired), for: owner)
                 await countWaiting()
-                batch = try await queue.oldest(Self.batchSize, for: owner)
+                queued = try await queue.oldest(Self.batchSize, for: owner)
             }
             // The endpoint takes one vehicle per upload.
-            guard let vehicleID = batch.first?.vehicleID else { return .nothingQueued }
-            let reports = Array(batch.prefix { $0.vehicleID == vehicleID })
+            guard let vehicleID = queued.first?.vehicleID else { return .nothingQueued }
+            let reports = Array(queued.prefix(Self.batchSize).prefix { $0.vehicleID == vehicleID })
             do {
                 try await api.postLocationHistory(LocationHistoryRequest(vehicleID: vehicleID, reports: reports))
                 log.notice("uploaded \(reports.count) kept reports for location history")
