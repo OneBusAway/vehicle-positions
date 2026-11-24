@@ -76,17 +76,22 @@ type RefreshTokenPruneStore interface {
 	PruneExpiredRefreshTokens(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
-// CreateRefreshToken persists the hash of a new refresh token.
+// CreateRefreshToken persists the hash of a new refresh token, the one a
+// sign-in hands out. The sign-in of an account that may use the admin UI is
+// recorded in the audit log in the same transaction. A renewal's token is
+// RotateRefreshToken's, which records nothing.
 func (s *Store) CreateRefreshToken(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
-	err := s.queries.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
-		TokenHash: tokenHash,
-		UserID:    userID,
-		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+	return s.inSessionTx(ctx, func(q *db.Queries) error {
+		err := q.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
+			TokenHash: tokenHash,
+			UserID:    userID,
+			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("create refresh token: %w", err)
+		}
+		return recordSession(ctx, q, auditSignIn)
 	})
-	if err != nil {
-		return fmt.Errorf("create refresh token: %w", err)
-	}
-	return nil
 }
 
 // GetRefreshToken returns the stored token with this hash, or

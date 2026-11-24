@@ -47,6 +47,9 @@ type fakeRefreshTokens struct {
 
 	createCalls  int
 	deletedUsers []int64
+	// signIns are the accounts CreateRefreshToken was told to record signing
+	// in, as the store would.
+	signIns []auditActor
 
 	// seen records each last_seen_at stamp; seenErr makes the stamp fail.
 	seen    []int64
@@ -57,9 +60,12 @@ func newFakeRefreshTokens() *fakeRefreshTokens {
 	return &fakeRefreshTokens{byHash: make(map[string]*RefreshToken), nextID: 1}
 }
 
-func (f *fakeRefreshTokens) CreateRefreshToken(_ context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
+func (f *fakeRefreshTokens) CreateRefreshToken(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
 	if f.createErr != nil {
 		return f.createErr
+	}
+	if actor, ok := sessionActor(ctx); ok {
+		f.signIns = append(f.signIns, actor)
 	}
 	if _, exists := f.byHash[tokenHash]; exists {
 		return errors.New("duplicate token hash")
@@ -732,7 +738,7 @@ func TestLoginRefreshLogoutFlow(t *testing.T) {
 	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	logoutReq.Header.Set("Authorization", "Bearer "+renewed.AccessToken)
 	logoutRec := httptest.NewRecorder()
-	authed(handleLogout(revocations, refreshTokens)).ServeHTTP(logoutRec, logoutReq)
+	authed(handleLogout(revocations, refreshTokens, false)).ServeHTTP(logoutRec, logoutReq)
 	require.Equal(t, http.StatusNoContent, logoutRec.Code)
 
 	after := postRefresh(refresh, renewed.RefreshToken)

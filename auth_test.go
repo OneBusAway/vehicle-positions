@@ -606,6 +606,9 @@ type fakeRevocations struct {
 	inactive      map[int64]bool
 	userErr       error // fails only IsUserActiveInRole
 	revokeErr     error // fails only RevokeToken
+	// signOuts are the accounts RevokeToken was told to record signing out,
+	// as the store would for a jti not revoked before.
+	signOuts []auditActor
 }
 
 func newFakeRevocations() *fakeRevocations {
@@ -632,12 +635,15 @@ func (f *fakeRevocations) IsUserActiveInRole(_ context.Context, userID int64, _ 
 	return !f.inactive[userID], nil
 }
 
-func (f *fakeRevocations) RevokeToken(_ context.Context, jti string, userID int64, expiresAt time.Time) error {
+func (f *fakeRevocations) RevokeToken(ctx context.Context, jti string, userID int64, expiresAt time.Time) error {
 	if f.err != nil {
 		return f.err
 	}
 	if f.revokeErr != nil {
 		return f.revokeErr
+	}
+	if actor, ok := sessionActor(ctx); ok {
+		f.signOuts = append(f.signOuts, actor)
 	}
 	f.revokeCalls++
 	f.lastUserID = userID
@@ -905,7 +911,7 @@ func TestHandleLogout_Returns204(t *testing.T) {
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	handleLogout(newFakeRevocations(), newFakeRefreshTokens())(w, logoutRequest(t, token))
+	handleLogout(newFakeRevocations(), newFakeRefreshTokens(), false)(w, logoutRequest(t, token))
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Empty(t, w.Body.String(), "204 means no body")
@@ -917,7 +923,7 @@ func TestHandleLogout_RevokesCallerToken(t *testing.T) {
 
 	revocations := newFakeRevocations()
 	w := httptest.NewRecorder()
-	handleLogout(revocations, newFakeRefreshTokens())(w, logoutRequest(t, token))
+	handleLogout(revocations, newFakeRefreshTokens(), false)(w, logoutRequest(t, token))
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 	assert.Contains(t, revocations.revoked, jtiOf(t, token), "the caller's own jti must be revoked")
@@ -937,7 +943,7 @@ func TestHandleLogout_Idempotent(t *testing.T) {
 	revocations := newFakeRevocations()
 	for i := 0; i < 2; i++ {
 		w := httptest.NewRecorder()
-		handleLogout(revocations, newFakeRefreshTokens())(w, logoutRequest(t, token))
+		handleLogout(revocations, newFakeRefreshTokens(), false)(w, logoutRequest(t, token))
 		assert.Equal(t, http.StatusNoContent, w.Code, "a repeat logout must not error")
 	}
 	assert.Equal(t, 2, revocations.revokeCalls, "both calls reach the store; the store deduplicates")
@@ -955,7 +961,7 @@ func TestHandleLogout_DeletesRefreshTokens(t *testing.T) {
 	revoked := storeRefreshToken(t, refreshTokens, 5, time.Now().Add(defaultRefreshTokenTTL))
 
 	w := httptest.NewRecorder()
-	handleLogout(newFakeRevocations(), refreshTokens)(w, logoutRequest(t, token))
+	handleLogout(newFakeRevocations(), refreshTokens, false)(w, logoutRequest(t, token))
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 	assert.Equal(t, []int64{5}, refreshTokens.deletedUsers, "only the caller's tokens may be deleted")
@@ -982,7 +988,7 @@ func TestHandleLogout_RefreshTokenDeleteError(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(original) })
 
 	w := httptest.NewRecorder()
-	handleLogout(revocations, refreshTokens)(w, logoutRequest(t, token))
+	handleLogout(revocations, refreshTokens, false)(w, logoutRequest(t, token))
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "internal server error", errorBody(t, w))
@@ -994,7 +1000,7 @@ func TestHandleLogout_RefreshTokenDeleteError(t *testing.T) {
 func TestHandleLogout_MissingClaims(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	w := httptest.NewRecorder()
-	handleLogout(newFakeRevocations(), newFakeRefreshTokens())(w, req)
+	handleLogout(newFakeRevocations(), newFakeRefreshTokens(), false)(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Equal(t, "unauthorized", errorBody(t, w))
@@ -1014,7 +1020,7 @@ func TestHandleLogout_StoreError(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(original) })
 
 	w := httptest.NewRecorder()
-	handleLogout(revocations, newFakeRefreshTokens())(w, logoutRequest(t, token))
+	handleLogout(revocations, newFakeRefreshTokens(), false)(w, logoutRequest(t, token))
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "internal server error", errorBody(t, w))
@@ -1059,7 +1065,7 @@ func TestLoginLogoutRevokeFlow(t *testing.T) {
 	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	logoutReq.Header.Set("Authorization", "Bearer "+loginResp.Token)
 	logoutRec := httptest.NewRecorder()
-	authed(handleLogout(revocations, newFakeRefreshTokens())).ServeHTTP(logoutRec, logoutReq)
+	authed(handleLogout(revocations, newFakeRefreshTokens(), false)).ServeHTTP(logoutRec, logoutReq)
 	require.Equal(t, http.StatusNoContent, logoutRec.Code)
 
 	after := call()

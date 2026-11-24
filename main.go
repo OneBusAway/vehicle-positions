@@ -81,6 +81,7 @@ type appStore interface {
 	ClearedAlertLister
 	AlertsRaisedLister
 	AuditLogLister
+	SignInRecorder
 }
 
 // newMux wires all application routes and returns the configured ServeMux.
@@ -97,7 +98,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, jwtSecret, ttls, loginLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, ttls, refreshLimiter, trustProxy))
-	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store, store)))
+	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store, store, trustProxy)))
 	// Outermost, so a request the auth middleware refuses is counted too.
 	countReports := health.count(healthReports)
 	countFeed := health.count(healthFeed)

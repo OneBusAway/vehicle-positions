@@ -145,7 +145,7 @@ func TestRevokeSessionCookie(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 		req.AddCookie(cookie)
 
-		require.NoError(t, revokeSessionCookie(req, testSecret, revocations))
+		require.NoError(t, revokeSessionCookie(req, testSecret, revocations, false))
 
 		assert.Contains(t, revocations.revoked, jtiOf(t, cookie.Value))
 		assert.Equal(t, int64(9), revocations.lastUserID, "cookieFor issues tokens for user 9")
@@ -155,7 +155,7 @@ func TestRevokeSessionCookie(t *testing.T) {
 		revocations := newFakeRevocations()
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 
-		assert.NoError(t, revokeSessionCookie(req, testSecret, revocations))
+		assert.NoError(t, revokeSessionCookie(req, testSecret, revocations, false))
 		assert.Zero(t, revocations.revokeCalls)
 	})
 
@@ -164,7 +164,7 @@ func TestRevokeSessionCookie(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "garbage"})
 
-		assert.NoError(t, revokeSessionCookie(req, testSecret, revocations),
+		assert.NoError(t, revokeSessionCookie(req, testSecret, revocations, false),
 			"a cookie that no longer validates is dead already, so the caller may clear it")
 		assert.Zero(t, revocations.revokeCalls, "a cookie that no longer validates has no jti to revoke")
 	})
@@ -176,7 +176,7 @@ func TestRevokeSessionCookie(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 		req.AddCookie(cookie)
 
-		err := revokeSessionCookie(req, testSecret, revocations)
+		err := revokeSessionCookie(req, testSecret, revocations, false)
 
 		assert.ErrorIs(t, err, storeErr, "the token is still live, so the caller must keep the session")
 	})
@@ -196,7 +196,7 @@ func TestRevokeSessionCookie(t *testing.T) {
 			nil,
 		)
 		req.AddCookie(cookie)
-		err = revokeSessionCookie(req, testSecret, revocations)
+		err = revokeSessionCookie(req, testSecret, revocations, false)
 		require.NoError(t, err)
 		assert.Zero(t, revocations.revokeCalls)
 	})

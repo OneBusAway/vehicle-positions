@@ -167,6 +167,16 @@ func TestAuditDetails(t *testing.T) {
 			want:   []auditDetail{{Label: "Status", From: "Running", To: "Ended"}},
 		},
 		{
+			name:  "a sign-in to the admin site",
+			after: map[string]any{"via": "admin"},
+			want:  []auditDetail{{Label: "Through", To: "Admin site"}},
+		},
+		{
+			name:  "a sign-in through the API",
+			after: map[string]any{"via": "api"},
+			want:  []auditDetail{{Label: "Through", To: "API"}},
+		},
+		{
 			name:  "an assignment names the vehicle",
 			after: map[string]any{"vehicle_id": "v-12"},
 			want:  []auditDetail{{Label: "Vehicle", To: "v-12"}},
@@ -254,7 +264,7 @@ func TestAuditPage_Filters(t *testing.T) {
 	})
 
 	for query, want := range map[string]string{
-		"type=driver": "type must be vehicle, user, trip or api_key",
+		"type=driver": "type must be vehicle, user, trip, api_key or session",
 		"id=v-12":     "id needs a type",
 		"actor=ops":   "actor must be a user id",
 		"actor=0":     "actor must be a user id",
@@ -281,6 +291,10 @@ func TestAuditPage_HeadlineAndChips(t *testing.T) {
 		Before: fieldsJSON(t, vehicleAudit{Label: "Van 12", Active: true}),
 		After:  fieldsJSON(t, vehicleAudit{Label: "Van 12", Active: false}),
 	}
+	signInRow := auditEntry{
+		ID: 3, At: time.Now(), ActorID: &admin, ActorEmail: "ops@example.org", AccountName: "Ana Diaz",
+		ObjectType: auditSession, ObjectID: "7", Action: auditSignIn, After: fieldsJSON(t, sessionAudit{Via: auditViaAdmin}),
+	}
 	tests := []struct {
 		query    string
 		entries  []auditEntry
@@ -292,14 +306,18 @@ func TestAuditPage_HeadlineAndChips(t *testing.T) {
 		{"?type=vehicle&id=v-12", []auditEntry{vehicleRow}, "History of Van 12", ""},
 		{"?type=vehicle&id=v-99", nil, "History of vehicle v-99", ""},
 		{"?type=trip&id=12", []auditEntry{{ID: 2, At: time.Now(), ObjectType: auditTrip, ObjectID: "12", Action: auditEnd}}, "History of trip 12", ""},
-		{"?actor=7", []auditEntry{vehicleRow}, "Changes by ops@example.org", ""},
-		{"?actor=8", nil, "Changes by account 8", ""},
+		{"?actor=7", []auditEntry{vehicleRow}, "What ops@example.org did", ""},
+		{"?actor=8", nil, "What account 8 did", ""},
+		{"?type=session", []auditEntry{signInRow}, "Who signed in", "Sign-ins"},
+		{"?type=session&id=7", []auditEntry{signInRow}, "Sign-ins for Ana Diaz", ""},
+		{"?type=session&id=9", nil, "Sign-ins for account 9", ""},
+		{"?type=session&actor=7", []auditEntry{signInRow}, "What ops@example.org did", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.query, func(t *testing.T) {
 			body := getAdminPage(t, newAuditMux(t, &fakeAuditLog{entries: tc.entries}), "/admin/audit"+tc.query)
 			assert.Contains(t, body, `<h2 class="h1">`+tc.headline+`</h2>`)
-			for _, label := range []string{"All", "Vehicles", "Accounts", "Trips", "API keys"} {
+			for _, label := range []string{"All", "Vehicles", "Accounts", "Trips", "API keys", "Sign-ins"} {
 				isCurrent := strings.Contains(body, `aria-current="true">`+label+`</a>`)
 				assert.Equal(t, label == tc.current, isCurrent, "chip %s", label)
 			}
@@ -312,12 +330,12 @@ func TestAuditPage_HeadlineAndChips(t *testing.T) {
 func TestAuditPage_EmptyAndPaged(t *testing.T) {
 	t.Run("nothing yet", func(t *testing.T) {
 		body := getAdminPage(t, newAuditMux(t, &fakeAuditLog{}), "/admin/audit")
-		assert.Contains(t, body, "No changes yet")
+		assert.Contains(t, body, "Nothing yet")
 	})
 
 	t.Run("nothing for a filter", func(t *testing.T) {
 		body := getAdminPage(t, newAuditMux(t, &fakeAuditLog{}), "/admin/audit?type=trip")
-		assert.Contains(t, body, "No changes here")
+		assert.Contains(t, body, "Nothing here")
 	})
 
 	t.Run("a full page", func(t *testing.T) {
@@ -327,6 +345,7 @@ func TestAuditPage_EmptyAndPaged(t *testing.T) {
 		}
 		body := getAdminPage(t, newAuditMux(t, &fakeAuditLog{entries: entries}), "/admin/audit?type=trip")
 		assert.Equal(t, adminPageSize, strings.Count(body, "Ended trip"), "one row past the page is read, not shown")
+		assert.Contains(t, body, "50 entries shown, page 1")
 		assert.Contains(t, body, `href="/admin/audit?page=2&amp;type=trip"`)
 	})
 }
@@ -404,7 +423,7 @@ func TestAuditLog_ThroughTheServer(t *testing.T) {
 	h.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, "Changes by aud-ops@example.org")
+	assert.Contains(t, body, "What aud-ops@example.org did")
 	assert.Contains(t, body, `Added vehicle <a href="/admin/audit?id=aud-page&amp;type=vehicle">From the page</a>`)
 	assert.Contains(t, body, `Added vehicle <a href="/admin/audit?id=aud-api&amp;type=vehicle">From the API</a>`)
 }
@@ -454,5 +473,5 @@ func TestAuditLog_AnAdminsNewEmail(t *testing.T) {
 
 	w = serve(http.MethodGet, "/admin/audit?actor="+idText(admin.ID), "")
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "Changes by aud-ops-new@example.org")
+	assert.Contains(t, w.Body.String(), "What aud-ops-new@example.org did")
 }

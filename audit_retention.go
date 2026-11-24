@@ -11,7 +11,8 @@ import (
 
 // auditLogPruneInterval is how often the audit log is swept: hourly, as
 // location history is by default. It has no setting of its own: the log
-// gains a few rows a day, so an hour either way changes nothing.
+// gains a row for each admin change and each sign-in and sign-out by an admin
+// or a viewer, so an hour either way changes nothing.
 const auditLogPruneInterval = time.Hour
 
 // startAuditLogRetention starts deleting the audit log's rows once they are
@@ -108,8 +109,9 @@ func (p *AuditLogPruner) run() {
 
 // prune deletes every row older than the retention period in one statement.
 // Unlike LocationPruner it does not batch: the log gains a few rows a day,
-// plus one for each row a CSV import writes, so even the first pass after
-// retention is turned on is a short delete.
+// plus one for each row a CSV import writes and each time a script signs in
+// as an admin, so even the first pass after retention is turned on is a short
+// delete.
 func (p *AuditLogPruner) prune(ctx context.Context) {
 	start := time.Now()
 	cutoff := start.Add(-p.retention)

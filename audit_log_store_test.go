@@ -13,10 +13,11 @@ import (
 	"github.com/OneBusAway/vehicle-positions/db"
 )
 
-// The audit log tests act on vehicles named aud-*, accounts aud-*@example.org
-// and API keys named aud-*, as admins aud-*@example.org, and remove them and
-// most of their audit rows before and after each test. Each test reads only
-// the rows written after a mark it takes, or by an admin only it uses.
+// The audit log tests act on vehicles named aud-*, accounts aud-*@example.org,
+// API keys named aud-* and revoked tokens aud-*, as admins aud-*@example.org,
+// and remove them and most of their audit rows before and after each test.
+// Each test reads only the rows written after a mark it takes, or by an admin
+// only it uses.
 func newAuditTestStore(t *testing.T) *Store {
 	t.Helper()
 	store := newTestStore(t)
@@ -34,6 +35,7 @@ func clearAuditFixture(t *testing.T, store *Store) {
 		`DELETE FROM users WHERE email LIKE 'aud-%@example.org'`,
 		`DELETE FROM vehicles WHERE id LIKE 'aud-%'`,
 		`DELETE FROM api_keys WHERE name LIKE 'aud-%'`,
+		`DELETE FROM revoked_tokens WHERE jti LIKE 'aud-%'`,
 		// The rows these tests' admins made, and the server's rows about
 		// these vehicles: the other objects' ids are numbers no later test
 		// reuses, but every test uses these names.
@@ -134,6 +136,8 @@ func auditFixtureState(t *testing.T, store *Store) string {
 		'assignments', (SELECT json_agg(a ORDER BY a.user_id, a.vehicle_id) FROM (SELECT user_id, vehicle_id FROM user_vehicles WHERE vehicle_id LIKE 'aud-%') a),
 		'trips', (SELECT json_agg(x ORDER BY x.id) FROM (SELECT id, status, end_time FROM trips WHERE vehicle_id LIKE 'aud-%') x),
 		'api_keys', (SELECT json_agg(k ORDER BY k.id) FROM (SELECT id, name, active FROM api_keys WHERE name LIKE 'aud-%') k),
+		'refresh_tokens', (SELECT json_agg(r ORDER BY r.token_hash) FROM (SELECT token_hash, user_id FROM refresh_tokens WHERE token_hash LIKE 'aud-%') r),
+		'revoked_tokens', (SELECT json_agg(v ORDER BY v.jti) FROM (SELECT jti, user_id FROM revoked_tokens WHERE jti LIKE 'aud-%') v),
 		'audit_rows', (SELECT count(*) FROM audit_log)
 	)::text`).Scan(&state))
 	return state
@@ -164,7 +168,8 @@ type wantAuditRow struct {
 	Before, After                string
 }
 
-// auditedWrite is one store method an admin change goes through.
+// auditedWrite is one store method an admin change, or a sign-in or sign-out,
+// goes through.
 type auditedWrite struct {
 	name string
 	// setup prepares what act needs beyond the fixture.
@@ -192,10 +197,19 @@ func apiKeyIDByName(t *testing.T, store *Store, name string) string {
 
 func idText(n int64) string { return strconv.FormatInt(n, 10) }
 
+// signingThrough is ctx's admin signing in or out through via rather than
+// making a change.
+func signingThrough(ctx context.Context, via string) context.Context {
+	actor, _ := ctx.Value(auditActorKey).(auditActor)
+	actor.Via = via
+	return context.WithValue(ctx, auditActorKey, actor)
+}
+
 const anaBefore = `{"name":"Ana","email":"aud-ana@example.org","role":"driver","active":true}`
 
-// auditedWrites is every store method an admin change goes through, but the
-// CSV imports, which TestStore_AuditLog_Imports covers.
+// auditedWrites is every store method an admin change, or a sign-in or
+// sign-out, goes through, but the CSV imports, which
+// TestStore_AuditLog_Imports covers.
 var auditedWrites = []auditedWrite{
 	{
 		name: "add a vehicle",
@@ -419,12 +433,50 @@ var auditedWrites = []auditedWrite{
 			return "api_keys", "UPDATE", "NEW.id = " + idText(fx.keyID)
 		},
 	},
+	{
+		name: "sign in to the admin UI",
+		act: func(ctx context.Context, s *Store, _ auditFixture) error {
+			return s.RecordSignIn(signingThrough(ctx, auditViaAdmin))
+		},
+		want: func(*testing.T, *Store, auditFixture) wantAuditRow {
+			return wantAuditRow{auditSession, idText(testAuditActor.UserID), auditSignIn, "", `{"via":"admin"}`}
+		},
+		// The row is the only write.
+		commitFails: func(auditFixture) (string, string, string) {
+			return "audit_log", "INSERT", "NEW.action = '" + auditSignIn + "'"
+		},
+	},
+	{
+		name: "sign in through the API",
+		act: func(ctx context.Context, s *Store, fx auditFixture) error {
+			return s.CreateRefreshToken(signingThrough(ctx, auditViaAPI), "aud-hash", fx.userID, time.Now().Add(time.Hour))
+		},
+		want: func(*testing.T, *Store, auditFixture) wantAuditRow {
+			return wantAuditRow{auditSession, idText(testAuditActor.UserID), auditSignIn, "", `{"via":"api"}`}
+		},
+		commitFails: func(auditFixture) (string, string, string) {
+			return "refresh_tokens", "INSERT", "NEW.token_hash = 'aud-hash'"
+		},
+	},
+	{
+		name: "sign out",
+		act: func(ctx context.Context, s *Store, fx auditFixture) error {
+			return s.RevokeToken(signingThrough(ctx, auditViaAdmin), "aud-jti", fx.userID, time.Now().Add(time.Hour))
+		},
+		want: func(*testing.T, *Store, auditFixture) wantAuditRow {
+			return wantAuditRow{auditSession, idText(testAuditActor.UserID), auditSignOut, "", `{"via":"admin"}`}
+		},
+		commitFails: func(auditFixture) (string, string, string) {
+			return "revoked_tokens", "INSERT", "NEW.jti = 'aud-jti'"
+		},
+	},
 }
 
 // TestStore_AuditLog_RecordsEveryAdminChange checks each change an admin can
-// make records one row, against the admin on the context, and that the row
-// and the change are one: a change whose row cannot be written does not
-// happen, and a row is not left behind by a change that fails as it commits.
+// make, and each sign-in and sign-out, records one row, against the admin on
+// the context, and that the row and the change are one: a change whose row
+// cannot be written does not happen, and a row is not left behind by a change
+// that fails as it commits.
 func TestStore_AuditLog_RecordsEveryAdminChange(t *testing.T) {
 	store := newAuditTestStore(t)
 

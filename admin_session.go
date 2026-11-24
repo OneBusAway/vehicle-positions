@@ -56,10 +56,11 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, trus
 
 // revokeSessionCookie revokes the JWT carried by the session cookie, so
 // signing out of the admin UI ends the token itself and not just the browser's
-// copy of it. It returns an error only when the revocation write fails, the
-// one case where the token is still live and the session must be kept. A
-// missing cookie, or one that no longer validates, has nothing to revoke.
-func revokeSessionCookie(r *http.Request, secret []byte, revoker TokenRevoker) error {
+// copy of it, and names its account as the one the audit log records signing
+// out. It returns an error only when the revocation write fails, the one case
+// where the token is still live and the session must be kept. A missing
+// cookie, or one that no longer validates, has nothing to revoke.
+func revokeSessionCookie(r *http.Request, secret []byte, revoker TokenRevoker, trustProxy bool) error {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil || c.Value == "" {
 		return nil
@@ -93,7 +94,8 @@ func revokeSessionCookie(r *http.Request, secret []byte, revoker TokenRevoker) e
 		slog.Warn("admin logout: unreadable exp claim", "sub", sub, "error", err)
 		return nil
 	}
-	if err := revoker.RevokeToken(r.Context(), jti, userID, expiresAt.Time); err != nil {
+	ctx := withSessionActor(r, sessionUser(userID, claims), auditViaAdmin, trustProxy)
+	if err := revoker.RevokeToken(ctx, jti, userID, expiresAt.Time); err != nil {
 		return fmt.Errorf("revoke session token for sub %s: %w", sub, err)
 	}
 	slog.Info("admin session token revoked", "sub", sub)

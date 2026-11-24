@@ -78,6 +78,7 @@ type apiKeyPageStore interface {
 type adminUI struct {
 	tmpl           *embeddedTemplates
 	users          UserFetcher
+	signIns        SignInRecorder
 	tracker        *Tracker
 	alerts         *alertWatcher
 	clearedAlerts  ClearedAlertLister
@@ -123,6 +124,7 @@ func newAdminUI(store appStore, tracker *Tracker, alerts *alertWatcher, reports 
 	return &adminUI{
 		tmpl:           tmpl,
 		users:          store,
+		signIns:        store,
 		tracker:        tracker,
 		alerts:         alerts,
 		clearedAlerts:  store,
@@ -305,6 +307,13 @@ func (ui *adminUI) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email, next)
 		return
 	}
+	// Before the cookie, so a session is never handed out without its row in
+	// the audit log.
+	if err := ui.signIns.RecordSignIn(withSessionActor(r, user, auditViaAdmin, ui.cfg.trustProxy)); err != nil {
+		slog.Error("admin login: failed to record the sign-in in the audit log", "sub", user.ID, "error", err)
+		ui.renderLogin(w, http.StatusInternalServerError, "Something went wrong. Try again.", email, next)
+		return
+	}
 	setSessionCookie(w, r, token, ui.cfg.trustProxy)
 	recordLastSeen(r.Context(), ui.users, user.ID, "admin login")
 	if next == "" {
@@ -329,7 +338,7 @@ func (ui *adminUI) renderLogin(w http.ResponseWriter, status int, errMsg, email,
 // clearing it would only hide a session that someone holding a copy of the
 // cookie could still use.
 func (ui *adminUI) logout(w http.ResponseWriter, r *http.Request) {
-	if err := revokeSessionCookie(r, ui.jwtSecret, ui.tokenRevoker); err != nil {
+	if err := revokeSessionCookie(r, ui.jwtSecret, ui.tokenRevoker, ui.cfg.trustProxy); err != nil {
 		slog.Error("admin logout: kept the session, revocation failed", "error", err)
 		setFlash(w, "logout_failed")
 		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)

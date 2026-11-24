@@ -15,16 +15,19 @@ import (
 	"github.com/OneBusAway/vehicle-positions/db"
 )
 
-// The kinds of object the audit log records changes to, as its object_type
-// column names them.
+// The kinds of object the audit log records, as its object_type column names
+// them. A session is named by its account: its object_id is the users.id.
 const (
 	auditVehicle = "vehicle"
 	auditUser    = "user"
 	auditTrip    = "trip"
 	auditAPIKey  = "api_key"
+	auditSession = "session"
 )
 
-// The changes the audit log records, as its action column names them.
+// What the audit log records, as its action column names it: the changes to
+// an object, and the sign-ins and sign-outs of an account that may use the
+// admin UI.
 const (
 	auditCreate     = "create"
 	auditUpdate     = "update"
@@ -35,6 +38,16 @@ const (
 	auditAssign     = "assign_vehicle"
 	auditUnassign   = "unassign_vehicle"
 	auditEnd        = "end"
+	auditSignIn     = "sign_in"
+	auditSignOut    = "sign_out"
+)
+
+// The ways an account signs in and out, as a session row's via names them:
+// the admin UI's form, or POST /api/v1/auth/login and /logout, which the
+// driver apps use too.
+const (
+	auditViaAdmin = "admin"
+	auditViaAPI   = "api"
 )
 
 // The fields of each kind of object the audit log keeps before and after a
@@ -67,12 +80,21 @@ type assignmentAudit struct {
 	VehicleID string `json:"vehicle_id"`
 }
 
-// auditActor is who a change is recorded against: the signed-in admin, and
-// the address their request came from.
+// sessionAudit is which way an account signed in or out, the one field the
+// log keeps of it: never a password, a token or its id.
+type sessionAudit struct {
+	Via string `json:"via"`
+}
+
+// auditActor is who a row is recorded against: the signed-in admin, or the
+// account signing in or out, and the address their request came from.
 type auditActor struct {
 	UserID int64
 	Email  string
 	IP     string
+	// Via is the way an account is signing in or out, and "" for an admin
+	// making a change.
+	Via string
 }
 
 const auditActorKey contextKey = "audit_actor"
@@ -92,6 +114,33 @@ func withAuditActor(r *http.Request, claims jwt.MapClaims, trustProxy bool) (*ht
 	return r.WithContext(context.WithValue(r.Context(), auditActorKey, actor)), nil
 }
 
+// withSessionActor returns r's context for signing user in or out through
+// via, with user as the actor the store records it against. A role that may
+// not use the admin UI gets the context as it was, so a driver's sign-ins and
+// sign-outs are not recorded: their trips say when they drove.
+func withSessionActor(r *http.Request, user *User, via string, trustProxy bool) context.Context {
+	if !adminUIRole(user.Role) {
+		return r.Context()
+	}
+	actor := auditActor{UserID: user.ID, Email: user.Email, IP: clientIP(r, trustProxy), Via: via}
+	return context.WithValue(r.Context(), auditActorKey, actor)
+}
+
+// sessionUser is the account signing out, as the claims of the session it
+// ends name it.
+func sessionUser(id int64, claims jwt.MapClaims) *User {
+	email, _ := claims["email"].(string)
+	role, _ := claims["role"].(string)
+	return &User{ID: id, Email: email, Role: role}
+}
+
+// sessionActor is the account signing in or out that withSessionActor put on
+// ctx, and false for a context with none.
+func sessionActor(ctx context.Context) (auditActor, bool) {
+	actor, ok := ctx.Value(auditActorKey).(auditActor)
+	return actor, ok && actor.Via != ""
+}
+
 // auditChange is one change to one object, as the audit log records it.
 type auditChange struct {
 	ObjectType string
@@ -105,9 +154,10 @@ type auditChange struct {
 
 // recordAudit writes c to the audit log through q, which must be the
 // transaction that makes the change, so the two commit or roll back together.
-// The actor is the one withAuditActor put on ctx; a change made with none
-// there was made by the server itself, at startup or by the reset-admin
-// command. A change that left every field as it was is not recorded.
+// The actor is the one withAuditActor or withSessionActor put on ctx; a
+// change made with none there was made by the server itself, at startup or by
+// the reset-admin command. A change that left every field as it was is not
+// recorded.
 func recordAudit(ctx context.Context, q *db.Queries, c auditChange) error {
 	before, err := auditJSON(c.Before)
 	if err != nil {
@@ -138,6 +188,43 @@ func recordAudit(ctx context.Context, q *db.Queries, c auditChange) error {
 	return nil
 }
 
+// inSessionTx runs fn, which signs an account in or out, in a transaction
+// when there is a row to write with it, and as it is when there is none.
+func (s *Store) inSessionTx(ctx context.Context, fn func(q *db.Queries) error) error {
+	if _, ok := sessionActor(ctx); !ok {
+		return fn(s.queries)
+	}
+	return s.inTx(ctx, fn)
+}
+
+// recordSession records action, a sign-in or a sign-out, through q, which
+// must be the transaction that makes or ends the session when it writes
+// anything else. A context that names no account to record it against
+// records nothing.
+func recordSession(ctx context.Context, q *db.Queries, action string) error {
+	actor, ok := sessionActor(ctx)
+	if !ok {
+		return nil
+	}
+	return recordAudit(ctx, q, auditChange{
+		ObjectType: auditSession, ObjectID: strconv.FormatInt(actor.UserID, 10), Action: action,
+		After: sessionAudit{Via: actor.Via},
+	})
+}
+
+// SignInRecorder records a sign-in to the admin UI, which has no other write
+// to share a transaction with: its session is only a cookie.
+type SignInRecorder interface {
+	RecordSignIn(ctx context.Context) error
+}
+
+var _ SignInRecorder = (*Store)(nil)
+
+// RecordSignIn records a sign-in by the account withSessionActor put on ctx.
+func (s *Store) RecordSignIn(ctx context.Context) error {
+	return recordSession(ctx, s.queries, auditSignIn)
+}
+
 // auditJSON is fields as the audit log stores them, nil for none.
 func auditJSON(fields any) ([]byte, error) {
 	if fields == nil {
@@ -164,13 +251,14 @@ type auditEntry struct {
 	// Before and After are nil where the row has none.
 	Before json.RawMessage
 	After  json.RawMessage
-	// AccountName is the name the account the row is about has now: "" for
-	// a row about something else, or about an account since deleted.
+	// AccountName is the name the account the row is about, or the session
+	// it records, has now: "" for a row about something else, or about an
+	// account since deleted.
 	AccountName string
 }
 
 // auditFilter narrows the audit log to one kind of object, one object of
-// that kind, or the changes one admin made. An empty field, or a nil ActorID,
+// that kind, or what one account did. An empty field, or a nil ActorID,
 // leaves the log unfiltered by it.
 type auditFilter struct {
 	ObjectType string

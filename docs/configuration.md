@@ -207,7 +207,7 @@ its own accuracy is left out of reports too.
 
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
-| `TRUST_PROXY_HEADERS` | `false` | Required behind a reverse proxy | Trust `X-Forwarded-For` and `X-Forwarded-Proto`. Controls which address the per-IP rate limiters bucket on, whether the admin session cookie is marked `Secure`, the client IP recorded for rider requests, and the address the audit log records for each admin change. Unparseable: warn and default. |
+| `TRUST_PROXY_HEADERS` | `false` | Required behind a reverse proxy | Trust `X-Forwarded-For` and `X-Forwarded-Proto`. Controls which address the per-IP rate limiters bucket on, whether the admin session cookie is marked `Secure`, the client IP recorded for rider requests, and the address the audit log records for each admin change, sign-in and sign-out. Unparseable: warn and default. |
 | `FEED_AUTH_ENABLED` | `false` | Optional | Require an `X-API-Key` header on `GET /gtfs-rt/vehicle-positions` and `GET /gtfs-rt/trip-updates`. Unlike every other boolean here, an unparseable value **refuses to start** rather than warning and defaulting: `strconv.ParseBool` rejects `yes` and `on`, and falling back to `false` would leave the feed public while the operator believes it is locked. Checked before the database is opened, so a typo fails immediately. |
 
 ## Prometheus metrics
@@ -242,11 +242,14 @@ the period by up to one interval, and the server logs a `WARN` saying so.
 
 Off by default, as location retention is: every row of the admin's **Audit
 log** is kept until an agency sets a period. The rows name the admins who made
-the changes and the addresses they made them from.
+changes and the admins and viewers who signed in or out, with the addresses
+they did it from. A script that signs in as an admin or a viewer adds a row
+each time, so one that runs often should renew its token with
+`POST /api/v1/auth/refresh` instead.
 
 | Variable | Default | Status | Purpose |
 |---|---|---|---|
-| `AUDIT_LOG_RETENTION_PERIOD` | `0` | Optional | How long to keep rows in `audit_log`, which the **Audit log** page and `GET /api/v1/admin/audit` read, measured from when each change was made. **`0` means keep forever**, not "keep nothing". A positive duration deletes older rows every hour, the first time an hour after startup; that interval is not configurable. Unparseable: warn and keep everything. A negative duration logs an `ERROR` and keeps everything; the server still starts. |
+| `AUDIT_LOG_RETENTION_PERIOD` | `0` | Optional | How long to keep rows in `audit_log`, which the **Audit log** page and `GET /api/v1/admin/audit` read, measured from when each row was written. **`0` means keep forever**, not "keep nothing". A positive duration deletes older rows every hour, the first time an hour after startup; that interval is not configurable. Unparseable: warn and keep everything. A negative duration logs an `ERROR` and keeps everything; the server still starts. |
 
 ## Rider mode
 

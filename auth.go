@@ -137,8 +137,9 @@ func recordLastSeen(ctx context.Context, recorder UserSeenRecorder, userID int64
 
 // handleLogin returns the JSON API login handler. limiter may be nil (e.g. in
 // tests that don't exercise rate limiting); trustProxy controls which IP
-// clientIP() reports to the limiter. When present, the rate-limit check runs
-// before the store is touched.
+// clientIP() reports to the limiter and to the audit log, which records the
+// logins of accounts that may use the admin UI. When present, the rate-limit
+// check runs before the store is touched.
 func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret []byte, ttls tokenTTLs, limiter *LoginRateLimiter, trustProxy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
@@ -203,8 +204,10 @@ func handleLogin(fetcher UserFetcher, refreshTokens RefreshTokenCreator, secret 
 		// A login that returned an access token but no refresh token would
 		// leave the client with a credential it cannot renew, and it would
 		// find that out only once the access token expired. Fail the login
-		// instead.
-		refreshToken, err := issueRefreshToken(r.Context(), refreshTokens, user.ID, ttls.refresh)
+		// instead. An admin's or a viewer's login that cannot be recorded in
+		// the audit log fails here too: the two are one transaction.
+		ctx := withSessionActor(r, user, auditViaAPI, trustProxy)
+		refreshToken, err := issueRefreshToken(ctx, refreshTokens, user.ID, ttls.refresh)
 		if err != nil {
 			slog.Error("login: failed to issue refresh token", "sub", user.ID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
@@ -532,7 +535,10 @@ func validUserRoleFilter(role string) bool { return role == "" || validUserRole(
 // refresh on all of them. That is the safe direction — the alternative is a
 // logout the client can undo by refreshing — and per-device sessions would
 // need a device identifier on refresh_tokens, which is a follow-up.
-func handleLogout(revoker TokenRevoker, refreshTokens RefreshTokenDeleter) http.HandlerFunc {
+//
+// An admin's or a viewer's logout is recorded in the audit log with the
+// revocation, against the address trustProxy says it came from.
+func handleLogout(revoker TokenRevoker, refreshTokens RefreshTokenDeleter, trustProxy bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := r.Context().Value(claimsKey).(jwt.MapClaims)
 		if !ok {
@@ -578,7 +584,8 @@ func handleLogout(revoker TokenRevoker, refreshTokens RefreshTokenDeleter) http.
 			return
 		}
 
-		if err := revoker.RevokeToken(r.Context(), jti, userID, expiresAt.Time); err != nil {
+		ctx := withSessionActor(r, sessionUser(userID, claims), auditViaAPI, trustProxy)
+		if err := revoker.RevokeToken(ctx, jti, userID, expiresAt.Time); err != nil {
 			slog.Error("logout: failed to revoke token", "sub", sub, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
