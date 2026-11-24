@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,11 @@ type Store struct {
 
 // NewStore connects to PostgreSQL.
 func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	config, err := parseDatabaseURL(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("connect to database: %w", err)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
@@ -40,6 +45,45 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 	}
 
 	return &Store{pool: pool, queries: db.New(pool)}, nil
+}
+
+// parseDatabaseURL is pgxpool.ParseConfig for DATABASE_URL, with errors that
+// never show a password, as the server logs them. pgx's repeat the whole
+// string, and it hides a password in one only where it can find it: not in the
+// query, and not one that a / ? or # in it cuts short, the start of which then
+// reads as a bad port. The key=value form is refused because Migrate takes
+// only a URL, and names whatever is before its first colon, such as the start
+// of a password, as a driver it does not know.
+func parseDatabaseURL(databaseURL string) (*pgxpool.Config, error) {
+	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
+		return nil, errors.New("DATABASE_URL must start with postgres:// or postgresql://")
+	}
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return nil, errors.New("DATABASE_URL is not a valid URL; special characters in its user name and password must be percent-encoded, such as %2F for /")
+	}
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err == nil {
+		return config, nil
+	}
+	// The reason is the same without the passwords in the query. The one before
+	// the host pgx hides, now that it can find it.
+	if _, shown := pgxpool.ParseConfig(withoutQueryPasswords(*u)); shown != nil {
+		return nil, shown
+	}
+	return nil, errors.New("DATABASE_URL has a password or a setting PostgreSQL's driver can't use")
+}
+
+// withoutQueryPasswords is u with any password in its query replaced.
+func withoutQueryPasswords(u url.URL) string {
+	query := u.Query()
+	for key := range query {
+		if strings.Contains(key, "password") {
+			query.Set(key, "xxxxx")
+		}
+	}
+	u.RawQuery = query.Encode()
+	return u.String()
 }
 
 // Migrate runs the database schema migrations.

@@ -479,9 +479,11 @@ sudo -u postgres createuser --pwprompt vehicle_positions
 sudo -u postgres createdb --owner vehicle_positions vehicle_positions
 ```
 
-Put the password you chose into `DATABASE_URL`. Use `sslmode=disable` only for
-a database on the same host reached over loopback; for a database on another
-machine use `sslmode=require`, or `sslmode=verify-full` with a CA you trust.
+Put the password you chose into `DATABASE_URL`, percent-encoding any special
+character in it (`%2F` for `/`, `%23` for `#`, `%25` for `%`). Use
+`sslmode=disable` only for a database on the same host reached over loopback;
+for a database on another machine use `sslmode=require`, or
+`sslmode=verify-full` with a CA you trust.
 
 ### 6.2 Migrations
 
