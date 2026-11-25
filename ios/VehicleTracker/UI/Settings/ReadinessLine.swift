@@ -168,7 +168,7 @@ private struct StopMark: View {
 
 /// The Tracking map's vehicle marker, as `MapGlyphs.vehicle` draws it in its
 /// 52 pt box, pointing up.
-private struct VehicleMark: View {
+struct VehicleMark: View {
     let ring: Color
     let side: CGFloat
 

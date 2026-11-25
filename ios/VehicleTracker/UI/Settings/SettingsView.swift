@@ -4,11 +4,12 @@ import SwiftUI
 private let groupCorner: CGFloat = 26
 
 /// Settings, opened from the account button on the pickers: whether this
-/// phone can report a trip, who is signed in and Sign out, the app's
-/// language and theme, Help, Share diagnostics and the build. Android's
+/// phone can report a trip, who is signed in and Sign out, what the app is
+/// allowed, its language and theme, Help, Share diagnostics and the build. Android's
 /// `SettingsScreen`.
 struct SettingsView: View {
     let access: any LocationAccess
+    let openPermissionCheck: () -> Void
 
     @Environment(TripSession.self) private var session
     @Environment(\.openURL) private var openURL
@@ -23,8 +24,9 @@ struct SettingsView: View {
     /// How far the page can scroll.
     @State private var furthest: CGFloat = 0
 
-    init(access: any LocationAccess) {
+    init(access: any LocationAccess, openPermissionCheck: @escaping () -> Void) {
         self.access = access
+        self.openPermissionCheck = openPermissionCheck
         _location = State(initialValue: access.current())
     }
 
@@ -35,11 +37,14 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                ReadinessHeader(readiness: readiness, fold: $fold, openSettings: { openURL(.appSettings) }, onShow: { shown = $0 })
+                ReadinessHeader(readiness: readiness, fold: $fold, onFix: fix, openCheck: openPermissionCheck, onShow: { shown = $0 })
                     // Over the rows, which go under it once it has folded.
                     .zIndex(1)
                 VStack(alignment: .leading, spacing: 0) {
                     AccountCard()
+                    SettingsGroup(title: SettingsText.phoneSection) {
+                        PermissionCheckRow(readiness: readiness, open: openPermissionCheck)
+                    }
                     SettingsGroup(title: SettingsText.appSection) {
                         LanguageSettingsRow()
                         SettingsDivider()
@@ -68,12 +73,29 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 SettingsBarTitle(readiness: shown ?? readiness, isFolded: isFolded)
+                    .contentShape(.rect)
+                    // The folded bar is the header.
+                    .onTapGesture { if isFolded { openPermissionCheck() } }
             }
         }
         // A driver back from the Settings app, or from iOS's own prompt, may
         // have changed the answer there.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { location = access.current() }
+            if phase == .active { read() }
+        }
+        // So may Permission check.
+        .onAppear(perform: read)
+    }
+
+    private func read() {
+        location = access.current()
+    }
+
+    private func fix(_ fix: Readiness.Fix) {
+        switch fix {
+        case .openSettings: openURL(.appSettings)
+        case .readAgain: read()
+        case .ask: openPermissionCheck()
         }
     }
 }
@@ -205,6 +227,22 @@ nonisolated enum AccountAddress {
     /// too long for its line.
     static func breakable(_ address: String) -> String {
         address.replacing("@", with: "@\u{200B}").replacing(".", with: "\u{200B}.")
+    }
+}
+
+/// How what the app is allowed stands, in a few words, and the page that says
+/// more.
+private struct PermissionCheckRow: View {
+    let readiness: Readiness
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            SettingsRow(symbol: readiness.canReport ? "checkmark.shield" : "exclamationmark.shield.fill",
+                        tint: readiness.canReport ? .secondary : .amberOnSurface,
+                        title: PermissionCheckText.title, value: SettingsText.permissions(readiness), end: .opens)
+        }
+        .buttonStyle(SettingsRowStyle())
     }
 }
 
@@ -362,6 +400,7 @@ private struct SettingsRow: View {
     }
 
     let symbol: String
+    var tint = Color.secondary
     let title: String
     var value: String?
     var end: End?
@@ -377,7 +416,7 @@ private struct SettingsRow: View {
         HStack(alignment: typeSize.isAccessibilitySize ? .firstTextBaseline : .center, spacing: 14) {
             Image(systemName: symbol)
                 .font(.system(size: 19))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(tint)
                 .frame(width: Self.symbolSide, height: Self.symbolSide)
                 .accessibilityHidden(true)
             words

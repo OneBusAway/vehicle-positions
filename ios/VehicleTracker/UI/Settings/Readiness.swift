@@ -36,21 +36,54 @@ nonisolated struct Readiness: Equatable {
         return false
     }
 
-    /// Whether the app's page in Settings can fix it. iOS has nothing there
-    /// about location until the app has asked, and nothing can lift a
-    /// restriction.
-    var opensSettings: Bool {
+    /// What puts right what stops a trip.
+    enum Fix: Equatable {
+        /// iOS asks about it. It has nothing in Settings about location until
+        /// the app has asked.
+        case ask
+        /// The app's page in Settings can change it.
+        case openSettings
+        /// Nothing the app may open turns Location Services on, so it reads
+        /// them again, as Before you start's Try again does.
+        case readAgain
+    }
+
+    /// Only one thing stops a trip at a time. Nil when a trip can start, and
+    /// for a restriction, which nothing can lift.
+    var fix: Fix? {
         switch state {
-        case .refused, .preciseOff, .servicesOff: true
-        case .ready, .notAsked, .restricted: false
+        case .notAsked: .ask
+        case .refused, .preciseOff: .openSettings
+        case .servicesOff: .readAgain
+        case .ready, .restricted: nil
         }
+    }
+
+    /// What the header offers. Not to ask: it says when the app does, and
+    /// Permission check asks.
+    var headerFix: Fix? { fix == .ask ? nil : fix }
+
+    /// What fixes `row` on Permission check, if it is what stops a trip.
+    func fix(for row: LocationChecklist.Row) -> Fix? {
+        stop(for: row) == .missing ? fix : nil
     }
 
     var stops: [Stop] {
         LocationChecklist.Row.allCases.map(stop(for:))
     }
 
-    private func stop(for row: LocationChecklist.Row) -> Stop {
+    /// The row as Before you start would have it, for its words.
+    func checklistState(of row: LocationChecklist.Row) -> LocationChecklist.RowState {
+        switch (stop(for: row), state) {
+        case (.allowed, _): .allowed
+        case (.missing, .refused), (.missing, .restricted): .neededInSettings
+        case (.missing, .preciseOff): .approximate
+        case (.missing, .servicesOff): .off
+        case (.missing, .notAsked), (.missing, .ready), (.beyond, _): .notReached
+        }
+    }
+
+    func stop(for row: LocationChecklist.Row) -> Stop {
         switch (state, row) {
         case (.ready, _): .allowed
         case (.preciseOff, .precise): .missing

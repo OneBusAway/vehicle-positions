@@ -11,24 +11,24 @@ import Testing
         let sentence: String
         let stops: [Readiness.Stop]
         let vehicleAt: Int
-        let opensSettings: Bool
+        let fix: Readiness.Fix?
 
         var testDescription: String { "\(access)" }
     }
 
     nonisolated static let cases = [
         Case(access: .allowed, title: "Ready to report", sentence: "Start a trip and riders see your vehicle.",
-             stops: [.allowed, .allowed, .allowed], vehicleAt: 4, opensSettings: false),
+             stops: [.allowed, .allowed, .allowed], vehicleAt: 4, fix: nil),
         Case(access: .notDetermined, title: "Not ready to report", sentence: "The app asks for location when you start a trip.",
-             stops: [.missing, .beyond, .allowed], vehicleAt: 0, opensSettings: false),
+             stops: [.missing, .beyond, .allowed], vehicleAt: 0, fix: .ask),
         Case(access: .denied, title: "Not ready to report", sentence: "Location is not allowed for this app.",
-             stops: [.missing, .beyond, .allowed], vehicleAt: 0, opensSettings: true),
+             stops: [.missing, .beyond, .allowed], vehicleAt: 0, fix: .openSettings),
         Case(access: .restricted, title: "Not ready to report", sentence: "This iPhone does not let apps use location.",
-             stops: [.missing, .beyond, .beyond], vehicleAt: 0, opensSettings: false),
+             stops: [.missing, .beyond, .beyond], vehicleAt: 0, fix: nil),
         Case(access: .approximateOnly, title: "Not ready to report", sentence: "Precise location is off for this app.",
-             stops: [.allowed, .missing, .allowed], vehicleAt: 1, opensSettings: true),
+             stops: [.allowed, .missing, .allowed], vehicleAt: 1, fix: .openSettings),
         Case(access: .servicesOff, title: "Not ready to report", sentence: "Location is off for the whole phone.",
-             stops: [.beyond, .beyond, .missing], vehicleAt: 0, opensSettings: true),
+             stops: [.beyond, .beyond, .missing], vehicleAt: 0, fix: .readAgain),
     ]
 
     @Test(arguments: cases) func eachAnswerHasItsWordsAndItsLine(_ expected: Case) {
@@ -39,7 +39,7 @@ import Testing
         #expect(words.symbol == nil)
         #expect(readiness.stops == expected.stops)
         #expect(readiness.vehicleAt == expected.vehicleAt)
-        #expect(readiness.opensSettings == expected.opensSettings)
+        #expect(readiness.fix == expected.fix)
     }
 
     /// A trip can start wherever Before you start would not stop it, and
@@ -55,6 +55,38 @@ import Testing
         for (row, stop) in zip(LocationChecklist.Row.allCases, Readiness(access: expected.access, waiting: 0).stops)
         where stop == .allowed && row != .locationServices {
             #expect(checklist.state(of: row) == .allowed, "\(row)")
+        }
+    }
+
+    /// A row has the fix only where it is what stops a trip.
+    @Test(arguments: cases) func theFixIsTheMissingRowsAlone(_ expected: Case) {
+        let readiness = Readiness(access: expected.access, waiting: 0)
+        for (row, stop) in zip(LocationChecklist.Row.allCases, expected.stops) {
+            #expect(readiness.fix(for: row) == (stop == .missing ? expected.fix : nil), "\(row)")
+        }
+    }
+
+    /// The header says when the app asks rather than asking.
+    @Test(arguments: cases) func theHeaderOffersTheFixUnlessItIsToAsk(_ expected: Case) {
+        #expect(Readiness(access: expected.access, waiting: 0).headerFix == (expected.fix == .ask ? nil : expected.fix))
+    }
+
+    /// Where Before you start can only be put right in one way, so can the
+    /// header and Permission check, under the same words: Try again reads
+    /// Location Services again, as the app's page in Settings can't turn them
+    /// on.
+    @Test func whatPutsItRightIsBeforeYouStarts() throws {
+        for (access, row, words) in [(LocationAccessState.denied, LocationChecklist.Row.location, "Open Settings"),
+                                     (.servicesOff, .locationServices, "Try again")] {
+            let action = try #require(LocationChecklist(access).state(of: row).action)
+            let readiness = Readiness(access: access, waiting: 0)
+            let fix = try #require(readiness.fix(for: row))
+            #expect(readiness.headerFix == fix)
+            switch (action, fix) {
+            case (.openSettings, .openSettings), (.readAgain, .readAgain): break
+            default: Issue.record("\(action) on Before you start, \(fix) in Settings")
+            }
+            #expect(PermissionCheckText.name(of: fix) == words)
         }
     }
 
