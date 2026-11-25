@@ -26,7 +26,6 @@ type passwordChange struct {
 	// KeepTokenHash is the refresh token of the sign-in that makes the change,
 	// the one that goes on.
 	KeepTokenHash string
-	At            time.Time
 }
 
 // OwnPasswordChanger is what the password change handler needs.
@@ -83,6 +82,9 @@ func (s *Store) ChangeOwnPassword(ctx context.Context, change passwordChange) er
 	if err != nil {
 		return fmt.Errorf("lock user: %w", err)
 	}
+	// Read under the lock, as a refresh reads the time its token counts as issued
+	// at, and from the same clock: every refresh is before this or after it.
+	now := time.Now()
 	if current != change.CheckedHash {
 		return ErrPasswordChangedMeanwhile
 	}
@@ -91,18 +93,14 @@ func (s *Store) ChangeOwnPassword(ctx context.Context, change passwordChange) er
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("get refresh token: %w", err)
 	}
-	if err != nil || kept.UserID != change.UserID || kept.UsedAt.Valid || !change.At.Before(kept.ExpiresAt.Time) {
+	if err != nil || kept.UserID != change.UserID || kept.UsedAt.Valid || !now.Before(kept.ExpiresAt.Time) {
 		return ErrRefreshTokenNotFound
 	}
 
 	if err := q.ChangeOwnPassword(ctx, db.ChangeOwnPasswordParams{
 		ID:           change.UserID,
 		PasswordHash: string(hash),
-		// A token's iat is in whole seconds and must be past this to be good, so
-		// this stops just short of the second under way: the token the kept
-		// sign-in refreshes to can be issued within it. This server's clock
-		// stamps the tokens, so it is the one read here, not the database's.
-		EndedAt: pgtype.Timestamptz{Time: change.At.Truncate(time.Second).Add(-time.Microsecond), Valid: true},
+		EndedAt:      pgtype.Timestamptz{Time: now, Valid: true},
 	}); err != nil {
 		return fmt.Errorf("change password: %w", err)
 	}

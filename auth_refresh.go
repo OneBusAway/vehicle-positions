@@ -185,7 +185,7 @@ func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limit
 			return
 		}
 
-		rotated, err := store.RotateRefreshToken(r.Context(), stored.ID, hashRefreshToken(newRefresh),
+		rotatedAt, rotated, err := store.RotateRefreshToken(r.Context(), stored.ID, hashRefreshToken(newRefresh),
 			stored.UserID, time.Now().Add(ttls.refresh))
 		if err != nil {
 			slog.Error("refresh: rotation failed", "sub", stored.UserID, "error", err)
@@ -212,7 +212,7 @@ func handleRefreshToken(store RefreshStore, secret []byte, ttls tokenTTLs, limit
 			return
 		}
 
-		accessToken, err := generateJWT(&User{ID: user.ID, Email: user.Email, Role: user.Role}, secret, ttls.access)
+		accessToken, err := generateJWTIssuedAt(&User{ID: user.ID, Email: user.Email, Role: user.Role}, secret, ttls.access, rotatedAt)
 		if err != nil {
 			// The old token is already spent, so this costs the client a
 			// re-login. Nothing to roll back to: reinstating it would undo

@@ -64,16 +64,12 @@ func changePassword(handler http.HandlerFunc, sub, contentType, body string) *ht
 
 func TestHandleChangePassword(t *testing.T) {
 	store := newFakePasswordChanger(t)
-	before := time.Now()
 	w := changePassword(handleChangePassword(store, nil, false), "42", "application/json; charset=utf-8", changeBody)
 
 	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 	assert.Empty(t, w.Body.String())
 	require.Len(t, store.changes, 1)
-	change := store.changes[0]
-	assert.WithinRange(t, change.At, before, time.Now())
-	change.At = time.Time{}
-	assert.Equal(t, passwordChange{UserID: 42, CheckedHash: store.hash, NewPassword: "new password", KeepTokenHash: hashRefreshToken("r1")}, change)
+	assert.Equal(t, passwordChange{UserID: 42, CheckedHash: store.hash, NewPassword: "new password", KeepTokenHash: hashRefreshToken("r1")}, store.changes[0])
 	assert.Equal(t, auditActor{UserID: 42, Email: "ana@test.com", IP: "203.0.113.9"}, store.actors[0])
 }
 
@@ -206,11 +202,17 @@ func TestChangePassword_ThroughTheServer(t *testing.T) {
 		h.ServeHTTP(w, req)
 		return w
 	}
-	// An access token a phone has had for a minute.
+	// Tokens issued just now, most likely in the same second as the change, and
+	// one a server issued before it said to the microsecond when.
+	issued := func(user *UserResponse) string {
+		token, err := generateJWT(&User{ID: user.ID, Email: user.Email, Role: roleDriver}, testSecret, defaultAccessTokenTTL)
+		require.NoError(t, err)
+		return token
+	}
 	older := func(user *UserResponse) string {
 		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 			"sub": strconv.FormatInt(user.ID, 10), "email": user.Email, "role": roleDriver, "jti": uniqueJTI(t),
-			"iat": time.Now().Add(-time.Minute).Unix(), "exp": time.Now().Add(time.Hour).Unix(), "iss": "vehicle-positions-api",
+			"iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(), "iss": "vehicle-positions-api",
 		}).SignedString(testSecret)
 		require.NoError(t, err)
 		return token
@@ -219,8 +221,9 @@ func TestChangePassword_ThroughTheServer(t *testing.T) {
 		token, _ := newStoredRefreshToken(t, store, user.ID, time.Now().Add(time.Hour))
 		return token
 	}
-	first, second := signedIn{older(ana), refreshToken(ana)}, signedIn{older(ana), refreshToken(ana)}
-	boPhone := signedIn{older(bo), refreshToken(bo)}
+	first, second := signedIn{issued(ana), refreshToken(ana)}, signedIn{issued(ana), refreshToken(ana)}
+	third := older(ana)
+	boPhone := signedIn{issued(bo), refreshToken(bo)}
 	mark := lastAuditID(t, store)
 	change := func(access, current, next, refresh string) *httptest.ResponseRecorder {
 		body, err := json.Marshal(ChangePasswordRequest{CurrentPassword: current, NewPassword: next, RefreshToken: refresh})
@@ -242,11 +245,13 @@ func TestChangePassword_ThroughTheServer(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, change("", "old password", "new password", first.refresh).Code)
 	assert.Empty(t, auditRowsAfter(t, store, mark))
 	require.Equal(t, http.StatusOK, vehicles(second.access))
+	require.Equal(t, http.StatusOK, vehicles(third))
 
 	w := change(first.access, "old password", "new password", first.refresh)
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
-	assert.Equal(t, http.StatusUnauthorized, vehicles(second.access), "the other phone's access token")
+	assert.Equal(t, http.StatusUnauthorized, vehicles(second.access), "the other phone's access token, of the same second or not")
+	assert.Equal(t, http.StatusUnauthorized, vehicles(third), "and one that says only which second")
 	assert.Equal(t, http.StatusUnauthorized, refreshed(second.refresh).Code, "the other phone's refresh token")
 	assert.Equal(t, http.StatusUnauthorized, vehicles(first.access), "this phone's access token is ended with the rest")
 	w = refreshed(first.refresh)
@@ -284,7 +289,7 @@ func TestStore_ChangeOwnPassword_Refuses(t *testing.T) {
 	token, err := store.GetRefreshToken(ctx, spent)
 	require.NoError(t, err)
 	_, next := newRefreshHash(t)
-	rotated, err := store.RotateRefreshToken(ctx, token.ID, next, userID, time.Now().Add(time.Hour))
+	_, rotated, err := store.RotateRefreshToken(ctx, token.ID, next, userID, time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	require.True(t, rotated)
 	_, others := newStoredRefreshToken(t, store, insertRefreshTestUser(t, store), time.Now().Add(time.Hour))
@@ -303,7 +308,7 @@ func TestStore_ChangeOwnPassword_Refuses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.change.NewPassword, tt.change.At = "new password", time.Now()
+			tt.change.NewPassword = "new password"
 			assert.ErrorIs(t, store.ChangeOwnPassword(ctx, tt.change), tt.want)
 			_, hash, err := store.GetUserCredentials(ctx, userID)
 			require.NoError(t, err)
@@ -330,10 +335,46 @@ func TestStore_ChangeOwnPassword_KeepsALaterEnd(t *testing.T) {
 	_, err = store.pool.Exec(ctx, `UPDATE users SET sessions_valid_after = $2 WHERE id = $1`, userID, later)
 	require.NoError(t, err)
 
-	require.NoError(t, store.ChangeOwnPassword(ctx, passwordChange{UserID: userID, CheckedHash: checked, NewPassword: "new password", KeepTokenHash: live, At: time.Now()}))
+	require.NoError(t, store.ChangeOwnPassword(ctx, passwordChange{UserID: userID, CheckedHash: checked, NewPassword: "new password", KeepTokenHash: live}))
 	var end time.Time
 	require.NoError(t, store.pool.QueryRow(ctx, `SELECT sessions_valid_after FROM users WHERE id = $1`, userID).Scan(&end))
 	assert.True(t, later.Equal(end), "%s, not %s", later, end)
+}
+
+// TestStore_ChangeOwnPassword_OrdersRefreshes: a refresh's access token counts
+// as issued under the user lock, whenever it is made. A change ends the one of a
+// refresh that came before it, and not the one of a refresh after it, which
+// waited for it.
+func TestStore_ChangeOwnPassword_OrdersRefreshes(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID := insertRefreshTestUser(t, store)
+	_, checked, err := store.GetUserCredentials(ctx, userID)
+	require.NoError(t, err)
+	_, live := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	_, other := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
+	refresh := func(hash string) time.Time {
+		t.Helper()
+		token, err := store.GetRefreshToken(ctx, hash)
+		require.NoError(t, err)
+		_, next := newRefreshHash(t)
+		at, rotated, err := store.RotateRefreshToken(ctx, token.ID, next, userID, time.Now().Add(time.Hour))
+		require.NoError(t, err)
+		require.True(t, rotated)
+		return at
+	}
+	good := func(issuedAt time.Time) bool {
+		t.Helper()
+		ok, err := store.IsUserActiveInRole(ctx, userID, roleDriver, issuedAt)
+		require.NoError(t, err)
+		return ok
+	}
+
+	before := refresh(other)
+	require.True(t, good(before))
+	require.NoError(t, store.ChangeOwnPassword(ctx, passwordChange{UserID: userID, CheckedHash: checked, NewPassword: "new password", KeepTokenHash: live}))
+	assert.False(t, good(before), "a refresh before the change, however late its token is made")
+	assert.True(t, good(refresh(live)), "a refresh after it")
 }
 
 // TestDriverPasswordRoute_Wiring: a viewer, as everywhere in the driver API, is

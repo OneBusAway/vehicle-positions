@@ -372,7 +372,7 @@ func TestStore_AuditLog_RenewalRecordsNothing(t *testing.T) {
 	require.NoError(t, err)
 	mark := lastAuditID(t, store)
 
-	rotated, err := store.RotateRefreshToken(ctx, first.ID, "aud-second", fx.userID, time.Now().Add(time.Hour))
+	_, rotated, err := store.RotateRefreshToken(ctx, first.ID, "aud-second", fx.userID, time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	require.True(t, rotated)
 

@@ -205,8 +205,8 @@ func (n *noopStore) CreateRefreshToken(_ context.Context, _ string, _ int64, _ t
 func (n *noopStore) GetRefreshToken(_ context.Context, _ string) (*RefreshToken, error) {
 	return nil, ErrRefreshTokenNotFound
 }
-func (n *noopStore) RotateRefreshToken(_ context.Context, _ int64, _ string, _ int64, _ time.Time) (bool, error) {
-	return false, nil
+func (n *noopStore) RotateRefreshToken(_ context.Context, _ int64, _ string, _ int64, _ time.Time) (time.Time, bool, error) {
+	return time.Time{}, false, nil
 }
 func (n *noopStore) DeleteRefreshTokensForUser(_ context.Context, _ int64) error {
 	return nil

@@ -8,7 +8,6 @@ import (
 	"mime"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -111,7 +110,7 @@ func handleChangePassword(store OwnPasswordChanger, limiter *LoginRateLimiter, t
 		}
 		err = store.ChangeOwnPassword(r.Context(), passwordChange{
 			UserID: userID, CheckedHash: hash, NewPassword: req.NewPassword,
-			KeepTokenHash: hashRefreshToken(req.RefreshToken), At: time.Now(),
+			KeepTokenHash: hashRefreshToken(req.RefreshToken),
 		})
 		switch {
 		case errors.Is(err, ErrPasswordChangedMeanwhile):
