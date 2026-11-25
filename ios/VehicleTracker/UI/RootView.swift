@@ -58,6 +58,7 @@ struct RootView: View {
             default: false
             }
         }
+        .background { WindowTheme(choice: session.settings.theme) }
         // Inside Tracking the trip sheet shows it: an alert cannot present
         // from under a sheet that is already up.
         .serverSetupPrompt(isActive: shown != .tracking)

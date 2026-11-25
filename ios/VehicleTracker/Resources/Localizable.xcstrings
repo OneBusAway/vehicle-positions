@@ -8431,179 +8431,6 @@
         }
       }
     },
-    "Account" : {
-      "comment" : "VoiceOver label of the account button on each picker screen, which opens Settings.",
-      "localizations" : {
-        "am" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "መለያ"
-          }
-        },
-        "ar" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "الحساب"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Konto"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Cuenta"
-          }
-        },
-        "fa" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "حساب"
-          }
-        },
-        "fi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Tili"
-          }
-        },
-        "fil" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Account"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Compte"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "अकाउंट"
-          }
-        },
-        "ht" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Kont"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Account"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "アカウント"
-          }
-        },
-        "km" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "គណនី"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "계정"
-          }
-        },
-        "lo" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ບັນຊີ"
-          }
-        },
-        "om" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Herrega"
-          }
-        },
-        "pa" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ਅਕਾਊਂਟ"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Konto"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Conta"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Аккаунт"
-          }
-        },
-        "sm" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Akauni"
-          }
-        },
-        "so" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Akoon"
-          }
-        },
-        "sw" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Akaunti"
-          }
-        },
-        "ti" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ኣካውንት"
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Обліковий запис"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Tài khoản"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "账号"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "帳號"
-          }
-        }
-      }
-    },
     "Add %@ to favorites" : {
       "comment" : "VoiceOver label of the star on a vehicle tile that is not yet a favourite: the fleet number, e.g. 'Add 4317 to favorites'.",
       "localizations" : {
@@ -16127,6 +15954,9 @@
         }
       }
     },
+    "Dark" : {
+      "comment" : "Settings, a theme: the app is dark whatever the phone is."
+    },
     "Details" : {
       "comment" : "CarPlay: the navigation bar button during a trip that opens the trip's details: route, run, schedule, next stop, reports and GPS.",
       "localizations" : {
@@ -23222,6 +23052,9 @@
           }
         }
       }
+    },
+    "Light" : {
+      "comment" : "Settings, a theme: the app is light whatever the phone is."
     },
     "Loading" : {
       "comment" : "What VoiceOver says while a picker's Try again is loading the list again.",
@@ -42085,7 +41918,7 @@
       }
     },
     "Settings" : {
-      "comment" : "The title of the app's own Settings page, opened from the account button on each picker screen."
+      "comment" : "The title of the app's own Settings page, and the VoiceOver label of the account button on each picker screen, which opens it."
     },
     "Share diagnostics" : {
       "comment" : "Settings: opens the share sheet with a small text file about the app and the iPhone, for whoever looks after the app.",
@@ -49735,6 +49568,9 @@
         }
       }
     },
+    "System" : {
+      "comment" : "Settings, a theme: the app is light or dark as the phone is."
+    },
     "Tap Resume" : {
       "comment" : "Problem line, after 'Location stopped': what to do. The Resume button is on the same line.",
       "localizations" : {
@@ -52851,6 +52687,9 @@
           }
         }
       }
+    },
+    "Theme" : {
+      "comment" : "Settings: the row that names the theme the app is shown in, at its end. A tap opens a menu of the themes."
     },
     "Then tap %@" : {
       "comment" : "Welcome, screen 2: under 'Choose a run'. The name of the button that starts a trip, filled in from that button, e.g. 'Then tap Start trip'.",
