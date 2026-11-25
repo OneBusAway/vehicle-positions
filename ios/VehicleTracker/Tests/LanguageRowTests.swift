@@ -3,8 +3,8 @@ import SwiftUI
 import Testing
 @testable import VehicleTracker
 
-/// The Language row on the first welcome screen and at the top of Help, as
-/// Android's: the language shown, named in that language.
+/// The Language row on the first welcome screen, as Android's, and in
+/// Settings: the language shown, named in that language.
 @Suite struct LanguageRowTests {
     @Test func theRowNamesTheLanguageShown() {
         #expect(AppLanguage.shownCode == "en")

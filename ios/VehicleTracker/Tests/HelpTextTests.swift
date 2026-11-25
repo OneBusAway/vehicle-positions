@@ -42,16 +42,11 @@ import Testing
         #expect(HelpText.welcomeAgainDetail == "3 short screens")
         #expect(HelpText.statusSection == "On the status card")
         #expect(HelpText.problemSection == "Under the card")
-        #expect(HelpText.aboutSection == "About")
-        #expect(HelpText.version == "Version")
-        #expect(HelpText.shareDiagnostics == "Share diagnostics")
-        #expect(HelpText.shareDiagnosticsDetail == "Sends the app version, the iPhone model, the server, what the app is allowed to do and recent errors. No positions, no sign-in details, no email.")
     }
 
     @Test func noWordSaysBus() {
         let words = [HelpText.title, HelpText.welcomeAgain, HelpText.welcomeAgainDetail, HelpText.statusSection,
-                     HelpText.problemSection, HelpText.aboutSection, HelpText.version, HelpText.shareDiagnostics,
-                     HelpText.shareDiagnosticsDetail]
+                     HelpText.problemSection]
             + StatusHelp.allCases.flatMap { [$0.title, $0.meaning] }
             + ProblemHelp.allCases.flatMap { [$0.title, $0.meaning] }
         #expect(words.allSatisfy { !$0.localizedCaseInsensitiveContains("bus") })

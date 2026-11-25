@@ -2,11 +2,11 @@ import CoreLocation
 import OSLog
 
 /// What Share diagnostics hands the share sheet: one small text file, read
-/// and written when the driver taps Share diagnostics, never while Help
+/// and written when the driver taps Share diagnostics, never while Settings
 /// draws, and deleted once the share sheet closes. The app sends it nowhere
 /// itself.
 nonisolated struct DiagnosticsFile {
-    /// The server's host, as Help's About row shows it.
+    /// The server's host, as Settings shows it.
     let host: String
 
     /// Writes the file and returns where. Off the main thread: Apple warns
@@ -14,7 +14,7 @@ nonisolated struct DiagnosticsFile {
     /// read from the start of the app's run.
     @concurrent func write(grants: LocationGrants) async throws -> URL {
         let device = DeviceFacts(
-            version: AccountMenu.versionNumber(Bundle.main.infoDictionary),
+            version: AccountText.versionNumber(Bundle.main.infoDictionary),
             system: Self.systemVersion(),
             model: Self.modelIdentifier(),
             location: grants.location,

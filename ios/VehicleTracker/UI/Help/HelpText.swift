@@ -5,7 +5,7 @@ import Foundation
 /// from `TripStatusText`, so Help cannot drift from the screen it explains.
 nonisolated enum HelpText {
     static var title: String {
-        String(localized: "Help", comment: "The account menu's item that opens Help, and the title of that page.")
+        String(localized: "Help", comment: "Settings' row that opens Help, and the title of that page.")
     }
 
     static var welcomeAgain: String {
@@ -90,25 +90,5 @@ nonisolated enum HelpText {
 
     static var openOnIPhoneMeaning: String {
         String(localized: "With CarPlay. Reports start when you open the app.", comment: "Help, under 'Open the app on iPhone': the line shows when a trip started from the car cannot report until the app is opened on the phone.")
-    }
-
-    // MARK: About
-
-    static var aboutSection: String {
-        String(localized: "About", comment: "Help: the heading over the app's version and the server.")
-    }
-
-    static var version: String {
-        String(localized: "Version", comment: "Help, About: the label beside the app's version, e.g. '1.0.0 (1)'.")
-    }
-
-    // MARK: Share diagnostics
-
-    static var shareDiagnostics: String {
-        String(localized: "Share diagnostics", comment: "Help: opens the share sheet with a small text file about the app and the iPhone, for whoever looks after the app.")
-    }
-
-    static var shareDiagnosticsDetail: String {
-        String(localized: "Sends the app version, the iPhone model, the server, what the app is allowed to do and recent errors. No positions, no sign-in details, no email.", comment: "Help: under 'Share diagnostics', what the file holds and what it never holds.")
     }
 }

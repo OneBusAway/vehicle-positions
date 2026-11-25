@@ -27,7 +27,7 @@ struct VehiclesView: View {
             // A viewer's session has ended: no one is signed in to show or
             // sign out.
             .toolbar {
-                if !session.viewerSignedOut { AccountMenu() }
+                if !session.viewerSignedOut { AccountButton() }
             }
             .searchable(text: $query, prompt: PickerText.vehicleSearchPrompt)
             // One load per visit: Back finds the same tiles at the same place.

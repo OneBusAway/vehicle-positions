@@ -12,7 +12,7 @@ nonisolated struct DeviceFacts: Equatable, Sendable {
         case allowed, notAllowed, notAskedYet, restricted
     }
 
-    /// "1.0.0 (1)", as Help's About row shows it.
+    /// "1.0.0 (1)", as Settings shows it.
     var version: String
     /// "26.4".
     var system: String

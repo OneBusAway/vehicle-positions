@@ -333,14 +333,17 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["refresh_token"])')
 ```
 
-1. On the run screen, tap the account menu (the person at the top right).
+1. On the run screen, tap the account button (the person at the top right).
 
-   **Expected outcome:** the menu shows `driver@example.com`, then
-   `localhost` and the app's version greyed out, then **Sign out** in red.
-   Tap **Sign out**: "Sign out?" with "The next driver can sign in on this
-   phone." Tap **Sign out** again: the sign-in screen appears with the server
-   as one line, **Server localhost:8081 Change**, the email empty, and the
-   server log has the logout:
+   **Expected outcome:** **Settings** says **Not ready to report** and "The app
+   asks for location when you start a trip." If location is allowed already,
+   it says **Ready to report** with **Precise Location** on, and **Not ready to
+   report** with it off ("Precise location is off for this app."). Then come
+   `driver@example.com` and `localhost` beside **Sign out**. At the end is
+   **Version** with the app's version. Tap **Sign out**: "Sign out?" with "The
+   next driver can sign in on this phone." Tap **Sign out** again: the sign-in
+   screen appears with the server as one line, **Server localhost:8081
+   Change**, the email empty, and the server log has the logout:
 
    ```bash
    grep '"path":"/api/v1/auth/logout"' /tmp/vt-server.log
@@ -373,13 +376,14 @@ OTHER_REFRESH=$(curl -s -X POST "$BASE/api/v1/auth/login" \
    # 401
    ```
 
-   Sign out from the account menu on **Choose your vehicle**.
+   Tap the account button on **Choose your vehicle**, then **Sign out** in
+   **Settings**.
 
 4. Sign in as `driver@example.com` again. That driver has one vehicle.
 
    **Expected outcome:** the app goes straight to **Choose a route**, with
    **Vehicle bus-1** under the title. Tap
-   Back: **Choose your vehicle** shows the `bus-1` tile and the account menu,
+   Back: **Choose your vehicle** shows the `bus-1` tile and the account button,
    and it stays there. Pull down to refresh: it still stays. Tap the tile and carry on with
    Check 1.
 
@@ -625,7 +629,7 @@ signs out. This check starts trips of its own.
 
 4. Start run **T1** again, stop the server as in step 1, tap **End trip**,
    confirm, and tap **End on this phone**. Start the server again as in step
-   2, then tap **Sign out** in the account menu.
+   2, then tap the account button and **Sign out** in **Settings**.
 
    **Expected outcome:** the sign-in screen appears. The server log has the
    trip's end before the logout, and the server has no active trip:

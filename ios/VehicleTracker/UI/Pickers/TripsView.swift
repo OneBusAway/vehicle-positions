@@ -47,7 +47,7 @@ struct TripsView: View {
             .navigationTitle(PickerText.runsTitle)
             .navigationSubtitle(PickerText.runsSubtitle(vehicle: vehicle.id, route: PickerText.name(of: route)))
             .navigationBarBackButtonHidden(starting)
-            .toolbar { AccountMenu() }
+            .toolbar { AccountButton() }
             // One load per visit: Back finds the board where it was.
             .task(id: loadRequest) {
                 guard case .loading = load else { return }

@@ -5788,7 +5788,7 @@
       }
     },
     "%lld reports to send when online" : {
-      "comment" : "Status card line 2 while reports saved with no connection wait on the iPhone, in place of the next stop's time and distance, and Help's example of it. The count is grouped, e.g. '1,244 reports to send when online', as the iPhone keeps up to 8,640.",
+      "comment" : "Status card line 2 while reports saved with no connection wait on the iPhone, in place of the next stop's time and distance, Help's example of it, and Settings, under 'Ready to report'. The count is grouped, e.g. '1,244 reports to send when online', as the iPhone keeps up to 8,640.",
       "localizations" : {
         "am" : {
           "variations" : {
@@ -8259,7 +8259,7 @@
       }
     },
     "About" : {
-      "comment" : "Help: the heading over the app's version and the server.",
+      "comment" : "Settings: the heading over Help, Share diagnostics and the app's version.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -8432,7 +8432,7 @@
       }
     },
     "Account" : {
-      "comment" : "VoiceOver label of the account menu's button on each picker screen. The menu shows the driver's email, the server and the app's version.",
+      "comment" : "VoiceOver label of the account button on each picker screen, which opens Settings.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -10753,6 +10753,9 @@
           }
         }
       }
+    },
+    "App" : {
+      "comment" : "Settings: the heading over the rows about the app itself, such as its language."
     },
     "As %@" : {
       "comment" : "Under the trip card when signing in again: the email the trip's driver signed in with, e.g. 'As jordan.lee@example.org'.",
@@ -20969,7 +20972,7 @@
       }
     },
     "Help" : {
-      "comment" : "The account menu's item that opens Help, and the title of that page.",
+      "comment" : "Settings' row that opens Help, and the title of that page.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -22871,8 +22874,11 @@
         }
       }
     },
+    "Language" : {
+      "comment" : "Settings: the row that names the language the app is shown in, at its end. A tap opens the app's page in the Settings app, where its language is chosen."
+    },
     "Language: %@" : {
-      "comment" : "The Language row, on the first welcome screen and at the top of Help. The language the app is shown in, named in that language, e.g. 'Language: English'. A tap opens the app's page in Settings, where its language is chosen.",
+      "comment" : "The Language row on the first welcome screen. The language the app is shown in, named in that language, e.g. 'Language: English'. A tap opens the app's page in Settings, where its language is chosen.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -23736,6 +23742,9 @@
         }
       }
     },
+    "Location is not allowed for this app." : {
+      "comment" : "Settings, under 'Not ready to report', when location was refused to the app."
+    },
     "Location is off for OBA Vehicle Tracker. Turn it on in Settings to start a trip." : {
       "comment" : "Refusal when the app has no location access.",
       "localizations" : {
@@ -23908,6 +23917,9 @@
           }
         }
       }
+    },
+    "Location is off for the whole phone." : {
+      "comment" : "Settings, under 'Not ready to report', when Location Services are off."
     },
     "Location must be on for the whole phone" : {
       "comment" : "Checklist: why Location Services must be on.",
@@ -27375,6 +27387,9 @@
         }
       }
     },
+    "Not ready to report" : {
+      "comment" : "Settings, large at the top: this phone can't report a trip yet."
+    },
     "Not reporting" : {
       "comment" : "Trip sheet Reports row: reports are not reaching the server (no connection, refused, or a wrong clock).",
       "localizations" : {
@@ -29625,7 +29640,7 @@
       }
     },
     "Open Settings" : {
-      "comment" : "Banner button that opens the app's page in the Settings app after a start was refused for location access.\nChecklist row button that opens the app's page in the Settings app, where refused location can be allowed.",
+      "comment" : "Banner button that opens the app's page in the Settings app after a start was refused for location access.\nChecklist row button, and the button under 'Not ready to report' in the app's own Settings, that opens the app's page in the Settings app, where location can be allowed.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -31181,6 +31196,9 @@
         }
       }
     },
+    "Precise location is off for this app." : {
+      "comment" : "Settings, under 'Not ready to report', when the app has only approximate location."
+    },
     "Precise Location is off. Turn it on in Settings so the vehicle shows on the right street." : {
       "comment" : "Refusal when the app has only approximate location.",
       "localizations" : {
@@ -31872,6 +31890,9 @@
           }
         }
       }
+    },
+    "Ready to report" : {
+      "comment" : "Settings, large at the top: this phone can report a trip."
     },
     "Reload" : {
       "comment" : "Banner button that loads the run list again after the schedule moved on to a new day.",
@@ -40853,7 +40874,7 @@
       }
     },
     "Sends the app version, the iPhone model, the server, what the app is allowed to do and recent errors. No positions, no sign-in details, no email." : {
-      "comment" : "Help: under 'Share diagnostics', what the file holds and what it never holds.",
+      "comment" : "Settings: under the group with 'Share diagnostics', what its file holds and what it never holds.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -42063,8 +42084,11 @@
         }
       }
     },
+    "Settings" : {
+      "comment" : "The title of the app's own Settings page, opened from the account button on each picker screen."
+    },
     "Share diagnostics" : {
-      "comment" : "Help: opens the share sheet with a small text file about the app and the iPhone, for whoever looks after the app.",
+      "comment" : "Settings: opens the share sheet with a small text file about the app and the iPhone, for whoever looks after the app.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -43275,7 +43299,7 @@
       }
     },
     "Sign out" : {
-      "comment" : "The account menu's item that signs the driver out, and the confirming button of the 'Sign out?' question it asks first.",
+      "comment" : "The button in Settings that signs the driver out, and the confirming button of the 'Sign out?' question it asks first.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -45003,6 +45027,9 @@
           }
         }
       }
+    },
+    "Start a trip and riders see your vehicle." : {
+      "comment" : "Settings, under 'Ready to report'."
     },
     "Start the %@ run?" : {
       "comment" : "Title of the start confirmation; the argument is the run's start time in the agency's zone, e.g. '6:43 AM'.",
@@ -50573,6 +50600,9 @@
         }
       }
     },
+    "The app asks for location when you start a trip." : {
+      "comment" : "Settings, under 'Not ready to report', when the app has not asked for location yet."
+    },
     "The app closed while this trip was running. Reports are paused until you choose." : {
       "comment" : "Under the Resume screen's title.",
       "localizations" : {
@@ -53513,6 +53543,9 @@
           }
         }
       }
+    },
+    "This iPhone does not let apps use location." : {
+      "comment" : "Settings, under 'Not ready to report', when parental controls or the agency's management of the iPhone forbid location."
     },
     "This link does not contain a server address the app can use." : {
       "comment" : "Title of the setup link alert when the link names no server address the app may use.",
@@ -57872,7 +57905,7 @@
       }
     },
     "Version" : {
-      "comment" : "Help, About: the label beside the app's version, e.g. '1.0.0 (1)'.",
+      "comment" : "Settings, About: the label beside the app's version, e.g. '1.0.0 (1)'.",
       "localizations" : {
         "am" : {
           "stringUnit" : {
@@ -58040,185 +58073,6 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "版本"
-          }
-        }
-      }
-    },
-    "Version %@ (%@)" : {
-      "comment" : "Account menu: the app's version, then its build number in brackets, e.g. 'Version 1.0.0 (7)'.",
-      "localizations" : {
-        "am" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ስሪት %1$@ (%2$@)"
-          }
-        },
-        "ar" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "الإصدار %1$@ (%2$@)"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Version %1$@ (%2$@)"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Version %1$@ (%2$@)"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Versión %1$@ (%2$@)"
-          }
-        },
-        "fa" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "نسخه %1$@ (%2$@)"
-          }
-        },
-        "fi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Versio %1$@ (%2$@)"
-          }
-        },
-        "fil" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Bersyon %1$@ (%2$@)"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Version %1$@ (%2$@)"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "वर्शन %1$@ (%2$@)"
-          }
-        },
-        "ht" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Vèsyon %1$@ (%2$@)"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Versione %1$@ (%2$@)"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "バージョン %1$@ (%2$@)"
-          }
-        },
-        "km" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "កំណែ %1$@ (%2$@)"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "버전 %1$@ (%2$@)"
-          }
-        },
-        "lo" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ເວີຊັນ %1$@ (%2$@)"
-          }
-        },
-        "om" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Veershinii %1$@ (%2$@)"
-          }
-        },
-        "pa" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ਵਰਜ਼ਨ %1$@ (%2$@)"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Wersja %1$@ (%2$@)"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Versão %1$@ (%2$@)"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Версия %1$@ (%2$@)"
-          }
-        },
-        "sm" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Lomiga %1$@ (%2$@)"
-          }
-        },
-        "so" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Nooca %1$@ (%2$@)"
-          }
-        },
-        "sw" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Toleo %1$@ (%2$@)"
-          }
-        },
-        "ti" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ቨርዥን %1$@ (%2$@)"
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Версія %1$@ (%2$@)"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "Phiên bản %1$@ (%2$@)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "版本 %1$@（%2$@）"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "版本 %1$@（%2$@）"
           }
         }
       }
