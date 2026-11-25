@@ -143,7 +143,7 @@ func handlePostLocationHistory(store LocationHistorySaver, rl *VehicleRateLimite
 				return
 			}
 			slog.Error("failed to save location history", "vehicle_id", req.VehicleID, "points", len(reports), "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save location history"})
+			writeReportFailure(w, err, "failed to save location history")
 			return
 		}
 		writeJSON(w, http.StatusCreated, historyUploadResponse{Saved: saved, Invalid: invalid})

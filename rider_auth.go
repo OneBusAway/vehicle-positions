@@ -32,7 +32,7 @@ func generateRiderJWT(riderID string, secret []byte, ttl time.Duration) (string,
 // one if rider tokens ever gain a jti; see checkRevoked for why it is inert
 // for them today.
 func requireRider(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
-	return requireRoles(secret, checker, false, roleRider)
+	return requireRoles(secret, checker, false, false, roleRider)
 }
 
 // riderIDFromContext returns the rider id from claims stored by requireRider.

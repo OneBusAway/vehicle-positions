@@ -104,6 +104,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 
 	authMiddleware := requireAuth(jwtSecret, store)
 	driverMiddleware := requireDriverAPI(jwtSecret, store)
+	reportMiddleware := requireDriverReports(jwtSecret, store)
 	adminMiddleware := requireAdmin(trustProxy)
 	if appConfig == nil {
 		appConfig = &driverAppConfig{}
@@ -155,11 +156,11 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	// The driver app's own routes. A viewer may read the admin but not drive,
 	// so these refuse one; everything else a viewer signs in for is behind
 	// adminMiddleware, which lets it read and refuses its writes.
-	mux.Handle("POST /api/v1/locations", countReports(driverMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter))))
+	mux.Handle("POST /api/v1/locations", countReports(reportMiddleware(handlePostLocation(alertFeed{LocationStore: store, alerts: alerts}, tracker, rateLimiter))))
 	// Built here rather than passed in like the others: it lives as long as the mux, and nothing
 	// else needs to reach it.
 	historyLimiter := NewKeyedRateLimiter(historyUploadInterval, historyUploadBurst, false)
-	mux.Handle("POST /api/v1/locations/history", countReports(driverMiddleware(handlePostLocationHistory(store, historyLimiter))))
+	mux.Handle("POST /api/v1/locations/history", countReports(reportMiddleware(handlePostLocationHistory(store, historyLimiter))))
 	mux.Handle("POST /api/v1/trips/start", driverMiddleware(handleStartTrip(store, catalog, tracker)))
 	mux.Handle("POST /api/v1/trips/end", driverMiddleware(handleEndTrip(store, tracker)))
 	mux.Handle("GET /api/v1/trips", driverMiddleware(handleListMyTrips(store, catalog)))

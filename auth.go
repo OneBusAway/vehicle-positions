@@ -438,13 +438,21 @@ func checkJTIRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChe
 // checker is consulted for every validated token so a logged-out one is
 // rejected for the rest of its lifetime.
 func requireAuth(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
-	return requireRoles(secret, checker, true, staffRoles...)
+	return requireRoles(secret, checker, true, false, staffRoles...)
 }
 
 // requireDriverAPI is requireAuth for the driver app's own routes, which a
 // viewer is refused with the 403 a rider token gets.
 func requireDriverAPI(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
-	return requireRoles(secret, checker, true, driverAPIRoles...)
+	return requireRoles(secret, checker, true, false, driverAPIRoles...)
+}
+
+// requireDriverReports is requireDriverAPI for the routes a driver's reports
+// come in by. While the database is away it answers them as their handlers do,
+// so that the apps keep them (writeReportFailure). Any other route's 503 would
+// mean something else to the apps: the schedule's says the server has none.
+func requireDriverReports(secret []byte, checker TokenChecker) func(http.Handler) http.Handler {
+	return requireRoles(secret, checker, true, true, driverAPIRoles...)
 }
 
 // requireRoles returns middleware that validates the Bearer JWT and admits
@@ -452,8 +460,9 @@ func requireDriverAPI(secret []byte, checker TokenChecker) func(http.Handler) ht
 // allowCookie is set, a request with no Authorization header at all falls back
 // to the admin UI's browser session cookie (spec §4.2); a present-but-bad
 // header never falls back, and a client that has no browser session — the
-// rider API — never accepts a cookie at all.
-func requireRoles(secret []byte, checker TokenChecker, allowCookie bool, roles ...string) func(http.Handler) http.Handler {
+// rider API — never accepts a cookie at all. reports is set for the routes
+// reports come in by (requireDriverReports).
+func requireRoles(secret []byte, checker TokenChecker, allowCookie, reports bool, roles ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -497,7 +506,11 @@ func requireRoles(secret []byte, checker TokenChecker, allowCookie bool, roles .
 				// not, because the cost of being wrong is an accepted
 				// logged-out token.
 				slog.Error("revocation check failed", "error", err, "path", r.URL.Path)
-				writeJSON(w, storeErrorStatus(err), map[string]string{"error": "internal server error"})
+				if reports {
+					writeReportFailure(w, err, "internal server error")
+				} else {
+					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				}
 				return
 			}
 			if revoked {

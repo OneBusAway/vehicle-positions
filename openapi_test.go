@@ -280,7 +280,8 @@ func (s *openAPISpec) mappings() map[string]map[string]any {
 
 // registeredRoute is one mux registration found in the server's Go source,
 // together with the middleware wrapping its handler. auth is set for both
-// staff doors, requireAuth and requireDriverAPI, and driverAPI for the second.
+// staff doors, requireAuth and requireDriverAPI, and driverAPI for the second,
+// which requireDriverReports is too.
 type registeredRoute struct {
 	method, path string
 	source       string
@@ -365,7 +366,7 @@ func extractRegisteredRoutes(t *testing.T) []registeredRoute {
 			method, path, ok := strings.Cut(pattern, " ")
 			require.Truef(t, ok, "%s: route pattern %q has no HTTP method prefix", source, pattern)
 
-			driverAPI := wrappedBy(call.Args[1], scope, "requireDriverAPI")
+			driverAPI := wrappedBy(call.Args[1], scope, "requireDriverAPI") || wrappedBy(call.Args[1], scope, "requireDriverReports")
 			routes = append(routes, registeredRoute{
 				method:    method,
 				path:      path,
@@ -462,7 +463,7 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 // route is classified by which of these produced the wrapper around its
 // handler, not by what the local variable happens to be called.
 var middlewareConstructors = map[string]struct{}{
-	"requireAuth": {}, "requireDriverAPI": {}, "requireAdmin": {}, "requireRider": {}, "requireAPIKey": {},
+	"requireAuth": {}, "requireDriverAPI": {}, "requireDriverReports": {}, "requireAdmin": {}, "requireRider": {}, "requireAPIKey": {},
 }
 
 // middlewareScope maps the identifiers naming an auth middleware inside one
