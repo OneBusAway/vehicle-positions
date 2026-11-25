@@ -45,6 +45,9 @@ type fakeRefreshTokens struct {
 	// concurrent refresh won the compare-and-set.
 	rotateLoses bool
 
+	// rotatedAt is when rotations say they were done, now when it is zero.
+	rotatedAt time.Time
+
 	createCalls  int
 	deletedUsers []int64
 	// signIns are the accounts CreateRefreshToken was told to record signing
@@ -98,21 +101,24 @@ func (f *fakeRefreshTokens) GetRefreshToken(_ context.Context, tokenHash string)
 	return &copied, nil
 }
 
-func (f *fakeRefreshTokens) RotateRefreshToken(_ context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (bool, error) {
+func (f *fakeRefreshTokens) RotateRefreshToken(_ context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (time.Time, bool, error) {
 	if f.rotateErr != nil {
-		return false, f.rotateErr
+		return time.Time{}, false, f.rotateErr
 	}
 	if f.rotateLoses {
-		return false, nil
+		return time.Time{}, false, nil
 	}
 	for _, token := range f.byHash {
 		if token.ID != usedID {
 			continue
 		}
 		if token.UsedAt != nil {
-			return false, nil
+			return time.Time{}, false, nil
 		}
 		now := time.Now()
+		if !f.rotatedAt.IsZero() {
+			now = f.rotatedAt
+		}
 		token.UsedAt = &now
 		f.byHash[newHash] = &RefreshToken{
 			ID:        f.nextID,
@@ -121,9 +127,9 @@ func (f *fakeRefreshTokens) RotateRefreshToken(_ context.Context, usedID int64, 
 			CreatedAt: now,
 		}
 		f.nextID++
-		return true, nil
+		return now, true, nil
 	}
-	return false, nil
+	return time.Time{}, false, nil
 }
 
 func (f *fakeRefreshTokens) DeleteRefreshTokensForUser(_ context.Context, userID int64) error {
@@ -206,6 +212,20 @@ func TestHandleRefresh_Success(t *testing.T) {
 	assert.Equal(t, "driver@test.com", claims["email"])
 	assert.Equal(t, "driver", claims["role"])
 	assert.NotEmpty(t, claims["jti"], "a refreshed token must be revocable too")
+}
+
+// TestHandleRefresh_TokenCountsAsIssuedAtTheRotation: the access token counts as
+// issued when the refresh was done, under the user lock, not when it was made.
+func TestHandleRefresh_TokenCountsAsIssuedAtTheRotation(t *testing.T) {
+	f, token := refreshStoreWithUser(t)
+	f.rotatedAt = time.Now().Add(-3 * time.Minute).Truncate(time.Microsecond)
+
+	resp := decodeTokens(t, postRefresh(handleRefreshToken(f, testSecret, testTTLs, nil, false), token))
+	claims, err := parseSessionToken(resp.AccessToken, testSecret)
+	require.NoError(t, err)
+	issuedAt, ok := tokenIssuedAt(claims)
+	require.True(t, ok)
+	assert.True(t, f.rotatedAt.Equal(issuedAt), "%s, not %s", f.rotatedAt, issuedAt)
 }
 
 // TestHandleRefresh_ReturnsBothTokenAndAccessToken pins the deprecated alias

@@ -1462,8 +1462,9 @@ type IsUserActiveInRoleParams struct {
 
 // A token's role claim is fixed when it is issued, so a user whose role has
 // changed since no longer holds the role the token claims. A token issued
-// before sessions_valid_after was ended by a deactivation or a role change and
-// stays ended, whatever the user's active flag and role are now.
+// before sessions_valid_after was ended by a deactivation, a role change or the
+// user's own password change, and stays ended, whatever the user's active flag
+// and role are now.
 func (q *Queries) IsUserActiveInRole(ctx context.Context, arg IsUserActiveInRoleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isUserActiveInRole, arg.ID, arg.Role, arg.IssuedAt)
 	var exists bool

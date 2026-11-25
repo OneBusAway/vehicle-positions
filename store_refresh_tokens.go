@@ -60,7 +60,7 @@ type RefreshTokenGetter interface {
 
 // RefreshTokenRotator consumes a token and stores its replacement.
 type RefreshTokenRotator interface {
-	RotateRefreshToken(ctx context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (bool, error)
+	RotateRefreshToken(ctx context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (rotatedAt time.Time, rotated bool, err error)
 }
 
 // RefreshTokenDeleter removes every refresh token belonging to one user.
@@ -130,10 +130,15 @@ func (s *Store) GetRefreshToken(ctx context.Context, tokenHash string) (*Refresh
 //
 // It also reports false when the user no longer exists: deleting a user
 // cascades to their tokens, so there is nothing left to rotate.
-func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (bool, error) {
+//
+// rotatedAt is when it was done, under the user lock, which the access token
+// that goes with it counts as issued at. A password change reads its own time
+// under the same lock, so one that comes after ends that token, whenever it is
+// made, and one that came before does not.
+func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash string, userID int64, expiresAt time.Time) (rotatedAt time.Time, rotated bool, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return false, fmt.Errorf("begin tx: %w", err)
+		return time.Time{}, false, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -148,17 +153,18 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 	// the users row the revoker holds.
 	if _, err := qtx.LockUser(ctx, userID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+			return time.Time{}, false, nil
 		}
-		return false, fmt.Errorf("lock user: %w", err)
+		return time.Time{}, false, fmt.Errorf("lock user: %w", err)
 	}
+	rotatedAt = time.Now()
 
 	rows, err := qtx.MarkRefreshTokenUsed(ctx, usedID)
 	if err != nil {
-		return false, fmt.Errorf("mark refresh token used: %w", err)
+		return time.Time{}, false, fmt.Errorf("mark refresh token used: %w", err)
 	}
 	if rows == 0 {
-		return false, nil
+		return time.Time{}, false, nil
 	}
 
 	err = qtx.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
@@ -167,13 +173,13 @@ func (s *Store) RotateRefreshToken(ctx context.Context, usedID int64, newHash st
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
 	if err != nil {
-		return false, fmt.Errorf("create rotated refresh token: %w", err)
+		return time.Time{}, false, fmt.Errorf("create rotated refresh token: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit refresh token rotation: %w", err)
+		return time.Time{}, false, fmt.Errorf("commit refresh token rotation: %w", err)
 	}
-	return true, nil
+	return rotatedAt, true, nil
 }
 
 // DeleteRefreshTokensForUser removes all of a user's refresh tokens, under the

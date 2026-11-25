@@ -277,8 +277,13 @@ func newJTI() (string, error) {
 // one: API access tokens are short and renewable, the admin UI's cookie
 // session is not (see sessionLifetime).
 func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
-	now := time.Now()
+	return generateJWTIssuedAt(user, secret, ttl, time.Now())
+}
 
+// generateJWTIssuedAt is generateJWT for a token that counts as issued at now.
+// iat is whole seconds, as JWT readers expect it; issuedAtClaim is the same
+// instant to the microsecond, as Postgres keeps the one it is compared with.
+func generateJWTIssuedAt(user *User, secret []byte, ttl time.Duration, now time.Time) (string, error) {
 	jti, err := newJTI()
 	if err != nil {
 		return "", err
@@ -292,9 +297,29 @@ func generateJWT(user *User, secret []byte, ttl time.Duration) (string, error) {
 		"exp":   now.Add(ttl).Unix(),
 		"iat":   now.Unix(),
 		"iss":   "vehicle-positions-api",
+
+		issuedAtClaim: now.UnixMicro(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(secret)
+}
+
+// issuedAtClaim is when a token was issued, in microseconds since 1970: well
+// within the whole numbers JSON holds exactly.
+const issuedAtClaim = "iat_us"
+
+// tokenIssuedAt is when the token behind claims was issued, and false when it
+// does not say. A token issued before issuedAtClaim was added has only iat,
+// which is at or before the instant it was issued.
+func tokenIssuedAt(claims jwt.MapClaims) (time.Time, bool) {
+	if micros, ok := claims[issuedAtClaim].(float64); ok {
+		return time.UnixMicro(int64(micros)), true
+	}
+	issuedAt, _ := claims.GetIssuedAt()
+	if issuedAt == nil {
+		return time.Time{}, false
+	}
+	return issuedAt.Time, true
 }
 
 // requireAdmin is middleware that restricts access to admin-role users, and
@@ -377,11 +402,10 @@ func parseSessionToken(tokenString string, secret []byte) (jwt.MapClaims, error)
 // otherwise keep its old powers until it expires: a demoted admin's token
 // would still pass requireAdmin. A client turned away for a role change
 // refreshes and gets a token for the role the user holds now.
-// A deactivation or role change ends the tokens issued before it for good, so
-// reactivating the user or giving the old role back does not revive them.
-// That is decided by the token's iat, which is whole seconds: a token issued
-// in the same second as the change is ended too. Every token generateJWT
-// issues has an iat, so a staff token without one is refused.
+// A deactivation, a role change or the user's own password change ends the
+// tokens issued before it for good, so reactivating the user or giving the old
+// role back does not revive them. That is decided by tokenIssuedAt. Every token
+// generateJWT issues says when, so a staff token that doesn't is refused.
 // It is the second half of validation, kept out of parseSessionToken so that
 // function stays pure; both token paths (the API's Authorization header and
 // the admin UI's vp_session cookie) must call it, and
@@ -401,12 +425,12 @@ func checkRevoked(ctx context.Context, claims jwt.MapClaims, checker TokenChecke
 	if err != nil {
 		return true, nil
 	}
-	issuedAt, _ := claims.GetIssuedAt()
-	if issuedAt == nil {
+	issuedAt, ok := tokenIssuedAt(claims)
+	if !ok {
 		slog.Warn("rejected staff token without iat", "sub", sub)
 		return true, nil
 	}
-	active, err := checker.IsUserActiveInRole(ctx, userID, role, issuedAt.Time)
+	active, err := checker.IsUserActiveInRole(ctx, userID, role, issuedAt)
 	if err != nil {
 		return false, err
 	}

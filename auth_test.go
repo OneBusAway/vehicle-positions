@@ -1185,3 +1185,28 @@ func TestRequireAuth_RejectsStaffTokenWithoutIat(t *testing.T) {
 		assert.False(t, cookieAccepted(withoutIat), "the admin UI must refuse the same token")
 	})
 }
+
+// TestTokenIssuedAt: a token says to the microsecond when it was issued, and one
+// from a server that did not yet say so counts as issued as its second began.
+func TestTokenIssuedAt(t *testing.T) {
+	at := time.Date(2026, 11, 25, 12, 30, 15, 123_456_789, time.UTC)
+	token, err := generateJWTIssuedAt(&User{ID: 1, Email: "a@test.com", Role: roleDriver}, testSecret, time.Hour, time.Now().Truncate(time.Second).Add(123_456_789*time.Nanosecond))
+	require.NoError(t, err)
+	claims, err := parseSessionToken(token, testSecret)
+	require.NoError(t, err)
+	issued, ok := tokenIssuedAt(claims)
+	require.True(t, ok)
+	assert.Equal(t, 123_456*time.Microsecond, issued.Sub(issued.Truncate(time.Second)))
+	iat, err := claims.GetIssuedAt()
+	require.NoError(t, err)
+	assert.True(t, iat.Time.Equal(issued.Truncate(time.Second)), "iat stays whole seconds")
+
+	issued, ok = tokenIssuedAt(jwt.MapClaims{"iat": float64(at.Unix())})
+	require.True(t, ok)
+	assert.True(t, issued.Equal(at.Truncate(time.Second)))
+	_, ok = tokenIssuedAt(jwt.MapClaims{})
+	assert.False(t, ok)
+	issued, ok = tokenIssuedAt(jwt.MapClaims{"iat": float64(at.Unix()), issuedAtClaim: "soon"})
+	require.True(t, ok)
+	assert.True(t, issued.Equal(at.Truncate(time.Second)), "a claim that isn't a number is not read")
+}

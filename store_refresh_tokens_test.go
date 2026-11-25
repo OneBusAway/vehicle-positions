@@ -100,7 +100,7 @@ func TestStore_RotateRefreshToken(t *testing.T) {
 	newHash := hashRefreshToken(newToken)
 	newExpiry := time.Now().Add(time.Hour)
 
-	rotated, err := store.RotateRefreshToken(ctx, old.ID, newHash, userID, newExpiry)
+	_, rotated, err := store.RotateRefreshToken(ctx, old.ID, newHash, userID, newExpiry)
 	require.NoError(t, err)
 	assert.True(t, rotated)
 
@@ -129,13 +129,13 @@ func TestStore_RotateRefreshToken_AlreadyUsed(t *testing.T) {
 
 	first, err := newRefreshTokenValue()
 	require.NoError(t, err)
-	rotated, err := store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(first), userID, time.Now().Add(time.Hour))
+	_, rotated, err := store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(first), userID, time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	require.True(t, rotated)
 
 	second, err := newRefreshTokenValue()
 	require.NoError(t, err)
-	rotated, err = store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(second), userID, time.Now().Add(time.Hour))
+	_, rotated, err = store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(second), userID, time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	assert.False(t, rotated, "a consumed token must not rotate twice")
 
@@ -157,7 +157,7 @@ func TestStore_RotateRefreshToken_RollsBackOnDuplicate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reusing a hash that is already stored violates the UNIQUE constraint.
-	rotated, err := store.RotateRefreshToken(ctx, old.ID, existingHash, userID, time.Now().Add(time.Hour))
+	_, rotated, err := store.RotateRefreshToken(ctx, old.ID, existingHash, userID, time.Now().Add(time.Hour))
 	require.Error(t, err, "a duplicate token_hash must fail the UNIQUE constraint")
 	assert.False(t, rotated)
 
@@ -184,7 +184,7 @@ func TestStore_RotateRefreshToken_DeletedUser(t *testing.T) {
 
 	newToken, err := newRefreshTokenValue()
 	require.NoError(t, err)
-	rotated, err := store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(newToken), userID, time.Now().Add(time.Hour))
+	_, rotated, err := store.RotateRefreshToken(ctx, old.ID, hashRefreshToken(newToken), userID, time.Now().Add(time.Hour))
 
 	require.NoError(t, err)
 	assert.False(t, rotated)
@@ -310,7 +310,7 @@ func TestStore_RotateRefreshToken_ConcurrentRotationsIssueOneToken(t *testing.T)
 		token, err := newRefreshTokenValue()
 		require.NoError(t, err)
 		go func(hash string) {
-			rotated, err := store.RotateRefreshToken(ctx, old.ID, hash, userID, time.Now().Add(time.Hour))
+			_, rotated, err := store.RotateRefreshToken(ctx, old.ID, hash, userID, time.Now().Add(time.Hour))
 			errs <- err
 			results <- rotated
 		}(hashRefreshToken(token))
@@ -400,7 +400,7 @@ func revokeDuringRotation(t *testing.T, store *Store, userID int64, revoke func(
 	}
 	rotated := make(chan rotation, 1)
 	go func() {
-		ok, err := store.RotateRefreshToken(ctx, old.ID, newHash, userID, time.Now().Add(time.Hour))
+		_, ok, err := store.RotateRefreshToken(ctx, old.ID, newHash, userID, time.Now().Add(time.Hour))
 		rotated <- rotation{ok, err}
 	}()
 	require.Eventually(t, waitingOnBlocker(1), 5*time.Second, 10*time.Millisecond,

@@ -575,8 +575,9 @@ SET source = EXCLUDED.source, body = EXCLUDED.body, sha256 = EXCLUDED.sha256, fe
 -- name: IsUserActiveInRole :one
 -- A token's role claim is fixed when it is issued, so a user whose role has
 -- changed since no longer holds the role the token claims. A token issued
--- before sessions_valid_after was ended by a deactivation or a role change and
--- stays ended, whatever the user's active flag and role are now.
+-- before sessions_valid_after was ended by a deactivation, a role change or the
+-- user's own password change, and stays ended, whatever the user's active flag
+-- and role are now.
 SELECT EXISTS (
     SELECT 1 FROM users
     WHERE id = sqlc.arg(id) AND active AND role = sqlc.arg(role)
