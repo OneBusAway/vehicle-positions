@@ -59,6 +59,12 @@ func (r *upsertVehicleRequest) validate() error {
 // validateVehicleText checks the text an admin gives a vehicle, for the API,
 // the vehicle form and the CSV import alike.
 func validateVehicleText(label, agencyTag string) error {
+	if err := validateStorable("label", label); err != nil {
+		return err
+	}
+	if err := validateStorable("agency_tag", agencyTag); err != nil {
+		return err
+	}
 	if utf8.RuneCountInString(label) > maxFieldLength {
 		return fmt.Errorf("label must be at most %d characters", maxFieldLength)
 	}

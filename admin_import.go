@@ -288,8 +288,8 @@ func driverRows(recs []importRecord) ([]driverImportRow, []importRowView) {
 		views[i] = importRowView{Line: rec.Line, Cells: []string{row.Email, row.Name, strings.Join(ids, " ")}}
 		if rec.Problem != "" {
 			views[i].fail(rec.Problem)
-		} else if row.Name == "" {
-			views[i].fail("name is required")
+		} else if err := validateUserName(row.Name); err != nil {
+			views[i].fail(err.Error())
 		} else if row.Email == "" {
 			views[i].fail("email is required")
 		} else if !validEmail(row.Email) {

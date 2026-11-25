@@ -800,6 +800,11 @@ func TestValidEmail(t *testing.T) {
 		{" driver@example.com", false},
 		{"driver@example.com ", false},
 		{"driver@ example.com", false},
+		// Nor any Postgres can't hold.
+		{"a\x00@example.com", false},
+		{"\"a\x00\"@example.com", false},
+		{"a\xff@example.com", false},
+		{"\"a\xff\"@example.com", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.email, func(t *testing.T) {

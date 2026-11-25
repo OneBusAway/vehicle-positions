@@ -232,7 +232,7 @@ func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimite
 	// CSRF: rejects browser cross-origin non-safe requests; clients without
 	// Sec-Fetch-Site/Origin headers (Retrofit, curl) are unaffected (spec §4.3).
 	csrf := http.NewCrossOriginProtection()
-	return csrf.Handler(refuseUnstorableQuery(mux)), nil
+	return csrf.Handler(refuseUnstorableURL(mux)), nil
 }
 
 // defaultDatabaseURL is the database the server and its subcommands use when

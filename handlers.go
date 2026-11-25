@@ -62,8 +62,11 @@ const maxVehicleIDLength = 50
 // a trip start, in characters.
 const maxTripFieldLength = 100
 
-// validateTripField checks the length of id, the request's field called name.
+// validateTripField checks id, the request's field called name.
 func validateTripField(name, id string) error {
+	if err := validateStorable(name, id); err != nil {
+		return err
+	}
 	if utf8.RuneCountInString(id) > maxTripFieldLength {
 		return fmt.Errorf("%s must be at most %d characters", name, maxTripFieldLength)
 	}

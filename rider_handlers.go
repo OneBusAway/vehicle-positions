@@ -319,6 +319,9 @@ func (req *riderRegisterRequest) validate() (string, bool) {
 	if !riderPlatforms[req.Platform] {
 		return "platform must be one of ios, android, other", false
 	}
+	if !storableText(req.AppID) || !storableText(req.AppVersion) {
+		return "app_id and app_version have a character that can't be saved", false
+	}
 	if tooLong(req.AppID) || tooLong(req.AppVersion) {
 		return "app_id and app_version must be at most 100 characters", false
 	}
@@ -352,6 +355,12 @@ func (s *riderService) handleStartRide() http.HandlerFunc {
 		if req.TripID == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "trip_id is required"})
 			return
+		}
+		for _, id := range []string{req.TripID, req.RouteID, req.BoardingStopID, req.DestinationStopID} {
+			if !storableText(id) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "identifiers have a character that can't be saved"})
+				return
+			}
 		}
 		if tooLong(req.TripID) || tooLong(req.RouteID) || tooLong(req.BoardingStopID) || tooLong(req.DestinationStopID) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "identifiers must be at most 100 characters"})

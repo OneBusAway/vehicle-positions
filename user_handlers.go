@@ -139,8 +139,8 @@ func handleCreateUser(store UserCreator) http.HandlerFunc {
 			return
 		}
 
-		if req.Name == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		if err := validateUserName(req.Name); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 		if req.Email == "" {
@@ -210,8 +210,8 @@ func handleUpdateUser(store UserUpdater) http.HandlerFunc {
 			return
 		}
 
-		if req.Name == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		if err := validateUserName(req.Name); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 		if req.Email == "" {
@@ -365,10 +365,20 @@ func handleDeleteUser(store UserDeleter) http.HandlerFunc {
 	}
 }
 
+// validateUserName checks a user's name, for the API, the forms and the CSV
+// import alike.
+func validateUserName(name string) error {
+	if name == "" {
+		return errors.New("name is required")
+	}
+	return validateStorable("name", name)
+}
+
 // validEmail reports whether email is a bare address that net/mail parses
 // back unchanged. ParseAddress also accepts "Name <a@example.com>", a
 // "(comment)" or surrounding spaces and returns only the address inside, so
-// comparing the two refuses anything but the address itself.
+// comparing the two refuses anything but the address itself. It takes none that
+// Postgres can't hold: a NUL or a byte that isn't UTF-8 does not parse.
 func validEmail(email string) bool {
 	addr, err := mail.ParseAddress(email)
 	return err == nil && addr.Address == email

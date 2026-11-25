@@ -22,6 +22,9 @@ func (r *createAPIKeyRequest) validate() error {
 	if r.Name == "" {
 		return errors.New("name is required")
 	}
+	if err := validateStorable("name", r.Name); err != nil {
+		return err
+	}
 	if utf8.RuneCountInString(r.Name) > maxFieldLength {
 		return fmt.Errorf("name must be at most %d characters", maxFieldLength)
 	}
