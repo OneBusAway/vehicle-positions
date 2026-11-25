@@ -13,6 +13,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,11 +63,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +81,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.data.WaitingOutlook
+import org.onebusaway.vehicletracker.ui.permissions.Fix
 import org.onebusaway.vehicletracker.ui.permissions.textOf
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
@@ -171,6 +177,15 @@ private fun headerWords(readiness: Readiness): HeaderWords {
     }
 }
 
+/** What the button under the words says it does, or null for none: a trip can start. */
+@Composable
+private fun fixNameOf(state: ReadinessState, locationFix: Fix): String? = when {
+    state is ReadinessState.Ready -> null
+    state == ReadinessState.LocationOff -> stringResource(R.string.settings_turn_on_location)
+    locationFix == Fix.OPEN_SETTINGS -> stringResource(R.string.preflight_open_settings)
+    else -> stringResource(R.string.settings_allow_location)
+}
+
 private const val NAMED_AT_MOST = 2
 
 /** "2 things to fix: Notifications, Battery", the names joined as the app's language joins a list. */
@@ -197,15 +212,24 @@ private fun shownReadiness(readiness: Readiness): Readiness {
 @Composable
 internal fun isNarrow(): Boolean = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < NarrowWidth
 
-private enum class HeaderPart { WORDS, STRIP, LINE, BAR }
+private enum class HeaderPart { TAPS, WORDS, STRIP, LINE, BAR }
 
 /**
  * The top of Settings: whether this phone can report a trip, and the line that says why. It goes behind the status bar.
  * As the page scrolls it folds to its bar with the line as its lower edge: the words go up under the bar, and nothing is
- * resized, recomposed or laid out for a frame of it.
+ * resized, recomposed or laid out for a frame of it. A tap on it, folded or not, opens Permission check. While location
+ * stops a trip, [onFix] is what its button does, by [locationFix].
  */
 @Composable
-internal fun ReadinessHeader(readiness: Readiness, fold: HeaderFold, onBack: () -> Unit, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ReadinessHeader(
+    readiness: Readiness,
+    locationFix: Fix,
+    fold: HeaderFold,
+    onBack: () -> Unit,
+    onFix: () -> Unit,
+    onPermissionCheck: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val shown = shownReadiness(readiness)
     val words = headerWords(shown)
     val colors = MaterialTheme.colorScheme
@@ -230,14 +254,16 @@ internal fun ReadinessHeader(readiness: Readiness, fold: HeaderFold, onBack: () 
 
     Layout(
         content = {
-            Words(words, showsButton = !shown.canReport, content, fold, onOpenSettings, Modifier.layoutId(HeaderPart.WORDS))
-            // The words go up under it. Where it is, it takes the taps they would.
+            // Under the rest, so it has the taps that nothing else there takes. The words say it to TalkBack.
+            Box(Modifier.layoutId(HeaderPart.TAPS).clickable(onClick = onPermissionCheck).clearAndSetSemantics {})
+            Words(words, fixNameOf(shown.state, locationFix), content, fold, onFix, onPermissionCheck, Modifier.layoutId(HeaderPart.WORDS))
+            // The words go up under it, and its button with them. Where it is, it takes the taps they would.
             Box(
                 Modifier
                     .layoutId(HeaderPart.STRIP)
                     .graphicsLayer { translationY = fold.offset }
                     .drawBehind { drawRect(block.value) }
-                    .pointerInput(Unit) {},
+                    .pointerInput(onPermissionCheck) { detectTapGestures { onPermissionCheck() } },
             )
             ReadinessLine(shown, content, { fold.fraction }, iconsIn, Modifier.layoutId(HeaderPart.LINE))
             Bar(words.folded, content, fold, onBack, Modifier.layoutId(HeaderPart.BAR).graphicsLayer { translationY = fold.offset })
@@ -263,9 +289,11 @@ internal fun ReadinessHeader(readiness: Readiness, fold: HeaderFold, onBack: () 
 
         val wordsTop = bar.height - WordsIntoBar.roundToPx()
         val height = wordsTop + said.height + line.height
+        val taps = part(HeaderPart.TAPS).measure(Constraints.fixed(width, height))
         fold.folded = bar.height + FoldedEdge.roundToPx()
         fold.range = (height - fold.folded).coerceAtLeast(0)
         layout(width, height) {
+            taps.place(0, 0)
             said.place(0, wordsTop)
             strip.place(0, 0)
             line.place(0, height - line.height)
@@ -275,12 +303,21 @@ internal fun ReadinessHeader(readiness: Readiness, fold: HeaderFold, onBack: () 
 }
 
 @Composable
-private fun Words(words: HeaderWords, showsButton: Boolean, content: State<Color>, fold: HeaderFold, onOpenSettings: () -> Unit, modifier: Modifier) {
+private fun Words(
+    words: HeaderWords,
+    fixName: String?,
+    content: State<Color>,
+    fold: HeaderFold,
+    onFix: () -> Unit,
+    onPermissionCheck: () -> Unit,
+    modifier: Modifier,
+) {
     val colors = MaterialTheme.colorScheme
     val amber = AppTheme.problemColors.iconOnSurface
     val titleStyle = if (isNarrow()) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge
     val bodyStyle = MaterialTheme.typography.bodyLarge
     val said = stringResource(R.string.preflight_row_state, words.title, words.sentence)
+    val check = stringResource(R.string.permission_check_title)
     Column(
         modifier
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
@@ -292,6 +329,11 @@ private fun Words(words: HeaderWords, showsButton: Boolean, content: State<Color
             modifier = Modifier.clearAndSetSemantics {
                 contentDescription = said
                 liveRegion = LiveRegionMode.Polite
+                role = Role.Button
+                onClick(label = check) {
+                    onPermissionCheck()
+                    true
+                }
             },
             transitionSpec = {
                 fadeIn(AppMotion.defaultEffectsSpec()) togetherWith fadeOut(AppMotion.defaultEffectsSpec()) using
@@ -323,20 +365,23 @@ private fun Words(words: HeaderWords, showsButton: Boolean, content: State<Color
                 }
             }
         }
+        // The button keeps its name while it fades out.
+        var buttonName by remember { mutableStateOf(fixName.orEmpty()) }
+        if (fixName != null) buttonName = fixName
         AnimatedVisibility(
-            visible = showsButton,
+            visible = fixName != null,
             enter = fadeIn(AppMotion.defaultEffectsSpec()) + expandVertically(AppMotion.defaultSpatialSpec()),
             exit = fadeOut(AppMotion.defaultEffectsSpec()) + shrinkVertically(AppMotion.defaultSpatialSpec()),
         ) {
             Button(
-                onClick = onOpenSettings,
+                onClick = onFix,
                 colors = ButtonDefaults.buttonColors(containerColor = colors.onSurface, contentColor = colors.surface),
                 modifier = Modifier
                     .padding(top = 14.dp)
                     .heightIn(min = 48.dp)
                     .graphicsLayer { alpha = 1f - within(fold.fraction, 0.3f, 0.8f) },
             ) {
-                Text(stringResource(R.string.preflight_open_settings))
+                Text(buttonName)
             }
         }
     }

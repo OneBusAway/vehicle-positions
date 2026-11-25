@@ -40,6 +40,8 @@ import org.onebusaway.vehicletracker.ui.help.HelpScreen
 import org.onebusaway.vehicletracker.ui.login.LoginScreenContent
 import org.onebusaway.vehicletracker.ui.login.LoginUiState
 import org.onebusaway.vehicletracker.ui.permissions.ChecklistRow
+import org.onebusaway.vehicletracker.ui.permissions.Fix
+import org.onebusaway.vehicletracker.ui.permissions.PermissionFixes
 import org.onebusaway.vehicletracker.ui.permissions.Grants
 import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
 import org.onebusaway.vehicletracker.ui.permissions.PreflightContent
@@ -61,6 +63,7 @@ import org.onebusaway.vehicletracker.ui.runs.RunsScreenContent
 import org.onebusaway.vehicletracker.ui.runs.RunsUiState
 import org.onebusaway.vehicletracker.ui.runs.TripRun
 import org.onebusaway.vehicletracker.ui.runs.runBoardTipText
+import org.onebusaway.vehicletracker.ui.settings.PermissionCheckContent
 import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
 import org.onebusaway.vehicletracker.ui.settings.SettingsContent
 import org.onebusaway.vehicletracker.ui.settings.readiness
@@ -257,11 +260,18 @@ class PseudolocaleScreensTest(private val tag: String) {
         val grants = Grants(Build.VERSION.SDK_INT, fine = true, coarse = true, background = true, notifications = true, batteryExempt = false)
         SettingsContent(
             readiness = readiness(PhoneAccess(grants, locationServicesOn = true), waiting = null),
+            locationFix = Fix.ALLOW,
             account = AccountUiState("driver@example.com", "tracker.example.org"),
             version = "0.1.0 (1)",
             theme = ThemeChoice.SYSTEM,
-            onBack = {}, onOpenPhoneSettings = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
+            onBack = {}, onFix = {}, onPermissionCheck = {}, onSignOut = {}, onSignedOut = {}, onChooseTheme = {}, onHelp = {}, onShare = {},
         )
+    }
+
+    @Test
+    fun permissionCheck() = check("permission-check", R.string.permission_check_title) {
+        val grants = Grants(sdk = 36, fine = false, coarse = true, background = false, notifications = false, batteryExempt = false)
+        PermissionCheckContent(readiness(PhoneAccess(grants, locationServicesOn = true), waiting = null), PermissionFixes(emptySet()) {}, onBack = {})
     }
 
     @Test

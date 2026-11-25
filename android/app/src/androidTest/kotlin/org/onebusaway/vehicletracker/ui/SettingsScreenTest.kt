@@ -17,6 +17,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -26,6 +27,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -46,6 +48,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -63,6 +66,7 @@ import org.onebusaway.vehicletracker.data.WaitingOutlook
 import org.onebusaway.vehicletracker.ui.account.AccountButton
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.LocalOpenSettings
+import org.onebusaway.vehicletracker.ui.permissions.Fix
 import org.onebusaway.vehicletracker.ui.permissions.Grants
 import org.onebusaway.vehicletracker.ui.settings.PhoneAccess
 import org.onebusaway.vehicletracker.ui.settings.Readiness
@@ -92,7 +96,8 @@ class SettingsScreenTest {
 
     private class Calls {
         var back = 0
-        var openPhoneSettings = 0
+        var fixes = 0
+        var permissionCheck = 0
         var signOuts = 0
         var signedOut = 0
         val themes = mutableListOf<ThemeChoice>()
@@ -103,15 +108,23 @@ class SettingsScreenTest {
     private val calls = Calls()
 
     @Composable
-    private fun Content(readiness: Readiness = ready(), account: AccountUiState = this.account, theme: ThemeChoice = ThemeChoice.SYSTEM, dark: Boolean = false) {
+    private fun Content(
+        readiness: Readiness = ready(),
+        locationFix: Fix = Fix.ALLOW,
+        account: AccountUiState = this.account,
+        theme: ThemeChoice = ThemeChoice.SYSTEM,
+        dark: Boolean = false,
+    ) {
         AppTheme(darkTheme = dark) {
             SettingsContent(
                 readiness = readiness,
+                locationFix = locationFix,
                 account = account,
                 version = "0.1.0 (1)",
                 theme = theme,
                 onBack = { calls.back++ },
-                onOpenPhoneSettings = { calls.openPhoneSettings++ },
+                onFix = { calls.fixes++ },
+                onPermissionCheck = { calls.permissionCheck++ },
                 onSignOut = { calls.signOuts++ },
                 onSignedOut = { calls.signedOut++ },
                 onChooseTheme = { calls.themes += it },
@@ -130,12 +143,17 @@ class SettingsScreenTest {
         compose.waitForIdle()
     }
 
-    private val fix get() = hasText(string(R.string.preflight_open_settings)) and hasClickAction()
+    private fun Dp.toPx(density: Density) = with(density) { toPx() }
+
+    /** The button under the words, by what it says it does. */
+    private fun fix(name: Int) = hasText(string(name)) and hasClickAction()
+
+    private val fixNames = listOf(R.string.settings_allow_location, R.string.settings_turn_on_location, R.string.preflight_open_settings)
 
     // --- The header ---
 
     @Test
-    fun theHeaderSaysEachState_andOffersThePhonesSettingsOnlyWhenATripCantStart() {
+    fun theHeaderSaysEachState_andHasAButtonOnlyWhenATripCantStart() {
         val battery = string(R.string.preflight_battery)
         val states = listOf(
             Triple(ready(), R.string.settings_ready, string(R.string.settings_ready_body)),
@@ -158,7 +176,7 @@ class SettingsScreenTest {
             letTheChangeShow()
 
             says(state.second, state.third).assertExists()
-            val buttons = compose.onAllNodes(fix).fetchSemanticsNodes().size
+            val buttons = fixNames.sumOf { compose.onAllNodes(fix(it)).fetchSemanticsNodes().size }
             assertEquals("${state.third}: the button", if (state.first.canReport) 0 else 1, buttons)
         }
     }
@@ -176,12 +194,89 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun theButtonOpensThePhonesSettings() {
-        compose.setContent { Content(ready(refused)) }
+    fun theButtonSaysWhatItWillDo() {
+        val states = listOf(
+            Triple(ready(refused), Fix.ALLOW, R.string.settings_allow_location),
+            Triple(ready(refused), Fix.OPEN_SETTINGS, R.string.preflight_open_settings),
+            Triple(ready(locationServicesOn = false), Fix.ALLOW, R.string.settings_turn_on_location),
+        )
+        var shown by mutableIntStateOf(0)
+        compose.setContent { Content(states[shown].first, states[shown].second) }
 
-        compose.onNode(fix).performClick()
+        for ((index, state) in states.withIndex()) {
+            shown = index
+            letTheChangeShow()
+            compose.onNode(fix(state.third)).performClick()
+            assertEquals(index + 1, calls.fixes)
+        }
+        assertEquals("the button is not the header", 0, calls.permissionCheck)
+    }
 
-        assertEquals(1, calls.openPhoneSettings)
+    @Test
+    fun aTapOnTheHeaderOpensPermissionCheck() {
+        compose.setContent { Content() }
+
+        compose.onRoot().performTouchInput { click(Offset(centerX, 150.dp.toPx())) }
+        assertEquals(1, calls.permissionCheck)
+
+        val header = says(R.string.settings_ready, string(R.string.settings_ready_body))
+        header.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        header.assert(SemanticsMatcher("its tap is named") { it.config[SemanticsActions.OnClick].label == string(R.string.permission_check_title) })
+        header.performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("as TalkBack taps it", 2, calls.permissionCheck)
+    }
+
+    @Test
+    fun aTapOnTheFoldedBarOpensPermissionCheck() {
+        compose.setContent { Box(Modifier.requiredHeight(420.dp)) { Content(ready(refused)) } }
+        compose.onNode(hasText(string(R.string.help_version))).performScrollTo()
+        compose.waitForIdle()
+        val title = compose.onNode(hasText(string(R.string.settings_title)) and isHeading()).fetchSemanticsNode().boundsInRoot
+
+        compose.onRoot().performTouchInput { click(Offset(width * 0.8f, title.center.y)) }
+
+        assertEquals(1, calls.permissionCheck)
+        assertEquals(0, calls.back)
+    }
+
+    @Test
+    fun aTapOnTheBarWhereTheButtonHasGoneUnderIt_opensPermissionCheckInstead() {
+        compose.setContent { Box(Modifier.requiredHeight(420.dp)) { Content(ready(refused)) } }
+        val button = compose.onNode(fix(R.string.settings_allow_location))
+        fun middle() = button.fetchSemanticsNode().let { it.positionInRoot.y + it.size.height / 2 }
+        val bar = compose.onNodeWithContentDescription(string(R.string.setup_navigate_up)).fetchSemanticsNode().boundsInRoot.bottom
+        val goneUnder = middle() - bar + 8.dp.toPx(compose.density)
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, goneUnder) }
+        compose.waitForIdle()
+        val at = button.fetchSemanticsNode().positionInRoot.x + button.fetchSemanticsNode().size.width - 8.dp.toPx(compose.density)
+        assertTrue("the button's middle, ${middle()}, is under the bar, which ends at $bar", middle() < bar)
+
+        val tapped = Offset(at, middle())
+        compose.onRoot().performTouchInput { click(tapped) }
+
+        assertEquals(1, calls.permissionCheck)
+        assertEquals(0, calls.fixes)
+        assertEquals(0, calls.back)
+    }
+
+    @Test
+    fun thePermissionCheckRowSaysHowThingsStand_andOpensIt() {
+        val states = listOf(
+            ready() to string(R.string.settings_permissions_all),
+            ready(everything.copy(batteryExempt = false)) to plural(R.plurals.settings_fix_many, 1, 1),
+            ready(everything.copy(batteryExempt = false, notifications = false)) to plural(R.plurals.settings_fix_many, 2, 2),
+            ready(refused) to string(R.string.settings_permissions_refused),
+            ready(locationServicesOn = false) to string(R.string.settings_permissions_off),
+        )
+        var shown by mutableIntStateOf(0)
+        compose.setContent { Content(states[shown].first) }
+
+        for ((index, state) in states.withIndex()) {
+            shown = index
+            letTheChangeShow()
+            compose.onNode(hasText(string(R.string.permission_check_title)) and hasText(state.second) and hasClickAction()).performScrollTo().performClick()
+            assertEquals(state.second, index + 1, calls.permissionCheck)
+        }
     }
 
     @Test
@@ -193,7 +288,7 @@ class SettingsScreenTest {
         letTheChangeShow()
 
         says(R.string.settings_ready, string(R.string.settings_ready_body)).assertExists()
-        compose.onNode(fix).assertDoesNotExist()
+        for (name in fixNames) compose.onNode(fix(name)).assertDoesNotExist()
     }
 
     @Test
@@ -493,7 +588,7 @@ class SettingsScreenTest {
         val headings = compose.onAllNodes(isHeading()).fetchSemanticsNodes()
             .sortedBy { it.boundsInRoot.top }
             .map { it.config[SemanticsProperties.Text].first().text }
-        assertEquals(listOf(R.string.settings_title, R.string.settings_group_app, R.string.help_section_about).map { string(it) }, headings)
+        assertEquals(listOf(R.string.settings_title, R.string.settings_group_phone, R.string.settings_group_app, R.string.help_section_about).map { string(it) }, headings)
     }
 
     // --- The largest text ---

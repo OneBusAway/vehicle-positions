@@ -1,6 +1,7 @@
 package org.onebusaway.vehicletracker.ui.settings
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -36,8 +38,8 @@ import org.onebusaway.vehicletracker.ui.theme.AppTheme
 /** Under this width the stops are closer, so the vehicle is smaller and the state's words a size down. */
 internal val NarrowWidth = 350.dp
 
-private val LineThickness = 6.dp
-private val DashThickness = 4.dp
+internal val LineThickness = 6.dp
+internal val DashThickness = 4.dp
 private val VehicleSize = 46.dp
 private val RiderSize = 28.dp
 private val IconSize = 22.dp
@@ -53,12 +55,21 @@ private const val FOLDED_VEHICLE = 0.65f
 private const val RIDER_FAR = 0.5f
 
 /** The vehicle has arrived a little before its spring's last settling, so the line's end does not wait for it. */
-private const val ARRIVED_WITHIN = 0.02f
+internal const val ARRIVED_WITHIN = 0.02f
 
 /** The vehicle's drive along the line, which the driver is meant to follow: longer than any spring of the motion scheme. */
 private val Drive = spring<Float>(dampingRatio = 0.85f, stiffness = 120f)
 
 private const val FRAMES_BEFORE_DRIVE = 2
+
+/** A change of state changes words and colours on its first frame, a long one on a slow phone. The drive starts after it. */
+internal suspend fun Animatable<Float, AnimationVector1D>.driveTo(position: Float) {
+    repeat(FRAMES_BEFORE_DRIVE) { withFrameNanos {} }
+    animateTo(position, Drive)
+}
+
+/** Ahead of the vehicle. */
+internal fun Density.lineDashes(): PathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
 
 /** How fast the rider is lifted as the vehicle reaches them: with [AppMotion.defaultSpatialSpec], about 4 dp and back. */
 private const val RIDER_LIFT = -268f
@@ -104,9 +115,7 @@ internal fun ReadinessLine(readiness: Readiness, content: State<Color>, folded: 
     val lift = remember { Animatable(0f) }
     LaunchedEffect(readiness.vehicleAt) {
         val drivesOn = readiness.canReport && at.value < readiness.vehicleAt
-        // The header's words and colours change on the first frame, a long one on a slow phone. The drive starts after it.
-        repeat(FRAMES_BEFORE_DRIVE) { withFrameNanos {} }
-        at.animateTo(readiness.vehicleAt.toFloat(), Drive)
+        at.driveTo(readiness.vehicleAt.toFloat())
         if (drivesOn) lift.animateTo(0f, AppMotion.defaultSpatialSpec(), initialVelocity = RIDER_LIFT)
     }
 
@@ -114,7 +123,7 @@ internal fun ReadinessLine(readiness: Readiness, content: State<Color>, folded: 
         modifier.drawWithCache {
             val geometry = LineGeometry(size.width.toDp(), readiness.stops.size)
             val y = size.height - LineThickness.toPx() / 2
-            val dashes = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
+            val dashes = lineDashes()
             fun along(x: Dp): Float = if (towardsLeft) size.width - x.toPx() else x.toPx()
             val start = if (towardsLeft) size.width else 0f
             val end = size.width - start
@@ -146,7 +155,7 @@ internal fun ReadinessLine(readiness: Readiness, content: State<Color>, folded: 
                 drawIcon(rider, riderCentre, RiderSize, content.value, if (readiness.canReport) 1f else RIDER_FAR)
 
                 val size = VehicleSize.toPx() * (if (geometry.narrow) NARROW_VEHICLE else 1f) * (1f - (1f - FOLDED_VEHICLE) * fold)
-                drawVehicle(vehicle, Offset(vehicleAt, y), size, ring, towardsLeft)
+                drawVehicle(vehicle, Offset(vehicleAt, y), size, ring, pointing = if (towardsLeft) -90f else 90f)
             }
         },
     )
@@ -169,17 +178,17 @@ private fun DrawScope.drawStop(stop: StopState, centre: Offset, reached: Color, 
     }
 }
 
-private fun DrawScope.drawIcon(icon: Painter, centre: Offset, size: Dp, tint: Color, alpha: Float) {
+internal fun DrawScope.drawIcon(icon: Painter, centre: Offset, size: Dp, tint: Color, alpha: Float) {
     val side = size.toPx()
     translate(centre.x - side / 2, centre.y - side / 2) {
         with(icon) { draw(Size(side, side), alpha, ColorFilter.tint(tint)) }
     }
 }
 
-/** The Tracking map's marker, its ring under it. It points north, as the map turns it; here the way the line runs. */
-private fun DrawScope.drawVehicle(vehicle: Painter, centre: Offset, side: Float, ring: Color, towardsLeft: Boolean) {
+/** The Tracking map's marker, its ring under it. It points north, as the map turns it; here [pointing] the way the line runs. */
+internal fun DrawScope.drawVehicle(vehicle: Painter, centre: Offset, side: Float, ring: Color, pointing: Float) {
     drawCircle(ring, side / 2 * RING_OF_MARKER, centre)
-    rotate(if (towardsLeft) -90f else 90f, centre) {
+    rotate(pointing, centre) {
         translate(centre.x - side / 2, centre.y - side / 2) {
             with(vehicle) { draw(Size(side, side)) }
         }

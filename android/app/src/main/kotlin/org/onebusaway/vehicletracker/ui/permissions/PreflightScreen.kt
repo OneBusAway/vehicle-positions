@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -34,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.onebusaway.vehicletracker.R
 import org.onebusaway.vehicletracker.ui.components.SetupBackButton
@@ -62,7 +65,7 @@ import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.theme.AppMotion
 import org.onebusaway.vehicletracker.ui.theme.AppTheme
 
-private val MarkerSize = 44.dp
+internal val MarkerSize = 44.dp
 private val AllowedShape = RoundedCornerShape(14.dp)
 
 /** A row's icon, title and why, as the checklist shows them before anything is answered. */
@@ -132,22 +135,12 @@ internal fun PreflightContent(
 @Composable
 private fun PreflightRow(row: ChecklistRow, onAction: () -> Unit) {
     val text = textOf(row.row)
-    val allowed = row.state == RowState.ALLOWED
-    // Once a row has shown allowed, it never ticks: asking Android again for precise location takes the location row
-    // back to Next, and the same grant would tick twice.
-    var shownAllowed by remember { mutableStateOf(allowed) }
-    val ticks = remember(allowed) { allowed && !shownAllowed }
-    val dip = remember { Animatable(0f) }
-    LaunchedEffect(ticks) {
-        if (!ticks) return@LaunchedEffect
-        shownAllowed = true
-        dip.animateTo(0f, AppMotion.defaultSpatialSpec(), initialVelocity = SETTLE_PUSH)
-    }
+    val tick = rememberRowTick(allowed = row.state == RowState.ALLOWED)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 76.dp)
-            .graphicsLayer { translationY = dip.value.dp.toPx() }
+            .graphicsLayer { translationY = tick.dip.toPx() }
             .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -157,7 +150,7 @@ private fun PreflightRow(row: ChecklistRow, onAction: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AnimatedContent(row.state.marker, transitionSpec = { if (ticks) tick() else crossFade() }, label = "marker") {
+            AnimatedContent(row.state.marker, transitionSpec = { tick.markerChange() }, label = "marker") {
                 Marker(it, text.icon)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -192,6 +185,29 @@ private fun PreflightRow(row: ChecklistRow, onAction: () -> Unit) {
     }
 }
 
+/** A row's tick, as the screen sees it become allowed: [ticks] for the marker, [dip] how far the row is pushed down. */
+@Stable
+internal class RowTick(val ticks: Boolean, private val settling: Animatable<Float, AnimationVector1D>) {
+    val dip: Dp get() = settling.value.dp
+
+    fun markerChange(): ContentTransform = if (ticks) tick() else crossFade()
+}
+
+@Composable
+internal fun rememberRowTick(allowed: Boolean): RowTick {
+    // Once a row has shown allowed, it never ticks: asking Android again for precise location takes the location row
+    // back to Next, and the same grant would tick twice.
+    var shownAllowed by remember { mutableStateOf(allowed) }
+    val ticks = remember(allowed) { allowed && !shownAllowed }
+    val dip = remember { Animatable(0f) }
+    LaunchedEffect(ticks) {
+        if (!ticks) return@LaunchedEffect
+        shownAllowed = true
+        dip.animateTo(0f, AppMotion.defaultSpatialSpec(), initialVelocity = SETTLE_PUSH)
+    }
+    return RowTick(ticks, dip)
+}
+
 /** How fast the row is pushed down as it ticks: with [AppMotion.defaultSpatialSpec], about 2 dp at most, and back. */
 private const val SETTLE_PUSH = 134f
 
@@ -203,7 +219,7 @@ private fun tick(): ContentTransform {
     return ContentTransform(checkIn, iconOut, sizeTransform = null)
 }
 
-private fun crossFade() = fadeIn(AppMotion.defaultEffectsSpec()) togetherWith fadeOut(AppMotion.defaultEffectsSpec())
+internal fun crossFade() = fadeIn(AppMotion.defaultEffectsSpec()) togetherWith fadeOut(AppMotion.defaultEffectsSpec())
 
 /** What a row says in place of its why once answered, or null to keep it. */
 @StringRes
@@ -248,7 +264,7 @@ private fun RowEnd(state: RowState, onAction: () -> Unit) {
 }
 
 /** How a row's marker looks; the states that wait on the driver keep the look of the row Android is on. */
-private enum class Marker { DONE, SKIPPED, CURRENT, PENDING }
+internal enum class Marker { DONE, SKIPPED, CURRENT, PENDING }
 
 private val RowState.marker: Marker
     get() = when (this) {
@@ -259,13 +275,14 @@ private val RowState.marker: Marker
     }
 
 @Composable
-private fun Marker(marker: Marker, @DrawableRes icon: Int) {
+internal fun Marker(marker: Marker, @DrawableRes icon: Int) {
     val colors = MaterialTheme.colorScheme
     val look = when (marker) {
         Marker.DONE -> Modifier.background(colors.primary, AllowedShape)
-        Marker.SKIPPED -> Modifier.border(2.dp, AppTheme.problemColors.iconOnSurface, CircleShape)
+        // Filled, as the pending ring is, to stand on Permission check's line.
+        Marker.SKIPPED -> Modifier.background(colors.surface, CircleShape).border(2.dp, AppTheme.problemColors.iconOnSurface, CircleShape)
         Marker.CURRENT -> Modifier.background(colors.primaryContainer, CircleShape)
-        Marker.PENDING -> Modifier.dashedRing(colors.outlineVariant)
+        Marker.PENDING -> Modifier.background(colors.surface, CircleShape).dashedRing(colors.outlineVariant)
     }
     val (glyph, tint) = when (marker) {
         Marker.DONE -> R.drawable.ic_check to colors.onPrimary

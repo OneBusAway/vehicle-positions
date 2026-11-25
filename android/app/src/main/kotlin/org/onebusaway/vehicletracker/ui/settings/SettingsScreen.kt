@@ -1,9 +1,6 @@
 package org.onebusaway.vehicletracker.ui.settings
 
-import android.content.ActivityNotFoundException
-import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import androidx.activity.compose.LocalActivity
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
@@ -28,6 +25,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,11 +38,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -52,11 +52,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.onebusaway.vehicletracker.R
-import org.onebusaway.vehicletracker.data.AppLog
 import org.onebusaway.vehicletracker.data.ThemeChoice
 import org.onebusaway.vehicletracker.ui.account.AccountUiState
 import org.onebusaway.vehicletracker.ui.account.AccountViewModel
@@ -67,12 +65,12 @@ import org.onebusaway.vehicletracker.ui.components.GroupTitle
 import org.onebusaway.vehicletracker.ui.components.groupRow
 import org.onebusaway.vehicletracker.ui.isolated
 import org.onebusaway.vehicletracker.ui.language.LanguageChooser
-import org.onebusaway.vehicletracker.ui.permissions.appDetailsIntent
-import org.onebusaway.vehicletracker.ui.permissions.grantsOf
-import org.onebusaway.vehicletracker.ui.permissions.locationServicesOn
+import org.onebusaway.vehicletracker.ui.permissions.Fix
+import org.onebusaway.vehicletracker.ui.permissions.PermissionRow
+import org.onebusaway.vehicletracker.ui.permissions.fixOf
+import org.onebusaway.vehicletracker.ui.permissions.rememberPermissionFixes
+import org.onebusaway.vehicletracker.ui.theme.AppTheme
 import java.util.concurrent.atomic.AtomicBoolean
-
-private const val TAG = "SettingsScreen"
 
 private val AccountShape = RoundedCornerShape(GroupOuterCorner)
 
@@ -80,12 +78,13 @@ private val AccountShape = RoundedCornerShape(GroupOuterCorner)
 private const val STACKS_FROM_TEXT = 1.3f
 
 /**
- * Settings, opened from the account button: whether this phone can report a trip, who is signed in and Sign out, then the
- * app's language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
+ * Settings, opened from the account button: whether this phone can report a trip, who is signed in and Sign out, what the
+ * app is allowed, its language and theme, Help and the build. [onSignedOut] is the phone having forgotten the driver.
  */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onPermissionCheck: () -> Unit,
     onHelp: () -> Unit,
     onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -101,22 +100,19 @@ fun SettingsScreen(
     // A second tap while the text is being read would open a second share sheet.
     val sharing = remember { AtomicBoolean(false) }
 
-    var access by remember { mutableStateOf(phoneAccess(context)) }
-    // The driver may be back from the phone's settings, or from its quick settings, which only take the focus.
-    val focused = LocalWindowInfo.current.isWindowFocused
-    LifecycleResumeEffect(focused) {
-        access = phoneAccess(context)
-        onPauseOrDispose {}
-    }
-
-    val readiness = remember(access, waiting) { readiness(access, waiting) }
+    val access = rememberPhoneAccess()
+    val fixes = rememberPermissionFixes(onAnswer = access::refresh)
+    val readiness = readiness(access.value, waiting)
     SettingsContent(
         readiness = readiness,
+        locationFix = fixOf(PermissionRow.LOCATION, fixes.onlyInSettings),
         account = account,
         version = version,
         theme = theme,
         onBack = onBack,
-        onOpenPhoneSettings = { openSettingsFor(readiness.state, context) },
+        // Only a location that stops a trip has the button.
+        onFix = { fixes.fix(if (readiness.state == ReadinessState.LocationOff) PermissionRow.LOCATION_SERVICES else PermissionRow.LOCATION) },
+        onPermissionCheck = onPermissionCheck,
         onSignOut = accountViewModel::onSignOut,
         onSignedOut = onSignedOut,
         onChooseTheme = { if (viewModel.onChooseTheme(it)) activity?.recreate() },
@@ -135,19 +131,6 @@ fun SettingsScreen(
     )
 }
 
-private fun phoneAccess(context: Context) = PhoneAccess(grantsOf(context), locationServicesOn(context))
-
-/** Where the phone keeps what stops a trip: its location switch, or the app's own permissions. */
-private fun openSettingsFor(state: ReadinessState, context: Context) {
-    val intent = if (state == ReadinessState.LocationOff) Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS) else appDetailsIntent(context)
-    try {
-        context.startActivity(intent)
-    } catch (e: ActivityNotFoundException) {
-        // A phone whose maker took the screen out. The driver can still find it in Settings.
-        AppLog.w(TAG, "No settings screen to open for $state", e)
-    }
-}
-
 /**
  * The system share sheet with [text] in it, which it shows above the apps to send it to. The driver chooses where it
  * goes; the app sends nothing itself.
@@ -163,11 +146,13 @@ internal fun shareIntent(text: String): Intent {
 @Composable
 internal fun SettingsContent(
     readiness: Readiness,
+    locationFix: Fix,
     account: AccountUiState,
     version: String,
     theme: ThemeChoice,
     onBack: () -> Unit,
-    onOpenPhoneSettings: () -> Unit,
+    onFix: () -> Unit,
+    onPermissionCheck: () -> Unit,
     onSignOut: () -> Unit,
     onSignedOut: () -> Unit,
     onChooseTheme: (ThemeChoice) -> Unit,
@@ -183,7 +168,7 @@ internal fun SettingsContent(
 
     Column(Modifier.fillMaxSize().nestedScroll(fold.settling).verticalScroll(scroll)) {
         // Over the rows, which go under it once it has folded.
-        ReadinessHeader(readiness, fold, onBack, onOpenPhoneSettings, Modifier.zIndex(1f))
+        ReadinessHeader(readiness, locationFix, fold, onBack, onFix, onPermissionCheck, Modifier.zIndex(1f))
         Column(
             Modifier
                 .clearOfHeader(fold)
@@ -191,6 +176,8 @@ internal fun SettingsContent(
                 .padding(start = 16.dp, top = 30.dp, end = 16.dp, bottom = 32.dp),
         ) {
             AccountCard(account) { confirming = true }
+            GroupTitle(R.string.settings_group_phone)
+            PermissionCheckRow(readiness.state, onPermissionCheck)
             GroupTitle(R.string.settings_group_app)
             LanguageChooser { shown, opensPhoneSettings, onClick ->
                 SettingsRow(
@@ -262,6 +249,29 @@ private const val MAY_BREAK_HERE = '\u200B'
 
 internal fun breakable(address: String): String = address.replace("@", "@$MAY_BREAK_HERE").replace(".", "$MAY_BREAK_HERE.")
 
+@Composable
+private fun PermissionCheckRow(state: ReadinessState, onClick: () -> Unit) {
+    val allAllowed = state is ReadinessState.Ready && state.toFix.isEmpty()
+    SettingsRow(
+        icon = if (allAllowed) R.drawable.ic_verified_user else R.drawable.ic_gpp_maybe,
+        title = stringResource(R.string.permission_check_title),
+        detail = when (state) {
+            ReadinessState.LocationRefused -> stringResource(R.string.settings_permissions_refused)
+            ReadinessState.LocationOff -> stringResource(R.string.settings_permissions_off)
+            is ReadinessState.Ready ->
+                if (allAllowed) {
+                    stringResource(R.string.settings_permissions_all)
+                } else {
+                    pluralStringResource(R.plurals.settings_fix_many, state.toFix.size, state.toFix.size)
+                }
+        },
+        place = GroupPlace.ONLY,
+        opens = true,
+        iconTint = if (allAllowed) Color.Unspecified else AppTheme.problemColors.iconOnSurface,
+        onClick = onClick,
+    )
+}
+
 /** A row of a group: its icon, its title over its value, and an arrow when it [opens] something in the app. */
 @Composable
 internal fun SettingsRow(
@@ -270,12 +280,13 @@ internal fun SettingsRow(
     detail: String?,
     place: GroupPlace,
     opens: Boolean = false,
+    iconTint: Color = Color.Unspecified,
     onClick: (() -> Unit)? = null,
 ) {
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = detail?.let { { Text(it) } },
-        leadingContent = { Icon(painterResource(icon), contentDescription = null) },
+        leadingContent = { Icon(painterResource(icon), contentDescription = null, tint = iconTint.takeOrElse { LocalContentColor.current }) },
         trailingContent = if (opens) {
             { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) }
         } else {

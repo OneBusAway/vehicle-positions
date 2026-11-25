@@ -163,9 +163,6 @@ internal fun rememberPermissionFlow(onReady: () -> Unit, showsLocationRationale:
     }
     val latestOnReady by rememberUpdatedState(onReady)
 
-    val locationRequest = remember {
-        LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS).build()
-    }
     val settingsClient = remember { LocationServices.getSettingsClient(context) }
 
     // Read as each ask goes out: with the one read after the answer, it tells a refusal for good from a dismissed prompt.
@@ -222,8 +219,7 @@ internal fun rememberPermissionFlow(onReady: () -> Unit, showsLocationRationale:
             PermissionStep.REQUEST_NOTIFICATIONS -> controller.ask(notificationsLauncher, Manifest.permission.POST_NOTIFICATIONS)
             PermissionStep.REQUEST_BATTERY -> controller.ask(batteryLauncher, batteryOptimizationIntent(context))
             PermissionStep.CHECK_LOCATION_SETTINGS -> {
-                val request = LocationSettingsRequest.Builder().addLocationRequest(locationRequest).build()
-                settingsClient.checkLocationSettings(request)
+                settingsClient.checkLocationSettings(locationSettingsRequest())
                     .addOnSuccessListener { controller.dispatch(PermissionEvent.LocationServicesChecked(on = true)) }
                     .addOnFailureListener { exception ->
                         if (exception is ResolvableApiException) {
@@ -248,8 +244,14 @@ internal fun rememberPermissionFlow(onReady: () -> Unit, showsLocationRationale:
     return controller
 }
 
+/** What a trip asks of the phone's location services. */
+internal fun locationSettingsRequest(): LocationSettingsRequest =
+    LocationSettingsRequest.Builder()
+        .addLocationRequest(LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS).build())
+        .build()
+
 // Fine and coarse are asked together, as Android 12 and later require.
-private val LOCATION_PERMISSIONS = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+internal val LOCATION_PERMISSIONS = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
 
 private fun Activity?.showsLocationRationale(): Boolean =
     this != null && LOCATION_PERMISSIONS.any { ActivityCompat.shouldShowRequestPermissionRationale(this, it) }
@@ -258,7 +260,7 @@ private fun Activity?.showsLocationRationale(): Boolean =
 internal fun appDetailsIntent(context: Context) =
     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
 
-private fun batteryOptimizationIntent(context: Context) =
+internal fun batteryOptimizationIntent(context: Context) =
     Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
         data = Uri.parse("package:${context.packageName}")
     }
