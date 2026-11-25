@@ -190,8 +190,8 @@ func recordAudit(ctx context.Context, q *db.Queries, c auditChange) error {
 	return nil
 }
 
-// inSessionTx runs fn, which signs an account in or out, in a transaction
-// when there is a row to write with it, and as it is when there is none.
+// inSessionTx runs fn, which signs an account out, in a transaction when there
+// is a row to write with it, and as it is when there is none.
 func (s *Store) inSessionTx(ctx context.Context, fn func(q *db.Queries) error) error {
 	if _, ok := sessionActor(ctx); !ok {
 		return fn(s.queries)
@@ -214,17 +214,18 @@ func recordSession(ctx context.Context, q *db.Queries, action string) error {
 	})
 }
 
-// SignInRecorder records a sign-in to the admin UI, which has no other write
-// to share a transaction with: its session is only a cookie.
+// SignInRecorder signs an account in to the admin UI, which stores nothing but
+// the row that records it: its session is only a cookie.
 type SignInRecorder interface {
-	RecordSignIn(ctx context.Context) error
+	RecordSignIn(ctx context.Context, user *User) (signedInAt time.Time, err error)
 }
 
 var _ SignInRecorder = (*Store)(nil)
 
-// RecordSignIn records a sign-in by the account withSessionActor put on ctx.
-func (s *Store) RecordSignIn(ctx context.Context) error {
-	return recordSession(ctx, s.queries, auditSignIn)
+// RecordSignIn records user's sign-in, as the account withSessionActor put on
+// ctx, and returns when it counts as done: see signIn.
+func (s *Store) RecordSignIn(ctx context.Context, user *User) (signedInAt time.Time, err error) {
+	return s.signIn(ctx, user, nil)
 }
 
 // auditJSON is fields as the audit log stores them, nil for none.

@@ -54,17 +54,23 @@ func sessionActors(role, ip, via string) []auditActor {
 	return []auditActor{{UserID: 9, Email: role + "@test.com", IP: ip, Via: via}}
 }
 
-// fakeSignIns is a SignInRecorder that keeps who it was told signed in, and
-// fails with err.
+// fakeSignIns is a SignInRecorder that keeps who it was told signed in, as their
+// sign-in checked them, and says they did at at, or fails with err.
 type fakeSignIns struct {
-	err    error
-	actors []auditActor
+	err     error
+	at      time.Time
+	actors  []auditActor
+	checked []*User
 }
 
-func (f *fakeSignIns) RecordSignIn(ctx context.Context) error {
+func (f *fakeSignIns) RecordSignIn(ctx context.Context, user *User) (time.Time, error) {
 	actor, _ := sessionActor(ctx)
 	f.actors = append(f.actors, actor)
-	return f.err
+	f.checked = append(f.checked, user)
+	if f.at.IsZero() {
+		return time.Now(), f.err
+	}
+	return f.at, f.err
 }
 
 // TestSessions_RecordedForAccountsThatMayUseTheAdmin: each way in and out
@@ -351,7 +357,8 @@ func TestStore_AuditLog_OtherSessionsRecordNothing(t *testing.T) {
 			failWrites(t, store, "BEFORE INSERT", "audit_log", "true", `RAISE EXCEPTION 'test failure';`)
 			mark := lastAuditID(t, store)
 
-			require.NoError(t, store.CreateRefreshToken(ctx, "aud-hash", fx.userID, time.Now().Add(time.Hour)))
+			_, err := store.CreateRefreshToken(ctx, "aud-hash", checkedUser(t, store, fx.userID), time.Now().Add(time.Hour))
+			require.NoError(t, err)
 			require.NoError(t, store.RevokeToken(ctx, "aud-jti", fx.userID, time.Now().Add(time.Hour)))
 
 			assert.Empty(t, auditRowsAfter(t, store, mark))
@@ -367,7 +374,8 @@ func TestStore_AuditLog_RenewalRecordsNothing(t *testing.T) {
 	store := newAuditTestStore(t)
 	fx := newAuditFixture(t, store)
 	ctx := signingThrough(asTestAdmin(), auditViaAPI)
-	require.NoError(t, store.CreateRefreshToken(ctx, "aud-first", fx.userID, time.Now().Add(time.Hour)))
+	_, err := store.CreateRefreshToken(ctx, "aud-first", checkedUser(t, store, fx.userID), time.Now().Add(time.Hour))
+	require.NoError(t, err)
 	first, err := store.GetRefreshToken(ctx, "aud-first")
 	require.NoError(t, err)
 	mark := lastAuditID(t, store)

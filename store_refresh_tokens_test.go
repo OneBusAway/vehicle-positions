@@ -51,8 +51,17 @@ func newStoredRefreshToken(t *testing.T, store *Store, userID int64, expiresAt t
 	token, err := newRefreshTokenValue()
 	require.NoError(t, err)
 	hash := hashRefreshToken(token)
-	require.NoError(t, store.CreateRefreshToken(context.Background(), hash, userID, expiresAt))
+	_, err = store.CreateRefreshToken(context.Background(), hash, checkedUser(t, store, userID), expiresAt)
+	require.NoError(t, err)
 	return token, hash
+}
+
+// checkedUser is userID's account as a sign-in with its password checks it now.
+func checkedUser(t *testing.T, store *Store, userID int64) *User {
+	t.Helper()
+	_, hash, err := store.GetUserCredentials(context.Background(), userID)
+	require.NoError(t, err)
+	return &User{ID: userID, PasswordHash: hash, Role: roleDriver, Active: true}
 }
 
 func TestStore_CreateAndGetRefreshToken(t *testing.T) {
@@ -198,7 +207,7 @@ func TestStore_CreateRefreshToken_DuplicateHashRejected(t *testing.T) {
 
 	_, hash := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
 
-	err := store.CreateRefreshToken(ctx, hash, userID, time.Now().Add(time.Hour))
+	_, err := store.CreateRefreshToken(ctx, hash, checkedUser(t, store, userID), time.Now().Add(time.Hour))
 	require.Error(t, err, "the UNIQUE constraint must reject a repeated token_hash")
 	assert.Equal(t, 1, countRefreshRows(t, store, hash), "the failed insert must leave no second row")
 }
@@ -207,11 +216,11 @@ func TestStore_CreateRefreshToken_EmptyHashRejected(t *testing.T) {
 	store := newTestStore(t)
 	userID := insertRefreshTestUser(t, store)
 
-	err := store.CreateRefreshToken(context.Background(), "", userID, time.Now().Add(time.Hour))
+	_, err := store.CreateRefreshToken(context.Background(), "", checkedUser(t, store, userID), time.Now().Add(time.Hour))
 	assert.Error(t, err, "the CHECK (token_hash != '') constraint must reject an empty hash")
 }
 
-func TestStore_CreateRefreshToken_UnknownUserFK(t *testing.T) {
+func TestStore_CreateRefreshToken_UnknownUser(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
@@ -220,9 +229,9 @@ func TestStore_CreateRefreshToken_UnknownUserFK(t *testing.T) {
 	hash := hashRefreshToken(token)
 
 	// -1 can never be a users.id (the column is a positive-only sequence).
-	err = store.CreateRefreshToken(ctx, hash, -1, time.Now().Add(time.Hour))
-	require.Error(t, err, "a token for a non-existent user must fail the foreign key")
-	assert.Equal(t, 0, countRefreshRows(t, store, hash), "the failed insert must leave no row behind")
+	_, err = store.CreateRefreshToken(ctx, hash, &User{ID: -1}, time.Now().Add(time.Hour))
+	require.ErrorIs(t, err, ErrAccountChangedMeanwhile, "an account deleted while it signed in")
+	assert.Equal(t, 0, countRefreshRows(t, store, hash), "the refused sign-in must leave no row behind")
 }
 
 func TestStore_DeleteRefreshTokensForUser(t *testing.T) {
@@ -622,9 +631,9 @@ func TestStore_SetUserActiveAndRevokeSessions_Reactivate(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	userID := insertRefreshTestUser(t, store)
+	_, token := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
 	_, err := store.pool.Exec(ctx, "UPDATE users SET active = false WHERE id = $1", userID)
 	require.NoError(t, err)
-	_, token := newStoredRefreshToken(t, store, userID, time.Now().Add(time.Hour))
 
 	require.NoError(t, store.SetUserActiveAndRevokeSessions(ctx, userID, true))
 

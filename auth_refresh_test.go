@@ -53,6 +53,10 @@ type fakeRefreshTokens struct {
 	// signIns are the accounts CreateRefreshToken was told to record signing
 	// in, as the store would.
 	signIns []auditActor
+	// checked are the accounts it was told signed in, as their sign-in checked
+	// them, and signedInAt is when it says they did, now when it is zero.
+	checked    []*User
+	signedInAt time.Time
 
 	// seen records each last_seen_at stamp; seenErr makes the stamp fail.
 	seen    []int64
@@ -63,25 +67,30 @@ func newFakeRefreshTokens() *fakeRefreshTokens {
 	return &fakeRefreshTokens{byHash: make(map[string]*RefreshToken), nextID: 1}
 }
 
-func (f *fakeRefreshTokens) CreateRefreshToken(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
+func (f *fakeRefreshTokens) CreateRefreshToken(ctx context.Context, tokenHash string, user *User, expiresAt time.Time) (time.Time, error) {
 	if f.createErr != nil {
-		return f.createErr
+		return time.Time{}, f.createErr
 	}
 	if actor, ok := sessionActor(ctx); ok {
 		f.signIns = append(f.signIns, actor)
 	}
 	if _, exists := f.byHash[tokenHash]; exists {
-		return errors.New("duplicate token hash")
+		return time.Time{}, errors.New("duplicate token hash")
 	}
 	f.createCalls++
+	f.checked = append(f.checked, user)
+	now := time.Now()
+	if !f.signedInAt.IsZero() {
+		now = f.signedInAt
+	}
 	f.byHash[tokenHash] = &RefreshToken{
 		ID:        f.nextID,
-		UserID:    userID,
+		UserID:    user.ID,
 		ExpiresAt: expiresAt,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 	}
 	f.nextID++
-	return nil
+	return now, nil
 }
 
 func (f *fakeRefreshTokens) UpdateUserLastSeen(_ context.Context, id int64) error {
@@ -165,7 +174,8 @@ func storeRefreshToken(t *testing.T, f *fakeRefreshTokens, userID int64, expires
 	t.Helper()
 	token, err := newRefreshTokenValue()
 	require.NoError(t, err)
-	require.NoError(t, f.CreateRefreshToken(context.Background(), hashRefreshToken(token), userID, expiresAt))
+	_, err = f.CreateRefreshToken(context.Background(), hashRefreshToken(token), &User{ID: userID}, expiresAt)
+	require.NoError(t, err)
 	return token
 }
 
