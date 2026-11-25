@@ -36,6 +36,7 @@ type appStore interface {
 	UserDeleter
 	UserActivator
 	UserPasswordUpdater
+	OwnPasswordChanger
 	UserRoleCounter
 	VehicleManager
 	VehiclePager
@@ -112,6 +113,7 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, store, jwtSecret, ttls, loginLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/refresh", handleRefreshToken(store, jwtSecret, ttls, refreshLimiter, trustProxy))
 	mux.Handle("POST /api/v1/auth/logout", authMiddleware(handleLogout(store, store, trustProxy)))
+	mux.Handle("POST /api/v1/auth/password", driverMiddleware(handleChangePassword(store, loginLimiter, trustProxy)))
 	// Outermost, so a request the auth middleware refuses is counted too.
 	countReports := health.count(healthReports)
 	countFeed := health.count(healthFeed)

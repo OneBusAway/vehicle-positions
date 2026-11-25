@@ -127,6 +127,10 @@ func (n *noopStore) SetUserActiveAndRevokeSessions(_ context.Context, _ int64, _
 func (n *noopStore) SetUserPasswordAndRevokeSessions(_ context.Context, _ int64, _ string) error {
 	return nil
 }
+func (n *noopStore) GetUserCredentials(_ context.Context, _ int64) (string, string, error) {
+	return "", "", nil
+}
+func (n *noopStore) ChangeOwnPassword(_ context.Context, _ passwordChange) error { return nil }
 func (n *noopStore) CountUsersByRole(_ context.Context, _ string) (int, error) {
 	return 0, nil
 }

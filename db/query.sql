@@ -94,6 +94,21 @@ WHERE id = $1;
 -- name: UpdateUserPassword :execrows
 UPDATE users SET password_hash = $2 WHERE id = $1;
 
+-- name: GetUserCredentials :one
+SELECT email, password_hash FROM users WHERE id = $1;
+
+-- name: GetUserPasswordForUpdate :one
+-- LockUser's lock, reading the password the change that follows replaces.
+SELECT password_hash FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: ChangeOwnPassword :exec
+-- Ends every token issued up to ended_at (sessions_valid_after), unless one
+-- already ended later.
+UPDATE users
+SET password_hash = sqlc.arg(password_hash),
+    sessions_valid_after = GREATEST(sessions_valid_after, sqlc.arg(ended_at))
+WHERE id = sqlc.arg(id);
+
 -- name: UpdateUserLastSeen :exec
 -- Stamped on every successful sign-in and token refresh. The
 -- set_users_updated_at trigger skips a change to last_seen_at alone, so this
@@ -533,6 +548,9 @@ WHERE id = $1 AND used_at IS NULL;
 
 -- name: DeleteRefreshTokensForUser :exec
 DELETE FROM refresh_tokens WHERE user_id = $1;
+
+-- name: DeleteOtherRefreshTokensForUser :exec
+DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash <> $2;
 
 -- name: DeleteExpiredRefreshTokens :execrows
 -- Garbage collection, not retention policy: the refresh handler rejects a
