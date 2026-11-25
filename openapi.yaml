@@ -250,6 +250,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/DatabaseAway'
 
   /api/v1/locations/history:
     post:
@@ -2495,6 +2497,15 @@ components:
     ScheduleUnavailable:
       description: |
         No GTFS schedule is loaded, so the rider engine cannot match trips.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    DatabaseAway:
+      description: |
+        The database can't answer for now, such as while it restarts. Nothing
+        was saved; send the report again later. Any request with a bearer token
+        can be answered so, as its sign-in is checked there.
       content:
         application/json:
           schema:

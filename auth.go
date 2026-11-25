@@ -497,7 +497,7 @@ func requireRoles(secret []byte, checker TokenChecker, allowCookie bool, roles .
 				// not, because the cost of being wrong is an accepted
 				// logged-out token.
 				slog.Error("revocation check failed", "error", err, "path", r.URL.Path)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				writeJSON(w, storeErrorStatus(err), map[string]string{"error": "internal server error"})
 				return
 			}
 			if revoked {
