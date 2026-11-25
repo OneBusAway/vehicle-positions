@@ -346,8 +346,8 @@ refused with `403 admin access required`, on the pages and in the API alike:
 `GET` and `HEAD` only (`adminGateAllows` in `auth.go`), so a route added later
 needs nothing of its own. The driver API (`POST /api/v1/locations`,
 `/api/v1/locations/history`, `/api/v1/trips/*`, `GET /api/v1/trips`,
-`GET /api/v1/vehicles` and `GET /api/v1/map`) refuses a viewer with `403`, as it
-does a rider, so a
+`GET /api/v1/vehicles`, `GET /api/v1/map` and `GET /api/v1/agency`) refuses a
+viewer with `403`, as it does a rider, so a
 viewer can't hold a vehicle either: `POST /api/v1/admin/assignments` refuses
 one with `409`, and making an account a viewer unassigns its vehicles in the
 same transaction, refused with `409` while it has a trip running. On the Audit

@@ -138,7 +138,7 @@ func TestMapRoute_Wiring(t *testing.T) {
 	riderToken, err := generateRiderJWT("rider-1", testSecret, time.Hour)
 	require.NoError(t, err)
 	mapURL := testMapURL
-	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, "", nil, nil, &mapURL, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
+	mux := newMux(&noopStore{}, nil, nil, testSecret, testTTLs, time.Time{}, nil, nil, false, false, "", nil, nil, &driverAppConfig{mapPMTilesURL: &mapURL}, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 
 	tests := []struct {
 		name       string
@@ -195,7 +195,7 @@ func TestNewHandler_PassesTheMapURLOn(t *testing.T) {
 	require.NoError(t, err)
 	mapURL := testMapURL
 	h, err := newHandler(&noopStore{}, tracker, nil, loginLimiter, loginLimiter, nil, testSecret, testTTLs, time.Now(),
-		adminUIConfig{stalenessThreshold: 5 * time.Minute}, false, "", nil, nil, &mapURL, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
+		adminUIConfig{stalenessThreshold: 5 * time.Minute}, false, "", nil, nil, &driverAppConfig{mapPMTilesURL: &mapURL}, newAlertWatcher(&noopStore{}, testAlertSettings), nil, newFeedHealth(time.Now))
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/map", nil)

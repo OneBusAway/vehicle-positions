@@ -176,6 +176,7 @@ var schemaStructs = map[string]string{
 	"LoginResponse": "LoginResponse",
 
 	// Where the driver app downloads its offline street map.
+	"Agency":    "agencyResponse",
 	"MapConfig": "mapConfigResponse",
 
 	// The audit log.

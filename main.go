@@ -98,12 +98,15 @@ type serverStore struct {
 // Extracting route registration here allows tests to build the real mux
 // without a live database, catching middleware wiring gaps like the one fixed
 // in issue #82.
-func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, metricsToken string, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) *http.ServeMux {
+func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time, loginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, trustProxy, feedAuthEnabled bool, metricsToken string, riderSvc *riderService, catalog *gtfsCatalog, appConfig *driverAppConfig, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authMiddleware := requireAuth(jwtSecret, store)
 	driverMiddleware := requireDriverAPI(jwtSecret, store)
 	adminMiddleware := requireAdmin(trustProxy)
+	if appConfig == nil {
+		appConfig = &driverAppConfig{}
+	}
 	riderEstimates, riderStatus := riderOrOff(riderSvc)
 
 	mux.Handle("POST /api/v1/auth/login", handleLogin(store, store, store, jwtSecret, ttls, loginLimiter, trustProxy))
@@ -159,9 +162,11 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 	mux.Handle("POST /api/v1/trips/end", driverMiddleware(handleEndTrip(store, tracker)))
 	mux.Handle("GET /api/v1/trips", driverMiddleware(handleListMyTrips(store, catalog)))
 	mux.Handle("GET /api/v1/vehicles", driverMiddleware(handleListMyVehicles(store)))
-	// Registered whether or not a map file is configured: an unconfigured server
-	// answers with a null URL, so a 404 only ever means one older than this route.
-	mux.Handle("GET /api/v1/map", driverMiddleware(handleMapConfig(mapPMTilesURL)))
+	// Both are registered whether or not they are configured: an unconfigured
+	// server answers with a null URL, so a 404 only ever means one older than the
+	// route.
+	mux.Handle("GET /api/v1/map", driverMiddleware(handleMapConfig(appConfig.mapPMTilesURL)))
+	mux.Handle("GET /api/v1/agency", driverMiddleware(handleAgency(appConfig.privacyPolicyURL)))
 
 	// Admin user management
 	mux.Handle("GET /api/v1/admin/users", authMiddleware(adminMiddleware(handleListUsers(store))))
@@ -207,9 +212,9 @@ func newMux(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter, j
 // and cross-cutting middleware come together.
 func newHandler(store appStore, tracker *Tracker, rateLimiter *VehicleRateLimiter,
 	loginLimiter, adminLoginLimiter *LoginRateLimiter, refreshLimiter *RefreshRateLimiter, jwtSecret []byte, ttls tokenTTLs, startTime time.Time,
-	cfg adminUIConfig, feedAuthEnabled bool, metricsToken string, riderSvc *riderService, catalog *gtfsCatalog, mapPMTilesURL *string, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) (http.Handler, error) {
+	cfg adminUIConfig, feedAuthEnabled bool, metricsToken string, riderSvc *riderService, catalog *gtfsCatalog, appConfig *driverAppConfig, alerts *alertWatcher, reports *serviceReporter, health *feedHealth) (http.Handler, error) {
 
-	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, metricsToken, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
+	mux := newMux(store, tracker, rateLimiter, jwtSecret, ttls, startTime, loginLimiter, refreshLimiter, cfg.trustProxy, feedAuthEnabled, metricsToken, riderSvc, catalog, appConfig, alerts, reports, health)
 
 	if cfg.enabled {
 		ui, err := newAdminUI(store, tracker, alerts, reports, health, jwtSecret, adminLoginLimiter, cfg)
@@ -293,6 +298,12 @@ func main() {
 		os.Exit(1)
 	}
 	logMapPMTilesURL(mapPMTilesURL)
+	privacyPolicyURL, err := parsePrivacyPolicyURL(os.Getenv("PRIVACY_POLICY_URL"))
+	if err != nil {
+		slog.Error("refusing to start: invalid privacy policy URL", "error", err)
+		os.Exit(1)
+	}
+	appConfig := &driverAppConfig{mapPMTilesURL: mapPMTilesURL, privacyPolicyURL: privacyPolicyURL}
 
 	// Checked before the database is touched too. The webhook is off when
 	// ALERT_WEBHOOK_URL is unset.
@@ -484,7 +495,7 @@ func main() {
 	defer healthHours.Stop()
 
 	handler, err := newHandler(serverStore{store, failedSignIns}, tracker, rateLimiter, loginLimiter, adminLoginLimiter, refreshLimiter, jwtSecret, ttls, startTime,
-		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, metricsToken, riderSvc, catalog, mapPMTilesURL, alerts, reports, health)
+		adminUIConfig{enabled: adminUIEnabled(), trustProxy: trustProxyHeaders(), stalenessThreshold: maxAge}, feedAuthEnabled, metricsToken, riderSvc, catalog, appConfig, alerts, reports, health)
 	if err != nil {
 		slog.Error("failed to build handler", "error", err)
 		os.Exit(1)
