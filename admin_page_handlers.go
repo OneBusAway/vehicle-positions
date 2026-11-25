@@ -713,7 +713,7 @@ func (ui *adminUI) vehicleCreate(w http.ResponseWriter, r *http.Request) {
 	label := r.PostFormValue("label")
 	agencyTag := r.PostFormValue("agency_tag")
 
-	if err := validateVehicleID(id); err != nil {
+	if err := validateNewVehicleID(id); err != nil {
 		ui.renderVehicleForm(w, r, http.StatusUnprocessableEntity, vehicleFormData{ID: id, Label: label, AgencyTag: agencyTag, Error: err.Error(), ErrorField: "id"})
 		return
 	}

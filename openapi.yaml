@@ -2681,6 +2681,8 @@ components:
 
     UpsertVehicleRequest:
       type: object
+      description: |
+        An `id` of `.` or `..` is refused, as a path can't hold it.
       additionalProperties: false
       required: [id]
       properties:

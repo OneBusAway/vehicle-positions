@@ -30,6 +30,19 @@ func validateVehicleID(id string) error {
 	return nil
 }
 
+// validateNewVehicleID is validateVehicleID for a vehicle being added. An id of
+// "." or ".." is refused too: a browser takes either out of a path, and so does
+// this server, so the vehicle's pages and API paths could not be reached.
+func validateNewVehicleID(id string) error {
+	if err := validateVehicleID(id); err != nil {
+		return err
+	}
+	if id == "." || id == ".." {
+		return errors.New("vehicle id must not be only dots")
+	}
+	return nil
+}
+
 type upsertVehicleRequest struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
@@ -37,7 +50,7 @@ type upsertVehicleRequest struct {
 }
 
 func (r *upsertVehicleRequest) validate() error {
-	if err := validateVehicleID(r.ID); err != nil {
+	if err := validateNewVehicleID(r.ID); err != nil {
 		return err
 	}
 	return validateVehicleText(r.Label, r.AgencyTag)
