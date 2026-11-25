@@ -694,7 +694,7 @@ func (ui *adminUI) vehicleNewPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // vehicleCreate validates and saves a new vehicle. It reuses
-// validateVehicleID and validateVehicleText, the JSON API's own checks, so form
+// validateNewVehicleID and validateVehicleText, the JSON API's own checks, so form
 // and API validation stay in lockstep, and reports the exact same error text on
 // failure. A 422 re-renders the form with the submitted values so the admin
 // doesn't have to retype everything.
@@ -1092,8 +1092,8 @@ func (ui *adminUI) userCreate(w http.ResponseWriter, r *http.Request) {
 	// The form marks name/email required client-side, but form submissions
 	// aren't trustworthy — enforce it server-side with the same error text as
 	// the JSON API (handleCreateUser).
-	if name == "" {
-		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: "name is required", ErrorField: "name"})
+	if err := validateUserName(name); err != nil {
+		ui.renderUserForm(w, r, http.StatusUnprocessableEntity, userFormData{Name: name, Email: email, Role: role, Error: err.Error(), ErrorField: "name"})
 		return
 	}
 	if email == "" {
@@ -1237,8 +1237,8 @@ func (ui *adminUI) userUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// Server-side required checks mirroring the JSON API (handleUpdateUser);
 	// the form's client-side `required` attributes aren't trustworthy.
-	if name == "" {
-		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "name", "name is required")
+	if err := validateUserName(name); err != nil {
+		ui.renderUserEditError(w, r, http.StatusUnprocessableEntity, id, name, email, role, "name", err.Error())
 		return
 	}
 	if email == "" {
@@ -1391,9 +1391,9 @@ func (ui *adminUI) setUserActive(w http.ResponseWriter, r *http.Request, active 
 // (a double-submit or a race with another admin) is treated as success — the
 // end state is what the admin wanted, so it just redirects without a flash —
 // ErrVehicleNotFoundFK and ErrUserNotFoundFK (an account deleted since the page
-// loaded) 404 rather than surfacing a raw 500, and ErrVehicleInactive (the form
-// only offers active vehicles, so a vehicle deactivated since the page loaded)
-// is a 409.
+// loaded) 404 rather than surfacing a raw 500, as does an id no vehicle can
+// have, and ErrVehicleInactive (the form only offers active vehicles, so a
+// vehicle deactivated since the page loaded) is a 409.
 func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -1407,6 +1407,10 @@ func (ui *adminUI) userAssignVehicle(w http.ResponseWriter, r *http.Request) {
 	}
 	vehicleID := r.PostFormValue("vehicle_id")
 	if vehicleID != "" {
+		if err := validateVehicleID(vehicleID); err != nil {
+			http.NotFound(w, r)
+			return
+		}
 		if _, err := ui.assignments.CreateAssignment(r.Context(), id, vehicleID); err != nil {
 			if errors.Is(err, ErrVehicleNotFoundFK) || errors.Is(err, ErrUserNotFoundFK) {
 				http.NotFound(w, r)

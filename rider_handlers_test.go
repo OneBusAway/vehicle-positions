@@ -444,6 +444,31 @@ func TestRiderIDLengthIsCharacters(t *testing.T) {
 	assert.Equal(t, "app_id and app_version must be at most 100 characters", decodeError(t, w))
 }
 
+// TestRiderTextPostgresCannotHold: a rider's ids, app_id and app_version with a
+// NUL are refused before they are saved, each on its own.
+func TestRiderTextPostgresCannotHold(t *testing.T) {
+	for _, field := range []string{"trip_id", "route_id", "boarding_stop_id", "destination_stop_id"} {
+		t.Run(field, func(t *testing.T) {
+			env := newRiderTestEnv(t)
+			_, tok := env.register(t)
+			body := map[string]any{"trip_id": "T1"}
+			body[field] = "a\x00"
+			w := env.do(t, "POST", "/api/v1/rider/rides", tok, body)
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Equal(t, "identifiers have a character that can't be saved", decodeError(t, w))
+			assert.Empty(t, env.store.rides)
+		})
+	}
+	for _, field := range []string{"app_id", "app_version"} {
+		t.Run(field, func(t *testing.T) {
+			body := map[string]any{"installation_id": uuid.NewString(), "platform": "ios", field: "a\x00"}
+			w := newRiderTestEnv(t).do(t, "POST", "/api/v1/rider/register", "", body)
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Equal(t, "app_id and app_version have a character that can't be saved", decodeError(t, w))
+		})
+	}
+}
+
 // TestStartRide_NoStartDateRefusesFridaysRunOnSaturday: T1 runs on weekdays at
 // 08:00. On Saturday mid-morning Friday's run ended a day ago, so a start that
 // names no start_date is refused rather than matched to that run.
